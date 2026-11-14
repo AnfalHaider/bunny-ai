@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bunny AI — reference screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./bunny-design-system.css">
+</head>
+<body>
+<!-- Reference markup for the chat page. Uses ONLY bunny-design-system.css.
+     The tiny script at the bottom is demo-only (menus, pane, push-to-talk). -->
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 10V4.5a2 2 0 0 1 4 0V10"/><path d="M13 10V3.5a2 2 0 0 1 4 0V11"/><circle cx="12" cy="15.5" r="5.5"/></svg>
+      Bunny AI
+    </div>
+    <button class="nav-row is-strong" id="new-chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New chat <span class="kbd">Ctrl N</span></button>
+    <button class="nav-row" id="incognito">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="16" r="3"/><circle cx="17" cy="16" r="3"/><path d="M10 16h4M3 11h18M6 11l2-6h8l2 6"/></svg>
+      Incognito</button>
+    <input class="side-search" id="search" type="search" placeholder="Search chats   Ctrl K">
+
+    <div class="side-label">Projects <button title="New project">＋</button></div>
+    <select class="select quiet side-projects" id="projects"><option>All chats</option><option>bunny-ai</option></select>
+
+    <div class="side-label">Today</div>
+    <ul class="session-list" id="sessions">
+      <li class="session"><span class="dot run"></span><span class="session-title">Refactor auth middleware</span><span class="session-switched" title="Provider switched">⇄</span></li>
+      <li class="session depth-1 is-active"><span class="dot wait"></span><span class="session-title">Write auth tests</span></li>
+      <li class="session depth-1"><span class="dot run"></span><span class="session-title">Update API docs</span></li>
+      <li class="session depth-2"><span class="dot ok"></span><span class="session-title">Fix broken links</span></li>
+      <li class="session"><span class="dot"></span><span class="session-title">Fallback router spike</span></li>
+    </ul>
+    <div class="side-label">Yesterday</div>
+    <ul class="session-list"><li class="session"><span class="dot"></span><span class="session-title">Landing page copy</span></li></ul>
+
+    <div class="sidebar-foot">
+      <button class="nav-row" id="import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Import chat</button>
+      <button class="nav-row" id="archived-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>Archived</button>
+      <a class="nav-row" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>Providers &amp; abilities</a>
+      <a class="nav-row" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Automation</a>
+      <a class="nav-row" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+      <div class="account"><span class="avatar">B</span>Bunny AI <span class="badge">Local</span></div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="mode-switch" role="group" aria-label="Mode">
+        <button class="is-active" id="mode-chat">Chat</button><button id="mode-cowork">Cowork</button><button id="mode-code">Code</button>
+      </div>
+      <nav class="crumbs"><a href="#">Refactor auth middleware</a><span class="sep">›</span><span class="current" id="chat-title">Write auth tests</span></nav>
+      <div class="toolbar">
+        <button class="tool-text" id="export">Export</button>
+        <button class="tool-text" id="artifacts-toggle">Artifacts <span class="count" id="artifact-count">0</span></button>
+        <span class="tool-sep"></span>
+        <button class="icon-btn" data-view="ov" title="Session overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></button>
+        <button class="icon-btn" data-view="term" title="Terminal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l5 5-5 5M12 18h8"/></svg></button>
+        <button class="icon-btn" data-view="diff" title="Changes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 8v6M9 11h6M9 17h6"/></svg></button>
+        <button class="icon-btn" data-view="web" title="Browser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5z"/></svg></button>
+        <button class="icon-btn" data-view="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg></button>
+        <button class="icon-btn" id="popout" title="Open in its own window"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>
+        <button class="icon-btn" id="theme-toggle" title="Theme">◐</button>
+      </div>
+    </header>
+
+    <div class="thread" id="thread"><div class="thread-col" id="messages">
+      <div class="msg-user">Add tests for <code>verifyToken()</code>: expired token, bad signature, missing header.</div>
+
+      <div class="msg-meta">DeepSeek-V3 · OpenRouter</div>
+      <div class="msg-ai">Reading the middleware first.</div>
+      <div class="tool-line">↳ Read <span class="tool-target">src/server/auth.js</span></div>
+      <div class="msg-ai">Two cases already exist. I'll add the missing-header case and —</div>
+
+      <div class="handoff">
+        <span class="handoff-icon">⇄</span>
+        <div><b>GPT-4.1</b> took over <span class="handoff-sub">· DeepSeek timed out</span><br>
+          <span class="handoff-sub">“I'm taking care of this now. Continuing with the missing-header test.”</span></div>
+        <button class="handoff-action">Switch back</button>
+      </div>
+
+      <div class="tool-line">↳ Edit <span class="tool-target">test/auth.test.js</span><span class="tool-result text-ok">+38</span></div>
+      <div class="tool-line">↳ Run <span class="tool-target">npm test -- auth</span><span class="tool-result text-bad">stopped</span></div>
+
+      <div class="child-note"><span class="dot ok"></span>Started <b>Fix broken links</b> under <b>Update API docs</b><a href="#">Open ›</a></div>
+
+      <div class="ask-card" role="group" aria-label="Pick a model">
+        <div class="ask-title">No equal coding model is answering</div>
+        <div class="ask-desc">GPT-4.1 and DeepSeek-V3 are down. This session is paused. Your other sessions keep going.</div>
+        <div class="ask-options">
+          <button class="ask-option"><span class="ask-option-name">Gemini 2.5 Flash<small>Google</small></span><span class="ask-option-pros">Fastest · reads images · weaker on big refactors</span><span class="ask-key">1</span></button>
+          <button class="ask-option"><span class="ask-option-name">Qwen2.5-Coder 32B<small>Ollama · this PC</small></span><span class="ask-option-pros">Free and private · slower · no images</span><span class="ask-key">2</span></button>
+          <button class="ask-option"><span class="ask-option-name">Mistral Large<small>Mistral</small></span><span class="ask-option-pros">Strongest · about 6× the cost</span><span class="ask-key">3</span></button>
+        </div>
+        <div class="ask-foot"><button class="toggle" role="switch" aria-checked="false" onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked')!=='true')"></button> Let Bunny pick next time <span class="end">Wait for GPT-4.1 · 0:45</span></div>
+      </div>
+    </div></div>
+
+    <!-- ============ CHAT BAR ============ -->
+    <div class="dock">
+      <div class="composer" id="composer">
+        <textarea class="composer-input" id="input" rows="1" placeholder="Send a message…"></textarea>
+        <div class="composer-row">
+          <button class="icon-btn round" id="attach" title="Add files, images, @ mentions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn round ptt" id="voice" title="Hold to talk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          <div class="listening"><i></i><i></i><i></i><i></i> Listening… release to stop</div>
+          <span class="spacer"></span>
+          <button class="send-btn" id="send" title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+        </div>
+      </div>
+
+      <div class="composer-under">
+        <button class="picker-btn" aria-expanded="false" data-menu="mode-menu"><span class="value" id="mode-label">Auto</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span class="under-sep">|</span>
+        <button class="picker-btn" aria-expanded="false" data-menu="model-menu"><span class="dot ok sm"></span><span class="value">Coding</span><span class="sub">· auto-fallback</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span class="composer-hint" id="composer-hint">Enter sends · Shift+Enter new line · <code>/compact</code> frees context</span>
+
+        <div class="menu up" id="mode-menu" hidden>
+          <div class="menu-title">Mode</div>
+          <button class="menu-item is-selected" data-mode="Auto"><span class="label">Auto<small>Bunny decides what needs your OK</small></span><span class="check">✓</span><span class="key">1</span></button>
+          <button class="menu-item" data-mode="Manual"><span class="label">Manual<small>Always ask before making changes</small></span><span class="check">✓</span><span class="key">2</span></button>
+          <button class="menu-item" data-mode="Accept edits"><span class="label">Accept edits<small>File edits go through, commands still ask</small></span><span class="check">✓</span><span class="key">3</span></button>
+          <button class="menu-item" data-mode="Plan"><span class="label">Plan<small>Agree a plan before any change</small></span><span class="check">✓</span><span class="key">4</span></button>
+          <div class="menu-sep"></div>
+          <button class="menu-item"><span class="label">Bypass permissions</span><span class="end">Enable</span></button>
+        </div>
+
+        <div class="menu up" id="model-menu" hidden style="min-width:340px">
+          <div class="menu-title">Ability group</div>
+          <div class="menu-group">Coding <span class="end text-bad">0 of 2 up</span></div>
+          <button class="menu-item is-selected"><span class="label">Auto-fallback<small>Best available coding model, switches on failure</small></span><span class="check">✓</span></button>
+          <button class="menu-item is-disabled"><span class="dot bad sm"></span><span class="label">DeepSeek-V3<small>OpenRouter · timed out</small></span></button>
+          <button class="menu-item is-disabled"><span class="dot bad sm"></span><span class="label">GPT-4.1<small>OpenAI · overloaded</small></span></button>
+          <div class="menu-group">Reasoning <span class="end">2 of 2 up</span></div>
+          <button class="menu-item"><span class="dot ok sm"></span><span class="label">Mistral Large<small>Mistral</small></span></button>
+          <div class="menu-group">Local <span class="end">1 of 1 up</span></div>
+          <button class="menu-item"><span class="dot ok sm"></span><span class="label">Qwen2.5-Coder 32B<small>Ollama · this PC</small></span></button>
+          <div class="menu-sep"></div>
+          <button class="menu-item"><span class="label text-dim">Manage providers…</span></button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ RIGHT PANE ============ -->
+  <aside class="pane" id="side-pane">
+    <section class="pane-view" id="view-ov">
+      <div class="pane-section"><h5>Environment</h5>
+        <div class="pane-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M2 19h20"/></svg>This computer<span class="end"><a class="link">Save</a></span></div>
+        <div class="pane-row" id="folder-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>bunny-ai <span class="faint">· D:\Projects\…</span></div>
+        <div class="pane-row" id="branch-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>dev<span class="end">worktree</span></div>
+      </div>
+      <div class="pane-section"><div class="pane-row link" id="context">Context ›<span class="end">36% <span class="meter"><span style="width:36%"></span></span></span></div></div>
+      <div class="pane-section"><h5>Providers this session</h5>
+        <div class="pane-row">DeepSeek-V3 <span class="faint">OpenRouter</span><span class="end"><span class="text-bad">timed out</span> · $0.02</span></div>
+        <div class="pane-row">GPT-4.1 <span class="faint">OpenAI</span><span class="end"><span class="text-bad">overloaded</span> · $0.11</span></div>
+        <div class="pane-row">Spent this session<span class="end">70k tokens · $0.13</span></div>
+      </div>
+      <div class="pane-section"><div class="pane-row link">Connectors ›<span class="end">3 connected</span></div></div>
+      <div class="pane-section"><h5>Outputs</h5>
+        <div class="pane-row link">coverage-report.html</div><div class="pane-row link">auth-test-plan.md</div></div>
+      <div class="pane-section"><h5>Changes</h5>
+        <div class="pane-row"><span class="add-count">+38</span> <span class="del-count">−4</span><span class="end"><button class="btn btn-sm">Commit changes</button></span></div></div>
+      <div class="pane-section"><h5>Background tasks</h5>
+        <div class="pane-row"><span class="mono" style="font-size:12px">npm test -- --watch</span><span class="end">4m <span class="stop-square"></span></span></div></div>
+    </section>
+
+    <section class="pane-view" id="view-term">
+      <div class="pane-head"><b>Terminal</b><span class="end"><button class="icon-btn" id="terminal-new">＋</button><button class="icon-btn" data-close>✕</button></span></div>
+      <div class="tabs"><button class="tab is-active">pwsh</button><button class="tab">npm test (watch)</button></div>
+      <div class="terminal" id="terminal-output"><span class="dim">PS D:\Projects\bunny-ai&gt;</span> npm test -- auth
+<span class="ok">✓ rejects an expired token (12 ms)</span>
+<span class="ok">✓ rejects a bad signature (4 ms)</span>
+<span class="bad">✗ rejects a missing header</span>
+<span class="dim">  expected 401, received 500 · auth.test.js:41</span>
+Tests: <span class="bad">1 failed</span>, <span class="ok">2 passed</span></div>
+    </section>
+
+    <section class="pane-view" id="view-diff">
+      <div class="pane-head"><b>dev</b> → working tree<span class="end"><button class="icon-btn" data-close>✕</button></span></div>
+      <div class="diff-file">› auth.test.js <span class="path">test/</span><span class="end add-count">+38</span></div>
+      <div class="diff-code"><div class="hunk">@@ -38,6 +38,12 @@</div><div class="add">+ it('rejects a missing header', async () =&gt; {</div><div class="add">+   expect((await call({ headers: {} })).status).toBe(401);</div><div class="add">+ });</div></div>
+      <div class="diff-file">› auth.js <span class="path">src/server/</span><span class="end del-count">−4</span></div>
+      <div style="padding:12px 16px"><button class="btn btn-sm">Commit changes</button></div>
+    </section>
+
+    <section class="pane-view" id="view-web">
+      <div class="pane-head"><b>Browser</b><span class="end"><button class="icon-btn" data-close>✕</button></span></div>
+      <div class="tabs"><button class="tab is-active">localhost:5173</button><button class="tab">coverage-report</button></div>
+      <div class="browser-url">← → ⟳ <input id="browser-url" value="http://localhost:5173/login"></div>
+      <div class="browser-frame pane-empty">Your dev server renders here</div>
+    </section>
+
+    <section class="pane-view" id="view-files">
+      <div class="pane-head"><b>Files</b><span class="end"><button class="icon-btn" data-close>✕</button></span></div>
+      <input class="input sm file-filter" placeholder="Filter, or ? to search in files" style="width:auto">
+      <ul class="file-tree">
+        <li>› docs</li><li>› src</li><li>› test</li>
+        <li>AGENTS.md <span class="git">U</span></li><li>package.json</li><li>README.md</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<script>
+/* demo-only behaviour */
+const pane = document.getElementById('side-pane');
+function view(v){
+  const cur = pane.dataset.view;
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('is-active'));
+  document.querySelectorAll('.pane-view').forEach(x=>x.classList.remove('is-active'));
+  if(!v || v===cur){ pane.classList.remove('is-open'); pane.dataset.view=''; return; }
+  pane.classList.add('is-open'); pane.dataset.view=v;
+  document.getElementById('view-'+v).classList.add('is-active');
+  document.querySelector('[data-view="'+v+'"]').classList.add('is-active');
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>view());
+view('ov');
+
+document.querySelectorAll('[data-menu]').forEach(btn=>btn.onclick=e=>{
+  e.stopPropagation();
+  const m=document.getElementById(btn.dataset.menu), open=m.hidden;
+  document.querySelectorAll('.menu').forEach(x=>x.hidden=true);
+  document.querySelectorAll('[data-menu]').forEach(x=>x.setAttribute('aria-expanded','false'));
+  m.hidden=!open; btn.setAttribute('aria-expanded', String(open));
+});
+document.querySelectorAll('[data-mode]').forEach(it=>it.onclick=()=>{
+  it.parentNode.querySelectorAll('.menu-item').forEach(x=>x.classList.remove('is-selected'));
+  it.classList.add('is-selected'); document.getElementById('mode-label').textContent=it.dataset.mode;
+});
+document.addEventListener('click',e=>{ if(!e.target.closest('.composer-under')) document.querySelectorAll('.menu').forEach(x=>x.hidden=true); });
+
+const ptt=document.getElementById('voice'), comp=document.getElementById('composer');
+const on=()=>{ptt.classList.add('is-live');comp.classList.add('is-talking')}, off=()=>{ptt.classList.remove('is-live');comp.classList.remove('is-talking')};
+ptt.addEventListener('pointerdown',on); ['pointerup','pointerleave'].forEach(ev=>ptt.addEventListener(ev,off));
+
+document.getElementById('theme-toggle').onclick=()=>{const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'};
+document.querySelectorAll('.mode-switch button').forEach(b=>b.onclick=()=>{b.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('is-active'));b.classList.add('is-active')});
+</script>
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Automation — Bunny AI</title>
+<link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+<main class="page">
+  <h1>Automation</h1>
+  <p class="sub">Memory, tools, schedules, hooks and skills. Everything here is stored on this machine.</p>
+
+  <h2>Memory</h2>
+  <p class="sub">Things the model is told about you in every chat. Switch one off without losing it.</p>
+  <div class="group" id="memory-suggestions" hidden></div>
+  <div class="group" id="memory-list"></div>
+  <form class="group inline-form" id="memory-form">
+    <input id="memory-text" placeholder="Remember that I prefer…" aria-label="New memory" />
+    <div class="actions"><button type="submit" class="primary">Remember</button></div>
+  </form>
+
+  <h2 style="margin-top:28px">MCP servers</h2>
+  <p class="sub">Tools that live outside this app. The tools are offered to the model when it is switched on.</p>
+  <div class="group" id="mcp-list"></div>
+  <form class="group inline-form" id="mcp-form">
+    <input id="mcp-name" placeholder="Name" aria-label="Server name" />
+    <input id="mcp-url" placeholder="https://example.com/mcp" aria-label="Server address" />
+    <div class="actions"><button type="submit" class="primary">Add server</button></div>
+  </form>
+
+  <h2 style="margin-top:28px">Schedules</h2>
+  <p class="sub">A prompt that runs on its own. Each run is kept as a chat.</p>
+  <div class="group" id="schedule-list"></div>
+  <form class="group inline-form" id="schedule-form">
+    <input id="schedule-name" placeholder="Name" aria-label="Schedule name" />
+    <input id="schedule-prompt" placeholder="What should it ask?" aria-label="Schedule prompt" />
+    <input id="schedule-every" type="number" min="1" value="60" aria-label="Every how many minutes" />
+    <div class="actions"><button type="submit" class="primary">Add schedule</button></div>
+  </form>
+
+  <h2 style="margin-top:28px">Hooks</h2>
+  <p class="sub">A command that runs when something happens. Hooks are off until you switch them on.</p>
+  <div class="group" id="hook-list"></div>
+  <form class="group inline-form" id="hook-form">
+    <input id="hook-name" placeholder="Name" aria-label="Hook name" />
+    <select id="hook-event" aria-label="Hook event">
+      <option value="message.sent">When a message is sent</option>
+      <option value="chat.created">When a chat is created</option>
+      <option value="reply.finished">When a reply finishes</option>
+    </select>
+    <input id="hook-command" placeholder="Command to run" aria-label="Hook command" />
+    <div class="actions"><button type="submit" class="primary">Add hook</button></div>
+  </form>
+
+  <h2 style="margin-top:28px">Skills</h2>
+  <p class="sub">A short instruction that can be switched on for your chats.</p>
+  <div class="group" id="skill-list"></div>
+  <form class="group inline-form" id="skill-form">
+    <input id="skill-name" placeholder="Name" aria-label="Skill name" />
+    <input id="skill-description" placeholder="What is it for?" aria-label="Skill description" />
+    <textarea id="skill-instructions" rows="2" placeholder="The instructions" aria-label="Skill instructions"></textarea>
+    <div class="actions"><button type="submit" class="primary">Add skill</button></div>
+  </form>
+
+  <span class="err" id="automation-error" role="alert"></span>
+
+  <p class="note"><a href="./index.html">← Back to chat</a> · <a href="./settings.html">Settings</a></p>
+</main>
+
+<script type="module">
+  import { getJSON, sendJSON } from './api.js';
+
+  const $ = (id) => document.getElementById(id);
+
+  function row(name, detail, isOn, onToggle, onDelete, toggleLabel = 'On') {
+    const line = document.createElement('div');
+    line.className = 'kv';
+
+    const left = document.createElement('span');
+    left.className = 'k';
+    left.textContent = name;
+    if (detail) {
+      const small = document.createElement('div');
+      small.className = 'desc';
+      small.textContent = detail;
+      left.append(small);
+    }
+
+    const right = document.createElement('span');
+    right.className = 'v';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = isOn ? toggleLabel : 'Off';
+    toggle.className = isOn ? 'primary small' : 'ghost small';
+    toggle.setAttribute('aria-pressed', String(Boolean(isOn)));
+    toggle.addEventListener('click', () => onToggle(!isOn));
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Delete';
+    remove.className = 'ghost small danger';
+    remove.addEventListener('click', onDelete);
+
+    right.append(toggle, remove);
+    line.append(left, right);
+    return line;
+  }
+
+  async function showError(err) {
+    $('automation-error').textContent = err.message ?? 'That did not work.';
+  }
+
+  // ---- memory ----
+  async function renderSuggestions() {
+    const host = $('memory-suggestions');
+    // Suggestions come from the chat that is open, if there is one.
+    const chatId = new URLSearchParams(location.search).get('s');
+    if (!chatId) { host.hidden = true; return; }
+    const suggestions = await sendJSON('/api/memory/suggestions', 'POST', { sessionId: chatId });
+    host.replaceChildren();
+    if (!suggestions.length) { host.hidden = true; return; }
+
+    const head = document.createElement('div');
+    head.className = 'row';
+    const title = document.createElement('div');
+    title.className = 'name';
+    title.textContent = 'Suggestions from this chat';
+    const hint = document.createElement('div');
+    hint.className = 'desc';
+    hint.textContent = 'Nothing is remembered until you accept it.';
+    head.append(title, hint);
+    host.append(head);
+
+    for (const suggestion of suggestions) {
+      const line = document.createElement('div');
+      line.className = 'kv';
+      const left = document.createElement('span');
+      left.className = 'k';
+      left.textContent = suggestion.text;
+      const small = document.createElement('div');
+      small.className = 'desc';
+      small.textContent = suggestion.reason;
+      left.append(small);
+      const right = document.createElement('span');
+      right.className = 'v';
+      const accept = document.createElement('button');
+      accept.type = 'button';
+      accept.className = 'primary small';
+      accept.textContent = 'Remember';
+      accept.addEventListener('click', async () => {
+        await sendJSON('/api/memory', 'POST', { text: suggestion.text, source: 'chat' });
+        await renderSuggestions();
+        await renderMemory();
+      });
+      right.append(accept);
+      line.append(left, right);
+      host.append(line);
+    }
+    host.hidden = false;
+  }
+
+  async function renderMemory() {
+    const host = $('memory-list');
+    const rows = await getJSON('/api/memory');
+    host.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'row';
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = 'Nothing is remembered yet.';
+      empty.append(desc);
+      host.append(empty);
+      return;
+    }
+    for (const m of rows) {
+      host.append(row(m.text, m.source === 'chat' ? 'from a chat' : null, m.enabled, async (on) => {
+        await sendJSON(`/api/memory/${m.id}`, 'PATCH', { enabled: on });
+        await renderMemory();
+      }, async () => {
+        await sendJSON(`/api/memory/${m.id}`, 'DELETE');
+        await renderMemory();
+      }, 'Remembered'));
+    }
+  }
+
+  $('memory-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await sendJSON('/api/memory', 'POST', { text: $('memory-text').value });
+      $('memory-text').value = '';
+      await renderMemory();
+    } catch (err) { showError(err); }
+  });
+
+  // ---- MCP ----
+  async function renderMcp() {
+    const host = $('mcp-list');
+    const rows = await getJSON('/api/mcp');
+    host.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'row';
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = 'No MCP servers yet.';
+      empty.append(desc);
+      host.append(empty);
+      return;
+    }
+    for (const server of rows) {
+      const detail = `${server.url} · ${server.status ?? 'unknown'}`;
+      const line = row(server.name, detail, server.enabled, async (on) => {
+        await sendJSON(`/api/mcp/${server.id}`, 'PATCH', { enabled: on });
+        await renderMcp();
+      }, async () => {
+        await sendJSON(`/api/mcp/${server.id}`, 'DELETE');
+        await renderMcp();
+      }, 'On');
+
+      const check = document.createElement('button');
+      check.type = 'button';
+      check.textContent = 'Check tools';
+      check.className = 'ghost small';
+      check.addEventListener('click', async () => {
+        try {
+          const res = await fetch(`/api/mcp/${server.id}/tools`);
+          const body = await res.json();
+          if (!res.ok) throw new Error(body.message ?? 'The server did not answer');
+          $('automation-error').textContent = '';
+          await renderMcp();
+        } catch (err) { showError(err); }
+      });
+      line.querySelector('.v').insertBefore(check, line.querySelector('.v').lastElementChild);
+      host.append(line);
+    }
+  }
+
+  $('mcp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await sendJSON('/api/mcp', 'POST', { name: $('mcp-name').value, url: $('mcp-url').value });
+      $('mcp-name').value = '';
+      $('mcp-url').value = '';
+      await renderMcp();
+    } catch (err) { showError(err); }
+  });
+
+  // ---- schedules ----
+  async function renderSchedules() {
+    const host = $('schedule-list');
+    const rows = await getJSON('/api/schedules');
+    host.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'row';
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = 'No schedules yet.';
+      empty.append(desc);
+      host.append(empty);
+      return;
+    }
+    for (const s of rows) {
+      host.append(row(s.name, `every ${s.everyMinutes} min · ${s.prompt}`, s.enabled, async (on) => {
+        await sendJSON(`/api/schedules/${s.id}`, 'PATCH', { enabled: on });
+        await renderSchedules();
+      }, async () => {
+        await sendJSON(`/api/schedules/${s.id}`, 'DELETE');
+        await renderSchedules();
+      }, 'Scheduled'));
+    }
+  }
+
+  $('schedule-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await sendJSON('/api/schedules', 'POST', {
+        name: $('schedule-name').value,
+        prompt: $('schedule-prompt').value,
+        everyMinutes: Number($('schedule-every').value) || 60,
+      });
+      $('schedule-name').value = '';
+      $('schedule-prompt').value = '';
+      await renderSchedules();
+    } catch (err) { showError(err); }
+  });
+
+  // ---- hooks ----
+  async function renderHooks() {
+    const host = $('hook-list');
+    const rows = await getJSON('/api/hooks');
+    host.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'row';
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = 'No hooks yet.';
+      empty.append(desc);
+      host.append(empty);
+      return;
+    }
+    for (const h of rows) {
+      host.append(row(h.name, `${h.event} · ${h.command}`, h.enabled, async (on) => {
+        await sendJSON(`/api/hooks/${h.id}`, 'PATCH', { enabled: on });
+        await renderHooks();
+      }, async () => {
+        await sendJSON(`/api/hooks/${h.id}`, 'DELETE');
+        await renderHooks();
+      }, 'On'));
+    }
+  }
+
+  $('hook-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await sendJSON('/api/hooks', 'POST', {
+        name: $('hook-name').value,
+        event: $('hook-event').value,
+        command: $('hook-command').value,
+      });
+      $('hook-name').value = '';
+      $('hook-command').value = '';
+      await renderHooks();
+    } catch (err) { showError(err); }
+  });
+
+  // ---- skills ----
+  async function renderSkills() {
+    const host = $('skill-list');
+    const rows = await getJSON('/api/skills');
+    host.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'row';
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = 'No skills yet.';
+      empty.append(desc);
+      host.append(empty);
+      return;
+    }
+    for (const s of rows) {
+      host.append(row(s.name, s.description || s.instructions, s.enabled, async (on) => {
+        await sendJSON(`/api/skills/${s.id}`, 'PATCH', { enabled: on });
+        await renderSkills();
+      }, async () => {
+        await sendJSON(`/api/skills/${s.id}`, 'DELETE');
+        await renderSkills();
+      }, 'On'));
+    }
+  }
+
+  $('skill-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await sendJSON('/api/skills', 'POST', {
+        name: $('skill-name').value,
+        description: $('skill-description').value,
+        instructions: $('skill-instructions').value,
+      });
+      $('skill-name').value = '';
+      $('skill-description').value = '';
+      $('skill-instructions').value = '';
+      await renderSkills();
+    } catch (err) { showError(err); }
+  });
+
+  async function boot() {
+    await renderMemory();
+    await renderSuggestions();
+    await renderMcp();
+    await renderSchedules();
+    await renderHooks();
+    await renderSkills();
+  }
+
+  boot();
+</script>
+</body>
+</html>

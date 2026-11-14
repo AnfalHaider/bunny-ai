@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Providers — Bunny AI</title>
+<link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+<main class="page">
+  <h1>Providers</h1>
+  <p class="sub">Connect and manage model providers</p>
+
+  <h2>Connected providers</h2>
+  <div class="group" id="connected" aria-live="polite"></div>
+
+  <h2 style="margin-top:28px">Popular providers</h2>
+  <div class="group" id="available"></div>
+
+  <p class="note">
+    Keys are encrypted with Windows DPAPI for your user account — never stored in plain text,
+    never sent anywhere except the provider you chose.
+  </p>
+  <p class="note"><a href="./index.html">← Back to chat</a></p>
+</main>
+
+<script type="module">
+  import { getJSON, sendJSON, esc } from './api.js';
+
+  const state = { providers: [], openForm: null, models: new Map(), errors: new Map() };
+
+  // Object.assign sets JS properties. Properties like `aria-label` and
+  // `data-x` are not reflected onto the element, so they have to go through
+  // setAttribute or a screen reader never sees them.
+  const ATTR = /^(aria-|data-|role$|for$)/;
+  const el = (tag, props = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [key, value] of Object.entries(props)) {
+      if (key.includes('-') || ATTR.test(key)) n.setAttribute(key, String(value));
+      else n[key] = value;
+    }
+    for (const k of kids) n.append(k);
+    return n;
+  };
+  const initial = (name) => name.trim()[0].toUpperCase();
+
+  function fieldSpec(provider) {
+    if (provider.kind === 'local') {
+      return [{ name: 'baseUrl', label: 'Server URL', type: 'url', required: true, hint: provider.defaultBaseUrl }];
+    }
+    if (provider.kind === 'oauth') return [];
+    return [
+      { name: 'apiKey', label: 'API key', type: 'password', required: true, hint: 'Paste your key' },
+      { name: 'baseUrl', label: 'Base URL', type: 'url', required: false, hint: provider.defaultBaseUrl },
+    ];
+  }
+
+  function rowShell(p) {
+    const row = el('div', { className: 'row' });
+    row.append(el('div', { className: 'glyph', textContent: initial(p.name), 'aria-hidden': 'true' }));
+    const meta = el('div', { className: 'meta-col' });
+    const name = el('div', { className: 'name' }, el('span', { textContent: p.name }));
+    if (p.recommended) name.append(el('span', { className: 'tag', textContent: 'Recommended' }));
+    if (p.status === 'connected' && p.kind === 'apiKey' && p.keyVerified === false) {
+      name.append(el('span', { className: 'tag warn', textContent: 'key unverified', title: 'This provider publishes its model list publicly, so the key cannot be checked until first use.' }));
+    }
+    meta.append(name, el('div', { className: 'desc', textContent: p.tagline }));
+    row.append(meta, el('div', { className: 'right' }));
+    return row;
+  }
+
+  function renderForm(p) {
+    const form = el('form', { className: 'inline', noValidate: true });
+    const specs = fieldSpec(p);
+    const inputs = {};
+
+    // A provider that signs in has no secret to type: it has a flow to walk
+    // through, so the form is built differently.
+    if (p.kind === 'oauth') {
+      const err = el('div', { className: 'err', role: 'alert', textContent: state.errors.get(p.id) ?? '' });
+      const codeBox = el('div', { className: 'oauth-box', hidden: true });
+      const start = el('button', { type: 'submit', className: 'primary', textContent: `Sign in with ${p.name}` });
+      const token = el('input', {
+        id: `f-${p.id}-token`, name: 'token', type: 'password', autocomplete: 'off',
+        placeholder: 'Or paste a token here',
+      });
+      const tokenLabel = el('label', { className: 'field', htmlFor: `f-${p.id}-token` },
+        el('span', {}, 'Token'), token);
+      const finish = el('button', { type: 'button', className: 'ghost', textContent: 'I have signed in' });
+
+      form.append(start, codeBox, tokenLabel, el('div', { className: 'actions' }, finish), err);
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.textContent = '';
+        start.disabled = true;
+        try {
+          const flow = await sendJSON(`/api/oauth/${p.id}/start`, 'POST');
+          codeBox.replaceChildren(
+            el('p', { className: 'oauth-code', textContent: flow.userCode }),
+            el('p', { className: 'hint', textContent: `Type this code at ${flow.verificationUri}` }),
+            el('a', { href: flow.verificationUriComplete || flow.verificationUri, target: '_blank', rel: 'noreferrer', textContent: 'Open the sign-in page' }),
+          );
+          codeBox.hidden = false;
+        } catch (ex) {
+          err.textContent = ex.message ?? 'The sign-in could not be started.';
+        } finally {
+          start.disabled = false;
+        }
+      });
+
+      finish.addEventListener('click', async () => {
+        err.textContent = '';
+        finish.disabled = true;
+        try {
+          await sendJSON(`/api/oauth/${p.id}/finish`, 'POST', { token: token.value.trim() });
+          state.openForm = null;
+          state.errors.delete(p.id);
+          await reload();
+        } catch (ex) {
+          err.textContent = ex.message ?? 'The sign-in could not be finished.';
+        } finally {
+          finish.disabled = false;
+        }
+      });
+      return form;
+    }
+
+    for (const f of specs) {
+      const id = `f-${p.id}-${f.name}`;
+      const input = el('input', {
+        id, name: f.name, type: f.type, autocomplete: 'off', spellcheck: false, placeholder: f.hint ?? '',
+      });
+      if (f.type === 'url' && p.defaultBaseUrl) input.value = p.defaultBaseUrl;
+      inputs[f.name] = input;
+      const label = el('label', { className: 'field', htmlFor: id },
+        el('span', {}, f.label, f.required ? '' : ' ', !f.required ? el('span', { className: 'opt', textContent: '(optional)' }) : ''));
+      label.append(input);
+      if (f.hint) label.append(el('span', { className: 'fhint', textContent: f.hint }));
+      form.append(label);
+    }
+    const err = el('div', { className: 'err', role: 'alert', textContent: state.errors.get(p.id) ?? '' });
+    const submit = el('button', { className: 'primary', type: 'submit', textContent: 'Connect' });
+    form.append(el('div', { className: 'actions' }, submit,
+      el('button', { type: 'button', textContent: 'Cancel', onclick: () => { state.openForm = null; syncOpen(); } })), err);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submit.disabled = true;
+      err.textContent = '';
+      const body = Object.fromEntries(specs.map((f) => [f.name, inputs[f.name].value]));
+      try {
+        await sendJSON(`/api/providers/${p.id}/connect`, 'POST', body);
+        state.openForm = null;
+        state.errors.delete(p.id);
+        await reload();
+      } catch (ex) {
+        state.errors.set(p.id, ex.message ?? 'Could not connect');
+        err.textContent = state.errors.get(p.id);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    return form;
+  }
+
+  // Forms stay in the DOM and are shown by toggling `hidden`. Re-rendering the
+  // whole list on every click lost clicks that landed mid-render and threw away
+  // whatever the person had typed.
+  const forms = new Map();
+  const toggles = new Map();
+
+  function syncOpen() {
+    for (const [id, form] of forms) form.hidden = state.openForm !== id;
+    for (const [id, button] of toggles) button.setAttribute('aria-expanded', String(state.openForm === id));
+  }
+
+  async function loadModels(id) {
+    if (state.models.has(id)) return state.models.get(id);
+    try {
+      const models = await getJSON(`/api/providers/${id}/models`);
+      state.models.set(id, models);
+      return models;
+    } catch {
+      state.models.set(id, []);
+      return [];
+    }
+  }
+
+  async function render() {
+    const connectedEl = document.getElementById('connected');
+    const availableEl = document.getElementById('available');
+    const connected = state.providers.filter((p) => p.status === 'connected');
+    const rest = state.providers.filter((p) => p.status !== 'connected');
+
+    // Paint both lists before asking any provider for models. A slow model list
+    // must not leave the connectable rows showing a provider that is now gone.
+    connectedEl.replaceChildren();
+    availableEl.replaceChildren();
+    forms.clear();
+    toggles.clear();
+
+    if (!connected.length) {
+      connectedEl.append(el('div', { className: 'row' }, el('div', { className: 'desc', textContent: 'No providers connected yet.' })));
+    }
+
+    const modelSlots = [];
+    for (const p of connected) {
+      const row = rowShell(p);
+      const right = row.querySelector('.right');
+      right.append(el('span', { className: 'tag', textContent: p.kind === 'local' ? 'Local' : 'API key' }));
+      right.append(el('span', { className: 'hint' }, el('span', { className: 'dot' }), el('span', { textContent: p.maskedKey || 'ready' })));
+      right.append(el('button', {
+        className: 'danger',
+        textContent: 'Disconnect',
+        'aria-label': `Disconnect ${p.name}`,
+        onclick: async () => {
+          await sendJSON(`/api/providers/${p.id}/disconnect`, 'POST', {});
+          state.models.delete(p.id);
+          await reload();
+        },
+      }));
+      connectedEl.append(row);
+
+      const slot = el('div', { className: 'row', style: 'display:block' },
+        el('div', { className: 'desc', textContent: 'Loading models…' }));
+      connectedEl.append(slot);
+      modelSlots.push([p, slot]);
+    }
+
+    for (const p of rest) {
+      const row = rowShell(p);
+      const right = row.querySelector('.right');
+      if (p.status === 'error') {
+        right.append(el('span', { className: 'err', textContent: p.lastError || 'Failed' }));
+      }
+      const label = p.kind === 'oauth' ? 'Sign in' : '＋ Connect';
+      const aria = p.kind === 'oauth' ? `Sign in with ${p.name}` : `Connect ${p.name}`;
+      const toggle = el('button', {
+        textContent: label,
+        'aria-label': aria,
+        'aria-expanded': String(state.openForm === p.id),
+        onclick: () => { state.openForm = state.openForm === p.id ? null : p.id; syncOpen(); },
+      });
+      toggles.set(p.id, toggle);
+      right.append(toggle);
+      availableEl.append(row);
+
+      const form = renderForm(p);
+      forms.set(p.id, form);
+      availableEl.append(form);
+    }
+
+    syncOpen();
+
+    await Promise.all(modelSlots.map(async ([p, slot]) => {
+      const models = await loadModels(p.id);
+      slot.replaceChildren();
+      if (!models.length) {
+        slot.append(el('div', { className: 'desc', textContent: 'No models were returned. The key may be unverified, or the provider is rate limiting.' }));
+        return;
+      }
+      const list = el('ul', { className: 'modellist' });
+      for (const m of models.slice(0, 8)) list.append(el('li', { textContent: m.id }));
+      if (models.length > 8) list.append(el('li', { textContent: `+ ${models.length - 8} more` }));
+      slot.append(el('div', { className: 'desc', textContent: `${models.length} models available` }), list);
+    }));
+  }
+
+  async function reload() {
+    state.providers = await getJSON('/api/providers');
+    await render();
+  }
+
+  await reload();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+*.bak-*
+
+# Playwright artefacts
+test-results/
+playwright-report/
+blob-report/
+
+# brainstorm mockups
+.superpowers/
+
+# dependencies and local backups
+node_modules/
+ui-backup-*/

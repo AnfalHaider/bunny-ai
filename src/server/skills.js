@@ -1,0 +1,98 @@
+/**
+ * Skills: a short written instruction that can be switched on for a chat.
+ *
+ * A skill is a name, a description and some instructions. When it is on, its
+ * instructions ride in front of the model like a project would, and it appears
+ * as a slash command so it can be switched on and off from the composer.
+ *
+ * Skills live in the profile, not in the repository, so a person can write one
+ * without touching the code.
+ */
+
+import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+
+const MAX_LENGTH = 4000;
+
+export function createSkillStore({ file }) {
+  let skills = [];
+  let loaded = false;
+
+  async function load() {
+    if (loaded) return skills;
+    try {
+      const parsed = JSON.parse(await readFile(file, 'utf8'));
+      if (Array.isArray(parsed)) skills = parsed;
+    } catch {
+      skills = [];
+    }
+    loaded = true;
+    return skills;
+  }
+
+  async function persist() {
+    await writeFile(file, JSON.stringify(skills, null, 2), 'utf8');
+  }
+
+  async function list({ enabledOnly = false } = {}) {
+    await load();
+    const rows = enabledOnly ? skills.filter((s) => s.enabled) : skills;
+    return [...rows].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }
+
+  async function add({ name, description = '', instructions = '', enabled = false }) {
+    await load();
+    const clean = String(name ?? '').trim();
+    if (!clean) throw Object.assign(new Error('A skill needs a name'), { code: 'skill.nameRequired' });
+    if (!String(instructions).trim()) {
+      throw Object.assign(new Error('A skill needs instructions'), { code: 'skill.instructionsRequired' });
+    }
+    const skill = {
+      id: randomUUID(),
+      name: clean.slice(0, 60),
+      description: String(description).trim().slice(0, 200),
+      instructions: String(instructions).trim().slice(0, MAX_LENGTH),
+      enabled: Boolean(enabled),
+      createdAt: new Date().toISOString(),
+    };
+    skills.push(skill);
+    await persist();
+    return skill;
+  }
+
+  async function update(id, patch) {
+    await load();
+    const skill = skills.find((s) => s.id === id);
+    if (!skill) throw Object.assign(new Error('No such skill'), { code: 'skill.notFound' });
+    if (patch.name !== undefined) skill.name = String(patch.name).trim().slice(0, 60) || skill.name;
+    if (patch.description !== undefined) skill.description = String(patch.description).trim().slice(0, 200);
+    if (patch.instructions !== undefined) {
+      const text = String(patch.instructions).trim().slice(0, MAX_LENGTH);
+      if (!text) throw Object.assign(new Error('A skill needs instructions'), { code: 'skill.instructionsRequired' });
+      skill.instructions = text;
+    }
+    if (patch.enabled !== undefined) skill.enabled = Boolean(patch.enabled);
+    await persist();
+    return skill;
+  }
+
+  async function remove(id) {
+    await load();
+    const before = skills.length;
+    skills = skills.filter((s) => s.id !== id);
+    await persist();
+    return skills.length !== before;
+  }
+
+  /** The block that goes in front of the model, or null when there is none. */
+  async function context() {
+    const rows = await list({ enabledOnly: true });
+    if (!rows.length) return null;
+    return [
+      'Skills that are switched on:',
+      ...rows.map((s) => `## ${s.name}\n${s.instructions}`),
+    ].join('\n');
+  }
+
+  return { list, add, update, remove, context };
+}

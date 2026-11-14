@@ -1,0 +1,39 @@
+Bunny AI - build status (2026-11-12)
+
+RUNS: yes, `npm start` -> http://127.0.0.1:5173/
+Zero dependencies at run time. No build step.
+
+FEATURE TALLY: 72 of 74 reference-app features are done and covered by a test.
+The generated tally is docs/FEATURE-TALLY.md; the registry is docs/features.js.
+Two rows are open on purpose: computer use (needs OS control and an
+entitlement) and plugins/marketplaces (would mean running third-party code).
+
+VERIFIED WORKING (evidence in docs/STATUS.md, one test per feature)
+- 10-provider catalogue, Nvidia first, connect/disconnect, masked keys
+- Probe honesty: a public model list does not fake a verified key
+- Sign-in for OAuth providers, device code flow
+- Local model servers (Ollama), no key needed
+- Model discovery, grouping, search, keyboard and aria in the picker
+- Streaming chat over SSE; stop keeps the partial reply; retry; edit and resend
+- Markdown, code blocks with copy, syntax highlighting, attachments
+- Context meter, /compact, automatic compaction when the window fills
+- Artifacts beside the chat: versions, restore, sandboxed HTML, charts, print
+- Branching and nesting, projects with instructions, pin, archive, rename, delete
+- Search across chats, import from other tools, export as Markdown
+- Command palette, four languages including right to left, notifications,
+  pop-out window, installable as a desktop app
+- Memory (kept deliberately, and suggested from a chat), MCP tools called by the
+  model, scheduled tasks, hooks, skills
+- Secrets encrypted per user with Windows DPAPI
+- Test mode is fully offline end to end
+
+TESTS
+- node --test test/        -> 204 tests, 204 pass, 0 fail
+- npx playwright test      -> 62 tests, 62 pass (real Chromium, own server)
+
+NOT DONE, ON PURPOSE
+- Computer use: needs OS-level control and an entitlement
+- Plugins and marketplaces: a plugin would mean running third-party code
+
+The app does not install updates itself (it can check a version feed you
+configure), and it speaks or listens only where the browser can.

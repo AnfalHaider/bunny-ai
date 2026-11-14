@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Settings — Bunny AI</title>
+<link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+<main class="page">
+  <h1>Settings</h1>
+  <p class="sub">Local preferences for this machine</p>
+
+  <h2>Appearance</h2>
+  <div class="group">
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Theme</div>
+        <div class="desc">Follow the system, or force light or dark.</div>
+      </div>
+      <div class="right">
+        <select id="theme" aria-label="Theme">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px">Connection</h2>
+  <div class="group">
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Provider</div>
+        <div class="desc">Default provider for new chats.</div>
+      </div>
+      <div class="right"><span class="tag" id="cur-provider">none</span></div>
+    </div>
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Model</div>
+        <div class="desc">Default model for new chats.</div>
+      </div>
+      <div class="right"><span class="tag" id="cur-model">none</span></div>
+    </div>
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Test mode</div>
+        <div class="desc">Reply locally without calling a provider. Useful for trying screens.</div>
+      </div>
+      <div class="right"><span class="tag" id="fake-mode">unknown</span></div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px">Version</h2>
+  <div class="group">
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Installed version</div>
+        <div class="desc">This app runs from a folder on your own machine, so it never updates itself.</div>
+      </div>
+      <div class="right"><span class="tag" id="version">unknown</span></div>
+    </div>
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Update source</div>
+        <div class="desc">A URL that answers with a version number. Leave it empty to skip the check.</div>
+      </div>
+      <div class="right wide-col">
+        <input id="update-url" placeholder="https://example.com/bunny-ai/version.json" aria-label="Update source" />
+      </div>
+    </div>
+    <div class="row">
+      <div class="right"><button id="check-update" class="primary">Check for updates</button></div>
+      <div class="meta-col"><div class="desc" id="update-note"></div></div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px">Language and alerts</h2>
+  <div class="group">
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Language</div>
+        <div class="desc">The interface language. Everything stays on this machine.</div>
+      </div>
+      <div class="right">
+        <select id="language" aria-label="Language">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+          <option value="ar">العربية</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Notifications</div>
+        <div class="desc">Tell me when a reply is ready and this window is in the background.</div>
+      </div>
+      <div class="right">
+        <label class="switch"><input type="checkbox" id="notifications" /><span id="notifications-state">off</span></label>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px">Models</h2>
+  <div class="group">
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Allowed models</div>
+        <div class="desc">One model id per line. Leave empty to offer every model the provider has.</div>
+      </div>
+      <div class="right wide-col">
+        <textarea id="allowlist" rows="3" aria-label="Allowed models"></textarea>
+      </div>
+    </div>
+    <div class="row">
+      <div class="meta-col">
+        <div class="name">Aliases</div>
+        <div class="desc">One "name = model-id" per line, so a model can be picked by a short name.</div>
+      </div>
+      <div class="right wide-col">
+        <textarea id="aliases" rows="3" aria-label="Model aliases"></textarea>
+      </div>
+    </div>
+    <div class="row">
+      <div class="right"><button id="save-models" class="primary">Save models</button></div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px">Usage</h2>
+  <div class="group" id="usage">
+    <div class="row"><div class="desc">Nothing has been used yet.</div></div>
+  </div>
+
+  <h2 style="margin-top:28px">Storage</h2>
+  <div class="group" id="storage"></div>
+
+  <p class="note"><a href="./index.html">← Back to chat</a> · <a href="./providers.html">Providers</a></p>
+</main>
+
+<script type="module">
+  import { getJSON, sendJSON, applyTheme } from './api.js';
+  import { LANGUAGES, applyLanguage } from './i18n.js';
+
+  const theme = document.getElementById('theme');
+  const allowlist = document.getElementById('allowlist');
+  const aliases = document.getElementById('aliases');
+  const language = document.getElementById('language');
+  const notifications = document.getElementById('notifications');
+
+  // The list of languages comes from one place, so the page and the app agree.
+  language.replaceChildren(...LANGUAGES.map((l) => {
+    const option = document.createElement('option');
+    option.value = l.code;
+    option.textContent = l.name;
+    return option;
+  }));
+
+  language.addEventListener('change', async () => {
+    applyLanguage(language.value);
+    await sendJSON('/api/settings', 'PUT', { language: language.value });
+  });
+
+  notifications.addEventListener('change', async () => {
+    const wanted = notifications.checked;
+    let allowed = wanted;
+    if (wanted && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      // A browser that has not been asked yet is asked now; one that has been
+      // refused stays refused.
+      allowed = (await Notification.requestPermission()) === 'granted';
+    }
+    notifications.checked = allowed;
+    document.getElementById('notifications-state').textContent = allowed ? 'on' : 'off';
+    await sendJSON('/api/settings', 'PUT', { notifications: allowed });
+  });
+
+  theme.addEventListener('change', async () => {
+    const value = theme.value;
+    applyTheme(value);
+    await sendJSON('/api/settings', 'PUT', { theme: value });
+  });
+
+  /** "fast = model-id" lines become an alias table. */
+  function parseAliases(text) {
+    const out = {};
+    for (const line of String(text).split('\n')) {
+      const match = line.match(/^\s*([^=\s]+)\s*=\s*(.+?)\s*$/);
+      if (match) out[match[1]] = match[2];
+    }
+    return out;
+  }
+
+  function renderAliases(map) {
+    aliases.value = Object.entries(map).map(([name, id]) => `${name} = ${id}`).join('\n');
+  }
+
+  const updateUrl = document.getElementById('update-url');
+
+  document.getElementById('check-update').addEventListener('click', async () => {
+    const note = document.getElementById('update-note');
+    note.textContent = 'Checking…';
+    await sendJSON('/api/settings', 'PUT', { updateUrl: updateUrl.value.trim() });
+    const result = await sendJSON('/api/update/check', 'POST');
+    note.textContent = result.message;
+  });
+
+  document.getElementById('save-models').addEventListener('click', async () => {    const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
+    const map = parseAliases(aliases.value);
+    await sendJSON('/api/settings', 'PUT', { allowlist: list, aliases: map });
+    const button = document.getElementById('save-models');
+    button.textContent = 'Saved';
+    setTimeout(() => { button.textContent = 'Save models'; }, 1200);
+  });
+
+  async function renderUsage() {
+    const host = document.getElementById('usage');
+    const data = await getJSON('/api/usage');
+    host.replaceChildren();
+    if (!data.providers.length) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = 'Nothing has been used yet.';
+      row.append(desc);
+      host.append(row);
+      return;
+    }
+    for (const row of data.providers) {
+      const line = document.createElement('div');
+      line.className = 'kv';
+      line.innerHTML = '<span class="k"></span><span class="v"></span>';
+      line.querySelector('.k').textContent = row.providerId;
+      line.querySelector('.v').textContent =
+        `${row.messages} messages · about ${row.tokens.toLocaleString()} tokens · ${row.sessions} chats`;
+      host.append(line);
+    }
+    const total = document.createElement('div');
+    total.className = 'kv';
+    total.innerHTML = '<span class="k"></span><span class="v"></span>';
+    total.querySelector('.k').textContent = 'Total';
+    total.querySelector('.v').textContent = `about ${data.total.toLocaleString()} tokens`;
+    host.append(total);
+  }
+
+  const boot = async () => {
+    const [settings, health] = await Promise.all([getJSON('/api/settings'), getJSON('/api/health')]);
+    theme.value = settings.theme ?? 'system';
+    applyTheme(theme.value);
+    document.getElementById('cur-provider').textContent = settings.providerId ?? 'none';
+    document.getElementById('cur-model').textContent = settings.model ?? 'none';
+    document.getElementById('fake-mode').textContent = health.fake ? 'on' : 'off';
+    allowlist.value = (settings.allowlist ?? []).join('\n');
+    renderAliases(settings.aliases ?? {});
+    language.value = settings.language ?? 'en';
+    applyLanguage(language.value);
+    notifications.checked = Boolean(settings.notifications);
+    document.getElementById('notifications-state').textContent = settings.notifications ? 'on' : 'off';
+
+    const version = await getJSON('/api/version');
+    document.getElementById('version').textContent = version.version;
+    updateUrl.value = version.updateUrl ?? '';
+
+    await renderUsage();
+
+    const storage = document.getElementById('storage');
+    const rows = [
+      ['Sessions', 'one JSON file per chat'],
+      ['Secrets', 'Windows DPAPI, per user'],
+      ['Server', location.origin],
+    ];
+    for (const [k, v] of rows) {
+      const row = document.createElement('div');
+      row.className = 'kv';
+      row.innerHTML = '<span class="k"></span><span class="v"></span>';
+      row.querySelector('.k').textContent = k;
+      row.querySelector('.v').textContent = v;
+      storage.append(row);
+    }
+  };
+
+  boot();
+</script>
+</body>
+</html>
