@@ -35,6 +35,7 @@ const DEFAULT_STALL_MS = 120_000;
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
+  maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null,
 }) {
   if (fake) {
     yield* fakeStream(model, messages, signal);
@@ -53,18 +54,23 @@ export async function* streamChat({
   const conversation = messages.map((m) => ({ ...m }));
   const offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+  for (let round = 0; round < maxToolRounds; round += 1) {
     const body = { model, messages: conversation, stream: true };
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
     if (maxTokens) body.max_tokens = maxTokens;
     if (offerTools) body.tools = tools;
+    if (extraBody) Object.assign(body, extraBody);
 
     const { text, toolCalls } = yield* streamRound({
       baseUrl, headers, body, signal, fetchImpl, stallMs,
     });
 
-    if (!offerTools || !toolCalls.length) return;
+    if (!offerTools || !toolCalls.length) {
+      // Some models use their tools and then stop without a word. Ask once for the answer.
+      if (round > 0 && !String(text ?? '').trim()) yield* finalAnswer();
+      return;
+    }
 
     // Run what the model asked for and put the answers back into the
     // conversation, so the model can finish its answer.
@@ -81,6 +87,19 @@ export async function* streamChat({
       }
       conversation.push({ role: 'tool', tool_call_id: call.id, content: String(result).slice(0, 8000) });
     }
+  }
+  // Out of tool steps: the person still gets an answer from what was found so far.
+  if (offerTools) yield* finalAnswer();
+
+  /** One more round without tools, asking for the reply itself. */
+  async function* finalAnswer() {
+    const body = {
+      model, stream: true,
+      messages: [...conversation, { role: 'user', content: 'Now give your answer to my message above, using what your tools found. Do not call any more tools.' }],
+    };
+    if (maxTokens) body.max_tokens = maxTokens;
+    if (extraBody) Object.assign(body, extraBody);
+    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs });
   }
 }
 
@@ -193,6 +212,19 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
         if (typeof delta?.content === 'string' && delta.content) {
           text += delta.content;
           yield delta.content;
+        }
+        // Image models (OpenRouter) return pictures beside the text: show them in the reply.
+        for (const img of Array.isArray(delta?.images) ? delta.images : []) {
+          const url = img?.image_url?.url ?? img?.url;
+          if (typeof url === 'string' && /^(data:image\/|https:\/\/)/.test(url)) {
+            const piece = `
+
+![Generated image](${url})
+
+`;
+            text += piece;
+            yield piece;
+          }
         }
         collectToolCall(toolCalls, delta?.tool_calls);
       }

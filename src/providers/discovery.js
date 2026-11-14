@@ -43,6 +43,9 @@ export function normalizeModels(payload) {
       ownedBy: row.owned_by ?? row.owner ?? null,
       contextLength: numberOrNull(row.context_length ?? row.max_context_length ?? row.context_window),
       free: isFree(row, id),
+      // What goes in and comes out (OpenRouter publishes this); kept only when the provider says.
+      ...(Array.isArray(row.architecture?.input_modalities) ? { inputModalities: row.architecture.input_modalities } : {}),
+      ...(Array.isArray(row.architecture?.output_modalities) ? { outputModalities: row.architecture.output_modalities } : {}),
     });
   }
 

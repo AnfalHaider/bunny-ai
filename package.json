@@ -60,5 +60,8 @@
       "uninstallerIcon": "build/icon.ico",
       "artifactName": "Bunny-AI-Setup-${version}.${ext}"
     }
+  },
+  "dependencies": {
+    "unpdf": "^2.2.0"
   }
 }

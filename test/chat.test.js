@@ -171,3 +171,39 @@ test('the fake stream echoes only the latest user turn', async () => {
   assert.match(text, /second/);
   assert.equal(text.includes('first'), false);
 });
+
+/** A provider that answers each request with the next canned SSE body. */
+function scriptedFetch(bodies) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push(JSON.parse(init.body));
+    const frames = bodies[Math.min(calls.length - 1, bodies.length - 1)];
+    const body = new ReadableStream({ start(c) { const e = new TextEncoder(); for (const f of frames) c.enqueue(e.encode(f)); c.close(); } });
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  };
+  return { fetchImpl, calls };
+}
+const toolFrame = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'look', arguments: '{}' } }] } }] })}\n\n`;
+const tools = [{ type: 'function', function: { name: 'look', parameters: { type: 'object', properties: {} } } }];
+
+test('a model that uses a tool and then says nothing is asked once for its answer', async () => {
+  const { fetchImpl, calls } = scriptedFetch([[toolFrame, 'data: [DONE]\n\n'], ['data: [DONE]\n\n'], [frame('The title is Example'), 'data: [DONE]\n\n']]);
+  const parts = await collect(streamChat({
+    baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'go' }],
+    fetchImpl, tools, runTool: async () => 'found it',
+  }));
+  assert.equal(parts.join(''), 'The title is Example');
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].tools, undefined, 'the last ask offers no tools');
+  assert.match(calls[2].messages.at(-1).content, /Now give your answer/);
+});
+
+test('a model that runs out of tool steps still gives an answer', async () => {
+  const { fetchImpl, calls } = scriptedFetch([[toolFrame, 'data: [DONE]\n\n'], [toolFrame, 'data: [DONE]\n\n'], [frame('Best so far'), 'data: [DONE]\n\n']]);
+  const parts = await collect(streamChat({
+    baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'go' }],
+    fetchImpl, tools, runTool: async () => 'more', maxToolRounds: 2,
+  }));
+  assert.equal(parts.join(''), 'Best so far');
+  assert.equal(calls.length, 3);
+});

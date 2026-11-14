@@ -74,5 +74,9 @@ test('a skill is added and switched on', async ({ page }) => {
 
 test('the automation screen is reachable from the chat screen', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('link', { name: 'Automation' })).toBeVisible();
+  // Providers and Automation live in the Settings window, not the sidebar.
+  await page.locator('#settings-open').click();
+  await page.locator('#settings-nav-list [data-section="automation"]').click();
+  const frame = page.frameLocator('#settings-frame');
+  await expect(frame.locator('#memory-form')).toBeVisible();
 });

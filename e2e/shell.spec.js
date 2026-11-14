@@ -72,11 +72,14 @@ test('the app can be installed as a desktop app', async ({ page }) => {
 test('an artifact shows a thumbnail and can be printed', async ({ page, context }) => {
   await connectAndChat(page, 'make me something to keep');
   await page.locator('.msg.assistant .msg-actions button[data-act="artifact"]').last().click();
-  await expect(page.locator('#artifact-list')).toBeVisible();
+  await expect(page.locator('#artifact-view')).toBeVisible();
 
-  // The list shows what the artifact is, before it is opened.
+  // Back to the list: it shows what the artifact is, before it is opened.
+  await page.getByRole('button', { name: 'All artifacts' }).click();
+  await expect(page.locator('#artifact-list')).toBeVisible();
   await expect(page.locator('#artifact-list .artifact-thumb')).toHaveCount(1);
   await expect(page.locator('#artifact-list .artifact-preview')).not.toHaveText('');
+  await page.locator('#artifact-list .artifact-row').first().click();
 
   // Printing opens the artifact on its own, so the page prints the document.
   const popupPromise = context.waitForEvent('page');

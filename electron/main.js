@@ -2,11 +2,12 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, Menu, Tray, ipcMain, shell, nativeImage } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
+import { controlFrame } from './browserAgent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -127,6 +128,23 @@ ipcMain.handle('prefs:set', (_event, patch) => {
   return savePrefs(clean);
 });
 ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
+// The native "choose a folder" dialog, for the folder a chat works in.
+ipcMain.handle('dialog:pickFolder', async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? win;
+  const result = await dialog.showOpenDialog(owner, { title: 'Choose a folder to work in', properties: ['openDirectory'] });
+  return result.canceled ? null : result.filePaths[0] ?? null;
+});
+
+// The model working a page in the browser panel (see browserAgent.js). Only Bunny's
+// own pages may ask, and only for frames inside the page that asked.
+ipcMain.handle('browser:act', async (event, name, action, args) => {
+  if (!isOwn(event.senderFrame?.url ?? '')) return { error: 'Not allowed' };
+  try {
+    return await controlFrame(event.sender, name, action, args ?? {});
+  } catch (err) {
+    return { error: String(err?.message ?? err) };
+  }
+});
 
 app.on('second-instance', showWindow);
 app.on('before-quit', () => { quitting = true; });
@@ -137,10 +155,24 @@ app.on('web-contents-created', (_event, contents) => guard(contents));
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
+  // The browser panel shows sites in frames. Many sites forbid being framed; for
+  // frames only, drop that one rule (X-Frame-Options and CSP frame-ancestors) so
+  // the panel works like a browser tab. Top-level pages keep every header.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (details.resourceType !== 'subFrame') return callback({});
+    const headers = { ...details.responseHeaders };
+    for (const key of Object.keys(headers)) {
+      const lower = key.toLowerCase();
+      if (lower === 'x-frame-options') delete headers[key];
+      if (lower === 'content-security-policy') {
+        headers[key] = headers[key].map((v) => v.split(';').filter((d) => !/^\s*frame-ancestors\b/i.test(d)).join(';'));
+      }
+    }
+    callback({ responseHeaders: headers });
+  });
   try {
     await startServer();
   } catch (err) {
-    const { dialog } = await import('electron');
     dialog.showErrorBox('Bunny AI could not start', String(err?.message ?? err));
     app.quit();
     return;

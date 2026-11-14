@@ -19,6 +19,10 @@
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true"><defs><mask id="brand-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48"><rect width="48" height="48" fill="#fff"/><g fill="#000" stroke="#000" stroke-width="5" stroke-linejoin="round"><path d="M20 8h8l1.5 16h-11Z" stroke="none"/><rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/><rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/></g></mask></defs><g fill="currentColor"><path mask="url(#brand-cut)" d="M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z"/><rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/><rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/></g></svg>
       <span data-i18n="app.name">Bunny AI</span>
+      <div class="mode-switch" role="group" aria-label="Mode">
+        <button id="mode-chat" class="mode-tab is-active" aria-pressed="true" data-i18n="mode.chat" title="Talk: no tools">Chat</button>
+        <button id="mode-code" class="mode-tab" aria-pressed="false" data-i18n="mode.code" title="Work inside a folder: read, edit and run">Code</button>
+      </div>
     </div>
 
     <button id="new-chat" class="nav-row is-strong">
@@ -28,6 +32,10 @@
     <button id="incognito" class="nav-row" aria-label="Start an incognito chat" title="Incognito: nothing is saved">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="16" r="3"/><circle cx="17" cy="16" r="3"/><path d="M10 16h4M3 11h18M6 11l2-6h8l2 6"/></svg>
       <span data-i18n="chat.incognito">Incognito</span>
+    </button>
+    <button id="artifacts-toggle" class="nav-row" aria-pressed="false" aria-controls="artifacts" title="Artifacts: opens in the side panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span data-i18n="chat.artifacts">Artifacts</span> <span class="count" id="artifact-count">0</span>
     </button>
 
     <search>
@@ -47,14 +55,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>
         <span data-i18n="chat.archived">Archived</span>
       </button>
-      <a class="nav-row" href="./providers.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
-        <span data-i18n="chat.providers">Providers</span>
-      </a>
-      <a class="nav-row" href="./automation.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
-        <span data-i18n="chat.automation">Automation</span>
-      </a>
       <div class="account-wrap">
         <button class="account" id="account-button" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu">
           <span class="avatar" id="account-avatar" aria-hidden="true">B</span>
@@ -105,11 +105,9 @@
       <button id="sidebar-toggle" class="icon-btn mobile-only" aria-label="Show chats" aria-expanded="false" aria-controls="sessions">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-      <div class="mode-switch" role="group" aria-label="Mode">
-        <button id="mode-chat" class="mode-tab is-active" aria-pressed="true" data-i18n="mode.chat">Chat</button>
-        <button id="mode-cowork" class="mode-tab" aria-pressed="false" data-i18n="mode.cowork">Cowork</button>
-        <button id="mode-code" class="mode-tab" aria-pressed="false" data-i18n="mode.code">Code</button>
-      </div>
+      <button id="sidebar-collapse" class="icon-btn desktop-sidebar-toggle" aria-pressed="true" aria-label="Hide sidebar" title="Hide sidebar (Ctrl+B)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
+      </button>
       <nav class="crumbs"><span class="current chat-title" id="chat-title"></span></nav>
       <span class="badge accent mode" id="mode" hidden>Incognito</span>
       <div class="bar-chip context" id="context" hidden title="Context window used">
@@ -121,9 +119,6 @@
 
       <div class="toolbar">
         <button id="export" class="tool-text" data-i18n="chat.export">Export</button>
-        <button id="artifacts-toggle" class="tool-text" aria-pressed="false" aria-controls="artifacts">
-          <span data-i18n="chat.artifacts">Artifacts</span> <span class="count" id="artifact-count">0</span>
-        </button>
         <span class="tool-sep"></span>
         <button id="rail-toggle" class="icon-btn" data-view="overview" aria-pressed="false" aria-controls="rail" aria-label="Session overview" title="Session overview">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
@@ -227,6 +222,14 @@
           <option value="max" data-i18n="composer.max">Max</option>
         </select>
         <span class="under-sep">|</span>
+        <div class="job-wrap">
+          <button class="picker-btn" id="job-button" aria-haspopup="menu" aria-expanded="false" aria-controls="job-menu" title="What kind of job this is">
+            <span class="value" id="job-label">Auto</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="menu up job-menu" id="job-menu" role="menu" hidden></div>
+        </div>
+        <span class="under-sep">|</span>
         <div class="picker" id="picker"></div>
         <span class="composer-model-indicator" id="composer-model-indicator"></span>
 
@@ -295,13 +298,40 @@
         <div class="diff-content" id="diff-content"><div class="pane-empty diff-empty"><span data-i18n="pane.diffEmpty">No changes yet.</span></div></div>
       </div>
 
-      <div class="side-pane-panel" id="pane-browser" hidden>
-        <div class="browser-url">
-          <input id="browser-url" type="url" data-i18n-placeholder="pane.browserPlaceholder" placeholder="https://example.com" aria-label="Browser URL" />
-          <button id="browser-go" class="btn btn-sm" data-i18n="pane.browserGo">Go</button>
+      <div class="side-pane-panel browser-pane" id="pane-browser" hidden>
+        <div class="browser-tabbar" id="browser-tabbar" role="tablist" aria-label="Browser tabs"></div>
+        <div class="browser-nav">
+          <button class="icon-btn" id="browser-back" aria-label="Back" title="Back">←</button>
+          <button class="icon-btn" id="browser-forward" aria-label="Forward" title="Forward">→</button>
+          <button class="icon-btn" id="browser-reload" aria-label="Reload" title="Reload">⟳</button>
+          <input id="browser-url" class="browser-address" type="text" data-i18n-placeholder="pane.browserPlaceholder" placeholder="Type a URL" aria-label="Address" autocomplete="off" spellcheck="false" />
+          <div class="browser-more-wrap">
+            <button class="icon-btn" id="browser-more" aria-label="Browser menu" aria-haspopup="menu" aria-expanded="false">⋯</button>
+            <div class="menu down browser-menu" id="browser-menu" role="menu" hidden>
+              <button class="menu-item" role="menuitem" data-browser="external" data-needs-url><span class="label">Open in your browser</span></button>
+              <button class="menu-item" role="menuitem" data-browser="copy" data-needs-url><span class="label">Copy URL</span></button>
+              <button class="menu-item" role="menuitem" data-browser="file"><span class="label">Open HTML file…</span></button>
+              <div class="menu-sep"></div>
+              <button class="menu-item" role="menuitem" data-browser="clear"><span class="label">Clear this tab's history</span></button>
+            </div>
+          </div>
+          <input type="file" id="browser-file" accept=".html,.htm,text/html" hidden />
         </div>
-        <div class="browser-content" id="browser-content">
-          <iframe id="browser-frame" class="browser-frame" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+        <div class="browser-content" id="browser-tabs-content">
+          <div class="browser-empty" id="browser-empty">
+            <p class="text-dim">Type a URL above, or open an HTML file from the ⋯ menu.</p>
+            <div class="browser-devserver" id="browser-devserver" hidden>
+              <p class="text-dim">Dev server detected in your folder.</p>
+              <div class="devserver-card">
+                <div><div class="devserver-port" id="devserver-port"></div><code id="devserver-command"></code></div>
+                <button class="btn btn-sm" id="devserver-use">Run and open</button>
+              </div>
+            </div>
+          </div>
+          <div class="browser-blocked" id="browser-blocked" hidden>
+            <p>This site does not allow being shown inside another app.</p>
+            <button class="btn btn-sm" id="browser-blocked-open">Open in your browser</button>
+          </div>
         </div>
       </div>
 
@@ -395,6 +425,23 @@
       <iframe id="settings-frame" title="Settings section"></iframe>
     </div>
   </div>
+</div>
+
+<!-- panel layout menu (opened from the layout button in each panel head) -->
+<div class="menu pane-layout-menu" id="pane-layout-menu" role="menu" hidden>
+  <div class="menu-title">Move</div>
+  <div class="layout-row">
+    <button class="layout-opt" data-dock="left" title="Dock left" aria-label="Dock left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="5.5" y="7" width="5" height="10" rx="1" fill="currentColor" stroke="none"/></svg></button>
+    <button class="layout-opt" data-dock="right" title="Dock right" aria-label="Dock right"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="13.5" y="7" width="5" height="10" rx="1" fill="currentColor" stroke="none"/></svg></button>
+    <button class="layout-opt" data-dock="bottom" title="Dock bottom" aria-label="Dock bottom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="5.5" y="12" width="13" height="5" rx="1" fill="currentColor" stroke="none"/></svg></button>
+  </div>
+  <div class="menu-title">Fill and arrange</div>
+  <div class="layout-row">
+    <button class="layout-opt" data-fill="true" title="Fill the chat area" aria-label="Fill the chat area"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="5.5" y="7" width="13" height="10" rx="1" fill="currentColor" stroke="none"/></svg></button>
+    <button class="layout-opt" data-fill="false" title="Side by side with the chat" aria-label="Side by side with the chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M12 5v14"/></svg></button>
+  </div>
+  <div class="menu-sep"></div>
+  <button class="menu-item" data-action="window"><span class="label">Open in new window</span></button>
 </div>
 
 <script type="module" src="./chat.js"></script>

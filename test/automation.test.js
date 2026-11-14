@@ -360,6 +360,10 @@ test('a tool the model asks for is run and the answer comes back', async (t) => 
 
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: upstreamUrl });
   const { body: created } = await post(base, '/api/sessions', { title: 'With a tool' });
+  // Auto mode: the tool runs without waiting for an Allow (Manual would wait for one).
+  await fetch(`${base}/api/sessions/${created.id}/setting/permissionMode`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: 'auto' }),
+  });
   const res = await fetch(`${base}/api/sessions/${created.id}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

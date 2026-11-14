@@ -12,7 +12,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
-const MAX_LENGTH = 4000;
+// Long skills (imported plugins with reference files) are kept whole and loaded on demand.
+const MAX_LENGTH = 120_000;
+const INLINE_LIMIT = 3000;
 
 export function createSkillStore({ file }) {
   let skills = [];
@@ -85,14 +87,34 @@ export function createSkillStore({ file }) {
   }
 
   /** The block that goes in front of the model, or null when there is none. */
+  /**
+   * What the model is told about the skills that are on. Short skills ride along
+   * whole; a long one is named and summarised, and the model loads it with the
+   * read_skill tool when the task needs it.
+   */
   async function context() {
     const rows = await list({ enabledOnly: true });
     if (!rows.length) return null;
+    // Many skills: a compact index only, so every message stays small.
+    if (rows.length > 12) {
+      return [
+        `Skills that are switched on (${rows.length}). When one fits the task, call read_skill with its name first, then follow it:`,
+        ...rows.map((s) => `- ${s.name}: ${String(s.description || '').slice(0, 140)}`),
+      ].join('\n');
+    }
     return [
       'Skills that are switched on:',
-      ...rows.map((s) => `## ${s.name}\n${s.instructions}`),
+      ...rows.map((s) => (s.instructions.length <= INLINE_LIMIT
+        ? `## ${s.name}\n${s.instructions}`
+        : `## ${s.name}\n${s.description || '(no summary)'}\n(Long skill: call read_skill with name "${s.name}" to load its full instructions when the task needs it.)`)),
     ].join('\n');
   }
 
-  return { list, add, update, remove, context };
+  /** One skill by name (case-insensitive) or id. */
+  async function find(nameOrId) {
+    const key = String(nameOrId ?? '').trim().toLowerCase();
+    return (await list()).find((s) => s.id === nameOrId || s.name.toLowerCase() === key) ?? null;
+  }
+
+  return { list, add, update, remove, context, find };
 }

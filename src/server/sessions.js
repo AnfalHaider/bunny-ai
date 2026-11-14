@@ -180,6 +180,10 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       attachments: message.attachments ?? [],
       at: new Date().toISOString(),
     };
+    // Optional details: tool steps (tool, status, result) and which model answered (Auto).
+    for (const key of ['tool', 'status', 'result', 'model', 'providerId', 'job', 'auto', 'fellBackFrom']) {
+      if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
+    }
     session.messages.push(entry);
     // First user line becomes the title, so the sidebar is useful immediately.
     if (session.title === 'New chat' && message.role === 'user') {
@@ -204,6 +208,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.permissionMode !== undefined) session.permissionMode = patch.permissionMode;
     if (patch.effort !== undefined) session.effort = patch.effort ?? null;
     if (patch.incognito !== undefined) session.incognito = Boolean(patch.incognito);
+    if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;
   }

@@ -10,6 +10,7 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { resolveArtifact, artifactName } from '../ui/artifact-content.js';
 
 const ID_PATTERN = /^[a-f0-9-]{36}$/;
 const KINDS = new Set(['html', 'code', 'markdown']);
@@ -60,6 +61,9 @@ export function createArtifactStore({ dir }) {
       starred: Boolean(artifact.starred),
       versionCount: artifact.versions.length,
       preview: String(current?.content ?? '').replace(/\s+/g, ' ').slice(0, 120),
+      // what the content really is, and a readable name for lists
+      shownKind: resolveArtifact(current?.content ?? '', artifact.kind).kind,
+      name: artifactName(current?.content ?? '', artifact.title),
       createdAt: artifact.createdAt,
       updatedAt: artifact.updatedAt,
     };

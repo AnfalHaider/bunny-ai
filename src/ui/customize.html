@@ -31,6 +31,7 @@
       <div class="menu down cz-add-menu" id="cz-add-menu" role="menu" hidden>
         <button class="menu-item" role="menuitem" data-add="connector"><span class="label">Connector<small>An MCP server reached over https</small></span></button>
         <button class="menu-item" role="menuitem" data-add="skill"><span class="label">Skill<small>Instructions the model follows when it is on</small></span></button>
+        <button class="menu-item" role="menuitem" data-add="github"><span class="label">Plugin from GitHub<small>Paste a repository link: its skills and connectors are added</small></span></button>
         <button class="menu-item" role="menuitem" data-add="plugin"><span class="label">Plugin from file<small>A .json bundle of connectors and skills</small></span></button>
       </div>
       <input type="file" id="cz-plugin-file" accept=".json,application/json" hidden />
@@ -45,6 +46,15 @@
     </div>
     <div class="actions"><button type="submit" class="btn btn-primary btn-sm">Add connector</button><button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button><span class="err" data-err></span></div>
   </form>
+  <form class="card card-form cz-form" id="cz-github-form" hidden>
+    <div class="form-row">
+      <input class="input" name="url" placeholder="https://github.com/owner/repo" aria-label="GitHub repository link" required />
+      <button type="submit" class="btn btn-primary btn-sm">Install</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button>
+    </div>
+    <span class="field-help">Skills (SKILL.md, with their reference files) and remote connectors (.mcp.json) are added. Hooks and scripts made for other apps are skipped.</span>
+    <span class="err" data-err></span>
+  </form>
   <form class="card card-form cz-form" id="cz-skill-form" hidden>
     <input class="input" name="title" placeholder="Name" aria-label="Skill name" required />
     <input class="input" name="description" placeholder="What is it for?" aria-label="Skill description" />
@@ -52,9 +62,18 @@
     <div class="actions"><button type="submit" class="btn btn-primary btn-sm">Add skill</button><button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button><span class="err" data-err></span></div>
   </form>
 
+  <div class="cz-bulk" id="cz-bulk" hidden>
+    <span id="cz-bulk-count">0 selected</span>
+    <button class="btn btn-sm" data-bulk="on">Turn on</button>
+    <button class="btn btn-sm" data-bulk="off">Turn off</button>
+    <button class="btn btn-sm btn-danger" data-bulk="remove">Remove</button>
+    <span class="spacer"></span>
+    <span class="hint" id="cz-bulk-note"></span>
+    <button class="btn btn-ghost btn-sm" data-bulk="clear">Clear</button>
+  </div>
   <div class="cz-table" role="table" aria-label="Items">
     <div class="cz-row cz-head" role="row">
-      <span role="columnheader" id="cz-col-name">Connector</span><span role="columnheader">Type</span><span role="columnheader">Status</span><span></span>
+      <span role="columnheader" class="cz-name"><input type="checkbox" id="cz-all" aria-label="Select all shown" /><span id="cz-col-name">Connector</span></span><span role="columnheader">Type</span><span role="columnheader">Status</span><span></span>
     </div>
     <div id="cz-list" role="rowgroup"></div>
   </div>
@@ -70,6 +89,8 @@
 
   const $ = (id) => document.getElementById(id);
   const view = { kind: 'connectors', scope: 'yours', q: '' };
+  const picked = new Set();   // ids selected for a bulk action (this tab only)
+  let shownIds = [];
   let data = { connectors: [], skills: [], plugins: [] };
 
   // ---- Discover: only things that work with no sign-in (checked 2026-11-15) ----
@@ -124,9 +145,17 @@
     return n;
   }
 
-  function row({ name, sub, type, typeTag, status, statusClass, actions = [] }) {
-    return el('div', { className: 'cz-row', role: 'row' },
+  function row({ id, name, sub, type, typeTag, status, statusClass, actions = [] }) {
+    let box = null;
+    if (id && view.scope === 'yours') {
+      shownIds.push(id);
+      box = el('input', { type: 'checkbox', 'aria-label': `Select ${name}` });
+      box.checked = picked.has(id);
+      box.addEventListener('change', () => { if (box.checked) picked.add(id); else picked.delete(id); paintBulk(); });
+    }
+    return el('div', { className: `cz-row${id && picked.has(id) ? ' is-picked' : ''}`, role: 'row' },
       el('span', { className: 'cz-name', role: 'cell' },
+        box,
         el('span', { className: 'cz-logo', 'aria-hidden': 'true', text: initial(name) }),
         el('span', { className: 'cz-text' }, el('b', { text: name }), sub ? el('small', { text: sub }) : null)),
       el('span', { className: 'cz-type', role: 'cell' }, document.createTextNode(type), typeTag ? el('span', { className: 'badge', text: typeTag }) : null),
@@ -147,6 +176,7 @@
         const plugin = pluginOf('connectors', s.id);
         const status = !s.enabled ? 'Off' : s.status === 'connected' ? `✓ ${s.tools?.length ?? 0} tools` : s.status === 'error' ? 'Error' : 'Not checked';
         list.append(row({
+          id: s.id,
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.url,
           type: 'Remote', typeTag: plugin ? 'Plugin' : 'Custom',
           status, statusClass: s.status === 'error' ? 'text-bad' : s.status === 'connected' && s.enabled ? 'text-ok' : '',
@@ -161,6 +191,7 @@
       for (const s of data.skills.filter((s) => matches(s.name, s.description))) {
         const plugin = pluginOf('skills', s.id);
         list.append(row({
+          id: s.id,
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.description,
           type: 'Skill', typeTag: plugin ? 'Plugin' : 'Custom',
           status: s.enabled ? 'On' : 'Off', statusClass: s.enabled ? 'text-ok' : '',
@@ -174,6 +205,7 @@
       for (const p of data.plugins.filter((p) => matches(p.name, p.description))) {
         const n = (p.connectors?.length ?? 0) + (p.skills?.length ?? 0);
         list.append(row({
+          id: p.id,
           name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
           status: 'Installed', statusClass: 'text-ok',
           actions: [act('Uninstall', () => uninstall(p), 'btn btn-danger btn-sm')],
@@ -204,6 +236,8 @@
   function paint() {
     const list = $('cz-list');
     list.replaceChildren();
+    shownIds = [];
+    $('cz-all').hidden = view.scope !== 'yours';
     $('cz-col-name').textContent = { connectors: 'Connector', skills: 'Skill', plugins: 'Plugin' }[view.kind];
     if (view.scope === 'yours') paintYours(); else paintDiscover();
     const empty = !list.children.length;
@@ -213,6 +247,27 @@
       : view.kind === 'connectors' ? 'The tools of every connector that is on are offered to the model in your chats.'
       : view.kind === 'skills' ? 'Skills that are on are added to the model’s instructions in every chat.'
       : 'Uninstalling a plugin removes the connectors and skills it added.';
+    paintBulk();
+  }
+
+  function paintBulk() {
+    for (const id of [...picked]) if (!idsOf(view.kind).includes(id)) picked.delete(id);
+    const n = picked.size;
+    $('cz-bulk').hidden = n === 0;
+    $('cz-bulk-count').textContent = `${n} selected`;
+    const all = $('cz-all');
+    all.checked = shownIds.length > 0 && shownIds.every((id) => picked.has(id));
+    all.indeterminate = !all.checked && shownIds.some((id) => picked.has(id));
+    const plugins = view.kind === 'plugins';
+    $('cz-bulk').querySelector('[data-bulk="on"]').hidden = plugins;
+    $('cz-bulk').querySelector('[data-bulk="off"]').hidden = plugins;
+    $('cz-bulk').querySelector('[data-bulk="remove"]').textContent = plugins ? 'Uninstall' : 'Remove';
+    const owned = plugins ? 0 : [...picked].filter((id) => pluginOf(view.kind, id)).length;
+    $('cz-bulk-note').textContent = owned ? `${owned} from plugins: uninstall the plugin to remove them` : '';
+  }
+
+  function idsOf(kind) {
+    return kind === 'plugins' ? data.plugins.map((p) => p.id) : data[kind].map((x) => x.id);
   }
 
   // ---- plugins: install adds each part and records what was added ----
@@ -241,6 +296,7 @@
   // ---- controls ----
   document.querySelectorAll('.cz-tab').forEach((b) => b.addEventListener('click', () => {
     view.kind = b.dataset.kind;
+    picked.clear();
     document.querySelectorAll('.cz-tab').forEach((t) => { t.classList.toggle('is-active', t === b); t.setAttribute('aria-selected', String(t === b)); });
     paint();
   }));
@@ -250,6 +306,41 @@
     paint();
   }));
   $('cz-search').addEventListener('input', (e) => { view.q = e.target.value.trim().toLowerCase(); paint(); });
+  $('cz-all').addEventListener('change', (e) => {
+    for (const id of shownIds) { if (e.target.checked) picked.add(id); else picked.delete(id); }
+    paint();
+  });
+  $('cz-bulk').addEventListener('click', async (e) => {
+    const action = e.target.closest('[data-bulk]')?.dataset.bulk;
+    if (!action) return;
+    if (action === 'clear') { picked.clear(); paint(); return; }
+    const ids = [...picked];
+    const kind = view.kind;
+    if (action === 'remove') {
+      const removable = kind === 'plugins' ? ids : ids.filter((id) => !pluginOf(kind, id));
+      if (!removable.length) return;
+      const what = kind === 'plugins' ? 'Uninstall' : 'Remove';
+      if (!window.confirm(`${what} ${removable.length} ${kind === 'plugins' ? 'plugin' : kind.slice(0, -1)}${removable.length === 1 ? '' : 's'}?`)) return;
+    }
+    const buttons = $('cz-bulk').querySelectorAll('button');
+    buttons.forEach((b) => { b.disabled = true; });
+    $('cz-bulk-note').textContent = 'Working…';
+    try {
+      if (kind === 'plugins') {
+        for (const id of ids) { const p = data.plugins.find((x) => x.id === id); if (p) await uninstall(p); }
+      } else {
+        const base = kind === 'connectors' ? '/api/mcp' : '/api/skills';
+        for (const id of ids) {
+          if (action === 'remove') { if (!pluginOf(kind, id)) await sendJSON(`${base}/${id}`, 'DELETE'); }
+          else await sendJSON(`${base}/${id}`, 'PATCH', { enabled: action === 'on' });
+        }
+      }
+    } finally {
+      buttons.forEach((b) => { b.disabled = false; });
+      picked.clear();
+      await load();
+    }
+  });
 
   const addMenu = $('cz-add-menu');
   $('cz-add').addEventListener('click', (e) => {
@@ -264,6 +355,7 @@
     if (b.dataset.add === 'connector') { $('cz-connector-form').hidden = false; $('cz-connector-form').elements.namedItem('title').focus(); }
     if (b.dataset.add === 'skill') { $('cz-skill-form').hidden = false; $('cz-skill-form').elements.namedItem('title').focus(); }
     if (b.dataset.add === 'plugin') $('cz-plugin-file').click();
+    if (b.dataset.add === 'github') { $('cz-github-form').hidden = false; $('cz-github-form').elements.namedItem('url').focus(); }
   }));
   document.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => { b.closest('form').hidden = true; }));
 
@@ -290,6 +382,22 @@
     e.preventDefault();
     const f = e.currentTarget;
     submit(f, '/api/skills', { name: f.elements.namedItem('title').value, description: f.elements.namedItem('description').value, instructions: f.elements.namedItem('instructions').value, enabled: true }, 'skills');
+  });
+  $('cz-github-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const err = f.querySelector('[data-err]');
+    const btn = f.querySelector('[type="submit"]');
+    err.textContent = ''; btn.textContent = 'Installing…'; btn.disabled = true;
+    try {
+      const out = await sendJSON('/api/plugins/install', 'POST', { url: f.elements.namedItem('url').value });
+      f.reset(); f.hidden = true;
+      document.querySelector('.cz-tab[data-kind="plugins"]').click();
+      document.querySelector('.cz-scope [data-scope="yours"]').click();
+      await load();
+      $('cz-note').textContent = `Installed ${out.plugin.name}.` + (out.skipped?.length ? ` Skipped: ${out.skipped.join(', ')}.` : '');
+    } catch (ex) { err.textContent = ex.message; }
+    finally { btn.textContent = 'Install'; btn.disabled = false; }
   });
   $('cz-plugin-file').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];

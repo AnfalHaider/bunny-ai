@@ -80,7 +80,8 @@ test('connect, pick a model, chat, and reload into the same thread', async ({ pa
   // 2. The chat screen now offers that provider's models.
   await page.goto('/');
   await page.locator('#picker-button').click();
-  const option = page.locator('.picker-panel [role="option"]').first();
+  // The first entries are Auto and "Best for …"; a model from the full list is picked by hand.
+  const option = page.locator('.picker-panel [role="option"][data-model]:not([data-section])').first();
   await expect(option).toBeVisible();
   const modelId = await option.getAttribute('data-model');
   await option.click();
@@ -116,11 +117,11 @@ test('the picker filters models by search', async ({ page }) => {
 
   await page.goto('/');
   await page.locator('#picker-button').click();
-  await expect(page.locator('.picker-panel [role="option"]')).toHaveCount(3);
+  await expect(page.locator('.picker-panel [role="option"][data-model]:not([data-section])')).toHaveCount(3);
 
   await page.getByRole('searchbox', { name: 'Search models' }).fill('code');
-  await expect(page.locator('.picker-panel [role="option"]')).toHaveCount(1);
-  await expect(page.locator('.picker-panel [role="option"]').first()).toHaveAttribute('data-model', /code/);
+  await expect(page.locator('.picker-panel [role="option"][data-model]:not([data-section])')).toHaveCount(1);
+  await expect(page.locator('.picker-panel [role="option"][data-model]:not([data-section])').first()).toHaveAttribute('data-model', /code/);
 
   await page.getByRole('searchbox', { name: 'Search models' }).fill('zzz');
   await expect(page.locator('.picker-empty')).toHaveText('No models match.');
@@ -137,7 +138,7 @@ test('Enter sends and Shift+Enter adds a line', async ({ page }) => {
 
   await page.goto('/');
   await page.locator('#picker-button').click();
-  await page.locator('.picker-panel [role="option"]').first().click();
+  await page.locator('.picker-panel [role="option"][data-model]:not([data-section])').first().click();
 
   const input = page.locator('#input');
   await input.fill('first');

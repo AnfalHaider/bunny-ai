@@ -80,7 +80,7 @@ test('the settings screen saves an allowed-model list', async ({ page }) => {
   // The picker now offers only that model.
   await page.goto('/');
   await page.locator('#picker-button').click();
-  await expect(page.locator('.picker-panel [role="option"]')).toHaveCount(1);
+  await expect(page.locator('.picker-panel [role="option"][data-model]:not([data-section])')).toHaveCount(1);
 });
 
 test('the settings screen saves a model alias', async ({ page }) => {

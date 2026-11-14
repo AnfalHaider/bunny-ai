@@ -95,6 +95,7 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
       name: t.name,
       description: String(t.description ?? '').slice(0, 400),
       inputSchema: t.inputSchema ?? null,
+      readOnly: t.annotations?.readOnlyHint === true,
     }));
   } catch (err) {
     if (err instanceof McpError) throw err;

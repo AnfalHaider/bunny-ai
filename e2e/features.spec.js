@@ -175,7 +175,7 @@ test('the model picker is driven from the keyboard', async ({ page }) => {
 
   const search = page.getByRole('searchbox', { name: 'Search models' });
   const options = page.locator('.picker-panel [role="option"]');
-  await expect(options).toHaveCount(3);
+  await expect(page.locator('.picker-panel [role="option"][data-model]:not([data-section])')).toHaveCount(3);
 
   // Arrow keys move the highlight, the focus stays in the search box.
   await search.press('ArrowDown');
@@ -185,8 +185,8 @@ test('the model picker is driven from the keyboard', async ({ page }) => {
 
   // End jumps to the last one.
   await search.press('End');
-  await expect(options.nth(2)).toHaveAttribute('aria-selected', 'true');
-  const lastModel = await options.nth(2).getAttribute('data-model');
+  await expect(options.last()).toHaveAttribute('aria-selected', 'true');
+  const lastModel = await options.last().getAttribute('data-model');
 
   // Enter takes the highlighted model.
   await search.press('Enter');
@@ -270,6 +270,8 @@ test('an artifact keeps every version and can restore an older one', async ({ pa
   await page.locator('.msg.assistant .msg-actions button[data-act="artifact"]').last().click();
   await expect(page.locator('#artifact-view')).toBeVisible();
 
+  // Editing is its own mode, opened from the Edit button.
+  await page.locator('#artifact-view').getByRole('button', { name: 'Edit' }).click();
   const editor = page.locator('.artifact-edit');
   await editor.fill('version two');
   await page.getByRole('button', { name: 'Save new version' }).click();
@@ -279,6 +281,7 @@ test('an artifact keeps every version and can restore an older one', async ({ pa
   await page.locator('#artifact-view select').selectOption('0');
   await page.getByRole('button', { name: 'Restore' }).click();
   await expect(page.locator('#artifact-view .tag')).toContainText('v3');
+  await page.locator('#artifact-view').getByRole('button', { name: 'Edit' }).click();
   await expect(page.locator('.artifact-edit')).toHaveValue(/This is a local test reply/);
 });
 

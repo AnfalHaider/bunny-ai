@@ -35,6 +35,16 @@ function inline(text) {
     return `\u0000${codes.length - 1}\u0000`;
   });
 
+  // Images: https addresses, or a picture a model returned inline (data:image/...;base64).
+  // Held as placeholders so the bold/italic passes cannot touch the address.
+  const images = [];
+  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (whole, alt, src) => {
+    const ok = /^https:\/\//i.test(src) || /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(src);
+    if (!ok) return whole;
+    images.push(`<img class="md-image" src="${src}" alt="${alt}" loading="lazy" />`);
+    return `\u0001${images.length - 1}\u0001`;
+  });
+
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (whole, label, href) => {
     const safe = safeHref(href);
     if (!safe) return whole;
@@ -47,6 +57,7 @@ function inline(text) {
   out = out.replace(/~~([^~]+)~~/g, '<del>$1</del>');
 
   out = out.replace(/\u0000(\d+)\u0000/g, (_, index) => `<code>${codes[Number(index)]}</code>`);
+  out = out.replace(/\u0001(\d+)\u0001/g, (_, index) => images[Number(index)]);
   return out;
 }
 

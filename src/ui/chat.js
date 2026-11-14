@@ -15,6 +15,10 @@ import {
 import { renderMarkdown } from './markdown.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
+import { resolveArtifact, htmlDocument } from './artifact-content.js';
+import { initBrowserPane } from './browser-pane.js';
+import { initPaneLayout } from './pane-layout.js';
+import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -132,7 +136,7 @@ function openView(name) {
   const artifacts = $('artifacts');
   if (artifacts) artifacts.hidden = !state.artifactOpen;
   if (state.sidePaneOpen) $(`tab-${next}`)?.click();
-  if (state.artifactOpen) renderArtifactList();
+  if (state.artifactOpen) loadArtifacts().catch(() => renderArtifactList());
   renderRail();
   syncPaneButtons();
 }
@@ -140,6 +144,7 @@ function openView(name) {
 function syncPaneButtons() {
   const view = currentView();
   $('pane')?.classList.toggle('is-open', Boolean(view));
+  $('app')?.classList.toggle('has-pane', Boolean(view));
   document.querySelectorAll('[data-view]').forEach((b) => {
     const on = b.dataset.view === view
       || (b.dataset.view === 'tasks' && view === 'plan');
@@ -158,7 +163,7 @@ async function terminalStart() {
   if (state.terminalId) return;
   try {
     // No folder set: the server starts the shell in its own working folder.
-    const cwd = state.session?.folder ?? undefined;
+    const cwd = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? undefined;
     const result = await terminalCreate({ cwd });
     state.terminalId = result.id;
     terminalPoll();
@@ -197,8 +202,11 @@ function renderComposerHeader() {
   const effortLevel = $('effort-level');
   const indicator = $('composer-model-indicator');
 
-  if (folderText) folderText.textContent = state.session?.folder ?? say('composer.noFolder');
-  if (branchText) branchText.textContent = state.session?.branch ?? say('composer.noBranch');
+  const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
+  const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
+  if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
+  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
+  if (branchText) branchText.textContent = branch ?? say('composer.noBranch');
   if (permMode) permMode.value = state.session?.permissionMode ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
   if (effortLevel) effortLevel.value = state.session?.effort ?? state.settings?.defaultEffort ?? 'medium';
@@ -268,7 +276,14 @@ function renderPicker() {
     'aria-expanded': 'false',
     className: 'picker-trigger',
   });
-  if (state.selected) {
+  if (state.modelAuto && state.models.length) {
+    const pick = state.autoPick;
+    trigger.classList.add('is-auto');
+    trigger.append(
+      element('span', { className: 'label', textContent: 'Auto' }),
+      element('span', { className: 'meta', textContent: pick ? `· ${pick.displayName ?? pick.id}` : '· no model for this job' }),
+    );
+  } else if (state.selected) {
     trigger.append(
       element('span', { className: 'label', textContent: state.selected.model }),
       element('span', { className: 'meta', textContent: state.selected.providerName }),
@@ -345,19 +360,49 @@ function openPicker(host, trigger) {
       return;
     }
     let currentProvider = null;
+    if (!q) {
+      const job = state.resolvedJob ?? 'chat';
+      const autoItem = button('', { className: 'picker-item picker-auto', role: 'option', 'aria-selected': String(Boolean(state.modelAuto)) });
+      autoItem.id = 'model-auto';
+      autoItem.append(
+        element('span', { className: 'model-name', textContent: 'Auto' }),
+        element('span', { className: 'model-desc', textContent: `Best available for ${JOBS[job].label.toLowerCase()}, then the next if it fails` }),
+      );
+      autoItem.addEventListener('click', () => {
+        state.modelAuto = true;
+        localStorage.setItem('bunny.modelAuto', '1');
+        closePicker();
+        refreshAutoPreview();
+      });
+      list.append(autoItem);
+      const best = rankModels(state.models, job).slice(0, 5);
+      if (best.length) {
+        list.append(element('div', { className: 'picker-group', textContent: `Best for ${JOBS[job].label}` }));
+        for (const m of best) list.append(pickerItem(m, 'best'));
+      }
+      list.append(element('div', { className: 'picker-group picker-group-all', textContent: 'All models' }));
+    }
     for (const m of matches) {
       if (m.providerId !== currentProvider) {
         currentProvider = m.providerId;
         list.append(element('div', { className: 'picker-group', textContent: m.providerName }));
       }
-      const isCurrent = state.selected
+      list.append(pickerItem(m));
+    }
+    active = 0;
+    highlight();
+  };
+
+  function pickerItem(m, section = '') {
+      const isCurrent = !state.modelAuto && state.selected
         && state.selected.model === m.id && state.selected.providerId === m.providerId;
       const item = button('', {
         className: 'picker-item', role: 'option', 'aria-selected': String(Boolean(isCurrent)),
       });
-      item.id = `model-${m.providerId}-${m.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
+      item.id = `model-${section}${m.providerId}-${m.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
       item.dataset.model = m.id;
       item.dataset.provider = m.providerId;
+      if (section) item.dataset.section = section; // the same model again, under "Best for …"
       item.append(
         element('span', { className: 'model-name', textContent: m.displayName ?? m.id }),
         element('span', {
@@ -374,12 +419,11 @@ function openPicker(host, trigger) {
         item.querySelector('.model-name')?.append(
           element('span', { className: 'tag', textContent: 'unavailable' }));
       }
+      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research');
+      if (abilities.length) item.querySelector('.model-desc')?.append(` · ${abilities.map((a) => JOBS[a].label).join(', ')}`);
       item.addEventListener('click', () => selectModel(m));
-      list.append(item);
-    }
-    active = 0;
-    highlight();
-  };
+      return item;
+  }
 
   paint('');
   search.addEventListener('input', () => paint(search.value));
@@ -400,6 +444,8 @@ function openPicker(host, trigger) {
 }
 
 async function selectModel(m) {
+  state.modelAuto = false;
+  localStorage.setItem('bunny.modelAuto', '0');
   state.selected = { providerId: m.providerId, providerName: m.providerName, model: m.id };
   closePicker();
   renderPicker();
@@ -762,6 +808,12 @@ function renderMessage(m) {
     return wrap;
   }
 
+  // Which model answered, when Auto chose it (and what it fell back from).
+  if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
+    const job = JOBS[m.job]?.label ?? 'Chat';
+    wrap.append(element('div', { className: 'msg-meta auto-meta',
+      textContent: `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} did not answer)` : ''}` }));
+  }
   const body = element('div', { className: 'body' });
   if (m.role === 'assistant') body.append(renderMarkdown(m.content));
   else body.textContent = m.content;
@@ -821,9 +873,22 @@ function renderAttachments(files) {
       box.append(img);
       continue;
     }
-    const card = element('div', { className: 'attachment-file' },
+    if (file.kind === 'audio' && file.url) {
+      const audio = element('audio', { className: 'attachment-audio', controls: true, preload: 'metadata' });
+      audio.src = file.url;
+      const save = element('a', { className: 'attachment-meta', href: file.url, download: 'speech.wav', textContent: `Download · ${Math.max(1, Math.round((file.size ?? 0) / 1024))} KB` });
+      box.append(element('div', { className: 'attachment-audio-wrap' }, audio, save));
+      continue;
+    }
+    // A document: what kind, how long, how many pictures, all read on the server.
+    const meta = file.kind === 'document' && file.label
+      ? [file.label, file.pages ? `${file.pages} ${/PowerPoint|slides/i.test(file.label) ? 'slide' : /Excel|sheet/i.test(file.label) ? 'sheet' : 'page'}${file.pages === 1 ? '' : 's'}` : '',
+        (file.pictures ?? []).length ? `${file.pictures.length} picture${file.pictures.length === 1 ? '' : 's'}` : '',
+        `${Math.max(1, Math.round((file.size ?? 0) / 1024))} KB`].filter(Boolean).join(' · ')
+      : `${Math.max(1, Math.round((file.size ?? 0) / 1024))} KB`;
+    const card = element('div', { className: `attachment-file${file.kind === 'document' ? ' is-document' : ''}`, title: file.note ?? '' },
       element('span', { className: 'attachment-name', textContent: file.name }),
-      element('span', { className: 'attachment-meta', textContent: `${Math.max(1, Math.round(file.size / 1024))} KB` }));
+      element('span', { className: 'attachment-meta', textContent: meta }));
     box.append(card);
   }
   return box;
@@ -932,10 +997,7 @@ function inferTitle(text) {
 }
 
 function inferKind(text) {
-  const body = String(text);
-  if (/^\s*(<!doctype html|<html|<body|<svg|<div|<h1)/i.test(body)) return 'html';
-  if (/```/.test(body)) return 'code';
-  return 'markdown';
+  return resolveArtifact(text).kind;
 }
 
 // ---------------------------------------------------------------------------
@@ -1074,6 +1136,9 @@ async function streamInto(bodyEl, { path, payload }) {
     },
     onDone: (info) => { meter = info?.context ?? null; },
     onError: (err) => { $('error').textContent = err.message ?? 'The request failed.'; },
+    onTool: (info) => showLiveTool(bodyEl, info),
+    onPermission: (info) => showLivePermission(bodyEl, info),
+    onBrowser: (info) => runBrowserAction(info),
   };
 
   try {
@@ -1091,6 +1156,68 @@ async function streamInto(bodyEl, { path, payload }) {
   }
 
   return { assembled, meter, aborted };
+}
+
+/** A tool step, shown above the reply while it streams ("↳ Read src/app.js"). */
+function showLiveTool(bodyEl, info) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  const lines = [...msg.parentNode.querySelectorAll('.live-tool')];
+  let line = lines.find((l) => l.dataset.tool === info.tool && l.dataset.status === 'running');
+  if (!line) {
+    line = element('div', { className: 'msg assistant live-tool' });
+    line.dataset.tool = info.tool;
+    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '' }).firstChild);
+    msg.before(line);
+  }
+  line.dataset.status = info.status;
+  line.querySelector('.tag')?.replaceChildren(info.status);
+  if (info.result) {
+    let res = line.querySelector('.tool-call-result');
+    if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }
+    res.textContent = `→ ${String(info.result).slice(0, 500)}`;
+  }
+  if ((info.attachments ?? []).length && !line.querySelector('.attachments')) line.append(renderAttachments(info.attachments));
+  msg.scrollIntoView({ block: 'end' });
+}
+
+/** The model asked to do something in the browser panel: show the panel, do it, answer. */
+async function runBrowserAction(info) {
+  let answer;
+  try {
+    if (currentView() !== 'browser') openView('browser');
+    answer = await state.browser.act(info.action, info.args ?? {});
+  } catch (err) {
+    answer = { error: err.message };
+  }
+  try {
+    await sendJSON(`/api/sessions/${state.sessionId}/browser/${info.id}`, 'POST', answer ?? { error: 'No answer' });
+  } catch { /* the reply ended meanwhile */ }
+}
+
+/** An edit or command waiting for the person's OK. */
+function showLivePermission(bodyEl, info) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  const card = element('div', { className: 'permission-prompt live-permission' });
+  card.append(element('h4', { textContent: `Allow: ${info.title}?` }));
+  if (info.detail) card.append(element('pre', { className: 'code' }, element('code', { textContent: info.detail })));
+  const actions = element('div', { className: 'permission-actions' });
+  const answer = async (allowed) => {
+    actions.replaceChildren(element('span', { className: 'hint', textContent: allowed ? 'Allowed' : 'Denied' }));
+    try {
+      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', { allowed });
+    } catch (err) {
+      actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
+    }
+  };
+  actions.append(
+    button('Allow', { className: 'primary', onclick: () => answer(true) }),
+    button('Deny', { className: 'ghost', onclick: () => answer(false) }),
+  );
+  card.append(actions);
+  msg.before(card);
+  card.scrollIntoView({ block: 'end' });
 }
 
 /** Ask again for the newest reply, keeping the user turn as-is. */
@@ -1111,6 +1238,9 @@ async function streamReply({ retry = true } = {}) {
       content: state.lastSent ?? '',
       providerId: state.selected?.providerId,
       model: state.selected?.model,
+      workMode: state.workMode ?? 'chat',
+      browserControl: Boolean(window.bunnyDesktop?.browserAct),
+      vision: canSee(state.selected?.providerId, state.selected?.model),
     },
   });
 
@@ -1150,6 +1280,7 @@ async function openSession(id) {
     };
     renderPicker();
   }
+  if (session.workMode) applyWorkMode(session.workMode);
   paintMessages();
   renderContext(session.context);
   await loadArtifacts();
@@ -1192,7 +1323,7 @@ async function send() {
     if (handled) { input.value = ''; return; }
   }
 
-  if (!state.selected) { $('error').textContent = 'Choose a model first.'; return; }
+  if (!state.selected && !(state.modelAuto && state.autoPick)) { $('error').textContent = 'Choose a model first.'; return; }
 
   input.value = '';
   state.lastSent = text;
@@ -1211,8 +1342,8 @@ async function send() {
     const { assembled, meter } = await streamInto(bodyEl, {
       path: '/api/complete',
       payload: {
-        providerId: state.selected.providerId,
-        model: state.selected.model,
+        providerId: (state.modelAuto ? state.autoPick?.providerId : null) ?? state.selected?.providerId,
+        model: (state.modelAuto ? state.autoPick?.id : null) ?? state.selected?.model,
         messages: state.messages.slice(0, -1).map(({ role, content }) => ({ role, content })),
       },
     });
@@ -1226,12 +1357,22 @@ async function send() {
   if (!state.sessionId) {
     const session = await sendJSON('/api/sessions', 'POST', {
       title: 'New chat',
-      providerId: state.selected.providerId,
-      model: state.selected.model,
+      providerId: (state.modelAuto ? state.autoPick?.providerId : null) ?? state.selected?.providerId,
+      model: (state.modelAuto ? state.autoPick?.id : null) ?? state.selected?.model,
       projectId: state.projectId,
     });
     state.sessionId = session.id;
     history.replaceState(null, '', `./index.html?s=${session.id}`);
+    if (state.pendingFolder) {
+      await sessionSetting(session.id, 'folder', state.pendingFolder.folder);
+      if (state.pendingFolder.branch) await sessionSetting(session.id, 'branch', state.pendingFolder.branch);
+      state.pendingFolder = null;
+    }
+    await sessionSetting(session.id, 'workMode', state.workMode ?? 'chat');
+    const permission = $('permission-mode')?.value;
+    if (permission) await sessionSetting(session.id, 'permissionMode', permission);
+    const effort = $('effort-level')?.value;
+    if (effort) await sessionSetting(session.id, 'effort', effort);
   }
 
   state.messages.push({ id: `pending-u-${Date.now()}`, role: 'user', content: text, local: true, attachments: files });
@@ -1239,15 +1380,38 @@ async function send() {
   paintMessages();
   const bodyEl = $('messages').lastElementChild?.querySelector('.body');
 
-  const { meter, aborted } = await streamInto(bodyEl, {
-    path: `/api/sessions/${state.sessionId}/messages`,
-    payload: {
-      content: text,
-      providerId: state.selected.providerId,
-      model: state.selected.model,
-      attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
-    },
-  });
+  const job = jobFor(text, files);
+  const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
+  const candidates = state.modelAuto ? rankModels(state.models, job).slice(0, 3) : fixed;
+  if (!candidates.length) candidates.push(...fixed);
+  let result = { meter: null, aborted: false };
+  let failed = null;
+  for (let i = 0; i < candidates.length; i += 1) {
+    const pick = candidates[i];
+    $('error').textContent = '';
+    result = await streamInto(bodyEl, {
+      path: `/api/sessions/${state.sessionId}/messages`,
+      payload: {
+        content: text,
+        retry: i > 0, // the user turn is already saved after the first try
+        providerId: pick.providerId,
+        model: pick.id,
+        attachments: i > 0 ? [] : files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
+        workMode: state.workMode ?? 'chat',
+        browserControl: Boolean(window.bunnyDesktop?.browserAct),
+        vision: canSee(pick.providerId, pick.id),
+        job,
+        auto: Boolean(state.modelAuto),
+        fellBackFrom: failed ?? undefined,
+      },
+    });
+    const errored = Boolean($('error').textContent) && !result.assembled?.trim();
+    if (!errored || result.aborted || !state.modelAuto || i === candidates.length - 1) break;
+    failed = pick.displayName ?? pick.id;
+    flashStatus(`${failed} did not answer: trying ${candidates[i + 1].displayName ?? candidates[i + 1].id}`);
+    bodyEl.textContent = '…';
+  }
+  const { meter, aborted } = result;
 
   if (meter) renderContext(meter);
   await refreshSession({ expectAssistant: aborted });
@@ -1294,23 +1458,41 @@ function renderPendingFiles() {
   });
 }
 
+// Documents travel as the file itself; the server reads them (PDF, Office, OpenDocument, RTF, e-books).
+const DOCUMENT_EXT = /\.(pdf|docx?|docm|dotx?|pptx?|pptm|ppsx?|xlsx?|xlsm|odt|odp|ods|epub|rtf)$/i;
+const MAX_DOCUMENT_MB = 30;
+
 /** Read the chosen files into memory, ready to be sent. */
 async function addFiles(fileList) {
   for (const file of Array.from(fileList).slice(0, 8)) {
     const isImage = file.type.startsWith('image/');
-    const data = await readFile(file, isImage);
+    const isDocument = !isImage && DOCUMENT_EXT.test(file.name);
+    if (isDocument && file.size > MAX_DOCUMENT_MB * 1024 * 1024) {
+      $('error').textContent = `${file.name} is too large. Documents must be under ${MAX_DOCUMENT_MB} MB.`;
+      continue;
+    }
+    const data = await readFile(file, isImage || isDocument);
     if (!data) continue;
-    state.pendingFiles.push({ name: file.name, mime: file.type || 'text/plain', kind: isImage ? 'image' : 'text', data, size: file.size });
+    state.pendingFiles.push({
+      name: file.name, mime: file.type || (isDocument ? 'application/octet-stream' : 'text/plain'),
+      kind: isImage ? 'image' : isDocument ? 'document' : 'text', data, size: file.size,
+    });
   }
   renderPendingFiles();
 }
 
-function readFile(file, isImage) {
+/** Whether a model can look at pictures (otherwise it gets the words read from them). */
+function canSee(providerId, modelId) {
+  const m = (state.allModels ?? state.models ?? []).find((x) => x.id === modelId && x.providerId === providerId);
+  return m ? modelAbilities(m).runs.has('see') : true;
+}
+
+function readFile(file, asDataUrl) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onerror = () => resolve(null);
     reader.onload = () => resolve(String(reader.result ?? ''));
-    if (isImage) reader.readAsDataURL(file);
+    if (asDataUrl) reader.readAsDataURL(file);
     else reader.readAsText(file);
   });
 }
@@ -1404,132 +1586,209 @@ async function exportChat() {
 // artifacts
 
 async function loadArtifacts() {
-  state.artifacts = state.sessionId
-    ? await getJSON(`/api/artifacts?sessionId=${state.sessionId}`)
-    : [];
+  // Every artifact, from every chat; the list groups this chat's first.
+  state.artifacts = await getJSON('/api/artifacts');
   $('artifact-count').textContent = String(state.artifacts.length);
   renderArtifactList();
+}
+
+const ARTIFACT_KIND = { html: { label: 'Page', mark: '</>' }, code: { label: 'Code', mark: '{ }' }, markdown: { label: 'Document', mark: '¶' } };
+const ICON = {
+  back: '<path d="M15 6l-6 6 6 6"/>',
+  full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  print: '<path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M7 14h10v6H7z"/>',
+  star: '<path d="M12 4l2.4 5 5.6.6-4.2 3.8 1.2 5.6L12 16.3 7 19l1.2-5.6L4 9.6l5.6-.6z"/>',
+  edit: '<path d="M4 20h4l10-10-4-4L4 16zM13.5 6.5l4 4"/>',
+  trash: '<path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+};
+function iconButton(name, label, onClick, extra = {}) {
+  const b = button('', { className: 'icon-btn', 'aria-label': label, title: label, ...extra });
+  b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
+  b.addEventListener('click', onClick);
+  return b;
+}
+function timeAgo(iso) {
+  const s = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function renderArtifactList() {
   const host = $('artifact-list');
   host.replaceChildren();
+  $('artifacts')?.classList.toggle('is-viewing', Boolean(state.artifact));
   if (!state.artifacts.length) {
-    host.append(element('p', {
-      className: 'hint',
-      textContent: 'No artifacts yet. Use “Save as artifact” on a reply to keep it here.',
-    }));
+    host.append(element('div', { className: 'artifact-empty' },
+      element('p', { className: 'artifact-empty-title', textContent: 'No artifacts yet' }),
+      element('p', { className: 'hint', textContent: 'Use “Save as artifact” on a reply to keep it here.' })));
     return;
   }
-  for (const a of state.artifacts) {
-    const row = button('', { className: 'artifact-row', 'aria-label': `Open ${a.title}` });
-    if (state.artifact?.id === a.id) row.setAttribute('aria-current', 'true');
-    row.append(
-      element('span', { className: `artifact-thumb thumb-${a.kind}`, 'aria-hidden': 'true' },
-        element('span', { className: 'thumb-mark', textContent: a.kind === 'html' ? '<>' : a.kind === 'code' ? '{}' : '¶' })),
+  const search = element('input', {
+    className: 'input sm artifact-search', type: 'search', placeholder: 'Search artifacts', 'aria-label': 'Search artifacts',
+    value: state.artifactQuery ?? '',
+  });
+  search.addEventListener('input', () => { state.artifactQuery = search.value; paint(); search.focus(); });
+  const groups = element('div', { className: 'artifact-groups' });
+  host.append(search, groups);
+
+  function row(a) {
+    const kind = ARTIFACT_KIND[a.shownKind ?? a.kind] ?? ARTIFACT_KIND.markdown;
+    const r = button('', { className: 'artifact-row', 'aria-label': `Open ${a.name ?? a.title}` });
+    if (state.artifact?.id === a.id) r.setAttribute('aria-current', 'true');
+    r.append(
+      element('span', { className: `artifact-thumb thumb-${a.shownKind ?? a.kind}`, 'aria-hidden': 'true' },
+        element('span', { className: 'thumb-mark', textContent: kind.mark })),
       element('span', { className: 'artifact-info' },
-        element('span', { className: 'artifact-title', textContent: a.title }),
-        element('span', { className: 'artifact-meta', textContent: `${a.kind} · v${a.versionCount}${a.starred ? ' · ★' : ''}` }),
+        element('span', { className: 'artifact-title', textContent: a.name ?? a.title }),
+        element('span', { className: 'artifact-meta', textContent: `${kind.label} · v${a.versionCount} · ${timeAgo(a.updatedAt)}${a.starred ? ' · ★' : ''}` }),
         element('span', { className: 'artifact-preview', textContent: a.preview ?? '' })),
     );
-    row.addEventListener('click', () => showArtifact(a.id));
-    host.append(row);
+    r.addEventListener('click', () => showArtifact(a.id));
+    return r;
   }
+  function paint() {
+    groups.replaceChildren();
+    const q = (state.artifactQuery ?? '').trim().toLowerCase();
+    const shown = state.artifacts.filter((a) => !q || `${a.name} ${a.title} ${a.preview}`.toLowerCase().includes(q));
+    const here = shown.filter((a) => state.sessionId && a.sessionId === state.sessionId);
+    const other = shown.filter((a) => !here.includes(a));
+    if (here.length) groups.append(element('div', { className: 'artifact-group', textContent: 'This chat' }), ...here.map(row));
+    if (other.length) groups.append(element('div', { className: 'artifact-group', textContent: here.length ? 'Other chats' : 'All artifacts' }), ...other.map(row));
+    if (!shown.length) groups.append(element('p', { className: 'hint artifact-none', textContent: 'Nothing matches that search.' }));
+  }
+  paint();
 }
 
-async function showArtifact(id) {
-  const artifact = await getJSON(`/api/artifacts/${id}`);
-  state.artifact = artifact;
-  if (currentView() !== 'artifacts') openView('artifacts');
+function closeArtifactView() {
+  state.artifact = null;
+  $('artifact-view').replaceChildren();
   renderArtifactList();
-  renderArtifactView(artifact);
 }
 
-function renderArtifactView(artifact) {
+function renderArtifactView(artifact, { mode } = {}) {
   const host = $('artifact-view');
   host.replaceChildren();
+  $('artifacts')?.classList.add('is-viewing');
   const current = artifact.versions.at(-1);
+  const shown = resolveArtifact(current.content, artifact.kind);
+  const summary = state.artifacts.find((a) => a.id === artifact.id);
+  const kind = ARTIFACT_KIND[shown.kind] ?? ARTIFACT_KIND.markdown;
+  // Preview for pages, documents and charts; Code shows the source. Edit is its own mode.
+  const view = mode ?? state.artifactMode ?? 'preview';
+  state.artifactMode = view === 'edit' ? state.artifactMode : view;
 
-  const head = element('div', { className: 'artifact-head' },
-    element('h3', { id: 'artifact-title', textContent: artifact.title }),
-    element('span', { className: 'tag', textContent: `${artifact.kind} · v${artifact.versions.length}` }));
-
-  const star = button(artifact.starred ? '★ Starred' : '☆ Star', { className: 'ghost small' });
-  star.addEventListener('click', async () => {
-    const updated = await sendJSON(`/api/artifacts/${artifact.id}`, 'PATCH', { starred: !artifact.starred });
+  const refresh = async (updated, nextMode) => {
     state.artifact = updated;
     await loadArtifacts();
-    renderArtifactView(updated);
-  });
+    renderArtifactView(updated, { mode: nextMode });
+  };
 
-  const versions = element('select', { 'aria-label': 'Artifact version' });
+  // ---- header: back, name, kind and version ----
+  const head = element('div', { className: 'artifact-head' },
+    iconButton('back', 'All artifacts', closeArtifactView, { className: 'icon-btn artifact-back' }),
+    element('div', { className: 'artifact-heading' },
+      element('h3', { id: 'artifact-title', textContent: summary?.name ?? artifact.title, title: artifact.title }),
+      element('span', { className: 'tag', textContent: `${kind.label} · v${artifact.versions.length}` })));
+
+  // ---- toolbar: Preview | Code, version, actions ----
+  const bar = element('div', { className: 'artifact-bar' });
+  const switcher = element('div', { className: 'mode-switch artifact-switch', role: 'group', 'aria-label': 'View' });
+  for (const [id, label] of [['preview', 'Preview'], ['code', 'Code']]) {
+    const b = button(label, { className: view === id ? 'is-active' : '', 'aria-pressed': String(view === id) });
+    b.addEventListener('click', () => { state.artifactMode = id; renderArtifactView(artifact, { mode: id }); });
+    switcher.append(b);
+  }
+  bar.append(switcher);
+
+  const versions = element('select', { className: 'select quiet artifact-version', 'aria-label': 'Artifact version' });
   artifact.versions.forEach((v, index) => {
-    versions.append(element('option', {
-      value: String(index), textContent: `v${index + 1} · ${new Date(v.at).toLocaleTimeString()}`,
-    }));
+    versions.append(element('option', { value: String(index), textContent: `v${index + 1} · ${new Date(v.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` }));
   });
   versions.value = String(artifact.versions.length - 1);
-
-  const restore = button('Restore', { className: 'ghost small' });
+  const restore = button('Restore', { className: 'btn btn-sm', hidden: true });
+  versions.addEventListener('change', () => { restore.hidden = Number(versions.value) === artifact.versions.length - 1; });
   restore.addEventListener('click', async () => {
     const updated = await sendJSON(`/api/artifacts/${artifact.id}/restore`, 'POST', { version: Number(versions.value) });
-    state.artifact = updated;
-    await loadArtifacts();
-    renderArtifactView(updated);
+    await refresh(updated, view);
   });
+  if (artifact.versions.length > 1) bar.append(versions, restore);
 
-  const open = button('Open', { className: 'ghost small' });
-  open.addEventListener('click', () => {
+  const stage = element('div', { className: 'artifact-stage' });
+  const actions = element('div', { className: 'artifact-actions' },
+    iconButton('full', 'Full screen', () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else stage.requestFullscreen?.().catch(() => {});
+    }),
     // A real URL rather than a blob, so the tab can be shared and reloaded.
-    window.open(`/api/artifacts/${artifact.id}/raw`, '_blank', 'noopener');
-  });
+    iconButton('open', 'Open', () => window.open(`/api/artifacts/${artifact.id}/raw`, '_blank', 'noopener')),
+    iconButton('print', 'Print', () => {
+      // A print window with the artifact alone in it, so the page prints the document and not the app.
+      const frame = window.open('', '_blank');
+      if (!frame) return;
+      frame.opener = null;
+      frame.document.write('<!doctype html><html><head><meta charset="utf-8"><title></title></head><body></body></html>');
+      frame.document.title = summary?.name ?? artifact.title;
+      if (shown.kind === 'html') frame.document.body.innerHTML = shown.body;
+      else {
+        const pre = frame.document.createElement('pre');
+        pre.textContent = shown.body;
+        pre.style.whiteSpace = 'pre-wrap';
+        frame.document.body.append(pre);
+      }
+      frame.focus();
+      frame.print();
+    }),
+    iconButton('star', artifact.starred ? 'Remove star' : 'Star', async () => {
+      const updated = await sendJSON(`/api/artifacts/${artifact.id}`, 'PATCH', { starred: !artifact.starred });
+      await refresh(updated, view);
+    }, { className: `icon-btn${artifact.starred ? ' is-starred' : ''}` }),
+    iconButton('edit', 'Edit', () => renderArtifactView(artifact, { mode: 'edit' })),
+    iconButton('trash', 'Delete', async () => {
+      if (!window.confirm(`Delete “${summary?.name ?? artifact.title}”?`)) return;
+      await sendJSON(`/api/artifacts/${artifact.id}`, 'DELETE');
+      state.artifact = null;
+      host.replaceChildren();
+      await loadArtifacts();
+    }, { className: 'icon-btn danger' }),
+  );
+  bar.append(element('span', { className: 'spacer' }), actions);
+  host.append(head, bar, stage);
 
-  const print = button(say('chat.print'), { className: 'ghost small' });
-  print.addEventListener('click', () => {
-    // A print window with the artifact alone in it, so the page prints the
-    // document and not the app around it.
-    const frame = window.open('', '_blank');
-    if (!frame) return;
-    // The print window is a dead end: it does not need a handle on the app.
-    frame.opener = null;
-    frame.document.write('<!doctype html><html><head><meta charset="utf-8"><title></title></head><body></body></html>');
-    frame.document.title = artifact.title;
-    if (artifact.kind === 'html') {
-      frame.document.body.innerHTML = current.content;
-    } else {
-      const pre = frame.document.createElement('pre');
-      pre.textContent = current.content;
-      pre.style.whiteSpace = 'pre-wrap';
-      frame.document.body.append(pre);
-    }
-    frame.focus();
-    frame.print();
-  });
-
-  const remove = button('Delete', { className: 'ghost small danger' });
-  remove.addEventListener('click', async () => {
-    if (!window.confirm(`Delete “${artifact.title}”?`)) return;
-    await sendJSON(`/api/artifacts/${artifact.id}`, 'DELETE');
-    state.artifact = null;
-    host.replaceChildren();
-    await loadArtifacts();
-  });
-
-  head.append(element('div', { className: 'actions' }, versions, restore, star, open, print, remove));
-  host.append(head);
-
-  if (artifact.kind === 'html') {
+  // ---- the stage ----
+  if (view === 'edit') {
+    // Editing appends a version rather than overwriting, so earlier content stays reachable.
+    const editor = element('textarea', { className: 'artifact-edit textarea', value: current.content, 'aria-label': 'Artifact content', spellcheck: false });
+    const save = button('Save new version', { className: 'btn btn-primary btn-sm' });
+    save.addEventListener('click', async () => {
+      const updated = await sendJSON(`/api/artifacts/${artifact.id}`, 'PATCH', { content: editor.value });
+      await refresh(updated, 'edit');
+    });
+    const cancel = button('Done', { className: 'btn btn-ghost btn-sm' });
+    cancel.addEventListener('click', () => renderArtifactView(artifact, { mode: state.artifactMode ?? 'preview' }));
+    stage.classList.add('is-editing');
+    stage.append(editor, element('div', { className: 'artifact-edit-bar' }, cancel, save));
+    editor.focus();
+    return;
+  }
+  if (view === 'code') {
+    const body = element('div', { className: 'artifact-body artifact-code' });
+    body.append(renderMarkdown(`\`\`\`${shown.kind === 'html' ? 'html' : shown.lang || ''}\n${shown.body}\n\`\`\``));
+    stage.append(body);
+    return;
+  }
+  if (shown.kind === 'html') {
     // Sandboxed: no same-origin, no top navigation. The artifact can run its own
     // scripts but cannot reach the app, its storage or its API.
-    const frame = element('iframe', {
-      className: 'artifact-frame', sandbox: 'allow-scripts', title: artifact.title,
-    });
-    frame.srcdoc = current.content;
-    host.append(frame);
-  } else if (artifact.kind === 'code') {
-    const pre = element('pre', { className: 'code' });
-    pre.append(element('code', { textContent: current.content }));
-    host.append(pre);
+    const frame = element('iframe', { className: 'artifact-frame', sandbox: 'allow-scripts allow-forms allow-modals', title: summary?.name ?? artifact.title });
+    frame.srcdoc = htmlDocument(shown.body);
+    stage.append(frame);
+  } else if (shown.kind === 'code') {
+    const body = element('div', { className: 'artifact-body artifact-code' });
+    body.append(renderMarkdown(`\`\`\`${shown.lang}\n${shown.body}\n\`\`\``));
+    stage.append(body);
   } else {
     const body = element('div', { className: 'artifact-body' });
     // Data that describes a chart is drawn, not printed.
@@ -1541,23 +1800,18 @@ function renderArtifactView(artifact) {
     } else {
       body.append(renderMarkdown(current.content));
     }
-    host.append(body);
+    stage.append(body);
   }
-
-  // Editing appends a version rather than overwriting, so the earlier content
-  // stays reachable from the version picker.
-  const editor = element('textarea', {
-    className: 'artifact-edit', rows: 6, value: current.content, 'aria-label': 'Artifact content',
-  });
-  const saveVersion = button('Save new version', { className: 'primary small' });
-  saveVersion.addEventListener('click', async () => {
-    const updated = await sendJSON(`/api/artifacts/${artifact.id}`, 'PATCH', { content: editor.value });
-    state.artifact = updated;
-    await loadArtifacts();
-    renderArtifactView(updated);
-  });
-  host.append(element('div', { className: 'artifact-editor' }, editor, saveVersion));
 }
+
+async function showArtifact(id) {
+  const artifact = await getJSON(`/api/artifacts/${id}`);
+  state.artifact = artifact;
+  if (currentView() !== 'artifacts') openView('artifacts');
+  renderArtifactList();
+  renderArtifactView(artifact);
+}
+
 
 function toggleArtifacts() {
   openView('artifacts');
@@ -1660,9 +1914,25 @@ function bindPushToTalk() {
 
 const MODE_LABELS = { auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
 
-function applyWorkMode(mode) {
+const WORK_MODES = ['chat', 'code'];
+const MODE_HINTS = {
+  chat: { placeholder: 'Send a message…', empty: 'Pick a model, then type below.' },
+  code: { placeholder: 'Ask about or change the code in your folder…', empty: 'Choose a folder below, then ask Bunny to read, change or run things in it.' },
+};
+
+function applyWorkMode(mode, { save = false } = {}) {
+  if (mode === 'cowork' || mode === 'delegate') mode = 'code'; // retired modes: both used tools
+  if (!WORK_MODES.includes(mode)) mode = 'chat';
+  state.workMode = mode;
   document.body.dataset.workMode = mode;
-  for (const m of ['chat', 'cowork', 'code']) {
+  const input = $('input');
+  if (input) input.placeholder = MODE_HINTS[mode].placeholder;
+  const emptyText = $('empty-text');
+  if (emptyText && state.models?.length) emptyText.textContent = MODE_HINTS[mode].empty;
+  if (save && state.sessionId && !state.incognito) {
+    sessionSetting(state.sessionId, 'workMode', mode).catch(() => {});
+  }
+  for (const m of WORK_MODES) {
     const b = $(`mode-${m}`);
     if (!b) continue;
     b.classList.toggle('is-active', m === mode);
@@ -1672,8 +1942,8 @@ function applyWorkMode(mode) {
 }
 
 function bindModeSwitch() {
-  for (const m of ['chat', 'cowork', 'code']) {
-    $(`mode-${m}`)?.addEventListener('click', () => applyWorkMode(m));
+  for (const m of WORK_MODES) {
+    $(`mode-${m}`)?.addEventListener('click', () => applyWorkMode(m, { save: true }));
   }
   applyWorkMode(localStorage.getItem('bunny.workMode') ?? 'chat');
 }
@@ -1730,6 +2000,135 @@ function bindModeMenu() {
 }
 
 // ---------------------------------------------------------------------------
+// Auto: the job a message is, and the model that does it best
+
+function jobFor(text, files = state.pendingFiles ?? []) {
+  if (state.jobChoice && state.jobChoice !== 'auto') return state.jobChoice;
+  const hasImage = files.some((f) => String(f.mime ?? '').startsWith('image/'));
+  return detectJob(text, { hasImage, workMode: state.workMode });
+}
+
+/** Re-read the message box: which job, and (with Auto) which model would answer. */
+function refreshAutoPreview() {
+  const job = jobFor($('input')?.value ?? '');
+  state.resolvedJob = job;
+  state.autoPick = rankModels(state.models ?? [], job)[0] ?? null;
+  const label = $('job-label');
+  if (label) label.textContent = state.jobChoice === 'auto' ? `Auto · ${JOBS[job].label}` : JOBS[job].label;
+  $('job-button')?.classList.toggle('is-auto', state.jobChoice === 'auto');
+  renderPicker();
+}
+
+function renderJobMenu() {
+  const menu = $('job-menu');
+  if (!menu) return;
+  const avail = jobAvailability(state.models ?? []);
+  menu.replaceChildren(element('div', { className: 'menu-title', textContent: 'Job' }));
+  const item = (id, label, hint, disabled = false) => {
+    const b = button('', { className: `menu-item${(state.jobChoice ?? 'auto') === id ? ' is-selected' : ''}${disabled ? ' is-disabled' : ''}`, role: 'menuitemradio' });
+    b.append(element('span', { className: 'label' }, label, element('small', { textContent: hint })), element('span', { className: 'check', textContent: '✓' }));
+    if (!disabled) b.addEventListener('click', () => {
+      state.jobChoice = id;
+      localStorage.setItem('bunny.job', id);
+      menu.hidden = true;
+      $('job-button')?.setAttribute('aria-expanded', 'false');
+      renderJobMenu();
+      refreshAutoPreview();
+    });
+    return b;
+  };
+  menu.append(item('auto', 'Auto', 'Work out the job from each message'), element('div', { className: 'menu-sep' }));
+  for (const [id, job] of Object.entries(JOBS)) {
+    const a = avail[id];
+    const none = a.runnable === 0;
+    const all = none ? (jobAvailability(state.allModels ?? [])[id] ?? { capable: 0, runnable: 0 }) : null;
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    const hint = !none ? null
+      : all.runnable ? `${plural(all.runnable, 'paid model')} can: show all models in Settings, Models`
+        : all.capable ? `${plural(all.capable, 'model')} can, but Bunny cannot use them yet`
+          : 'None of your models can do this yet';
+    menu.append(item(id, job.label, hint ?? `${job.hint} · ${plural(a.runnable, 'model')}`, none));
+  }
+}
+
+function bindAutoPickers() {
+  state.jobChoice = localStorage.getItem('bunny.job') ?? 'auto';
+  state.modelAuto = localStorage.getItem('bunny.modelAuto') !== '0';
+  const buttonEl = $('job-button');
+  const menu = $('job-menu');
+  buttonEl?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderJobMenu();
+    menu.hidden = !menu.hidden;
+    buttonEl.setAttribute('aria-expanded', String(!menu.hidden));
+  });
+  document.addEventListener('click', (e) => { if (menu && !e.target.closest('#job-menu, #job-button')) menu.hidden = true; });
+  let timer = null;
+  $('input')?.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(refreshAutoPreview, 250); });
+  refreshAutoPreview();
+}
+
+// ---------------------------------------------------------------------------
+// the folder a chat works in
+
+/** Ask for a folder: the native dialog in the desktop app, a path box in the browser. */
+async function chooseFolder() {
+  const current = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? '';
+  let picked = null;
+  if (window.bunnyDesktop?.pickFolder) picked = await window.bunnyDesktop.pickFolder();
+  else picked = await askForPath(current);
+  if (picked) await useFolder(picked);
+}
+
+/** Check the folder on the server, read its git branch, and remember both. */
+async function useFolder(path) {
+  $('error').textContent = '';
+  try {
+    const { folder, branch } = await sendJSON('/api/folder/check', 'POST', { folder: path });
+    if (state.sessionId && !state.incognito) {
+      await sessionSetting(state.sessionId, 'folder', folder);
+      await sessionSetting(state.sessionId, 'branch', branch ?? '');
+      state.session = { ...state.session, folder, branch };
+    } else {
+      state.pendingFolder = { folder, branch };
+    }
+    renderComposerHeader();
+    state.browser?.refresh();
+    flashStatus(`Working in ${folder}`);
+  } catch (err) {
+    $('error').textContent = err.message;
+  }
+}
+
+/** A small in-page box for a folder path (the browser cannot open a folder dialog for the server). */
+function askForPath(current) {
+  return new Promise((resolveValue) => {
+    const backdrop = element('div', { className: 'modal-backdrop' });
+    const box = element('div', { className: 'modal', role: 'dialog', 'aria-label': 'Choose a folder' });
+    const input = element('input', { className: 'input', value: current, placeholder: 'D:\\Projects\\my-app', 'aria-label': 'Folder path' });
+    const done = (value) => { backdrop.remove(); resolveValue(value); };
+    const ok = button('Use folder', { className: 'btn btn-primary', onclick: () => done(input.value.trim() || null) });
+    const cancel = button('Cancel', { className: 'btn btn-ghost', onclick: () => done(null) });
+    box.append(
+      element('div', { className: 'modal-head' },
+        element('h3', { className: 'modal-title', textContent: 'Choose a folder to work in' }),
+        element('p', { className: 'modal-sub', textContent: 'Paste the full path of a folder on this computer.' })),
+      element('div', { className: 'modal-body' }, input),
+      element('div', { className: 'modal-foot' }, cancel, ok),
+    );
+    backdrop.append(box);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') done(input.value.trim() || null);
+      if (e.key === 'Escape') done(null);
+    });
+    document.body.append(backdrop);
+    input.focus();
+    input.select();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // profile, account menu and the Settings window
 
 /** Name and avatar in the sidebar come from Settings, Profile. */
@@ -1739,6 +2138,7 @@ function bindModeMenu() {
  */
 function visibleModels(all) {
   state.allModelCount = all.length;
+  state.allModels = all;
   if (state.settings?.modelFilter === 'all') return all;
   return all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
 }
@@ -1991,6 +2391,22 @@ async function boot() {
   bindModeMenu();
   bindAccountMenu();
   bindSettingsWindow();
+  initPaneLayout({
+    // The browser tab opens its page in a new window; any other panel pops the chat out.
+    onNewWindow: () => {
+      const url = currentView() === 'browser' ? state.browser?.currentUrl() : '';
+      if (url && /^https?:/.test(url)) window.open(url, '_blank', 'noopener');
+      else $('popout')?.click();
+    },
+  });
+  state.browser = initBrowserPane({
+    getFolder: () => (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null,
+    // "Run and open" for a detected dev server: the command goes to the built-in terminal.
+    runInTerminal: async (command) => {
+      if (!state.terminalId) await terminalStart();
+      if (state.terminalId) await terminalWrite(state.terminalId, command + '\n');
+    },
+  });
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const open = $('app').classList.toggle('sidebar-open');
@@ -2135,19 +2551,14 @@ async function boot() {
   }
 
   // ---- folder chip ----
-  $('folder-chip')?.addEventListener('click', async () => {
-    const next = window.prompt('Working folder', state.session?.folder ?? '');
-    if (next === null) return;
-    await sessionSetting(state.sessionId, 'folder', next);
-    renderComposerHeader();
-  });
+  $('folder-chip')?.addEventListener('click', () => chooseFolder());
 
   // ---- branch chip ----
+  // The branch is read from the folder's git repository; clicking reads it again.
   $('branch-chip')?.addEventListener('click', async () => {
-    const next = window.prompt('Branch', state.session?.branch ?? '');
-    if (next === null) return;
-    await sessionSetting(state.sessionId, 'branch', next);
-    renderComposerHeader();
+    const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder;
+    if (!folder) { chooseFolder(); return; }
+    await useFolder(folder);
   });
 
   // ---- permission mode ----
@@ -2165,6 +2576,8 @@ async function boot() {
     const settings = await getJSON('/api/settings');
     state.settings = settings;
     state.models = visibleModels(await getJSON('/api/models'));
+    loadArtifacts().catch(() => {});
+    bindAutoPickers();
     applyProfile(settings);
     applyCapabilities(settings);
     applyTheme(settings.theme ?? 'system');

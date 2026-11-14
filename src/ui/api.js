@@ -28,7 +28,8 @@ export async function sendJSON(path, method, body) {
  * @param {object} body
  * @param {{onDelta?: (t: string) => void, onDone?: (d: any) => void, onError?: (e: any) => void, onCompacted?: (d: any) => void, signal?: AbortSignal}} handlers
  */
-export async function streamAt(path, body, { onDelta, onDone, onError, onCompacted, signal } = {}) {
+export async function streamAt(path, body, handlers = {}) {
+  const { onDelta, onDone, onError, onCompacted, signal } = handlers;
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -74,6 +75,9 @@ export async function streamAt(path, body, { onDelta, onDone, onError, onCompact
       else if (event === 'done') onDone?.(parsed);
       else if (event === 'error') onError?.(parsed);
       else if (event === 'compacted') onCompacted?.(parsed);
+      else if (event === 'tool') handlers.onTool?.(parsed);
+      else if (event === 'permission') handlers.onPermission?.(parsed);
+      else if (event === 'browser') handlers.onBrowser?.(parsed);
     }
   }
 }

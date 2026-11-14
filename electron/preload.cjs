@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
   setPrefs: (patch) => ipcRenderer.invoke('prefs:set', patch),
   quit: () => ipcRenderer.invoke('app:quit'),
+  pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  browserAct: (frameName, action, args) => ipcRenderer.invoke('browser:act', frameName, action, args),
 });
