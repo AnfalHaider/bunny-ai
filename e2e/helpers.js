@@ -46,6 +46,8 @@ export async function resetProfile(request) {
   await request.put('/api/settings', {
     data: {
       language: 'en', theme: 'system', allowlist: [], aliases: {}, notifications: false,
+      // The tests chat through a test Anthropic provider, so every model is shown.
+      modelFilter: 'all',
     },
   });
 }

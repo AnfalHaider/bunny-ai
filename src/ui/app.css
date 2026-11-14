@@ -1285,9 +1285,9 @@ pre.code code { display: block; padding: var(--sp-6) var(--sp-7); background: no
    ========================================================================== */
 main.page > h1 { font-size: var(--fs-xl); font-weight: var(--fw-semibold); letter-spacing: -.01em; }
 main.page > h1 + .sub { margin-top: var(--sp-2); color: var(--text-dim); }
-main.page > h2 { margin: var(--sp-16) 0 var(--sp-2) !important; font-size: var(--fs-md); font-weight: var(--fw-semibold); }
-main.page > h2 + p:not(.group) { margin-bottom: var(--sp-6); font-size: var(--fs-md); color: var(--text-dim); }
-main.page > h2 + .group, main.page > p + .group { margin-top: var(--sp-6); }
+main.page h2 { margin: var(--sp-16) 0 var(--sp-2) !important; font-size: var(--fs-md); font-weight: var(--fw-semibold); }
+main.page h2 + p:not(.group) { margin-bottom: var(--sp-6); font-size: var(--fs-md); color: var(--text-dim); }
+main.page h2 + .group, main.page p.sub + .group { margin-top: var(--sp-6); }
 .group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
 .group + .group, .group + form.group { margin-top: var(--sp-6); }
 .group:empty { display: none; }
@@ -1352,7 +1352,7 @@ form.group.inline-form > input, form.group.inline-form > select, form.group.inli
 form.group.inline-form input[type="number"] { width: 120px; }
 form.group.inline-form button[type="submit"] { align-self: flex-start; }
 main.page > p.sub { font-size: var(--fs-md); color: var(--text-dim); }
-main.page > h2 + p.sub { margin-bottom: var(--sp-6); }
+main.page h2 + p.sub { margin-bottom: var(--sp-6); }
 
 /* toggle used on settings (label > input[type=checkbox] inside .switch) */
 .switch { position: relative; display: inline-flex; align-items: center; gap: var(--sp-4); cursor: pointer; }
@@ -1360,3 +1360,97 @@ main.page > h2 + p.sub { margin-bottom: var(--sp-6); }
 .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: var(--r-pill); background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left var(--t-fast) var(--ease); }
 .switch input:checked { background: var(--accent); }
 .switch input:checked::after { left: 14px; }
+
+
+/* ==========================================================================
+   ACCOUNT MENU (sidebar footer) and SETTINGS WINDOW
+   ========================================================================== */
+.brand-mark { width: 20px; height: 20px; }
+.account-wrap { position: relative; display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
+.account-wrap .account {
+  flex: 1; min-width: 0; margin: 0; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md);
+  text-align: left; font-size: var(--fs-md); font-weight: var(--fw-medium);
+}
+.account-wrap .account:hover, .account-wrap .account[aria-expanded="true"] { background: var(--hover); }
+.account-wrap .account .account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-wrap .account .chev { width: 12px; height: 12px; opacity: .55; }
+.account-menu { left: 0; right: 0; min-width: 0; bottom: calc(100% + 6px); }
+.sidebar { overflow-x: hidden; }
+.account-menu .menu-item { align-items: center; font-size: var(--fs-base); }
+.account-menu .menu-item svg { width: 17px; height: 17px; color: var(--text-dim); }
+.account-menu .menu-item .kbd { margin-left: auto; }
+body:not(.is-desktop) .desktop-only { display: none !important; }
+
+.settings-backdrop { align-items: center; padding: var(--sp-8); }
+.settings-window {
+  width: min(1040px, 100%); height: min(760px, calc(100vh - 2 * var(--sp-8)));
+  display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl);
+  box-shadow: var(--shadow-modal); overflow: hidden;
+  animation: bunny-pop var(--t-base) var(--ease);
+}
+.settings-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: var(--sp-6) var(--sp-8) var(--sp-6) var(--sp-10); border-bottom: 1px solid var(--line); }
+.settings-head h2 { font-size: var(--fs-lg); font-weight: var(--fw-semibold); }
+.settings-nav { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-6) var(--sp-5); border-right: 1px solid var(--line); overflow-y: auto; }
+.settings-search { width: 100%; background: var(--bg-sidebar); border-color: transparent; }
+.settings-nav-list { display: flex; flex-direction: column; gap: 1px; }
+.settings-nav-list .nav-row { font-size: var(--fs-base); padding: 7px var(--sp-5); color: var(--text); }
+.settings-nav-list .nav-row.is-active { background: var(--hover); box-shadow: none; font-weight: var(--fw-medium); }
+.settings-nav-list .is-filtered { display: none; }
+.settings-sep { height: 1px; background: var(--line); margin: var(--sp-4) var(--sp-5); }
+.settings-body { min-height: 0; }
+.settings-body iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--surface); }
+@media (max-width: 760px) {
+  .settings-backdrop { padding: 0; }
+  .settings-window { height: 100%; border-radius: 0; grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); }
+  .settings-nav { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
+}
+
+/* panel mode: a settings-style page shown inside the Settings window */
+html.embedded body { background: var(--surface); }
+html.embedded main.page { max-width: none; padding: var(--sp-8) var(--sp-12) var(--sp-16); }
+html.embedded main.page > h1, html.embedded main.page > h1 + .sub, html.embedded .page-links { display: none; }
+html.embedded main.page h2 { margin-top: var(--sp-10) !important; font-size: var(--fs-lg); font-weight: var(--fw-semibold); }
+html.embedded main.page section:not([hidden]) ~ section:not([hidden]) h2:first-child { margin-top: var(--sp-16) !important; }
+html.embedded main.page > section:first-of-type h2:first-child,
+html.embedded main.page > h2:first-of-type { margin-top: 0 !important; }
+html.embedded .group { border-radius: var(--r-lg); }
+
+
+/* ==========================================================================
+   CUSTOMIZE (connectors, skills, plugins)
+   ========================================================================== */
+.cz-bar { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; margin: var(--sp-10) 0 var(--sp-6); }
+html.embedded .cz-bar { margin-top: 0; }
+.cz-tabs { display: flex; gap: var(--sp-1); }
+.cz-tab { height: 32px; padding: 0 var(--sp-6); border-radius: var(--r-md); color: var(--text-dim); font-size: var(--fs-base); }
+.cz-tab:hover { color: var(--text); }
+.cz-tab.is-active { background: var(--hover); color: var(--text); }
+.cz-scope button { height: 28px; }
+.cz-search { flex: 1; min-width: 160px; max-width: 280px; margin-left: auto; background: var(--bg-sidebar); border-color: transparent; }
+.cz-add-wrap { position: relative; }
+.cz-add-menu { right: 0; left: auto; min-width: 280px; }
+.cz-form { margin-bottom: var(--sp-6); }
+.cz-table { border-top: 1px solid var(--line); }
+.cz-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 150px 140px auto; align-items: center; gap: var(--sp-6);
+  padding: var(--sp-5) var(--sp-4); border-bottom: 1px solid var(--line); font-size: var(--fs-base);
+}
+.cz-head { padding-top: var(--sp-4); padding-bottom: var(--sp-4); font-size: var(--fs-md); color: var(--text-dim); font-weight: var(--fw-medium); }
+.cz-name { display: flex; align-items: center; gap: var(--sp-6); min-width: 0; }
+.cz-logo {
+  width: 30px; height: 30px; flex: none; border-radius: var(--r-md); display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm);
+  font-size: var(--fs-md); font-weight: var(--fw-semibold); color: var(--accent);
+}
+.cz-text { display: flex; flex-direction: column; min-width: 0; }
+.cz-text b { font-weight: var(--fw-medium); }
+.cz-text small { font-size: var(--fs-md); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cz-type { display: flex; align-items: center; gap: var(--sp-4); color: var(--text-dim); }
+.cz-status { color: var(--text-dim); font-size: var(--fs-md); }
+.cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
+.cz-note { margin-top: var(--sp-6); }
+@media (max-width: 760px) {
+  .cz-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .cz-row .cz-type, .cz-row .cz-status { display: none; }
+}

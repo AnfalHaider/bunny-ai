@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Automation — Bunny AI</title>
 <link rel="stylesheet" href="./app.css" />
+<link rel="icon" href="./icon.svg" type="image/svg+xml" />
 </head>
 <body>
 <main class="page">
@@ -65,11 +66,13 @@
 
   <span class="err" id="automation-error" role="alert"></span>
 
-  <p class="note"><a href="./index.html">← Back to chat</a> · <a href="./settings.html">Settings</a></p>
+  <p class="note page-links"><a href="./index.html">← Back to chat</a> · <a href="./settings.html">Settings</a></p>
 </main>
 
 <script type="module">
   import { getJSON, sendJSON } from './api.js';
+  import { applyEmbed } from './embed.js';
+  applyEmbed();
 
   const $ = (id) => document.getElementById(id);
 

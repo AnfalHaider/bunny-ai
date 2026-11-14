@@ -42,10 +42,23 @@ export function normalizeModels(payload) {
       displayName: String(row.display_name ?? row.displayName ?? row.name ?? id),
       ownedBy: row.owned_by ?? row.owner ?? null,
       contextLength: numberOrNull(row.context_length ?? row.max_context_length ?? row.context_window),
+      free: isFree(row, id),
     });
   }
 
   return [...seen.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * A model costs nothing when the provider prices it at zero (OpenRouter publishes
+ * prompt and completion prices) or names it as free (":free", "-free").
+ */
+function isFree(row, id) {
+  if (/(?::|-)free$/i.test(id)) return true;
+  const price = row.pricing;
+  if (!price || typeof price !== 'object') return false;
+  const parts = ['prompt', 'completion'].filter((k) => price[k] !== undefined);
+  return parts.length > 0 && parts.every((k) => Number(price[k]) === 0);
 }
 
 function numberOrNull(value) {

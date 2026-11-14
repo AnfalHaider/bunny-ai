@@ -1,12 +1,12 @@
 {
   "name": "Bunny AI",
   "short_name": "Bunny AI",
-  "description": "A provider-agnostic chat app that uses your own API keys.",
+  "description": "Provider-agnostic AI workspace: your own keys, your own machine.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1a1a1a",
+  "background_color": "#faf9f6",
+  "theme_color": "#6a4fd8",
   "icons": [
     {
       "src": "./icon.svg",

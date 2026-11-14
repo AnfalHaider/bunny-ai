@@ -11,3 +11,6 @@ blob-report/
 # dependencies and local backups
 node_modules/
 ui-backup-*/
+
+# desktop build output
+dist/

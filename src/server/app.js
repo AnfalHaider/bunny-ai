@@ -8,7 +8,8 @@
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { extname, join, normalize, sep } from 'node:path';
+import { dirname, extname, join, normalize, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createProviderRegistry } from '../providers/connections.js';
 import { findProvider } from '../providers/catalog.js';
@@ -35,7 +36,9 @@ import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
 import { streamChat } from './chat.js';
 
-const ROOT = process.cwd();
+// The project root, found from this file rather than the working directory, so the
+// server also finds its UI when it runs inside the packaged desktop app.
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // Only the UI directory is public. Secrets and transcripts live in the data
 // directory, but there is no reason to expose source files either.
 const UI_ROOT = normalize(join(ROOT, 'src', 'ui'));
@@ -628,6 +631,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     // ---- sign-in (OAuth device flow) ----
 
     // ---- computer use ----
+    if (path.startsWith('/api/computer/') && settings.computerUseEnabled === false) {
+      return sendJson(res, 403, { code: 'computer.disabled', message: 'Computer use is switched off in Settings, Capabilities.' });
+    }
     if (path === '/api/computer/screenshot' && method === 'POST') {
       const body = await readBody(req);
       const sessionId = String(body.sessionId ?? '');
@@ -971,7 +977,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Memory and skills are standing context, and are never stored as turns.
       const memoryText = settings.memoryEnabled === false ? null : await memory.context();
       if (memoryText) history.unshift({ role: 'system', content: memoryText });
-      const skillText = await skills.context();
+      // Settings, Capabilities: skills and connectors can be switched off for every chat.
+      const skillText = settings.skillsEnabled === false ? null : await skills.context();
       if (skillText) history.unshift({ role: 'system', content: skillText });
 
       res.writeHead(200, {
@@ -983,7 +990,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
       // Tools from the MCP servers the person has switched on.
-      const servers = (await mcp.list()).filter((s) => s.enabled);
+      const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
       const toolDefinitions = [];
       const toolIndex = new Map();
       for (const server of servers) {

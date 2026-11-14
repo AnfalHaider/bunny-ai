@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Bunny mark preview</title>
+<style>
+body{margin:0;padding:32px;font-family:system-ui,sans-serif;background:#faf9f6;color:#1f2023;display:flex;flex-direction:column;gap:28px}
+.row{display:flex;gap:24px;align-items:flex-end}
+.tile{display:grid;place-items:center;border-radius:22.5%}
+.v{background:#6a4fd8;color:#fff}.d{background:#1f2023;color:#faf9f6}.l{background:#fff;color:#6a4fd8;box-shadow:0 0 0 1px #e6e2da inset}
+.dark{background:#141518;padding:24px;border-radius:12px;color:#ececee}
+small{display:block;font-size:11px;color:#8a8e96;text-align:center;margin-top:6px}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><symbol id="m" viewBox="0 0 48 48">
+  <defs><mask id="bc" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48"><rect width="48" height="48" fill="#fff"/><g fill="#000" stroke="#000" stroke-width="5" stroke-linejoin="round"><path d="M20 8h8l1.5 16h-11Z" stroke="none"/><rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/><rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/></g></mask></defs>
+  <path fill="currentColor" mask="url(#bc)" d="M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z"/>
+  <g fill="currentColor"><rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/><rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/></g>
+</symbol></svg>
+<div class="row">
+  <div><div class="tile v" style="width:160px;height:160px"><svg width="112" height="112"><use href="#m"/></svg></div><small>app icon 160</small></div>
+  <div><div class="tile d" style="width:96px;height:96px"><svg width="68" height="68"><use href="#m"/></svg></div><small>dark 96</small></div>
+  <div><div class="tile l" style="width:64px;height:64px"><svg width="44" height="44"><use href="#m"/></svg></div><small>light 64</small></div>
+  <div><div class="tile v" style="width:32px;height:32px"><svg width="22" height="22"><use href="#m"/></svg></div><small>32</small></div>
+  <div><div class="tile v" style="width:16px;height:16px"><svg width="12" height="12"><use href="#m"/></svg></div><small>16</small></div>
+</div>
+<div class="row" style="align-items:center;gap:10px"><svg width="20" height="20" style="color:#6a4fd8"><use href="#m"/></svg><b style="font-size:15px">Bunny AI</b><span style="color:#8a8e96;font-size:13px">&nbsp;sidebar brand, 20px mark</span></div>
+<div class="dark row" style="align-items:center;gap:10px"><svg width="20" height="20" style="color:#b3a1ff"><use href="#m"/></svg><b style="font-size:15px">Bunny AI</b><span style="color:#6e717a;font-size:13px">&nbsp;dark theme</span></div>
+</body></html>

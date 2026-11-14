@@ -41,6 +41,22 @@ test('normalises an OpenAI-compatible list', () => {
     displayName: 'meta/llama-3.1-70b-instruct',
     ownedBy: 'meta',
     contextLength: null,
+    free: false,
+  });
+});
+
+test('marks a model free when it is priced at zero or named free', () => {
+  const models = normalizeModels({ data: [
+    { id: 'paid/model', pricing: { prompt: '0.000002', completion: '0.000006' } },
+    { id: 'zero/model', pricing: { prompt: '0', completion: '0' } },
+    { id: 'vendor/model:free' },
+    { id: 'house-model-free' },
+    { id: 'plain/model' },
+  ] });
+  const free = Object.fromEntries(models.map((m) => [m.id, m.free]));
+  assert.deepEqual(free, {
+    'house-model-free': true, 'paid/model': false, 'plain/model': false,
+    'vendor/model:free': true, 'zero/model': true,
   });
 });
 

@@ -199,9 +199,9 @@ function renderComposerHeader() {
 
   if (folderText) folderText.textContent = state.session?.folder ?? say('composer.noFolder');
   if (branchText) branchText.textContent = state.session?.branch ?? say('composer.noBranch');
-  if (permMode) permMode.value = state.session?.permissionMode ?? 'ask';
+  if (permMode) permMode.value = state.session?.permissionMode ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
-  if (effortLevel) effortLevel.value = state.session?.effort ?? 'medium';
+  if (effortLevel) effortLevel.value = state.session?.effort ?? state.settings?.defaultEffort ?? 'medium';
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
     const modelAbilities = ab ? ab.abilities : [];
@@ -867,7 +867,7 @@ function renderActions(m, stored) {
 
   if (m.role === 'assistant') {
     act(say('chat.retry'), 'retry', async () => retry(m));
-    act(say('chat.saveArtifact'), 'artifact', async () => promote(m));
+    if (state.settings?.artifactsEnabled !== false) act(say('chat.saveArtifact'), 'artifact', async () => promote(m));
     act(say('chat.readAloud'), 'read', async (node) => {
       const ok = readAloud(m.content);
       flash(node, ok ? say('chat.reading') : say('chat.cannotRead'));
@@ -1533,7 +1533,7 @@ function renderArtifactView(artifact) {
   } else {
     const body = element('div', { className: 'artifact-body' });
     // Data that describes a chart is drawn, not printed.
-    const spec = chartSpec(current.content);
+    const spec = state.settings?.chartsEnabled === false ? null : chartSpec(current.content);
     if (spec) {
       const chart = element('div', { className: 'artifact-chart' });
       chart.append(renderChart(spec));
@@ -1730,6 +1730,148 @@ function bindModeMenu() {
 }
 
 // ---------------------------------------------------------------------------
+// profile, account menu and the Settings window
+
+/** Name and avatar in the sidebar come from Settings, Profile. */
+/**
+ * Settings, Models, "Show models": by default the picker offers only models that
+ * cost nothing plus every Nvidia model. "all" shows everything a provider offers.
+ */
+function visibleModels(all) {
+  state.allModelCount = all.length;
+  if (state.settings?.modelFilter === 'all') return all;
+  return all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
+}
+
+function applyCapabilities(settings) {
+  // Settings, Capabilities, Artifacts: off hides the button and the save action.
+  const on = settings?.artifactsEnabled !== false;
+  const toggle = $('artifacts-toggle');
+  if (toggle) toggle.hidden = !on;
+  if (!on && state.artifactOpen) openView(null);
+}
+
+function applyProfile(settings) {
+  const name = (settings?.displayName ?? '').trim() || 'Bunny AI';
+  const label = $('account-name');
+  if (label) label.textContent = name;
+  const avatar = $('account-avatar');
+  if (avatar) avatar.textContent = (name.match(/\p{L}|\p{N}/u)?.[0] ?? 'B').toUpperCase();
+}
+
+// Sections that live on their own page rather than inside settings.html.
+const SETTINGS_PAGES = { providers: './providers.html', automation: './automation.html', customize: './customize.html' };
+
+function openSettings(section = 'profile') {
+  closeAccountMenu();
+  const backdrop = $('settings-backdrop');
+  if (!backdrop) return;
+  backdrop.hidden = false;
+  showSettingsSection(section);
+  $('settings-search')?.focus();
+}
+
+function showSettingsSection(section) {
+  const frame = $('settings-frame');
+  const base = SETTINGS_PAGES[section] ?? './settings.html';
+  const query = SETTINGS_PAGES[section] ? '?embed=1' : `?embed=1&section=${encodeURIComponent(section)}`;
+  if (frame) frame.src = base + query;
+  document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
+    const on = b.dataset.section === section;
+    b.classList.toggle('is-active', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+}
+
+async function closeSettings() {
+  const backdrop = $('settings-backdrop');
+  if (!backdrop || backdrop.hidden) return;
+  backdrop.hidden = true;
+  $('settings-frame')?.removeAttribute('src');
+  // Settings may have changed underneath: theme, language, name, defaults, models.
+  try {
+    const settings = await getJSON('/api/settings');
+    state.settings = settings;
+    applyProfile(settings);
+    applyCapabilities(settings);
+    applyTheme(settings.theme ?? 'system');
+    state.language = settings.language ?? 'en';
+    applyLanguage(state.language);
+    state.providers = await getJSON('/api/providers');
+    state.models = visibleModels(await getJSON('/api/models'));
+    renderPicker();
+    renderComposerHeader();
+    paintMessages();
+  } catch { /* the chat keeps working with what it had */ }
+}
+
+function bindSettingsWindow() {
+  const backdrop = $('settings-backdrop');
+  if (!backdrop) return;
+  $('settings-close')?.addEventListener('click', closeSettings);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSettings(); });
+  document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
+    b.addEventListener('click', () => showSettingsSection(b.dataset.section));
+  });
+  // The search box narrows the section list by name and keywords.
+  $('settings-search')?.addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
+      const hay = `${b.textContent} ${b.dataset.keywords ?? ''}`.toLowerCase();
+      b.classList.toggle('is-filtered', Boolean(q) && !hay.includes(q));
+    });
+    document.querySelectorAll('#settings-nav-list .settings-sep').forEach((sep) => sep.classList.toggle('is-filtered', Boolean(q)));
+  });
+  $('settings-search')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const first = [...document.querySelectorAll('#settings-nav-list [data-section]')]
+      .find((b) => !b.classList.contains('is-filtered') && b.offsetParent !== null);
+    if (first) showSettingsSection(first.dataset.section);
+  });
+  // A link inside an embedded page (for example "Back to chat") navigates this window.
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.data?.type !== 'bunny:navigate') return;
+    const href = String(e.data.href);
+    if (href.includes('index.html')) { closeSettings(); return; }
+    const page = Object.entries(SETTINGS_PAGES).find(([, path]) => href.includes(path.slice(2)));
+    if (page) showSettingsSection(page[0]);
+    else if (href.includes('settings.html')) showSettingsSection('profile');
+  });
+  document.querySelectorAll('[data-settings]').forEach((b) => {
+    b.addEventListener('click', (e) => { e.stopPropagation(); openSettings(b.dataset.settings); });
+  });
+}
+
+function closeAccountMenu() {
+  const menu = $('account-menu');
+  if (menu) menu.hidden = true;
+  $('account-button')?.setAttribute('aria-expanded', 'false');
+}
+
+function bindAccountMenu() {
+  const buttonEl = $('account-button');
+  const menu = $('account-menu');
+  if (!buttonEl || !menu) return;
+  // Desktop-only entries (Quit, the Desktop app section) show inside the Electron shell.
+  document.body.classList.toggle('is-desktop', Boolean(window.bunnyDesktop));
+  buttonEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.hidden;
+    menu.hidden = !open;
+    buttonEl.setAttribute('aria-expanded', String(open));
+    if (open) menu.querySelector('.menu-item')?.focus();
+  });
+  menu.querySelector('[data-action="palette"]')?.addEventListener('click', () => { closeAccountMenu(); openPalette(); });
+  menu.querySelector('[data-action="quit"]')?.addEventListener('click', () => window.bunnyDesktop?.quit());
+  menu.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeAccountMenu(); buttonEl.focus(); }
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#account-menu, #account-button')) closeAccountMenu();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // command palette
 
 const PALETTE_COMMANDS = [
@@ -1847,6 +1989,8 @@ async function boot() {
   });
   bindModeSwitch();
   bindModeMenu();
+  bindAccountMenu();
+  bindSettingsWindow();
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const open = $('app').classList.toggle('sidebar-open');
@@ -1906,6 +2050,11 @@ async function boot() {
       e.preventDefault();
       if ($('palette-backdrop').hidden) openPalette(); else closePalette();
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+      e.preventDefault();
+      if ($('settings-backdrop').hidden) openSettings('profile'); else closeSettings();
+    }
+    if (e.key === 'Escape' && !$('settings-backdrop').hidden) closeSettings();
     if (e.key === 'Escape' && !$('palette-backdrop').hidden) closePalette();
     if (e.key === 'Escape' && !$('import-backdrop').hidden) closeImport();
   });
@@ -2013,9 +2162,11 @@ async function boot() {
 
   try {
     state.providers = await getJSON('/api/providers');
-    state.models = await getJSON('/api/models');
     const settings = await getJSON('/api/settings');
     state.settings = settings;
+    state.models = visibleModels(await getJSON('/api/models'));
+    applyProfile(settings);
+    applyCapabilities(settings);
     applyTheme(settings.theme ?? 'system');
     state.language = settings.language ?? 'en';
     applyLanguage(state.language);

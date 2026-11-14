@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Providers — Bunny AI</title>
 <link rel="stylesheet" href="./app.css" />
+<link rel="icon" href="./icon.svg" type="image/svg+xml" />
 </head>
 <body>
 <main class="page">
@@ -21,11 +22,13 @@
     Keys are encrypted with Windows DPAPI for your user account — never stored in plain text,
     never sent anywhere except the provider you chose.
   </p>
-  <p class="note"><a href="./index.html">← Back to chat</a></p>
+  <p class="note page-links"><a href="./index.html">← Back to chat</a></p>
 </main>
 
 <script type="module">
   import { getJSON, sendJSON, esc } from './api.js';
+  import { applyEmbed } from './embed.js';
+  applyEmbed();
 
   const state = { providers: [], openForm: null, models: new Map(), errors: new Map() };
 

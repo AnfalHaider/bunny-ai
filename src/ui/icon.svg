@@ -1,4 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bunny AI">
-  <rect width="64" height="64" rx="14" fill="#1a1a1a"/>
-  <text x="32" y="43" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="700" fill="#ffffff" text-anchor="middle">B</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bunny AI">
+  <defs>
+    <mask id="bunny-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+      <rect width="48" height="48" fill="#fff"/>
+      <g fill="#000" stroke="#000" stroke-width="5" stroke-linejoin="round">
+        <path d="M20 8h8l1.5 16h-11Z" stroke="none"/>
+        <rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/>
+        <rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/>
+      </g>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="#6a4fd8"/>
+  <g transform="translate(88 82) scale(7)" fill="#ffffff">
+    <path mask="url(#bunny-cut)" d="M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z"/>
+    <rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/>
+    <rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/>
+  </g>
 </svg>

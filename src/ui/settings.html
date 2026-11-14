@@ -5,150 +5,332 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Settings — Bunny AI</title>
 <link rel="stylesheet" href="./app.css" />
+<link rel="icon" href="./icon.svg" type="image/svg+xml" />
 </head>
 <body>
+<!-- Each <section data-section> can be shown alone: settings.html?embed=1&section=appearance
+     (that is how the Settings window in the chat page shows one section at a time). -->
 <main class="page">
   <h1>Settings</h1>
   <p class="sub">Local preferences for this machine</p>
 
-  <h2>Appearance</h2>
-  <div class="group">
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Theme</div>
-        <div class="desc">Follow the system, or force light or dark.</div>
+  <section data-section="profile">
+    <h2>Profile</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Display name</div>
+          <div class="desc">Shown in the sidebar. It never leaves this computer.</div>
+        </div>
+        <div class="right"><input id="display-name" maxlength="40" placeholder="Your name" aria-label="Display name" /></div>
       </div>
-      <div class="right">
-        <select id="theme" aria-label="Theme">
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Account</div>
+          <div class="desc">Bunny AI has no cloud account. Your chats and keys stay on this computer.</div>
+        </div>
+        <div class="right"><span class="tag">Local</span></div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <h2 style="margin-top:28px">Connection</h2>
-  <div class="group">
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Provider</div>
-        <div class="desc">Default provider for new chats.</div>
+  <section data-section="appearance">
+    <h2>Appearance</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Theme</div>
+          <div class="desc">Follow the system, or force light or dark.</div>
+        </div>
+        <div class="right">
+          <select id="theme" aria-label="Theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
       </div>
-      <div class="right"><span class="tag" id="cur-provider">none</span></div>
     </div>
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Model</div>
-        <div class="desc">Default model for new chats.</div>
-      </div>
-      <div class="right"><span class="tag" id="cur-model">none</span></div>
-    </div>
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Test mode</div>
-        <div class="desc">Reply locally without calling a provider. Useful for trying screens.</div>
-      </div>
-      <div class="right"><span class="tag" id="fake-mode">unknown</span></div>
-    </div>
-  </div>
+  </section>
 
-  <h2 style="margin-top:28px">Version</h2>
-  <div class="group">
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Installed version</div>
-        <div class="desc">This app runs from a folder on your own machine, so it never updates itself.</div>
+  <section data-section="language">
+    <h2>Language</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Language</div>
+          <div class="desc">The interface language. Everything stays on this machine.</div>
+        </div>
+        <div class="right">
+          <select id="language" aria-label="Language">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="ar">العربية</option>
+          </select>
+        </div>
       </div>
-      <div class="right"><span class="tag" id="version">unknown</span></div>
     </div>
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Update source</div>
-        <div class="desc">A URL that answers with a version number. Leave it empty to skip the check.</div>
-      </div>
-      <div class="right wide-col">
-        <input id="update-url" placeholder="https://example.com/bunny-ai/version.json" aria-label="Update source" />
-      </div>
-    </div>
-    <div class="row">
-      <div class="right"><button id="check-update" class="primary">Check for updates</button></div>
-      <div class="meta-col"><div class="desc" id="update-note"></div></div>
-    </div>
-  </div>
+  </section>
 
-  <h2 style="margin-top:28px">Language and alerts</h2>
-  <div class="group">
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Language</div>
-        <div class="desc">The interface language. Everything stays on this machine.</div>
-      </div>
-      <div class="right">
-        <select id="language" aria-label="Language">
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="fr">Français</option>
-          <option value="ar">العربية</option>
-        </select>
+  <section data-section="notifications">
+    <h2>Notifications</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Reply ready</div>
+          <div class="desc">Tell me when a reply is ready and this window is in the background.</div>
+        </div>
+        <div class="right">
+          <label class="switch"><input type="checkbox" id="notifications" /><span id="notifications-state">off</span></label>
+        </div>
       </div>
     </div>
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Notifications</div>
-        <div class="desc">Tell me when a reply is ready and this window is in the background.</div>
-      </div>
-      <div class="right">
-        <label class="switch"><input type="checkbox" id="notifications" /><span id="notifications-state">off</span></label>
-      </div>
-    </div>
-  </div>
+  </section>
 
-  <h2 style="margin-top:28px">Models</h2>
-  <div class="group">
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Allowed models</div>
-        <div class="desc">One model id per line. Leave empty to offer every model the provider has.</div>
-      </div>
-      <div class="right wide-col">
-        <textarea id="allowlist" rows="3" aria-label="Allowed models"></textarea>
-      </div>
-    </div>
-    <div class="row">
-      <div class="meta-col">
-        <div class="name">Aliases</div>
-        <div class="desc">One "name = model-id" per line, so a model can be picked by a short name.</div>
-      </div>
-      <div class="right wide-col">
-        <textarea id="aliases" rows="3" aria-label="Model aliases"></textarea>
+  <section data-section="privacy">
+    <h2>Privacy</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Use memory</div>
+          <div class="desc">Give the model the things you asked it to remember (Automation, Memory).</div>
+        </div>
+        <div class="right">
+          <label class="switch"><input type="checkbox" id="memory-enabled" /><span id="memory-state">on</span></label>
+        </div>
       </div>
     </div>
-    <div class="row">
-      <div class="right"><button id="save-models" class="primary">Save models</button></div>
+    <h2>Storage</h2>
+    <div class="group" id="storage"></div>
+  </section>
+
+  <section data-section="capabilities">
+    <h2>Capabilities</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Artifacts</div>
+          <div class="desc">Keep replies as artifacts and open them in their own panel next to your chat.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="artifactsEnabled" /><span>on</span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Draw charts in artifacts</div>
+          <div class="desc">An artifact that holds chart data is drawn as a chart instead of shown as text.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="chartsEnabled" /><span>on</span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Use skills</div>
+          <div class="desc">Add the skills you switched on (Customize) to the model's instructions in every chat.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="skillsEnabled" /><span>on</span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Use connectors</div>
+          <div class="desc">Offer the tools of your switched-on connectors (Customize) to the model. Off keeps every chat offline from them.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" /><span>on</span></label></div>
+      </div>
     </div>
-  </div>
 
-  <h2 style="margin-top:28px">Usage</h2>
-  <div class="group" id="usage">
-    <div class="row"><div class="desc">Nothing has been used yet.</div></div>
-  </div>
+    <h2>Computer use <span class="tag">Local only</span></h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Enable computer use</div>
+          <div class="desc">Allow screenshots, clicks and typing on this computer through Bunny AI. Off refuses every such request.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="computerUseEnabled" /><span>on</span></label></div>
+      </div>
+    </div>
+  </section>
 
-  <h2 style="margin-top:28px">Storage</h2>
-  <div class="group" id="storage"></div>
+  <section data-section="connection">
+    <h2>Connection</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Provider</div>
+          <div class="desc">Default provider for new chats.</div>
+        </div>
+        <div class="right"><span class="tag" id="cur-provider">none</span></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Model</div>
+          <div class="desc">Default model for new chats.</div>
+        </div>
+        <div class="right"><span class="tag" id="cur-model">none</span></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Test mode</div>
+          <div class="desc">Reply locally without calling a provider. Useful for trying screens.</div>
+        </div>
+        <div class="right"><span class="tag" id="fake-mode">unknown</span></div>
+      </div>
+    </div>
+  </section>
 
-  <p class="note"><a href="./index.html">← Back to chat</a> · <a href="./providers.html">Providers</a></p>
+  <section data-section="models">
+    <h2>Models</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Show models</div>
+          <div class="desc">Which models the model picker offers. Free models cost nothing to use; Nvidia models are always included.</div>
+        </div>
+        <div class="right">
+          <select id="model-filter" aria-label="Show models">
+            <option value="free-nvidia">Free and Nvidia models</option>
+            <option value="all">All models</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Longest reply</div>
+          <div class="desc">The most tokens a single reply may use.</div>
+        </div>
+        <div class="right"><input id="max-tokens" type="number" min="256" step="256" aria-label="Longest reply in tokens" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Allowed models</div>
+          <div class="desc">One model id per line. Leave empty to offer every model the provider has.</div>
+        </div>
+        <div class="right wide-col">
+          <textarea id="allowlist" rows="3" aria-label="Allowed models"></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Aliases</div>
+          <div class="desc">One "name = model-id" per line, so a model can be picked by a short name.</div>
+        </div>
+        <div class="right wide-col">
+          <textarea id="aliases" rows="3" aria-label="Model aliases"></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <div class="right"><button id="save-models" class="primary">Save models</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="code">
+    <h2>Code</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Default permission mode</div>
+          <div class="desc">How careful a new chat starts out. You can change it per chat under the message box.</div>
+        </div>
+        <div class="right">
+          <select id="default-permission" aria-label="Default permission mode">
+            <option value="ask">Manual</option>
+            <option value="accept">Accept edits</option>
+            <option value="plan">Plan</option>
+            <option value="auto">Auto</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Default effort</div>
+          <div class="desc">How hard the model thinks in a new chat.</div>
+        </div>
+        <div class="right">
+          <select id="default-effort" aria-label="Default effort">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="max">Max</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="usage">
+    <h2>Usage</h2>
+    <div class="group" id="usage">
+      <div class="row"><div class="desc">Nothing has been used yet.</div></div>
+    </div>
+  </section>
+
+  <section data-section="desktop" id="desktop-section" hidden>
+    <h2>Desktop app</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Start when I sign in</div>
+          <div class="desc">Open Bunny AI when you sign in to Windows.</div>
+        </div>
+        <div class="right">
+          <label class="switch"><input type="checkbox" id="launch-at-login" /><span id="launch-state">off</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Keep running in the tray</div>
+          <div class="desc">Closing the window keeps Bunny AI in the system tray, so schedules keep running.</div>
+        </div>
+        <div class="right">
+          <label class="switch"><input type="checkbox" id="close-to-tray" /><span id="tray-state">off</span></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="about">
+    <h2>About</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Installed version</div>
+          <div class="desc">This app runs on your own machine.</div>
+        </div>
+        <div class="right"><span class="tag" id="version">unknown</span></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Update source</div>
+          <div class="desc">A URL that answers with a version number. Leave it empty to skip the check.</div>
+        </div>
+        <div class="right wide-col">
+          <input id="update-url" placeholder="https://example.com/bunny-ai/version.json" aria-label="Update source" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="right"><button id="check-update" class="primary">Check for updates</button></div>
+        <div class="meta-col"><div class="desc" id="update-note"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <p class="note page-links"><a href="./index.html">← Back to chat</a> · <a href="./providers.html">Providers</a></p>
 </main>
 
 <script type="module">
   import { getJSON, sendJSON, applyTheme } from './api.js';
   import { LANGUAGES, applyLanguage } from './i18n.js';
+  import { applyEmbed } from './embed.js';
 
-  const theme = document.getElementById('theme');
-  const allowlist = document.getElementById('allowlist');
-  const aliases = document.getElementById('aliases');
-  const language = document.getElementById('language');
-  const notifications = document.getElementById('notifications');
+  applyEmbed();
+
+  const $ = (id) => document.getElementById(id);
+  const theme = $('theme');
+  const allowlist = $('allowlist');
+  const aliases = $('aliases');
+  const language = $('language');
+  const notifications = $('notifications');
+  const save = (patch) => sendJSON('/api/settings', 'PUT', patch);
 
   // The list of languages comes from one place, so the page and the app agree.
   language.replaceChildren(...LANGUAGES.map((l) => {
@@ -160,7 +342,7 @@
 
   language.addEventListener('change', async () => {
     applyLanguage(language.value);
-    await sendJSON('/api/settings', 'PUT', { language: language.value });
+    await save({ language: language.value });
   });
 
   notifications.addEventListener('change', async () => {
@@ -172,14 +354,50 @@
       allowed = (await Notification.requestPermission()) === 'granted';
     }
     notifications.checked = allowed;
-    document.getElementById('notifications-state').textContent = allowed ? 'on' : 'off';
-    await sendJSON('/api/settings', 'PUT', { notifications: allowed });
+    $('notifications-state').textContent = allowed ? 'on' : 'off';
+    await save({ notifications: allowed });
   });
 
   theme.addEventListener('change', async () => {
-    const value = theme.value;
-    applyTheme(value);
-    await sendJSON('/api/settings', 'PUT', { theme: value });
+    applyTheme(theme.value);
+    await save({ theme: theme.value });
+  });
+
+  // ---- profile ----
+  $('display-name').addEventListener('change', async (e) => {
+    await save({ displayName: e.target.value.trim() });
+  });
+
+  // ---- privacy ----
+  $('memory-enabled').addEventListener('change', async (e) => {
+    $('memory-state').textContent = e.target.checked ? 'on' : 'off';
+    await save({ memoryEnabled: e.target.checked });
+  });
+
+  // ---- capabilities: each switch is one settings key, on unless set to false ----
+  function bindCapabilities(settings) {
+    for (const box of document.querySelectorAll('[data-cap]')) {
+      const key = box.dataset.cap;
+      const label = box.nextElementSibling;
+      box.checked = settings[key] !== false;
+      label.textContent = box.checked ? 'on' : 'off';
+      box.addEventListener('change', async () => {
+        label.textContent = box.checked ? 'on' : 'off';
+        await save({ [key]: box.checked });
+      });
+    }
+  }
+
+  // ---- code defaults ----
+  $('default-permission').addEventListener('change', (e) => save({ defaultPermissionMode: e.target.value }));
+  $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
+
+  // ---- models ----
+  $('model-filter').addEventListener('change', (e) => save({ modelFilter: e.target.value }));
+  $('max-tokens').addEventListener('change', async (e) => {
+    const n = Math.max(256, Math.round(Number(e.target.value) || 4096));
+    e.target.value = n;
+    await save({ maxTokens: n });
   });
 
   /** "fast = model-id" lines become an alias table. */
@@ -196,26 +414,56 @@
     aliases.value = Object.entries(map).map(([name, id]) => `${name} = ${id}`).join('\n');
   }
 
-  const updateUrl = document.getElementById('update-url');
+  const updateUrl = $('update-url');
 
-  document.getElementById('check-update').addEventListener('click', async () => {
-    const note = document.getElementById('update-note');
+  $('check-update').addEventListener('click', async () => {
+    const note = $('update-note');
     note.textContent = 'Checking…';
-    await sendJSON('/api/settings', 'PUT', { updateUrl: updateUrl.value.trim() });
+    await save({ updateUrl: updateUrl.value.trim() });
     const result = await sendJSON('/api/update/check', 'POST');
     note.textContent = result.message;
   });
 
-  document.getElementById('save-models').addEventListener('click', async () => {    const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
+  $('save-models').addEventListener('click', async () => {
+    const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
     const map = parseAliases(aliases.value);
-    await sendJSON('/api/settings', 'PUT', { allowlist: list, aliases: map });
-    const button = document.getElementById('save-models');
+    await save({ allowlist: list, aliases: map });
+    const button = $('save-models');
     button.textContent = 'Saved';
     setTimeout(() => { button.textContent = 'Save models'; }, 1200);
   });
 
+  // ---- desktop app (only inside the Electron shell, which exposes window.bunnyDesktop) ----
+  async function bootDesktop() {
+    // The Settings window shows this page in an iframe; the bridge lives on the parent.
+    const desk = window.bunnyDesktop ?? window.parent?.bunnyDesktop;
+    if (!desk) return;
+    $('desktop-section').hidden = false;
+    const prefs = await desk.getPrefs();
+    const bind = (id, stateId, key) => {
+      const box = $(id);
+      box.checked = Boolean(prefs[key]);
+      $(stateId).textContent = box.checked ? 'on' : 'off';
+      box.addEventListener('change', async () => {
+        $(stateId).textContent = box.checked ? 'on' : 'off';
+        await desk.setPrefs({ [key]: box.checked });
+      });
+    };
+    bind('launch-at-login', 'launch-state', 'launchAtLogin');
+    bind('close-to-tray', 'tray-state', 'closeToTray');
+  }
+
+  function kvRow(k, v) {
+    const row = document.createElement('div');
+    row.className = 'kv';
+    row.innerHTML = '<span class="k"></span><span class="v"></span>';
+    row.querySelector('.k').textContent = k;
+    row.querySelector('.v').textContent = v;
+    return row;
+  }
+
   async function renderUsage() {
-    const host = document.getElementById('usage');
+    const host = $('usage');
     const data = await getJSON('/api/usage');
     host.replaceChildren();
     if (!data.providers.length) {
@@ -229,56 +477,48 @@
       return;
     }
     for (const row of data.providers) {
-      const line = document.createElement('div');
-      line.className = 'kv';
-      line.innerHTML = '<span class="k"></span><span class="v"></span>';
-      line.querySelector('.k').textContent = row.providerId;
-      line.querySelector('.v').textContent =
-        `${row.messages} messages · about ${row.tokens.toLocaleString()} tokens · ${row.sessions} chats`;
-      host.append(line);
+      host.append(kvRow(row.providerId,
+        `${row.messages} messages · about ${row.tokens.toLocaleString()} tokens · ${row.sessions} chats`));
     }
-    const total = document.createElement('div');
-    total.className = 'kv';
-    total.innerHTML = '<span class="k"></span><span class="v"></span>';
-    total.querySelector('.k').textContent = 'Total';
-    total.querySelector('.v').textContent = `about ${data.total.toLocaleString()} tokens`;
-    host.append(total);
+    host.append(kvRow('Total', `about ${data.total.toLocaleString()} tokens`));
   }
 
   const boot = async () => {
     const [settings, health] = await Promise.all([getJSON('/api/settings'), getJSON('/api/health')]);
     theme.value = settings.theme ?? 'system';
     applyTheme(theme.value);
-    document.getElementById('cur-provider').textContent = settings.providerId ?? 'none';
-    document.getElementById('cur-model').textContent = settings.model ?? 'none';
-    document.getElementById('fake-mode').textContent = health.fake ? 'on' : 'off';
+    $('display-name').value = settings.displayName ?? '';
+    $('cur-provider').textContent = settings.providerId ?? 'none';
+    $('cur-model').textContent = settings.model ?? 'none';
+    $('fake-mode').textContent = health.fake ? 'on' : 'off';
     allowlist.value = (settings.allowlist ?? []).join('\n');
     renderAliases(settings.aliases ?? {});
+    $('max-tokens').value = Number(settings.maxTokens) || 4096;
     language.value = settings.language ?? 'en';
     applyLanguage(language.value);
     notifications.checked = Boolean(settings.notifications);
-    document.getElementById('notifications-state').textContent = settings.notifications ? 'on' : 'off';
+    $('notifications-state').textContent = settings.notifications ? 'on' : 'off';
+    $('memory-enabled').checked = settings.memoryEnabled !== false;
+    $('memory-state').textContent = settings.memoryEnabled !== false ? 'on' : 'off';
+    $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
+    $('default-effort').value = settings.defaultEffort ?? 'medium';
+    bindCapabilities(settings);
+    $('model-filter').value = settings.modelFilter === 'all' ? 'all' : 'free-nvidia';
 
     const version = await getJSON('/api/version');
-    document.getElementById('version').textContent = version.version;
+    $('version').textContent = version.version;
     updateUrl.value = version.updateUrl ?? '';
 
     await renderUsage();
 
-    const storage = document.getElementById('storage');
-    const rows = [
+    const storage = $('storage');
+    for (const [k, v] of [
       ['Sessions', 'one JSON file per chat'],
       ['Secrets', 'Windows DPAPI, per user'],
       ['Server', location.origin],
-    ];
-    for (const [k, v] of rows) {
-      const row = document.createElement('div');
-      row.className = 'kv';
-      row.innerHTML = '<span class="k"></span><span class="v"></span>';
-      row.querySelector('.k').textContent = k;
-      row.querySelector('.v').textContent = v;
-      storage.append(row);
-    }
+    ]) storage.append(kvRow(k, v));
+
+    await bootDesktop();
   };
 
   boot();

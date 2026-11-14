@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Customize — Bunny AI</title>
+<link rel="stylesheet" href="./app.css" />
+<link rel="icon" href="./icon.svg" type="image/svg+xml" />
+</head>
+<body>
+<!-- Connectors (MCP servers), skills and plugins in one place.
+     Connectors and skills use the same stores as Automation; a plugin is a bundle
+     of connectors and skills, recorded in settings.plugins so it can be removed as one. -->
+<main class="page cz-page">
+  <h1>Customize</h1>
+  <p class="sub">Connectors, skills and plugins the model can use in your chats</p>
+
+  <div class="cz-bar">
+    <div class="cz-tabs" role="tablist" aria-label="What to show">
+      <button role="tab" class="cz-tab is-active" data-kind="connectors" aria-selected="true">Connectors</button>
+      <button role="tab" class="cz-tab" data-kind="skills" aria-selected="false">Skills</button>
+      <button role="tab" class="cz-tab" data-kind="plugins" aria-selected="false">Plugins</button>
+    </div>
+    <div class="mode-switch cz-scope" role="group" aria-label="Yours or discover">
+      <button class="is-active" data-scope="yours" aria-pressed="true">Yours</button>
+      <button data-scope="discover" aria-pressed="false">Discover</button>
+    </div>
+    <input class="input sm cz-search" id="cz-search" type="search" placeholder="Search" aria-label="Search" />
+    <div class="cz-add-wrap">
+      <button class="btn btn-primary btn-sm" id="cz-add" aria-haspopup="menu" aria-expanded="false">＋ Add</button>
+      <div class="menu down cz-add-menu" id="cz-add-menu" role="menu" hidden>
+        <button class="menu-item" role="menuitem" data-add="connector"><span class="label">Connector<small>An MCP server reached over https</small></span></button>
+        <button class="menu-item" role="menuitem" data-add="skill"><span class="label">Skill<small>Instructions the model follows when it is on</small></span></button>
+        <button class="menu-item" role="menuitem" data-add="plugin"><span class="label">Plugin from file<small>A .json bundle of connectors and skills</small></span></button>
+      </div>
+      <input type="file" id="cz-plugin-file" accept=".json,application/json" hidden />
+    </div>
+  </div>
+
+  <!-- add forms -->
+  <form class="card card-form cz-form" id="cz-connector-form" hidden>
+    <div class="form-row">
+      <input class="input" name="title" placeholder="Name" aria-label="Connector name" required />
+      <input class="input" name="url" type="url" placeholder="https://example.com/mcp" aria-label="Connector address" required />
+    </div>
+    <div class="actions"><button type="submit" class="btn btn-primary btn-sm">Add connector</button><button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button><span class="err" data-err></span></div>
+  </form>
+  <form class="card card-form cz-form" id="cz-skill-form" hidden>
+    <input class="input" name="title" placeholder="Name" aria-label="Skill name" required />
+    <input class="input" name="description" placeholder="What is it for?" aria-label="Skill description" />
+    <textarea class="textarea" name="instructions" rows="4" placeholder="The instructions the model should follow" aria-label="Skill instructions" required></textarea>
+    <div class="actions"><button type="submit" class="btn btn-primary btn-sm">Add skill</button><button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button><span class="err" data-err></span></div>
+  </form>
+
+  <div class="cz-table" role="table" aria-label="Items">
+    <div class="cz-row cz-head" role="row">
+      <span role="columnheader" id="cz-col-name">Connector</span><span role="columnheader">Type</span><span role="columnheader">Status</span><span></span>
+    </div>
+    <div id="cz-list" role="rowgroup"></div>
+  </div>
+  <p class="hint cz-note" id="cz-note"></p>
+
+  <p class="note page-links"><a href="./index.html">← Back to chat</a></p>
+</main>
+
+<script type="module">
+  import { getJSON, sendJSON, applyTheme } from './api.js';
+  import { applyEmbed } from './embed.js';
+  applyEmbed();
+
+  const $ = (id) => document.getElementById(id);
+  const view = { kind: 'connectors', scope: 'yours', q: '' };
+  let data = { connectors: [], skills: [], plugins: [] };
+
+  // ---- Discover: only things that work with no sign-in (checked 2026-11-15) ----
+  const CATALOG = {
+    connectors: [
+      { name: 'DeepWiki', url: 'https://mcp.deepwiki.com/mcp', desc: 'Ask questions about any public GitHub repository' },
+      { name: 'Context7', url: 'https://mcp.context7.com/mcp', desc: 'Up-to-date docs and code examples for libraries' },
+    ],
+    skills: [
+      { name: 'Code reviewer', description: 'Reviews a change for bugs before style',
+        instructions: 'When asked to review code, look for correctness bugs first, then security issues, then readability. Quote the exact line, say what goes wrong with a concrete input, and suggest the smallest fix. Skip style nits unless asked.' },
+      { name: 'Commit message writer', description: 'Short, clear commit messages',
+        instructions: 'When asked for a commit message, write a subject line under 60 characters in the imperative mood, a blank line, then two or three lines on why the change was made. No emoji, no trailers.' },
+      { name: 'Plain-language explainer', description: 'Explains without jargon',
+        instructions: 'Explain things in plain words a smart non-specialist understands. Lead with the answer, use one concrete example, define any term you cannot avoid, and keep it short.' },
+      { name: 'Test writer', description: 'Writes focused tests for a function',
+        instructions: 'When asked for tests, cover the normal case, the edge cases and one failure case. Name each test after the promise it checks. Use the project test framework if one is visible.' },
+    ],
+    plugins: [
+      { name: 'Developer docs pack', description: 'DeepWiki and Context7 connectors plus a skill that cites its sources',
+        connectors: [
+          { name: 'DeepWiki', url: 'https://mcp.deepwiki.com/mcp' },
+          { name: 'Context7', url: 'https://mcp.context7.com/mcp' },
+        ],
+        skills: [{ name: 'Cite sources', description: 'Says where an answer came from',
+          instructions: 'When you use a connector to answer, name the source (repository, library and page) next to the claim it supports.' }] },
+    ],
+  };
+
+  async function load() {
+    const [connectors, skills, settings] = await Promise.all([
+      getJSON('/api/mcp'), getJSON('/api/skills'), getJSON('/api/settings'),
+    ]);
+    applyTheme(settings.theme ?? 'system');
+    data = { connectors, skills, plugins: settings.plugins ?? [] };
+    paint();
+  }
+
+  const pluginOf = (kind, id) => data.plugins.find((p) => (p[kind] ?? []).includes(id));
+  const initial = (name) => (String(name).match(/\p{L}|\p{N}/u)?.[0] ?? '?').toUpperCase();
+  const matches = (...fields) => !view.q || fields.join(' ').toLowerCase().includes(view.q);
+
+  function el(tag, props = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'className') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v);
+    }
+    n.append(...kids.filter(Boolean));
+    return n;
+  }
+
+  function row({ name, sub, type, typeTag, status, statusClass, actions = [] }) {
+    return el('div', { className: 'cz-row', role: 'row' },
+      el('span', { className: 'cz-name', role: 'cell' },
+        el('span', { className: 'cz-logo', 'aria-hidden': 'true', text: initial(name) }),
+        el('span', { className: 'cz-text' }, el('b', { text: name }), sub ? el('small', { text: sub }) : null)),
+      el('span', { className: 'cz-type', role: 'cell' }, document.createTextNode(type), typeTag ? el('span', { className: 'badge', text: typeTag }) : null),
+      el('span', { className: `cz-status ${statusClass ?? ''}`, role: 'cell', text: status }),
+      el('span', { className: 'cz-actions', role: 'cell' }, ...actions));
+  }
+
+  function toggle(on, label, change) {
+    return el('button', { className: 'toggle', role: 'switch', 'aria-checked': String(on), 'aria-label': label,
+      onclick: async (e) => { e.currentTarget.disabled = true; await change(!on); await load(); } });
+  }
+  const act = (text, onclick, cls = 'btn btn-ghost btn-sm') => el('button', { className: cls, text, onclick });
+
+  function paintYours() {
+    const list = $('cz-list');
+    if (view.kind === 'connectors') {
+      for (const s of data.connectors.filter((s) => matches(s.name, s.url))) {
+        const plugin = pluginOf('connectors', s.id);
+        const status = !s.enabled ? 'Off' : s.status === 'connected' ? `✓ ${s.tools?.length ?? 0} tools` : s.status === 'error' ? 'Error' : 'Not checked';
+        list.append(row({
+          name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.url,
+          type: 'Remote', typeTag: plugin ? 'Plugin' : 'Custom',
+          status, statusClass: s.status === 'error' ? 'text-bad' : s.status === 'connected' && s.enabled ? 'text-ok' : '',
+          actions: [
+            act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; await fetch(`/api/mcp/${s.id}/tools`); await load(); }),
+            toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on })),
+            plugin ? null : act('Remove', async () => { await sendJSON(`/api/mcp/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
+          ],
+        }));
+      }
+    } else if (view.kind === 'skills') {
+      for (const s of data.skills.filter((s) => matches(s.name, s.description))) {
+        const plugin = pluginOf('skills', s.id);
+        list.append(row({
+          name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.description,
+          type: 'Skill', typeTag: plugin ? 'Plugin' : 'Custom',
+          status: s.enabled ? 'On' : 'Off', statusClass: s.enabled ? 'text-ok' : '',
+          actions: [
+            toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/skills/${s.id}`, 'PATCH', { enabled: on })),
+            plugin ? null : act('Remove', async () => { await sendJSON(`/api/skills/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
+          ],
+        }));
+      }
+    } else {
+      for (const p of data.plugins.filter((p) => matches(p.name, p.description))) {
+        const n = (p.connectors?.length ?? 0) + (p.skills?.length ?? 0);
+        list.append(row({
+          name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
+          status: 'Installed', statusClass: 'text-ok',
+          actions: [act('Uninstall', () => uninstall(p), 'btn btn-danger btn-sm')],
+        }));
+      }
+    }
+  }
+
+  function paintDiscover() {
+    const list = $('cz-list');
+    const have = (url) => data.connectors.some((c) => c.url === url);
+    const haveSkill = (name) => data.skills.some((s) => s.name === name);
+    const havePlugin = (name) => data.plugins.some((p) => p.name === name);
+    for (const item of CATALOG[view.kind].filter((i) => matches(i.name, i.desc ?? i.description))) {
+      let added; let add;
+      if (view.kind === 'connectors') { added = have(item.url); add = () => sendJSON('/api/mcp', 'POST', { name: item.name, url: item.url, enabled: true }); }
+      else if (view.kind === 'skills') { added = haveSkill(item.name); add = () => sendJSON('/api/skills', 'POST', { ...item, enabled: true }); }
+      else { added = havePlugin(item.name); add = () => install(item); }
+      list.append(row({
+        name: item.name, sub: item.desc ?? item.description,
+        type: view.kind === 'connectors' ? 'Remote' : view.kind === 'skills' ? 'Skill' : 'Plugin', typeTag: 'No sign-in',
+        status: added ? '✓ Added' : '', statusClass: added ? 'text-ok' : '',
+        actions: [added ? null : act('Add', async (e) => { e.currentTarget.textContent = 'Adding…'; await add(); await load(); }, 'btn btn-sm')],
+      }));
+    }
+  }
+
+  function paint() {
+    const list = $('cz-list');
+    list.replaceChildren();
+    $('cz-col-name').textContent = { connectors: 'Connector', skills: 'Skill', plugins: 'Plugin' }[view.kind];
+    if (view.scope === 'yours') paintYours(); else paintDiscover();
+    const empty = !list.children.length;
+    $('cz-note').textContent = empty
+      ? (view.q ? 'Nothing matches that search.'
+        : view.scope === 'yours' ? `No ${view.kind} yet. Add one, or look in Discover.` : 'Nothing to discover here yet.')
+      : view.kind === 'connectors' ? 'The tools of every connector that is on are offered to the model in your chats.'
+      : view.kind === 'skills' ? 'Skills that are on are added to the model’s instructions in every chat.'
+      : 'Uninstalling a plugin removes the connectors and skills it added.';
+  }
+
+  // ---- plugins: install adds each part and records what was added ----
+  async function install(bundle) {
+    const name = String(bundle?.name ?? '').trim();
+    if (!name) throw new Error('A plugin needs a name');
+    const record = { id: crypto.randomUUID(), name: name.slice(0, 60), description: String(bundle.description ?? '').slice(0, 200), connectors: [], skills: [] };
+    for (const c of bundle.connectors ?? []) {
+      const added = await sendJSON('/api/mcp', 'POST', { name: c.name, url: c.url, enabled: true });
+      if (added?.id) record.connectors.push(added.id);
+    }
+    for (const s of bundle.skills ?? []) {
+      const added = await sendJSON('/api/skills', 'POST', { name: s.name, description: s.description ?? '', instructions: s.instructions, enabled: true });
+      if (added?.id) record.skills.push(added.id);
+    }
+    await sendJSON('/api/settings', 'PUT', { plugins: [...data.plugins, record] });
+  }
+
+  async function uninstall(plugin) {
+    for (const id of plugin.connectors ?? []) await sendJSON(`/api/mcp/${id}`, 'DELETE');
+    for (const id of plugin.skills ?? []) await sendJSON(`/api/skills/${id}`, 'DELETE');
+    await sendJSON('/api/settings', 'PUT', { plugins: data.plugins.filter((p) => p.id !== plugin.id) });
+    await load();
+  }
+
+  // ---- controls ----
+  document.querySelectorAll('.cz-tab').forEach((b) => b.addEventListener('click', () => {
+    view.kind = b.dataset.kind;
+    document.querySelectorAll('.cz-tab').forEach((t) => { t.classList.toggle('is-active', t === b); t.setAttribute('aria-selected', String(t === b)); });
+    paint();
+  }));
+  document.querySelectorAll('.cz-scope button').forEach((b) => b.addEventListener('click', () => {
+    view.scope = b.dataset.scope;
+    document.querySelectorAll('.cz-scope button').forEach((t) => { t.classList.toggle('is-active', t === b); t.setAttribute('aria-pressed', String(t === b)); });
+    paint();
+  }));
+  $('cz-search').addEventListener('input', (e) => { view.q = e.target.value.trim().toLowerCase(); paint(); });
+
+  const addMenu = $('cz-add-menu');
+  $('cz-add').addEventListener('click', (e) => {
+    e.stopPropagation();
+    addMenu.hidden = !addMenu.hidden;
+    $('cz-add').setAttribute('aria-expanded', String(!addMenu.hidden));
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.cz-add-wrap')) addMenu.hidden = true; });
+  addMenu.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
+    addMenu.hidden = true;
+    document.querySelectorAll('.cz-form').forEach((f) => { f.hidden = true; });
+    if (b.dataset.add === 'connector') { $('cz-connector-form').hidden = false; $('cz-connector-form').elements.namedItem('title').focus(); }
+    if (b.dataset.add === 'skill') { $('cz-skill-form').hidden = false; $('cz-skill-form').elements.namedItem('title').focus(); }
+    if (b.dataset.add === 'plugin') $('cz-plugin-file').click();
+  }));
+  document.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => { b.closest('form').hidden = true; }));
+
+  async function submit(form, url, body, kind) {
+    const err = form.querySelector('[data-err]');
+    err.textContent = '';
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const out = await res.json();
+      if (!res.ok) throw new Error(out.message ?? 'That did not work');
+      form.reset(); form.hidden = true;
+      view.kind = kind; view.scope = 'yours';
+      document.querySelector(`.cz-tab[data-kind="${kind}"]`).click();
+      document.querySelector('.cz-scope [data-scope="yours"]').click();
+      await load();
+    } catch (e) { err.textContent = e.message; }
+  }
+  $('cz-connector-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    submit(f, '/api/mcp', { name: f.elements.namedItem('title').value, url: f.elements.namedItem('url').value, enabled: true }, 'connectors');
+  });
+  $('cz-skill-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    submit(f, '/api/skills', { name: f.elements.namedItem('title').value, description: f.elements.namedItem('description').value, instructions: f.elements.namedItem('instructions').value, enabled: true }, 'skills');
+  });
+  $('cz-plugin-file').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const bundle = JSON.parse(await file.text());
+      await install(bundle);
+      document.querySelector('.cz-tab[data-kind="plugins"]').click();
+      document.querySelector('.cz-scope [data-scope="yours"]').click();
+      await load();
+    } catch (err) {
+      $('cz-note').textContent = `That plugin could not be installed: ${err.message}`;
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>
