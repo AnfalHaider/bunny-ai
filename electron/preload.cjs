@@ -1,6 +1,6 @@
 // The only bridge between the Bunny AI pages and the desktop shell.
 // Pages see window.bunnyDesktop; nothing else from Node or Electron is exposed.
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('bunnyDesktop', {
   platform: process.platform,
@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   quit: () => ipcRenderer.invoke('app:quit'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   browserAct: (frameName, action, args) => ipcRenderer.invoke('browser:act', frameName, action, args),
+  // Zoom for the whole window (Ctrl++ / Ctrl+- / Ctrl+0 and the account menu).
+  zoom: {
+    get: () => webFrame.getZoomFactor(),
+    set: (factor) => webFrame.setZoomFactor(Math.min(3, Math.max(0.5, Number(factor) || 1))),
+  },
   // Updates from GitHub Releases: the status, a check now, and Restart to update.
   updates: {
     get: () => ipcRenderer.invoke('update:get'),

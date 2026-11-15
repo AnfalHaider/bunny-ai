@@ -13,8 +13,12 @@ test('a fresh page greets you and centres the composer', async ({ page }) => {
   await page.goto('/');
   // Boot paints the greeting after its first fetches, so wait for it first.
   await expect(page.locator('#greeting')).toBeVisible();
-  const greeting = (await page.locator('#greeting').textContent()).trim();
-  expect(['Good morning', 'Good afternoon', 'Good evening']).toContain(greeting);
+  // The whole line is its label; the headline shows its first sentence.
+  const greeting = ((await page.locator('#greeting').getAttribute('aria-label')) ?? (await page.locator('#greeting').textContent())).trim();
+  // One of Bunny's playful lines, with the person's name (or "friend" when none is set).
+  const { GREETINGS } = await import('../src/ui/greetings.js');
+  const lines = Object.values(GREETINGS).flat();
+  expect(lines.some((l) => new RegExp(`^${l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\{name\\}', '.+')}$`).test(greeting)), greeting).toBe(true);
   // The empty state is on: no messages are shown.
   await expect(page.locator('#messages .msg')).toHaveCount(0);
 });
@@ -54,4 +58,20 @@ test('the session rail shows environment and connectors', async ({ page }) => {
   await expect(page.locator('#rail')).toBeVisible();
   await expect(page.locator('#rail-project')).toContainText(/No project/);
   await expect(page.locator('#rail-connectors .rail-empty')).toContainText(/No connectors yet/);
+});
+
+test('zoom from the account menu and with Ctrl+plus, Ctrl+minus and Ctrl+0', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#greeting')).toBeVisible();
+  await page.locator('#account-button').click();
+  await expect(page.locator('.zoom-row')).toBeVisible();
+  await page.screenshot({ path: 'test-results/zoom-menu.png' });
+  await page.locator('#zoom-in').click();
+  await expect(page.locator('#zoom-reset')).toHaveText('110%');
+  await page.keyboard.press('Control+0');
+  await expect(page.locator('#zoom-reset')).toHaveText('100%');
+  await page.keyboard.press('Control+-');
+  await expect(page.locator('#zoom-reset')).toHaveText('90%');
+  await page.locator('#zoom-reset').click();
+  await expect(page.locator('#zoom-reset')).toHaveText('100%');
 });

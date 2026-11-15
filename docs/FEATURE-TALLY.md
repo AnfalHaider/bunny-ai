@@ -171,11 +171,11 @@ The agentic surfaces: memory, tools, schedules.
 
 ## Score
 
-**111 of 111** features are done and covered by a test.
+**115 of 115** features are done and covered by a test.
 
 | Status | Count |
 |---|---|
-| done | 111 |
+| done | 115 |
 | partial | 0 |
 | missing | 0 |
 
@@ -189,6 +189,7 @@ The agentic surfaces: memory, tools, schedules.
 | Structure | 8 | 0 | 0 | 8 |
 | Shell | 15 | 0 | 0 | 15 |
 | Automation | 31 | 0 | 0 | 31 |
+| Settings | 4 | 0 | 0 | 4 |
 
 ### What this means
 

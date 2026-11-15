@@ -8,68 +8,90 @@
 <link rel="icon" href="./icon.svg" type="image/svg+xml" />
 </head>
 <body>
-<main class="page">
+<main class="page automation-page">
   <h1>Automation</h1>
   <p class="sub">Memory, tools, schedules, hooks and skills. Everything here is stored on this machine.</p>
 
-  <h2>Memory</h2>
-  <p class="sub">Things the model is told about you in every chat. Switch one off without losing it.</p>
-  <div class="group" id="memory-suggestions" hidden></div>
-  <div class="group" id="memory-list"></div>
-  <form class="group inline-form" id="memory-form">
-    <input id="memory-text" placeholder="Remember that I prefer…" aria-label="New memory" />
-    <div class="actions"><button type="submit" class="primary">Remember</button></div>
-  </form>
+  <section class="auto-section" id="memory">
+    <h2>Memory</h2>
+    <p class="sub">What Bunny knows about you in every chat. Switch one off without losing it.</p>
+    <div class="group auto-card">
+      <div id="memory-suggestions" hidden></div>
+      <div id="memory-list"></div>
+      <form class="add-row cols-memory" id="memory-form">
+        <input id="memory-text" placeholder="Remember that I prefer…" aria-label="New memory" />
+        <button type="submit" class="primary">Remember</button>
+      </form>
+    </div>
+  </section>
 
-  <h2 style="margin-top:28px">MCP servers</h2>
-  <p class="sub">Tools that live outside this app. The tools are offered to the model when it is switched on.</p>
-  <div class="group" id="mcp-list"></div>
-  <form class="group inline-form" id="mcp-form">
-    <input id="mcp-name" placeholder="Name" aria-label="Server name" />
-    <input id="mcp-url" placeholder="https://example.com/mcp" aria-label="Server address" />
-    <div class="actions"><button type="submit" class="primary">Add server</button></div>
-  </form>
-  <form class="group inline-form local-mcp" id="mcp-local-form">
-    <p class="desc" style="width:100%">A <b>local connector</b> runs as a program on this computer, like most published MCP servers. For example: <code>npx -y @modelcontextprotocol/server-filesystem C:\notes</code></p>
-    <input id="mcp-local-name" placeholder="Name" aria-label="Local connector name" />
-    <input id="mcp-local-command" placeholder="npx -y @modelcontextprotocol/server-filesystem C:\notes" aria-label="Command that runs the connector" spellcheck="false" />
-    <textarea id="mcp-local-env" rows="2" placeholder="Settings it needs, one per line: API_KEY=..." aria-label="Settings, one per line" spellcheck="false"></textarea>
-    <div class="actions"><button type="submit" class="primary" data-i18n="automation.localTitle">Add local connector</button></div>
-  </form>
+  <section class="auto-section" id="servers">
+    <h2>MCP servers</h2>
+    <p class="sub">Tools that live outside this app, offered to the model while switched on.</p>
+    <div class="group auto-card">
+      <div id="mcp-list"></div>
+      <form class="add-row cols-server" id="mcp-form">
+        <span class="add-label">Remote server</span>
+        <input id="mcp-name" placeholder="Name" aria-label="Server name" />
+        <input id="mcp-url" placeholder="https://example.com/mcp" aria-label="Server address" spellcheck="false" />
+        <button type="submit" class="primary">Add server</button>
+      </form>
+      <form class="add-row cols-local local-mcp" id="mcp-local-form">
+        <span class="add-label">Local connector</span>
+        <p class="desc add-help">Runs as a program on this computer, like most published MCP servers, for example <code>npx -y @modelcontextprotocol/server-filesystem C:\notes</code></p>
+        <input id="mcp-local-name" placeholder="Name" aria-label="Local connector name" />
+        <input id="mcp-local-command" placeholder="npx -y @modelcontextprotocol/server-filesystem C:\notes" aria-label="Command that runs the connector" spellcheck="false" />
+        <textarea id="mcp-local-env" rows="2" placeholder="Settings it needs, one per line: API_KEY=..." aria-label="Settings, one per line" spellcheck="false"></textarea>
+        <button type="submit" class="primary" data-i18n="automation.localTitle">Add local connector</button>
+      </form>
+    </div>
+  </section>
 
-  <h2 style="margin-top:28px">Schedules</h2>
-  <p class="sub">A prompt that runs on its own. Each run is kept as a chat.</p>
-  <div class="group" id="schedule-list"></div>
-  <form class="group inline-form" id="schedule-form">
-    <input id="schedule-name" placeholder="Name" aria-label="Schedule name" />
-    <input id="schedule-prompt" placeholder="What should it ask?" aria-label="Schedule prompt" />
-    <input id="schedule-every" type="number" min="1" value="60" aria-label="Every how many minutes" />
-    <div class="actions"><button type="submit" class="primary">Add schedule</button></div>
-  </form>
+  <section class="auto-section" id="schedules">
+    <h2>Schedules</h2>
+    <p class="sub">A prompt that runs on its own. Each run is kept as a chat.</p>
+    <div class="group auto-card">
+      <div id="schedule-list"></div>
+      <form class="add-row cols-schedule" id="schedule-form">
+        <input id="schedule-name" placeholder="Name" aria-label="Schedule name" />
+        <input id="schedule-prompt" placeholder="What should it do?" aria-label="Schedule prompt" />
+        <label class="every"><span>Every</span><input id="schedule-every" type="number" min="1" value="60" aria-label="Every how many minutes" /><span>min</span></label>
+        <button type="submit" class="primary">Add schedule</button>
+      </form>
+    </div>
+  </section>
 
-  <h2 style="margin-top:28px">Hooks</h2>
-  <p class="sub">A command that runs when something happens. Hooks are off until you switch them on.</p>
-  <div class="group" id="hook-list"></div>
-  <form class="group inline-form" id="hook-form">
-    <input id="hook-name" placeholder="Name" aria-label="Hook name" />
-    <select id="hook-event" aria-label="Hook event">
-      <option value="message.sent">When a message is sent</option>
-      <option value="chat.created">When a chat is created</option>
-      <option value="reply.finished">When a reply finishes</option>
-    </select>
-    <input id="hook-command" placeholder="Command to run" aria-label="Hook command" />
-    <div class="actions"><button type="submit" class="primary">Add hook</button></div>
-  </form>
+  <section class="auto-section" id="hooks">
+    <h2>Hooks</h2>
+    <p class="sub">A command that runs when something happens. Hooks are off until you switch them on.</p>
+    <div class="group auto-card">
+      <div id="hook-list"></div>
+      <form class="add-row cols-hook" id="hook-form">
+        <input id="hook-name" placeholder="Name" aria-label="Hook name" />
+        <select id="hook-event" aria-label="Hook event">
+          <option value="message.sent">When a message is sent</option>
+          <option value="chat.created">When a chat is created</option>
+          <option value="reply.finished">When a reply finishes</option>
+        </select>
+        <input id="hook-command" placeholder="Command to run" aria-label="Hook command" spellcheck="false" />
+        <button type="submit" class="primary">Add hook</button>
+      </form>
+    </div>
+  </section>
 
-  <h2 style="margin-top:28px">Skills</h2>
-  <p class="sub">A short instruction that can be switched on for your chats.</p>
-  <div class="group" id="skill-list"></div>
-  <form class="group inline-form" id="skill-form">
-    <input id="skill-name" placeholder="Name" aria-label="Skill name" />
-    <input id="skill-description" placeholder="What is it for?" aria-label="Skill description" />
-    <textarea id="skill-instructions" rows="2" placeholder="The instructions" aria-label="Skill instructions"></textarea>
-    <div class="actions"><button type="submit" class="primary">Add skill</button></div>
-  </form>
+  <section class="auto-section" id="skills">
+    <h2>Skills</h2>
+    <p class="sub">A short instruction that can be switched on for your chats.</p>
+    <div class="group auto-card">
+      <div id="skill-list"></div>
+      <form class="add-row cols-skill" id="skill-form">
+        <input id="skill-name" placeholder="Name" aria-label="Skill name" />
+        <input id="skill-description" placeholder="What is it for?" aria-label="Skill description" />
+        <textarea id="skill-instructions" rows="3" placeholder="The instructions" aria-label="Skill instructions"></textarea>
+        <button type="submit" class="primary">Add skill</button>
+      </form>
+    </div>
+  </section>
 
   <span class="err" id="automation-error" role="alert"></span>
 
@@ -102,12 +124,16 @@
     const right = document.createElement('span');
     right.className = 'v';
 
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.textContent = isOn ? toggleLabel : 'Off';
-    toggle.className = isOn ? 'primary small' : 'ghost small';
-    toggle.setAttribute('aria-pressed', String(Boolean(isOn)));
-    toggle.addEventListener('click', () => onToggle(!isOn));
+    const toggle = document.createElement('label');
+    toggle.className = 'switch';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = Boolean(isOn);
+    box.setAttribute('aria-label', `${name}: ${isOn ? toggleLabel : 'off'}`);
+    box.addEventListener('change', () => onToggle(box.checked));
+    const state = document.createElement('span');
+    state.textContent = isOn ? 'on' : 'off';
+    toggle.append(box, state);
 
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -188,7 +214,8 @@
       return;
     }
     for (const m of rows) {
-      host.append(row(m.text, m.source === 'chat' ? 'from a chat' : null, m.enabled, async (on) => {
+      const from = { chat: 'from a chat', auto: 'learned from a chat', import: 'imported from another assistant' }[m.source] ?? null;
+      host.append(row(m.text, from, m.enabled, async (on) => {
         await sendJSON(`/api/memory/${m.id}`, 'PATCH', { enabled: on });
         await renderMemory();
       }, async () => {

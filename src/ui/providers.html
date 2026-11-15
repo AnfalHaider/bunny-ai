@@ -20,8 +20,8 @@
 
   <h2 style="margin-top:28px" data-i18n="providers.customTitle">Add a custom provider</h2>
   <div class="group">
-    <form class="inline" id="custom-form" novalidate style="display:block">
-      <p class="desc" style="margin-bottom:12px" data-i18n="providers.customDesc">Any server that speaks the OpenAI API (<code>/chat/completions</code> and <code>/models</code>): a company gateway, a cloud not listed above, or a server on your network.</p>
+    <form class="custom-provider-form" id="custom-form" novalidate>
+      <p class="desc" data-i18n="providers.customDesc">Any server that speaks the OpenAI API (<code>/chat/completions</code> and <code>/models</code>): a company gateway, a cloud not listed above, or a server on your network.</p>
       <label class="field" for="custom-name"><span data-i18n="providers.name">Name</span><input id="custom-name" name="name" autocomplete="off" placeholder="My provider" /></label>
       <label class="field" for="custom-url"><span data-i18n="providers.baseUrl">Base URL</span><input id="custom-url" name="baseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1" /><span class="fhint">The address that ends before /chat/completions, usually with /v1</span></label>
       <label class="field" for="custom-key"><span data-i18n="providers.apiKey">API key (optional)</span><input id="custom-key" name="apiKey" type="password" autocomplete="off" placeholder="Leave empty for a server that needs no key" /></label>

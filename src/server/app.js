@@ -8,6 +8,7 @@
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -48,7 +49,7 @@ import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolde
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
-  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, cleanQuestion, describeAnyAgentTool as describeAgentTool,
+  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, SENSITIVE, cleanQuestion, describeAnyAgentTool as describeAgentTool,
 } from './agentTools.js';
 
 import { createAccounts } from './accounts.js';
@@ -130,6 +131,16 @@ function readBody(req, max = MAX_BODY) {
   });
 }
 
+/** The signed-in Windows user's name, capitalised ("anfal" → "Anfal"); empty when unknown. */
+function systemUserName() {
+  try {
+    const raw = String(userInfo().username ?? '').replace(/[._-]+/g, ' ').trim().split(/\s+/)[0] ?? '';
+    return raw ? raw[0].toUpperCase() + raw.slice(1) : '';
+  } catch {
+    return '';
+  }
+}
+
 /** What the person reads when the model worked and then stopped without saying anything. */
 export function stoppedReport(steps) {
   const last = steps.slice(-5).map((s) => `- ${s}`).join('\n');
@@ -200,6 +211,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const pendingCapabilities = new Map();
   // Questions the model asked, waiting for the person's answer.
   const pendingQuestions = new Map();
+  // How each chat's reply is going: working, needs you (a card is waiting), ready (finished,
+  // not opened yet) or failed. Kept in memory: it describes this run of the app only.
+  const replyStatus = new Map();
   // The scale of each chat's last screen picture, so clicks land where the model meant.
   const screenScale = new Map();
 
@@ -556,10 +570,43 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       return sendJson(res, 200, registry.list().map((p) => ({ id: p.id, name: p.name, abilities: registry.find(p.id)?.abilities ?? [] })));
     }
 
-    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, settings);
+    // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
+    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, { ...settings, systemUserName: systemUserName() });
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
-      settings = { ...settings, ...body };
+      const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
+      settings = { ...settings, ...patch };
+      await writeJson(settingsFile, settings);
+      return sendJson(res, 200, settings);
+    }
+
+    // ---- profile photo: kept as a file on this computer, shown in the sidebar ----
+    const photoFile = join(dataDir, 'profile-photo');
+    if (path === '/api/profile/photo' && method === 'GET') {
+      if (!settings.profilePhoto) return sendJson(res, 404, { code: 'photo.none', message: 'No profile photo' });
+      try {
+        const bytes = await readFile(photoFile);
+        res.writeHead(200, { 'content-type': settings.profilePhoto.mime, 'cache-control': 'no-cache', 'content-length': bytes.length });
+        return res.end(bytes);
+      } catch {
+        return sendJson(res, 404, { code: 'photo.none', message: 'No profile photo' });
+      }
+    }
+    if (path === '/api/profile/photo' && method === 'POST') {
+      const body = await readBody(req, 15 * 1024 * 1024);
+      const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(body.data ?? ''));
+      if (!m) return sendJson(res, 400, { code: 'photo.type', message: 'Choose a PNG, JPEG or WebP picture.' });
+      const bytes = Buffer.from(m[3], 'base64');
+      if (bytes.length > 10 * 1024 * 1024) return sendJson(res, 400, { code: 'photo.size', message: 'That picture is over 10 MB.' });
+      await writeFile(photoFile, bytes);
+      settings = { ...settings, profilePhoto: { mime: m[1], at: Date.now() } };
+      await writeJson(settingsFile, settings);
+      return sendJson(res, 200, settings);
+    }
+    if (path === '/api/profile/photo' && method === 'DELETE') {
+      await rm(photoFile, { force: true });
+      const { profilePhoto, ...rest } = settings;
+      settings = rest;
       await writeJson(settingsFile, settings);
       return sendJson(res, 200, settings);
     }
@@ -615,7 +662,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         q: url.searchParams.get('q') ?? '',
         projectId: url.searchParams.get('projectId'),
       });
-      return sendJson(res, 200, rows);
+      return sendJson(res, 200, rows.map((r) => (replyStatus.has(r.id) ? { ...r, replyStatus: replyStatus.get(r.id) } : r)));
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
@@ -720,6 +767,19 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'memory.failed', message: err.message });
       }
+    }
+    if (path === '/api/memory/import' && method === 'POST') {
+      const body = await readBody(req, 2 * 1024 * 1024);
+      const lines = String(body.text ?? '').split(/\r?\n/)
+        .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').replace(/^#+\s*/, '').trim())
+        .filter((l) => l.length >= 4 && !/^(here (is|are)|memory|memories|sure|okay)\b.*:?$/i.test(l));
+      const known = new Set((await memory.list()).map((m) => m.text.toLowerCase()));
+      let added = 0;
+      for (const text of lines.slice(0, 150)) {
+        if (known.has(text.toLowerCase())) continue;
+        try { await memory.add({ text: text.slice(0, 400), source: 'import' }); known.add(text.toLowerCase()); added += 1; } catch { /* full or invalid */ }
+      }
+      return sendJson(res, 200, { added, found: lines.length });
     }
     if (path === '/api/memory/suggestions' && method === 'POST') {
       const body = await readBody(req);
@@ -1210,6 +1270,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const sessionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})$/);
     if (sessionMatch && method === 'GET') {
       const session = await sessions.get(sessionMatch[1]);
+      // Opening a finished chat is reading it: it is no longer "ready".
+      if (['ready', 'failed'].includes(replyStatus.get(sessionMatch[1])) && url.searchParams.get('seen') === '1') replyStatus.delete(sessionMatch[1]);
       return session
         ? sendJson(res, 200, { ...session, context: sessions.context(session) })
         : sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
@@ -1234,6 +1296,36 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'fork.failed', message: err.message });
       }
+    }
+
+    // Settings → Code → Prompt suggestions: three short next messages that fit the chat.
+    const suggestMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/suggest$/);
+    if (suggestMatch && method === 'POST') {
+      const body = await readBody(req);
+      const session = await sessions.get(suggestMatch[1]);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
+      if (fake) return sendJson(res, 200, { suggestions: ['Explain that in simpler words', 'What should I do next?', 'Show me an example'] });
+      const provider = registry.list().find((p) => p.id === body.providerId && p.status === 'connected');
+      if (!provider || !body.model) return sendJson(res, 200, { suggestions: [] });
+      const apiKey = await secrets.get(`provider:${provider.id}`);
+      const recent = session.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.kind?.match(/tool_call|permission_prompt|error|summary/))
+        .slice(-6).map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 2500)}`).join('\n\n');
+      let out = '';
+      try {
+        for await (const delta of streamChat({
+          baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model: body.model, auth: provider.auth ?? null, maxTokens: 300,
+          messages: [
+            { role: 'system', content: 'Suggest the three most useful next messages the person might send in this conversation, tailored to what is being worked on. '
+              + 'Write them as the person would, each under 12 words. One per line, no numbering, no quotes, nothing else.' },
+            { role: 'user', content: recent || '(empty conversation)' },
+          ],
+        })) out += delta;
+      } catch {
+        return sendJson(res, 200, { suggestions: [] });
+      }
+      const suggestions = out.split(/\r?\n/).map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').replace(/^["']|["']$/g, '').trim())
+        .filter((l) => l && l.length <= 120).slice(0, 3);
+      return sendJson(res, 200, { suggestions });
     }
 
     const compactMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/compact$/);
@@ -1348,6 +1440,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       if (project?.instructions) {
         history.unshift({ role: 'system', content: `Project instructions for ${project.name}:\n${project.instructions}` });
       }
+      // Settings → My Dear Bunny → Instructions: kept in mind in every chat.
+      const standing = String(settings.instructions ?? '').trim();
+      if (standing) history.unshift({ role: 'system', content: `The person's instructions for every chat:\n${standing.slice(0, 20_000)}` });
       // Memory and skills are standing context, and are never stored as turns.
       const memoryText = settings.memoryEnabled === false ? null : await memory.context();
       if (memoryText) history.unshift({ role: 'system', content: memoryText });
@@ -1364,7 +1459,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Tool steps and questions from a helper agent carry its name, so the person
       // can tell its work from the main reply. A helper working in the background
       // may outlive this reply: once it has ended, nothing more is written.
+      replyStatus.set(id, 'working');
+      res.on('close', () => { if (replyStatus.get(id) === 'working' || replyStatus.get(id) === 'needs-you') replyStatus.delete(id); });
       const send = (event, data) => {
+        // The sidebar's status label follows what the reply is doing.
+        const status = { question: 'needs-you', permission: 'needs-you', capability: 'needs-you', tool: 'working', delta: 'working', done: 'ready', error: 'failed' }[event];
+        if (status) replyStatus.set(id, status);
         if (res.writableEnded || res.destroyed) return;
         const helper = agentScope.getStore()?.label;
         let out = data;
@@ -1411,6 +1511,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
 
+      // Settings → Code.
+      const branchPrefix = String(settings.branchPrefix ?? 'bunny').trim().replace(/[^\w.-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'bunny';
+      const helpersOn = settings.helpersEnabled !== false;
+      const reportOn = settings.summaryNextSteps !== false;
+      const unrelatedTask = ['ask', 'new', 'here'].includes(settings.unrelatedTask) ? settings.unrelatedTask : 'ask';
       const modeTexts = {
         chat: 'Mode: Chat. Have a conversation. You can search and read the web and find, install and use plugins, skills and connectors. '
           + 'You cannot read or change files or run commands in Chat mode: if that is needed, call request_capability with code_mode straight away. '
@@ -1420,7 +1525,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
           + 'and update it as you go; when you continue a job, read it first. '
           + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command, '
-          + 'and never say you cannot run commands. They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again.',
+          + 'and never say you cannot run commands. They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + `When you create a git branch, start its name with "${branchPrefix}/" (for example ${branchPrefix}/fix-login).`,
       };
       const modeText = modeTexts[workMode];
       const folderText = workspace
@@ -1436,7 +1542,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const now = new Date();
       const today = `Today is ${now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, `
         + `${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). `;
-      const honesty = today + 'You are Bunny AI. Use your tools instead of guessing: search before you describe something you have not read, '
+      // The name the person asked to be called (Settings → Profile), else their full name.
+      const callName = String(settings.callName || settings.displayName || '').trim().slice(0, 60);
+      const honesty = today + (callName ? `The person you are talking to likes to be called ${callName}. ` : '') + 'You are Bunny AI. Use your tools instead of guessing: search before you describe something you have not read, '
         + 'and never claim you did something a tool did not do. '
         + (artifactsOn ? 'When you make something the person will look at or use (a page, app, game, document, diagram or long code), put it in an artifact with create_artifact instead of pasting it into your reply. ' : '')
         + 'When you need something you do not have, do not work around it: call request_capability so the person can give it to you '
@@ -1444,10 +1552,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         + 'straight away, without asking in words first. '
         + 'Keep the person informed as you work, like a colleague: before each tool call (or group of calls), write one short plain sentence '
         + 'saying what you are about to do and why ("Checking what the build printed."); when a result surprises you or changes the plan, say so in a sentence. '
-        + 'Always finish with a short report: what you did and found, what is left, and what you need from the person, if anything. Never stop without that report. '
+        + (reportOn ? 'Always finish with a short report: what you did and found, what is left, and what you need from the person, if anything. Never stop without that report. ' : 'Finish with your answer; keep it short. ')
+        + (unrelatedTask === 'here' ? '' : 'When the person asks for something unrelated to the work in this chat, call move_to_new_chat with a title and the request instead of doing it here. ')
+        + (settings.memorySensitive === true ? '' : 'Do not save sensitive details (health, religion, politics, sexuality, money) to memory unless the person asks you to. ')
         + 'When something is unclear or there are real choices to make, ask with ask_user (offer choices when you can) instead of guessing. '
-        + 'For a big job made of independent parts, hand the parts to helpers with run_subagent, several in one go, and combine their reports; '
-        + 'give each helper the kind of work (job: code, research, see or chat) so it runs on the model best suited to it. '
+        + (helpersOn ? 'For a big job made of independent parts, hand the parts to helpers with run_subagent, several in one go, and combine their reports; '
+        + 'give each helper the kind of work (job: code, research, see or chat) so it runs on the model best suited to it. ' : '')
         + 'For a job no tool can do, first look for a plugin or connector with search_plugins and offer to install it'
         + (buildOn ? '; if none fits, build one with create_tool.' : '; if none fits, ask for custom_tools so you can build one.');
       // A scheduled run has nobody watching: no questions, no cards, just the work and a report.
@@ -1472,7 +1582,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...(workspace ? processToolDefinitions(risks) : []),
         ...(aiComputerOn ? computerToolDefinitions(permissionMode === 'plan' ? risks : [...risks, 'build']) : []),
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
-        ...teamToolDefinitions(),
+        ...teamToolDefinitions({ canDelegate: helpersOn }),
+        ...(settings.searchChats === false ? [] : [chatSearchToolDefinition()]),
+        ...(scheduledTask || unrelatedTask === 'here' ? [] : [newChatToolDefinition()]),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
         ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']) : []),
@@ -1570,6 +1682,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const timer = setTimeout(() => pendingQuestions.get(qid)?.resolve({ skipped: true }), 30 * 60_000);
         pendingQuestions.set(qid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingQuestions.delete(qid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingQuestions.get(qid)?.resolve({ skipped: true }));
+        replyStatus.set(id, 'needs-you');
         send('question', { id: qid, ...q });
       });
       const grantCapability = async (capability, reason) => {
@@ -1622,7 +1735,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ?? (toolIndex.has(name) ? (toolIndex.get(name).tool.readOnly ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'start_session', 'message_session', 'ask_user']);
+      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -1926,6 +2039,43 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               result = all.length ? all.map((t) => `- ${t.name}: every ${t.everyMinutes} min${t.enabled ? '' : ' (paused)'}${t.lastRun ? `, last ran ${t.lastRun}` : ''}`).join('\n') : 'No scheduled tasks.';
               break;
             }
+            case 'search_chats': {
+              const q = String(parsed.query ?? '').trim();
+              if (!q) throw new Error('search_chats needs words to look for');
+              const rows = (await sessions.list({ q })).filter((r) => r.id !== id).slice(0, 8);
+              if (!rows.length) { result = `No past chats mention "${q}".`; break; }
+              const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+              const lines = [];
+              for (const r of rows) {
+                const full = await sessions.get(r.id);
+                const hit = full?.messages?.find((m) => words.some((w) => String(m.content ?? '').toLowerCase().includes(w)));
+                const text = String(hit?.content ?? '').replace(/\s+/g, ' ');
+                const at = Math.max(0, text.toLowerCase().indexOf(words[0]) - 80);
+                lines.push(`- "${r.title}" (id ${r.id}, ${String(r.updatedAt ?? '').slice(0, 10)})${text ? `: …${text.slice(at, at + 240)}…` : ''}`);
+              }
+              result = `Past chats that mention "${q}":\n${lines.join('\n')}\nRead more of one with read_session.`;
+              break;
+            }
+            case 'move_to_new_chat': {
+              const title = String(parsed.title ?? '').trim().slice(0, 80) || 'New chat';
+              const message = String(parsed.message ?? '').trim();
+              if (!message) throw new Error('move_to_new_chat needs the message to send in the new chat');
+              let go = unrelatedTask === 'new';
+              if (!go) {
+                const answer = await askQuestion({ question: `That looks like a separate task: "${title}". Start it in a new chat?`,
+                  choices: [{ label: 'Start a new chat', reason: 'Keeps this chat about its own work', recommended: true }, { label: 'Do it here', reason: 'Carry on in this chat' }] });
+                go = (answer.choices ?? [])[0] === 'Start a new chat';
+                replyStatus.set(id, 'working');
+              }
+              if (go) {
+                send('newChat', { title, message });
+                result = 'A new chat was started for that request. Do not work on it here: say in one short line that it continues in the new chat.';
+                shown = `Moved "${title}" to a new chat`;
+              } else {
+                result = 'The person wants it done here: carry on with it in this chat.';
+              }
+              break;
+            }
             case 'list_sessions':
               result = await listLinkedChats();
               break;
@@ -2207,6 +2357,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               } catch (err) {
                 send('error', { code: 'speech.failed', message: `The reply is here, but it could not be spoken: ${err.message}` });
               }
+            }
+            // Settings → My Dear Bunny → Generate memory from chats: lasting facts the person stated.
+            if (settings.autoMemory === true && settings.memoryEnabled !== false) {
+              try {
+                const known = new Set((await memory.list()).map((m) => m.text.toLowerCase()));
+                for (const s of suggestMemories([{ role: 'user', content }])) {
+                  if (known.has(s.text.toLowerCase())) continue;
+                  if (settings.memorySensitive !== true && SENSITIVE.test(s.text)) continue;
+                  await memory.add({ text: s.text, source: 'auto', chatId: id });
+                }
+              } catch { /* memory is a convenience; the reply matters more */ }
             }
             const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking } : {}) });
             session = await sessions.get(id);

@@ -7,13 +7,14 @@
  */
 
 import {
-  getJSON, sendJSON, streamMessage, streamComplete, applyTheme,
+  getJSON, sendJSON, streamMessage, streamComplete, applyTheme, applyAppearance,
   computerScreenshot, computerClick, computerType, computerKey, computerWait, computerReset,
   terminalCreate, terminalWrite, terminalRead, terminalResize, terminalKill, terminalList,
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
 import { createWorking } from './bunny-working.js';
+import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument } from './artifact-content.js';
@@ -24,6 +25,7 @@ import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './
 const $ = (id) => document.getElementById(id);
 
 const state = {
+  greetingSeed: 1 + Math.floor(Math.random() * 2147483645),
   providers: [],
   models: [],
   selected: null,          // { providerId, providerName, model }
@@ -543,7 +545,7 @@ function announceFinishedChats(rows) {
 let workingTimer = null;
 function watchWorkingChats() {
   clearTimeout(workingTimer);
-  if (!state.sessions?.some((s) => s.agentStatus === 'working')) return;
+  if (!state.sessions?.some((s) => s.agentStatus === 'working' || s.replyStatus === 'working' || s.replyStatus === 'needs-you')) return;
   workingTimer = setTimeout(() => loadSessions().catch(() => {}), 5000);
 }
 
@@ -713,6 +715,11 @@ function renderSessionRow(s, depth) {
   if (s.agent) {
     const label = s.agent === 'helper' ? say('agent.helper') : say('agent.background');
     a.append(element('span', { className: `tag agent-tag${s.agentStatus === 'working' ? ' is-working' : ''}`, textContent: s.agentStatus === 'working' ? `${label} · ${say('agent.working')}` : label }));
+  }
+  // Settings → Code → Label chats by status.
+  const STATUS = { working: 'Working', 'needs-you': 'Needs you', ready: 'Ready', failed: 'Failed' };
+  if (state.settings?.statusLabels !== false && STATUS[s.replyStatus] && !(s.id === state.sessionId && s.replyStatus === 'ready')) {
+    a.append(element('span', { className: `tag status-tag is-${s.replyStatus}`, textContent: STATUS[s.replyStatus] }));
   }
   if (s.id === state.sessionId && state.streaming) {
     // A live dot marks a session that is working right now.
@@ -907,13 +914,58 @@ function paintMessages() {
   if (state.messages.length) host.lastElementChild?.scrollIntoView({ block: 'end' });
 }
 
+// ---------------------------------------------------------------------------
+// Zoom: the desktop app zooms the whole window; in a plain browser the page is scaled.
+const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+let zoomFactor = 1;
+function setZoom(factor, { save = true } = {}) {
+  zoomFactor = Math.min(3, Math.max(0.5, Math.round(factor * 100) / 100));
+  if (window.bunnyDesktop?.zoom) window.bunnyDesktop.zoom.set(zoomFactor);
+  else document.documentElement.style.zoom = zoomFactor === 1 ? '' : String(zoomFactor);
+  const level = $('zoom-reset');
+  if (level) level.textContent = `${Math.round(zoomFactor * 100)}%`;
+  if (save) sendJSON('/api/settings', 'PUT', { uiZoom: zoomFactor }).catch(() => {});
+}
+function stepZoom(direction) {
+  const next = direction > 0 ? ZOOM_STEPS.find((z) => z > zoomFactor + 0.001) : [...ZOOM_STEPS].reverse().find((z) => z < zoomFactor - 0.001);
+  if (next) setZoom(next);
+}
+
+/** The same "random" choices again for the same seed: the greeting keeps its line when only the name changes. */
+function seeded(seed) {
+  let x = seed;
+  return () => { x = (x * 16807) % 2147483647; return (x - 1) / 2147483646; };
+}
+
 /** The time-of-day greeting on a fresh page. */
 function paintGreeting() {
   const el = $('greeting');
   if (!el) return;
   const hour = new Date().getHours();
+  // Your call-me name, else your first name, else your Windows user name.
+  const name = String(state.settings?.callName || state.settings?.displayName || state.settings?.systemUserName || '').trim().split(/\s+/)[0];
+  // English gets Bunny's playful lines with your name; other languages a translated hello.
+  if ((state.language ?? 'en') === 'en') {
+    // Picked again when the name arrives or changes, so it never sticks on a placeholder.
+    if (!state.greeting || state.greetingName !== name) {
+      state.greeting = pickGreeting({ name, hour, random: state.greetingSeed ? seeded(state.greetingSeed) : Math.random });
+      state.greetingName = name;
+    }
+    el.textContent = state.greeting.head;
+    el.setAttribute('aria-label', state.greeting.title);
+    let more = $('greeting-more');
+    if (!more) {
+      more = element('p', { className: 'greeting-more', id: 'greeting-more' });
+      el.after(more);
+    }
+    more.textContent = state.greeting.rest;
+    more.hidden = !state.greeting.rest;
+    const tag = document.querySelector('.empty-title');
+    if (tag) tag.textContent = state.greeting.tagline;
+    return;
+  }
   const key = hour < 12 ? 'chat.greetingMorning' : hour < 18 ? 'chat.greetingAfternoon' : 'chat.greetingEvening';
-  el.textContent = say(key);
+  el.textContent = name ? `${say(key)}, ${name}` : say(key);
 }
 
 /** The title in the topbar: the chat's name, or the new-chat state. */
@@ -941,7 +993,7 @@ function renderMessage(m) {
     tc.append(body);
     if (m.result) {
       const res = element('div', { className: 'tool-call-result' });
-      res.textContent = `→ ${String(m.result).slice(0, 500)}`;
+      res.textContent = `→ ${String(m.result).slice(0, resultLimit())}`;
       tc.append(res);
     }
     wrap.append(tc);
@@ -1352,6 +1404,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
     onThinking: (info) => { working.alive(); if (!segment) working.set('thinking'); showLiveThinking(bodyEl, info.text ?? ''); },
     onQuestion: (info) => { flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
+    onNewChat: (info) => { state.pendingNewChat = info; },
   };
   function flushNote() {
     const note = stripToolMarkup(segment);
@@ -1422,7 +1475,7 @@ function showLiveTool(bodyEl, info) {
   if (info.result) {
     let res = line.querySelector('.tool-call-result');
     if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }
-    res.textContent = `→ ${String(info.result).slice(0, 500)}`;
+    res.textContent = `→ ${String(info.result).slice(0, resultLimit())}`;
   }
   if ((info.attachments ?? []).length && !line.querySelector('.attachments')) line.append(renderAttachments(info.attachments));
   if (info.linked && !line.querySelector('.linked-card')) {
@@ -1527,8 +1580,12 @@ function answeredQuestionCard(q) {
 }
 
 /** The model's thinking: folded under "Thinking…", open it to read along. */
+/** How much of a step's result shows: all of it in the Verbose transcript view. */
+const resultLimit = () => (state.settings?.transcriptView === 'verbose' ? 100_000 : 500);
+
 function thinkingBlock(text, { live = false } = {}) {
   const box = element('details', { className: `thinking${live ? ' is-live' : ''}` });
+  if (['thinking', 'verbose'].includes(state.settings?.transcriptView)) box.open = true;
   const words = String(text).trim().split(/\s+/).filter(Boolean).length;
   box.append(
     element('summary', { textContent: live ? say('thinking.live') : say('thinking.done', { words }) }),
@@ -1816,7 +1873,7 @@ async function openSession(id) {
   state.sessionId = id;
   state.incognito = false;
   renderMode();
-  const session = await getJSON(`/api/sessions/${id}`);
+  const session = await getJSON(`/api/sessions/${id}?seen=1`);
   state.session = session;
   state.messages = session.messages;
   if (session.providerId && session.model) {
@@ -1840,6 +1897,8 @@ async function openSession(id) {
 
 function startNewChat({ incognito = false } = {}) {
   state.sessionId = null;
+  state.greeting = null; // a fresh chat gets a fresh greeting
+  state.greetingSeed = 1 + Math.floor(Math.random() * 2147483645);
   state.session = null;
   state.messages = [];
   state.incognito = incognito;
@@ -1876,6 +1935,7 @@ async function send() {
 
   input.value = '';
   state.lastSent = text;
+  if ($('prompt-suggestions')) $('prompt-suggestions').hidden = true;
   const files = state.pendingFiles;
   state.pendingFiles = [];
   renderPendingFiles();
@@ -1978,6 +2038,38 @@ async function send() {
   await refreshSession({ expectAssistant: aborted });
   await loadSessions();
   notifyReply();
+  const moved = state.pendingNewChat;
+  state.pendingNewChat = null;
+  if (moved?.message) { await openNewChatWith(moved); return; }
+  suggestNextPrompts().catch(() => {});
+}
+
+/** Settings → Code → unrelated tasks: the request starts in a chat of its own, in the same project. */
+async function openNewChatWith({ title, message }) {
+  startNewChat({ incognito: false });
+  renderSidebar();
+  flashStatus(`Started a new chat: ${title}`, 5000);
+  $('input').value = message;
+  await send();
+}
+
+/** Settings → Code → Prompt suggestions: a few next messages that fit the chat, one click to use. */
+async function suggestNextPrompts() {
+  const box = $('prompt-suggestions');
+  if (!box) return;
+  box.hidden = true;
+  box.replaceChildren();
+  if (state.settings?.promptSuggestions !== true || !state.sessionId) return;
+  const pick = retryPick();
+  const sessionAtStart = state.sessionId;
+  const { suggestions = [] } = await sendJSON(`/api/sessions/${state.sessionId}/suggest`, 'POST', { providerId: pick.providerId, model: pick.model });
+  if (state.sessionId !== sessionAtStart || state.streaming || $('input').value.trim()) return;
+  for (const text of suggestions.slice(0, 3)) {
+    const chip = button(text, { className: 'prompt-suggestion' });
+    chip.addEventListener('click', () => { $('input').value = text; box.hidden = true; $('input').focus(); });
+    box.append(chip);
+  }
+  box.hidden = !suggestions.length;
 }
 
 /**
@@ -2719,8 +2811,28 @@ function applyProfile(settings) {
   const label = $('account-name');
   if (label) label.textContent = name;
   const avatar = $('account-avatar');
-  if (avatar) avatar.textContent = (name.match(/\p{L}|\p{N}/u)?.[0] ?? 'B').toUpperCase();
+  if (!avatar) return;
+  avatar.textContent = (name.match(/\p{L}|\p{N}/u)?.[0] ?? 'B').toUpperCase();
+  avatar.classList.toggle('has-photo', Boolean(settings?.profilePhoto));
+  if (settings?.profilePhoto) {
+    const img = element('img', { alt: '', src: `/api/profile/photo?v=${settings.profilePhoto.at}` });
+    img.addEventListener('error', () => { img.remove(); avatar.classList.remove('has-photo'); });
+    avatar.replaceChildren(img);
+  }
 }
+
+// Settings (in its frame) says when the name or photo changed, so the sidebar updates at once.
+window.addEventListener('message', async (e) => {
+  if (e.origin !== location.origin) return;
+  if (e.data?.type === 'bunny:open-section' && typeof e.data.section === 'string') { showSettingsSection(e.data.section); return; }
+  if (!['bunny:profile', 'bunny:appearance', 'bunny:settings'].includes(e.data?.type)) return;
+  try {
+    const settings = await getJSON('/api/settings');
+    state.settings = settings;
+    applyProfile(settings);
+    applyAppearance(settings);
+  } catch { /* the next open of the window updates it */ }
+});
 
 // Sections that live on their own page rather than inside settings.html.
 const SETTINGS_PAGES = { providers: './providers.html', automation: './automation.html', customize: './customize.html' };
@@ -2757,7 +2869,7 @@ async function closeSettings() {
     state.settings = settings;
     applyProfile(settings);
     applyCapabilities(settings);
-    applyTheme(settings.theme ?? 'system');
+    applyAppearance(settings);
     state.language = settings.language ?? 'en';
     applyLanguage(state.language);
     state.providers = await getJSON('/api/providers');
@@ -3058,6 +3170,17 @@ async function boot() {
     await loadSessions();
   });
 
+  // Zoom: Ctrl++ / Ctrl+= in, Ctrl+- out, Ctrl+0 actual size, and the row in the account menu.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); stepZoom(1); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(-1); }
+    else if (e.key === '0') { e.preventDefault(); setZoom(1); }
+  });
+  $('zoom-in')?.addEventListener('click', (e) => { e.stopPropagation(); stepZoom(1); });
+  $('zoom-out')?.addEventListener('click', (e) => { e.stopPropagation(); stepZoom(-1); });
+  $('zoom-reset')?.addEventListener('click', (e) => { e.stopPropagation(); setZoom(1); });
+
   // The command palette: Ctrl+K, or Ctrl+/ on some keyboards.
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
@@ -3184,12 +3307,13 @@ async function boot() {
     state.providers = await getJSON('/api/providers');
     const settings = await getJSON('/api/settings');
     state.settings = settings;
+    setZoom(Number(settings.uiZoom) || 1, { save: false }); // the zoom you left it at
     state.models = visibleModels(await getJSON('/api/models'));
     loadArtifacts().catch(() => {});
     bindAutoPickers();
     applyProfile(settings);
     applyCapabilities(settings);
-    applyTheme(settings.theme ?? 'system');
+    applyAppearance(settings);
     state.language = settings.language ?? 'en';
     applyLanguage(state.language);
 

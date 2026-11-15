@@ -82,6 +82,7 @@ export async function streamAt(path, body, handlers = {}) {
       else if (event === 'tasks') handlers.onTasks?.(parsed);
       else if (event === 'thinking') handlers.onThinking?.(parsed);
       else if (event === 'question') handlers.onQuestion?.(parsed);
+      else if (event === 'newChat') handlers.onNewChat?.(parsed);
     }
   }
 }
@@ -160,3 +161,70 @@ export function esc(value) {
 export function applyTheme(theme) {
   document.documentElement.dataset.theme = theme === 'light' || theme === 'dark' ? theme : '';
 }
+
+// ---------------------------------------------------------------------------
+// Appearance: fonts, transcript size and width, motion, and the colours of code.
+
+const FONTS = {
+  system: null,
+  serif: 'Georgia, "Cambria", "Times New Roman", serif',
+  sans: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
+  mono: 'ui-monospace, "Cascadia Code", Consolas, monospace',
+};
+const SIZES = { small: '13px', medium: null, large: '16px', xlarge: '18px' };
+const WIDTHS = { narrow: null, medium: '880px', wide: '1080px', full: 'none' };
+
+/** Code colours. Each: background, text, then the token kinds highlight.js marks. */
+export const CODE_THEMES = {
+  'bunny-light': { label: 'Bunny Light', dark: false, bg: '#f4f3f1', text: '#1f2023', keyword: '#7c4dcc', string: '#1f8a5b', number: '#b5560f', comment: '#8a8e96', type: '#2f6fb8', literal: '#b5560f', tag: '#c03a5b', attr: '#8a6a12' },
+  'github-light': { label: 'GitHub Light', dark: false, bg: '#f6f8fa', text: '#1f2328', keyword: '#cf222e', string: '#0a3069', number: '#0550ae', comment: '#6e7781', type: '#8250df', literal: '#0550ae', tag: '#116329', attr: '#953800' },
+  'solarized-light': { label: 'Solarized Light', dark: false, bg: '#fdf6e3', text: '#586e75', keyword: '#859900', string: '#2aa198', number: '#d33682', comment: '#93a1a1', type: '#b58900', literal: '#cb4b16', tag: '#268bd2', attr: '#b58900' },
+  'carrot-light': { label: 'Carrot Patch', dark: false, bg: '#fff7f0', text: '#3b2a20', keyword: '#d4537e', string: '#3b6d11', number: '#c2410c', comment: '#a08b7d', type: '#7c4dcc', literal: '#c2410c', tag: '#d4537e', attr: '#9a6b00' },
+  'bunny-dark': { label: 'Bunny Dark', dark: true, bg: '#1f2023', text: '#ececee', keyword: '#c4b5ff', string: '#7fdcae', number: '#f2b37a', comment: '#7d818a', type: '#8cc3ff', literal: '#f2b37a', tag: '#f59ab0', attr: '#e6c66e' },
+  'one-dark': { label: 'One Dark', dark: true, bg: '#282c34', text: '#abb2bf', keyword: '#c678dd', string: '#98c379', number: '#d19a66', comment: '#5c6370', type: '#e5c07b', literal: '#d19a66', tag: '#e06c75', attr: '#d19a66' },
+  dracula: { label: 'Dracula', dark: true, bg: '#282a36', text: '#f8f8f2', keyword: '#ff79c6', string: '#f1fa8c', number: '#bd93f9', comment: '#6272a4', type: '#8be9fd', literal: '#bd93f9', tag: '#ff79c6', attr: '#50fa7b' },
+  'midnight-bunny': { label: 'Midnight Bunny', dark: true, bg: '#17131c', text: '#e9e3f0', keyword: '#ed93b1', string: '#9fe1cb', number: '#fac775', comment: '#6f6680', type: '#afa9ec', literal: '#fac775', tag: '#ed93b1', attr: '#f0997b' },
+};
+const TOKENS = ['keyword', 'string', 'number', 'comment', 'type', 'literal', 'tag', 'attr'];
+
+/** The CSS variables for one code theme: used on the page, and on the previews in Settings. */
+export function codeThemeVars(id, dark) {
+  const t = CODE_THEMES[id] ?? CODE_THEMES[dark ? 'bunny-dark' : 'bunny-light'];
+  const vars = { '--code-bg': t.bg, '--code-text': t.text };
+  for (const k of TOKENS) vars[`--tk-${k}`] = t[k];
+  return vars;
+}
+
+let lastAppearance = {};
+const isDark = () => {
+  const forced = document.documentElement.dataset.theme;
+  if (forced === 'dark') return true;
+  if (forced === 'light') return false;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+};
+
+/** Apply every appearance setting to this page. Safe to call again whenever settings change. */
+export function applyAppearance(settings = {}) {
+  lastAppearance = settings;
+  applyTheme(settings.theme ?? 'system');
+  const root = document.documentElement;
+  const set = (name, value) => (value ? root.style.setProperty(name, value) : root.style.removeProperty(name));
+  set('--font-sans', FONTS[settings.interfaceFont] ?? null);
+  const reply = settings.responseFont && settings.responseFont !== 'match' ? FONTS[settings.responseFont] : null;
+  set('--font-reply', reply);
+  set('--fs-transcript', SIZES[settings.transcriptSize] ?? null);
+  set('--thread-max', WIDTHS[settings.transcriptWidth] ?? null);
+  root.dataset.motion = settings.motion === 'reduced' || settings.motion === 'full' ? settings.motion : '';
+  const font = String(settings.codeFont ?? '').replace(/["';{}<>]/g, '').trim();
+  set('--font-mono', font ? `"${font}", ui-monospace, "Cascadia Code", Consolas, monospace` : null);
+  const size = Number(settings.codeFontSize);
+  set('--fs-code', size >= 10 && size <= 24 ? `${size}px` : null);
+  const dark = isDark();
+  // Bunny's own code colours are the stylesheet's; another theme overrides them.
+  const id = dark ? settings.codeThemeDark : settings.codeThemeLight;
+  const custom = Boolean(CODE_THEMES[id]) && !String(id).startsWith('bunny-');
+  for (const [name, value] of Object.entries(codeThemeVars(id, dark))) set(name, custom ? value : null);
+}
+
+// Following the system theme: the code colours switch with it.
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyAppearance(lastAppearance));

@@ -211,6 +211,18 @@ export function memoryToolDefinitions({ memory = true } = {}) {
   ];
 }
 
+/** Settings → My Dear Bunny → Search and reference chats. */
+export const CHAT_SEARCH_TOOL_RISK = { search_chats: 'read' };
+Object.assign(AGENT_TOOL_RISK, CHAT_SEARCH_TOOL_RISK);
+export function chatSearchToolDefinition() {
+  return fn('search_chats', 'Search the person\'s past chats for relevant details (what was decided, built or said before). '
+    + 'Returns matching chats with their ids and a snippet; read more of one with read_session.',
+  { query: { type: 'string', description: 'Words to look for' } }, ['query']);
+}
+
+/** Details memory should not keep unless the person allows it (Settings → My Dear Bunny). */
+export const SENSITIVE = /\b(health|ill(ness)?|disease|diagnos\w*|medic\w*|pregnan\w*|therap\w*|depress\w*|anxiety|religio\w*|church|mosque|temple|faith|pray\w*|politic\w*|vot(e|ing)|sexual\w*|gay|lesbian|transgender|salary|debt|income|bank account|password)\b/i;
+
 const describeTeam = describeTeamTool;
 export function describeAnyAgentTool(name, args = {}) {
   const s = (v, n = 60) => String(v ?? '').replace(/\s+/g, ' ').slice(0, n);
@@ -219,6 +231,8 @@ export function describeAnyAgentTool(name, args = {}) {
     case 'schedule_task': return `Schedule "${s(args.name)}" every ${Math.round(Number(args.every_minutes) || 60)} min`;
     case 'list_scheduled_tasks': return 'List scheduled tasks';
     case 'ask_user': return `Asked: "${s(args.question, 80)}"`;
+    case 'search_chats': return `Search past chats for "${s(args.query, 60)}"`;
+    case 'move_to_new_chat': return `New chat: "${s(args.title, 60)}"`;
     case 'update_tasks': {
       const list = Array.isArray(args.tasks) ? args.tasks : [];
       return `Plan: ${list.filter((t) => t?.done).length} of ${list.length} done`;
@@ -246,6 +260,16 @@ export function cleanTasks(tasks) {
 }
 
 // ---- asking the person ----
+
+export const NEW_CHAT_TOOL_RISK = { move_to_new_chat: 'own' };
+Object.assign(AGENT_TOOL_RISK, NEW_CHAT_TOOL_RISK);
+
+/** Settings → Code → "When you ask for an unrelated task": the request moves to a chat of its own. */
+export function newChatToolDefinition() {
+  return fn('move_to_new_chat', 'Move a request that is unrelated to this chat\'s work into a new chat of its own. '
+    + 'Depending on the person\'s settings they are asked first, or the new chat starts at once. Give a short title and the request, complete enough to start from.',
+  { title: { type: 'string', description: 'A short name for the new chat' }, message: { type: 'string', description: 'The request, as the first message of the new chat' } }, ['title', 'message']);
+}
 
 export const ASK_TOOL_RISK = { ask_user: 'own' };
 Object.assign(AGENT_TOOL_RISK, ASK_TOOL_RISK);

@@ -15,11 +15,12 @@ test('a memory can be written and switched off', async ({ page }) => {
   await page.getByRole('button', { name: 'Remember' }).click();
 
   await expect(page.locator('#memory-list')).toContainText('I prefer short answers');
-  await expect(page.locator('#memory-list .tag, #memory-list button[aria-pressed="true"]')).toHaveCount(1);
+  const toggle = page.locator('#memory-list .switch input[type="checkbox"]');
+  await expect(toggle).toBeChecked();
 
   // Switching it off keeps the memory but stops offering it.
-  await page.locator('#memory-list button[aria-pressed="true"]').click();
-  await expect(page.locator('#memory-list button[aria-pressed="false"]')).toHaveCount(1);
+  await toggle.click();
+  await expect(page.locator('#memory-list .switch input[type="checkbox"]')).not.toBeChecked();
   await expect(page.locator('#memory-list')).toContainText('I prefer short answers');
 });
 
@@ -56,7 +57,7 @@ test('a hook is added, and is off until it is switched on', async ({ page }) => 
 
   await expect(page.locator('#hook-list')).toContainText('note');
   // A hook that runs a command is off by default.
-  await expect(page.locator('#hook-list button[aria-pressed="false"]')).toHaveCount(1);
+  await expect(page.locator('#hook-list .switch input[type="checkbox"]')).not.toBeChecked();
 });
 
 test('a skill is added and switched on', async ({ page }) => {
@@ -68,8 +69,8 @@ test('a skill is added and switched on', async ({ page }) => {
   await page.getByRole('button', { name: 'Add skill' }).click();
 
   await expect(page.locator('#skill-list')).toContainText('pirate');
-  await page.locator('#skill-list button[aria-pressed="false"]').click();
-  await expect(page.locator('#skill-list button[aria-pressed="true"]')).toHaveCount(1);
+  await page.locator('#skill-list .switch input[type="checkbox"]').click();
+  await expect(page.locator('#skill-list .switch input[type="checkbox"]')).toBeChecked();
 });
 
 test('the automation screen is reachable from the chat screen', async ({ page }) => {

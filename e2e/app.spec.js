@@ -15,7 +15,9 @@ test('the chat screen loads under the Bunny AI name', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('Bunny AI');
   await expect(page.locator('.brand')).toContainText('Bunny AI');
-  await expect(page.getByRole('heading', { name: 'Start a conversation' })).toBeVisible();
+  // Under the greeting, one of Bunny's taglines.
+  const { TAGLINES } = await import('../src/ui/greetings.js');
+  await expect(page.locator('.empty-title')).toHaveText(new RegExp(`^(${TAGLINES.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`));
 });
 
 test('an empty profile says how to get a model', async ({ page }) => {

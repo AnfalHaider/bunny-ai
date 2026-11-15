@@ -83,7 +83,7 @@
 </main>
 
 <script type="module">
-  import { getJSON, sendJSON, applyTheme } from './api.js';
+  import { getJSON, sendJSON, applyTheme, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
   applyEmbed();
 
@@ -124,7 +124,7 @@
     const [connectors, skills, settings] = await Promise.all([
       getJSON('/api/mcp'), getJSON('/api/skills'), getJSON('/api/settings'),
     ]);
-    applyTheme(settings.theme ?? 'system');
+    applyAppearance(settings);
     data = { connectors, skills, plugins: settings.plugins ?? [] };
     paint();
   }

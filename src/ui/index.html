@@ -80,6 +80,15 @@
           <button class="menu-item" role="menuitem" data-action="palette">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h1M11 10h2M16 10h1M8 14h8"/></svg>
             <span class="label">Command palette</span><span class="kbd">Ctrl+K</span></button>
+          <div class="menu-item zoom-row" role="group" aria-label="Zoom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3M8.5 11h5M11 8.5v5"/></svg>
+            <span class="label">Zoom</span>
+            <span class="zoom-controls">
+              <button type="button" class="zoom-btn" id="zoom-out" aria-label="Zoom out (Ctrl+-)" title="Zoom out · Ctrl+-">−</button>
+              <button type="button" class="zoom-level" id="zoom-reset" aria-label="Actual size (Ctrl+0)" title="Actual size · Ctrl+0">100%</button>
+              <button type="button" class="zoom-btn" id="zoom-in" aria-label="Zoom in (Ctrl++)" title="Zoom in · Ctrl++">+</button>
+            </span>
+          </div>
           <div class="menu-sep"></div>
           <button class="menu-item" role="menuitem" data-settings="providers">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
@@ -163,6 +172,7 @@
 
     <!-- chat bar -->
     <div class="dock">
+      <div class="prompt-suggestions" id="prompt-suggestions" hidden aria-label="Suggested next messages"></div>
       <div class="composer" id="composer">
         <div class="slash menu up" id="slash" hidden role="listbox" aria-label="Commands"></div>
         <div class="pending-files" id="pending-files" hidden></div>
@@ -410,7 +420,8 @@
         <button class="nav-row" data-section="profile" data-keywords="account name local">Profile</button>
         <button class="nav-row" data-section="usage" data-keywords="tokens cost messages">Usage</button>
         <div class="settings-sep"></div>
-        <button class="nav-row" data-section="appearance" data-keywords="theme dark light">Appearance</button>
+        <button class="nav-row" data-section="appearance" data-keywords="theme dark light font size width motion code colours">Appearance</button>
+        <button class="nav-row" data-section="bunny" data-keywords="instructions memory remember search chats import">My Dear Bunny</button>
         <button class="nav-row" data-section="language" data-keywords="translate locale">Language</button>
         <button class="nav-row" data-section="notifications" data-keywords="alerts reply ready">Notifications</button>
         <button class="nav-row" data-section="privacy" data-keywords="memory storage data secrets">Privacy</button>
@@ -422,7 +433,7 @@
         <button class="nav-row" data-section="customize" data-keywords="connectors mcp skills plugins discover">Customize</button>
         <button class="nav-row" data-section="automation" data-keywords="memory mcp schedules hooks skills">Automation</button>
         <div class="settings-sep"></div>
-        <button class="nav-row" data-section="code" data-keywords="permission mode effort defaults">Code</button>
+        <button class="nav-row" data-section="code" data-keywords="permission mode effort defaults branch prefix status transcript helpers suggestions unrelated">Code</button>
         <button class="nav-row desktop-only" data-section="desktop" data-keywords="startup login tray">Desktop app</button>
         <button class="nav-row" data-section="about" data-keywords="version updates">About</button>
       </div>
