@@ -8,7 +8,8 @@
  *   edit  - write_file, edit_file
  *   run   - run_command
  */
-import { exec, execFile } from 'node:child_process';
+import { exec, execFile, spawn } from 'node:child_process';
+import { clip } from './clip.js';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
@@ -20,6 +21,8 @@ const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
+// Nobody can answer a prompt from a command Bunny runs: tools are told not to ask.
+export const NON_INTERACTIVE = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', npm_config_yes: 'true', NO_UPDATE_NOTIFIER: '1' };
 
 /**
  * Said before every command the model runs. In Windows PowerShell 5.1 "curl" is
@@ -32,7 +35,60 @@ export const POWERSHELL_PRELUDE = [
   "$PSDefaultParameterValues['Invoke-WebRequest:UseBasicParsing'] = $true",
   'Remove-Item Alias:curl -ErrorAction SilentlyContinue',
   'Remove-Item Alias:wget -ErrorAction SilentlyContinue',
+  // > and Out-File write UTF-16 in Windows PowerShell 5.1, which nothing else reads well; and
+  // programs' output is read as UTF-8 so their words do not come back garbled.
+  "$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'",
+  "$PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8'",
+  "$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8'",
+  '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
+  '$OutputEncoding = [Text.Encoding]::UTF8',
 ].join('; ');
+
+/**
+ * A text file as words, whatever it was saved as: UTF-8 (with or without a byte-order mark)
+ * or UTF-16, which is what Windows PowerShell 5.1 writes with > .
+ */
+export function decodeText(buf) {
+  if (buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString('utf16le');
+  if (buf[0] === 0xfe && buf[1] === 0xff) {
+    const swapped = Buffer.from(buf.subarray(2));
+    swapped.swap16();
+    return swapped.toString('utf16le');
+  }
+  if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.subarray(3).toString('utf8');
+  return buf.toString('utf8');
+}
+
+/**
+ * Windows PowerShell 5.1 has no && or ||. Models write them all the time, so a chain is
+ * rewritten into the form 5.1 understands: a && b  ->  a; if ($?) { b }. Quoted text is left alone.
+ */
+export function translateChains(command) {
+  const parts = [];
+  const ops = [];
+  let current = '';
+  let quote = null;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    if (quote) {
+      current += ch;
+      if (ch === '`' && i + 1 < command.length) { current += command[i + 1]; i += 1; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; current += ch; continue; }
+    const two = command.slice(i, i + 2);
+    if (two === '&&' || two === '||') { parts.push(current.trim()); ops.push(two); current = ''; i += 1; continue; }
+    current += ch;
+  }
+  parts.push(current.trim());
+  if (!ops.length || parts.some((x) => !x)) return command;
+  let out = parts[parts.length - 1];
+  for (let i = ops.length - 1; i >= 0; i -= 1) {
+    out = ops[i] === '&&' ? `${parts[i]}; if ($?) { ${out} }` : `${parts[i]}; if (-not $?) { ${out} }`;
+  }
+  return out;
+}
 
 export const TOOL_RISK = {
   list_files: 'read', read_file: 'read', search_files: 'read',
@@ -58,8 +114,10 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
     fn('edit_file', 'Replace one exact snippet in a file. old_text must appear exactly once.',
       { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' } }, ['path', 'old_text', 'new_text']),
-    fn('run_command', 'Run a PowerShell command in the workspace folder and return its output (2 minute limit).',
-      { command: { type: 'string' } }, ['command']),
+    fn('run_command', 'Run a command yourself and get its output (2 minute limit). It runs in Windows PowerShell 5.1: '
+      + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you). '
+      + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
+      { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' } }, ['command']),
   ];
   return all.filter((d) => risks.includes(TOOL_RISK[d.function.name]));
 }
@@ -100,7 +158,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null } = {}) {
+export function createWorkspace(rootFolder, { beforeWrite = null, signal = null } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -164,7 +222,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null } = {}) {
       const pictures = doc.pictures.map((p, i) => `[picture ${i + 1}${p.page ? `, page ${p.page}` : ''}: ${texts[i] ? `words in it: ${texts[i]}` : 'no words found in it'}]`);
       text = [`[${doc.label}${doc.pages ? `, ${doc.pages} pages` : ''}]`, doc.note ? `(${doc.note})` : '', doc.text, ...pictures].filter(Boolean).join('\n');
     } else {
-      text = await readFile(abs, 'utf8');
+      text = decodeText(await readFile(abs));
     }
     if (start_line || end_line) {
       const all = text.split('\n');
@@ -225,17 +283,60 @@ export function createWorkspace(rootFolder, { beforeWrite = null } = {}) {
     return `Edited ${show(abs)}`;
   }
 
-  function run_command({ command } = {}) {
-    const cmd = String(command ?? '').trim();
+  async function run_command({ command, cwd } = {}) {
+    const cmd = translateChains(String(command ?? '').trim());
     if (!cmd) throw new Error('run_command needs a command');
+    const where = cwd ? await inside(cwd) : root;
     return new Promise((done) => {
-      const child = execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
-        { cwd: root, timeout: COMMAND_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
-          let out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
-          if (err && err.killed) out += '\n[stopped after 2 minutes: for a program that keeps running, use start_process]';
-          else if (err) out += `\n[exit code ${err.code ?? 1}]`;
-          done(out.length > MAX_OUTPUT ? `${out.slice(0, MAX_OUTPUT)}\n… (output truncated)` : out || '(no output)');
-        });
+      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
+        { cwd: where, windowsHide: true, env: { ...process.env, ...NON_INTERACTIVE } });
+      const outBufs = [];
+      const errBufs = [];
+      let size = 0;
+      const keep = (into) => (d) => { if (size < 8 << 20) { into.push(d); size += d.length; } };
+      child.stdout.on('data', keep(outBufs));
+      child.stderr.on('data', keep(errBufs));
+      // A timeout or Stop ends the whole tree: npm, node and anything they started, not just PowerShell.
+      let killedFor = null;
+      const killTree = (why) => {
+        if (killedFor || finished) return;
+        killedFor = why;
+        execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+      };
+      const timer = setTimeout(() => killTree('timeout'), COMMAND_TIMEOUT_MS);
+      const sig = typeof signal === 'function' ? signal() : signal;
+      const onAbort = () => killTree('stopped');
+      sig?.addEventListener?.('abort', onAbort, { once: true });
+      let finished = false;
+      const finish = (code, spawnErr) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        sig?.removeEventListener?.('abort', onAbort);
+        const stdout = decodeText(Buffer.concat(outBufs)).trim();
+        const stderr = decodeText(Buffer.concat(errBufs)).trim();
+        const body = `${stdout}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
+        let status = '';
+        if (spawnErr) status = `[could not start: ${spawnErr.message}]`;
+        else if (killedFor === 'timeout') status = '[stopped after 2 minutes: it may be waiting for input, or it keeps running. Use start_process for a program that keeps running, and non-interactive flags such as --yes]';
+        else if (killedFor === 'stopped') status = '[stopped by the person]';
+        else if (code) {
+          status = `[exit code ${code}]`;
+          // A failure that printed nothing usually sent its message to a file with > .
+          if (!body) {
+            status += /[^2]>\s*\S/.test(cmd)
+              ? ' It printed nothing here because its output went to the file after >: read that file to see the error.'
+              : ' It printed nothing: run it again without redirecting its output to see why.';
+          }
+        }
+        // The status comes first, so it survives even when long output is cut.
+        const out = [status, clip(body, MAX_OUTPUT)].filter(Boolean).join('\n');
+        done(out || '(no output)');
+      };
+      child.on('error', (err) => finish(null, err));
+      // Programs it started may keep the output open after it ends; do not wait for them.
+      child.on('exit', (code) => setTimeout(() => finish(code), 200));
+      if (sig?.aborted) onAbort();
       // Nobody can type into it: a command that waits for input ends instead of hanging.
       child.stdin?.end();
     });
@@ -245,6 +346,8 @@ export function createWorkspace(rootFolder, { beforeWrite = null } = {}) {
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),
+    // A folder inside the workspace (checked), for programs started there.
+    folder: (path) => inside(path),
     run: (name, args) => tools[name](args ?? {}),
   };
 }

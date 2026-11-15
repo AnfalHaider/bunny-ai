@@ -37,7 +37,8 @@ import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions
 import { createLocalMcp } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat } from './chat.js';
+import { streamChat, stripToolMarkup } from './chat.js';
+import { clip } from './clip.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
@@ -74,6 +75,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // directory, but there is no reason to expose source files either.
 const UI_ROOT = normalize(join(ROOT, 'src', 'ui'));
 const MAX_BODY = 1024 * 1024;
+const MAX_IMPORT = 300 * 1024 * 1024;
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -102,20 +104,20 @@ function sendJson(res, status, value) {
   res.end(body);
 }
 
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0;
+    let tooLarge = false;
     const chunks = [];
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY) {
-        reject(new ConnectError('request.tooLarge', 'Request body is too large'));
-        req.destroy();
-        return;
-      }
+      // Too large: the rest is read and dropped, so the answer still reaches the window
+      // (cutting the connection showed only "Failed to fetch").
+      if (size > max) { tooLarge = true; chunks.length = 0; return; }
       chunks.push(chunk);
     });
     req.on('end', () => {
+      if (tooLarge) return reject(new ConnectError('request.tooLarge', `That is too large (over ${Math.round(max / 1024 / 1024)} MB).`));
       const raw = Buffer.concat(chunks).toString('utf8');
       if (!raw) return resolve({});
       try {
@@ -126,6 +128,14 @@ function readBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+/** What the person reads when the model worked and then stopped without saying anything. */
+export function stoppedReport(steps) {
+  const last = steps.slice(-5).map((s) => `- ${s}`).join('\n');
+  return `I stopped before writing my report, so here is where things stand.\n\n`
+    + `**Last steps (${steps.length} in all):**\n${last}\n\n`
+    + 'The work may not be finished. Send **continue** and I will check what is done and carry on from there.';
 }
 
 /**
@@ -575,12 +585,14 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
     // ---- import ----
     if (path === '/api/import' && method === 'POST') {
-      const body = await readBody(req);
+      // Exported chats can be large: a long chat with its tool output runs to tens of megabytes.
+      const body = await readBody(req, MAX_IMPORT);
       const content = String(body.content ?? '');
       if (!content.trim()) {
         return sendJson(res, 400, { code: 'import.empty', message: 'There is nothing to import' });
       }
-      const parsed = parseImport(content, { title: body.title ?? null });
+      // A title found in the file wins; the file's name is the fallback.
+      const parsed = parseImport(content);
       if (!parsed.messages.length) {
         return sendJson(res, 400, {
           code: 'import.nothingFound',
@@ -1361,8 +1373,18 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         res.write(`event: ${event}\ndata: ${JSON.stringify(out)}\n\n`);
       };
       // A helper's own steps are kept in its own chat; the main chat keeps its own.
+      // What the model said since its last step ("Checking the server log.") is kept with the
+      // next step, so the chat reads as a running account of the work, also after a reload.
+      let sinceStep = '';
+      const stepsTaken = [];
       const logStep = (entry) => {
         const scope = agentScope.getStore();
+        if (!scope && entry.kind === 'tool_call') {
+          const note = stripToolMarkup(sinceStep);
+          sinceStep = '';
+          if (note) entry = { ...entry, note: note.slice(0, 2000) };
+          stepsTaken.push(`${entry.tool}${entry.status && entry.status !== 'done' ? ` (${entry.status})` : ''}`);
+        }
         return sessions.append(scope?.logTo ?? id, entry);
       };
 
@@ -1380,7 +1402,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal }) : null;
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
@@ -1389,15 +1411,18 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
 
-      const modeText = {
+      const modeTexts = {
         chat: 'Mode: Chat. Have a conversation. You can search and read the web and find, install and use plugins, skills and connectors. '
           + 'You cannot read or change files or run commands in Chat mode: if that is needed, call request_capability with code_mode straight away. '
           + 'Do not ask in words first: the card is the question, and the person answers it with one click.',
         code: 'Mode: Code. You are working on the project in the workspace folder. Look before you change: list and read the files you need, '
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it. '
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
-          + 'and update it as you go; when you continue a job, read it first.',
-      }[workMode];
+          + 'and update it as you go; when you continue a job, read it first. '
+          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command, '
+          + 'and never say you cannot run commands. They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again.',
+      };
+      const modeText = modeTexts[workMode];
       const folderText = workspace
         ? `Workspace folder: ${workspace.root}. All file paths are relative to it. Permission mode: ${permissionMode}`
           + (permissionMode === 'plan' ? ' (read-only: propose a plan, do not change anything).' : '.')
@@ -1417,6 +1442,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         + 'When you need something you do not have, do not work around it: call request_capability so the person can give it to you '
         + '(code_mode for files, commands and programs; computer_use to control this computer; new_tool for anything else) '
         + 'straight away, without asking in words first. '
+        + 'Keep the person informed as you work, like a colleague: before each tool call (or group of calls), write one short plain sentence '
+        + 'saying what you are about to do and why ("Checking what the build printed."); when a result surprises you or changes the plan, say so in a sentence. '
+        + 'Always finish with a short report: what you did and found, what is left, and what you need from the person, if anything. Never stop without that report. '
         + 'When something is unclear or there are real choices to make, ask with ask_user (offer choices when you can) instead of guessing. '
         + 'For a big job made of independent parts, hand the parts to helpers with run_subagent, several in one go, and combine their reports; '
         + 'give each helper the kind of work (job: code, research, see or chat) so it runs on the model best suited to it. '
@@ -1442,7 +1470,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
         ...(workspace ? processToolDefinitions(risks) : []),
-        ...(aiComputerOn ? computerToolDefinitions(risks) : []),
+        ...(aiComputerOn ? computerToolDefinitions(permissionMode === 'plan' ? risks : [...risks, 'build']) : []),
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
         ...teamToolDefinitions(),
         planToolDefinition(),
@@ -1556,16 +1584,19 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           const fresh = await sessions.get(id);
           const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
           if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { beforeWrite });
+          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
+          // The reply goes on in Code mode: its rules and its longer step limit apply from here.
+          maxToolRounds = Math.max(maxToolRounds, EFFORT.code);
           return `Code mode is on. Workspace folder: ${workspace.root}; paths are relative to it. You now have: `
-            + [...workspaceToolDefinitions(risks), ...processToolDefinitions(risks)].map((d) => d.function.name).join(', ') + '.';
+            + [...workspaceToolDefinitions(risks), ...processToolDefinitions(risks)].map((d) => d.function.name).join(', ') + '.\n'
+            + `Ignore what you were told about Chat mode. ${modeTexts.code}`;
         }
         if (capability === 'computer_use') {
           await saveSettings({ aiComputerUse: true });
           computerOn = true;
-          toolDefinitions.push(...computerToolDefinitions(risks));
+          toolDefinitions.push(...computerToolDefinitions(permissionMode === 'plan' ? risks : [...risks, 'build']));
           return 'You can now control this computer: start with computer_screenshot to see the screen.';
         }
         if (capability === 'custom_tools') {
@@ -1912,7 +1943,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               break;
             case 'start_process': {
               if (!workspace) throw new Error('Programs run in Code mode, inside the workspace folder.');
-              const p = processes.start({ command: String(parsed.command ?? ''), cwd: workspace.root, owner: id });
+              const cwd = parsed.cwd ? await workspace.folder(parsed.cwd) : workspace.root;
+              const p = processes.start({ command: String(parsed.command ?? ''), cwd, owner: id });
               const r = await processes.settle(p.id, id, parsed.wait_seconds ?? 5);
               result = `${r.running ? `Started ${r.id}; it is still running.` : `${r.id} finished with exit code ${r.exitCode}.`}\nOutput:\n${r.output.slice(-6000) || '(nothing yet)'}`;
               if (r.running && browserControl && /https?:\/\/(localhost|127\.0\.0\.1)/i.test(r.output)) result += '\nOpen its address with browser_open to look at it.';
@@ -1984,9 +2016,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           status = 'failed';
           result = `The tool failed: ${err.message}`;
         }
-        result = String(result).slice(0, 12000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: (shown ?? result).slice(0, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
-        send('tool', { tool: summary, status, result: (shown ?? result).slice(0, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
+        result = clip(String(result), 12000);
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
+        send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
       };
 
@@ -2030,8 +2062,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             result = `The browser action failed: ${err.message}`;
           }
           result = String(result).slice(0, 9000);
-          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200), attachments });
-          send('tool', { tool: summary, status, result: result.slice(0, 600), attachments });
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), attachments });
+          send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return result;
         }
         const isApp = appTools.has(name);
@@ -2069,9 +2101,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           status = 'failed';
           result = `The tool failed: ${err.message}`;
         }
-        result = String(result).slice(0, 8000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200) });
-        send('tool', { tool: summary, status, result: result.slice(0, 1200) });
+        result = clip(String(result), 8000);
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200) });
+        send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
       // Effort: how long a reply may be, how many tool steps it may take, and (where the
@@ -2079,12 +2111,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const effort = ['low', 'medium', 'high', 'max'].includes(session.effort) ? session.effort
         : ['low', 'medium', 'high', 'max'].includes(settings.defaultEffort) ? settings.defaultEffort : 'medium';
       const EFFORT = {
-        low: { tokens: 0.5, chat: 3, code: 8, note: 'Effort: low. Be brief and direct; skip extras.' },
-        medium: { tokens: 1, chat: 6, code: 16, note: '' },
-        high: { tokens: 2, chat: 10, code: 24, note: 'Effort: high. Think it through and check your work before answering.' },
-        max: { tokens: 4, chat: 16, code: 40, note: 'Effort: max. Be thorough: consider alternatives, verify every step, and double-check the result.' },
+        low: { tokens: 0.5, chat: 3, code: 12, note: 'Effort: low. Be brief and direct; skip extras.' },
+        medium: { tokens: 1, chat: 6, code: 30, note: '' },
+        high: { tokens: 2, chat: 10, code: 45, note: 'Effort: high. Think it through and check your work before answering.' },
+        max: { tokens: 4, chat: 16, code: 70, note: 'Effort: max. Be thorough: consider alternatives, verify every step, and double-check the result.' },
       }[effort];
-      const maxToolRounds = workMode === 'code' ? EFFORT.code : EFFORT.chat;
+      let maxToolRounds = workMode === 'code' ? EFFORT.code : EFFORT.chat;
       if (EFFORT.note) history.unshift({ role: 'system', content: EFFORT.note });
       // OpenRouter normalises a reasoning setting across models and ignores it where unsupported.
       const reasoningBody = providerId === 'openrouter' && effort !== 'medium'
@@ -2139,7 +2171,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             tools: toolDefinitions,
             runTool,
             maxTokens,
-            maxToolRounds,
+            maxToolRounds: () => maxToolRounds,
             extraBody,
             parallel: (name) => name === 'run_subagent',
             // The model's thinking, shown folded above the reply and kept with it.
@@ -2147,16 +2179,25 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             auth: provider.auth ?? null,
           })) {
             assembled += delta;
+            sinceStep += delta;
             send('delta', { text: delta });
           }
 
+          // The words before each step were kept with that step; the reply is what came after the last one.
+          let reply = stripToolMarkup(stepsTaken.length ? sinceStep : assembled);
           if (clientGone) {
             // Stopped: keep what arrived, and do not pretend there was a reply
             // when nothing had arrived yet.
-            if (assembled.trim()) {
-              await sessions.append(id, { role: 'assistant', content: assembled, kind: 'partial', ...undoInfo() });
+            if (reply.trim()) {
+              await sessions.append(id, { role: 'assistant', content: reply, kind: 'partial', ...undoInfo() });
             }
           } else {
+            // The model worked and then stopped without a word: the person is told where things stand.
+            if (!reply.trim() && stepsTaken.length) {
+              reply = stoppedReport(stepsTaken);
+              send('delta', { text: reply });
+            }
+            assembled = reply;
             // Speech job: turn the reply into audio with a Windows voice, kept with the message.
             let spoken = [];
             if (job === 'speech' && assembled.trim()) {
@@ -2179,8 +2220,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           break;
         } catch (err) {
           if (clientGone) {
-            if (assembled.trim()) {
-              await sessions.append(id, { role: 'assistant', content: assembled, kind: 'partial', ...undoInfo() });
+            const reply = stripToolMarkup(stepsTaken.length ? sinceStep : assembled);
+            if (reply.trim()) {
+              await sessions.append(id, { role: 'assistant', content: reply, kind: 'partial', ...undoInfo() });
             }
             break;
           }
@@ -2188,7 +2230,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           // The provider said how many tokens the balance covers: ask for
           // that many and try again.
           const affordable = affordableTokens(err.message);
-          if (attempt === 1 && affordable && affordable < maxTokens) {
+          if (attempt === 1 && !stepsTaken.length && !assembled.trim() && affordable && affordable < maxTokens) {
             maxTokens = affordable;
             continue;
           }
@@ -2196,7 +2238,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           // Nvidia provisions a model on first use: the first call answers
           // "not found for account" and a short wait later the same call
           // works. One retry before giving up on the model.
-          if (attempt === 1 && notProvisioned(err.message)) {
+          if (attempt === 1 && !stepsTaken.length && !assembled.trim() && notProvisioned(err.message)) {
             await new Promise((r) => setTimeout(r, 1500));
             continue;
           }
@@ -2211,6 +2253,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             message: err.message,
             modelUnavailable: Boolean(shape),
           });
+          // Kept in the chat, so after a reload it still says why the reply stopped.
+          // (The model never reads these: history leaves errors out.)
+          await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
           break;
         }
       }
@@ -2291,8 +2336,16 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
   const server = createServer((req, res) => {
     route(req, res).catch((err) => {
-      if (!res.headersSent) sendJson(res, 500, { code: 'server.error', message: err.message });
-      else res.end();
+      if (!res.headersSent) {
+        const status = err?.code === 'request.tooLarge' ? 413 : err instanceof ConnectError ? 400 : 500;
+        sendJson(res, status, { code: err?.code ?? 'server.error', message: err.message });
+        return;
+      }
+      // A reply that already started streaming: say what went wrong instead of just going quiet.
+      if (String(res.getHeader('content-type') ?? '').includes('text/event-stream') && !res.writableEnded) {
+        res.write(`event: error\ndata: ${JSON.stringify({ code: 'server.error', message: `Something went wrong: ${err.message}` })}\n\n`);
+      }
+      res.end();
     });
   });
 

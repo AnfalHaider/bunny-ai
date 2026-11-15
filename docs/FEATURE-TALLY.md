@@ -160,17 +160,22 @@ The agentic surfaces: memory, tools, schedules.
 | 6.23 | Scheduled tasks with tools, unattended | app | **D** | `incognito chats and scheduled tasks send the key in the provider header; scheduled runs get tools` |
 | 6.25 | The model asks questions with tailored choices and reasons | app | **D** | `the model asks with choices and gets the one the person clicked, in the same reply` |
 | 6.26 | The model remembers its steps and continues after a cut-off | app | **D** | `on the next message the model is told what it already did, and to carry on after a cut-off` |
+| 6.27 | Bunny narrates its steps, runs tool calls written as text, and never ends silently | app | **D** | `a written-out tool call runs, the words before it stay with the step, and a silent end gets a report` |
+| 6.29 | Long command output keeps its end; Stop and the time limit end the whole command | app | **D** | `Stop ends a running command at once, with everything it started` |
+| 6.30 | A failed reply is kept in the chat with its reason | app | **D** | `a model error is saved in the chat as the reason the reply stopped` |
+| 6.31 | Large chat imports (JSON, JSON Lines, Markdown) in many formats | app | **D** | `a large import (over the normal request limit) goes through` |
+| 6.28 | Commands work in Windows PowerShell 5.1: && chains, a folder to run in, readable output | app | **D** | `run_command runs in a subfolder with cwd, and a silent failure says where its output went` |
 | 6.24 | Helpers on the model suited to their work | app | **D** | `a helper can run on a different model: named outright, chosen for the job, or the chat model when one fails` |
 
 ---
 
 ## Score
 
-**106 of 106** features are done and covered by a test.
+**111 of 111** features are done and covered by a test.
 
 | Status | Count |
 |---|---|
-| done | 106 |
+| done | 111 |
 | partial | 0 |
 | missing | 0 |
 
@@ -183,7 +188,7 @@ The agentic surfaces: memory, tools, schedules.
 | Artifacts | 10 | 0 | 0 | 10 |
 | Structure | 8 | 0 | 0 | 8 |
 | Shell | 15 | 0 | 0 | 15 |
-| Automation | 26 | 0 | 0 | 26 |
+| Automation | 31 | 0 | 0 | 31 |
 
 ### What this means
 

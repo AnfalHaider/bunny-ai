@@ -17,11 +17,13 @@ export function parseImport(text, { title = null } = {}) {
   if (!raw) return { messages: [], title: null, notes: ['The file was empty.'] };
 
   if (raw.startsWith('{') || raw.startsWith('[')) {
-    try {
-      return parseJson(JSON.parse(raw), { title });
-    } catch {
-      return { messages: [], title: null, notes: ['That file is not valid JSON.'] };
-    }
+    let data;
+    try { data = JSON.parse(raw); } catch { data = undefined; }
+    if (data !== undefined) return parseJson(data, { title });
+    // JSON Lines: one JSON object per line (Claude Code and other agents keep transcripts this way).
+    const rows = raw.split(/\r?\n/).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+    if (rows.length) return parseJson(rows, { title });
+    return { messages: [], title: null, notes: ['That file is not valid JSON.'] };
   }
   return parseMarkdown(raw, { title });
 }
@@ -62,8 +64,13 @@ export function parseJson(data, { title = null } = {}) {
 
   // A bare array of messages.
   if (Array.isArray(data)) {
-    return { messages: clean(data), title, notes };
+    const messages = clean(data);
+    if (messages.length) return { messages, title, notes };
   }
+
+  // Any other shape: the longest list of things that look like messages, wherever it sits.
+  const found = findMessageList(data);
+  if (found.length) return { messages: found, title: title ?? data?.title ?? data?.name ?? data?.summary ?? null, notes };
 
   notes.push('No messages were found in that file.');
   return { messages: [], title, notes };
@@ -87,14 +94,12 @@ export function parseMarkdown(text, { title = null } = {}) {
   for (const line of lines) {
     const h1 = line.match(/^#\s+(.*)$/);
     if (h1) { foundTitle ??= h1[1].trim(); continue; }
-    const h2 = line.match(/^##\s+(.*)$/);
+    // "## You", "### Assistant", "**User:**" or "Human:" starts a message.
+    const h2 = line.match(/^#{2,4}\s+(.*)$/) ?? line.match(/^\*\*([^*]{1,30})\*\*:?\s*$/) ?? line.match(/^(you|user|human|assistant|claude|chatgpt|ai|model|bunny):\s*$/i);
     if (h2) {
-      flush();
-      const label = h2[1].trim().toLowerCase();
-      heading = label.startsWith('you') || label === 'user' ? 'you'
-        : label.startsWith('assistant') || label === 'model' || label === 'claude' ? 'assistant'
-          : null;
-      continue;
+      const label = h2[1].trim().replace(/[:*]+$/, '').trim().toLowerCase().split(/[\s(]/)[0];
+      const next = USER.test(label) ? 'you' : ASSISTANT.test(label) ? 'assistant' : null;
+      if (next || line.startsWith('##')) { flush(); heading = next; continue; }
     }
     buffer.push(line);
   }
@@ -104,12 +109,59 @@ export function parseMarkdown(text, { title = null } = {}) {
   return { messages, title: foundTitle, notes };
 }
 
+const ASSISTANT = /^(assistant|model|ai|bot|claude|gpt|chatgpt|gemini|bunny|agent)$/i;
+const USER = /^(user|human|you|person|me)$/i;
+
+/** Who wrote a message, from whichever field the tool used; null when it is neither side. */
+function roleOf(m) {
+  const who = m?.role ?? m?.message?.role ?? m?.author?.role ?? m?.author ?? m?.sender ?? m?.from ?? m?.speaker ?? m?.type;
+  const w = typeof who === 'string' ? who.trim() : '';
+  if (ASSISTANT.test(w)) return 'assistant';
+  if (USER.test(w)) return 'user';
+  return null;
+}
+
+/** The words of a message: a string, a list of parts ({type:'text', text}), or nested in .message. */
+function textOf(value, depth = 0) {
+  if (value == null || depth > 4) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((p) => (typeof p === 'string' ? p : p?.type && p.type !== 'text' ? '' : textOf(p?.text ?? p?.content, depth + 1))).filter(Boolean).join('\n');
+  if (typeof value === 'object') {
+    if (value.parts) return textOf(value.parts, depth + 1);
+    return textOf(value.text ?? value.content ?? value.message?.content ?? value.value, depth + 1);
+  }
+  return '';
+}
+
 function clean(list) {
   return (Array.isArray(list) ? list : [])
     .map((m) => ({
-      role: m.role === 'assistant' || m.role === 'model' ? 'assistant' : 'user',
-      content: String(m.content ?? m.text ?? ''),
-      at: m.at ?? m.created_at ?? undefined,
+      role: roleOf(m) ?? (m?.role ? 'user' : null),
+      content: textOf(m?.content ?? m?.text ?? m?.message ?? m?.parts ?? m?.body),
+      at: m?.at ?? m?.created_at ?? m?.timestamp ?? m?.createdAt ?? undefined,
     }))
-    .filter((m) => m.content.trim());
+    .filter((m) => m.role && m.content.trim())
+    .map((m) => (m.at === undefined ? { role: m.role, content: m.content } : m));
+}
+
+/** Walks any JSON and returns the longest list whose items read as messages. */
+function findMessageList(data) {
+  let best = [];
+  const seen = new Set();
+  const walk = (node, depth) => {
+    if (!node || typeof node !== 'object' || depth > 8 || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      const objects = node.filter((x) => x && typeof x === 'object');
+      if (objects.length >= 2 && objects.filter((x) => roleOf(x)).length >= objects.length / 2) {
+        const messages = clean(objects);
+        if (messages.length > best.length) best = messages;
+      }
+      for (const x of objects) walk(x, depth + 1);
+      return;
+    }
+    for (const v of Object.values(node)) walk(v, depth + 1);
+  };
+  walk(data, 0);
+  return best;
 }

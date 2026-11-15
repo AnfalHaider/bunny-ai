@@ -7,7 +7,7 @@
  * chat's folder. They all stop when Bunny AI closes.
  */
 import { spawn, execFile } from 'node:child_process';
-import { POWERSHELL_PRELUDE } from './workspace.js';
+import { POWERSHELL_PRELUDE, NON_INTERACTIVE, translateChains } from './workspace.js';
 
 const MAX_KEPT = 40_000;       // characters of output kept per process
 const MAX_RUNNING = 6;         // per chat
@@ -24,7 +24,8 @@ export function createProcessStore() {
     counter += 1;
     const id = `p${counter}`;
     const child = process.platform === 'win32'
-      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${command}`], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${translateChains(command)}`],
+        { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...NON_INTERACTIVE } })
       : spawn('sh', ['-c', command], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const p = { id, command, cwd, owner, child, out: '', read: 0, exitCode: null, started: Date.now() };
     const add = (chunk) => {

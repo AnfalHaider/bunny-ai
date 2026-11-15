@@ -13,6 +13,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { createWorking } from './bunny-working.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument } from './artifact-content.js';
@@ -928,6 +929,7 @@ function renderMessage(m) {
   // Tool call block: collapsible, shows the tool name, args and result
   if (m.kind === 'tool_call') {
     // A question the model asked is shown as its card, with the answer, not as a step line.
+    if (m.note) wrap.append(stepNote(m.note, true));
     if (m.question) { wrap.append(answeredQuestionCard(m.question)); return wrap; }
     const tc = element('div', { className: 'tool-call' });
     const header = element('div', { className: 'tool-call-header' });
@@ -947,6 +949,13 @@ function renderMessage(m) {
     if (m.artifact) wrap.append(artifactCard(m.artifact));
     if (m.linked) wrap.append(linkedChatCard(m.linked));
     if (m.question) wrap.append(answeredQuestionCard(m.question));
+    return wrap;
+  }
+
+  // A reply that failed: why, kept in the chat.
+  if (m.kind === 'error') {
+    wrap.classList.add('error-note');
+    wrap.append(element('p', { className: 'error-note-text', textContent: m.content ?? 'The reply failed.' }));
     return wrap;
   }
 
@@ -1278,14 +1287,19 @@ function flashStatus(text, ms = 3000) {
  * @param {{path: string, payload: object}} opts
  * @returns {Promise<{assembled: string, meter: object|null}>}
  */
-async function streamInto(bodyEl, { path, payload }) {
+async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
   const controller = new AbortController();
   state.streaming = controller;
   setStreaming(true);
 
   let assembled = '';
+  // The words since the last step: they are drawn in the reply box until a step comes,
+  // then kept above that step as a note, so the chat reads as a running account.
+  let segment = '';
   let meter = null;
   let aborted = false;
+  let errorCode = null;
+  let gotDone = false;
   // The reply is drawn as Markdown while it streams, a few times a second, so long
   // code arrives already folded instead of as a wall of text.
   let paintQueued = false;
@@ -1295,7 +1309,7 @@ async function streamInto(bodyEl, { path, payload }) {
     requestAnimationFrame(() => {
       paintQueued = false;
       const opened = new Set([...bodyEl.querySelectorAll('pre.is-foldable')].map((pre, i) => (pre.classList.contains('is-folded') ? -1 : i)));
-      bodyEl.replaceChildren(renderMarkdown(assembled, { foldCode: true }));
+      bodyEl.replaceChildren(renderMarkdown(stripToolMarkup(segment), { foldCode: true }));
       bodyEl.classList.add('is-streaming');
       [...bodyEl.querySelectorAll('pre.is-foldable')].forEach((pre, i) => {
         if (opened.has(i)) setFolded(pre, false);
@@ -1304,12 +1318,17 @@ async function streamInto(bodyEl, { path, payload }) {
       bodyEl.scrollIntoView({ block: 'end' });
     });
   };
-  bodyEl.textContent = '…';
+  bodyEl.textContent = '';
+  // The hopping bunny under the reply, with a word that matches what is happening.
+  const working = createWorking(mood);
+  bodyEl.closest('.msg')?.after(working.el);
 
   const handlers = {
     signal: controller.signal,
     onDelta: (delta) => {
       assembled += delta;
+      segment += delta;
+      working.alive();
       paintLive();
       bodyEl.scrollIntoView({ block: 'end' });
     },
@@ -1317,16 +1336,31 @@ async function streamInto(bodyEl, { path, payload }) {
       flashStatus('Compacted automatically');
       renderContext(info.after);
     },
-    onDone: (info) => { meter = info?.context ?? null; },
-    onError: (err) => { $('error').textContent = err.message ?? 'The request failed.'; },
-    onTool: (info) => showLiveTool(bodyEl, info),
-    onPermission: (info) => showLivePermission(bodyEl, info),
+    onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
+    onError: (err) => { errorCode = err.code ?? 'chat.failed'; $('error').textContent = err.message ?? 'The request failed.'; },
+    onTool: (info) => {
+      flushNote();
+      showLiveTool(bodyEl, info);
+      if (info.status === 'failed' || info.status === 'denied') working.thump();
+      else if (info.status === 'running') working.set(/(^| › )Asked: /.test(info.tool ?? '') ? 'asking' : 'tool', info.tool);
+      else working.set('thinking');
+      working.el.parentNode?.append(working.el);
+    },
+    onPermission: (info) => { working.set('asking'); showLivePermission(bodyEl, info); },
     onBrowser: (info) => runBrowserAction(info),
-    onCapability: (info) => showLiveCapability(bodyEl, info),
+    onCapability: (info) => { working.set('asking'); showLiveCapability(bodyEl, info); },
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
-    onThinking: (info) => showLiveThinking(bodyEl, info.text ?? ''),
-    onQuestion: (info) => showLiveQuestion(bodyEl, info),
+    onThinking: (info) => { working.alive(); if (!segment) working.set('thinking'); showLiveThinking(bodyEl, info.text ?? ''); },
+    onQuestion: (info) => { flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
   };
+  function flushNote() {
+    const note = stripToolMarkup(segment);
+    segment = '';
+    if (!note) return;
+    const msg = bodyEl.closest('.msg');
+    msg?.before(stepNote(note));
+    bodyEl.textContent = '';
+  }
 
   try {
     if (path === '/api/complete') await streamComplete(payload, handlers);
@@ -1335,15 +1369,38 @@ async function streamInto(bodyEl, { path, payload }) {
     if (err.name === 'AbortError') {
       aborted = true;
     } else {
+      errorCode = 'network';
       $('error').textContent = err.message;
     }
   } finally {
+    // The connection ended with neither an answer nor an error: say so, so it is not just silence
+    // (and Auto can try the next model).
+    if (!gotDone && !errorCode && !aborted && !controller.signal.aborted) {
+      errorCode = 'chat.noReply';
+      $('error').textContent = 'The reply stopped without finishing. Send "continue" to pick up where it stopped.';
+    }
+    working.stop();
     state.streaming = null;
     setStreaming(false);
     bodyEl.classList.remove('is-streaming');
   }
 
-  return { assembled, meter, aborted };
+  return { assembled, meter, aborted, errorCode };
+}
+
+/** Tool calls some models write out as text: they are run, so the markup is not shown. */
+function stripToolMarkup(text) {
+  return String(text ?? '')
+    .replace(/<tool_call>[\s\S]*?(<\/tool_call>|$)/g, '')
+    .replace(/<function=[\w.-]+>[\s\S]*?(<\/function>|$)/g, '')
+    .trim();
+}
+
+/** What Bunny said before a step ("Checking the build output."). */
+function stepNote(text, inline = false) {
+  const note = element('div', { className: inline ? 'step-note' : 'msg assistant step-note' });
+  note.append(renderMarkdown(text, { foldCode: true }));
+  return note;
 }
 
 /** A tool step, shown above the reply while it streams ("↳ Read src/app.js"). */
@@ -1720,6 +1777,7 @@ async function streamReply({ retry = true } = {}) {
   if (!bodyEl) return null;
 
   const { assembled, meter } = await streamInto(bodyEl, {
+    mood: 'retry',
     path: `/api/sessions/${state.sessionId}/messages`,
     payload: {
       retry,
@@ -1873,7 +1931,7 @@ async function send() {
 
   const job = jobFor(text, files);
   const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
-  const candidates = state.modelAuto ? rankModels(state.models, job).slice(0, 3) : fixed;
+  const candidates = state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed;
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
@@ -1882,7 +1940,8 @@ async function send() {
     const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
     candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
   }
-  const busy = (message) => /\b(429|500|502|503|504)\b|rate.?limit|quota|overloaded|capacity|did not answer|stopped (responding|sending)|not found for account|temporarily unavailable/i.test(message);
+  // Errors that are not the model's fault: another model would not help.
+  const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
   let result = { meter: null, aborted: false };
   let failed = null;
   for (let i = 0; i < candidates.length; i += 1) {
@@ -1903,11 +1962,12 @@ async function send() {
         auto: Boolean(state.modelAuto),
         fellBackFrom: failed ?? undefined,
       },
+      mood: failed ? 'fallback' : 'waiting',
     });
-    const errorText = $('error').textContent;
-    const errored = Boolean(errorText) && !result.assembled?.trim();
+    // Any failure of the model itself (busy, refused, empty, cut off mid-work, unreachable)
+    // goes to the next model. What was already done is saved, so the next one carries on from there.
+    const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode);
     if (!errored || result.aborted || i === candidates.length - 1) break;
-    if (!state.modelAuto && !busy(errorText)) break; // a real error with your model is shown, not hidden
     failed = pick.displayName ?? pick.id;
     flashStatus(say('model.fallback', { from: failed, to: candidates[i + 1].displayName ?? candidates[i + 1].id }), 6000);
     bodyEl.textContent = '…';
@@ -2833,9 +2893,14 @@ function renderPalette(query) {
 // ---------------------------------------------------------------------------
 // import
 
+let importFile = null;
+
 function openImport() {
+  importFile = null;
   $('import-backdrop').hidden = false;
   $('import-error').textContent = '';
+  $('import-text').disabled = false;
+  $('import-text').placeholder = 'Paste JSON or Markdown here…';
   $('import-text').value = '';
   $('import-text').focus();
 }
@@ -2845,15 +2910,22 @@ function closeImport() {
 }
 
 async function runImport() {
-  const content = $('import-text').value;
+  const content = importFile?.text ?? $('import-text').value;
   $('import-error').textContent = '';
+  const run = $('import-run');
+  const label = run.textContent;
+  run.disabled = true;
+  run.textContent = 'Importing…';
   try {
-    const result = await sendJSON('/api/import', 'POST', { content });
+    const result = await sendJSON('/api/import', 'POST', { content, title: importFile?.name.replace(/\.(json|jsonl|md|txt)$/i, '') });
     closeImport();
     await loadSessions();
     location.href = `./index.html?s=${result.session.id}`;
   } catch (err) {
     $('import-error').textContent = err.message ?? 'That file could not be imported.';
+  } finally {
+    run.disabled = false;
+    run.textContent = label;
   }
 }
 
@@ -3012,8 +3084,18 @@ async function boot() {
   $('import-file').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    $('import-text').value = await file.text();
+    // A big file is kept aside, not poured into the text box (which freezes on megabytes of text).
+    const text = await file.text();
     e.target.value = '';
+    if (text.length > 200_000) {
+      importFile = { name: file.name, text };
+      $('import-text').value = '';
+      $('import-text').placeholder = `${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB) is ready. Press Import.`;
+      $('import-text').disabled = true;
+    } else {
+      importFile = null;
+      $('import-text').value = text;
+    }
   });
   $('import-backdrop').addEventListener('click', (e) => {
     if (e.target === $('import-backdrop')) closeImport();

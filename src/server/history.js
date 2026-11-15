@@ -9,13 +9,15 @@
  * that turn's reply; a turn that was cut off says so, so the model can carry on.
  */
 import { sinceSummary } from './sessions.js';
+import { clip } from './clip.js';
 
 const STEP_RESULT = 300;   // characters of each step's result
 const STEPS_TOTAL = 6000;  // characters of steps for one turn
 
 const stepLine = (m) => {
   const result = String(m.result ?? '').replace(/\s+/g, ' ').trim();
-  return `- ${m.tool ?? 'step'} (${m.status ?? 'done'})${result ? ` → ${result.slice(0, STEP_RESULT)}${result.length > STEP_RESULT ? '…' : ''}` : ''}`;
+  const note = String(m.note ?? '').replace(/\s+/g, ' ').trim();
+  return `${note ? `(you said: ${note.slice(0, 200)})\n` : ''}- ${m.tool ?? 'step'} (${m.status ?? 'done'})${result ? ` → ${clip(result, STEP_RESULT)}` : ''}`;
 };
 
 function stepsText(lines) {
@@ -31,7 +33,9 @@ function stepsText(lines) {
  *   interrupted: the turn before the latest message was cut off (stopped, dropped, or
  *   ended in the middle of its steps), so the model should continue it, not restart.
  */
-export function buildHistory(messages, toModel) {
+export function buildHistory(allMessages, toModel) {
+  // Errors are kept in the chat for the person; the model never reads them.
+  const messages = allMessages.filter((m) => m.kind !== 'error');
   const start = sinceSummary(messages);
   const history = [];
   let steps = [];
@@ -60,6 +64,15 @@ export function buildHistory(messages, toModel) {
     steps = [];
     if (typeof out.content === 'string') out.content = `${prefix}${out.content}${suffix}`;
     history.push(out);
+  }
+  // Steps after the latest message: this reply already started (another model, or a retry,
+  // takes over). They go in as a note, never as a last assistant turn, which some providers
+  // refuse and others read as a reply to finish with nothing.
+  const tail = steps.length > 0 && messages.slice(start).filter((m) => m.kind !== 'tool_call' && m.kind !== 'permission_prompt').at(-1)?.role === 'user';
+  if (tail) {
+    history.push({ role: 'user', content: `[Note: work on this message already started. Steps already done:\n${stepsText(steps)}\n`
+      + 'Do not redo them: check what is done and carry on from there.]' });
+    steps = [];
   }
   flushCutOff();
 

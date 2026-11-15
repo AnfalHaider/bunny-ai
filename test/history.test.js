@@ -21,7 +21,7 @@ test('the steps of a turn go back in front of its reply, shortened', () => {
     user('thanks'),
   ], plain);
   assert.equal(history.length, 3);
-  assert.match(history[1].content, /^\[Steps taken for this reply:\n- Write test\/a\.test\.js \(done\) → Wrote test\/a\.test\.js \(12 lines\)\n- Run node --test \(done\) → x{300}…\]\n\nAdded the test; it passes\.$/);
+  assert.match(history[1].content, /^\[Steps taken for this reply:\n- Write test\/a\.test\.js \(done\) → Wrote test\/a\.test\.js \(12 lines\)\n- Run node --test \(done\) → x{75}\n… \(\d+ characters left out\) …\nx+\]\n\nAdded the test; it passes\.$/);
   assert.equal(interrupted, false, 'that turn finished');
 });
 
@@ -100,4 +100,12 @@ test('on the next message the model is told what it already did, and to carry on
   assert.match(remembered.content, /Read notes\.txt \(done\) → hello/);
   assert.doesNotMatch(later[0].content, /cut off/, 'a finished turn is not called cut off');
   assert.match(later[0].content, /\.bunny\/progress\.md/, 'Code mode keeps a progress file for long jobs');
+});
+
+test('when another model takes over mid-work, the steps go in as a note, never as a last assistant turn', () => {
+  const step = (tool) => ({ role: 'assistant', kind: 'tool_call', tool, status: 'done', result: 'ok' });
+  const { history } = buildHistory([user('build it'), step('Run npm install'), step('Write a.js')], plain);
+  assert.equal(history.at(-1).role, 'user');
+  assert.match(history.at(-1).content, /already started[\s\S]*Run npm install[\s\S]*Write a\.js[\s\S]*Do not redo them/);
+  assert.equal(history.filter((m) => m.role === 'assistant').length, 0);
 });

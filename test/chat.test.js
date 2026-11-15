@@ -195,7 +195,7 @@ test('a model that uses a tool and then says nothing is asked once for its answe
   assert.equal(parts.join(''), 'The title is Example');
   assert.equal(calls.length, 3);
   assert.equal(calls[2].tools, undefined, 'the last ask offers no tools');
-  assert.match(calls[2].messages.at(-1).content, /Now give your answer/);
+  assert.match(calls[2].messages.at(-1).content, /Stop using tools now and reply to me. Say briefly what you did/);
 });
 
 test('a model that runs out of tool steps still gives an answer', async () => {

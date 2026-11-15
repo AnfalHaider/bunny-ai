@@ -17,7 +17,7 @@
 export const AGENT_TOOL_RISK = {
   create_artifact: 'own', update_artifact: 'own', request_capability: 'own',
   start_process: 'run', read_process: 'read', stop_process: 'read', list_processes: 'read',
-  computer_screenshot: 'read', computer_click: 'run', computer_type: 'run', computer_key: 'run', computer_scroll: 'run',
+  computer_screenshot: 'read', computer_click: 'build', computer_type: 'build', computer_key: 'build', computer_scroll: 'build',
   create_tool: 'build',
 };
 
@@ -61,9 +61,11 @@ export function capabilityToolDefinition() {
 
 export function processToolDefinitions(risks) {
   return [
-    fn('start_process', 'Start a program that keeps running (a dev server, a watcher, a long build) in the workspace folder, as a PowerShell command. '
+    fn('start_process', 'Start a program that keeps running (a dev server, a watcher, a long build), as a Windows PowerShell 5.1 command '
+      + '(separate commands with ;  — && and || are translated for you). Pass cwd to run in a subfolder; cd in an earlier call does not carry over. '
       + 'Waits a few seconds and returns its first output and id. Use run_command instead for commands that finish.',
-    { command: { type: 'string' }, wait_seconds: { type: 'integer', description: '1 to 30, default 5' } }, ['command']),
+    { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "web". Default: the workspace folder' },
+      wait_seconds: { type: 'integer', description: '1 to 30, default 5' } }, ['command']),
     fn('read_process', 'Read what a started program printed since you last looked, and whether it is still running.',
       { id: { type: 'string' }, wait_seconds: { type: 'integer', description: 'Wait up to this long for output, 0 to 30. Default 0' } }, ['id']),
     fn('stop_process', 'Stop a program you started.', { id: { type: 'string' } }, ['id']),

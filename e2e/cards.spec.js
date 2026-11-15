@@ -37,6 +37,7 @@ function script(body) {
 let server;
 let port;
 const busyModels = new Set();
+const brokenModels = new Set();
 test.beforeAll(async () => {
   server = createServer((req, res) => {
     let raw = '';
@@ -52,8 +53,16 @@ test.beforeAll(async () => {
         res.end('{"error":{"message":"Rate limit exceeded"}}');
         return;
       }
+      // The first model asked "are you broken" refuses with an error that is not about being busy.
+      const brokenAsk = /are you broken/.test(JSON.stringify(body.messages));
+      if (brokenAsk && !brokenModels.size) {
+        brokenModels.add(body.model);
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end('{"error":{"message":"This model does not support tool use"}}');
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const answer = busyAsk ? frame({ content: `not busy: ${body.model}` }) : script(body);
+      const answer = brokenAsk ? frame({ content: `working: ${body.model}` }) : busyAsk ? frame({ content: `not busy: ${body.model}` }) : script(body);
       res.end(`${answer}data: [DONE]\n\n`);
     });
   });
@@ -143,11 +152,22 @@ test('when the picked model is busy, another answers and the reply says so', asy
   expect(meta).toContain(answeredBy);
 });
 
+test('when the picked model fails for another reason, the next model still answers', async ({ page }) => {
+  await send(page, 'are you broken?');
+  const reply = page.locator('.msg.assistant .body').last();
+  await expect(reply).toContainText('working:');
+  const answeredBy = (await reply.textContent()).match(/working: (\S+)/)[1];
+  expect([...brokenModels]).not.toContain(answeredBy);
+});
+
 test('the model asks a question: one click answers it, and the reply goes on', async ({ page }) => {
   await page.locator('#input').fill('pick a colour for the shop');
   await page.locator('#send').click();
   const card = page.locator('.question-card');
   await expect(card.locator('h4')).toHaveText('Which colour?');
+  // While Bunny waits for the answer, the hopping bunny says so, with a timer.
+  await expect(page.locator('.bunny-working .bunny-word')).toHaveText('Waiting… (arms crossed)');
+  await expect(page.locator('.bunny-working .bunny-time')).toHaveText(/\d+s/);
   await page.screenshot({ path: 'test-results/question-card.png' });
   // The recommended choice comes first, with its reason.
   await expect(card.locator('.question-choice').first()).toContainText('Green');
@@ -156,6 +176,7 @@ test('the model asks a question: one click answers it, and the reply goes on', a
   await card.getByRole('button', { name: 'Green' }).click();
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
   await expect(page.locator('.msg.assistant .body').last()).toContainText('The person answered: Green');
+  await expect(page.locator('.bunny-working')).toHaveCount(0);
   // After the reply, the question stays in the chat with the answer.
   await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Green');
   await expect(page.locator('.question-card.is-answered .is-chosen')).toContainText('Green');

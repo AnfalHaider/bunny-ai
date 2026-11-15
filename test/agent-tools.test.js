@@ -19,7 +19,7 @@ test('risk levels: artifacts and asking need no OK, building always asks, progra
   assert.equal(AGENT_TOOL_RISK.request_capability, 'own');
   assert.equal(AGENT_TOOL_RISK.create_tool, 'build');
   assert.equal(AGENT_TOOL_RISK.start_process, 'run');
-  assert.equal(AGENT_TOOL_RISK.computer_click, 'run');
+  assert.equal(AGENT_TOOL_RISK.computer_click, 'build');
   assert.deepEqual(processToolDefinitions(['read']).map((d) => d.function.name).sort(), ['list_processes', 'read_process', 'stop_process']);
   assert.deepEqual(computerToolDefinitions(['read']).map((d) => d.function.name), ['computer_screenshot']);
   assert.ok(CAPABILITIES.code_mode && CAPABILITIES.new_tool);

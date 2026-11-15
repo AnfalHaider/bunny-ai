@@ -805,3 +805,29 @@ details.thinking.is-live summary { color: var(--accent); }
 .question-choice.is-static { padding: var(--sp-2) var(--sp-5); color: var(--text-dim); }
 .question-choice.is-static:hover { border-color: var(--line-strong); color: var(--text-dim); }
 .question-choice.is-chosen { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+
+/* What Bunny says before a step: plain reply text, so the steps read as a running account. */
+.step-note { color: var(--text); margin: var(--sp-3) 0 var(--sp-1); }
+.step-note > :first-child { margin-top: 0; }
+.step-note > :last-child { margin-bottom: 0; }
+.msg.step-note + .live-tool .tool-call, .step-note + .tool-call { margin-top: var(--sp-1); }
+
+/* The hopping bunny shown while Bunny works, with a word that matches the step. */
+.bunny-working { display: flex; align-items: center; gap: var(--sp-3); margin: var(--sp-2) 0 var(--sp-4); color: var(--text-dim); font-size: 0.95em; }
+.bunny-working .bunny-mark { width: 22px; height: 22px; flex: none; transform-origin: 50% 100%; animation: bunny-hop 1.1s ease-out infinite; }
+.bunny-working .ear { fill: #ED93B1; transform-box: fill-box; transform-origin: 50% 100%; transition: transform .25s; }
+.bunny-working .face { fill: #D4537E; }
+.bunny-working .eye { fill: #4B1528; }
+.bunny-working .nose { fill: #FBEAF0; }
+.bunny-working .bunny-word { color: var(--text); transition: opacity .18s; }
+.bunny-working .bunny-word.is-swapping { opacity: 0; }
+.bunny-working .bunny-time { color: var(--text-faint, var(--text-dim)); font-size: 0.9em; font-variant-numeric: tabular-nums; }
+.bunny-working.is-grumpy .ear { transform: rotate(55deg) scaleY(.7); }
+.bunny-working.is-grumpy .ear + .ear { transform: rotate(-55deg) scaleY(.7); }
+.bunny-working.is-thumping .bunny-mark { animation: bunny-thump .5s ease-in 2, bunny-hop 1.1s ease-out 1s infinite; }
+@keyframes bunny-hop { 0%, 55%, 100% { transform: translateY(0) scale(1, 1); } 20% { transform: translateY(-5px) scale(.95, 1.05); } 40% { transform: translateY(0) scale(1.08, .92); } }
+@keyframes bunny-thump { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(1px) scale(1.12, .85); } 60% { transform: translateY(-1px) rotate(-6deg); } }
+@media (prefers-reduced-motion: reduce) { .bunny-working .bunny-mark { animation: none !important; } }
+
+/* A reply that failed, kept in the chat with the reason. */
+.msg.error-note .error-note-text { margin: var(--sp-1) 0; color: var(--bad); font-size: 0.92em; }

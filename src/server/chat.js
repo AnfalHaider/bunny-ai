@@ -10,6 +10,7 @@
  */
 
 import { ConnectError } from '../providers/errors.js';
+import { clip } from './clip.js';
 
 const MAX_TOOL_ROUNDS = 4;
 
@@ -54,7 +55,9 @@ export async function* streamChat({
   const conversation = messages.map((m) => ({ ...m }));
   const offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
 
-  for (let round = 0; round < maxToolRounds; round += 1) {
+  // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
+  const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
+  for (let round = 0; round < roundLimit(); round += 1) {
     const body = { model, messages: conversation, stream: true };
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
@@ -74,6 +77,17 @@ export async function* streamChat({
       ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, onThinking }));
       if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
         throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
+      }
+    }
+
+    // Some models write their tool calls as text instead of asking for them properly.
+    // Those are read and run, so the work goes on instead of stopping on a line of markup.
+    if (offerTools && !toolCalls.length) {
+      const offered = new Set(tools.map((d) => d.function?.name).filter(Boolean));
+      const written = parseTextToolCalls(text, offered);
+      if (written.length) {
+        toolCalls = written;
+        text = stripToolMarkup(text);
       }
     }
 
@@ -109,7 +123,7 @@ export async function* streamChat({
         for (const url of result.images ?? []) pictures.push({ name: call.function.name, url });
         result = result.content ?? '';
       }
-      conversation.push({ role: 'tool', tool_call_id: call.id, content: String(result).slice(0, 12000) });
+      conversation.push({ role: 'tool', tool_call_id: call.id, content: clip(result, 12000) });
     }
     if (pictures.length) {
       conversation.push({
@@ -128,7 +142,11 @@ export async function* streamChat({
   async function* finalAnswer() {
     const body = {
       model, stream: true,
-      messages: [...conversation, { role: 'user', content: 'Now give your answer to my message above, using what your tools found. Do not call any more tools.' }],
+      messages: [...conversation, {
+        role: 'user',
+        content: 'Stop using tools now and reply to me. Say briefly what you did and found, what is left to do (if anything), '
+          + 'and what you need from me (if anything). If work remains, end by telling me to send "continue". Do not call any more tools.',
+      }],
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
@@ -278,6 +296,48 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
   }
 
   return { text, toolCalls: finishCalls(toolCalls), finish };
+}
+
+/**
+ * Tool calls a model wrote into its reply as text, in the two common forms:
+ *   <tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>
+ *   <tool_call>{"name": "NAME", "arguments": {...}}</tool_call>
+ * Only tools that were offered are taken.
+ */
+export function parseTextToolCalls(text, offered) {
+  const calls = [];
+  const src = String(text ?? '');
+  const add = (name, args) => {
+    if (!offered.has(name)) return;
+    calls.push({ id: `text_call_${calls.length}`, type: 'function', function: { name, arguments: JSON.stringify(args ?? {}) } });
+  };
+  for (const m of src.matchAll(/<function=([\w.-]+)>([\s\S]*?)(?:<\/function>|<\/tool_call>|$)/g)) {
+    const args = {};
+    for (const p of m[2].matchAll(/<parameter=([\w.-]+)>([\s\S]*?)<\/parameter>/g)) {
+      const raw = p[2].replace(/^\n/, '').replace(/\n$/, '');
+      try { args[p[1]] = /^[[{]|^(true|false|null|-?\d+(\.\d+)?)$/.test(raw.trim()) ? JSON.parse(raw.trim()) : raw; } catch { args[p[1]] = raw; }
+    }
+    add(m[1], args);
+  }
+  if (!calls.length) {
+    for (const m of src.matchAll(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g)) {
+      try {
+        const o = JSON.parse(m[1]);
+        const args = typeof o.arguments === 'string' ? JSON.parse(o.arguments) : (o.arguments ?? o.parameters);
+        add(o.name, args);
+      } catch { /* not a call */ }
+    }
+  }
+  return calls;
+}
+
+/** The reply with any written-out tool calls taken away. */
+export function stripToolMarkup(text) {
+  return String(text ?? '')
+    .replace(/<tool_call>[\s\S]*?(<\/tool_call>|$)/g, '')
+    .replace(/<function=[\w.-]+>[\s\S]*?(<\/function>|$)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /** Turn the gathered fragments into complete tool calls. */
