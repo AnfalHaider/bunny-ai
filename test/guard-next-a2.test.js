@@ -183,6 +183,26 @@ test('E deny: a sign-off for another role, and ids that escape the folder', (t) 
   allowed(t, 'node .bootstrap/bin/bootstrap.mjs signoff b-1 --verdict PASS ; node other.mjs --role qa');
 });
 
+test('E: the require sub-command is for chief-of-staff and security only', (t) => {
+  const req = 'node .bootstrap/bin/bootstrap.mjs require b-1 qa tech-lead';
+  denied(t, req, 'tech-lead');
+  denied(t, req, 'builder');
+  allowed(t, req, 'chief-of-staff');
+  const sec = makeRepo(t, 'security', { roles: { security: 'write_globs: [docs/**, *.md]' } });
+  assert.equal(guard.decide({ tool: 'Bash', command: req, cwd: sec }).allow, true);
+  const cli = join(BIN, 'bootstrap.mjs');
+  assert.notEqual(runNode(cli, ['require', 'b-1', 'qa'], makeRepo(t, 'tech-lead')).code, 0, 'the command refuses too');
+  assert.equal(runNode(cli, ['require', 'b-1', 'qa'], makeRepo(t, 'chief-of-staff')).code, 0);
+});
+
+test('A1/A2: the staged set carries .gitattributes so hooks stay LF on a CRLF machine', async () => {
+  const { readFileSync } = await import('node:fs');
+  const staged = readFileSync(join(BIN, '..', '..', '.gitattributes'), 'utf8');
+  assert.match(staged, /^\.githooks\/\*\s+text\s+eol=lf/m);
+  const root = readFileSync(join(BIN, '..', '..', '..', '..', '.gitattributes'), 'utf8');
+  assert.match(root, /scripts\/guard-next\/\.githooks\/\*\s+text\s+eol=lf/);
+});
+
 test('E: the sign-off command itself rejects a bad id and another role (defence in depth)', (t) => {
   const root = makeRepo(t, 'tech-lead');
   const cli = join(BIN, 'bootstrap.mjs');

@@ -141,6 +141,10 @@ function signoff(root, piece, args) {
 }
 
 function requireRoles(root, piece, roles) {
+  if (!['chief-of-staff', 'security'].includes(currentRole(root))) {
+    console.error(`only the Chief of Staff or Security sets which roles must sign a piece (you are "${currentRole(root)}").`);
+    process.exit(1);
+  }
   for (const id of [piece, ...roles]) {
     if (!PLAIN_ID.test(id) || id.includes('..')) { console.error(`"${id}" is not a plain id (letters, digits, dot, dash).`); process.exit(1); }
   }

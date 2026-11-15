@@ -32,6 +32,7 @@ export function gitCall(words) {
   while (i < words.length) {
     const w = words[i].text;
     if (w === '-c') { configs.push(words[i + 1]?.text ?? ''); i += 2; continue; }
+    if (w.length > 2 && w.startsWith('-c') && w[2] !== '-') { configs.push(w.slice(2)); i += 1; continue; } // the attached form: -ckey=value
     if (w === '--config-env') { configs.push(words[i + 1]?.text ?? ''); i += 2; continue; }
     if (w.startsWith('--config-env=')) { configs.push(w.slice('--config-env='.length)); i += 1; continue; }
     if (SEP_VALUE.has(w)) { i += 2; continue; }
@@ -105,7 +106,12 @@ export function pushDestinations(args, currentBranch) {
   });
 }
 
-function refuseGit(call) {
+/** `git push` that carries many branches at once: --all, --mirror, or a wildcard refspec. */
+function pushesEverything(args) {
+  return args.some((a) => a === '--all' || a === '--mirror' || (!a.startsWith('-') && a.includes('*')));
+}
+
+function refuseGit(call, ctx = {}) {
   const { sub, args, argWords, configs } = call;
   for (const c of configs) {
     const key = String(c).split('=')[0].toLowerCase();
@@ -119,6 +125,9 @@ function refuseGit(call) {
     if ((end < 0 ? args : args.slice(0, end)).some(isHookSkipLong)) return NO_HOOKS;
   }
   if (sub === 'push' && pushForces(args)) return 'force pushes are not allowed.';
+  if (sub === 'push' && pushesEverything(args) && !(ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role)) {
+    return 'pushing every branch at once (--all, --mirror, a wildcard refspec) could move the live branch; name the branch you mean.';
+  }
   if (sub === 'reset' && args.includes('--hard')) return '"git reset --hard" is not allowed: it throws work away. Use a new commit or a branch.';
   return null;
 }
@@ -150,6 +159,9 @@ function checkBootstrapCli(args, ctx) {
       }
     }
   }
+  if (sub === 'require' && ctx.role !== 'chief-of-staff' && ctx.role !== 'security') {
+    return `only the Chief of Staff or Security sets which roles must sign a piece (you are "${ctx.role}").`;
+  }
   if (sub === 'require' && args.slice(1).some((w) => !w.text.startsWith('-') && !okId(w))) {
     return 'sign-off piece and role ids must be plain names, never paths.';
   }
@@ -180,7 +192,7 @@ export function checkShell(parsed, ctx, depth = 0) {
       if (!words.length) continue;
       const head = words[0].text;
       if (isCmd(head, 'git')) {
-        const why = refuseGit(gitCall(words));
+        const why = refuseGit(gitCall(words), ctx);
         if (why) return why;
       }
       const bi = words.findIndex((w) => /(^|[\\/])bootstrap\.mjs$/.test(w.text));

@@ -85,6 +85,30 @@ test('A3 allow: the key name as plain prose', (t) => {
   allowed(t, `git config user.name`);
 });
 
+test('A3 deny: the attached -c form, quoted or not, for commit and push', (t) => {
+  denied(t, `git -c${HOOKS}=x commit -m y`);
+  denied(t, `git -c${HOOKS}=x push origin claude/x`);
+  denied(t, `git "-c${HOOKS}=x" commit -m y`);
+  denied(t, `git '-c${HOOKS}=x' push`);
+  denied(t, `git -C d -c${HOOKS.toLowerCase()}=x status`);
+  allowed(t, 'git -cuser.name=x status');
+  allowed(t, 'git -Cdir status');
+});
+
+test('Push of every branch is refused for a role that may not push live; allowed for one that may', (t) => {
+  denied(t, 'git push --all origin', 'builder');
+  denied(t, 'git push origin --all', 'builder');
+  denied(t, 'git push --mirror origin', 'builder');
+  denied(t, 'git -C d push --mirror', 'qa');
+  denied(t, 'git push origin "refs/heads/*:refs/heads/*"', 'builder');
+  denied(t, 'git push origin refs/heads/*:refs/heads/*', 'tech-lead');
+  denied(t, 'git push origin HEAD:refs/heads/*', 'builder');
+  allowed(t, 'git push origin claude/builder-x', 'builder');
+  allowed(t, 'git push --tags origin', 'builder');
+  allowed(t, 'echo "git push --all"', 'builder');
+  allowed(t, 'git push --all origin', 'release-ops');
+});
+
 test('A5 deny: setting the role from a command', (t) => {
   denied(t, 'BOOTSTRAP_ROLE=chief-of-staff git commit -m x');
   denied(t, 'export BOOTSTRAP_ROLE=chief-of-staff');

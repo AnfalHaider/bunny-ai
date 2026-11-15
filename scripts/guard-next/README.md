@@ -31,10 +31,11 @@ regexes, applied when a command cannot be read with confidence or `shell_parse` 
 
 1. `diff -r scripts/guard-next/.bootstrap .bootstrap` and `diff -r scripts/guard-next/.githooks .githooks`: confirm
    nothing live changed since staging (the staged `policy.json` is the 0.1.4-era copy plus the keys above).
-2. Copy every file in the table to its target in one commit as chief-of-staff. **LF endings** (the hooks are shell scripts);
-   `git config core.autocrlf` is `true` on this machine, so add `.githooks/* text eol=lf` to `.gitattributes` or the checked-out
-   `pre-commit` gets CRLF.
-3. `git update-index --chmod=+x .githooks/pre-commit`. `bootstrap init` should also write `.githooks/pre-commit`
+2. Copy every file in the table to its target in one commit as chief-of-staff, **including `scripts/guard-next/.gitattributes`
+   to the repo root** (`.githooks/* text eol=lf`; `core.autocrlf` is `true` on this machine, so without it the checked-out
+   hooks get CRLF). The root `.gitattributes` already carries the same rule for the staged folder, so the tests pass on a CRLF
+   checkout; after copying, run `git add --renormalize .githooks`.
+3. Make the new hook executable: `git update-index --chmod=+x .githooks/pre-commit`. `bootstrap init` should also write `.githooks/pre-commit`
    (the toolkit's `init` only writes `pre-push`).
 4. Run `node scripts/gate.mjs`; the `test/guard-next*.test.js` files keep testing the staged copies, so after landing
    either delete the staging folder and point `test/guard-helpers.js` `NEXT` at the repo root, or keep both identical.
@@ -56,7 +57,9 @@ regexes, applied when a command cannot be read with confidence or `shell_parse` 
   everyone else uses `bootstrap signoff|require|release`. This matches what the plugin guard already says; confirm no role
   writes those folders another way.
 - **Symlinks and junctions** inside the repo are not followed (item B2, not built): a write through a link that points at a protected path is judged by the link's name. A1 at commit time sees the real change.
-- **The "require" sub-command** (which roles must sign a piece) can be run by any role today, as before. Narrowing it to the Chief of Staff would stop a role weakening a piece's sign-off list, but Tech Lead's own workflow writes `_required.md`. The plugin guard already restricts it to chief-of-staff and security. Decision for Tech Lead and the Chief of Staff.
+- **The "require" sub-command** (which roles must sign a piece) is for chief-of-staff and security only, in the shell rule and in the command itself, as the plugin guard has it (Tech Lead confirmed; their role does not write `_required.md`).
+- **Variable write targets** (`echo x > $p`, `Set-Content $p x`) are not blocked unless their text names a protected path or a record folder: the seatbelt fails open there and A1 catches the change at commit. Tech Lead's spec said fail closed; accepted as fail open.
+- **Push of everything** (`--all`, `--mirror`, a wildcard refspec) is refused in the shell for roles outside `releases.live_pushers`; the pre-push hook is the backstop.
 - **Windows names.** 8.3 short names are resolved only when the file already exists; junctions and symlinks are not
   followed (spec item B2, not built).
 
