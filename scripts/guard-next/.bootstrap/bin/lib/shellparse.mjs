@@ -6,7 +6,8 @@
 // into extra commands marked `nested`.
 //
 // It is a seatbelt, not a shell: it follows the common bash and PowerShell shapes and reports
-// `unbalanced: true` when it could not close a quote, so callers can fall back to something stricter.
+// `unbalanced: true` when it could not close a quote, and `uncertain: true` for that and for anything else it
+// cannot read the same way bash and PowerShell would, so callers fall back to something stricter.
 // It never throws.
 
 const MAX_DEPTH = 6;
@@ -18,12 +19,13 @@ const ESCAPABLE = new Set([' ', '"', "'", '$', ';', '&', '|', '<', '>', '(', ')'
 /** @typedef {{ words: Word[], redirs: Redir[], nested: boolean }} Command */
 
 export function parseShell(input) {
-  const out = { commands: [], unbalanced: false };
+  const out = { commands: [], unbalanced: false, uncertain: false };
   try {
     parseInto(String(input ?? ''), out, false, 0);
   } catch {
     out.unbalanced = true;
   }
+  out.uncertain = out.uncertain || out.unbalanced;
   return out;
 }
 
@@ -42,6 +44,29 @@ export function commandWord(words) {
     return i;
   }
   return Math.max(0, words.length - 1);
+}
+
+/**
+ * Is `word` the command `name`? Read two ways, because bash and Windows disagree about backslashes:
+ * as a path ("C:\Git\git.exe") and with the backslashes dropped ("g\it" is git to bash).
+ */
+export function isCmd(word, name) {
+  const text = String(word);
+  return baseName(text) === name || baseName(text.replace(/\\/g, '')) === name;
+}
+
+/**
+ * Every word position that may start the real command. Normally one. After a wrapper (env, sudo, nice...)
+ * every later word is a candidate, because the wrapper's own options and their arguments cannot be told apart.
+ */
+export function commandStarts(words) {
+  const starts = [commandWord(words)];
+  let i = 0;
+  while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i].text)) i += 1;
+  if (i < words.length && WRAPPERS.has(baseName(words[i].text))) {
+    for (let j = i + 1; j < words.length; j += 1) if (!starts.includes(j)) starts.push(j);
+  }
+  return starts;
 }
 
 /** "C:\\Program Files\\Git\\cmd\\git.exe" -> "git" */
@@ -92,7 +117,7 @@ function parseInto(src, out, nested, depth) {
     buf = null;
     if (pending) {
       redirs.push({ op: pending.op, fd: pending.fd, target: w });
-      if (pending.op === '<<' || pending.op === '<<-') heredocs.push({ delim: w.text, strip: pending.op === '<<-' });
+      if (pending.op === '<<' || pending.op === '<<-') heredocs.push({ delim: w.text.replace(/\\/g, ''), strip: pending.op === '<<-' });
       pending = null;
     } else words.push(w);
   };
@@ -109,11 +134,8 @@ function parseInto(src, out, nested, depth) {
     const close = findClose(src, open, opener);
     const b = start();
     b.d = true;
-    if (close < 0 || depth >= MAX_DEPTH) {
-      if (close < 0) out.unbalanced = true;
-      b.t += src.slice(i);
-      return n;
-    }
+    if (close < 0) { out.unbalanced = true; b.t += src.slice(i); return n; }
+    if (depth >= MAX_DEPTH) { out.uncertain = true; b.t += src.slice(i, close); return close; }
     b.t += src.slice(i, close);
     parseInto(src.slice(open + 1, close - 1), out, true, depth + 1);
     return close;
@@ -140,7 +162,12 @@ function parseInto(src, out, nested, depth) {
       let closed = false;
       while (i < n) {
         const d = src[i];
-        if (d === '\\' && i + 1 < n && '"\\$`'.includes(src[i + 1])) { b.t += src[i + 1]; i += 2; continue; }
+        if (d === '\\' && i + 1 < n && '"\\$`'.includes(src[i + 1])) {
+          if (src[i + 1] === '"') out.uncertain = true; // bash and PowerShell read a backslash-quote differently
+          b.t += src[i + 1];
+          i += 2;
+          continue;
+        }
         if (d === '"') { closed = true; i += 1; break; }
         if (d === '$' && src[i + 1] === '(') { i = subst(i, '('); continue; }
         if (d === '`') { i = subst(i, '`'); continue; }
@@ -170,13 +197,15 @@ function parseInto(src, out, nested, depth) {
       i += 1;
       // heredoc bodies start here and are data until the delimiter line
       for (const h of heredocs.splice(0)) {
+        let found = false;
         while (i < n) {
           let e = src.indexOf('\n', i);
           if (e < 0) e = n;
           const line = src.slice(i, e);
           i = Math.min(n, e + 1);
-          if ((h.strip ? line.replace(/^\t+/, '') : line).replace(/\r$/, '') === h.delim) break;
+          if ((h.strip ? line.replace(/^\t+/, '') : line).replace(/\r$/, '') === h.delim) { found = true; break; }
         }
+        if (!found) out.uncertain = true;
       }
       continue;
     }

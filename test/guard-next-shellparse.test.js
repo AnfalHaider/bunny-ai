@@ -103,6 +103,47 @@ test('PowerShell here-strings and backslash paths survive', () => {
   assert.deepEqual(all('copy C:\\a\\b.txt D:\\c'), [['copy', 'C:\\a\\b.txt', 'D:\\c']]);
 });
 
+test('uncertain: anything the parser cannot be sure of is flagged so callers fall back to stricter rules', () => {
+  assert.equal(parse('echo "abc').uncertain, true, 'unclosed quote');
+  assert.equal(parse('echo "a \\" b"').uncertain, true, 'a backslash-quote differs between bash and PowerShell');
+  assert.equal(parse('cat <<EOF\nnever closed').uncertain, true, 'a heredoc with no closing line');
+  assert.equal(parse('$('.repeat(20) + 'x' + ')'.repeat(20)).uncertain, true, 'nesting past the depth limit');
+  assert.equal(parse('git commit -m "plain" && ls').uncertain, false);
+  assert.equal(parse('copy C:\\a\\b D:\\c').uncertain, false, 'path backslashes are not ambiguity');
+});
+
+test('the text after a depth-limit cut is still parsed', () => {
+  const r = parse('$('.repeat(20) + 'x' + ')'.repeat(20) + '; git commit -n');
+  assert.ok(r.commands.some((c) => c.words[0]?.text === 'git' && !c.nested), 'the top-level commit after the cut is seen');
+});
+
+test('heredoc delimiters are normalised the way bash does: quotes and backslashes dropped', () => {
+  for (const intro of ["<<'EOF'", '<<"EOF"', '<<\\EOF', '<<E"O"F', '<<EOF']) {
+    const r = parse(`cat ${intro}\nbody > x; rm y\nEOF\nls`);
+    assert.deepEqual(r.commands.map(texts), [['cat'], ['ls']], intro);
+    assert.equal(r.uncertain, false, intro);
+  }
+});
+
+test('isCmd reads a word both as a path and with backslashes dropped', () => {
+  assert.equal(sp.isCmd('git', 'git'), true);
+  assert.equal(sp.isCmd('\\git', 'git'), true);
+  assert.equal(sp.isCmd('g\\it', 'git'), true, 'bash reads g\\it as git');
+  assert.equal(sp.isCmd('C:\\Program Files\\Git\\cmd\\git.exe', 'git'), true);
+  assert.equal(sp.isCmd('/usr/bin/git', 'git'), true);
+  assert.equal(sp.isCmd('gitx', 'git'), false);
+  assert.equal(sp.isCmd('digit', 'git'), false);
+});
+
+test('commandStarts: after a wrapper every later word is a possible command start', () => {
+  const starts = (s) => sp.commandStarts(parse(s).commands[0].words);
+  assert.deepEqual(starts('git status'), [0]);
+  assert.deepEqual(starts('FOO=1 git status'), [1]);
+  const s = starts('sudo -u me git commit -n');
+  assert.ok(s.includes(3) && s.includes(1), `wrapper with an option argument: ${s}`);
+  assert.ok(starts('env -i FOO=1 -C d git commit').includes(5));
+});
+
 test('malformed input never throws: unbalanced quotes, empty, huge, odd bytes', () => {
   assert.equal(parse('echo "abc').unbalanced, true);
   assert.equal(parse("echo 'abc").unbalanced, true);

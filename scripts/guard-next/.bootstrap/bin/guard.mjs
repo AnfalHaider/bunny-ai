@@ -12,6 +12,8 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
+import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace', 'edit_file']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command', 'run_terminal_cmd']);
@@ -40,6 +42,21 @@ export function pushTargets(command, cwd) {
   return out;
 }
 
+/** Destination branches of every `git push` in a parsed command line (global options and quotes understood). */
+export function tokenPushTargets(parsed, cwd) {
+  const out = [];
+  const current = () => git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  for (const cmd of parsed.commands) {
+    for (const start of commandStarts(cmd.words)) {
+      const words = cmd.words.slice(start);
+      if (!words.length || !isCmd(words[0].text, 'git')) continue;
+      const call = gitCall(words);
+      if (call.sub === 'push') out.push(...pushDestinations(call.args, current));
+    }
+  }
+  return out;
+}
+
 export function decide({ tool, command = '', filePath = '', cwd = process.cwd() }) {
   const root = repoRoot(cwd);
   if (!root) return { allow: true };
@@ -49,13 +66,22 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
   const brief = loadRole(root, role) || {};
 
   if (SHELL_TOOLS.has(tool)) {
-    for (const pat of [...policy.deny_all, ...(policy.destructive_commands || []), ...(brief.deny_commands || [])]) {
+    // The hook-skip, hooks-folder and role rules read WORDS through the tokenizer (policy.shell_parse).
+    // When the command cannot be read with confidence (unclosed quote, bash/PowerShell ambiguity) or the
+    // switch is off, the old regexes over the raw text apply as well: stricter, with their false blocks.
+    const parsed = policy.shell_parse === false ? null : parseShell(command);
+    const strict = !parsed || parsed.uncertain;
+    for (const pat of [...policy.deny_all, ...(policy.destructive_commands || []), ...(brief.deny_commands || []), ...(strict ? policy.legacy_deny_all || [] : [])]) {
       if (new RegExp(pat).test(command)) {
         return { allow: false, reason: `Blocked for role "${role}": command matches a rule in .bootstrap/policy.json or roles/${role}.md (${pat}). If the owner wants this, they run it themselves, or the Chief of Staff records their word first.` };
       }
     }
-    if (/\bgit\s+push\b/.test(command)) {
-      for (const dst of pushTargets(command, cwd)) {
+    if (parsed) {
+      const why = checkShell(parsed, { role });
+      if (why) return { allow: false, reason: `Blocked for role "${role}": ${why}` };
+    }
+    if (/\bgit\b[\s\S]*\bpush\b/.test(command)) {
+      for (const dst of strict ? pushTargets(command, cwd) : tokenPushTargets(parsed, cwd)) {
         if (dst === policy.branches.live && !policy.releases.live_pushers.includes(role)) {
           return { allow: false, reason: `Blocked: only ${policy.releases.live_pushers.join(' / ')} may push "${dst}" (you are "${role}"). Live moves only on the owner's word (AGENTS.md, section 7E).` };
         }

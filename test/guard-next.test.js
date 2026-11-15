@@ -46,6 +46,19 @@ test('B: protected paths stay protected through case changes and ..\\ detours', 
   assert.ok(lib.scopeViolation(rel('.BOOTSTRAP\\Policy.JSON'), policy, {}, 'tech-lead'), 'different casing still protected');
 });
 
+test('B: Windows name tricks do not hide a protected path (trailing dots and spaces, :streams)', () => {
+  const rel = (p) => lib.toRepoPath(WROOT, p, WROOT, W);
+  assert.equal(rel('.bootstrap.\\policy.json'), '.bootstrap/policy.json');
+  assert.equal(rel('.bootstrap \\policy.json'), '.bootstrap/policy.json');
+  assert.equal(rel('.bootstrap\\policy.json.'), '.bootstrap/policy.json');
+  assert.equal(rel('.bootstrap\\policy.json::$DATA'), '.bootstrap/policy.json');
+  assert.equal(rel('AGENTS.md:stream'), 'AGENTS.md');
+  const policy = { protected_globs: ['.bootstrap/**', 'AGENTS.md'] };
+  for (const p of ['.bootstrap.\\policy.json', 'AGENTS.md::$DATA', 'AGENTS.md.']) {
+    assert.ok(lib.scopeViolation(rel(p), policy, {}, 'builder'), p);
+  }
+});
+
 test('B: malformed paths never throw', () => {
   const rel = (p) => lib.toRepoPath(WROOT, p, WROOT, W);
   assert.equal(rel(''), null);

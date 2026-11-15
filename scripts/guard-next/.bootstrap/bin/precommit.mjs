@@ -10,7 +10,7 @@
 // Fails OPEN, loudly, on an internal error (a bug here must not stop every commit);
 // fails CLOSED only on a definite violation.
 import { pathToFileURL } from 'node:url';
-import { currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolations } from './lib/policy.mjs';
+import { DEFAULT_POLICY, currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolations } from './lib/policy.mjs';
 
 /** Staged paths, renames reported as both sides (so moving a file out of scope is caught). */
 export function stagedPaths(root) {
@@ -20,12 +20,24 @@ export function stagedPaths(root) {
 }
 
 function main() {
+  let root = null;
+  let role = 'unassigned';
   try {
-    const root = repoRoot(process.cwd());
-    const policy = root && loadPolicy(root);
+    root = repoRoot(process.cwd());
+    let policy;
+    let degraded = false;
+    try {
+      policy = root && loadPolicy(root);
+    } catch (err) {
+      // The policy file exists but cannot be read: say so loudly, and still hold the built-in
+      // protected paths (never the role scopes, which come from that same policy).
+      process.stderr.write(`pre-commit: internal error (${err.message}); .bootstrap/policy.json is unreadable, so only the built-in protected paths are checked.\n`);
+      policy = { ...DEFAULT_POLICY };
+      degraded = true;
+    }
     if (!policy || policy.scope_check?.commit === false) return process.exit(0);
-    const role = currentRole(root);
-    const brief = loadRole(root, role) || {};
+    role = currentRole(root);
+    const brief = degraded ? {} : loadRole(root, role) || {};
     const bad = scopeViolations(stagedPaths(root), policy, brief, role);
     if (!bad.length) return process.exit(0);
     for (const b of bad) process.stderr.write(`pre-commit: ${b}\n`);

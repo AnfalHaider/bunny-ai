@@ -98,8 +98,12 @@ test('A1 fails open, loudly, on an internal error (a policy file that is not JSO
   writeFileSync(join(root, '.bootstrap', 'policy.json'), '{broken');
   stage(root, { 'src/a.js': 'a' });
   const r = runPrecommit(root);
-  assert.equal(r.code, 0);
+  assert.equal(r.code, 0, 'no role scope can be known without the policy: not blocked, but loud');
   assert.match(r.out, /pre-commit: internal error/i);
+  stage(root, { '.githooks/x': 'a' });
+  const p = runPrecommit(root);
+  assert.equal(p.code, 1, 'the built-in protected paths are still held when the policy file is unreadable');
+  assert.match(p.out, /\.githooks\/x/);
 });
 
 test('A1: the hook file runs the checker, with LF endings', () => {

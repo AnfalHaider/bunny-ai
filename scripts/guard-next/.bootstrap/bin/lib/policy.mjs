@@ -1,6 +1,6 @@
 // Shared helpers: project root, policy, role, glob matching, git.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path, { join } from 'node:path';
 import { parseFrontmatter } from './fm.mjs';
 
@@ -98,8 +98,20 @@ export function matchesAny(file, globs, { ci = false } = {}) {
 export function toRepoPath(root, filePath, cwd, p = path) {
   if (typeof filePath !== 'string' || !filePath || filePath.includes('\0')) return null;
   const abs = p.isAbsolute(filePath) ? filePath : p.join(cwd || root, filePath);
-  const rel = p.relative(root, abs).replace(/\\/g, '/');
+  let rel = p.relative(root, abs).replace(/\\/g, '/');
   if (rel === '..' || rel.startsWith('../') || /^[A-Za-z]:/.test(rel) || rel.startsWith('/')) return null;
+  if (p === path.win32) {
+    // Windows reads ".bootstrap." and ".bootstrap " as ".bootstrap", and "x::$DATA" / "x:stream" as "x".
+    rel = rel.split('/').map((seg) => seg.split(':')[0].replace(/[. ]+$/, '') || seg).join('/');
+    // 8.3 short names ("BOOTST~1") cannot be read from the text: ask the file system for the long form.
+    if (/~\d/.test(rel) && process.platform === 'win32') {
+      try {
+        const real = realpathSync.native(p.join(root, rel));
+        const back = p.relative(realpathSync.native(root), real).replace(/\\/g, '/');
+        if (back && !back.startsWith('..') && !/^[A-Za-z]:/.test(back)) rel = back;
+      } catch { /* the file does not exist yet: the text form stands */ }
+    }
+  }
   return rel;
 }
 
