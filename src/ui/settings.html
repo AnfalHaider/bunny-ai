@@ -26,8 +26,8 @@
       </div>
       <div class="row">
         <div class="meta-col">
-          <div class="name">Account</div>
-          <div class="desc">Bunny AI has no cloud account. Signing in links your GitHub or Google identity to this copy of Bunny AI; your chats and keys still stay on this computer.</div>
+          <div class="name" data-i18n="account.name">Account</div>
+          <div class="desc" data-i18n="account.desc">Bunny AI has no cloud account. Signing in links your GitHub or Google identity to this copy of Bunny AI; your chats and keys still stay on this computer.</div>
         </div>
         <div class="right"><span class="tag">Local</span></div>
       </div>
@@ -48,12 +48,13 @@
         <div class="meta-col">
           <div class="name">Google</div>
           <div class="desc" id="google-desc">Sign in with your Google (Gmail) account.</div>
+          <label class="account-check"><input type="checkbox" id="google-workspace" /> <span data-i18n="account.googleWorkspace">Also let Bunny use Gmail, Calendar and Drive (it drafts emails; sending always asks you first)</span></label>
           <div class="err" role="alert" id="google-err"></div>
         </div>
         <div class="right" id="google-actions"></div>
       </div>
       <details class="row account-apps">
-        <summary class="name">Sign-in apps <span class="opt">(advanced)</span></summary>
+        <summary class="name"><span data-i18n="account.apps">Sign-in apps</span> <span class="opt">(advanced)</span></summary>
         <p class="desc">GitHub's "Sign in with GitHub" and Google sign-in need an OAuth app you register once with them. GitHub: Settings → Developer settings → OAuth Apps, tick "Enable Device Flow". Google: Cloud console → APIs &amp; Services → Credentials → OAuth client ID → Desktop app.</p>
         <label class="field" for="github-client-id"><span>GitHub OAuth app client ID</span><input id="github-client-id" autocomplete="off" spellcheck="false" placeholder="Ov23li…" /></label>
         <label class="field" for="google-client-id"><span>Google client ID</span><input id="google-client-id" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" /></label>
@@ -164,6 +165,13 @@
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" /><span>on</span></label></div>
       </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name" data-i18n="settings.fallbackName">Try another model when yours is busy</div>
+          <div class="desc" data-i18n="settings.fallbackDesc">When the model you picked hits a rate limit or does not answer, the reply goes to the best other model for the job, and the reply says which answered.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" /><span>on</span></label></div>
+      </div>
     </div>
 
     <h2>Voice</h2>
@@ -188,19 +196,19 @@
       </div>
       <div class="row">
         <div class="meta-col">
-          <div class="name">Let the AI control the desktop</div>
-          <div class="desc">The AI may look at the screen, click, type and press keys to do what you ask. Clicks and typing still ask first in Manual and Accept edits. The AI can also ask you to switch this on when it needs it.</div>
+          <div class="name" data-i18n="settings.aiDesktopName">Let the AI control the desktop</div>
+          <div class="desc" data-i18n="settings.aiDesktopDesc">The AI may look at the screen, click, type and press keys to do what you ask. Clicks and typing still ask first in Manual and Accept edits. The AI can also ask you to switch this on when it needs it.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="aiComputerUse" data-cap-default="off" /><span>off</span></label></div>
       </div>
     </div>
 
-    <h2>Tools the AI builds</h2>
+    <h2 data-i18n="settings.toolsTitle">Tools the AI builds</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
-          <div class="name">Let the AI build its own tools</div>
-          <div class="desc">When nothing Bunny AI has can do a job, the AI may write a small PowerShell script that becomes a tool. You read and approve every one before it is saved, and each run follows your permission mode.</div>
+          <div class="name" data-i18n="settings.buildName">Let the AI build its own tools</div>
+          <div class="desc" data-i18n="settings.buildDesc">When nothing Bunny AI has can do a job, the AI may write a small PowerShell script that becomes a tool. You read and approve every one before it is saved, and each run follows your permission mode.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="customToolsEnabled" data-cap-default="off" /><span>off</span></label></div>
       </div>
@@ -377,7 +385,9 @@
 
 <script type="module">
   import { getJSON, sendJSON, applyTheme } from './api.js';
-  import { LANGUAGES, applyLanguage } from './i18n.js';
+  import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
+  // Words in the page's language, for text the script writes.
+  const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
   import { applyEmbed } from './embed.js';
 
   applyEmbed();
@@ -456,29 +466,31 @@
     };
     if (a.github) {
       $('github-desc').replaceChildren(whoBadge(a.github, `${a.github.name} (@${a.github.login}) · via ${a.github.method}`));
-      gh.append(btn('Sign out', 'ghost small', run('github-err', () => sendJSON('/api/account/github', 'DELETE'))));
+      gh.append(btn(tt('account.signOut'), 'ghost small', run('github-err', () => sendJSON('/api/account/github', 'DELETE'))));
     } else {
-      $('github-desc').textContent = 'Sign in so the AI can work with your repositories, issues and pull requests.';
-      gh.append(btn('Use GitHub CLI sign-in', 'primary small', run('github-err', () => sendJSON('/api/account/github/cli', 'POST'))));
+      $('github-desc').textContent = tt('account.githubDesc');
+      gh.append(btn(tt('account.useCli'), 'primary small', run('github-err', () => sendJSON('/api/account/github/cli', 'POST'))));
       if (a.githubDeviceReady) {
-        gh.append(btn('Sign in with GitHub', 'ghost small', run('github-err', async () => {
+        gh.append(btn(tt('account.signInGithub'), 'ghost small', run('github-err', async () => {
           const flow = await sendJSON('/api/account/github/device/start', 'POST');
           $('github-desc').textContent = `Type the code ${flow.userCode} at ${flow.verificationUri} (a browser tab is opening). Waiting…`;
           window.open(flow.verificationUri, '_blank');
           await sendJSON('/api/account/github/device/finish', 'POST');
         })));
       }
-      gh.append(btn('Paste a token', 'ghost small', () => { $('github-token-box').hidden = false; $('github-token').focus(); }));
+      gh.append(btn(tt('account.pasteToken'), 'ghost small', () => { $('github-token-box').hidden = false; $('github-token').focus(); }));
     }
     const go = $('google-actions');
     go.replaceChildren();
     $('google-err').textContent = '';
+    $('google-workspace').checked = Boolean(a.googleWorkspaceOn);
     if (a.google) {
-      $('google-desc').replaceChildren(whoBadge(a.google, `${a.google.name}${a.google.email ? ` · ${a.google.email}` : ''}`));
-      go.append(btn('Sign out', 'ghost small', run('google-err', () => sendJSON('/api/account/google', 'DELETE'))));
+      const extra = a.google.workspace ? ' · Gmail, Calendar and Drive on' : a.googleWorkspaceOn ? ' · sign out and in again to allow Gmail, Calendar and Drive' : '';
+      $('google-desc').replaceChildren(whoBadge(a.google, `${a.google.name}${a.google.email ? ` · ${a.google.email}` : ''}${extra}`));
+      go.append(btn(tt('account.signOut'), 'ghost small', run('google-err', () => sendJSON('/api/account/google', 'DELETE'))));
     } else {
-      $('google-desc').textContent = a.googleReady ? 'Sign in with your Google (Gmail) account.' : 'Sign in with your Google (Gmail) account. Needs a Google client ID under Sign-in apps first.';
-      const b = btn('Sign in with Google', 'primary small', run('google-err', async () => {
+      $('google-desc').textContent = a.googleReady ? tt('account.googleDesc') : tt('account.googleNeedsApp');
+      const b = btn(tt('account.signInGoogle'), 'primary small', run('google-err', async () => {
         const { url } = await sendJSON('/api/account/google/start', 'POST');
         window.open(url, '_blank');
         $('google-desc').textContent = 'Finish signing in in your browser, then come back here.';
@@ -501,6 +513,7 @@
       await renderAccount();
     } catch (err) { $('github-err').textContent = err.message; }
   });
+  $('google-workspace').addEventListener('change', async (e) => { await save({ googleWorkspace: e.target.checked }); renderAccount(); });
   function bindSignInApps(settings) {
     for (const [id, key] of [['github-client-id', 'githubClientId'], ['google-client-id', 'googleClientId'], ['google-client-secret', 'googleClientSecret']]) {
       const input = $(id);

@@ -203,6 +203,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     for (const key of ['tool', 'status', 'result', 'model', 'providerId', 'job', 'auto', 'fellBackFrom']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
+    // The model's thinking, when it sent any (shown folded above the reply).
+    if (typeof message.thinking === 'string' && message.thinking.trim()) entry.thinking = message.thinking.slice(0, 40_000);
     // The checklist the model kept while it worked (update_tasks).
     if (Array.isArray(message.tasks) && message.tasks.length) {
       entry.tasks = message.tasks.slice(0, 20).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));
@@ -315,7 +317,11 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
    * exchange. Deliberately local and deterministic — it must work with no key,
    * no provider and no network, and it must not invent facts.
    */
-  async function compact(id) {
+  /**
+   * summarize(session) may write the summary with the model; when it is missing or fails,
+   * the summary is built here from the transcript, so compacting never depends on a network.
+   */
+  async function compact(id, { summarize = null } = {}) {
     const session = await get(requireId(id));
     if (!session) throw Object.assign(new Error('No such session'), { code: 'session.notFound' });
     if (session.messages.length < 2) {
@@ -336,6 +342,14 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (asks.length) lines.push('', 'Then asked:', '', ...asks);
     if (tail) lines.push('', `Latest answer covered: ${tail}${tail.length >= 300 ? '…' : ''}`);
     lines.push('', `_${userTurns.length} request(s) and ${before.messages} messages were summarised._`);
+    let written = '';
+    if (summarize) {
+      try { written = String(await summarize(session) ?? '').trim(); } catch { written = ''; }
+    }
+    if (written) {
+      lines.length = 0;
+      lines.push('**Summary of the conversation so far**', '', written, '', `_${before.messages} messages were summarised by the model._`);
+    }
 
     session.compactions ??= [];
     session.compactions.push({
@@ -355,12 +369,12 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
   }
 
   /** Automatic compaction: call it before a send when the window is nearly full. */
-  async function compactIfFull(id, threshold = 0.8) {
+  async function compactIfFull(id, threshold = 0.8, options = {}) {
     const session = await get(requireId(id));
     if (!session || session.messages.length < 8) return null;
     const meter = context(session);
     if (meter.used < meter.limit * threshold) return null;
-    return compact(id);
+    return compact(id, options);
   }
   /** Everything a transcript export needs, in one call. */
   async function exportSession(id) {

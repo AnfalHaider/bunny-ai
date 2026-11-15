@@ -12,6 +12,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { ghCliToken, githubClient } from './github.js';
+import { GOOGLE_WORKSPACE_SCOPES } from './google.js';
 
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
@@ -36,6 +37,7 @@ export function createAccounts({ file, secrets, getSettings, fetchImpl = globalT
       google: data.google ?? null,
       githubDeviceReady: Boolean(s.githubClientId),
       googleReady: Boolean(s.googleClientId),
+      googleWorkspaceOn: s.googleWorkspace === true,
     };
   }
 
@@ -104,7 +106,9 @@ export function createAccounts({ file, secrets, getSettings, fetchImpl = globalT
     const url = new URL(GOOGLE_AUTH);
     url.search = new URLSearchParams({
       client_id: s.googleClientId, redirect_uri: redirectUri, response_type: 'code',
-      scope: 'openid email profile', state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account',
+      // Gmail, Calendar and Drive only when the person switched them on; offline for a refresh token.
+      scope: ['openid', 'email', 'profile', ...(s.googleWorkspace ? GOOGLE_WORKSPACE_SCOPES : [])].join(' '),
+      access_type: 'offline', state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'consent select_account',
     }).toString();
     return { url: url.toString() };
   }
@@ -125,12 +129,33 @@ export function createAccounts({ file, secrets, getSettings, fetchImpl = globalT
     const tokens = await res.json().catch(() => ({}));
     if (!res.ok || !tokens.access_token) throw new Error(`Google did not finish the sign-in: ${tokens.error_description ?? tokens.error ?? res.status}`);
     const who = await fetchImpl(GOOGLE_USER, { headers: { authorization: `Bearer ${tokens.access_token}` } }).then((r) => r.json());
-    await secrets.set('account:google', tokens.refresh_token ?? tokens.access_token);
+    await secrets.set('account:google', JSON.stringify({ refresh: tokens.refresh_token ?? null, access: tokens.access_token, expires: Date.now() + (Number(tokens.expires_in) || 3600) * 1000 }));
     const data = await read();
-    data.google = { name: who.name ?? who.email, email: who.email ?? null, avatar: who.picture ?? null, connectedAt: new Date().toISOString() };
+    const granted = String(tokens.scope ?? '').split(' ');
+    data.google = { name: who.name ?? who.email, email: who.email ?? null, avatar: who.picture ?? null, connectedAt: new Date().toISOString(),
+      workspace: GOOGLE_WORKSPACE_SCOPES.every((sc) => granted.includes(sc)) };
     await write(data);
     return data.google;
   }
 
-  return { status, githubFromCli, githubFromToken, githubDeviceConfig, saveGithub, githubToken, signOut, googleStart, googleFinish };
+  /** A current access token for Gmail, Calendar and Drive, refreshed when it has run out; null when not signed in. */
+  async function googleAccessToken() {
+    const raw = await secrets.get('account:google');
+    if (!raw) return null;
+    let saved;
+    try { saved = JSON.parse(raw); } catch { saved = { refresh: raw, access: null, expires: 0 }; }
+    if (saved.access && saved.expires - Date.now() > 60_000) return saved.access;
+    if (!saved.refresh) return null;
+    const s = getSettings();
+    const res = await fetchImpl(GOOGLE_TOKEN, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: s.googleClientId ?? '', ...(s.googleClientSecret ? { client_secret: s.googleClientSecret } : {}), refresh_token: saved.refresh, grant_type: 'refresh_token' }).toString(),
+    });
+    const fresh = await res.json().catch(() => ({}));
+    if (!res.ok || !fresh.access_token) throw new Error(`Google would not renew the sign-in (${fresh.error ?? res.status}). Sign in again in Settings, Profile.`);
+    await secrets.set('account:google', JSON.stringify({ ...saved, access: fresh.access_token, expires: Date.now() + (Number(fresh.expires_in) || 3600) * 1000 }));
+    return fresh.access_token;
+  }
+
+  return { googleAccessToken, status, githubFromCli, githubFromToken, githubDeviceConfig, saveGithub, githubToken, signOut, googleStart, googleFinish };
 }

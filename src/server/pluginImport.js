@@ -72,7 +72,8 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     });
   }
 
-  // connectors: remote servers from .mcp.json (local command servers cannot run here)
+  // connectors: remote servers from .mcp.json are added; local ones run a program, so they are
+  // listed for add_connector, where the person confirms the exact command.
   const connectors = [];
   const skipped = [];
   if (files.includes('.mcp.json')) {
@@ -80,7 +81,8 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
       const mcp = JSON.parse(await raw('.mcp.json'));
       for (const [name, def] of Object.entries(mcp.mcpServers ?? mcp)) {
         if (def?.url && /^https?:\/\//.test(def.url)) connectors.push({ name, url: def.url });
-        else skipped.push(`connector "${name}" (runs a local command)`);
+        else if (def?.command) skipped.push(`local connector "${name}" (${[def.command, ...(def.args ?? [])].join(' ')}): add it with add_connector so the person can confirm the command`);
+        else skipped.push(`connector "${name}" (no address or command)`);
       }
     } catch { skipped.push('.mcp.json (could not be read)'); }
   }

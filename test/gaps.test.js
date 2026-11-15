@@ -147,7 +147,7 @@ test('programs the AI started are listed for the Terminal pane, with their outpu
   assert.deepEqual((await json(base, '/api/processes?sessionId=00000000-0000-0000-0000-000000000000')).body, []);
 });
 
-test('incognito chats and scheduled tasks send the key in the provider\'s own header', async (t) => {
+test('incognito chats and scheduled tasks send the key in the provider header; scheduled runs get tools', async (t) => {
   const seen = [];
   const server = createServer((req, res) => {
     let raw = '';
@@ -176,5 +176,30 @@ test('incognito chats and scheduled tasks send the key in the provider\'s own he
   const runs = await app.runDueSchedules();
   assert.equal(runs[0]?.text, 'header ok');
   const scheduled = seen.filter((s) => s.body?.messages).at(-1);
-  assert.match(scheduled.body.messages[0].content, /Today is .*\d{4}\. This is the scheduled task "Daily"/);
+  assert.match(scheduled.body.messages[0].content, /Today is [\s\S]*This is the scheduled task "Daily", running on its own/);
+  const names = (scheduled.body.tools ?? []).map((d) => d.function.name);
+  assert.ok(names.includes('web_search'), 'a scheduled run has tools');
+  assert.ok(!names.includes('request_capability'), 'but no card nobody could answer');
+  assert.ok(!names.includes('remember'), 'and it only looks (Plan) unless set up to change things');
+});
+
+test('compacting uses a summary the model writes, and the plain one when the model cannot', async (t) => {
+  const { createSessionStore } = await import('../src/server/sessions.js');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-compact-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const store = createSessionStore({ dir });
+  const make = async () => {
+    const s = await store.create({ title: 'Long' });
+    for (let i = 0; i < 4; i += 1) {
+      await store.append(s.id, { role: 'user', content: `question ${i} about carrots` });
+      await store.append(s.id, { role: 'assistant', content: `answer ${i}` });
+    }
+    return s.id;
+  };
+  let seen = null;
+  const written = await store.compact(await make(), { summarize: async (session) => { seen = session.messages.length; return 'The person grows carrots and wants a watering plan.'; } });
+  assert.equal(seen, 8, 'the model saw the whole conversation');
+  assert.match(written.session.messages[0].content, /The person grows carrots and wants a watering plan\.[\s\S]*summarised by the model/);
+  const plain = await store.compact(await make(), { summarize: async () => { throw new Error('offline'); } });
+  assert.match(plain.session.messages[0].content, /Started with: question 0 about carrots/);
 });

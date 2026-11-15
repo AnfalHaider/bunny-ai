@@ -34,7 +34,7 @@ timer.unref?.();
 
 const stop = () => {
   clearInterval(timer);
-  app.processes.stopAll().catch(() => {}).finally(() => app.server.close(() => process.exit(0)));
+  Promise.all([app.processes.stopAll(), app.localMcp.stopAll()]).catch(() => {}).finally(() => app.server.close(() => process.exit(0)));
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

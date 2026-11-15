@@ -28,8 +28,12 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { url: { type: 'string' } }, ['url']),
     fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI and switch it on.',
       { name: { type: 'string' }, description: { type: 'string' }, instructions: { type: 'string' } }, ['name', 'instructions']),
-    fn('add_connector', 'Add a remote MCP server (https address) to Bunny AI as a connector and switch it on.',
-      { name: { type: 'string' }, url: { type: 'string' } }, ['name', 'url']),
+    fn('add_connector', 'Add an MCP server to Bunny AI as a connector and switch it on: a remote one by its https address, '
+      + 'or a local one by the command that runs it (for example command "npx", args ["-y", "@modelcontextprotocol/server-filesystem", "C:\\notes"]). The person always confirms a local command.',
+      { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
+        command: { type: 'string', description: 'For a local connector: the program to run' },
+        args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
+        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Settings it needs, such as an API key name and value' } }, ['name']),
   ].filter((d) => risks.includes(APP_TOOL_RISK[d.function.name]));
 }
 
@@ -72,9 +76,9 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ skills, mcp, getSettings, saveSettings }) {
+export function createAppTools({ skills, mcp, getSettings, saveSettings, fetchImpl = globalThis.fetch }) {
   async function installFromGithub(url) {
-    const plugin = await readGithubPlugin(url);
+    const plugin = await readGithubPlugin(url, { fetchImpl });
     const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, source: plugin.source, connectors: [], skills: [] };
     for (const s of plugin.skills) record.skills.push((await skills.add({ ...s, enabled: true })).id);
     for (const c of plugin.connectors) record.connectors.push((await mcp.add({ ...c, enabled: true })).id);
@@ -95,10 +99,13 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings }) {
       const { plugin } = await installFromGithub(url);
       return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], `
         + `${plugin.connectors.length} connector(s). They are switched on and appear in Settings, Customize.`
-        + (plugin.skipped.length ? ` Not imported (built for other apps): ${plugin.skipped.join(', ')}.` : '');
+        + (plugin.skipped.length ? ` Not imported: ${plugin.skipped.join('; ')}.` : '');
     },
     add_skill: async (args) => `Added skill ${(await skills.add({ ...args, enabled: true })).name}. It is switched on.`,
-    add_connector: async (args) => `Added connector ${(await mcp.add({ ...args, enabled: true })).name}. It is switched on; its tools load the next time it is tested in Settings, Customize.`,
+    add_connector: async (args) => {
+      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: true });
+      return `Added the ${added.type === 'local' ? 'local' : 'remote'} connector ${added.name}. It is switched on; its tools are offered from the next message.`;
+    },
   };
 
   return {

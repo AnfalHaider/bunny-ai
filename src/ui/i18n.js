@@ -6,6 +6,8 @@
  * on the document so the layout follows.
  */
 
+import { AGENT_STRINGS } from './i18n-agent.js';
+
 export const LANGUAGES = [
   { code: 'en', name: 'English' },
   { code: 'es', name: 'Español' },
@@ -471,4 +473,12 @@ export function applyLanguage(code) {
     node.setAttribute('aria-label', t(key, lang));
   }
   return lang;
+}
+
+// The agent's screens (i18n-agent.js), merged into each language's table.
+for (const [code, table] of Object.entries({ en, es, fr, ar })) Object.assign(table, AGENT_STRINGS[code]);
+
+/** Fill {name} placeholders: fill('Show all {n} lines', { n: 40 }). */
+export function fill(text, vars = {}) {
+  return String(text).replace(/\{(\w+)\}/g, (whole, k) => (vars[k] ?? whole));
 }

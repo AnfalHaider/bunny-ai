@@ -106,16 +106,72 @@ test('Google sign-in sends the person to Google with PKCE and comes back to this
   const who = await accounts.googleFinish({ code: 'the-code', state: params.get('state') });
   assert.equal(who.email, 'anna@example.com');
   assert.match(seen[0].body, /code_verifier=/);
-  assert.equal(await secrets.get('account:google'), '1//r');
+  assert.equal(JSON.parse(await secrets.get('account:google')).refresh, '1//r');
+  assert.equal(await accounts.googleAccessToken(), 'ya29.x', 'a fresh token is used as it is');
   await assert.rejects(accounts.googleFinish({ code: 'again', state: params.get('state') }), /expired/, 'a sign-in link works once');
 });
 
 test('the account routes report nothing signed in, refuse a bad token, and need a client id for Google', async (t) => {
   const { base } = await startApp(t);
   const { body } = await json(base, '/api/account');
-  assert.deepEqual(body, { github: null, google: null, githubDeviceReady: false, googleReady: false });
+  assert.deepEqual(body, { github: null, google: null, githubDeviceReady: false, googleReady: false, googleWorkspaceOn: false });
   assert.equal((await post(base, '/api/account/github/token', { token: 'nope' })).status, 400);
   const google = await post(base, '/api/account/google/start', {});
   assert.equal(google.status, 400);
   assert.match(google.body.message, /client id/);
+});
+
+test('Gmail, Calendar and Drive are asked for only when switched on, and an old token is renewed', async (t) => {
+  const { mkdtemp: mk } = await import('node:fs/promises');
+  const dir = await mk(join(tmpdir(), 'bunny-account-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  let renewals = 0;
+  const fetchImpl = async (url, init = {}) => {
+    if (url.includes('oauth2.googleapis.com/token')) {
+      const form = new URLSearchParams(String(init.body));
+      if (form.get('grant_type') === 'refresh_token') { renewals += 1; return new Response(JSON.stringify({ access_token: 'ya29.new', expires_in: 3600 }), { status: 200 }); }
+      return new Response(JSON.stringify({ access_token: 'ya29.old', refresh_token: '1//r', expires_in: 1, scope: 'openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.readonly' }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ name: 'Anna', email: 'anna@example.com' }), { status: 200 });
+  };
+  const settings = { googleClientId: 'abc.apps.googleusercontent.com', googleWorkspace: false };
+  const accounts = createAccounts({ file: join(dir, 'account.json'), secrets: memorySecretStore(), getSettings: () => settings, fetchImpl });
+  assert.equal(new URL(accounts.googleStart('http://127.0.0.1:1').url).searchParams.get('scope'), 'openid email profile');
+  settings.googleWorkspace = true;
+  const params = new URL(accounts.googleStart('http://127.0.0.1:1').url).searchParams;
+  assert.match(params.get('scope'), /gmail\.readonly.*calendar\.events.*drive\.readonly/);
+  assert.equal(params.get('access_type'), 'offline');
+  const who = await accounts.googleFinish({ code: 'c', state: params.get('state') });
+  assert.equal(who.workspace, true);
+  assert.equal(await accounts.googleAccessToken(), 'ya29.new', 'the token had run out, so it was renewed');
+  assert.equal(await accounts.googleAccessToken(), 'ya29.new');
+  assert.equal(renewals, 1, 'and the renewed one is kept');
+});
+
+test('the Google tools search mail, draft without sending, read the calendar and export a Doc', async () => {
+  const { runGoogleTool, googleToolDefinitions, GOOGLE_TOOL_RISK } = await import('../src/server/google.js');
+  assert.equal(GOOGLE_TOOL_RISK.gmail_send, 'build', 'sending always asks');
+  assert.equal(GOOGLE_TOOL_RISK.gmail_draft, 'edit');
+  assert.ok(!googleToolDefinitions(['read']).some((d) => d.function.name === 'gmail_draft'));
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : null, auth: init.headers?.authorization });
+    const ok = (d) => new Response(typeof d === 'string' ? d : JSON.stringify(d), { status: 200 });
+    if (url.includes('/messages?')) return ok({ messages: [{ id: 'm1' }] });
+    if (url.includes('/messages/m1?format=metadata')) return ok({ snippet: 'Your carrots shipped', payload: { headers: [{ name: 'From', value: 'shop@example.com' }, { name: 'Subject', value: 'Order 42' }, { name: 'Date', value: 'Mon' }] } });
+    if (url.includes('/drafts')) return ok({ id: 'd1' });
+    if (url.includes('/calendar/v3/')) return ok({ items: [{ summary: 'Carrot tasting', start: { dateTime: '2026-11-20T15:00:00Z' }, end: { dateTime: '2026-11-20T16:00:00Z' } }] });
+    if (url.includes('/export?')) return ok('Carrot Shop plan');
+    if (url.includes('/drive/v3/files/doc1?fields')) return ok({ name: 'Plan', mimeType: 'application/vnd.google-apps.document' });
+    return new Response('{}', { status: 404 });
+  };
+  const opts = { token: 'ya29.t', fetchImpl };
+  assert.match(await runGoogleTool('gmail_search', { query: 'newer_than:7d' }, opts), /\[m1\] Mon · shop@example\.com · Order 42\n  Your carrots shipped/);
+  assert.match(await runGoogleTool('gmail_draft', { to: 'a@example.com', subject: 'Hi', body: 'Hello' }, opts), /draft d1/);
+  const draft = calls.find((c) => c.url.includes('/drafts'));
+  assert.match(Buffer.from(draft.body.message.raw, 'base64url').toString(), /^To: a@example\.com\r\nSubject: =\?UTF-8\?B\?SGk=\?=/);
+  assert.ok(!calls.some((c) => c.url.includes('/messages/send')), 'a draft is not sent');
+  assert.match(await runGoogleTool('calendar_events', {}, opts), /Carrot tasting/);
+  assert.equal(await runGoogleTool('drive_read', { id: 'doc1' }, opts), 'Plan:\nCarrot Shop plan');
+  assert.ok(calls.every((c) => c.auth === 'Bearer ya29.t'));
 });

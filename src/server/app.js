@@ -33,7 +33,8 @@ import { createMcpStore } from './mcpStore.js';
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as mcpListTools, callTool as mcpCallTool, toToolDefinitions, toolPrefix } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions, toolPrefix } from './mcp.js';
+import { createLocalMcp } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
 import { streamChat } from './chat.js';
@@ -53,8 +54,10 @@ import { createAccounts } from './accounts.js';
 import { githubClient, githubToolDefinitions, isGithubTool, describeGithubTool, runGithubTool, GITHUB_TOOL_RISK } from './github.js';
 import { startDeviceFlow as startGithubDevice, waitForToken as waitGithubToken } from '../providers/oauth.js';
 
-// GitHub tools are judged by the same risk table as the other agent tools.
-Object.assign(AGENT_TOOL_RISK, GITHUB_TOOL_RISK);
+import { googleToolDefinitions, isGoogleTool, describeGoogleTool, runGoogleTool, GOOGLE_TOOL_RISK } from './google.js';
+
+// GitHub and Google tools are judged by the same risk table as the other agent tools.
+Object.assign(AGENT_TOOL_RISK, GITHUB_TOOL_RISK, GOOGLE_TOOL_RISK);
 
 // Which helper agent (if any) a tool step belongs to, carried through async calls.
 const agentScope = new AsyncLocalStorage();
@@ -175,6 +178,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  // Connectors: remote ones over http, local ones as a program on this computer.
+  const localMcp = createLocalMcp();
+  const mcpListTools = (server) => (server.type === 'local' ? localMcp.listTools(server) : httpListTools(server));
+  const mcpCallTool = (server, call) => (server.type === 'local' ? localMcp.callTool(server, call) : httpCallTool(server, call));
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -282,6 +289,33 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
    * Each one is an ordinary chat: it is stored like any other conversation, so
    * the result can be read later.
    */
+  /**
+   * A summary written by the chat's own model, for compacting: it keeps the goal, the
+   * decisions and the facts far better than a list of questions. '' when it cannot be had.
+   */
+  function modelSummarizer(providerId, model) {
+    return async (session) => {
+      const provider = registry.list().find((p) => p.id === providerId && p.status === 'connected');
+      if (!provider || !model || fake) return '';
+      const apiKey = await secrets.get(`provider:${providerId}`);
+      const transcript = session.messages
+        .filter((m) => m.kind !== 'tool_call' && m.kind !== 'permission_prompt')
+        .map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 4000)}`)
+        .join('\n\n').slice(-60_000);
+      let out = '';
+      for await (const delta of streamChat({
+        baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, auth: provider.auth ?? null, maxTokens: 1500,
+        messages: [
+          { role: 'system', content: 'You write the memory of a conversation so it can go on after its earlier turns are removed. '
+            + 'Keep the goal, decisions made, facts and numbers, names of files, code and links, what was done, and open questions. '
+            + 'Plain text, at most 350 words, no preamble.' },
+          { role: 'user', content: transcript },
+        ],
+      })) out += delta;
+      return out.trim();
+    };
+  }
+
   async function runDueSchedules() {
     const due = await schedules.due();
     const results = [];
@@ -296,6 +330,27 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const provider = registry.list().find((p) => p.id === providerId);
         if (!provider || provider.status !== 'connected') {
           await schedules.markRun(schedule.id, 'the provider is not connected');
+          continue;
+        }
+        // The run goes through the normal chat route, so it has the same tools a chat has:
+        // look-only unless the task was set up to make changes, and never a card to answer.
+        const port = server.address()?.port;
+        if (port && !fake) {
+          const run = await sessions.create({
+            title: schedule.name, providerId, model, folder: schedule.folder ?? null,
+            permissionMode: schedule.permissionMode === 'auto' ? 'auto' : 'plan', workMode: schedule.folder ? 'code' : 'chat',
+          });
+          const res = await fetch(`http://127.0.0.1:${port}/api/sessions/${run.id}/messages`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ content: schedule.prompt, providerId, model, workMode: schedule.folder ? 'code' : 'chat', scheduledTask: schedule.name }),
+          });
+          const stream = await res.text();
+          const failed = /event: error\ndata: (.*)/.exec(stream);
+          const done = await sessions.get(run.id);
+          const text = done.messages.filter((m) => m.role === 'assistant' && m.kind !== 'tool_call').at(-1)?.content ?? '';
+          if (failed && !text) throw new Error(JSON.parse(failed[1]).message ?? 'the run failed');
+          await schedules.markRun(schedule.id, text.slice(0, 500));
+          results.push({ schedule: schedule.id, session: run.id, text });
           continue;
         }
         const session = await sessions.create({ title: schedule.name, providerId, model });
@@ -668,7 +723,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/mcp' && method === 'GET') return sendJson(res, 200, await mcp.list());
     if (path === '/api/mcp' && method === 'POST') {
       try {
-        return sendJson(res, 200, await mcp.add(await readBody(req)));
+        const body = await readBody(req);
+        // A local connector runs a program: only with the person's explicit confirmation of the command.
+        if (String(body.command ?? '').trim() && body.confirmLocal !== true) {
+          return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'A local connector runs a program on this computer. Confirm the command to add it.' });
+        }
+        return sendJson(res, 200, await mcp.add(body));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });
       }
@@ -676,12 +736,14 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const mcpMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})$/);
     if (mcpMatch && method === 'PATCH') {
       try {
+        await localMcp.stop(mcpMatch[1]);
         return sendJson(res, 200, await mcp.update(mcpMatch[1], await readBody(req)));
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'mcp.failed', message: err.message });
       }
     }
     if (mcpMatch && method === 'DELETE') {
+      await localMcp.stop(mcpMatch[1]);
       return sendJson(res, 200, { ok: await mcp.remove(mcpMatch[1]) });
     }
     const mcpToolsMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/tools$/);
@@ -1144,7 +1206,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const compactMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/compact$/);
     if (compactMatch && method === 'POST') {
       try {
-        const result = await sessions.compact(compactMatch[1]);
+        const target = await sessions.get(compactMatch[1]);
+        const result = await sessions.compact(compactMatch[1], { summarize: modelSummarizer(target?.providerId, target?.model) });
         return sendJson(res, 200, {
           ok: true,
           summary: result.session.messages[0]?.content ?? '',
@@ -1229,7 +1292,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
       // Compact automatically before the window fills, so a long thread keeps
       // working instead of failing at the provider's limit.
-      const compacted = await sessions.compactIfFull(id).catch(() => null);
+      const compacted = await sessions.compactIfFull(id, 0.8, { summarize: modelSummarizer(providerId, model) }).catch(() => null);
 
       if (!retry) await sessions.append(id, { role: 'user', content, attachments });
       await runHooks('message.sent', { sessionId: id, content });
@@ -1336,16 +1399,23 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         + 'give each helper the kind of work (job: code, research, see or chat) so it runs on the model best suited to it. '
         + 'For a job no tool can do, first look for a plugin or connector with search_plugins and offer to install it'
         + (buildOn ? '; if none fits, build one with create_tool.' : '; if none fits, ask for custom_tools so you can build one.');
-      history.unshift({ role: 'system', content: [honesty, modeText, folderText].filter(Boolean).join('\n') });
+      // A scheduled run has nobody watching: no questions, no cards, just the work and a report.
+      const scheduledTask = typeof body.scheduledTask === 'string' ? body.scheduledTask.slice(0, 80) : '';
+      const scheduledText = scheduledTask
+        ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
+      history.unshift({ role: 'system', content: [honesty, modeText, folderText, scheduledText].filter(Boolean).join('\n') });
 
       // Tools from the MCP servers the person has switched on (not in Chat mode).
       const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
       const builtTools = buildOn ? await customTools.list() : [];
       const githubToken = await accounts.githubToken().catch(() => null);
       const githubAccount = githubToken ? (await accounts.status()).github : null;
+      // Gmail, Calendar and Drive, when the Google sign-in allowed them.
+      const googleAccount = (await accounts.status()).google;
+      const googleOn = Boolean(googleAccount?.workspace);
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit']),
-        capabilityToolDefinition(),
+        ...(scheduledTask ? [] : [capabilityToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
         ...(workspace ? processToolDefinitions(risks) : []),
@@ -1354,8 +1424,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...teamToolDefinitions(),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
+        ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']) : []),
         ...(githubToken ? githubToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'], { canClone: Boolean(workspace) }) : []),
       ];
+      if (googleOn) {
+        history.unshift({ role: 'system', content: `The person is signed in to Google as ${googleAccount.email ?? googleAccount.name}. Use the gmail_, calendar_ and drive_ tools for their email, calendar and files. Draft emails rather than sending unless they ask you to send.` });
+      }
       if (githubToken && githubAccount) {
         history.unshift({ role: 'system', content: `The person is signed in to GitHub as ${githubAccount.login}. Use the github_ tools only for GitHub itself: repositories, issues and pull requests online. "My folder", "my project", "my files" or anything on this computer means local files: use the file tools, or ask for code_mode if you do not have them. Never read a GitHub repository in place of a local folder.` });
       }
@@ -1377,6 +1451,15 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       }
       const toolIndex = new Map();
       for (const server of servers) {
+        // A connector that was never checked has no tools on file yet: ask it once now.
+        if (!server.tools?.length && server.status !== 'error') {
+          try {
+            server.tools = await mcpListTools(server);
+            await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
+          } catch (err) {
+            await mcp.setStatus(server.id, { status: 'error', error: err.message }).catch(() => {});
+          }
+        }
         const prefix = toolPrefix(server.name);
         for (const tool of server.tools ?? []) {
           if (permissionMode === 'plan' && !tool.readOnly) continue;
@@ -1518,7 +1601,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         let fellBack = '';
         const once = () => (async () => {
           for await (const delta of streamChat({
-            baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake,
+            baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake: fake && !use.provider.custom,
             signal: background ? undefined : controller.signal,
             tools: toolDefinitions.filter(allowed), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
             // OpenRouter's reasoning setting belongs to this chat's provider only.
@@ -1659,7 +1742,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ];
         let reply = '';
         for await (const delta of streamChat({
-          baseUrl: useProvider.baseUrl, apiKey: useKey ?? undefined, model: useModel, messages: history, fake,
+          baseUrl: useProvider.baseUrl, apiKey: useKey ?? undefined, model: useModel, messages: history, fake: fake && !useProvider.custom,
           signal: controller.signal, maxTokens, extraBody: theirProvider ? null : extraBody, auth: useProvider.auth ?? null,
         })) reply += delta;
         await sessions.append(target.id, { role: 'user', content: incoming });
@@ -1670,8 +1753,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const runAgentTool = async (name, parsed) => {
         const custom = !isAgentTool(name);
         if (!toolDefinitions.some((d) => d.function.name === name)) throw new Error(`There is no tool called ${name}`);
-        const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : describeAgentTool(name, parsed);
-        const risk = custom ? 'run' : AGENT_TOOL_RISK[name];
+        const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : isGoogleTool(name) ? describeGoogleTool(name, parsed) : describeAgentTool(name, parsed);
+        // A schedule that may change things runs unwatched later, so it always asks, whatever the mode.
+        const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -1680,6 +1764,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         } else if (name === 'start_process') detail = parsed.command;
         else if (name === 'computer_type') detail = parsed.text;
         else if (custom) detail = JSON.stringify(parsed, null, 2);
+        else if (isGoogleTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
+          detail = name === 'calendar_create_event'
+            ? [`${parsed.title}`, `${parsed.start} → ${parsed.end}`, parsed.attendees?.length ? `With: ${parsed.attendees.join(', ')}` : '', parsed.description].filter(Boolean).join('\n')
+            : [`To: ${parsed.to}`, `Subject: ${parsed.subject}`, '', parsed.body].join('\n');
+        }
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
@@ -1745,7 +1834,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               break;
             }
             case 'schedule_task': {
-              const task = await schedules.add({ name: parsed.name, prompt: parsed.prompt, everyMinutes: parsed.every_minutes, providerId, model });
+              const task = await schedules.add({ name: parsed.name, prompt: parsed.prompt, everyMinutes: parsed.every_minutes, providerId, model, permissionMode: parsed.may_change === true ? 'auto' : 'plan', folder: workspace?.root ?? null });
               result = `Scheduled "${task.name}" every ${task.everyMinutes} minutes with ${model}. It runs while Bunny AI is open; the person can change or stop it in Automation, Schedules.`;
               break;
             }
@@ -1833,7 +1922,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               break;
             }
             default:
-              result = isGithubTool(name)
+              result = isGoogleTool(name)
+                ? await runGoogleTool(name, parsed, { token: await accounts.googleAccessToken() })
+                : isGithubTool(name)
                 ? await runGithubTool(githubClient(githubToken), name, parsed, { workspaceRoot: workspace?.root ?? null, token: githubToken })
                 : await customTools.run(name.slice(CUSTOM_PREFIX.length), parsed, workspace?.root);
           }
@@ -1897,8 +1988,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (!isApp && !isWorkspace && !entry) throw new Error(`There is no tool called ${name}`);
         const summary = isApp ? describeAppTool(name, parsed)
           : isWorkspace ? describeToolCall(name, parsed) : `${entry.server.name}: ${entry.tool.name}`;
-        const risk = isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
-        const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command : '';
+        // A local connector runs a program on this computer: always confirmed, whatever the mode.
+        const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
+        const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
+        const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command
+          : localConnector ? `This runs on your computer:
+${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
+with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
         if (needsOk(risk)) {
           const allowed = await askPermission(summary, detail);
@@ -1970,6 +2066,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       });
 
       let assembled = '';
+      let thinking = '';
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
@@ -1984,7 +2081,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             apiKey: apiKey ?? undefined,
             model,
             messages: history,
-            fake,
+            // The stand-in upstream (tests) answers for built-in providers; a custom one is reached for real.
+            fake: fake && !provider.custom,
             signal: controller.signal,
             tools: toolDefinitions,
             runTool,
@@ -1992,6 +2090,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             maxToolRounds,
             extraBody,
             parallel: (name) => name === 'run_subagent',
+            // The model's thinking, shown folded above the reply and kept with it.
+            onThinking: (piece) => { if (agentScope.getStore()) return; thinking += piece; send('thinking', { text: piece }); },
             auth: provider.auth ?? null,
           })) {
             assembled += delta;
@@ -2015,7 +2115,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
                 send('error', { code: 'speech.failed', message: `The reply is here, but it could not be spoken: ${err.message}` });
               }
             }
-            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}) });
+            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking } : {}) });
             session = await sessions.get(id);
             send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
@@ -2145,10 +2245,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   });
 
   // Programs the model left running stop with the server.
-  server.on('close', () => { processes.stopAll().catch(() => {}); });
+  server.on('close', () => { processes.stopAll().catch(() => {}); localMcp.stopAll().catch(() => {}); });
 
   return {
-    server, registry, processes, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
+    server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
     computer, terminals,
     getSettings: () => settings,
     dataDir,

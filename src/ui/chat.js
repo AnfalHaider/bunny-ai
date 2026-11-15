@@ -59,8 +59,10 @@ const state = {
 };
 
 /** Translate a key in the current language. */
-function say(key) {
-  return tr(key, state.language);
+function say(key, vars = null) {
+  const text = tr(key, state.language);
+  // {name} in a string is filled in: say('agent.finished', { title: 'Researcher' }).
+  return vars ? text.replace(/\{(\w+)\}/g, (whole, k) => (vars[k] ?? whole)) : text;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,11 +218,11 @@ function renderTerminalTabs(programs) {
     if (running !== undefined) b.prepend(element('span', { className: `dot${running ? '' : ' is-off'}`, 'aria-hidden': 'true' }));
     return b;
   };
-  host.replaceChildren(tab('shell', 'Shell'));
+  host.replaceChildren(tab('shell', say('terminal.shell')));
   for (const p of programs) {
-    host.append(tab(p.id, `AI: ${p.command.slice(0, 40)}`, p.running));
+    host.append(tab(p.id, `${say('terminal.ai')}: ${p.command.slice(0, 40)}`, p.running));
     if (p.running && (state.terminalView ?? 'shell') === p.id) {
-      host.append(button('Stop', {
+      host.append(button(say('terminal.stop'), {
         className: 'ghost sm terminal-stop', 'aria-label': `Stop ${p.command}`,
         onclick: async () => { await sendJSON(`/api/processes/${p.id}/stop`, 'POST').catch(() => {}); host.dataset.key = ''; },
       }));
@@ -508,8 +510,40 @@ async function loadSessions() {
   const search = q ? `/api/search?q=${encodeURIComponent(q)}` : '/api/sessions?archived=1';
   let rows = await getJSON(search);
   if (!q) rows = rows.filter((s) => (state.archivedView ? true : !s.archived));
+  announceFinishedChats(rows);
   state.sessions = rows;
   renderSidebar();
+  watchWorkingChats();
+}
+
+/**
+ * Background chats and helpers work on after a reply ends. While any is working the
+ * sidebar is refreshed every few seconds, and when one finishes the person is told:
+ * in the status line, and with a desktop notice if they switched notices on.
+ */
+const workingChats = new Map(); // id -> title
+function announceFinishedChats(rows) {
+  for (const s of rows) {
+    if (s.agentStatus === 'working') { workingChats.set(s.id, s.title); continue; }
+    if (!workingChats.has(s.id)) continue;
+    workingChats.delete(s.id);
+    if (s.agentStatus !== 'done' && s.agentStatus !== 'failed') continue;
+    const text = s.agentStatus === 'done' ? say('agent.finished', { title: s.title }) : say('agent.stopped', { title: s.title });
+    flashStatus(text, 6000);
+    if (state.sessionId === s.parentId && !state.streaming) refreshSession().catch(() => {});
+    if (state.settings?.notifications && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        const note = new Notification(say('app.name'), { body: text, tag: `agent-${s.id}` });
+        note.onclick = () => { window.focus(); location.assign(`./index.html?s=${s.id}`); note.close(); };
+      } catch { /* notices are a help, not a requirement */ }
+    }
+  }
+}
+let workingTimer = null;
+function watchWorkingChats() {
+  clearTimeout(workingTimer);
+  if (!state.sessions?.some((s) => s.agentStatus === 'working')) return;
+  workingTimer = setTimeout(() => loadSessions().catch(() => {}), 5000);
 }
 
 function renderSidebar() {
@@ -655,8 +689,8 @@ function renderSessionRow(s, depth) {
   if (s.pinned) a.append(element('span', { className: 'pin', textContent: '★', 'aria-label': 'Pinned', role: 'img' }));
   if (s.incognito) a.append(element('span', { className: 'tag', textContent: 'incognito' }));
   if (s.agent) {
-    const label = s.agent === 'helper' ? 'helper' : 'background';
-    a.append(element('span', { className: `tag agent-tag${s.agentStatus === 'working' ? ' is-working' : ''}`, textContent: s.agentStatus === 'working' ? `${label} · working` : label }));
+    const label = s.agent === 'helper' ? say('agent.helper') : say('agent.background');
+    a.append(element('span', { className: `tag agent-tag${s.agentStatus === 'working' ? ' is-working' : ''}`, textContent: s.agentStatus === 'working' ? `${label} · ${say('agent.working')}` : label }));
   }
   if (s.id === state.sessionId && state.streaming) {
     // A live dot marks a session that is working right now.
@@ -864,8 +898,11 @@ function renderMessage(m) {
   if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
     const job = JOBS[m.job]?.label ?? 'Chat';
     wrap.append(element('div', { className: 'msg-meta auto-meta',
-      textContent: `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} did not answer)` : ''}` }));
+      textContent: m.auto
+        ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${say('model.didNotAnswer', { model: m.fellBackFrom })})` : ''}`
+        : say('model.answeredInstead', { model: m.model, from: m.fellBackFrom }) }));
   }
+  if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking));
   const body = element('div', { className: 'body' });
   if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
   else body.textContent = m.content;
@@ -1205,6 +1242,7 @@ async function streamInto(bodyEl, { path, payload }) {
     onBrowser: (info) => runBrowserAction(info),
     onCapability: (info) => showLiveCapability(bodyEl, info),
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
+    onThinking: (info) => showLiveThinking(bodyEl, info.text ?? ''),
   };
 
   try {
@@ -1258,6 +1296,29 @@ function showLiveTool(bodyEl, info) {
   msg.scrollIntoView({ block: 'end' });
 }
 
+/** The model's thinking: folded under "Thinking…", open it to read along. */
+function thinkingBlock(text, { live = false } = {}) {
+  const box = element('details', { className: `thinking${live ? ' is-live' : ''}` });
+  const words = String(text).trim().split(/\s+/).filter(Boolean).length;
+  box.append(
+    element('summary', { textContent: live ? say('thinking.live') : say('thinking.done', { words }) }),
+    element('div', { className: 'thinking-text', textContent: text }),
+  );
+  return box;
+}
+function showLiveThinking(bodyEl, piece) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  let box = msg.querySelector(':scope > details.thinking');
+  if (!box) {
+    box = thinkingBlock('', { live: true });
+    msg.insertBefore(box, bodyEl);
+  }
+  const textEl = box.querySelector('.thinking-text');
+  textEl.textContent += piece;
+  if (box.open) textEl.scrollTop = textEl.scrollHeight;
+}
+
 /** The model's checklist: drawn as one list that updates in place, and in the Tasks pane. */
 function taskList(tasks) {
   const tl = element('div', { className: 'task-list', role: 'list', 'aria-label': 'Plan' });
@@ -1286,11 +1347,11 @@ function renderTasksPane(tasks) {
   const host = $('tasks-content');
   if (!host) return;
   if (!tasks?.length) {
-    host.replaceChildren(element('div', { className: 'pane-empty tasks-empty' }, element('span', { textContent: 'No tasks yet. When Bunny works through a job with several steps, its plan shows here.' })));
+    host.replaceChildren(element('div', { className: 'pane-empty tasks-empty' }, element('span', { textContent: say('tasks.empty') })));
     return;
   }
   const done = tasks.filter((t) => t.done).length;
-  host.replaceChildren(element('p', { className: 'hint tasks-progress', textContent: `${done} of ${tasks.length} done` }), taskList(tasks));
+  host.replaceChildren(element('p', { className: 'hint tasks-progress', textContent: say('tasks.progress', { done, total: tasks.length }) }), taskList(tasks));
 }
 
 /** "Undo file changes": put back every file this reply wrote or edited. */
@@ -1298,22 +1359,22 @@ function undoBar(m) {
   const n = m.checkpoint.files;
   const bar = element('div', { className: 'undo-bar' });
   if (m.checkpoint.restored) {
-    bar.append(element('span', { className: 'hint', textContent: `File changes undone (${n} file${n === 1 ? '' : 's'})` }));
+    bar.append(element('span', { className: 'hint', textContent: say('undo.done', { n }) }));
     return bar;
   }
   bar.append(
-    element('span', { className: 'hint', textContent: `Changed ${n} file${n === 1 ? '' : 's'}` }),
-    button('Undo file changes', {
+    element('span', { className: 'hint', textContent: say('undo.changed', { n }) }),
+    button(say('undo.button'), {
       className: 'ghost sm',
       onclick: async (e) => {
         const b = e.currentTarget;
-        if (!confirm(`Put back the ${n} file${n === 1 ? '' : 's'} this reply changed, as they were before it? Later edits to the same files are replaced too. Changes made by commands it ran are not undone.`)) return;
+        if (!confirm(say('undo.confirm', { n }))) return;
         b.disabled = true;
         try {
           const r = await sendJSON(`/api/sessions/${state.sessionId}/checkpoints/${m.checkpoint.id}/restore`, 'POST');
           m.checkpoint.restored = true;
           bar.replaceWith(undoBar(m));
-          flashStatus(`Put back ${r.restored} file${r.restored === 1 ? '' : 's'}${r.skipped?.length ? `; ${r.skipped.length} too large to keep` : ''}`);
+          flashStatus(say('undo.restored', { n: r.restored }));
           state.browser?.refresh?.();
         } catch (err) {
           b.disabled = false;
@@ -1326,29 +1387,29 @@ function undoBar(m) {
 
 /** A card for another chat a step started or talked to: a helper, a background chat. */
 function linkedChatCard(c) {
-  const status = { working: 'Working…', done: 'Finished', failed: 'Stopped' }[c.status] ?? '';
+  const status = { working: say('card.working'), done: say('card.finished'), failed: say('card.stopped') }[c.status] ?? '';
   const card = element('div', { className: 'artifact-card linked-card' },
     element('span', { className: 'artifact-thumb thumb-chat', 'aria-hidden': 'true' }, icon('branch')),
     element('span', { className: 'artifact-card-info' },
       element('span', { className: 'artifact-card-title', textContent: c.title ?? 'Chat' }),
-      element('span', { className: 'artifact-card-kind', textContent: ['Chat', c.model ? c.model.split('/').pop() : '', status].filter(Boolean).join(' · ') })));
-  card.append(button('Open chat', {
+      element('span', { className: 'artifact-card-kind', textContent: [say('card.chat'), c.model ? c.model.split('/').pop() : '', status].filter(Boolean).join(' · ') })));
+  card.append(button(say('card.openChat'), {
     className: 'ghost sm', 'aria-label': `Open the chat ${c.title ?? ''}`,
     // Leaving now would stop the reply that is still coming in.
-    onclick: () => (state.streaming ? flashStatus('The reply is still coming in. Open it when it finishes, or from the sidebar.') : location.assign(`./index.html?s=${c.id}`)),
+    onclick: () => (state.streaming ? flashStatus(say('card.wait')) : location.assign(`./index.html?s=${c.id}`)),
   }));
   return card;
 }
 
 /** A card in the chat for an artifact the model made: its name, what it is, and Open. */
 function artifactCard(a) {
-  const kind = { html: 'Page', code: 'Code', markdown: 'Document' }[a.kind] ?? 'Artifact';
+  const kind = { html: say('card.page'), code: say('card.code'), markdown: say('card.document') }[a.kind] ?? 'Artifact';
   const card = element('div', { className: 'artifact-card' },
     element('span', { className: `artifact-thumb thumb-${a.kind ?? 'markdown'}`, 'aria-hidden': 'true' }, icon('artifact')),
     element('span', { className: 'artifact-card-info' },
       element('span', { className: 'artifact-card-title', textContent: a.title ?? 'Artifact' }),
       element('span', { className: 'artifact-card-kind', textContent: kind })));
-  card.append(button('Open', {
+  card.append(button(say('card.open'), {
     className: 'ghost sm', 'aria-label': `Open ${a.title ?? 'artifact'}`,
     onclick: () => showArtifact(a.id).catch((err) => { $('error').textContent = err.message.includes('404') ? 'That artifact was deleted.' : err.message; }),
   }));
@@ -1361,7 +1422,7 @@ function setFolded(pre, folded) {
   const lines = pre.dataset.lines ?? '';
   for (const b of pre.querySelectorAll('[data-fold]')) {
     b.setAttribute('aria-expanded', String(!folded));
-    b.textContent = b.classList.contains('code-fold-top') ? (folded ? 'Expand' : 'Collapse') : (folded ? `Show all ${lines} lines` : 'Show less');
+    b.textContent = b.classList.contains('code-fold-top') ? say(folded ? 'code.expand' : 'code.collapse') : (folded ? say('code.showAll', { n: lines }) : say('code.showLess'));
   }
 }
 
@@ -1370,19 +1431,19 @@ function showLiveCapability(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const yesLabel = {
-    code_mode: info.hasFolder ? 'Switch to Code mode' : 'Choose a folder',
-    computer_use: 'Let Bunny control this computer',
-    custom_tools: 'Let Bunny build tools',
-    new_tool: 'Find or build it',
+    code_mode: info.hasFolder ? say('cap.code') : say('cap.folder'),
+    computer_use: say('cap.computer'),
+    custom_tools: say('cap.build'),
+    new_tool: say('cap.newTool'),
   }[info.capability] ?? 'Allow';
   const card = element('div', { className: 'permission-prompt live-permission capability-card' });
   card.append(
-    element('p', { className: 'capability-eyebrow', textContent: 'Bunny needs a capability' }),
+    element('p', { className: 'capability-eyebrow', textContent: say('cap.eyebrow') }),
     element('h4', { textContent: info.title ?? info.capability }),
   );
   if (info.reason) card.append(element('p', { className: 'capability-reason', textContent: info.reason }));
-  if (info.capability === 'computer_use') card.append(element('p', { className: 'hint', textContent: 'Clicks and typing still ask first in Manual and Accept edits. You can switch this off in Settings, Capabilities.' }));
-  if (info.capability === 'custom_tools') card.append(element('p', { className: 'hint', textContent: 'You read and approve every tool before it is saved. Settings, Capabilities lists them and can remove them.' }));
+  if (info.capability === 'computer_use') card.append(element('p', { className: 'hint', textContent: say('cap.computerHint') }));
+  if (info.capability === 'custom_tools') card.append(element('p', { className: 'hint', textContent: say('cap.buildHint') }));
   const actions = element('div', { className: 'permission-actions' });
   const answer = async (granted) => {
     try {
@@ -1390,7 +1451,7 @@ function showLiveCapability(bodyEl, info) {
         if (!info.hasFolder) await chooseFolder();
         applyWorkMode('code', { save: true });
       }
-      actions.replaceChildren(element('span', { className: 'hint', textContent: granted ? 'Given' : 'Not now' }));
+      actions.replaceChildren(element('span', { className: 'hint', textContent: granted ? say('cap.given') : say('cap.notNow') }));
       await sendJSON(`/api/sessions/${state.sessionId}/capability/${info.id}`, 'POST', { granted });
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
@@ -1398,7 +1459,7 @@ function showLiveCapability(bodyEl, info) {
   };
   actions.append(
     button(yesLabel, { className: 'primary', onclick: () => answer(true) }),
-    button('Not now', { className: 'ghost', onclick: () => answer(false) }),
+    button(say('cap.notNow'), { className: 'ghost', onclick: () => answer(false) }),
   );
   card.append(actions);
   msg.before(card);
@@ -1445,6 +1506,12 @@ function showLivePermission(bodyEl, info) {
 }
 
 /** Ask again for the newest reply, keeping the user turn as-is. */
+/** The model a retry or an edit asks: Auto's pick in Auto, otherwise the one picked by hand. */
+function retryPick() {
+  if (state.modelAuto && state.autoPick) return { providerId: state.autoPick.providerId, model: state.autoPick.id };
+  return { providerId: state.selected?.providerId, model: state.selected?.model };
+}
+
 async function streamReply({ retry = true } = {}) {
   let bodyEl = [...$('messages').querySelectorAll('.msg.assistant')].at(-1)?.querySelector('.body');
   if (!bodyEl) {
@@ -1460,11 +1527,12 @@ async function streamReply({ retry = true } = {}) {
     payload: {
       retry,
       content: state.lastSent ?? '',
-      providerId: state.selected?.providerId,
-      model: state.selected?.model,
+      // In Auto, ask again with the model Auto chose, not an older hand-picked one.
+      providerId: retryPick().providerId,
+      model: retryPick().model,
       workMode: state.workMode ?? 'chat',
       browserControl: Boolean(window.bunnyDesktop?.browserAct),
-      vision: canSee(state.selected?.providerId, state.selected?.model),
+      vision: canSee(retryPick().providerId, retryPick().model),
     },
   });
 
@@ -1610,6 +1678,14 @@ async function send() {
   const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = state.modelAuto ? rankModels(state.models, job).slice(0, 3) : fixed;
   if (!candidates.length) candidates.push(...fixed);
+  // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
+  // not answering) does the reply go to the best other model for the job, and you are told.
+  const fallbackOn = !state.modelAuto && state.settings?.fallbackWhenBusy !== false;
+  if (fallbackOn) {
+    const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
+    candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
+  }
+  const busy = (message) => /\b(429|500|502|503|504)\b|rate.?limit|quota|overloaded|capacity|did not answer|stopped (responding|sending)|not found for account|temporarily unavailable/i.test(message);
   let result = { meter: null, aborted: false };
   let failed = null;
   for (let i = 0; i < candidates.length; i += 1) {
@@ -1631,10 +1707,12 @@ async function send() {
         fellBackFrom: failed ?? undefined,
       },
     });
-    const errored = Boolean($('error').textContent) && !result.assembled?.trim();
-    if (!errored || result.aborted || !state.modelAuto || i === candidates.length - 1) break;
+    const errorText = $('error').textContent;
+    const errored = Boolean(errorText) && !result.assembled?.trim();
+    if (!errored || result.aborted || i === candidates.length - 1) break;
+    if (!state.modelAuto && !busy(errorText)) break; // a real error with your model is shown, not hidden
     failed = pick.displayName ?? pick.id;
-    flashStatus(`${failed} did not answer: trying ${candidates[i + 1].displayName ?? candidates[i + 1].id}`);
+    flashStatus(say('model.fallback', { from: failed, to: candidates[i + 1].displayName ?? candidates[i + 1].id }), 6000);
     bodyEl.textContent = '…';
   }
   const { meter, aborted } = result;
@@ -2690,7 +2768,7 @@ async function boot() {
     const pre = target.closest('pre');
     const code = pre?.querySelector('code')?.textContent ?? '';
     const ok = await copyText(code);
-    flash(target, ok ? 'Copied' : 'Copy failed');
+    flash(target, ok ? say('chat.copied') : 'Copy failed');
   });
 
   let searchTimer;
@@ -2834,7 +2912,10 @@ async function boot() {
     state.language = settings.language ?? 'en';
     applyLanguage(state.language);
 
-    if (settings.providerId && settings.model) {
+    // The saved choice counts only while its provider is still connected; a removed or
+    // disconnected one falls back to the first model there is.
+    const savedConnected = state.providers.some((p) => p.id === settings.providerId && p.status === 'connected');
+    if (settings.providerId && settings.model && savedConnected) {
       const inList = state.models.find((m) => m.id === settings.model && m.providerId === settings.providerId);
       state.selected = inList
         ? { providerId: inList.providerId, providerName: inList.providerName, model: inList.id }

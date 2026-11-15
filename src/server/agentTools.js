@@ -201,9 +201,10 @@ export function memoryToolDefinitions({ memory = true } = {}) {
       + '(for example their name, preferences, or a project rule). Only when they ask you to remember something or say something clearly lasting.',
     { text: { type: 'string', description: 'One short sentence' } }, ['text'])] : []),
     fn('schedule_task', 'Set up a task Bunny AI runs on its own, again and again (for example "every morning, summarise my repos\' new issues"). '
-      + 'Each run happens in a new chat with this model while the app is open.',
+      + 'Each run happens in a new chat with this model and the same tools while the app is open, in this folder if there is one.',
     { name: { type: 'string' }, prompt: { type: 'string', description: 'What to do each time, as a full instruction' },
-      every_minutes: { type: 'integer', description: 'How often, in minutes (60 = hourly, 1440 = daily)' } }, ['name', 'prompt', 'every_minutes']),
+      every_minutes: { type: 'integer', description: 'How often, in minutes (60 = hourly, 1440 = daily)' },
+      may_change: { type: 'boolean', description: 'true only if each run must change files or run commands; otherwise runs may only look (search, read)' } }, ['name', 'prompt', 'every_minutes']),
     fn('list_scheduled_tasks', 'List the tasks Bunny AI runs on a schedule.'),
   ];
 }

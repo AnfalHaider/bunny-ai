@@ -29,6 +29,13 @@
     <input id="mcp-url" placeholder="https://example.com/mcp" aria-label="Server address" />
     <div class="actions"><button type="submit" class="primary">Add server</button></div>
   </form>
+  <form class="group inline-form local-mcp" id="mcp-local-form">
+    <p class="desc" style="width:100%">A <b>local connector</b> runs as a program on this computer, like most published MCP servers. For example: <code>npx -y @modelcontextprotocol/server-filesystem C:\notes</code></p>
+    <input id="mcp-local-name" placeholder="Name" aria-label="Local connector name" />
+    <input id="mcp-local-command" placeholder="npx -y @modelcontextprotocol/server-filesystem C:\notes" aria-label="Command that runs the connector" spellcheck="false" />
+    <textarea id="mcp-local-env" rows="2" placeholder="Settings it needs, one per line: API_KEY=..." aria-label="Settings, one per line" spellcheck="false"></textarea>
+    <div class="actions"><button type="submit" class="primary" data-i18n="automation.localTitle">Add local connector</button></div>
+  </form>
 
   <h2 style="margin-top:28px">Schedules</h2>
   <p class="sub">A prompt that runs on its own. Each run is kept as a chat.</p>
@@ -72,6 +79,8 @@
 <script type="module">
   import { getJSON, sendJSON } from './api.js';
   import { applyEmbed } from './embed.js';
+  import { applyLanguage } from './i18n.js';
+  getJSON('/api/settings').then((s) => applyLanguage(s.language ?? 'en')).catch(() => {});
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);
@@ -214,7 +223,8 @@
       return;
     }
     for (const server of rows) {
-      const detail = `${server.url} · ${server.status ?? 'unknown'}`;
+      const where = server.type === 'local' ? `Local: ${[server.command, ...(server.args ?? [])].join(' ')}` : server.url;
+      const detail = `${where} · ${server.status ?? 'unknown'}${server.tools?.length ? ` · ${server.tools.length} tools` : ''}`;
       const line = row(server.name, detail, server.enabled, async (on) => {
         await sendJSON(`/api/mcp/${server.id}`, 'PATCH', { enabled: on });
         await renderMcp();
@@ -247,6 +257,33 @@
       await sendJSON('/api/mcp', 'POST', { name: $('mcp-name').value, url: $('mcp-url').value });
       $('mcp-name').value = '';
       $('mcp-url').value = '';
+      await renderMcp();
+    } catch (err) { showError(err); }
+  });
+
+  // A command line split into the program and its arguments; "quoted parts" stay together.
+  function splitCommand(line) {
+    const parts = [];
+    for (const m of String(line).matchAll(/"((?:[^"]|"")*)"|(\S+)/g)) parts.push(m[1] !== undefined ? m[1].replace(/""/g, '"') : m[2]);
+    return parts;
+  }
+  $('mcp-local-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const [command, ...args] = splitCommand($('mcp-local-command').value.trim());
+    if (!command) { showError(new Error('Type the command that runs the connector.')); return; }
+    const env = {};
+    for (const line of $('mcp-local-env').value.split('\n')) {
+      const at = line.indexOf('=');
+      if (at > 0) env[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+    }
+    // It runs a program: say exactly which, and only go on with a yes.
+    const shown = [command, ...args].join(' ');
+    if (!confirm(`This connector runs a program on your computer:\n\n${shown}\n\nOnly add it if you trust where it comes from. Add it?`)) return;
+    try {
+      await sendJSON('/api/mcp', 'POST', { name: $('mcp-local-name').value, command, args, env, confirmLocal: true });
+      $('mcp-local-name').value = '';
+      $('mcp-local-command').value = '';
+      $('mcp-local-env').value = '';
       await renderMcp();
     } catch (err) { showError(err); }
   });

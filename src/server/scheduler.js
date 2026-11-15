@@ -41,7 +41,7 @@ export function createScheduleStore({ file }) {
     return schedules.find((s) => s.id === id) ?? null;
   }
 
-  async function add({ name, prompt, everyMinutes = 60, providerId = null, model = null, enabled = true }) {
+  async function add({ name, prompt, everyMinutes = 60, providerId = null, model = null, enabled = true, permissionMode = 'plan', folder = null }) {
     await load();
     const cleanName = String(name ?? '').trim();
     const cleanPrompt = String(prompt ?? '').trim();
@@ -55,6 +55,10 @@ export function createScheduleStore({ file }) {
       everyMinutes: every,
       providerId,
       model,
+      // What a run may do: look only (plan) unless it was set up to make changes (auto),
+      // and the folder it works in, if any.
+      permissionMode: permissionMode === 'auto' ? 'auto' : 'plan',
+      folder: folder ? String(folder) : null,
       enabled: Boolean(enabled),
       lastRun: null,
       lastResult: null,

@@ -156,7 +156,7 @@ app.on('before-quit', (event) => {
   if (programsStopped || !bunnyApp) return;
   event.preventDefault();
   programsStopped = true;
-  bunnyApp.processes.stopAll().catch(() => {}).finally(() => app.quit());
+  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(() => app.quit());
 });
 app.on('window-all-closed', () => {
   if (!prefs.closeToTray) app.quit();

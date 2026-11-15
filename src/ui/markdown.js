@@ -9,6 +9,10 @@
  */
 
 import { highlight } from './highlight.js';
+import { t, fill } from './i18n.js';
+
+/** The interface language, set on the page by applyLanguage. */
+const word = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -77,7 +81,7 @@ function codeBlock(language, code, { fold = false } = {}) {
   copy.type = 'button';
   copy.className = 'code-copy';
   copy.dataset.copy = '1';
-  copy.textContent = 'Copy';
+  copy.textContent = word('code.copy');
   copy.setAttribute('aria-label', `Copy ${language || 'code'} block`);
   bar.append(label);
   const body = document.createElement('code');
@@ -93,18 +97,18 @@ function codeBlock(language, code, { fold = false } = {}) {
     toggle.className = 'code-fold';
     toggle.dataset.fold = '1';
     toggle.setAttribute('aria-expanded', 'false');
-    toggle.textContent = `Show all ${lineCount} lines`;
+    toggle.textContent = word('code.showAll', { n: lineCount });
     const foot = document.createElement('div');
     foot.className = 'code-foot';
     const keep = document.createElement('button');
     keep.type = 'button';
     keep.className = 'code-keep';
     keep.dataset.toArtifact = '1';
-    keep.textContent = /^(html|htm|svg)$/i.test(language) ? 'Open as artifact' : 'Save as artifact';
+    keep.textContent = word(/^(html|htm|svg)$/i.test(language) ? 'code.openArtifact' : 'code.saveArtifact');
     foot.append(toggle, keep);
     const top = toggle.cloneNode(true);
     top.className = 'code-fold code-fold-top';
-    top.textContent = 'Expand';
+    top.textContent = word('code.expand');
     bar.append(top);
     pre.append(foot);
   }

@@ -35,7 +35,7 @@ const DEFAULT_STALL_MS = 120_000;
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
-  maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null,
+  maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
 }) {
   if (fake) {
     yield* fakeStream(model, messages, signal);
@@ -63,7 +63,7 @@ export async function* streamChat({
     if (extraBody) Object.assign(body, extraBody);
 
     let { text, toolCalls, finish, aborted } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs,
+      baseUrl, headers, body, signal, fetchImpl, stallMs, onThinking,
     });
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
@@ -71,7 +71,7 @@ export async function* streamChat({
     // nothing to show. Once, ask again with more room before giving up.
     if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length' && !signal?.aborted) {
       const roomier = { ...body, max_tokens: Math.min(32_000, (body.max_tokens || 4096) * 4) };
-      ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs }));
+      ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, onThinking }));
       if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
         throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
       }
@@ -132,7 +132,7 @@ export async function* streamChat({
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
-    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs });
+    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, onThinking });
   }
 }
 
@@ -166,7 +166,7 @@ async function errorDetail(res) {
  * One round of streaming.
  * @returns {AsyncGenerator<string, {text: string, toolCalls: object[]}>}
  */
-async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs = DEFAULT_STALL_MS }) {
+async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs = DEFAULT_STALL_MS, onThinking = null }) {
   // The provider can accept the request and then never send a byte. Without a
   // watchdog the chat spins forever, so silence longer than stallMs is an
   // error, not a wait. The person's own stop signal still cuts in first.
@@ -249,6 +249,10 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
         }
         const delta = parsed?.choices?.[0]?.delta;
         if (parsed?.choices?.[0]?.finish_reason) finish = parsed.choices[0].finish_reason;
+        // A reasoning model may send its thinking beside the answer (reasoning_content on
+        // DeepSeek and Nvidia, reasoning on OpenRouter). It is passed on, never mixed into the reply.
+        const thought = delta?.reasoning_content ?? delta?.reasoning;
+        if (typeof thought === 'string' && thought && onThinking) onThinking(thought);
         if (typeof delta?.content === 'string' && delta.content) {
           text += delta.content;
           yield delta.content;

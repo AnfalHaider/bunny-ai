@@ -37,6 +37,8 @@ The spine of the product: sending, streaming, keeping and shaping a thread.
 | 1.15 | File and image attachments | app | **D** | `a file can be attached to a message` |
 | 1.16 | /clear | app | **D** | `/clear starts a new chat and keeps the old one` |
 | 1.17 | /compact | app | **D** | `/compact replaces the transcript with a labelled summary` |
+| 1.24 | The model’s thinking, folded above the reply | app | **D** | `an artifact the model makes gets a card and opens beside the chat; its thinking is folded` |
+| 1.25 | Compaction with a summary the model writes | app | **D** | `compacting uses a summary the model writes, and the plain one when the model cannot` |
 | 1.18 | Automatic compaction | app | **D** | `a chat that fills up is compacted before the next message` |
 | 1.19 | Context meter | app | **D** | `the context meter counts what the transcript will cost` |
 | 1.20 | /export a transcript | app | **D** | `export returns a markdown transcript and a json one` |
@@ -70,6 +72,7 @@ Which model answers, and how a key gets there honestly.
 | 2.18 | The provider's own error explanation reaches the person | core | **D** | `the provider explanation reaches the person` |
 | 2.19 | An unverifiable key is not waved through | core | **D** | `the google 404-on-models quirk does not wave a bad key through` |
 | 2.20 | Custom OpenAI-compatible providers | app | **D** | `a custom provider is added, chats with its own key header, survives a restart, and can be removed` |
+| 2.22 | Another model answers when the picked one is busy | app | **D** | `when the picked model is busy, another answers and the reply says so` |
 | 2.21 | ModelScope, SiliconFlow, Gitee AI and other popular providers | app | **D** | `ModelScope, SiliconFlow and Gitee AI are ready to connect with their own addresses` |
 
 ## 3. Artifacts
@@ -141,7 +144,7 @@ The agentic surfaces: memory, tools, schedules.
 | 6.7 | Computer use | enterprise | **D** | `screen text is given at the centre of each line, in the pixels of the shown picture` |
 | 6.8 | Skills | app | **D** | `a skill that is on reaches the model` |
 | 6.9 | Hooks | app | **D** | `a hook runs when a message is sent` |
-| 6.10 | Plugins and marketplaces | app | **P** | plugins install from GitHub and connectors from the MCP registry, but no automated test covers the install yet |
+| 6.10 | Plugins and marketplaces | app | **D** | `installing a plugin adds and switches on its skills and connectors, and records the plugin` |
 | 6.11 | Memories suggested from a chat | app | **D** | `a chat can suggest a memory, and it is kept only when accepted` |
 | 6.12 | The model asks for a capability it lacks | app | **D** | `asking for Code mode: the person picks a folder and the file tools arrive in the same reply` |
 | 6.13 | Programs that keep running | app | **D** | `a started program keeps running, is read in pieces, and stops` |
@@ -152,29 +155,33 @@ The agentic surfaces: memory, tools, schedules.
 | 6.18 | Undo the model's file changes | app | **D** | `the file changes of a reply can be undone, once` |
 | 6.19 | A plan the model keeps visible | app | **D** | `the plan is shown as a live checklist and kept with the reply, without a step line per update` |
 | 6.20 | The model remembers and schedules | app | **D** | `the AI can remember a fact and schedule a task; both ask first in Manual` |
+| 6.21 | Local connectors (MCP servers run as a program) | app | **D** | `a local connector is only added with the command confirmed, and its tools reach the chat` |
+| 6.22 | Gmail, Calendar and Drive | app | **D** | `the Google tools search mail, draft without sending, read the calendar and export a Doc` |
+| 6.23 | Scheduled tasks with tools, unattended | app | **D** | `incognito chats and scheduled tasks send the key in the provider header; scheduled runs get tools` |
+| 6.24 | Helpers on the model suited to their work | app | **D** | `a helper can run on a different model: named outright, chosen for the job, or the chat model when one fails` |
 
 ---
 
 ## Score
 
-**96 of 97** features are done and covered by a test.
+**104 of 104** features are done and covered by a test.
 
 | Status | Count |
 |---|---|
-| done | 96 |
-| partial | 1 |
+| done | 104 |
+| partial | 0 |
 | missing | 0 |
 
 ### By area
 
 | Area | done | partial | missing | total |
 |---|---|---|---|---|
-| Conversation | 23 | 0 | 0 | 23 |
-| Providers | 21 | 0 | 0 | 21 |
+| Conversation | 25 | 0 | 0 | 25 |
+| Providers | 22 | 0 | 0 | 22 |
 | Artifacts | 10 | 0 | 0 | 10 |
 | Structure | 8 | 0 | 0 | 8 |
 | Shell | 15 | 0 | 0 | 15 |
-| Automation | 19 | 1 | 0 | 20 |
+| Automation | 24 | 0 | 0 | 24 |
 
 ### What this means
 
@@ -183,8 +190,6 @@ providers spine, artifacts beside the chat, branching, projects, memory, MCP too
 schedules, hooks, skills, import, search, a command palette and four languages,
 and an agent that makes artifacts, asks for what it lacks, runs helpers side by side,
 works with GitHub, controls the desktop when allowed, and can undo its file changes.
-
-Still open: **plugins and marketplaces** (plugins install from GitHub and connectors from the MCP registry, but no automated test covers the install yet).
 
 This file is generated by `scripts/feature-tally.mjs` from `docs/features.js`;
 `test/tally.test.js` fails when the committed file is stale.

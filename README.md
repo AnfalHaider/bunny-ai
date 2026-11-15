@@ -82,7 +82,11 @@ Link your GitHub or Google account to Bunny. There is still no cloud account: yo
 - **Remembers** lasting facts you share and **runs tasks on a schedule**.
 - **Auto picks the model:** it chooses one for each message, falls back when one does not answer, and tells you which answered.
 - **Projects, branches, search, incognito chats, voice input, read-aloud, import and export**, and the interface in English, Spanish, French and Arabic (the newest screens are English for now).
-- **Connectors (MCP), skills and plugins** to add more abilities.
+- **Connectors (MCP), skills and plugins** to add more abilities, including local connectors that run as a program on your PC (you confirm the exact command).
+- **Gmail, Calendar and Drive** when you allow them at Google sign-in: search and read mail, write drafts (sending always asks), see and add events, read Docs and Sheets.
+- **Never stuck on a busy model:** when the model you picked hits a rate limit, the best other model answers, and the reply says so.
+- **See how it thinks:** models that share their reasoning show it folded above the reply.
+- **Scheduled tasks that use tools,** and background chats that tell you when they finish.
 
 ---
 
@@ -101,14 +105,20 @@ Desktop control and tool-building are off until you switch them on, either in Se
 
 ## Get started
 
-**Windows desktop app**
+**Download for Windows**
+
+Get **Bunny-AI-Setup-0.1.0.exe** from the [latest release](../../releases/latest), run it, open **Providers**, connect a model (Nvidia and OpenRouter have free ones), and start chatting.
+
+The installer is not code-signed yet, so Windows SmartScreen may say it does not recognise the app: choose **More info**, then **Run anyway**.
+
+**Or build the installer yourself**
 
 ```bash
 npm install
 npm run dist
 ```
 
-This builds `dist/Bunny-AI-Setup-0.1.0.exe`. Run it, open **Providers**, connect a model (Nvidia and OpenRouter have free ones), and start chatting.
+This writes `dist/Bunny-AI-Setup-0.1.0.exe`.
 
 **Run it in your browser instead**
 
@@ -125,7 +135,7 @@ Then open the address it prints.
 npm run test:all
 ```
 
-271 unit tests and 72 end-to-end tests cover the features above. `docs/FEATURE-TALLY.md` lists every feature with the test that proves it.
+280 unit tests and 77 end-to-end tests cover the features above. `docs/FEATURE-TALLY.md` lists every feature with the test that proves it.
 
 ---
 
