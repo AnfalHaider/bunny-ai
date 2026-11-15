@@ -20,6 +20,7 @@
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
+| B-1 | bootstrap.mjs: quote-safe spawn (shell only for .cmd), drop unused imports | LOW | builder | builder, 2026-11-16 | claimed | `claude/builder-efa9a9` |
 
 ## SIGN-OFF GRID
 
