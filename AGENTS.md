@@ -1,4 +1,4 @@
-# AGENTS.md — standing rules
+ 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Haiku |# AGENTS.md — standing rules
 
 <!-- Written by bootstrap-environment. Edited only by the Chief of Staff, on the owner's typed word.
      Every rule keeps its reason: a rule without its reason gets argued away. Fill every <…>. -->
@@ -47,15 +47,15 @@ CRITICAL: production data, credentials, irreversible migration, live users — n
 | Role id | Display name (owner's choice) | Started? |
 |---|---|---|
 | chief-of-staff | Chief of Staff | 2026-11-16 — the owner's main session, main checkout |
-| librarian | Librarian | |
-| researcher | Researcher | |
-| design | Design | |
-| builder | Builder | |
-| qa | QA | |
-| tech-lead | Tech Lead | |
-| security | Security | |
-| release-ops | Release Ops | |
-| hotfix (cloud) | Hotfix | |
+| librarian | Librarian | 2026-11-16 — own worktree, cheapest model (Haiku) |
+| researcher | Researcher | 2026-11-16 — own worktree, mid model (Sonnet) |
+| design | Design | 2026-11-16 — own worktree, mid model (Sonnet) |
+| builder | Builder | 2026-11-16 — own worktree, mid model (Sonnet) |
+| qa | QA | 2026-11-16 — own worktree, mid model (Sonnet) |
+| tech-lead | Tech Lead | 2026-11-16 — own worktree, mid model (Sonnet) |
+| security | Security | 2026-11-16 — own worktree, mid model (Sonnet) |
+| release-ops | Release Ops | 2026-11-16 — own worktree, mid model (Sonnet) |
+| hotfix (cloud) | Hotfix | 2026-11-16 — requested as a cloud session (from `initial-import`) |
 | platform (on demand) | Platform | not started: no work yet |
 | support (on demand) | Support | not started: no work yet |
 | project lanes | none named yet | |
