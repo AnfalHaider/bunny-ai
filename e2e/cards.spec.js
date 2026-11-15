@@ -25,6 +25,10 @@ function script(body) {
     if (tools === 1) return call('update_tasks', { tasks: [{ text: 'Look', done: true }, { text: 'Write' }] });
     return frame({ content: 'Planned.' });
   }
+  if (/pick a colour/.test(asked)) {
+    const told = body.messages.filter((m) => m.role === 'tool').at(-1)?.content;
+    return told ? frame({ content: `Painting it. (${told})` }) : call('ask_user', { question: 'Which colour?', choices: [{ label: 'Blue', reason: 'Calm, like the current header' }, { label: 'Green', reason: 'Matches the carrot leaves in the logo', recommended: true }] });
+  }
   if (/use a helper/.test(asked)) return tools === 0 ? call('run_subagent', { title: 'Carrot counter', task: 'Count carrots' }) : frame({ content: 'The helper reported.' });
   if (/long code/.test(asked)) return frame({ content: `Here:\n\n\`\`\`python\n${LONG}\n\`\`\`\n` });
   return frame({ content: 'hello' });
@@ -137,4 +141,33 @@ test('when the picked model is busy, another answers and the reply says so', asy
   expect(busy, meta).toBeTruthy();
   expect(busy).not.toBe(answeredBy);
   expect(meta).toContain(answeredBy);
+});
+
+test('the model asks a question: one click answers it, and the reply goes on', async ({ page }) => {
+  await page.locator('#input').fill('pick a colour for the shop');
+  await page.locator('#send').click();
+  const card = page.locator('.question-card');
+  await expect(card.locator('h4')).toHaveText('Which colour?');
+  await page.screenshot({ path: 'test-results/question-card.png' });
+  // The recommended choice comes first, with its reason.
+  await expect(card.locator('.question-choice').first()).toContainText('Green');
+  await expect(card.locator('.question-choice').first()).toContainText('Recommended');
+  await expect(card.locator('.question-choice').first()).toContainText('Matches the carrot leaves in the logo');
+  await card.getByRole('button', { name: 'Green' }).click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('The person answered: Green');
+  // After the reply, the question stays in the chat with the answer.
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Green');
+  await expect(page.locator('.question-card.is-answered .is-chosen')).toContainText('Green');
+});
+
+test('a question can be answered in your own words', async ({ page }) => {
+  await page.locator('#input').fill('pick a colour, any');
+  await page.locator('#send').click();
+  const card = page.locator('.question-card');
+  await card.getByLabel('Your answer').fill('Sunset orange');
+  await card.getByLabel('Your answer').press('Enter');
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('The person answered: Sunset orange');
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Sunset orange');
 });

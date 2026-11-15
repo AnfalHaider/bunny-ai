@@ -81,6 +81,7 @@ export async function streamAt(path, body, handlers = {}) {
       else if (event === 'capability') handlers.onCapability?.(parsed);
       else if (event === 'tasks') handlers.onTasks?.(parsed);
       else if (event === 'thinking') handlers.onThinking?.(parsed);
+      else if (event === 'question') handlers.onQuestion?.(parsed);
     }
   }
 }

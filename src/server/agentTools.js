@@ -216,6 +216,7 @@ export function describeAnyAgentTool(name, args = {}) {
     case 'remember': return `Remember: "${s(args.text)}"`;
     case 'schedule_task': return `Schedule "${s(args.name)}" every ${Math.round(Number(args.every_minutes) || 60)} min`;
     case 'list_scheduled_tasks': return 'List scheduled tasks';
+    case 'ask_user': return `Asked: "${s(args.question, 80)}"`;
     case 'update_tasks': {
       const list = Array.isArray(args.tasks) ? args.tasks : [];
       return `Plan: ${list.filter((t) => t?.done).length} of ${list.length} done`;
@@ -240,4 +241,54 @@ export function cleanTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).slice(0, 20)
     .map((t) => ({ text: String(t?.text ?? t ?? '').replace(/\s+/g, ' ').trim().slice(0, 160), done: Boolean(t?.done) }))
     .filter((t) => t.text);
+}
+
+// ---- asking the person ----
+
+export const ASK_TOOL_RISK = { ask_user: 'own' };
+Object.assign(AGENT_TOOL_RISK, ASK_TOOL_RISK);
+
+export function askToolDefinition() {
+  return fn('ask_user', 'Ask the person a question and wait for the answer, in this same reply. Use it when something is unclear, '
+    + 'when there are real choices to make, or before doing something they may not want. '
+    + 'Offer choices tailored to what you are working on together (their project, files and goal, not generic options): '
+    + 'each with a one-line reason. Always mark exactly one choice recommended: the one you would pick for them, given what you know. '
+    + 'They can always type their own answer instead.',
+  {
+    question: { type: 'string', description: 'One clear question' },
+    choices: {
+      type: 'array', description: 'Up to 6 answers to click, the recommended one first',
+      items: { type: 'object', properties: {
+        label: { type: 'string', description: 'The answer, a few words' },
+        reason: { type: 'string', description: 'One line: why this fits what we are doing, or its trade-off' },
+        recommended: { type: 'boolean', description: 'true for exactly one choice: the one you recommend' },
+      }, required: ['label'] },
+    },
+    recommended: { type: 'string', description: 'The label of the choice you recommend (always give one when you offer choices)' },
+    multiple: { type: 'boolean', description: 'true if they may pick more than one choice' },
+    placeholder: { type: 'string', description: 'A hint for the typed answer, e.g. "Your colour"' },
+  }, ['question']);
+}
+
+/**
+ * The question as shown: trimmed, at most six choices, each { label, reason, recommended }
+ * (plain strings are accepted too), the recommended one first.
+ */
+export function cleanQuestion(a = {}) {
+  const choices = (Array.isArray(a.choices) ? a.choices : []).map((c) => (typeof c === 'string'
+    ? { label: c.trim().slice(0, 120), reason: '', recommended: false }
+    : { label: String(c?.label ?? '').trim().slice(0, 120), reason: String(c?.reason ?? '').trim().slice(0, 240), recommended: c?.recommended === true }))
+    .filter((c) => c.label).slice(0, 6);
+  // The recommendation may come as a label on the question, or marked on a choice.
+  const named = String(a.recommended ?? '').trim().toLowerCase();
+  if (named) for (const c of choices) if (c.label.toLowerCase() === named) c.recommended = true;
+  let marked = false;
+  for (const c of choices) { if (c.recommended && !marked) marked = true; else c.recommended = false; }
+  choices.sort((x, y) => Number(y.recommended) - Number(x.recommended));
+  return {
+    question: String(a.question ?? '').trim().slice(0, 600),
+    choices,
+    multiple: a.multiple === true,
+    placeholder: String(a.placeholder ?? '').slice(0, 80),
+  };
 }

@@ -590,7 +590,8 @@ function renderSidebar() {
     if (!members.length) continue;
     const collapsed = state.collapsedProjects.has(project.id);
     host.append(renderProjectHead(project, members.length, collapsed));
-    if (!collapsed) for (const s of members) host.append(renderSessionRow(s, 0));
+    // Under its own project's heading a chat does not need the project's name again.
+    if (!collapsed) for (const s of members) { const r = renderSessionRow(s, 0); r.querySelector('.project-tag')?.remove(); host.append(r); }
   }
 
   if (loose.length) {
@@ -609,6 +610,7 @@ function renderSidebar() {
 
 /** A project header row in the sidebar tree: click expands or collapses it. */
 function renderProjectHead(project, count, collapsed) {
+  const row = element('div', { className: `project-head-row${collapsed ? ' collapsed' : ''}` });
   const head = element('button', {
     type: 'button',
     className: `side-group project-head${collapsed ? ' collapsed' : ''}`,
@@ -626,7 +628,26 @@ function renderProjectHead(project, count, collapsed) {
     localStorage.setItem('bunny.projects', JSON.stringify([...state.collapsedProjects]));
     renderSidebar();
   });
-  return head;
+  // A new chat straight into this project: it follows the project's instructions.
+  const add = button('＋', {
+    className: 'ghost project-new-chat', title: `New chat in ${project.name}`, 'aria-label': `New chat in ${project.name}`,
+    onclick: () => newChatInProject(project.id),
+  });
+  row.append(head, add);
+  return row;
+}
+
+/** Start a chat that belongs to a project (its instructions apply from the first message). */
+function newChatInProject(projectId) {
+  state.projectId = projectId;
+  state.projectEdit = null;
+  renderProjects();
+  startNewChat({ incognito: false });
+  renderSidebar();
+  const name = state.projects.find((p) => p.id === projectId)?.name ?? 'the project';
+  flashStatus(`New chat in ${name}: it is saved there when you send the first message`, 5000);
+  const empty = $('empty-text');
+  if (empty) empty.textContent = `This chat will be saved in ${name} and follow its instructions.`;
 }
 
 const BUCKETS = {
@@ -697,7 +718,7 @@ function renderSessionRow(s, depth) {
     a.append(element('span', { className: 'dot', role: 'img', 'aria-label': 'Working' }));
   }
   a.append(element('span', { className: 'session-title', textContent: s.title }));
-  if (s.projectId) a.append(element('span', { className: 'tag', textContent: projectName(s.projectId) }));
+  if (s.projectId) a.append(element('span', { className: 'tag project-tag', textContent: projectName(s.projectId) }));
 
   const menuButton = button('⋯', {
     className: 'row-menu', 'aria-label': `Actions for ${s.title}`, 'aria-expanded': 'false',
@@ -906,6 +927,8 @@ function renderMessage(m) {
 
   // Tool call block: collapsible, shows the tool name, args and result
   if (m.kind === 'tool_call') {
+    // A question the model asked is shown as its card, with the answer, not as a step line.
+    if (m.question) { wrap.append(answeredQuestionCard(m.question)); return wrap; }
     const tc = element('div', { className: 'tool-call' });
     const header = element('div', { className: 'tool-call-header' });
     header.append(element('span', { textContent: m.tool ?? 'tool' }));
@@ -923,6 +946,7 @@ function renderMessage(m) {
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
     if (m.linked) wrap.append(linkedChatCard(m.linked));
+    if (m.question) wrap.append(answeredQuestionCard(m.question));
     return wrap;
   }
 
@@ -963,8 +987,12 @@ function renderMessage(m) {
   wrap.append(body);
 
   if (m.kind === 'summary' || m.kind === 'partial') {
-    wrap.append(element('div', { className: 'meta' },
-      element('span', { className: 'tag', textContent: say(m.kind === 'summary' ? 'chat.summary' : 'chat.stopped') })));
+    const meta = element('div', { className: 'meta' },
+      element('span', { className: 'tag', textContent: say(m.kind === 'summary' ? 'chat.summary' : 'chat.stopped') }));
+    // The messages above a summary are still here to read; the model reads the summary instead.
+    if (m.kind === 'summary') meta.append(element('span', { className: 'hint', textContent: ' The messages above stay here; to save room, Bunny now reads this summary instead of them.' }));
+    if (m.kind === 'partial') meta.append(element('span', { className: 'hint', textContent: ' Send "continue" and Bunny picks up where it stopped.' }));
+    wrap.append(meta);
   }
 
   // The files this reply changed can be put back.
@@ -1297,6 +1325,7 @@ async function streamInto(bodyEl, { path, payload }) {
     onCapability: (info) => showLiveCapability(bodyEl, info),
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
     onThinking: (info) => showLiveThinking(bodyEl, info.text ?? ''),
+    onQuestion: (info) => showLiveQuestion(bodyEl, info),
   };
 
   try {
@@ -1321,6 +1350,8 @@ async function streamInto(bodyEl, { path, payload }) {
 function showLiveTool(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
+  // A question shows as its own card (showLiveQuestion), not as a step line too.
+  if (/(^| › )Asked: /.test(info.tool ?? '')) return;
   const lines = [...msg.parentNode.querySelectorAll('.live-tool')];
   let line = lines.find((l) => l.dataset.tool === info.tool && l.dataset.status === 'running');
   if (!line) {
@@ -1348,6 +1379,94 @@ function showLiveTool(bodyEl, info) {
     loadArtifacts().then(() => (currentView() === 'browser' ? null : showArtifact(info.artifact.id))).catch(() => {});
   }
   msg.scrollIntoView({ block: 'end' });
+}
+
+/**
+ * The model asks the person something: click a choice (or tick several), or type an
+ * answer. The reply waits, then carries on with the answer.
+ */
+function showLiveQuestion(bodyEl, info) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  const card = element('form', { className: 'permission-prompt live-permission question-card', 'aria-label': 'Bunny has a question' });
+  card.append(
+    element('p', { className: 'capability-eyebrow', textContent: 'Bunny has a question' }),
+    element('h4', { textContent: info.question }),
+  );
+  const picked = new Set();
+  const choiceBox = element('div', { className: 'question-choices', role: info.multiple ? 'group' : 'radiogroup' });
+  const text = element('textarea', { className: 'question-text', rows: 2, placeholder: info.placeholder || (info.choices?.length ? 'Or type your own answer…' : 'Type your answer…'), 'aria-label': 'Your answer' });
+  const actions = element('div', { className: 'permission-actions' });
+  const send = async (answer) => {
+    actions.replaceChildren(element('span', { className: 'hint', textContent: 'Sending…' }));
+    for (const el of card.querySelectorAll('button, textarea, input')) el.disabled = true;
+    try {
+      await sendJSON(`/api/sessions/${state.sessionId}/question/${info.id}`, 'POST', answer);
+      const said = answer.skipped ? 'Skipped' : [...(answer.choices ?? []), answer.text].filter(Boolean).join(', ');
+      card.replaceChildren(element('p', { className: 'capability-eyebrow', textContent: 'Bunny asked' }),
+        element('h4', { textContent: info.question }),
+        element('p', { className: 'question-answer', textContent: answer.skipped ? 'You skipped this question.' : `You answered: ${said}` }));
+    } catch (err) {
+      actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
+    }
+  };
+  for (const raw of info.choices ?? []) {
+    const choice = typeof raw === 'string' ? { label: raw, reason: '', recommended: false } : raw;
+    // A choice shows its label, why it fits, and whether Bunny recommends it.
+    const parts = [
+      element('span', { className: 'question-choice-label' }, choice.label,
+        choice.recommended ? element('span', { className: 'tag question-recommended', textContent: 'Recommended' }) : null),
+      choice.reason ? element('span', { className: 'question-choice-reason', textContent: choice.reason }) : null,
+    ];
+    if (info.multiple) {
+      const box = element('input', { type: 'checkbox', 'aria-label': choice.label });
+      box.addEventListener('change', () => (box.checked ? picked.add(choice.label) : picked.delete(choice.label)));
+      choiceBox.append(element('label', { className: `question-choice is-check${choice.recommended ? ' is-recommended' : ''}` }, box, element('span', { className: 'question-choice-body' }, ...parts)));
+    } else {
+      // One click answers: the quickest way through.
+      const b = button('', { className: `question-choice${choice.recommended ? ' is-recommended' : ''}`, 'aria-label': choice.label, onclick: () => send({ choices: [choice.label], text: text.value.trim() }) });
+      b.append(element('span', { className: 'question-choice-body' }, ...parts));
+      choiceBox.append(b);
+    }
+  }
+  if (info.choices?.length) card.append(choiceBox);
+  card.append(text);
+  actions.append(
+    button('Send', { type: 'submit', className: 'primary' }),
+    button('Skip', { className: 'ghost', onclick: () => send({ skipped: true }) }),
+  );
+  card.append(actions);
+  card.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const answer = { choices: [...picked], text: text.value.trim() };
+    if (!answer.choices.length && !answer.text) { text.focus(); return; }
+    send(answer);
+  });
+  // Enter sends the typed answer; Shift+Enter makes a new line.
+  text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); card.requestSubmit(); } });
+  msg.before(card);
+  card.scrollIntoView({ block: 'end' });
+  (info.choices?.length && !info.multiple ? card.querySelector('.question-choice') : text)?.focus();
+}
+
+/** A question asked earlier in the chat, with its choices and the answer given. */
+function answeredQuestionCard(q) {
+  const card = element('div', { className: 'permission-prompt question-card is-answered' });
+  card.append(
+    element('p', { className: 'capability-eyebrow', textContent: 'Bunny asked' }),
+    element('h4', { textContent: q.question }),
+  );
+  if (q.choices?.length) {
+    const list = element('div', { className: 'question-choices' });
+    for (const c of q.choices) {
+      const chosen = q.answer && q.answer.split(/, | \| /).includes(c.label);
+      list.append(element('span', { className: `question-choice is-static${chosen ? ' is-chosen' : ''}`, title: c.reason || '' },
+        element('span', { className: 'question-choice-label' }, c.label, c.recommended ? element('span', { className: 'tag question-recommended', textContent: 'Recommended' }) : null)));
+    }
+    card.append(list);
+  }
+  card.append(element('p', { className: 'question-answer', textContent: q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
+  return card;
 }
 
 /** The model's thinking: folded under "Thinking…", open it to read along. */

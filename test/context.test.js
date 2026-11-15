@@ -56,9 +56,13 @@ test('a chat that fills up is compacted before the next message', async () => {
   assert.ok(result, 'compaction should have happened');
   assert.ok(result.after.used < before.used);
 
+  // The conversation stays on screen; the summary is added after it, and only the
+  // summary onwards is counted (and read by the model).
   const session = await store.get(id);
-  assert.equal(session.messages.length, 1);
-  assert.equal(session.messages[0].kind, 'summary');
+  assert.equal(session.messages.length, 13);
+  assert.equal(session.messages.at(-1).kind, 'summary');
+  assert.equal(session.messages[0].content, 'x'.repeat(120));
+  assert.equal(store.context(session).messages, 13);
   // The covered turns are remembered, so nothing is silently thrown away.
   assert.equal(session.compactions.length, 1);
   assert.equal(session.compactions[0].coveredMessages, 12);

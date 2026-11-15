@@ -65,8 +65,6 @@ button.small { height: 26px; padding: 0 var(--sp-4); font-size: var(--fs-xs); }
 .side-group.sub { padding-top: var(--sp-4); }
 .side-group.project-head { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; border-radius: var(--r-sm); }
 .side-group.project-head:hover { color: var(--text); }
-.side-group.project-head::before { content: "▾"; font-size: 9px; }
-.side-group.project-head.collapsed::before { content: "▸"; }
 .side-group.project-head .count { margin-left: auto; }
 
 .session-row { position: relative; display: flex; align-items: center; border-radius: var(--r-md); }
@@ -704,7 +702,7 @@ pre.code:not(.is-folded) .code-foot { border-top: 1px solid var(--line); }
 .artifact-card-kind { font-size: var(--fs-xs); color: var(--text-dim); }
 
 /* the model asking for a capability */
-.capability-card .capability-eyebrow { margin: 0 0 var(--sp-2); font-size: var(--fs-2xs); font-weight: var(--fw-medium); letter-spacing: .02em; color: var(--accent); text-transform: uppercase; }
+.capability-card .capability-eyebrow, .question-card .capability-eyebrow { margin: 0 0 var(--sp-2); font-size: var(--fs-2xs); font-weight: var(--fw-medium); letter-spacing: .02em; color: var(--accent); text-transform: uppercase; }
 .capability-card .capability-reason { color: var(--text); }
 .capability-card .hint { font-size: var(--fs-xs); }
 
@@ -777,3 +775,33 @@ details.thinking.is-live summary { color: var(--accent); }
 #edit-project { width: 26px; height: 26px; padding: 0; justify-content: center; color: var(--text-faint); }
 #edit-project svg { width: 14px; height: 14px; }
 .project-form .danger-text { color: var(--danger, #c0392b); margin-left: auto; }
+
+/* a project's heading in the sidebar: one small arrow, the name, the count, and + for a new chat in it */
+.project-head-row { display: flex; align-items: center; gap: var(--sp-1); padding-right: var(--sp-2); }
+.project-head-row .side-group.project-head { flex: 1; min-width: 0; padding-top: var(--sp-6); text-align: left; background: none; }
+.side-group.project-head svg { width: 12px; height: 12px; flex: none; transition: transform var(--t-fast); }
+.side-group.project-head.collapsed svg { transform: rotate(-90deg); }
+.side-group.project-head .project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-dim); }
+.project-new-chat { width: 22px; height: 22px; padding: 0; margin-top: var(--sp-4); justify-content: center; color: var(--text-faint); font-size: var(--fs-xs); border-radius: var(--r-sm); }
+.project-new-chat:hover { color: var(--text); background: var(--hover); }
+
+/* the model asking a question */
+.question-choices { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-5); }
+.question-choice { padding: var(--sp-3) var(--sp-6); border: 1px solid var(--line-strong); border-radius: var(--r-pill, 999px); background: var(--surface); font-size: var(--fs-md); color: var(--text); }
+.question-choice:hover { border-color: var(--accent); color: var(--accent); }
+.question-choice.is-check { display: inline-flex; align-items: center; gap: var(--sp-3); cursor: pointer; }
+.question-text { width: 100%; margin-top: var(--sp-5); padding: var(--sp-4) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); font: inherit; font-size: var(--fs-md); resize: vertical; }
+.question-text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.question-answer { color: var(--text) !important; font-weight: var(--fw-medium); }
+.question-choices { flex-direction: column; align-items: stretch; }
+.question-choice { display: flex; text-align: left; border-radius: var(--r-md); padding: var(--sp-4) var(--sp-6); }
+.question-choice-body { display: flex; flex-direction: column; gap: var(--sp-1); }
+.question-choice-label { display: inline-flex; align-items: center; gap: var(--sp-3); font-weight: var(--fw-medium); }
+.question-choice-reason { font-size: var(--fs-xs); color: var(--text-dim); font-weight: normal; }
+.question-choice.is-recommended { border-color: var(--accent); background: var(--accent-soft); }
+.question-recommended { color: var(--accent); background: var(--surface); }
+.question-card.is-answered { box-shadow: none; }
+.question-card.is-answered .question-choices { flex-direction: row; flex-wrap: wrap; }
+.question-choice.is-static { padding: var(--sp-2) var(--sp-5); color: var(--text-dim); }
+.question-choice.is-static:hover { border-color: var(--line-strong); color: var(--text-dim); }
+.question-choice.is-chosen { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }

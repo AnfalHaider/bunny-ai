@@ -74,10 +74,10 @@ test('/compact summarises the chat and frees context', async ({ page }) => {
   await page.locator('#input').press('Enter');
 
   await expect(page.locator('#status')).toContainText('Compacted');
-  // The transcript is now one labelled summary.
-  await expect(page.locator('.msg')).toHaveCount(1);
-  await expect(page.locator('.msg .meta .tag')).toHaveText('summary');
-  await expect(page.locator('.msg.assistant .body')).toContainText('Summary of the conversation so far');
+  // The conversation stays; a labelled summary follows it.
+  await expect(page.locator('.msg.user .body').first()).toHaveText('a long question about pricing');
+  await expect(page.locator('.msg').last().locator('.meta .tag')).toHaveText('summary');
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Summary of the conversation so far');
 });
 
 test('/clear starts a new chat and keeps the old one', async ({ page }) => {
@@ -365,9 +365,10 @@ test('a project groups chats and filters the sidebar', async ({ page }) => {
   await page.locator('#send').click();
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
 
-  // The chat carries the project tag and the filter keeps showing it.
-  await expect(page.locator('#sessions .tag')).toHaveText('Contracts');
+  // The chat sits under its project's heading (no repeated tag), and the filter keeps showing it.
+  await expect(page.locator('#sessions .project-head-row .project-name')).toHaveText('Contracts');
   await expect(page.locator('#sessions .session-row')).toHaveCount(1);
+  await expect(page.locator('#sessions .session-row .project-tag')).toHaveCount(0);
 });
 
 test('long code in a reply starts folded and opens on request', async ({ page }) => {
@@ -432,4 +433,29 @@ test('a project can be renamed, given instructions, and deleted from the sidebar
   await expect(page.locator('#project-filter option', { hasText: 'Carrot shop' })).toHaveCount(0);
   await expect(page.locator('#project-filter')).toHaveValue('');
   await expect(page.locator('#edit-project')).toHaveCount(0);
+});
+
+test('a project heading is tidy, and its + starts a chat saved in that project', async ({ page, request }) => {
+  await connectAnthropic(page);
+  const project = await (await request.post('/api/projects', { data: { name: 'Demo Website' } })).json();
+  await request.post('/api/sessions', { data: { title: 'Older chat', projectId: project.id } });
+  await page.goto('/');
+  const head = page.locator('.project-head-row', { hasText: 'Demo Website' });
+  await expect(head.locator('.project-name')).toHaveText('Demo Website');
+  const arrow = await head.locator('svg').boundingBox();
+  expect(arrow.width).toBeLessThanOrEqual(14);
+  // A chat under its own project's heading does not repeat the project's name.
+  await expect(page.locator('.session-row', { hasText: 'Older chat' }).locator('.project-tag')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/project-sidebar.png' });
+
+  await head.getByRole('button', { name: 'New chat in Demo Website' }).click();
+  await expect(page.locator('#empty-text')).toContainText('saved in Demo Website');
+  await pickFirstModel(page);
+  await page.locator('#input').fill('hello project');
+  await page.locator('#send').click();
+  await expect(page.locator('.msg.user .body').last()).toHaveText('hello project');
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  const sessionId = new URL(page.url()).searchParams.get('s');
+  const saved = await (await request.get(`/api/sessions/${sessionId}`)).json();
+  expect(saved.projectId).toBe(project.id);
 });

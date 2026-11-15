@@ -21,6 +21,22 @@ export function estimateTokens(text) {
   return Math.ceil(String(text ?? '').length / 4);
 }
 
+/**
+ * What an attachment costs the model. A picture or file kept as a data URL is not read
+ * as its base64 text, so it counts as a fixed amount; a read document counts its words.
+ */
+function attachmentTokens(file) {
+  const data = String(file?.data ?? '');
+  if (file?.kind === 'image' || data.startsWith('data:') || data.startsWith('/api/')) return 1000;
+  return estimateTokens(data) + (file?.pictures?.length ?? 0) * 1000;
+}
+
+/** Where the model's view of a chat starts: the latest summary, or the beginning. */
+export function sinceSummary(messages = []) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) if (messages[i].kind === 'summary') return i;
+  return 0;
+}
+
 /** @param {string} dir */
 export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
   const fileFor = (id) => join(dir, `${id}.json`);
@@ -89,10 +105,14 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
   /** The context meter for a transcript. */
   function context(session) {
     let used = 0;
-    for (const m of session.messages ?? []) {
+    // Only what the model reads counts: from the latest summary on. Earlier messages stay
+    // on screen but are no longer sent.
+    const messages = session.messages ?? [];
+    for (const m of messages.slice(sinceSummary(messages))) {
       used += estimateTokens(m.content) + 4;
+      if (m.kind === 'tool_call') used += estimateTokens(m.result);
       // An attachment costs the model context too.
-      for (const file of m.attachments ?? []) used += estimateTokens(file.data) + 4;
+      for (const file of m.attachments ?? []) used += attachmentTokens(file) + 4;
     }
     // A model with a known window sets the limit; otherwise the default stands.
     const limit = session.contextLimit ?? contextLimit;
@@ -202,6 +222,15 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
     for (const key of ['tool', 'status', 'result', 'model', 'providerId', 'job', 'auto', 'fellBackFrom']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
+    }
+    // A question the model asked, its choices and the person's answer (null: not answered).
+    if (message.question && typeof message.question === 'object') {
+      const q = message.question;
+      entry.question = {
+        question: String(q.question ?? '').slice(0, 600),
+        choices: (Array.isArray(q.choices) ? q.choices : []).slice(0, 6).map((c) => ({ label: String(c?.label ?? c ?? '').slice(0, 120), reason: String(c?.reason ?? '').slice(0, 240), recommended: c?.recommended === true })),
+        answer: q.answer == null ? null : String(q.answer).slice(0, 4000),
+      };
     }
     // The model's thinking, when it sent any (shown folded above the reply).
     if (typeof message.thinking === 'string' && message.thinking.trim()) entry.thinking = message.thinking.slice(0, 40_000);
@@ -324,14 +353,16 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
   async function compact(id, { summarize = null } = {}) {
     const session = await get(requireId(id));
     if (!session) throw Object.assign(new Error('No such session'), { code: 'session.notFound' });
-    if (session.messages.length < 2) {
+    // Only what came after the last summary is summarised (that summary included).
+    const since = session.messages.slice(sinceSummary(session.messages));
+    if (since.filter((m) => m.kind !== 'summary').length < 2) {
       throw Object.assign(new Error('There is nothing to compact yet'), { code: 'compact.nothing' });
     }
     const before = context(session);
-    const userTurns = session.messages.filter((m) => m.role === 'user');
+    const userTurns = since.filter((m) => m.role === 'user');
     const ask = String(userTurns[0]?.content ?? '').replace(/\s+/g, ' ').trim();
     const asks = userTurns.slice(1, 6).map((m) => `- ${String(m.content).replace(/\s+/g, ' ').trim().slice(0, 120)}`);
-    const lastAssistant = [...session.messages].reverse().find((m) => m.role === 'assistant');
+    const lastAssistant = [...since].reverse().find((m) => m.role === 'assistant' && m.kind !== 'tool_call');
     const tail = String(lastAssistant?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
 
     const lines = [
@@ -344,7 +375,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     lines.push('', `_${userTurns.length} request(s) and ${before.messages} messages were summarised._`);
     let written = '';
     if (summarize) {
-      try { written = String(await summarize(session) ?? '').trim(); } catch { written = ''; }
+      try { written = String(await summarize({ ...session, messages: since }) ?? '').trim(); } catch { written = ''; }
     }
     if (written) {
       lines.length = 0;
@@ -354,16 +385,18 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     session.compactions ??= [];
     session.compactions.push({
       at: new Date().toISOString(),
-      coveredMessages: session.messages.length,
+      coveredMessages: since.length,
       coveredTokens: before.used,
     });
-    session.messages = [{
+    // The summary is added after the conversation, which stays on screen: from here on the
+    // model reads the summary instead of the messages above it.
+    session.messages.push({
       id: randomUUID(),
       role: 'assistant',
       kind: 'summary',
       content: lines.join('\n'),
       at: new Date().toISOString(),
-    }];
+    });
     await save(session);
     return { session, before, after: context(session) };
   }
@@ -371,7 +404,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
   /** Automatic compaction: call it before a send when the window is nearly full. */
   async function compactIfFull(id, threshold = 0.8, options = {}) {
     const session = await get(requireId(id));
-    if (!session || session.messages.length < 8) return null;
+    if (!session || session.messages.length - sinceSummary(session.messages) < 8) return null;
     const meter = context(session);
     if (meter.used < meter.limit * threshold) return null;
     return compact(id, options);

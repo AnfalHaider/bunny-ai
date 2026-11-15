@@ -197,7 +197,7 @@ test('the context meter counts what the transcript will cost', async (t) => {
   assert.equal(body.context.messages, 2);
 });
 
-test('/compact replaces the transcript with a labelled summary', async (t) => {
+test('/compact adds a labelled summary and keeps the conversation on screen', async (t) => {
   const { base } = await startApp(t);
   const id = await sessionWithTurns(base, ['ask one', 'answer one', 'ask two', 'answer two']);
 
@@ -208,8 +208,10 @@ test('/compact replaces the transcript with a labelled summary', async (t) => {
   assert.ok(body.after.used < body.before.used);
 
   const { body: after } = await json(base, `/api/sessions/${id}`);
-  assert.equal(after.messages.length, 1);
-  assert.equal(after.messages[0].kind, 'summary');
+  // Every message is still there, with the summary added after them.
+  assert.equal(after.messages.filter((m) => m.kind !== 'summary').length, after.messages.length - 1);
+  assert.equal(after.messages.find((m) => m.role === 'user').content, 'ask one');
+  assert.equal(after.messages.at(-1).kind, 'summary');
 });
 
 test('compacting an almost empty chat explains itself instead of pretending', async (t) => {

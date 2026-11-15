@@ -199,7 +199,8 @@ test('compacting uses a summary the model writes, and the plain one when the mod
   let seen = null;
   const written = await store.compact(await make(), { summarize: async (session) => { seen = session.messages.length; return 'The person grows carrots and wants a watering plan.'; } });
   assert.equal(seen, 8, 'the model saw the whole conversation');
-  assert.match(written.session.messages[0].content, /The person grows carrots and wants a watering plan\.[\s\S]*summarised by the model/);
+  assert.match(written.session.messages.at(-1).content, /The person grows carrots and wants a watering plan\.[\s\S]*summarised by the model/);
   const plain = await store.compact(await make(), { summarize: async () => { throw new Error('offline'); } });
-  assert.match(plain.session.messages[0].content, /Started with: question 0 about carrots/);
+  assert.match(plain.session.messages.at(-1).content, /Started with: question 0 about carrots/);
+  assert.equal(plain.session.messages.length, 9, 'the eight messages stay, with the summary after them');
 });

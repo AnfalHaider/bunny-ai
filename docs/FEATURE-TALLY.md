@@ -36,7 +36,7 @@ The spine of the product: sending, streaming, keeping and shaping a thread.
 | 1.14 | Syntax highlighting | app | **D** | `code in a reply is highlighted` |
 | 1.15 | File and image attachments | app | **D** | `a file can be attached to a message` |
 | 1.16 | /clear | app | **D** | `/clear starts a new chat and keeps the old one` |
-| 1.17 | /compact | app | **D** | `/compact replaces the transcript with a labelled summary` |
+| 1.17 | /compact | app | **D** | `/compact adds a labelled summary and keeps the conversation on screen` |
 | 1.24 | The model’s thinking, folded above the reply | app | **D** | `an artifact the model makes gets a card and opens beside the chat; its thinking is folded` |
 | 1.25 | Compaction with a summary the model writes | app | **D** | `compacting uses a summary the model writes, and the plain one when the model cannot` |
 | 1.18 | Automatic compaction | app | **D** | `a chat that fills up is compacted before the next message` |
@@ -158,17 +158,19 @@ The agentic surfaces: memory, tools, schedules.
 | 6.21 | Local connectors (MCP servers run as a program) | app | **D** | `a local connector is only added with the command confirmed, and its tools reach the chat` |
 | 6.22 | Gmail, Calendar and Drive | app | **D** | `the Google tools search mail, draft without sending, read the calendar and export a Doc` |
 | 6.23 | Scheduled tasks with tools, unattended | app | **D** | `incognito chats and scheduled tasks send the key in the provider header; scheduled runs get tools` |
+| 6.25 | The model asks questions with tailored choices and reasons | app | **D** | `the model asks with choices and gets the one the person clicked, in the same reply` |
+| 6.26 | The model remembers its steps and continues after a cut-off | app | **D** | `on the next message the model is told what it already did, and to carry on after a cut-off` |
 | 6.24 | Helpers on the model suited to their work | app | **D** | `a helper can run on a different model: named outright, chosen for the job, or the chat model when one fails` |
 
 ---
 
 ## Score
 
-**104 of 104** features are done and covered by a test.
+**106 of 106** features are done and covered by a test.
 
 | Status | Count |
 |---|---|
-| done | 104 |
+| done | 106 |
 | partial | 0 |
 | missing | 0 |
 
@@ -181,7 +183,7 @@ The agentic surfaces: memory, tools, schedules.
 | Artifacts | 10 | 0 | 0 | 10 |
 | Structure | 8 | 0 | 0 | 8 |
 | Shell | 15 | 0 | 0 | 15 |
-| Automation | 24 | 0 | 0 | 24 |
+| Automation | 26 | 0 | 0 | 26 |
 
 ### What this means
 

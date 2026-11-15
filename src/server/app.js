@@ -47,7 +47,7 @@ import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolde
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
-  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, describeAnyAgentTool as describeAgentTool,
+  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, cleanQuestion, describeAnyAgentTool as describeAgentTool,
 } from './agentTools.js';
 
 import { createAccounts } from './accounts.js';
@@ -64,6 +64,7 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 
 // The project root, found from this file rather than the working directory, so the
@@ -187,6 +188,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   let githubDevice = null;
   // Capability cards waiting for the person's choice.
   const pendingCapabilities = new Map();
+  // Questions the model asked, waiting for the person's answer.
+  const pendingQuestions = new Map();
   // The scale of each chat's last screen picture, so clicks land where the model meant.
   const screenScale = new Map();
 
@@ -1048,6 +1051,17 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       }
     }
 
+    // ---- a question card: the person's answer ----
+    const questionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/question\/([a-f0-9-]{36})$/);
+    if (questionMatch && method === 'POST') {
+      const pending = pendingQuestions.get(questionMatch[2]);
+      if (!pending || pending.sessionId !== questionMatch[1]) {
+        return sendJson(res, 404, { code: 'question.gone', message: 'That question is no longer waiting' });
+      }
+      pending.resolve(await readBody(req));
+      return sendJson(res, 200, { ok: true });
+    }
+
     // ---- a capability card: the person's choice ----
     const capabilityMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/capability\/([a-f0-9-]{36})$/);
     if (capabilityMatch && method === 'POST') {
@@ -1217,7 +1231,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const result = await sessions.compact(compactMatch[1], { summarize: modelSummarizer(target?.providerId, target?.model) });
         return sendJson(res, 200, {
           ok: true,
-          summary: result.session.messages[0]?.content ?? '',
+          summary: result.session.messages.at(-1)?.content ?? '',
           before: result.before,
           after: result.after,
         });
@@ -1316,10 +1330,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
       // Project instructions ride in front of the transcript, never into it.
       const project = session.projectId ? await projects.get(session.projectId) : null;
-      const history = session.messages
-        .filter((m) => m.kind !== 'tool_call' && m.kind !== 'permission_prompt')
-        // vision: whether this model can look at pictures (the window knows the model's abilities).
-        .map((m) => toModelMessage(m, { vision: body.vision !== false }));
+      // What the model reads: the chat since the latest summary, with the steps it took,
+      // so it remembers what it already did (vision: whether this model can see pictures).
+      const { history, interrupted } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
       if (project?.instructions) {
         history.unshift({ role: 'system', content: `Project instructions for ${project.name}:\n${project.instructions}` });
       }
@@ -1381,7 +1394,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'You cannot read or change files or run commands in Chat mode: if that is needed, call request_capability with code_mode straight away. '
           + 'Do not ask in words first: the card is the question, and the person answers it with one click.',
         code: 'Mode: Code. You are working on the project in the workspace folder. Look before you change: list and read the files you need, '
-          + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it.',
+          + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it. '
+          + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
+          + 'and update it as you go; when you continue a job, read it first.',
       }[workMode];
       const folderText = workspace
         ? `Workspace folder: ${workspace.root}. All file paths are relative to it. Permission mode: ${permissionMode}`
@@ -1402,6 +1417,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         + 'When you need something you do not have, do not work around it: call request_capability so the person can give it to you '
         + '(code_mode for files, commands and programs; computer_use to control this computer; new_tool for anything else) '
         + 'straight away, without asking in words first. '
+        + 'When something is unclear or there are real choices to make, ask with ask_user (offer choices when you can) instead of guessing. '
         + 'For a big job made of independent parts, hand the parts to helpers with run_subagent, several in one go, and combine their reports; '
         + 'give each helper the kind of work (job: code, research, see or chat) so it runs on the model best suited to it. '
         + 'For a job no tool can do, first look for a plugin or connector with search_plugins and offer to install it'
@@ -1410,7 +1426,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const scheduledTask = typeof body.scheduledTask === 'string' ? body.scheduledTask.slice(0, 80) : '';
       const scheduledText = scheduledTask
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
-      history.unshift({ role: 'system', content: [honesty, modeText, folderText, scheduledText].filter(Boolean).join('\n') });
+      history.unshift({ role: 'system', content: [honesty, modeText, folderText, scheduledText, interrupted ? CONTINUE_NOTE : ''].filter(Boolean).join('\n') });
 
       // Tools from the MCP servers the person has switched on (not in Chat mode).
       const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
@@ -1422,7 +1438,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const googleOn = Boolean(googleAccount?.workspace);
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit']),
-        ...(scheduledTask ? [] : [capabilityToolDefinition()]),
+        ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
         ...(workspace ? processToolDefinitions(risks) : []),
@@ -1519,6 +1535,15 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
         send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, 400), hasFolder: Boolean(folder?.ok) });
       });
+      // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
+      const askQuestion = (q) => new Promise((resolveAnswer) => {
+        if (res.writableEnded || res.destroyed) { resolveAnswer({ skipped: true }); return; }
+        const qid = randomUUID();
+        const timer = setTimeout(() => pendingQuestions.get(qid)?.resolve({ skipped: true }), 30 * 60_000);
+        pendingQuestions.set(qid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingQuestions.delete(qid); resolveAnswer(a ?? {}); } });
+        res.once('close', () => pendingQuestions.get(qid)?.resolve({ skipped: true }));
+        send('question', { id: qid, ...q });
+      });
       const grantCapability = async (capability, reason) => {
         if (!CAPABILITIES[capability]) return `There is no such capability. Choose one of: ${Object.keys(CAPABILITIES).join(', ')}.`;
         if (capability === 'code_mode' && workspace) return `Code mode is already on in ${workspace.root}.`;
@@ -1566,7 +1591,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ?? (toolIndex.has(name) ? (toolIndex.get(name).tool.readOnly ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'start_session', 'message_session']);
+      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'start_session', 'message_session', 'ask_user']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -1794,6 +1819,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         let images = [];
         let artifact = null;
         let linked = null;
+        let asked = null;
         // What the person sees under the step, when the model's answer is full of ids and addresses.
         let shown = null;
         const scaled = (v) => Math.round(Number(v) / (screenScale.get(id) ?? 1));
@@ -1830,6 +1856,25 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               linked = { id: child.id, title: child.title, status: 'working', model: child.model };
               result = `Started the chat "${child.title}" (id ${child.id}) with ${child.model}. It works in the background; check on it with read_session.`;
               shown = `Working in the background with ${child.model}.`;
+              break;
+            }
+            case 'ask_user': {
+              const q = cleanQuestion(parsed);
+              if (!q.question) throw new Error('Say what to ask.');
+              const answer = await askQuestion(q);
+              const labels = q.choices.map((c) => c.label);
+              const picked = (Array.isArray(answer.choices) ? answer.choices : []).map(String).filter((c) => labels.includes(c));
+              const typed = String(answer.text ?? '').trim().slice(0, 4000);
+              const said = [picked.join(', '), typed].filter(Boolean).join(' | ');
+              if (answer.skipped || !said) {
+                result = 'The person did not answer. Carry on with your best judgement and say what you assumed.';
+                shown = 'No answer';
+              } else {
+                result = `The person answered: ${said}`;
+                shown = `You answered: ${said}`;
+              }
+              // Kept with the step, so the question and the answer stay in the chat.
+              asked = { question: q.question, choices: q.choices, answer: answer.skipped || !said ? null : said };
               break;
             }
             case 'list_models':
@@ -1940,7 +1985,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           result = `The tool failed: ${err.message}`;
         }
         result = String(result).slice(0, 12000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: (shown ?? result).slice(0, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: (shown ?? result).slice(0, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
         send('tool', { tool: summary, status, result: (shown ?? result).slice(0, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
       };
