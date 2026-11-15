@@ -21,7 +21,7 @@
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
 | B-1 | bootstrap.mjs: quote-safe spawn (shell only for .cmd), drop unused imports | LOW | builder | builder, 2026-11-16 | claimed | `claude/builder-efa9a9` |
-| S-1 | Lock the local API to Bunny's own pages (Host, Origin, per-launch token) per Tech Lead notes 40e4230 | HIGH | builder | builder, 2026-11-16 | claimed; owner go relayed (7E) | `claude/builder-efa9a9`, `docs/plans/S-1-build-notes.md` on claude/tech-lead-86cf31 |
+| S-1 | Lock the local API to Bunny's own pages (Host, Origin, per-launch token) per Tech Lead notes 40e4230 | HIGH | builder | builder, 2026-11-16 | built at ca01243, gate 7/7; awaiting QA + Security + Tech Lead review | `claude/builder-efa9a9`, `docs/plans/S-1-build-notes.md` on claude/tech-lead-86cf31 |
 
 ## SIGN-OFF GRID
 
