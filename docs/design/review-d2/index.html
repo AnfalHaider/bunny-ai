@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D-2 chat and panes</title>
+<link rel="stylesheet" href="../bunny-design-system.css">
+<style>
+/* page chrome (not part of the proposal) */
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif)}
+.page{max-width:1320px;margin:0 auto;padding:24px 16px 90px}
+.page h1{font-size:24px;margin:0 0 4px}.page h2{font-size:20px;margin:0}.page h3{font-size:16px;margin:22px 0 4px}
+.pg-dim{color:var(--text-dim)}
+.bar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--text);padding:6px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--on-ink)}
+.screen{margin-top:44px;border-top:1px solid var(--line);padding-top:20px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:13px;color:var(--text-dim)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;align-items:start}
+.pair.stack{grid-template-columns:1fr}
+figure.f{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;min-width:0}
+figure.f figcaption{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:14px}
+figure.f figcaption.p{color:var(--accent)}
+.imgbox{padding:10px;text-align:center}.imgbox img{max-width:100%;height:auto;border:1px solid var(--line)}
+.fitbox{padding:10px;overflow:hidden}
+ul.notes{margin:12px 0 0;padding-left:20px}ul.notes li{margin:4px 0}
+.page code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.q{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 14px;margin:8px 0}
+@media (max-width:1000px){.pair{grid-template-columns:1fr}}
+
+/* ---------- proposal drawing: everything below is the proposed UI, tokens only ---------- */
+.d2{font:15px/1.55 var(--font-sans,system-ui,"Segoe UI",sans-serif);color:var(--text);background:var(--bg);text-align:left}
+.d2 *{box-sizing:border-box}
+.d2 .frame{position:relative;background:var(--bg);display:flex;overflow:hidden;border:1px solid var(--line)}
+.d2 .frame.d{width:1440px;height:900px}
+.d2 .frame.m{width:390px;height:844px;flex-direction:column}
+.d2 .sbar{width:248px;flex:none;background:var(--bg-sidebar);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.d2 .sbar .brand{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px}
+.d2 .sbar .row{padding:6px 8px;border-radius:8px;color:var(--text-dim)}
+.d2 .sbar .row.on{background:var(--surface);color:var(--text)}
+.d2 .main{flex:1;min-width:0;display:flex;flex-direction:column}
+.d2 .top{height:48px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:14px;border-bottom:1px solid var(--line)}
+.d2 .top b{font-weight:600}
+.d2 .top .sp{flex:1}
+.d2 .top .ib{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--text-dim)}
+.d2 .top .ib.on{background:var(--hover);color:var(--text)}
+.d2 .thread{flex:1;overflow:hidden;padding:20px 16px 0}
+.d2 .col{max-width:720px;margin:0 auto}
+.d2 .user{margin-left:auto;width:max-content;max-width:90%;background:var(--bg-sidebar);border-radius:16px;padding:10px 16px;margin-bottom:22px}
+.d2 .note,.d2 .reply{margin:10px 0}
+.d2 .reply p{margin:0 0 10px}
+.d2 .reply code,.d2 .note code{background:var(--bg-sidebar);border-radius:4px;padding:0 5px;font:13px var(--font-mono,ui-monospace,Consolas,monospace)}
+/* tool group */
+.d2 .grp{margin:8px 0}
+.d2 .gh{display:flex;align-items:center;gap:8px;color:var(--text-dim);font-size:14px;padding:3px 0;cursor:pointer}
+.d2 .gh .chev{width:14px;height:14px;transition:transform .15s;flex:none}
+.d2 .gh.open .chev{transform:rotate(90deg)}
+.d2 .gh .sum{flex:1;min-width:0}
+.d2 .gh .meta2{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.d2 .lab-fail{font-size:12px;font-weight:600;color:var(--bad);background:var(--bad-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .lab-stop{font-size:12px;font-weight:600;color:var(--warn);background:var(--warn-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .subs{margin:2px 0 4px 6px;padding-left:14px;border-left:1px solid var(--line)}
+.d2 .sub{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-dim);padding:3px 0}
+.d2 .sub .chev{width:12px;height:12px;flex:none;color:var(--text-faint)}
+.d2 .sub.open .chev{transform:rotate(90deg)}
+.d2 .sub .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d2 .detail{margin:4px 0 8px 20px;border:1px solid var(--line);border-radius:10px;background:var(--bg-sidebar);overflow:hidden;font-size:13px}
+.d2 .detail .dh{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);color:var(--text-dim);font-size:12px}
+.d2 .detail .dh .sp{flex:1}
+.d2 .detail pre{margin:0;padding:10px;font:12.5px/1.5 var(--font-mono,ui-monospace,Consolas,monospace);white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.d2 .detail pre.err{color:var(--bad)}
+.d2 .detail pre.cmd::before{content:"$ ";color:var(--text-faint)}
+.d2 .cp{border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text-dim);font-size:12px;padding:0 8px;line-height:22px}
+/* running */
+.d2 .running{display:flex;align-items:center;gap:10px;color:var(--text-dim);margin:8px 0}
+.d2 .bunny{width:22px;height:22px;flex:none;animation:d2hop 1.1s ease-out infinite;transform-origin:50% 100%}
+.d2 .bunny .ear{fill:var(--accent);fill-opacity:.55}.d2 .bunny .face{fill:var(--accent)}.d2 .bunny .eye,.d2 .bunny .nose{fill:var(--on-accent)}
+@keyframes d2hop{0%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){.d2 .bunny{animation:none}}
+.d2 .running .w{color:var(--text)}.d2 .running .t{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.d2 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run);border-top-color:transparent;flex:none}
+/* stopped + fallback */
+.d2 .stopped{border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--surface);padding:12px 14px;margin:12px 0}
+.d2 .stopped b{display:block;margin-bottom:4px}
+.d2 .stopped ul{margin:4px 0 8px;padding-left:18px;list-style:disc;color:var(--text-dim);font-size:14px}
+.d2 .btns{display:flex;gap:8px;flex-wrap:wrap}
+.d2 .btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 12px;font-size:13px}
+.d2 .btn.pri{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.d2 .btn.bad{color:var(--bad);border-color:var(--bad)}
+.d2 .fb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);margin:8px 0}
+.d2 .fb i{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+/* composer */
+.d2 .comp{flex:none;padding:0 16px 14px}
+.d2 .comp .box{max-width:720px;margin:0 auto;border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:12px 16px;color:var(--text-faint);box-shadow:var(--shadow-sm)}
+.d2 .comp .meta3{max-width:720px;margin:6px auto 0;font-size:12px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap}
+/* right pane */
+.d2 .pane{width:420px;flex:none;border-left:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-height:0}
+.d2 .frame.m .pane{width:100%;flex:1;border-left:0}
+.d2 .ph{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.d2 .ph .sp{flex:1}.d2 .ph .x{color:var(--text-dim);font-weight:400}
+.d2 .tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.d2 .tabs span{padding:3px 10px;border-radius:999px;color:var(--text-dim)}
+.d2 .tabs span.on{background:var(--hover);color:var(--text)}
+.d2 .pbody{flex:1;overflow:hidden;padding:12px 14px;font-size:13.5px}
+.d2 .sec{margin-bottom:16px}.d2 .sec h5{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:none;letter-spacing:0}
+.d2 .kv{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+.d2 .kv:last-child{border-bottom:0}
+.d2 .kv .k{color:var(--text-dim);width:92px;flex:none}.d2 .kv .v{flex:1;min-width:0;overflow-wrap:anywhere}
+.d2 .kv .v small{display:block;color:var(--text-dim);font-size:12px}
+.d2 .meter{height:6px;border-radius:999px;background:var(--hover);overflow:hidden;margin-top:4px}
+.d2 .meter span{display:block;height:100%;background:var(--accent)}
+.d2 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--ok)}
+.d2 .dot.off{background:var(--text-faint)}.d2 .dot.run{background:var(--run)}
+.d2 .banner{border:1px solid var(--line);border-radius:10px;background:var(--bg-sidebar);padding:8px 12px;font-size:12.5px;color:var(--text-dim);margin-bottom:12px}
+.d2 .cpt{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.d2 .cpt .ch{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+.d2 .cpt .ch b{color:var(--text);font-weight:600}.d2 .cpt .ch .sp{flex:1}
+.d2 .fr{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px}
+.d2 .fr .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono,ui-monospace,Consolas,monospace);font-size:12.5px}
+.d2 .add{color:var(--ok);font-variant-numeric:tabular-nums}.d2 .del{color:var(--bad);font-variant-numeric:tabular-nums}
+.d2 .badge{font-size:11px;border-radius:999px;padding:0 7px;line-height:18px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.d2 .diff{font:12.5px/1.55 var(--font-mono,ui-monospace,Consolas,monospace);border-top:1px solid var(--line)}
+.d2 .diff div{display:flex;padding:0 10px;white-space:pre-wrap;word-break:break-all}
+.d2 .diff .ln{width:28px;flex:none;color:var(--text-faint);text-align:right;margin-right:10px;user-select:none}
+.d2 .diff .a{background:var(--ok-soft)}.d2 .diff .r{background:var(--bad-soft)}.d2 .diff .h{color:var(--text-dim);background:var(--bg-sidebar)}
+.d2 .tree .t{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:6px;font-size:13px}
+.d2 .tree .t .chev{width:12px;height:12px;color:var(--text-faint)}.d2 .tree .t .chev.o{transform:rotate(90deg)}
+.d2 .tree .t.fresh{background:var(--accent-soft)}.d2 .tree .t.cur{background:var(--hover);font-weight:600}
+.d2 .tree .t .ago{margin-left:auto;font-size:11.5px;color:var(--accent)}
+.d2 .tree .ind1{margin-left:18px}.d2 .tree .ind2{margin-left:36px}
+.d2 .file{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:12px;overflow:hidden}
+.d2 .file .fh{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+.d2 .file .fh b{color:var(--text)}.d2 .file .fh .sp{flex:1}
+.d2 .file .code{font:12.5px/1.55 var(--font-mono,ui-monospace,Consolas,monospace)}
+.d2 .file .code div{display:flex;padding:0 10px}.d2 .file .code .ln{width:24px;text-align:right;margin-right:10px;color:var(--text-faint)}
+.d2 .file .code .hl{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.d2 .specimen{max-width:760px}
+.d2 .specimen.m{max-width:390px}
+.d2 .spec{border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:6px 14px 10px;margin-bottom:12px}
+.d2 .spec .lbl{font-size:11.5px;font-weight:600;color:var(--accent);padding:6px 0 0}
+</style></head><body>
+<div class="bar">
+  <strong>D-2 chat and panes</strong>
+  <span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></span>
+  <span class="seg" id="size"><button data-v="d" aria-pressed="true">Desktop 1440</button><button data-v="m" aria-pressed="false">Phone 390</button></span>
+</div>
+<div class="page">
+<h1>How the chat behaves: today beside proposed</h1>
+<p class="pg-dim">Design session, 2026-11-16, against 5cc3801 on initial-import (0.1.4). Owner's brief: "this is how i want the chat interface to behave, not like this", Claude Code's desktop chat shown next to Bunny's. <strong>Today</strong> is the real app on an invented profile (a temp folder with three small files, user "Ada Example", fake upstream), unedited, the same conversation as the proposal. <strong>Proposed</strong> is drawn with the project's design tokens (<code>docs/design/bunny-design-system.css</code>, linked, so both themes follow it) and the purple bunny from D1. The proposal is a drawing of a screen, not a running build: nothing is built until the owner approves.</p>
+<p class="pg-dim"><strong>Not covered, stated plainly:</strong> no contrast ratios were measured (UNKNOWN); English only; the drawn sample runs are invented (no real chats, files or paths); the tool-group wording rules below are a proposal for every tool Bunny has, but only five tools are drawn; Today's Changes and Files panes were shot as they are, which is why they look empty (see their notes).</p>
+<div id="out"></div>
+<div class="screen" id="decisions"><h2>Decisions for the owner, each with a recommendation</h2><div id="dec"></div></div>
+</div>
+
+<script>
+const CH='<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"/></svg>';
+const BUNNY='<svg class="bunny" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="ear" cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)"/><ellipse class="ear" cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)"/><circle class="face" cx="12" cy="15" r="7"/><circle class="eye" cx="9.5" cy="14" r="1"/><circle class="eye" cx="14.5" cy="14" r="1"/><circle class="nose" cx="12" cy="16.6" r=".9"/></svg>';
+const IC='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>';
+
+/* ---- transcript pieces ---- */
+const grp=(open,sum,meta,subs)=>'<div class="grp"><div class="gh '+(open?'open':'')+'">'+CH+'<span class="sum">'+sum+'</span>'+(meta||'')+'</div>'+(open?'<div class="subs">'+subs+'</div>':'')+'</div>';
+const sub=(open,nm,label,detail)=>'<div class="sub '+(open?'open':'')+'">'+CH+'<span class="nm">'+nm+'</span>'+(label||'')+'</div>'+(open?detail:'');
+const FAIL='<span class="lab-fail">Failed</span>';
+const detailRead='<div class="detail"><div class="dh">Read src/app.test.js<span class="sp"></span></div><pre class="err">Error: ENOENT: no such file or directory, open src/app.test.js</pre></div>';
+const detailRun='<div class="detail"><div class="dh">Command · exit code 1 · 2.1s<span class="sp"></span><span class="cp">Copy</span></div><pre class="cmd">npm test</pre><pre class="err">not ok 1 - greet\n  AssertionError: expected "Hello, Ada!" got undefined\n  at src/app.test.js:1:1\n# tests 1   # pass 0   # fail 1</pre></div>';
+function transcript(){return ''
+ +'<div class="user">Add a bye() next to greet() and a test for both, then run the tests.</div>'
+ +'<div class="note">I will look at the greeter first and see whether a test file already exists.</div>'
+ +grp(true,'Read a file, tried to read another','<span class="lab-fail">1 failed</span>',
+    sub(false,'Read src/app.js')+sub(true,'Read src/app.test.js',FAIL,detailRead))
+ +'<div class="note">There is no test yet. I will write one, then add <code>bye()</code> to the greeter.</div>'
+ +grp(false,'Wrote a file, edited a file','<span class="meta2">+4 −1</span>')
+ +grp(true,'Ran a command','<span class="lab-fail">Failed</span>',sub(true,'Run npm test',FAIL,detailRun))
+ +'<div class="reply"><p>I added <code>bye()</code> and a test, but the test run failed: the test file only has a title and no assertion yet. Want me to write the assertions?</p></div>';}
+function frameD(inner,paneHtml,active){return '<div class="d2"><div class="frame d"><div class="sbar"><div class="brand">'+BUNNY.replace('class="bunny"','class="bunny" style="animation:none"')+'Bunny AI</div><div class="row">New chat</div><div class="row">Incognito</div><div class="row">Artifacts</div><div class="row">Search chats</div><div class="row on">Add a goodbye to the greeter</div></div><div class="main"><div class="top"><b>Add a goodbye to the greeter</b><span class="sp"></span><span class="ib '+(active==='session'?'on':'')+'">☰</span><span class="ib">›_</span><span class="ib '+(active==='changes'?'on':'')+'">±</span><span class="ib">◎</span><span class="ib '+(active==='files'?'on':'')+'">▢</span></div><div class="thread"><div class="col">'+inner+'</div></div><div class="comp"><div class="box">Ask about or change the code in your folder…</div><div class="meta3"><span>bunny-design-project</span><span>main</span><span>Manual</span><span>Medium</span><span>Auto · Chat</span></div></div></div>'+(paneHtml?'<div class="pane">'+paneHtml+'</div>':'')+'</div></div>';}
+function frameM(inner,paneHtml,active){const t='<div class="top"><span class="ib">☰</span><b>Add a goodbye…</b><span class="sp"></span><span class="ib '+(active==='session'?'on':'')+'">☰</span><span class="ib '+(active==='changes'?'on':'')+'">±</span><span class="ib '+(active==='files'?'on':'')+'">▢</span></div>';
+ if(paneHtml)return '<div class="d2"><div class="frame m">'+t+'<div class="pane">'+paneHtml+'</div></div></div>';
+ return '<div class="d2"><div class="frame m">'+t+'<div class="thread"><div class="col">'+inner+'</div></div><div class="comp"><div class="box">Ask about or change the code…</div></div></div></div>';}
+
+/* ---- states specimen ---- */
+function states(){
+ const S=(l,h)=>'<div class="spec"><div class="lbl">'+l+'</div>'+h+'</div>';
+ return '<div class="d2"><div class="specimen '+(size==='m'?'m':'')+'">'
+ +S('Done, collapsed (the default once a step has finished)',grp(false,'Read 3 files, searched for a word','<span class="meta2">4s</span>'))
+ +S('Done, expanded (click the line; sub-rows each open to their detail)',grp(true,'Read 2 files','<span class="meta2">1s</span>',sub(false,'Read src/app.js')+sub(false,'Read README.md')))
+ +S('Running (the line stays open and shows the live step; the purple bunny and its word sit under the last group)',grp(true,'Running a command…','<span class="spin"></span>',sub(true,'Run npm test','<span class="spin"></span>','<div class="detail"><div class="dh">Command · running<span class="sp"></span></div><pre class="cmd">npm test</pre></div>'))+'<div class="running">'+BUNNY+'<span class="w">Thumping npm test…</span><span class="t">12s</span></div>')
+ +S('Failed (red label on the line and on the step; opens to the exact command and the error)',grp(true,'Ran a command','<span class="lab-fail">Failed</span>',sub(true,'Run npm test',FAIL,detailRun)))
+ +S('Stopped by the person (a report, not a silence: what was done, what was not, and what happens next)','<div class="stopped"><b>Stopped</b><div class="pg-dim" style="font-size:14px">You stopped Bunny after 2 steps.</div><ul><li>Done: wrote src/app.test.js, edited src/app.js</li><li>Not done: run the tests, fix the failing test</li></ul><div class="btns"><span class="btn pri">Continue</span><span class="btn">Undo these changes</span></div></div>')
+ +S('A model failed and another took over (one dim line, not an error box)','<div class="fb"><i></i>Bunny Large was not available (rate limited). Bunny Code continued the reply. <span style="color:var(--accent)">Details</span></div>')
+ +S('A reply that failed outright (the same red Failed label, with why and one action)','<div class="grp"><div class="gh open">'+CH+'<span class="sum">The reply failed</span>'+FAIL+'</div></div><div class="detail"><div class="dh">Provider error<span class="sp"></span><span class="cp">Copy</span></div><pre class="err">Bunny Code (offline): the connection was refused.</pre></div><div class="btns" style="margin:0 0 8px 20px"><span class="btn pri">Try again</span><span class="btn">Choose another model</span></div>')
+ +'</div></div>';}
+
+/* ---- panes ---- */
+const diffA='<div class="diff"><div class="h"><span class="ln"></span>@@ src/app.js</div><div class="r"><span class="ln">1</span>−export const greet = (name) =&gt; "Hello, " + name;</div><div class="a"><span class="ln">1</span>+export const greet = (name) =&gt; `Hello, ${name}!`;</div><div class="a"><span class="ln">2</span>+export const bye = () =&gt; "Bye";</div></div>';
+const changesPane=(m)=>'<div class="ph">Changes<span class="badge">2 files</span><span class="add">+4</span><span class="del">−1</span><span class="sp"></span><span class="x">'+(m?'Close':'✕')+'</span></div>'
+ +'<div class="tabs"><span class="on">This session</span><span>Since checkpoint</span></div>'
+ +'<div class="pbody"><div class="cpt"><div class="ch"><b>Checkpoint 2</b> after Edit src/app.js<span class="sp"></span><span class="btn bad" style="line-height:20px;padding:0 8px">Undo to here</span></div>'
+ +'<div class="fr"><span class="nm">src/app.js</span><span class="badge">edited</span><span class="add">+3</span><span class="del">−1</span></div>'+diffA+'</div>'
+ +'<div class="cpt"><div class="ch"><b>Checkpoint 1</b> after Write src/app.test.js<span class="sp"></span><span class="btn bad" style="line-height:20px;padding:0 8px">Undo to here</span></div><div class="fr"><span class="nm">src/app.test.js</span><span class="badge">new</span><span class="add">+1</span></div></div>'
+ +'<div class="banner"><b>Folder is not a git repository.</b> Bunny saved a copy of each file before editing it, so every change can still be shown and undone here.</div>'
+ +'<div class="banner">Undo to checkpoint 1 restores src/app.js and removes src/app.test.js.<div class="btns" style="margin-top:8px"><span class="btn pri">Undo 2 files</span><span class="btn">Keep</span></div></div></div>';
+const filesPane=(m)=>'<div class="ph">Files<span class="pg-dim" style="font-weight:400">bunny-design-project</span><span class="sp"></span><span class="x">'+(m?'Close':'✕')+'</span></div>'
+ +'<div class="pbody"><div class="tree"><div class="t">'+CH.replace('class="chev"','class="chev o"')+'src</div>'
+ +'<div class="t ind1 cur">app.js<span class="ago">edited 2m ago</span></div><div class="t ind1 fresh">app.test.js<span class="ago">new 3m ago</span></div>'
+ +'<div class="t">'+CH+'docs</div><div class="t">README.md</div><div class="t">package.json</div></div>'
+ +'<div class="file"><div class="fh"><b>src/app.js</b><span class="badge">edited by Bunny</span><span class="sp"></span><span>Copy path</span></div><div class="code"><div class="hl"><span class="ln">1</span>export const greet = (name) =&gt; `Hello, ${name}!`;</div><div class="hl"><span class="ln">2</span>export const bye = () =&gt; "Bye";</div></div></div></div>';
+const sessionPane=(m)=>'<div class="ph">Session<span class="sp"></span><span class="x">'+(m?'Close':'✕')+'</span></div><div class="pbody">'
+ +'<div class="sec"><h5>Where</h5><div class="kv"><span class="k">Folder</span><span class="v">bunny-design-project<small>C:/…/bunny-design-project · Open in Explorer</small></span></div><div class="kv"><span class="k">Branch</span><span class="v">main<small>2 files changed, not committed</small></span></div></div>'
+ +'<div class="sec"><h5>Model</h5><div class="kv"><span class="k">Model</span><span class="v">Bunny Code (offline)<small>Auto picked this: a small edit, so the faster model</small></span></div><div class="kv"><span class="k">Effort</span><span class="v">Medium</span></div></div>'
+ +'<div class="sec"><h5>Context and cost</h5><div class="kv"><span class="k">Context</span><span class="v">38% · 76k of 200k tokens<div class="meter"><span style="width:38%"></span></div></span></div><div class="kv"><span class="k">This chat</span><span class="v">41k in · 6k out<small>est. 0.00 (offline model)</small></span></div></div>'
+ +'<div class="sec"><h5>Connectors</h5><div class="kv"><span class="v"><span class="dot"></span>Filesystem (local)</span></div><div class="kv"><span class="v"><span class="dot off"></span>GitHub (off)</span></div></div>'
+ +'<div class="sec"><h5>Running programs</h5><div class="kv"><span class="v"><span class="dot run"></span>npm run dev<small>port 5173 · 4m</small></span><span class="btn" style="line-height:20px;padding:0 8px">Stop</span></div></div>'
+ +'<div class="sec"><h5>Outputs</h5><div class="kv"><span class="v">src/app.test.js<small>new file</small></span></div></div></div>';
+
+/* ---- sections ---- */
+const SEC=[
+ {t:'1. Chat transcript',files:'src/ui/chat.js:986-1000 (tool box), :1460-1480 (live tools), :1453 (step note), :1060/:1646-1662 (undo bar); src/ui/app.css:1149-1155, :1495, :1767; src/ui/bunny-working.js',risk:'MEDIUM: touches the renderer every chat goes through and ids the e2e tests use (L005)',today:'chat',prop:'transcript',
+  notes:['<b>Today:</b> every tool call is its own row with a "done"/"failed" pill, and its raw result sits in a grey box under it ("→ [exit code 1] > node --test …"). Five steps are five rows; the one failure that matters is a line of mono text, not marked red.',
+   '<b>Proposed rules:</b> (a) consecutive steps between two pieces of narration become <b>one group line</b> with a plain past-tense summary ("Read a file, tried to read another", "Wrote a file, edited a file", "Ran a command"); (b) the group opens to <b>sub-rows</b> named for the target ("Read src/app.js", "Run npm test"), each of which opens to its detail; (c) a failed step gets a <b>red "Failed" label</b> on its sub-row and the group, and opens to the exact command and the error with a Copy button; (d) the model\'s <b>short sentences between groups stay as plain text</b>; (e) the reply is plain prose, no box.',
+   '<b>Running:</b> the group line shows the live step with a small spinner; the purple bunny and its word stay under the last group (specimen below). <b>Stopped, fallback, failed reply</b> are shown in the specimen board.',
+   '<b>Phone:</b> same structure; details wrap, group lines never truncate the summary, only sub-row names do.',
+   '<b>Kept from today:</b> approvals (permission prompts) and the question cards keep their own cards; they are not drawn here and are not changed.'],states:true},
+ {t:'2. Changes pane',files:'src/ui/index.html:312-315; src/ui/chat.js:1646-1662 (undo); src/server/checkpoints.js; new: a read-only server endpoint for the session\'s changes',risk:'MEDIUM: a new endpoint that reads the session folder (Security to review); undo already exists server-side',today:'changes',prop:'changes',
+  notes:['<b>Today:</b> the pane is a placeholder. Its markup says "No changes yet." and no code writes anything into it (I searched the UI source: nothing references <code>diff-content</code>), so it never shows a diff even after Bunny edits files. Undo exists only as a bar under a reply (<code>chat.js:1646</code>).',
+   '<b>Proposed:</b> header with file count and total +/−; one card per <b>checkpoint</b> (the point after each edit step) listing its files with new/edited badges and +/− counts, the diff of an expanded file, and <b>Undo to here</b> per checkpoint with a confirm that names what will be restored or removed.',
+   '<b>Folders that are not git repositories:</b> the same cards, built from the copy Bunny already saves before each edit; a banner says so in one sentence. Git folders can also show "Since last commit".',
+   '<b>Needs:</b> a server endpoint returning the session\'s checkpoints with before/after text per file; nothing is written by it.']},
+ {t:'3. Files pane',files:'src/ui/index.html:354-356; new: a read-only listing and file-read endpoint scoped to the session folder',risk:'MEDIUM: reads the session folder (Security to review path escapes)',today:'files',prop:'files',
+  notes:['<b>Today:</b> the pane is a placeholder: "Open a file to read it." There is no folder tree, and nothing opens a file into it.',
+   '<b>Proposed:</b> the session folder as a tree (folders open/close), the open file below it with line numbers, files <b>Bunny edited or created this session highlighted</b> in the accent tint with "edited 2m ago" / "new", and the exact lines it changed highlighted in the file. Clicking "Read src/app.js" in the transcript opens it here. Read-only: no editing from this pane.',
+   '<b>Phone:</b> tree first; opening a file shows the file with a back row.']},
+ {t:'4. Session pane',files:'src/ui/index.html:261-286; src/ui/chat.js:1267-1330 (renderRail); src/server/processes.js, usage.js',risk:'LOW to MEDIUM: more fields; running programs come from the existing process list',today:'session',prop:'session',
+  notes:['<b>Today:</b> Environment ("This computer", "No project"), Context % bar, Connectors, Outputs. It does not show the folder, the branch, the model, what Auto picked, tokens or cost, or running programs, though the footer under the composer does show folder, branch and model.',
+   '<b>Proposed:</b> groups <b>Where</b> (folder with Open in Explorer, branch with uncommitted count), <b>Model</b> (the model, why Auto chose it in one line, effort), <b>Context and cost</b> (percentage, tokens used of the limit, tokens in/out for this chat, estimated cost), <b>Connectors</b>, <b>Running programs</b> (with Stop), <b>Outputs</b>.',
+   '<b>Cost:</b> shown only when the provider reports usage; otherwise "not reported" (never a guess).']}
+];
+const DEC=[
+ ['Group by what?','One group per run of steps between narrations (as drawn). Alternative: one group per reply. Recommendation: per run; a long reply stays readable.'],
+ ['Does a failed step open by itself?','No: collapsed with the red Failed label, except the last failed step of a reply that ended on it, which starts open (as drawn). Recommendation: as drawn.'],
+ ['Changes pane in non-git folders','Use the copy Bunny saves before each edit. Recommendation: yes; it is already stored for undo.'],
+ ['Is the Files pane read-only?','Yes in this round. Recommendation: yes; editing is a separate decision.'],
+ ['Build order','1 transcript, 2 Session pane, 3 Changes, 4 Files (the last two need new read-only endpoints, so Security looks first). Recommendation: as listed.']
+];
+let theme='light',size='d';
+const q=(s)=>document.querySelector(s);
+const fit=()=>document.querySelectorAll('.fitbox').forEach(b=>{const fr=b.querySelector('.frame');if(!fr)return;const w=fr.offsetWidth;const avail=b.clientWidth-20;const sc=Math.min(1,avail/w);fr.parentElement.style.transform='scale('+sc+')';fr.parentElement.style.transformOrigin='0 0';b.style.height=(fr.offsetHeight*sc+20)+'px';});
+function render(){
+ const out=q('#out');out.innerHTML='';
+ for(const s of SEC){
+  const sec=document.createElement('section');sec.className='screen';
+  const proposed=s.prop==='transcript'?(size==='d'?frameD(transcript(),null,''):frameM(transcript(),null,'')):
+    s.prop==='changes'?(size==='d'?frameD(transcript(),changesPane(false),'changes'):frameM('',changesPane(true),'changes')):
+    s.prop==='files'?(size==='d'?frameD(transcript(),filesPane(false),'files'):frameM('',filesPane(true),'files')):
+    (size==='d'?frameD(transcript(),sessionPane(false),'session'):frameM('',sessionPane(true),'session'));
+  let h='<h2>'+s.t+'</h2><div class="meta"><span class="tag">Risk: '+s.risk+'</span><span class="tag">'+s.files+'</span></div>';
+  h+='<div class="pair stack"><figure class="f"><figcaption>Today, as built ('+theme+', '+(size==='d'?'1440':'390')+')</figcaption><div class="imgbox"><img src="shots/today-'+s.today+'-'+theme+'-'+size+'.png" alt="'+s.t+': today"></div></figure>'
+   +'<figure class="f"><figcaption class="p">Proposed</figcaption><div class="fitbox"><div style="width:max-content">'+proposed+'</div></div></figure></div>';
+  if(s.states)h+='<h3>Proposed: every state, one at a time</h3><figure class="f"><figcaption class="p">States (proposed)</figcaption><div style="padding:14px">'+states()+'</div></figure>';
+  h+='<ul class="notes">'+s.notes.map(n=>'<li>'+n+'</li>').join('')+'</ul>';
+  sec.innerHTML=h;out.append(sec);
+ }
+ q('#dec').innerHTML=DEC.map(d=>'<div class="q"><b>'+d[0]+'</b><br><span class="pg-dim">'+d[1]+'</span></div>').join('');
+ fit();
+}
+for(const [id,set] of [['theme',v=>{theme=v;document.documentElement.dataset.theme=v}],['size',v=>{size=v}]])
+ q('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;q('#'+id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));set(b.dataset.v);render();});
+if(matchMedia('(prefers-color-scheme:dark)').matches){theme='dark';document.documentElement.dataset.theme='dark';q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='dark'))}
+addEventListener('resize',fit);
+render();
+</script></body></html>
