@@ -158,7 +158,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
   // and is handed to the pages the server itself serves.
-  const guard = createRequestGuard({ token: apiToken ?? makeToken() });
+  const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
 
   const secrets = secretStore ?? dpapiSecretStore({ dir: join(dataDir, 'secrets') });
   const connectionsFile = join(dataDir, 'connections.json');
@@ -441,7 +441,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const method = req.method ?? 'GET';
 
     if (localGuard !== false) {
-      const verdict = guard.check(req, path, method);
+      const verdict = guard.check(req, path, method, url.searchParams);
       if (!verdict.ok) return sendJson(res, 403, { code: verdict.code, message: verdict.message });
     }
 
@@ -914,7 +914,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (audioMatch && method === 'GET') {
       try {
         const body = await readFile(join(speech.dir, `${audioMatch[1]}.wav`));
-        res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': body.length, 'cache-control': 'private, max-age=31536000' });
+        res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': body.length, 'cache-control': 'private, max-age=31536000', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
         return res.end(body);
       } catch {
         return sendJson(res, 404, { code: 'audio.notFound', message: 'No such audio' });

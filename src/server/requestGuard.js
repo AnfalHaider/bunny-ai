@@ -18,7 +18,12 @@ const HEADERLESS = [
   /^\/api\/profile\/photo$/,
   /^\/api\/screens\/[a-f0-9-]{36}\.png$/,
   /^\/api\/artifacts\/[a-f0-9-]{36}\/raw$/,
+  /^\/api\/audio\/[a-f0-9-]{36}\.wav$/,
 ];
+
+// Google's sign-in return is a navigation from the system browser: no Origin, no token, cross-site.
+// It is the ONE exception, GET only, and only for a `state` Bunny made for a sign-in still in flight.
+const GOOGLE_CALLBACK = '/api/account/google/callback';
 
 const refuse = (code, message) => ({ ok: false, code, message });
 
@@ -33,8 +38,8 @@ export function makeToken() {
   return randomBytes(32).toString('hex');
 }
 
-export function createRequestGuard({ token = makeToken() } = {}) {
-  function check(req, path, method) {
+export function createRequestGuard({ token = makeToken(), validCallbackState = () => false } = {}) {
+  function check(req, path, method, query = null) {
     const headers = req.headers ?? {};
     const port = req.socket?.localPort;
 
@@ -42,6 +47,10 @@ export function createRequestGuard({ token = makeToken() } = {}) {
     const host = typeof headers.host === 'string' ? headers.host.trim().toLowerCase() : '';
     if (!port || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) {
       return refuse('request.badHost', NOT_BUNNY);
+    }
+
+    if (method === 'GET' && path === GOOGLE_CALLBACK) {
+      return validCallbackState(query?.get('state') ?? '') ? { ok: true } : refuse('request.badState', 'This sign-in link has expired. Start again from Bunny AI.');
     }
 
     const isApi = path.startsWith('/api/');

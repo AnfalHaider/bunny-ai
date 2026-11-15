@@ -203,3 +203,72 @@ test('BUNNY_API_TOKEN is honoured only in fake-upstream mode', () => {
   const src = readFileSync(new URL('../src/server/main.js', import.meta.url), 'utf8');
   assert.match(src, /BUNNY_FAKE_UPSTREAM === '1'[\s\S]{0,160}BUNNY_API_TOKEN|BUNNY_API_TOKEN[\s\S]{0,160}BUNNY_FAKE_UPSTREAM === '1'/);
 });
+
+// ---------- re-fix after Security's FAIL at ca01243: sign-in return and speech files ----------
+
+test('audio files load without a token, from the same origin only', () => {
+  const path = `/api/audio/${UUID}.wav`;
+  assert.equal(ok({ host: `127.0.0.1:${P}`, 'sec-fetch-site': 'same-origin' }, path).ok, true);
+  assert.equal(ok({ host: `127.0.0.1:${P}`, 'sec-fetch-site': 'cross-site' }, path).code, 'request.badOrigin');
+  assert.equal(ok({ host: `evil.example:${P}` }, path).code, 'request.badHost');
+  assert.equal(ok({ host: `127.0.0.1:${P}` }, path, 'POST').code, 'request.noToken');
+});
+
+const callbackGuard = createRequestGuard({ token: TOKEN, validCallbackState: (s) => s === 'in-flight-state' });
+const callback = (headers, state, method = 'GET', path = '/api/account/google/callback') =>
+  callbackGuard.check(req(headers), path, method, new URLSearchParams(state === undefined ? '' : `state=${state}&code=c`));
+const fromGoogle = { host: `127.0.0.1:${P}`, 'sec-fetch-site': 'cross-site' }; // what the system browser sends back
+
+test('Google return: the callback with a state Bunny made passes, with no token, cross-site', () => {
+  assert.equal(callback(fromGoogle, 'in-flight-state').ok, true);
+  assert.equal(callback({ host: `localhost:${P}` }, 'in-flight-state').ok, true, 'no fetch metadata at all');
+});
+
+test('Google return: a missing, wrong or spent state is refused', () => {
+  assert.equal(callback(fromGoogle, undefined).code, 'request.badState');
+  assert.equal(callback(fromGoogle, 'guess').code, 'request.badState');
+  assert.equal(callback(fromGoogle, '').code, 'request.badState');
+});
+
+test('Google return: only that route, only GET, and the Host rule still holds', () => {
+  assert.equal(callback(fromGoogle, 'in-flight-state', 'POST').ok, false, 'a cross-site POST to the same path');
+  assert.equal(callback(fromGoogle, 'in-flight-state', 'POST').code, 'request.badOrigin');
+  assert.equal(callback({ host: `evil.example:${P}` }, 'in-flight-state').code, 'request.badHost');
+  for (const other of ['/api/account/google/start', '/api/account', '/api/mcp', '/api/account/google/callback/x', '/api/account/google/callbackx']) {
+    assert.equal(callback(fromGoogle, 'in-flight-state', 'GET', other).ok, false, other);
+  }
+});
+
+test('Google return, through the real app: a bad state is refused by the guard, audio loads', async (t) => {
+  const { base } = await startApp(t, { localGuard: true, apiToken: TOKEN });
+  const host = new URL(base).host;
+  const stranger = { host, 'sec-fetch-site': 'cross-site' };
+  assert.equal((await raw(base, '/api/account/google/callback?state=nope&code=x', { headers: stranger })).status, 403);
+  assert.equal((await raw(base, '/api/account/google/callback', { headers: stranger })).status, 403);
+  assert.equal((await raw(base, '/api/account/google/callback?state=nope', { method: 'POST', headers: stranger })).status, 403);
+  assert.equal((await raw(base, `/api/audio/${UUID}.wav`, { headers: { host, 'sec-fetch-site': 'same-origin' } })).status, 404, 'not 403: the file simply is not there');
+});
+
+test('Google return: a started sign-in is known once, then spent; an old one has expired', async () => {
+  const { createAccounts } = await import('../src/server/accounts.js');
+  const { memorySecretStore } = await import('../src/providers/connections.js');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-acct-'));
+  const accounts = createAccounts({
+    file: join(dir, 'account.json'), secrets: memorySecretStore(), getSettings: () => ({ googleClientId: 'abc.apps.googleusercontent.com' }),
+    fetchImpl: async () => ({ ok: false, status: 400, json: async () => ({ error: 'invalid_grant' }) }),
+  });
+  try {
+    const state = new URL(accounts.googleStart('http://127.0.0.1:1').url).searchParams.get('state');
+    assert.equal(accounts.googleFlowKnown(state), true);
+    assert.equal(accounts.googleFlowKnown(state), true, 'peeking does not use it up');
+    await assert.rejects(() => accounts.googleFinish({ code: 'c', state }));
+    assert.equal(accounts.googleFlowKnown(state), false, 'finishing uses it up, even when Google refuses');
+    const realNow = Date.now;
+    const again = new URL(accounts.googleStart('http://127.0.0.1:1').url).searchParams.get('state');
+    Date.now = () => realNow() + 11 * 60_000;
+    try {
+      assert.equal(accounts.googleFlowKnown(again), false, 'older than ten minutes');
+      await assert.rejects(() => accounts.googleFinish({ code: 'c', state: again }), /expired/);
+    } finally { Date.now = realNow; }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

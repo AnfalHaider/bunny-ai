@@ -55,6 +55,8 @@ regexes, applied when a command cannot be read with confidence or `shell_parse` 
 - **Records.** Only `chief-of-staff` writes `docs/signoffs/**` and `docs/releases/**` directly (file tools and shell);
   everyone else uses `bootstrap signoff|require|release`. This matches what the plugin guard already says; confirm no role
   writes those folders another way.
+- **Symlinks and junctions** inside the repo are not followed (item B2, not built): a write through a link that points at a protected path is judged by the link's name. A1 at commit time sees the real change.
+- **The "require" sub-command** (which roles must sign a piece) can be run by any role today, as before. Narrowing it to the Chief of Staff would stop a role weakening a piece's sign-off list, but Tech Lead's own workflow writes `_required.md`. The plugin guard already restricts it to chief-of-staff and security. Decision for Tech Lead and the Chief of Staff.
 - **Windows names.** 8.3 short names are resolved only when the file already exists; junctions and symlinks are not
   followed (spec item B2, not built).
 
