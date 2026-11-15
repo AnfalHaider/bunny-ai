@@ -22,7 +22,7 @@
 |---|---|---|---|---|---|---|
 | B-1 | bootstrap.mjs: quote-safe spawn (shell only for .cmd), drop unused imports | LOW | builder | builder, 2026-11-16 | claimed | `claude/builder-efa9a9` |
 | S-1 | Lock the local API to Bunny's own pages (Host, Origin, per-launch token) per Tech Lead notes 40e4230 | HIGH | builder | builder, 2026-11-16 | built at ca01243, gate 7/7; awaiting QA + Security + Tech Lead review | `claude/builder-efa9a9`, `docs/plans/S-1-build-notes.md` on claude/tech-lead-86cf31 |
-| D1 | Design review 0.1.4: greeting + Add a provider button, phone Settings pill row, custom provider form first, phone Automation buttons full width, purple bunny (notes 2a744a9) | LOW | builder | builder, 2026-11-16 | claimed (same branch as S-1; D1 commits kept separate) | `claude/builder-efa9a9` |
+| D1 | Design review 0.1.4: greeting + Add a provider button, phone Settings pill row, custom provider form first, phone Automation buttons full width, purple bunny (notes 2a744a9) | LOW | builder | builder, 2026-11-16 | built, gate 7/7; shots in docs/design/review-0.1.4/built; awaiting Design + QA | `claude/builder-efa9a9` |
 
 ## SIGN-OFF GRID
 
