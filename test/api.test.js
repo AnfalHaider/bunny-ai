@@ -28,6 +28,7 @@ async function startApp(t, overrides = {}) {
     secretStore: memorySecretStore(),
     probe: async () => ({ ok: true, keyVerified: true }),
     discover: async () => MODELS,
+    localGuard: false, // S-1: this suite has no browser; the guard has its own suite
     ...overrides,
   });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));

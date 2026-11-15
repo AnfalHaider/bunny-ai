@@ -68,6 +68,7 @@ import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
+import { createRequestGuard, makeToken } from './requestGuard.js';
 
 // The project root, found from this file rather than the working directory, so the
 // server also finds its UI when it runs inside the packaged desktop app.
@@ -152,8 +153,12 @@ export function stoppedReport(steps) {
 /**
  * @param {{ dataDir: string, fake?: boolean, secretStore?: any, probe?: any, discover?: any }} options
  */
-export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover } = {}) {
+export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true } = {}) {
   await mkdir(dataDir, { recursive: true });
+
+  // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
+  // and is handed to the pages the server itself serves.
+  const guard = createRequestGuard({ token: apiToken ?? makeToken() });
 
   const secrets = secretStore ?? dpapiSecretStore({ dir: join(dataDir, 'secrets') });
   const connectionsFile = join(dataDir, 'connections.json');
@@ -368,7 +373,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             permissionMode: schedule.permissionMode === 'auto' ? 'auto' : 'plan', workMode: schedule.folder ? 'code' : 'chat',
           });
           const res = await fetch(`http://127.0.0.1:${port}/api/sessions/${run.id}/messages`, {
-            method: 'POST', headers: { 'content-type': 'application/json' },
+            method: 'POST', headers: { 'content-type': 'application/json', 'x-bunny-token': guard.token },
             body: JSON.stringify({ content: schedule.prompt, providerId, model, workMode: schedule.folder ? 'code' : 'chat', scheduledTask: schedule.name }),
           });
           const stream = await res.text();
@@ -434,6 +439,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
+
+    if (localGuard !== false) {
+      const verdict = guard.check(req, path, method);
+      if (!verdict.ok) return sendJson(res, 403, { code: verdict.code, message: verdict.message });
+    }
 
     if (path === '/api/health') return sendJson(res, 200, { ok: true, fake });
 
@@ -586,7 +596,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       if (!settings.profilePhoto) return sendJson(res, 404, { code: 'photo.none', message: 'No profile photo' });
       try {
         const bytes = await readFile(photoFile);
-        res.writeHead(200, { 'content-type': settings.profilePhoto.mime, 'cache-control': 'no-cache', 'content-length': bytes.length });
+        res.writeHead(200, { 'content-type': settings.profilePhoto.mime, 'cache-control': 'no-cache', 'content-length': bytes.length, 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
         return res.end(bytes);
       } catch {
         return sendJson(res, 404, { code: 'photo.none', message: 'No profile photo' });
@@ -1174,7 +1184,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (screenMatch && method === 'GET') {
       try {
         const png = await readFile(join(screensDir, `${screenMatch[1]}.png`));
-        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'private, max-age=31536000' });
+        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'private, max-age=31536000', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
         return res.end(png);
       } catch {
         return sendJson(res, 404, { code: 'screen.notFound', message: 'No such screenshot' });
@@ -2488,7 +2498,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     }
     try {
       const body = await readFile(target);
-      res.writeHead(200, { 'content-type': TYPES[extname(target)] ?? 'application/octet-stream' });
+      const type = TYPES[extname(target)] ?? 'application/octet-stream';
+      if (extname(target) === '.html') {
+        // Bunny's own pages are given the launch token, and are never cached with a stale one.
+        const page = body.toString('utf8').replace(/<head>/i, `<head>
+<meta name="bunny-token" content="${guard.token}">
+<script src="/src/ui/token.js"></script>`);
+        res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', 'content-security-policy': "frame-ancestors 'self'" });
+        res.end(page);
+        return;
+      }
+      res.writeHead(200, { 'content-type': type });
       res.end(body);
     } catch {
       res.writeHead(404).end('not found');
@@ -2518,6 +2538,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     computer, terminals,
     getSettings: () => settings,
     dataDir,
+    apiToken: guard.token,
     runHooks,
     runDueSchedules,
   };

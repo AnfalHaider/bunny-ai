@@ -2226,13 +2226,16 @@ async function compactChat() {
 
 async function exportChat() {
   if (!state.sessionId) { $('error').textContent = 'Start a chat before exporting.'; return; }
-  const link = element('a', {
-    href: `/api/sessions/${state.sessionId}/export?format=markdown`,
-    download: '',
-  });
+  // A plain download link cannot carry the page's token, so fetch the file and save it from memory.
+  const res = await fetch(`/api/sessions/${state.sessionId}/export?format=markdown`);
+  if (!res.ok) { $('error').textContent = 'Could not export this chat.'; return; }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? `${state.sessionId}.md`;
+  const href = URL.createObjectURL(await res.blob());
+  const link = element('a', { href, download: name });
   document.body.append(link);
   link.click();
   link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }
 
 // ---------------------------------------------------------------------------

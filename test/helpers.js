@@ -25,6 +25,8 @@ export async function startApp(t, overrides = {}) {
     secretStore: memorySecretStore(),
     probe: async () => ({ ok: true, keyVerified: true }),
     discover: async () => MODELS,
+    // S-1: these suites call the API with no browser; the guard has its own suite (request-guard.test.js).
+    localGuard: false,
     ...overrides,
   };
   // `null` means "use the real one" rather than the stub.
