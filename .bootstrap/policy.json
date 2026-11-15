@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "branches": {
+    "live": "main",
+    "dev": "main"
+  },
+  "destructive_commands": [
+    "BUNNY_RESET_PROFILE\\s*=\\s*1",
+    "Bunny-AI-Setup-[^\\s]*\\.exe\\s+(//|/)S\\b"
+  ],
+  "deny_all": [
+    "\\bgit\\s+push\\b.*\\s(--force|-f|--force-with-lease)(\\s|=|$)",
+    "--no-verify\\b",
+    "\\bgit\\s+config\\b.*\\bcore\\.hooksPath\\b",
+    "\\bgit\\s+reset\\s+--hard\\b",
+    "^\\s*(ssh|scp)\\s"
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.bootstrap/bin/guard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "bootstrap-environment@bootstrap-environment": true,
+    "superpowers@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "session-report@claude-plugins-official": true,
+    "ponytail@ponytail": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "php-lsp@claude-plugins-official": false,
+    "csharp-lsp@claude-plugins-official": false,
+    "laravel@laravel": false,
+    "playground@claude-plugins-official": false,
+    "context-mode@context-mode": false,
+    "claude-mem@thedotmack": false,
+    "planning-with-files@planning-with-files": false,
+    "fullstack-dev-skills@fullstack-dev-skills": false,
+    "a11y-audit@claude-code-skills": false,
+    "agent-memory@claude-code-skills": false,
+    "agenthub@claude-code-skills": false,
+    "book-to-skill@claude-code-skills": false,
+    "apple-hig-expert@claude-code-skills": false,
+    "agile-product-owner@claude-code-skills": false,
+    "andreessen@claude-code-skills": false,
+    "business-growth-skills@claude-code-skills": false,
+    "business-operations-skills@claude-code-skills": false,
+    "c-level-skills@claude-code-skills": false,
+    "c-level-agents@claude-code-skills": false,
+    "caveman@claude-code-skills": false,
+    "chief-ai-officer-advisor@claude-code-skills": false,
+    "engineering-skills@claude-code-skills": false,
+    "feature-flags-architect@claude-code-skills": false,
+    "chief-data-officer-advisor@claude-code-skills": false,
+    "commercial-skills@claude-code-skills": false,
+    "compliance-os@claude-code-skills": false,
+    "grill-with-docs@claude-code-skills": false,
+    "self-improving-agent@claude-code-skills": false,
+    "product-skills@claude-code-skills": false,
+    "llm-cost-optimizer@claude-code-skills": false
+  }
+}
