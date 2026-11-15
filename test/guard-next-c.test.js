@@ -103,6 +103,11 @@ test('Push of every branch is refused for a role that may not push live; allowed
   denied(t, 'git push origin "refs/heads/*:refs/heads/*"', 'builder');
   denied(t, 'git push origin refs/heads/*:refs/heads/*', 'tech-lead');
   denied(t, 'git push origin HEAD:refs/heads/*', 'builder');
+  for (const abbreviated of ['--al', '--mir', '--mirr', '--branches', '--bra', '--m', '--all=true']) {
+    denied(t, `git push ${abbreviated} origin`, 'builder');
+  }
+  allowed(t, 'git push --atomic origin claude/x', 'builder');
+  allowed(t, 'git push --set-upstream origin claude/x', 'builder');
   allowed(t, 'git push origin claude/builder-x', 'builder');
   allowed(t, 'git push --tags origin', 'builder');
   allowed(t, 'echo "git push --all"', 'builder');

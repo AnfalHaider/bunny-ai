@@ -108,7 +108,13 @@ export function pushDestinations(args, currentBranch) {
 
 /** `git push` that carries many branches at once: --all, --mirror, or a wildcard refspec. */
 function pushesEverything(args) {
-  return args.some((a) => a === '--all' || a === '--mirror' || (!a.startsWith('-') && a.includes('*')));
+  // git accepts any unique prefix of a long option ("--al", "--mir"), so every prefix of these counts.
+  const BULK = ['--all', '--mirror', '--branches'];
+  const isBulk = (a) => {
+    const name = a.split('=')[0];
+    return name.startsWith('--') && name.length >= 3 && BULK.some((o) => o.startsWith(name));
+  };
+  return args.some((a) => isBulk(a) || (!a.startsWith('-') && a.includes('*')));
 }
 
 function refuseGit(call, ctx = {}) {
