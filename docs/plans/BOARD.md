@@ -20,6 +20,12 @@
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
+| S-1 | Local API: Host/Origin/token check, real confirm for local connectors | HIGH | Builder (needs owner's go) | Security, 2026-11-16 | Filed | docs/security/2026-11-16-baseline-0.1.4.md |
+| S-2 | Updater fails closed without checksum; signing decision | MEDIUM | Builder + owner | Security, 2026-11-16 | Filed | same |
+| S-3 | Secret store: entropy; agent tools refuse secrets folder (check first) | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
+| S-4 | Import: lower cap or stream; reject before reading | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
+| S-5..S-7 | move_to_new_chat/memory import confirm; secretStore cipher check + pinned powershell; updater temp folder | LOW | Builder | Security, 2026-11-16 | Filed | same |
+| S-8 | 6 moderate audit findings accepted (dev-only); do not downgrade electron-builder | LOW | Security | Security, 2026-11-16 | Accepted, re-check each release | same |
 
 ## SIGN-OFF GRID
 
