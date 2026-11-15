@@ -22,6 +22,8 @@ otherwise handle everything that can be done." Relayed to Tech Lead under 7E (ex
 - Security: only GET /api/account/google/callback reaches the server from outside the app; one exemption is enough (sent to Builder).
 - Owner on tools and permissions: "when allowed by me, everything should be allowed." Project files can never grant permissions or tools; whatever the owner allowed applies in full, no hidden limits, no re-asking. Sent to Builder (T-4, permission code) and QA (audit every mode).
 - Owner: "we are only working for english, no need to cover other languages." Sent to Builder, Design, QA: English only, no new translations, existing ones left as they are.
+- Tech Lead (81782a9): S-1 PASS at 09b35e4 (Google return the one exception, audio token-free, 32/32 guard and provider tests; e2e left to QA). G-1 FAIL at 09b35e4 (attached -c form; push --all/--mirror/wildcard refspecs; LF endings for hooks) back to Builder; 87/97 adversarial cases already right.
+- Decided under the delegation, as Tech Lead recommended: push-exempt list stays release-ops, hotfix, chief-of-staff; the require sub-command is for chief-of-staff and security only; writes through shell variables are a documented limit, caught by the commit-time check.
 - Owner added for S-1: "ensure it does not break any model provider also" — sent to Builder, QA, Security.
 - Found: prepush counts a complete sign-off set as covering every ancestor commit, so D1's set would cover
   S-1. Rule for tonight: S-1 is signed in full before any push. Sent to Tech Lead as guard item F.
