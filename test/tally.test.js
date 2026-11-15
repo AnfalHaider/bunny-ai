@@ -70,7 +70,9 @@ test('every test named by a done row actually exists', async () => {
 test('the readable tally is the rendered registry', async () => {
   const { render } = await import('../scripts/feature-tally.mjs');
   const doc = await readFile(join(ROOT, 'docs', 'FEATURE-TALLY.md'), 'utf8');
-  assert.equal(doc, render(), 'docs/FEATURE-TALLY.md is stale; run: node scripts/feature-tally.mjs');
+  // Line endings differ by checkout (git may write CRLF on Windows); the words must not.
+  const lf = (text) => text.replace(/\r\n/g, '\n');
+  assert.equal(lf(doc), lf(render()), 'docs/FEATURE-TALLY.md is stale; run: node scripts/feature-tally.mjs');
 });
 
 test('the area breakdown adds up to the total', () => {
