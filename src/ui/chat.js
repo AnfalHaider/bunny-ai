@@ -784,10 +784,64 @@ function renderProjects() {
   select.value = state.projectId ?? '';
   select.addEventListener('change', async () => {
     state.projectId = select.value || null;
+    state.projectEdit = null;
+    renderProjects(); // the edit button belongs to the chosen project
     await loadSessions();
   });
 
-  host.append(select, button('＋', { id: 'new-project', 'aria-label': 'New project', className: 'ghost' }));
+  host.append(select);
+  const current = state.projects.find((p) => p.id === state.projectId);
+  // The chosen project can be renamed, given new instructions, or deleted.
+  if (current) {
+    const edit = button('', { id: 'edit-project', 'aria-label': `Edit project ${current.name}`, title: 'Rename, edit or delete this project', className: 'ghost' });
+    edit.append(icon('edit'));
+    edit.addEventListener('click', () => { state.projectEdit = state.projectEdit === current.id ? null : current.id; state.projectOpen = false; renderProjects(); });
+    host.append(edit);
+  }
+  host.append(button('＋', { id: 'new-project', 'aria-label': 'New project', className: 'ghost' }));
+
+  if (current && state.projectEdit === current.id) {
+    const form = element('form', { className: 'project-form', 'aria-label': `Edit project ${current.name}` });
+    const name = element('input', { value: current.name, placeholder: 'Project name', 'aria-label': 'Project name' });
+    const instructions = element('textarea', {
+      rows: 3, placeholder: 'Standing instructions (optional)', 'aria-label': 'Project instructions',
+    });
+    instructions.value = current.instructions ?? '';
+    const err = element('div', { className: 'err', role: 'alert' });
+    const close = () => { state.projectEdit = null; renderProjects(); };
+    form.append(name, instructions, element('div', { className: 'actions' },
+      button('Save', { type: 'submit', className: 'primary' }),
+      button('Cancel', { className: 'ghost', onclick: close }),
+      button('Delete project', {
+        className: 'ghost danger-text',
+        onclick: async () => {
+          const count = state.sessions.filter((s) => s.projectId === current.id).length;
+          if (!confirm(`Delete the project "${current.name}"? Its ${count} chat${count === 1 ? '' : 's'} will stay, under All chats.`)) return;
+          try {
+            await sendJSON(`/api/projects/${current.id}`, 'DELETE');
+            state.projectEdit = null;
+            state.projectId = null;
+            await loadProjects();
+            await loadSessions();
+            flashStatus(`Deleted the project "${current.name}"`);
+          } catch (ex) { err.textContent = ex.message; }
+        },
+      })), err);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!name.value.trim()) { name.focus(); return; }
+      try {
+        await sendJSON(`/api/projects/${current.id}`, 'PATCH', { name: name.value, instructions: instructions.value });
+        state.projectEdit = null;
+        await loadProjects();
+        renderSidebar();
+        flashStatus('Project saved');
+      } catch (ex) { err.textContent = ex.message; }
+    });
+    host.append(form);
+    name.focus();
+    name.select();
+  }
 
   if (state.projectOpen) {
     const form = element('form', { className: 'project-form' });
@@ -797,7 +851,7 @@ function renderProjects() {
     });
     const save = button('Create', { type: 'submit', className: 'primary' });
     form.append(name, instructions, element('div', { className: 'actions' }, save,
-      button('Cancel', { className: 'ghost', onClick: () => { state.projectOpen = false; renderProjects(); } })));
+      button('Cancel', { className: 'ghost', onclick: () => { state.projectOpen = false; renderProjects(); } })));
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!name.value.trim()) { name.focus(); return; }
@@ -2856,6 +2910,7 @@ async function boot() {
   $('projects').addEventListener('click', (e) => {
     if (e.target.closest('#new-project')) {
       state.projectOpen = !state.projectOpen;
+      state.projectEdit = null;
       renderProjects();
     }
   });

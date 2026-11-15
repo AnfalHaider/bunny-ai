@@ -772,3 +772,8 @@ details.thinking.is-live summary { color: var(--accent); }
 .update-banner { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-8); background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
 .update-banner[hidden] { display: none; }
 .update-banner #update-text { flex: 1; }
+
+/* the chosen project's edit button, and its Delete */
+#edit-project { width: 26px; height: 26px; padding: 0; justify-content: center; color: var(--text-faint); }
+#edit-project svg { width: 14px; height: 14px; }
+.project-form .danger-text { color: var(--danger, #c0392b); margin-left: auto; }

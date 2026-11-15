@@ -407,3 +407,29 @@ test('a Markdown table in a reply is drawn as a table', async ({ page }) => {
   await expect(table.locator('tbody tr')).toHaveCount(2);
   await expect(table.locator('tbody tr').first().locator('td').last()).toHaveText('185 GB');
 });
+
+test('a project can be renamed, given instructions, and deleted from the sidebar', async ({ page, request }) => {
+  const created = await (await request.post('/api/projects', { data: { name: 'Old name' } })).json();
+  await page.goto('/');
+  await page.locator('#project-filter').selectOption(created.id);
+  await page.locator('#edit-project').click();
+  const form = page.locator('#projects .project-form');
+  await form.getByLabel('Project name').fill('Carrot shop');
+  await form.getByLabel('Project instructions').fill('Answer briefly.');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#project-filter option:checked')).toHaveText('Carrot shop');
+  const saved = (await (await request.get('/api/projects')).json()).find((p) => p.id === created.id);
+  expect(saved.instructions).toBe('Answer briefly.');
+
+  // Cancel closes the form without changes.
+  await page.locator('#edit-project').click();
+  await form.getByRole('button', { name: 'Cancel' }).click();
+  await expect(form).toHaveCount(0);
+
+  await page.locator('#edit-project').click();
+  page.once('dialog', (d) => d.accept());
+  await form.getByRole('button', { name: 'Delete project' }).click();
+  await expect(page.locator('#project-filter option', { hasText: 'Carrot shop' })).toHaveCount(0);
+  await expect(page.locator('#project-filter')).toHaveValue('');
+  await expect(page.locator('#edit-project')).toHaveCount(0);
+});

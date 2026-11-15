@@ -634,7 +634,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       }
     }
     if (projectMatch && method === 'DELETE') {
-      return sendJson(res, 200, { ok: await projects.remove(projectMatch[1]) });
+      // The project goes; its chats stay, back under All chats.
+      const ok = await projects.remove(projectMatch[1]);
+      let moved = 0;
+      for (const s of await sessions.list({ includeArchived: true })) {
+        if (s.projectId === projectMatch[1]) { await sessions.update(s.id, { projectId: null }); moved += 1; }
+      }
+      return sendJson(res, 200, { ok, moved });
     }
 
     // ---- artifacts ----

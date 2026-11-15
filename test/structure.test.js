@@ -279,3 +279,15 @@ test('an incognito chat is still a chat, just marked', async (t) => {
   const { body: got } = await json(base, `/api/sessions/${created.id}`);
   assert.equal(got.incognito, true);
 });
+
+test('deleting a project keeps its chats, back under All chats', async (t) => {
+  const { base } = await startApp(t);
+  const { body: project } = await post(base, '/api/projects', { name: 'Going away' });
+  const { body: chat } = await post(base, '/api/sessions', { title: 'Keep me', projectId: project.id });
+  assert.equal((await json(base, `/api/sessions/${chat.id}`)).body.projectId, project.id);
+  const removed = await del(base, `/api/projects/${project.id}`);
+  assert.equal(removed.body.moved, 1);
+  const { body: after } = await json(base, `/api/sessions/${chat.id}`);
+  assert.equal(after.title, 'Keep me');
+  assert.equal(after.projectId, null);
+});
