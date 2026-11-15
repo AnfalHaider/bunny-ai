@@ -14,6 +14,10 @@
     "\\bgit\\s+config\\b.*\\bcore\\.hooksPath\\b",
     "\\bgit\\s+reset\\s+--hard\\b",
     "^\\s*(ssh|scp)\\s",
-    "\\bgit\\s+commit\\b[^|;&]*\\s-[A-Za-z]*n[A-Za-z]*(\\s|$)"
+    "\\bgit\\b[^|;&]*\\scommit\\b[^|;&]*\\s-[A-Za-z]*n[A-Za-z]*(\\s|$)",
+    "\\bgit\\b[^|;&]*\\s--no-ve(r(i(f(y)?)?)?)?(\\s|=|$)",
+    "\\bgit\\b[^|;&]*\\s-c\\s*[Cc][Oo][Rr][Ee]\\.[Hh][Oo][Oo][Kk][Ss][Pp][Aa][Tt][Hh]",
+    "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b",
+    "\\bcore\\.hooksPath\\b"
   ]
 }
