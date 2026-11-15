@@ -13,6 +13,7 @@
     "--no-verify\\b",
     "\\bgit\\s+config\\b.*\\bcore\\.hooksPath\\b",
     "\\bgit\\s+reset\\s+--hard\\b",
-    "^\\s*(ssh|scp)\\s"
+    "^\\s*(ssh|scp)\\s",
+    "\\bgit\\s+commit\\b[^|;&]*\\s-[A-Za-z]*n[A-Za-z]*(\\s|$)"
   ]
 }
