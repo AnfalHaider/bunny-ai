@@ -17,6 +17,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
+/** Where new versions are published: the latest GitHub release. */
+export const RELEASES_FEED = 'https://api.github.com/repos/AnfalHaider/bunny-ai/releases/latest';
+
 let cached = null;
 
 /** The version of the app, from package.json. */
@@ -89,7 +92,8 @@ export async function checkForUpdate({ url, fetchImpl = globalThis.fetch, timeou
     return { current, latest: current, updateAvailable: false, source: feed, message: 'The update source did not send a version.' };
   }
 
-  const latest = String(payload?.version ?? '').trim();
+  // A small feed says { version }, a GitHub release says { tag_name: 'v0.2.0' }.
+  const latest = String(payload?.version ?? payload?.tag_name ?? '').replace(/^v/i, '').trim();
   if (!latest) {
     return { current, latest: current, updateAvailable: false, source: feed, message: 'The update source did not send a version.' };
   }
@@ -99,8 +103,8 @@ export async function checkForUpdate({ url, fetchImpl = globalThis.fetch, timeou
     latest,
     updateAvailable,
     source: feed,
-    url: payload?.url ?? null,
-    notes: payload?.notes ?? null,
+    url: payload?.html_url ?? payload?.url ?? null,
+    notes: payload?.notes ?? payload?.body ?? null,
     message: updateAvailable ? `Version ${latest} is available.` : `You are on the latest version (${current}).`,
   };
 }

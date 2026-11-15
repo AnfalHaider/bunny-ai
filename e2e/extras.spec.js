@@ -70,20 +70,32 @@ test('voice input says so when the browser cannot listen', async ({ page }) => {
   await expect(page.locator('#error')).toContainText(/type instead/i);
 });
 
-test('the version is shown and the update check is honest', async ({ page }) => {
-  await page.goto('/src/ui/settings.html');
-  await expect(page.locator('#version')).toContainText(/\d+\.\d+\.\d+/);
-
-  // With no update source, the app says that rather than pretending.
-  await page.locator('#check-update').click();
-  await expect(page.locator('#update-note')).toContainText(/no update source/i);
+test('the version is shown, and a newer GitHub release is reported', async ({ page, request }) => {
+  // A stand-in for GitHub's latest-release answer, so the test does not need the internet.
+  const { createServer } = await import('node:http');
+  const server = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ tag_name: 'v99.0.0', html_url: 'https://github.com/x/y/releases/tag/v99.0.0', body: 'Big news' }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    await request.put('/api/settings', { data: { updateUrl: `http://127.0.0.1:${server.address().port}/releases/latest` } });
+    await page.goto('/src/ui/settings.html');
+    await expect(page.locator('#version')).toContainText(/\d+\.\d+\.\d+/);
+    await page.locator('#check-update').click();
+    await expect(page.locator('#update-note')).toContainText('Version 99.0.0 is available.');
+  } finally {
+    await request.put('/api/settings', { data: { updateUrl: null } });
+    await new Promise((r) => server.close(r));
+  }
 });
 
-test('a newer version in the feed is reported', async ({ page }) => {
+test('an update source that cannot be reached is reported honestly', async ({ page, request }) => {
+  await request.put('/api/settings', { data: { updateUrl: 'http://127.0.0.1:9/releases/latest' } });
   await page.goto('/src/ui/settings.html');
-  await page.locator('#update-url').fill('http://127.0.0.1:9/version.json');
   await page.locator('#check-update').click();
   await expect(page.locator('#update-note')).toContainText(/could not be reached|answered/i);
+  await request.put('/api/settings', { data: { updateUrl: null } });
 });
 
 test('a chat can suggest a memory, and it is kept only when accepted', async ({ page }) => {

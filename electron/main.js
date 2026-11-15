@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { controlFrame } from './browserAgent.js';
+import { createUpdater } from './updater.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -148,6 +149,21 @@ ipcMain.handle('browser:act', async (event, name, action, args) => {
   }
 });
 
+// ---- updates from GitHub Releases ----
+let updater = null;
+const sendUpdate = (status) => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('update:status', status); };
+ipcMain.handle('update:get', () => updater?.status() ?? { state: 'unavailable', current: app.getVersion() });
+ipcMain.handle('update:check', () => updater?.check({ manual: true }) ?? { state: 'unavailable', current: app.getVersion(), message: 'Updates work in the installed app.' });
+ipcMain.handle('update:install', () => {
+  // Restart to update: the installer runs once Bunny AI has closed, then opens the new version.
+  if (!updater?.hasUpdate()) return false;
+  installOnQuit = 'relaunch';
+  quitting = true;
+  app.quit();
+  return true;
+});
+let installOnQuit = 'quietly';
+
 app.on('second-instance', showWindow);
 // Programs the AI started (dev servers and the like) stop before the app does.
 let programsStopped = false;
@@ -156,7 +172,11 @@ app.on('before-quit', (event) => {
   if (programsStopped || !bunnyApp) return;
   event.preventDefault();
   programsStopped = true;
-  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(() => app.quit());
+  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(() => {
+    // A downloaded update installs as the app closes (and reopens it after Restart to update).
+    if (updater?.hasUpdate()) updater.install({ relaunch: installOnQuit === 'relaunch' });
+    app.quit();
+  });
 });
 app.on('window-all-closed', () => {
   if (!prefs.closeToTray) app.quit();
@@ -189,4 +209,13 @@ app.whenReady().then(async () => {
   }
   createTray();
   createWindow();
+  // Only the installed app updates itself (or a test pointing at its own feed).
+  if (app.isPackaged || process.env.BUNNY_UPDATE_FEED) {
+    updater = createUpdater({
+      currentVersion: app.getVersion(),
+      enabled: () => bunnyApp?.getSettings().autoUpdate !== false,
+      onStatus: sendUpdate,
+    });
+    updater.start({ firstCheckMs: Number(process.env.BUNNY_UPDATE_FIRST_CHECK_MS) || 15_000 });
+  }
 });

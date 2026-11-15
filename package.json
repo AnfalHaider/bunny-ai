@@ -1,7 +1,7 @@
 {
   "name": "bunny-ai",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Provider-agnostic AI workspace: your own keys, your own machine.",
   "author": "Anfal Haider",
@@ -14,7 +14,8 @@
     "test:all": "npm test && npm run test:e2e",
     "build:icons": "node scripts/build-icons.mjs",
     "desktop": "electron .",
-    "dist": "npm run build:css && npm run build:icons && electron-builder --win nsis --x64"
+    "dist": "npm run build:css && npm run build:icons && electron-builder --win nsis --x64",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",

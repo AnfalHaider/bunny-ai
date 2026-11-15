@@ -9,4 +9,11 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   quit: () => ipcRenderer.invoke('app:quit'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   browserAct: (frameName, action, args) => ipcRenderer.invoke('browser:act', frameName, action, args),
+  // Updates from GitHub Releases: the status, a check now, and Restart to update.
+  updates: {
+    get: () => ipcRenderer.invoke('update:get'),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onStatus: (fn) => { const h = (_e, s) => fn(s); ipcRenderer.on('update:status', h); return () => ipcRenderer.removeListener('update:status', h); },
+  },
 });

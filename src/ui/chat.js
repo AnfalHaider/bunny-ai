@@ -1506,6 +1506,30 @@ function showLivePermission(bodyEl, info) {
 }
 
 /** Ask again for the newest reply, keeping the user turn as-is. */
+/**
+ * A newer version, downloaded from GitHub Releases and checked, waits for a restart.
+ * The bar offers it; "Later" hides it until the next start (it installs on quit anyway).
+ */
+function bindUpdates() {
+  const updates = window.bunnyDesktop?.updates;
+  if (!updates) return;
+  let dismissed = false;
+  const show = (s) => {
+    const bar = $('update-banner');
+    if (!bar) return;
+    bar.hidden = dismissed || s?.state !== 'ready';
+    if (s?.state === 'ready') $('update-text').textContent = `Bunny AI ${s.latest} is ready. It installs when you restart.`;
+  };
+  updates.get().then(show).catch(() => {});
+  updates.onStatus(show);
+  $('update-install')?.addEventListener('click', () => {
+    $('update-install').disabled = true;
+    $('update-text').textContent = 'Restarting to update…';
+    updates.install().catch(() => {});
+  });
+  $('update-later')?.addEventListener('click', () => { dismissed = true; $('update-banner').hidden = true; });
+}
+
 /** The model a retry or an edit asks: Auto's pick in Auto, otherwise the one picked by hand. */
 function retryPick() {
   if (state.modelAuto && state.autoPick) return { providerId: state.autoPick.providerId, model: state.autoPick.id };
@@ -2734,6 +2758,7 @@ async function boot() {
   // rail-toggle carries data-view="overview", so the loop above wires it.
   $('attach').addEventListener('click', () => $('file-input').click());
   bindPushToTalk();
+  bindUpdates();
   $('file-input').addEventListener('change', async (e) => {
     await addFiles(e.target.files);
     e.target.value = '';

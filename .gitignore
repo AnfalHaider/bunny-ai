@@ -14,3 +14,4 @@ ui-backup-*/
 
 # desktop build output
 dist/
+dist-*/

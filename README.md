@@ -107,7 +107,7 @@ Desktop control and tool-building are off until you switch them on, either in Se
 
 **Download for Windows**
 
-Get **Bunny-AI-Setup-0.1.0.exe** from the [latest release](../../releases/latest), run it, open **Providers**, connect a model (Nvidia and OpenRouter have free ones), and start chatting.
+Get the **Bunny-AI-Setup** installer from the [latest release](../../releases/latest), run it, open **Providers**, connect a model (Nvidia and OpenRouter have free ones), and start chatting.
 
 The installer is not code-signed yet, so Windows SmartScreen may say it does not recognise the app: choose **More info**, then **Run anyway**.
 
@@ -118,7 +118,17 @@ npm install
 npm run dist
 ```
 
-This writes `dist/Bunny-AI-Setup-0.1.0.exe`.
+This writes the installer to `dist/`.
+
+**Updates**
+
+The installed app checks GitHub Releases a few seconds after it starts and every few hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, it installs then. Switch it off, or check at once, in **Settings → About**.
+
+**Publishing a new version**
+
+1. Raise `version` in `package.json` (installed copies only move to a higher number).
+2. `npm run dist`
+3. `npm run release` (uses the GitHub CLI; add `-- --notes-file notes.md` for your own notes)
 
 **Run it in your browser instead**
 
@@ -135,7 +145,7 @@ Then open the address it prints.
 npm run test:all
 ```
 
-280 unit tests and 77 end-to-end tests cover the features above. `docs/FEATURE-TALLY.md` lists every feature with the test that proves it.
+285 unit tests and 77 end-to-end tests cover the features above. `docs/FEATURE-TALLY.md` lists every feature with the test that proves it.
 
 ---
 

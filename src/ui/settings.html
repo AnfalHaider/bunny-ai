@@ -366,15 +366,13 @@
       </div>
       <div class="row">
         <div class="meta-col">
-          <div class="name">Update source</div>
-          <div class="desc">A URL that answers with a version number. Leave it empty to skip the check.</div>
+          <div class="name">Update automatically</div>
+          <div class="desc">Bunny AI checks GitHub Releases for a new version, downloads it in the background, checks it against its published fingerprint, and installs it when you restart.</div>
         </div>
-        <div class="right wide-col">
-          <input id="update-url" placeholder="https://example.com/bunny-ai/version.json" aria-label="Update source" />
-        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoUpdate" /><span>on</span></label></div>
       </div>
       <div class="row">
-        <div class="right"><button id="check-update" class="primary">Check for updates</button></div>
+        <div class="right"><button id="check-update" class="primary">Check for updates</button> <button id="restart-update" class="ghost" hidden>Restart to update</button></div>
         <div class="meta-col"><div class="desc" id="update-note"></div></div>
       </div>
     </div>
@@ -601,15 +599,23 @@
     aliases.value = Object.entries(map).map(([name, id]) => `${name} = ${id}`).join('\n');
   }
 
-  const updateUrl = $('update-url');
-
-  $('check-update').addEventListener('click', async () => {
+  // In the desktop app the updater downloads and installs; in a browser this only says what is out.
+  const updates = window.bunnyDesktop?.updates ?? window.parent?.bunnyDesktop?.updates ?? null;
+  const showUpdate = (s) => {
     const note = $('update-note');
-    note.textContent = 'Checking…';
-    await save({ updateUrl: updateUrl.value.trim() });
-    const result = await sendJSON('/api/update/check', 'POST');
-    note.textContent = result.message;
+    if (!s) return;
+    note.textContent = s.state === 'downloading' ? `Downloading Bunny AI ${s.latest}… ${s.progress ?? 0}%`
+      : s.state === 'checking' ? 'Checking…' : (s.message ?? '');
+    const restart = $('restart-update');
+    if (restart) restart.hidden = s.state !== 'ready';
+  };
+  updates?.onStatus(showUpdate);
+  updates?.get().then(showUpdate).catch(() => {});
+  $('check-update').addEventListener('click', async () => {
+    $('update-note').textContent = 'Checking…';
+    showUpdate(updates ? await updates.check() : await sendJSON('/api/update/check', 'POST'));
   });
+  $('restart-update')?.addEventListener('click', () => updates?.install());
 
   $('save-models').addEventListener('click', async () => {
     const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -703,7 +709,7 @@
 
     const version = await getJSON('/api/version');
     $('version').textContent = version.version;
-    updateUrl.value = version.updateUrl ?? '';
+
 
     await renderUsage();
 

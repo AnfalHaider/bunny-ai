@@ -1715,3 +1715,8 @@ details.thinking.is-live summary { color: var(--accent); }
 .local-mcp textarea { width: 100%; font-family: var(--font-mono); font-size: var(--fs-xs); }
 #mcp-local-command { flex: 2; font-family: var(--font-mono); }
 .account-check { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--text-dim); }
+
+/* a new version is ready */
+.update-banner { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-8); background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+.update-banner[hidden] { display: none; }
+.update-banner #update-text { flex: 1; }

@@ -26,7 +26,7 @@ import { normaliseAttachments, prepareAttachments, toModelMessage } from './atta
 import { parseImport } from './import.js';
 import { createUsageStore } from './usage.js';
 import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned } from './unavailable.js';
-import { appVersion, checkForUpdate } from './updates.js';
+import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
@@ -556,7 +556,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       return sendJson(res, 200, { version: await appVersion(), updateUrl: settings.updateUrl ?? '' });
     }
     if (path === '/api/update/check' && method === 'POST') {
-      const result = await checkForUpdate({ url: settings.updateUrl ?? '' });
+      // Bunny AI's own releases on GitHub, unless Settings points somewhere else.
+      const result = await checkForUpdate({ url: settings.updateUrl || RELEASES_FEED });
       return sendJson(res, 200, result);
     }
 
