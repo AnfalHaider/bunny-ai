@@ -133,6 +133,18 @@ export function scopeViolation(rel, policy, brief, role) {
   return null;
 }
 
+/**
+ * Sign-off and release records are written through the bootstrap command (which checks the role and the ids),
+ * not by hand. Only `policy.records.writers` write there directly. Not part of the commit-time check:
+ * a role commits its own record file after the command wrote it.
+ */
+export function recordViolation(rel, policy, role) {
+  const r = policy.records;
+  if (!r || !Array.isArray(r.globs) || !r.globs.length) return null;
+  if (!matchesAny(rel, r.globs, { ci: true }) || (r.writers || []).includes(role)) return null;
+  return `${rel} is a sign-off or release record. Only ${(r.writers || []).join(' / ') || 'nobody'} writes there directly; everyone else uses the bootstrap command ("bootstrap signoff <piece> --verdict PASS").`;
+}
+
 /** scopeViolation over a list of repo-relative paths: ["src/a.js: role ... is outside that", ...]. */
 export function scopeViolations(paths, policy, brief, role) {
   const out = [];

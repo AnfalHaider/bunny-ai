@@ -8,6 +8,7 @@
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
 
 const SHELLS = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd'];
+const EVALS = ['eval', 'invoke-expression', 'iex'];
 const SHELL_FLAGS = new Set(['-c', '-lc', '-ic', '-cl', '-command', '-c:', '/c', '/k']);
 const HOOK_SKIP_SUBS = new Set(['push', 'merge', 'am', 'rebase', 'cherry-pick', 'revert', 'pull']);
 const ROLE_WORD = /^(\$env:|env:)?BOOTSTRAP_ROLE(\s*=|$)/i;
@@ -38,15 +39,18 @@ export function gitCall(words) {
     sub = w;
     break;
   }
-  return { sub, args: words.slice(i + 1).map((x) => x.text), configs };
+  const argWords = words.slice(i + 1);
+  return { sub, args: argWords.map((x) => x.text), argWords, configs };
 }
 
 /** Does `git commit` get a hook-skip flag? Message and file values are skipped so a message can say anything. */
-function commitSkipsHooks(args) {
+function commitSkipsHooks(args, argWords = []) {
   const LONG_VALUE = new Set(['--message', '--file', '--reuse-message', '--reedit-message', '--author', '--date', '--template', '--cleanup', '--fixup', '--squash', '--pathspec-from-file', '--trailer']);
   for (let k = 0; k < args.length; k += 1) {
     const a = args[k];
     if (a === '--') break;
+    // a bare variable where a flag could be ($X may hold the skip flag): refuse rather than guess
+    if (argWords[k] && argWords[k].dynamic && !argWords[k].quoted && /^[$`]/.test(a)) return true;
     if (a.startsWith('--')) {
       if (isHookSkipLong(a)) return true;
       if (LONG_VALUE.has(a)) k += 1;
@@ -102,20 +106,63 @@ export function pushDestinations(args, currentBranch) {
 }
 
 function refuseGit(call) {
-  const { sub, args, configs } = call;
+  const { sub, args, argWords, configs } = call;
   for (const c of configs) {
     const key = String(c).split('=')[0].toLowerCase();
     if (key === 'core.hookspath') return 'pointing git at another hooks folder is not allowed (it would skip the pre-commit and pre-push checks).';
     if (key.startsWith('alias.') && /\b(commit|push)\b/i.test(String(c).slice(key.length))) return `a one-off git alias for commit or push can hide a hook skip; run the real command. ${NO_HOOKS}`;
   }
   if (sub === 'config' && args.some((a) => /core\.hookspath/i.test(a))) return 'changing the git hooks folder is not allowed (it would skip the pre-commit and pre-push checks).';
-  if (sub === 'commit' && commitSkipsHooks(args)) return NO_HOOKS;
+  if (sub === 'commit' && commitSkipsHooks(args, argWords)) return NO_HOOKS;
   if (HOOK_SKIP_SUBS.has(sub)) {
     const end = args.indexOf('--');
     if ((end < 0 ? args : args.slice(0, end)).some(isHookSkipLong)) return NO_HOOKS;
   }
   if (sub === 'push' && pushForces(args)) return 'force pushes are not allowed.';
   if (sub === 'reset' && args.includes('--hard')) return '"git reset --hard" is not allowed: it throws work away. Use a new commit or a branch.';
+  return null;
+}
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const okId = (w) => w.dynamic || (ID.test(w.text) && !w.text.includes('..'));
+
+/**
+ * E: the bootstrap command's own words (its argv), never "the rest of the line".
+ *  role     only a session with no role yet, or the Chief of Staff, assigns one (A5)
+ *  signoff  piece and role ids must be plain names (no path); a role signs only for itself, the Chief of Staff for anyone
+ *  require  piece and role ids must be plain names
+ */
+function checkBootstrapCli(args, ctx) {
+  const sub = args[0]?.text;
+  if (sub === 'role' && ctx.role !== 'unassigned' && ctx.role !== 'chief-of-staff') {
+    return `a session that already has a role ("${ctx.role}") does not change it. The Chief of Staff assigns roles.`;
+  }
+  if (sub === 'signoff') {
+    const piece = args[1];
+    if (piece && !piece.text.startsWith('-') && !okId(piece)) return 'a sign-off piece id must be a plain name (letters, digits, dot, dash), never a path.';
+    const at = args.findIndex((w) => w.text === '--role');
+    const role = at >= 0 ? args[at + 1] : null;
+    if (role) {
+      if (!okId(role)) return 'a sign-off role id must be a plain name, never a path.';
+      if (!role.dynamic && role.text !== ctx.role && ctx.role !== 'chief-of-staff') {
+        return `a sign-off is signed by its own role: you are "${ctx.role}", not "${role.text}". Ask that role to sign.`;
+      }
+    }
+  }
+  if (sub === 'require' && args.slice(1).some((w) => !w.text.startsWith('-') && !okId(w))) {
+    return 'sign-off piece and role ids must be plain names, never paths.';
+  }
+  return null;
+}
+
+/** The command line inside `sh -c "..."`, `eval ...` and friends, parsed; or null when `words` is not one of those. */
+export function innerParsed(words) {
+  const head = words[0]?.text ?? '';
+  if (EVALS.some((e) => isCmd(head, e)) && words.length > 1) return parseShell(words.slice(1).map((w) => w.text).join(' '));
+  if (SHELLS.some((s) => isCmd(head, s))) {
+    const at = words.findIndex((w, k) => k > 0 && SHELL_FLAGS.has(w.text.toLowerCase()));
+    if (at > 0 && words[at + 1]) return parseShell(words.slice(at + 1).map((w) => w.text).join(' '));
+  }
   return null;
 }
 
@@ -135,9 +182,14 @@ export function checkShell(parsed, ctx, depth = 0) {
         const why = refuseGit(gitCall(words));
         if (why) return why;
       }
-      if (words.some((w) => /(^|[\\/])bootstrap\.mjs$/.test(w.text)) && words.some((w) => w.text === 'role') &&
-          ctx.role !== 'unassigned' && ctx.role !== 'chief-of-staff') {
-        return `a session that already has a role ("${ctx.role}") does not change it. The Chief of Staff assigns roles.`;
+      const bi = words.findIndex((w) => /(^|[\\/])bootstrap\.mjs$/.test(w.text));
+      if (bi >= 0) {
+        const why = checkBootstrapCli(words.slice(bi + 1), ctx);
+        if (why) return why;
+      }
+      if (depth < 4 && EVALS.some((e) => isCmd(head, e)) && words.length > 1) {
+        const why = checkShell(parseShell(words.slice(1).map((w) => w.text).join(' ')), ctx, depth + 1);
+        if (why) return why;
       }
       if (depth < 4 && SHELLS.some((s) => isCmd(head, s))) {
         const at = words.findIndex((w, k) => k > 0 && SHELL_FLAGS.has(w.text.toLowerCase()));

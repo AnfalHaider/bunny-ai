@@ -11,9 +11,10 @@
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
+import { checkWrites } from './lib/shellwrites.mjs';
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace', 'edit_file']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command', 'run_terminal_cmd']);
@@ -79,9 +80,19 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
     if (parsed) {
       const why = checkShell(parsed, { role });
       if (why) return { allow: false, reason: `Blocked for role "${role}": ${why}` };
+      // A2 and E: a seatbelt over the files a command writes (A1 is the authoritative check, at commit).
+      if (policy.shell_write_check !== false) {
+        const wrote = checkWrites(parsed, { root, cwd, policy, brief, role });
+        if (wrote) return { allow: false, reason: `Blocked for role "${role}": ${wrote}` };
+      }
     }
-    if (/\bgit\b[\s\S]*\bpush\b/.test(command)) {
-      for (const dst of strict ? pushTargets(command, cwd) : tokenPushTargets(parsed, cwd)) {
+    if (/push/i.test(command)) {
+      // Both readings: the tokenizer's and the old split on spaces. A live branch found by either is refused.
+      const targets = [
+        ...(parsed ? tokenPushTargets(parsed, cwd) : []),
+        ...(/\bgit\b[\s\S]*\bpush\b/.test(command) ? pushTargets(command, cwd) : []),
+      ];
+      for (const dst of targets) {
         if (dst === policy.branches.live && !policy.releases.live_pushers.includes(role)) {
           return { allow: false, reason: `Blocked: only ${policy.releases.live_pushers.join(' / ')} may push "${dst}" (you are "${role}"). Live moves only on the owner's word (AGENTS.md, section 7E).` };
         }
@@ -93,7 +104,7 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
   if (WRITE_TOOLS.has(tool) && filePath) {
     const rel = toRepoPath(root, filePath, cwd);
     if (rel === null) return { allow: true }; // outside the project: not ours to police
-    const why = scopeViolation(rel, policy, brief, role);
+    const why = scopeViolation(rel, policy, brief, role) ?? recordViolation(rel, policy, role);
     if (why) return { allow: false, reason: `Blocked: ${why}` };
   }
   return { allow: true };

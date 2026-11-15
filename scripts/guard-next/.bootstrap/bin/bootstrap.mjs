@@ -15,6 +15,7 @@ import { DEFAULT_POLICY, currentRole, git, globToRegex, loadPolicy, repoRoot } f
 import { completeSignoffs } from './prepush.mjs';
 
 const KIT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const PLAIN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const today = () => new Date().toISOString().slice(0, 10);
 const log = (state, what) => console.log(`${state.padEnd(7)} ${what}`);
 
@@ -106,13 +107,15 @@ function role(root, id) {
   s.permissions.deny = [...new Set([...(s.permissions.deny || []), ...(data.deny || [])])];
   const kit = Array.isArray(data.kit_plugins) ? data.kit_plugins : [];
   const projectSettings = join(root, '.claude', 'settings.json');
-  const installed = existsSync(projectSettings) ? Object.keys(JSON.parse(readFileSync(projectSettings, 'utf8')).enabledPlugins || {}) : [];
+  const projectEnabled = existsSync(projectSettings) ? JSON.parse(readFileSync(projectSettings, 'utf8')).enabledPlugins || {} : {};
+  const installed = Object.keys(projectEnabled);
   if (installed.length && kit.length) {
     s.enabledPlugins ||= {};
     // kit entries are plugin names, optionally with * wildcards ("*-lsp" = every language server).
+    // Narrowing only: a plugin the project switches off stays off, whatever the kit says (D).
     for (const id2 of installed) {
       const name = id2.split('@')[0];
-      s.enabledPlugins[id2] = name === 'bootstrap-environment' || kit.some((k) => globToRegex(k).test(name));
+      s.enabledPlugins[id2] = projectEnabled[id2] !== false && (name === 'bootstrap-environment' || kit.some((k) => globToRegex(k).test(name)));
     }
   }
   mkdirSync(dirname(p), { recursive: true });
@@ -123,6 +126,10 @@ function role(root, id) {
 
 function signoff(root, piece, args) {
   const r = arg(args, 'role', currentRole(root));
+  // Ids become folder and file names: plain names only, and a role signs for itself (the Chief of Staff for anyone).
+  if (!PLAIN_ID.test(piece) || piece.includes('..')) { console.error(`"${piece}" is not a plain piece id (letters, digits, dot, dash).`); process.exit(1); }
+  if (!PLAIN_ID.test(r) || r.includes('..')) { console.error(`"${r}" is not a plain role id.`); process.exit(1); }
+  if (r !== currentRole(root) && currentRole(root) !== 'chief-of-staff') { console.error(`a sign-off is signed by its own role: you are "${currentRole(root)}", not "${r}".`); process.exit(1); }
   const sha = arg(args, 'sha', git(['rev-parse', 'HEAD'], root));
   const verdict = (arg(args, 'verdict', '') || '').toUpperCase();
   if (!['PASS', 'FAIL'].includes(verdict)) { console.error('--verdict PASS|FAIL is required'); process.exit(1); }
@@ -134,6 +141,9 @@ function signoff(root, piece, args) {
 }
 
 function requireRoles(root, piece, roles) {
+  for (const id of [piece, ...roles]) {
+    if (!PLAIN_ID.test(id) || id.includes('..')) { console.error(`"${id}" is not a plain id (letters, digits, dot, dash).`); process.exit(1); }
+  }
   const p = join(root, 'docs', 'signoffs', piece, '_required.md');
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, `---\npiece: ${piece}\nroles: [${roles.join(', ')}]\nset_by: ${currentRole(root)}\ndate: ${today()}\n---\n`);

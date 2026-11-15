@@ -251,8 +251,9 @@ function parseInto(src, out, nested, depth) {
       continue;
     }
 
+    const atStart = !buf;
     const b = start();
-    if (c === '$' || c === '*' || c === '?' || c === '[' || c === '%') b.d = true;
+    if (c === '$' || c === '*' || c === '?' || c === '[' || c === '%' || (c === '~' && atStart)) b.d = true;
     b.t += c;
     i += 1;
   }
