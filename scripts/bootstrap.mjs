@@ -4,15 +4,15 @@
 //
 //   node scripts/bootstrap.mjs
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, lstatSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const win = process.platform === 'win32';
 const run = (cmd, args) => {
   console.log(`> ${cmd} ${args.join(' ')}`);
-  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: win });
+  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: win && /\.cmd$/.test(cmd) });
   if (r.status !== 0) { console.error(`failed: ${cmd} ${args.join(' ')} (exit ${r.status})`); process.exit(r.status || 1); }
 };
 
