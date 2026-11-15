@@ -106,6 +106,14 @@ test('Push of every branch is refused for a role that may not push live; allowed
   for (const abbreviated of ['--al', '--mir', '--mirr', '--branches', '--bra', '--m', '--all=true']) {
     denied(t, `git push ${abbreviated} origin`, 'builder');
   }
+  denied(t, 'git push origin :', 'builder');
+  denied(t, 'git push origin +:', 'builder');
+  denied(t, 'git -c remote.origin.mirror=true push origin', 'builder');
+  denied(t, 'git -cremote.origin.push=refs/heads/*:refs/heads/* push origin', 'builder');
+  denied(t, 'git -c push.default=matching push origin', 'builder');
+  denied(t, 'git --config-env remote.origin.mirror=M push origin', 'builder');
+  allowed(t, 'git -c remote.origin.mirror=true push origin', 'release-ops');
+  allowed(t, 'git -c user.name=x push origin claude/x', 'builder');
   allowed(t, 'git push --atomic origin claude/x', 'builder');
   allowed(t, 'git push --set-upstream origin claude/x', 'builder');
   allowed(t, 'git push origin claude/builder-x', 'builder');

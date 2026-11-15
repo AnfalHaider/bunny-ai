@@ -114,7 +114,8 @@ function pushesEverything(args) {
     const name = a.split('=')[0];
     return name.startsWith('--') && name.length >= 3 && BULK.some((o) => o.startsWith(name));
   };
-  return args.some((a) => isBulk(a) || (!a.startsWith('-') && a.includes('*')));
+  // a bare ":" refspec means "every branch that already exists on both sides"
+  return args.some((a) => isBulk(a) || (!a.startsWith('-') && (a.includes('*') || a === ':' || a === '+:')));
 }
 
 function refuseGit(call, ctx = {}) {
@@ -131,7 +132,11 @@ function refuseGit(call, ctx = {}) {
     if ((end < 0 ? args : args.slice(0, end)).some(isHookSkipLong)) return NO_HOOKS;
   }
   if (sub === 'push' && pushForces(args)) return 'force pushes are not allowed.';
-  if (sub === 'push' && pushesEverything(args) && !(ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role)) {
+  const mayPushLive = (ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role);
+  if (sub === 'push' && !mayPushLive && configs.some((c) => /^(remote\..*\.(push|mirror)|push\.default)(=|$)/i.test(String(c)))) {
+    return 'overriding where a push goes (remote.*.push, remote.*.mirror, push.default) from the command line could move the live branch; name the branch you mean.';
+  }
+  if (sub === 'push' && pushesEverything(args) && !mayPushLive) {
     return 'pushing every branch at once (--all, --mirror, a wildcard refspec) could move the live branch; name the branch you mean.';
   }
   if (sub === 'reset' && args.includes('--hard')) return '"git reset --hard" is not allowed: it throws work away. Use a new commit or a branch.';
