@@ -20,6 +20,7 @@
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
+| D1 | 0.1.4 screens design review (8 screens, today beside proposed) | LOW | design | design, 2026-11-16 | Artifact ready; awaiting the owner's approval, nothing built | `docs/design/review-0.1.4/index.html`, `docs/memory/logs/design.md` |
 
 ## SIGN-OFF GRID
 
