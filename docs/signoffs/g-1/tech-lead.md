@@ -1,9 +1,9 @@
 ---
 piece: g-1
 role: tech-lead
-sha: 09b35e4
-verdict: FAIL
+sha: 560e636
+verdict: PASS
 date: 2026-11-15
 ---
 
-Strong work: 97 adversarial cases, 87 as expected. Required before PASS: (1) the attached short form of the git config override (-c immediately followed by the key, no space) is allowed and skips hooks; (2) git push with --all, --mirror or a wildcard refspec is allowed for non-live roles; (3) a gitattributes entry so the hooks are LF and the A1 hook test passes on this machine, and the executable bit noted for landing. Decisions: require sub-command to chief-of-staff and security only; push exempt list confirmed. Variable write targets pass: document as a limit.
+Re-ran my cases against 560e636 on a clean checkout: 113 cases, 112 as expected; the one miss was my own over-strict expectation. The three required fixes are in (attached short override, push of every branch, LF hooks via gitattributes). All 97 guard-next and request-guard tests pass here, including the LF hook test. Builder reports gate 7 of 7 with 420 unit and 92 e2e; I did not run the e2e. Landing is the Chief of Staff's, following the README steps; limits are documented.
