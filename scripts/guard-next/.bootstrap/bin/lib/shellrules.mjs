@@ -124,7 +124,8 @@ function refuseGit(call) {
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const okId = (w) => w.dynamic || (ID.test(w.text) && !w.text.includes('..'));
+// A variable cannot be checked, so it is refused too: ids here are always spelled out.
+const okId = (w) => !w.dynamic && ID.test(w.text) && !w.text.includes('..');
 
 /**
  * E: the bootstrap command's own words (its argv), never "the rest of the line".
@@ -144,7 +145,7 @@ function checkBootstrapCli(args, ctx) {
     const role = at >= 0 ? args[at + 1] : null;
     if (role) {
       if (!okId(role)) return 'a sign-off role id must be a plain name, never a path.';
-      if (!role.dynamic && role.text !== ctx.role && ctx.role !== 'chief-of-staff') {
+      if (role.text !== ctx.role && ctx.role !== 'chief-of-staff') {
         return `a sign-off is signed by its own role: you are "${ctx.role}", not "${role.text}". Ask that role to sign.`;
       }
     }

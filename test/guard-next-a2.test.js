@@ -176,6 +176,8 @@ test('E deny: a sign-off for another role, and ids that escape the folder', (t) 
   denied(t, 'node .bootstrap/bin/bootstrap.mjs signoff ../../src --verdict PASS');
   denied(t, 'node .bootstrap/bin/bootstrap.mjs signoff b-1 --verdict PASS --role ../../x');
   denied(t, 'node .bootstrap/bin/bootstrap.mjs signoff a/b --verdict PASS');
+  denied(t, 'node .bootstrap/bin/bootstrap.mjs signoff $PIECE --verdict PASS');
+  denied(t, 'node .bootstrap/bin/bootstrap.mjs signoff b-1 --verdict PASS --role $R');
   allowed(t, 'node .bootstrap/bin/bootstrap.mjs signoff b-1 --verdict PASS --role qa', 'chief-of-staff');
   // the rest of the line is not the sign-off's own options
   allowed(t, 'node .bootstrap/bin/bootstrap.mjs signoff b-1 --verdict PASS ; node other.mjs --role qa');
