@@ -20,7 +20,7 @@
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
-| S-1 | Local API: Host/Origin/token check, real confirm for local connectors | HIGH | Builder (needs owner's go) | Security, 2026-11-16 | Filed | docs/security/2026-11-16-baseline-0.1.4.md |
+| S-1 | Local API: Host/Origin/token check, real confirm for local connectors | HIGH | Builder (owner's go: "Yes, S-1 first", typed in the Security session, 2026-11-16; question: "Approve S-1 (local API caller checks) as the Builder's first job?") | Security, 2026-11-16 | Filed | docs/security/2026-11-16-baseline-0.1.4.md |
 | S-2 | Updater fails closed without checksum; signing decision | MEDIUM | Builder + owner | Security, 2026-11-16 | Filed | same |
 | S-3 | Secret store: entropy; agent tools refuse secrets folder (check first) | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
 | S-4 | Import: lower cap or stream; reject before reading | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
