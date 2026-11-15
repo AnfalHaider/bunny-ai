@@ -26,6 +26,9 @@
 | S-4 | Import: lower cap or stream; reject before reading | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
 | S-5..S-7 | move_to_new_chat/memory import confirm; secretStore cipher check + pinned powershell; updater temp folder | LOW | Builder | Security, 2026-11-16 | Filed | same |
 | S-8 | 6 moderate audit findings accepted (dev-only); do not downgrade electron-builder | LOW | Security | Security, 2026-11-16 | Accepted, re-check each release | same |
+| G1-1 | Guard does not cover `gh release/pr merge/api` writes (publishing path) | HIGH | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | docs/security/2026-11-16-g1-guard-review.md |
+| G1-2 | Sign-off, release and `_required` records not authenticated at commit | MEDIUM | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
+| G1-3..G1-5 | Hooks folder removable; git alias/--git-dir/plumbing skips; dynamic push refspec; role-by-variable | MEDIUM/LOW | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
 
 ## SIGN-OFF GRID
 
