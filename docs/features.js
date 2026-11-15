@@ -97,7 +97,7 @@ export const FEATURES = [
   { id: '5.7', area: 'Shell', name: 'Multiple windows and popouts', scope: 'app', status: 'D', test: 'a chat can be opened in its own window' },
   { id: '5.8', area: 'Shell', name: 'Voice input and read-aloud', scope: 'app', status: 'D', test: 'a reply can be read aloud' },
   { id: '5.9', area: 'Shell', name: 'Notifications when a reply is ready', scope: 'app', status: 'D', test: 'notifications can be switched on' },
-  { id: '5.10', area: 'Shell', name: 'Check for a newer version', scope: 'app', status: 'D', test: 'the version is shown and the update check is honest' },
+  { id: '5.10', area: 'Shell', name: 'Check for a newer version', scope: 'app', status: 'D', test: 'the version is shown, and a newer GitHub release is reported' },
   { id: '5.11', area: 'Shell', name: 'Multi-language UI', scope: 'app', status: 'D', test: 'the interface can speak another language' },
   { id: '5.12', area: 'Shell', name: 'Accessibility labels and focus order', scope: 'core', status: 'D', test: 'every connect button has its own name' },
 

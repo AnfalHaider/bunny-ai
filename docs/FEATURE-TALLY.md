@@ -122,7 +122,7 @@ The frame around the conversation.
 | 5.7 | Multiple windows and popouts | app | **D** | `a chat can be opened in its own window` |
 | 5.8 | Voice input and read-aloud | app | **D** | `a reply can be read aloud` |
 | 5.9 | Notifications when a reply is ready | app | **D** | `notifications can be switched on` |
-| 5.10 | Check for a newer version | app | **D** | `the version is shown and the update check is honest` |
+| 5.10 | Check for a newer version | app | **D** | `the version is shown, and a newer GitHub release is reported` |
 | 5.11 | Multi-language UI | app | **D** | `the interface can speak another language` |
 | 5.12 | Accessibility labels and focus order | core | **D** | `every connect button has its own name` |
 | 5.13 | Open chat title in the topbar | app | **D** | `the topbar names the open chat` |
