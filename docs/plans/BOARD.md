@@ -14,7 +14,7 @@
 
 | # | Date | Question | Recommendation | Owner's answer (exact words, date) |
 |---|---|---|---|---|
-| 1 | 2026-11-12 | The feature parity tally is 72 of 74. The two open rows are **computer use** (needs OS-level control and an entitlement) and **plugins/marketplaces** (would mean running third-party code this app does not run). Keep them open, or take one on? | Keep them open. Both are the only rows that would make Bunny AI run code or drive the machine it runs on; everything else the reference app is known for is built and tested. | |
+| 1 | 2026-11-12 | The feature parity tally is 72 of 74. The two open rows are **computer use** (needs OS-level control and an entitlement) and **plugins/marketplaces** (would mean running third-party code this app does not run). Keep them open, or take one on? | Keep them open. Both are the only rows that would make Bunny AI run code or drive the machine it runs on; everything else the reference app is known for is built and tested. | _Not the owner's answer._ Answered by research, awaiting owner's acknowledgement: the premise is out of date. Both rows (6.7 Computer use, 6.10 Plugins and marketplaces) are marked done in `docs/features.js:111,114`. Not closed here; the owner closes it. (Recorded by Librarian, 2026-11-16, relayed from the Chief of Staff.) |
 
 ## OPEN
 
