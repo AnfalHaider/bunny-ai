@@ -11,7 +11,7 @@
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, toRepoPath } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace', 'edit_file']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command', 'run_terminal_cmd']);
@@ -66,14 +66,9 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
 
   if (WRITE_TOOLS.has(tool) && filePath) {
     const rel = toRepoPath(root, filePath, cwd);
-    if (rel.startsWith('..')) return { allow: true }; // outside the project: not ours to police
-    if (matchesAny(rel, policy.protected_globs) && role !== 'chief-of-staff') {
-      return { allow: false, reason: `Blocked: ${rel} is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.` };
-    }
-    const scope = brief.write_globs;
-    if (Array.isArray(scope) && scope.length && !matchesAny(rel, scope)) {
-      return { allow: false, reason: `Blocked: role "${role}" writes only ${scope.join(', ')}; ${rel} is outside that. File a board row for the role that owns it.` };
-    }
+    if (rel === null) return { allow: true }; // outside the project: not ours to police
+    const why = scopeViolation(rel, policy, brief, role);
+    if (why) return { allow: false, reason: `Blocked: ${why}` };
   }
   return { allow: true };
 }
