@@ -15,10 +15,7 @@
   <h2>Connected providers</h2>
   <div class="group" id="connected" aria-live="polite"></div>
 
-  <h2 style="margin-top:28px">Popular providers</h2>
-  <div class="group" id="available"></div>
-
-  <h2 style="margin-top:28px" data-i18n="providers.customTitle">Add a custom provider</h2>
+  <h2 style="margin-top:28px" data-i18n="providers.customTitle">Add a custom provider (any OpenAI-compatible server)</h2>
   <div class="group">
     <form class="custom-provider-form" id="custom-form" novalidate>
       <p class="desc" data-i18n="providers.customDesc">Any server that speaks the OpenAI API (<code>/chat/completions</code> and <code>/models</code>): a company gateway, a cloud not listed above, or a server on your network.</p>
@@ -30,6 +27,9 @@
       <div class="err" role="alert" id="custom-err"></div>
     </form>
   </div>
+
+  <h2 style="margin-top:28px">Popular providers</h2>
+  <div class="group" id="available"></div>
 
   <p class="note">
     Keys are encrypted with Windows DPAPI for your user account — never stored in plain text,

@@ -2857,7 +2857,7 @@ function showSettingsSection(section) {
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     const on = b.dataset.section === section;
     b.classList.toggle('is-active', on);
-    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    if (on) { b.setAttribute('aria-current', 'page'); b.scrollIntoView?.({ inline: 'center', block: 'nearest' }); } else b.removeAttribute('aria-current');
   });
 }
 
@@ -3336,7 +3336,10 @@ async function boot() {
       const first = state.models[0];
       state.selected = { providerId: first.providerId, providerName: first.providerName, model: first.id };
     } else {
-      $('empty-text').innerHTML = 'No models yet. Add a provider in <a href="./providers.html">Providers</a>.';
+      // Nothing to pick yet: the one way forward is a button, not a line of small print.
+      const empty = $('empty-text');
+      empty.removeAttribute('data-i18n');
+      empty.replaceChildren(element('a', { className: 'primary empty-cta', href: './providers.html', textContent: say('chat.addProvider') }));
     }
   } catch (err) {
     $('error').textContent = err.message;
