@@ -20,6 +20,7 @@ otherwise handle everything that can be done." Relayed to Tech Lead under 7E (ex
 - Approved under the delegation: Design's T-4 cards (91b49df) as drawn: trust card (Use / Not now, quiet Never for this folder link, states that project instructions cannot change permissions or grant tools), set-up card with per-file diffs, the Using AGENTS.md chip.
 - Owner, in this chat: "i have sent this to tech lead, approved sign off for B-1 D1 and everything till morning." (approval typed in Tech Lead's own chat).
 - Security: only GET /api/account/google/callback reaches the server from outside the app; one exemption is enough (sent to Builder).
+- Owner on tools and permissions: "when allowed by me, everything should be allowed." Project files can never grant permissions or tools; whatever the owner allowed applies in full, no hidden limits, no re-asking. Sent to Builder (T-4, permission code) and QA (audit every mode).
 - Owner added for S-1: "ensure it does not break any model provider also" — sent to Builder, QA, Security.
 - Found: prepush counts a complete sign-off set as covering every ancestor commit, so D1's set would cover
   S-1. Rule for tonight: S-1 is signed in full before any push. Sent to Tech Lead as guard item F.
