@@ -19,5 +19,12 @@
     "\\bgit\\b[^|;&]*\\s-c\\s*[Cc][Oo][Rr][Ee]\\.[Hh][Oo][Oo][Kk][Ss][Pp][Aa][Tt][Hh]",
     "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b",
     "\\bcore\\.hooksPath\\b"
-  ]
+  ],
+  "releases": {
+    "live_pushers": [
+      "release-ops",
+      "hotfix",
+      "chief-of-staff"
+    ]
+  }
 }
