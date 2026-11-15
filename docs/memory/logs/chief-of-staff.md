@@ -17,6 +17,7 @@ otherwise handle everything that can be done." Relayed to Tech Lead under 7E (ex
   model answered, no red lines, a calm offline state (message waits, sends on reconnect) only after a failure
   plus an agreeing connectivity probe. Condition: real model names, a timeout is never called "busy".
 - Tech Lead will sign only on the owner's approval typed in its own chat (relay not accepted, classifier refused earlier). Every code commit needs its sign-off, so the push to main and the release wait for that one morning approval. Its D1 review: PASS from the code (notes: .empty .empty-title restyles every state; phone hides settings search). Upstream plugin report: 0d0e8e7 (items E, C, A3, D, F).
+- Approved under the delegation: Design's T-4 cards (91b49df) as drawn: trust card (Use / Not now, quiet Never for this folder link, states that project instructions cannot change permissions or grant tools), set-up card with per-file diffs, the Using AGENTS.md chip.
 - Owner added for S-1: "ensure it does not break any model provider also" — sent to Builder, QA, Security.
 - Found: prepush counts a complete sign-off set as covering every ancestor commit, so D1's set would cover
   S-1. Rule for tonight: S-1 is signed in full before any push. Sent to Tech Lead as guard item F.
