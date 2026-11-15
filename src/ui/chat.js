@@ -174,14 +174,58 @@ async function terminalStart() {
 
 async function terminalPoll() {
   if (!state.terminalId) return;
+  const output = $('terminal-output');
   try {
-    const result = await terminalRead(state.terminalId);
-    const output = $('terminal-output');
-    if (output) { output.textContent = result.text; output.scrollTop = output.scrollHeight; }
+    // Programs the AI started in this chat get a tab each beside the shell.
+    const programs = state.sessionId ? await getJSON(`/api/processes?sessionId=${state.sessionId}`).catch(() => []) : [];
+    renderTerminalTabs(programs);
+    const view = state.terminalView ?? 'shell';
+    const atBottom = !output || output.scrollHeight - output.scrollTop - output.clientHeight < 40;
+    if (view === 'shell') {
+      const result = await terminalRead(state.terminalId);
+      if (output) output.textContent = result.text;
+    } else {
+      const log = await getJSON(`/api/processes/${view}/log`);
+      if (output) output.textContent = `> ${log.command}\n${log.output}${log.running ? '' : `\n[finished, exit code ${log.exitCode}]`}`;
+    }
+    // Follow new output, unless the person scrolled up to read.
+    if (output && atBottom) output.scrollTop = output.scrollHeight;
   } catch {
-    // terminal may have exited
+    // terminal or program may have exited
   }
   state.terminalPoll = setTimeout(terminalPoll, 1000);
+}
+
+/** Tabs above the terminal: the shell, and each program the AI started here. */
+function renderTerminalTabs(programs) {
+  const host = $('terminal-tabs');
+  if (!host) return;
+  const view = state.terminalView ?? 'shell';
+  if (view !== 'shell' && !programs.some((p) => p.id === view)) state.terminalView = 'shell';
+  host.hidden = !programs.length;
+  $('terminal-input')?.closest('.terminal-input-row')?.toggleAttribute('hidden', (state.terminalView ?? 'shell') !== 'shell');
+  const key = JSON.stringify([state.terminalView ?? 'shell', programs.map((p) => [p.id, p.running])]);
+  if (host.dataset.key === key) return;
+  host.dataset.key = key;
+  const tab = (id, label, running) => {
+    const b = button(label, {
+      className: `terminal-tab${(state.terminalView ?? 'shell') === id ? ' is-active' : ''}`, role: 'tab',
+      'aria-selected': String((state.terminalView ?? 'shell') === id), title: label,
+      onclick: () => { state.terminalView = id; host.dataset.key = ''; clearTimeout(state.terminalPoll); terminalPoll(); },
+    });
+    if (running !== undefined) b.prepend(element('span', { className: `dot${running ? '' : ' is-off'}`, 'aria-hidden': 'true' }));
+    return b;
+  };
+  host.replaceChildren(tab('shell', 'Shell'));
+  for (const p of programs) {
+    host.append(tab(p.id, `AI: ${p.command.slice(0, 40)}`, p.running));
+    if (p.running && (state.terminalView ?? 'shell') === p.id) {
+      host.append(button('Stop', {
+        className: 'ghost sm terminal-stop', 'aria-label': `Stop ${p.command}`,
+        onclick: async () => { await sendJSON(`/api/processes/${p.id}/stop`, 'POST').catch(() => {}); host.dataset.key = ''; },
+      }));
+    }
+  }
 }
 
 function terminalStop() {
@@ -610,6 +654,10 @@ function renderSessionRow(s, depth) {
   if (depth) a.append(element('span', { className: 'branch-mark', textContent: '↳', 'aria-hidden': 'true' }));
   if (s.pinned) a.append(element('span', { className: 'pin', textContent: '★', 'aria-label': 'Pinned', role: 'img' }));
   if (s.incognito) a.append(element('span', { className: 'tag', textContent: 'incognito' }));
+  if (s.agent) {
+    const label = s.agent === 'helper' ? 'helper' : 'background';
+    a.append(element('span', { className: `tag agent-tag${s.agentStatus === 'working' ? ' is-working' : ''}`, textContent: s.agentStatus === 'working' ? `${label} · working` : label }));
+  }
   if (s.id === state.sessionId && state.streaming) {
     // A live dot marks a session that is working right now.
     a.append(element('span', { className: 'dot', role: 'img', 'aria-label': 'Working' }));
@@ -738,6 +786,8 @@ function renderProjects() {
 function paintMessages() {
   const host = $('messages');
   host.replaceChildren();
+  // The Tasks pane follows the latest plan in this chat.
+  renderTasksPane([...state.messages].reverse().find((m) => m.tasks?.length)?.tasks ?? []);
   const empty = state.messages.length === 0;
   $('empty').hidden = !empty;
   $('main')?.classList.toggle('is-empty', empty);
@@ -784,6 +834,7 @@ function renderMessage(m) {
     wrap.append(tc);
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
+    if (m.linked) wrap.append(linkedChatCard(m.linked));
     return wrap;
   }
 
@@ -825,17 +876,11 @@ function renderMessage(m) {
       element('span', { className: 'tag', textContent: say(m.kind === 'summary' ? 'chat.summary' : 'chat.stopped') })));
   }
 
+  // The files this reply changed can be put back.
+  if (m.role === 'assistant' && m.checkpoint?.files) wrap.append(undoBar(m));
+
   // Task list under latest message
-  if (m.tasks?.length) {
-    const tl = element('div', { className: 'task-list' });
-    for (const task of m.tasks) {
-      const ti = element('div', { className: 'task-item' });
-      const cb = element('div', { className: 'checkbox' + (task.done ? ' checked' : '') });
-      ti.append(cb, element('span', { className: 'text', textContent: task.text }));
-      tl.append(ti);
-    }
-    wrap.append(tl);
-  }
+  if (m.tasks?.length) wrap.append(taskList(m.tasks));
 
   // Next-step box
   if (m.nextStep) {
@@ -1159,6 +1204,7 @@ async function streamInto(bodyEl, { path, payload }) {
     onPermission: (info) => showLivePermission(bodyEl, info),
     onBrowser: (info) => runBrowserAction(info),
     onCapability: (info) => showLiveCapability(bodyEl, info),
+    onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
   };
 
   try {
@@ -1199,6 +1245,10 @@ function showLiveTool(bodyEl, info) {
     res.textContent = `→ ${String(info.result).slice(0, 500)}`;
   }
   if ((info.attachments ?? []).length && !line.querySelector('.attachments')) line.append(renderAttachments(info.attachments));
+  if (info.linked && !line.querySelector('.linked-card')) {
+    line.append(linkedChatCard(info.linked));
+    loadSessions().catch(() => {});
+  }
   if (info.artifact && info.status === 'done') {
     line.querySelector('.artifact-card')?.remove();
     line.append(artifactCard(info.artifact));
@@ -1206,6 +1256,88 @@ function showLiveTool(bodyEl, info) {
     loadArtifacts().then(() => (currentView() === 'browser' ? null : showArtifact(info.artifact.id))).catch(() => {});
   }
   msg.scrollIntoView({ block: 'end' });
+}
+
+/** The model's checklist: drawn as one list that updates in place, and in the Tasks pane. */
+function taskList(tasks) {
+  const tl = element('div', { className: 'task-list', role: 'list', 'aria-label': 'Plan' });
+  for (const task of tasks) {
+    const ti = element('div', { className: `task-item${task.done ? ' is-done' : ''}`, role: 'listitem' });
+    ti.append(element('div', { className: 'checkbox' + (task.done ? ' checked' : ''), 'aria-hidden': 'true' }),
+      element('span', { className: 'text', textContent: task.text }),
+      element('span', { className: 'sr', textContent: task.done ? ' (done)' : ' (to do)' }));
+    tl.append(ti);
+  }
+  return tl;
+}
+function showLiveTasks(bodyEl, tasks) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  let live = msg.parentNode.querySelector('.live-tasks');
+  if (!live) {
+    live = element('div', { className: 'msg assistant live-tasks' });
+    msg.before(live);
+  }
+  live.replaceChildren(taskList(tasks));
+  renderTasksPane(tasks);
+}
+/** The Tasks pane shows the latest plan in this chat. */
+function renderTasksPane(tasks) {
+  const host = $('tasks-content');
+  if (!host) return;
+  if (!tasks?.length) {
+    host.replaceChildren(element('div', { className: 'pane-empty tasks-empty' }, element('span', { textContent: 'No tasks yet. When Bunny works through a job with several steps, its plan shows here.' })));
+    return;
+  }
+  const done = tasks.filter((t) => t.done).length;
+  host.replaceChildren(element('p', { className: 'hint tasks-progress', textContent: `${done} of ${tasks.length} done` }), taskList(tasks));
+}
+
+/** "Undo file changes": put back every file this reply wrote or edited. */
+function undoBar(m) {
+  const n = m.checkpoint.files;
+  const bar = element('div', { className: 'undo-bar' });
+  if (m.checkpoint.restored) {
+    bar.append(element('span', { className: 'hint', textContent: `File changes undone (${n} file${n === 1 ? '' : 's'})` }));
+    return bar;
+  }
+  bar.append(
+    element('span', { className: 'hint', textContent: `Changed ${n} file${n === 1 ? '' : 's'}` }),
+    button('Undo file changes', {
+      className: 'ghost sm',
+      onclick: async (e) => {
+        const b = e.currentTarget;
+        if (!confirm(`Put back the ${n} file${n === 1 ? '' : 's'} this reply changed, as they were before it? Later edits to the same files are replaced too. Changes made by commands it ran are not undone.`)) return;
+        b.disabled = true;
+        try {
+          const r = await sendJSON(`/api/sessions/${state.sessionId}/checkpoints/${m.checkpoint.id}/restore`, 'POST');
+          m.checkpoint.restored = true;
+          bar.replaceWith(undoBar(m));
+          flashStatus(`Put back ${r.restored} file${r.restored === 1 ? '' : 's'}${r.skipped?.length ? `; ${r.skipped.length} too large to keep` : ''}`);
+          state.browser?.refresh?.();
+        } catch (err) {
+          b.disabled = false;
+          $('error').textContent = err.message;
+        }
+      },
+    }));
+  return bar;
+}
+
+/** A card for another chat a step started or talked to: a helper, a background chat. */
+function linkedChatCard(c) {
+  const status = { working: 'Working…', done: 'Finished', failed: 'Stopped' }[c.status] ?? '';
+  const card = element('div', { className: 'artifact-card linked-card' },
+    element('span', { className: 'artifact-thumb thumb-chat', 'aria-hidden': 'true' }, icon('branch')),
+    element('span', { className: 'artifact-card-info' },
+      element('span', { className: 'artifact-card-title', textContent: c.title ?? 'Chat' }),
+      element('span', { className: 'artifact-card-kind', textContent: ['Chat', c.model ? c.model.split('/').pop() : '', status].filter(Boolean).join(' · ') })));
+  card.append(button('Open chat', {
+    className: 'ghost sm', 'aria-label': `Open the chat ${c.title ?? ''}`,
+    // Leaving now would stop the reply that is still coming in.
+    onclick: () => (state.streaming ? flashStatus('The reply is still coming in. Open it when it finishes, or from the sidebar.') : location.assign(`./index.html?s=${c.id}`)),
+  }));
+  return card;
 }
 
 /** A card in the chat for an artifact the model made: its name, what it is, and Open. */
@@ -1389,6 +1521,8 @@ function startNewChat({ incognito = false } = {}) {
   state.messages = [];
   state.incognito = incognito;
   history.replaceState(null, '', './index.html');
+  // A new chat starts in the mode the person last picked by hand, not the one the last chat was in.
+  applyWorkMode(localStorage.getItem('bunny.workMode') ?? 'chat');
   paintMessages();
   renderContext(null);
   renderMode();
@@ -2012,7 +2146,9 @@ const MODE_HINTS = {
   code: { placeholder: 'Ask about or change the code in your folder…', empty: 'Choose a folder below, then ask Bunny to read, change or run things in it.' },
 };
 
-function applyWorkMode(mode, { save = false } = {}) {
+// Only a mode the person picks by hand becomes the default for new chats; opening a chat,
+// or saying yes to Code mode on a card, changes that chat alone.
+function applyWorkMode(mode, { save = false, remember = false } = {}) {
   if (mode === 'cowork' || mode === 'delegate') mode = 'code'; // retired modes: both used tools
   if (!WORK_MODES.includes(mode)) mode = 'chat';
   state.workMode = mode;
@@ -2030,12 +2166,12 @@ function applyWorkMode(mode, { save = false } = {}) {
     b.classList.toggle('is-active', m === mode);
     b.setAttribute('aria-pressed', String(m === mode));
   }
-  localStorage.setItem('bunny.workMode', mode);
+  if (remember) localStorage.setItem('bunny.workMode', mode);
 }
 
 function bindModeSwitch() {
   for (const m of WORK_MODES) {
-    $(`mode-${m}`)?.addEventListener('click', () => applyWorkMode(m, { save: true }));
+    $(`mode-${m}`)?.addEventListener('click', () => applyWorkMode(m, { save: true, remember: true }));
   }
   applyWorkMode(localStorage.getItem('bunny.workMode') ?? 'chat');
 }

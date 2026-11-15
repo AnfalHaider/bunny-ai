@@ -60,6 +60,8 @@ export const FEATURES = [
   { id: '2.17', area: 'Providers', name: 'A silent provider is reported instead of hanging', scope: 'core', status: 'D', test: 'a provider that goes silent is reported instead of hanging' },
   { id: '2.18', area: 'Providers', name: "The provider's own error explanation reaches the person", scope: 'core', status: 'D', test: 'the provider explanation reaches the person' },
   { id: '2.19', area: 'Providers', name: 'An unverifiable key is not waved through', scope: 'core', status: 'D', test: 'the google 404-on-models quirk does not wave a bad key through' },
+  { id: '2.20', area: 'Providers', name: 'Custom OpenAI-compatible providers', scope: 'app', status: 'D', test: 'a custom provider is added, chats with its own key header, survives a restart, and can be removed' },
+  { id: '2.21', area: 'Providers', name: 'ModelScope, SiliconFlow, Gitee AI and other popular providers', scope: 'app', status: 'D', test: 'ModelScope, SiliconFlow and Gitee AI are ready to connect with their own addresses' },
 
   // 3. Artifacts
   { id: '3.1', area: 'Artifacts', name: 'Artifact side panel', scope: 'app', status: 'D', test: 'a reply can be kept as an artifact beside the chat' },
@@ -71,6 +73,7 @@ export const FEATURES = [
   { id: '3.7', area: 'Artifacts', name: 'Star an artifact', scope: 'app', status: 'D', test: 'an artifact can be starred and deleted' },
   { id: '3.8', area: 'Artifacts', name: 'Charts and diagrams in artifacts', scope: 'app', status: 'D', test: 'an artifact that is data is drawn as a chart' },
   { id: '3.9', area: 'Artifacts', name: 'Artifact thumbnails', scope: 'app', status: 'D', test: 'an artifact shows a thumbnail and can be printed' },
+  { id: '3.10', area: 'Artifacts', name: 'The model makes artifacts itself', scope: 'app', status: 'D', test: 'in Chat mode the model can make an artifact, which opens as a sandboxed page' },
 
   // 4. Structure
   { id: '4.1', area: 'Structure', name: 'Flat conversation list', scope: 'core', status: 'D', test: 'list is newest-first' },
@@ -102,15 +105,25 @@ export const FEATURES = [
   { id: '6.4', area: 'Automation', name: 'MCP tools in a conversation', scope: 'app', status: 'D', test: 'a tool the model asks for is run and the answer comes back' },
   { id: '6.5', area: 'Automation', name: 'Connectors with OAuth', scope: 'app', status: 'D', test: 'the token arrives once the person has signed in' },
   { id: '6.6', area: 'Automation', name: 'Scheduled and recurring tasks', scope: 'app', status: 'D', test: 'a due schedule runs and leaves a chat behind' },
-  { id: '6.7', area: 'Automation', name: 'Computer use', scope: 'enterprise', status: 'M', note: 'deliberately out of scope: needs OS-level control and an entitlement' },
+  { id: '6.7', area: 'Automation', name: 'Computer use', scope: 'enterprise', status: 'D', test: 'screen text is given at the centre of each line, in the pixels of the shown picture' },
   { id: '6.8', area: 'Automation', name: 'Skills', scope: 'app', status: 'D', test: 'a skill that is on reaches the model' },
   { id: '6.9', area: 'Automation', name: 'Hooks', scope: 'app', status: 'D', test: 'a hook runs when a message is sent' },
-  { id: '6.10', area: 'Automation', name: 'Plugins and marketplaces', scope: 'app', status: 'M', note: 'a plugin would mean running third-party code; this app runs no code it did not write' },
+  { id: '6.10', area: 'Automation', name: 'Plugins and marketplaces', scope: 'app', status: 'P', note: 'plugins install from GitHub and connectors from the MCP registry, but no automated test covers the install yet' },
   { id: '6.11', area: 'Automation', name: 'Memories suggested from a chat', scope: 'app', status: 'D', test: 'a chat can suggest a memory, and it is kept only when accepted' },
+  { id: '6.12', area: 'Automation', name: 'The model asks for a capability it lacks', scope: 'app', status: 'D', test: 'asking for Code mode: the person picks a folder and the file tools arrive in the same reply' },
+  { id: '6.13', area: 'Automation', name: 'Programs that keep running', scope: 'app', status: 'D', test: 'a started program keeps running, is read in pieces, and stops' },
+  { id: '6.14', area: 'Automation', name: 'Tools the model builds, with approval', scope: 'app', status: 'D', test: 'building a tool always asks, even in Auto mode, and the tool is usable at once' },
+  { id: '6.15', area: 'Automation', name: 'Sub-agents working side by side', scope: 'app', status: 'D', test: 'two helpers run side by side, report back, and are kept as chats nested under this one' },
+  { id: '6.16', area: 'Automation', name: 'Chats that message each other', scope: 'app', status: 'D', test: 'one chat can message another and read it; a background chat works on its own' },
+  { id: '6.17', area: 'Automation', name: 'GitHub repositories, issues and pull requests', scope: 'app', status: 'D', test: 'the GitHub tools read and write through the API with the signed-in token' },
+  { id: '6.18', area: 'Automation', name: "Undo the model's file changes", scope: 'app', status: 'D', test: 'the file changes of a reply can be undone, once' },
+  { id: '6.19', area: 'Automation', name: 'A plan the model keeps visible', scope: 'app', status: 'D', test: 'the plan is shown as a live checklist and kept with the reply, without a step line per update' },
+  { id: '6.20', area: 'Automation', name: 'The model remembers and schedules', scope: 'app', status: 'D', test: 'the AI can remember a fact and schedule a task; both ask first in Manual' },
   { id: '1.23', area: 'Conversation', name: 'Greeting on a fresh page', scope: 'app', status: 'D', test: 'a fresh page greets you and centres the composer' },
   { id: '4.8', area: 'Structure', name: 'Date buckets and Recents in the sidebar', scope: 'app', status: 'D', test: 'the sidebar groups chats under a date bucket' },
   { id: '5.13', area: 'Shell', name: 'Open chat title in the topbar', scope: 'app', status: 'D', test: 'the topbar names the open chat' },
   { id: '5.14', area: 'Shell', name: 'Session rail show / hide', scope: 'app', status: 'D', test: 'the session rail shows environment and connectors' },
+  { id: '5.15', area: 'Shell', name: 'Sign in with GitHub or Google', scope: 'app', status: 'D', test: 'signing in to GitHub: from the CLI, from a token, and out again; tokens never come back' },
 ];
 
 export const countBy = (status) => FEATURES.filter((f) => f.status === status).length;

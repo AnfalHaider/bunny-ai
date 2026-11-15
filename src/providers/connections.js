@@ -162,7 +162,9 @@ async function defaultProbe({ baseUrl, apiKey, local = false, auth = null }, fet
  *   catalog?: ReadonlyArray<any>
  * }} deps
  */
-export function createProviderRegistry({ secrets, probe = defaultProbe, catalog = PROVIDERS, discover = discoverModels, modelTtlMs = 5 * 60_000 }) {
+export function createProviderRegistry({ secrets, probe = defaultProbe, catalog: builtIn = PROVIDERS, discover = discoverModels, modelTtlMs = 5 * 60_000 }) {
+  // The built-in providers, then any the person added (custom: true).
+  const catalog = [...builtIn];
   /** @type {Map<string, { status: Status, baseUrl: string, maskedKey: string, lastError: string|null, connectedAt: string|null }>} */
   const state = new Map();
   /** @type {Map<string, { at: number, models: any[] }>} */
@@ -187,6 +189,8 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog 
         tagline: provider.tagline,
         kind: provider.kind,
         recommended: Boolean(provider.recommended),
+        custom: Boolean(provider.custom),
+        docsUrl: provider.docsUrl ?? '',
         defaultBaseUrl: provider.defaultBaseUrl ?? '',
         // Which header the key belongs in. Names only, never the key itself.
         auth: provider.auth ?? null,
@@ -327,7 +331,30 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog 
     }
   }
 
-  return { list, connect, connectWithToken, disconnect, models, hydrate };
+  /**
+   * Add a provider the person describes: any server that speaks the OpenAI shape.
+   * Replaces an earlier custom one with the same id; built-in ids are refused.
+   */
+  function addProvider(def) {
+    const existing = catalog.findIndex((p) => p.id === def.id);
+    if (existing >= 0 && !catalog[existing].custom) throw new ConnectError('provider.taken', 'That name belongs to a built-in provider', 'name');
+    const provider = Object.freeze({ ...def, custom: true });
+    if (existing >= 0) catalog.splice(existing, 1, provider); else catalog.push(provider);
+    return provider;
+  }
+
+  async function removeProvider(id) {
+    const at = catalog.findIndex((p) => p.id === id);
+    if (at < 0 || !catalog[at].custom) throw new ConnectError('provider.notCustom', 'Only providers you added can be removed');
+    await secrets.delete(`provider:${id}`);
+    modelCache.delete(id);
+    state.delete(id);
+    catalog.splice(at, 1);
+  }
+
+  const find = (id) => catalog.find((p) => p.id === id) ?? null;
+
+  return { list, connect, connectWithToken, disconnect, models, hydrate, addProvider, removeProvider, find };
 }
 
 /** Dev/test store. Not for real keys: process memory only. */

@@ -131,3 +131,112 @@ export function screenLinesText(lines, scale = 1, max = 150) {
     return `(${x}, ${y}) ${l.text}`;
   }).join('\n');
 }
+
+// ---- helpers and other chats ----
+
+export const TEAM_TOOL_RISK = {
+  run_subagent: 'own', start_session: 'own', list_models: 'read', list_sessions: 'read', read_session: 'read', message_session: 'edit',
+};
+Object.assign(AGENT_TOOL_RISK, TEAM_TOOL_RISK);
+
+// A helper need not use this chat's model: the kind of work picks the best-suited one,
+// or a model can be named outright (list_models shows them).
+const MODEL_CHOICE = {
+  job: { type: 'string', enum: ['chat', 'code', 'research', 'see'], description: 'The kind of work, so the best-suited model is picked: code (coding and tools), research (long answers from sources), see (pictures and screenshots), chat (writing and talk). Leave empty to use the model of this chat.' },
+  model: { type: 'string', description: 'A specific model id from list_models, instead of job' },
+};
+
+export function teamToolDefinitions({ canDelegate = true } = {}) {
+  const defs = [
+    fn('list_sessions', 'List the other chats: the ones nested under this chat, its parent, and recent ones, with their ids.'),
+    fn('read_session', 'Read the latest messages of another chat by id.',
+      { session_id: { type: 'string' }, last: { type: 'integer', description: 'How many messages, default 10' } }, ['session_id']),
+    fn('message_session', 'Send a message to another chat and get its reply. That chat answers with what it knows from its own conversation; '
+      + 'the message and the reply are added to it.',
+    { session_id: { type: 'string' }, message: { type: 'string' } }, ['session_id', 'message']),
+  ];
+  if (canDelegate) {
+    defs.unshift(
+      fn('run_subagent', 'Hand a self-contained task to a helper agent that works on it with your tools and reports back. '
+        + 'Call it several times in one go to run helpers side by side (for example one per file, topic or question). '
+        + 'The helper cannot see this conversation or ask the person anything, so put everything it needs in the task. '
+        + 'Each helper\'s work is kept as a chat nested under this one.',
+      {
+        title: { type: 'string', description: 'A short name for the helper, e.g. "Check the tests"' },
+        task: { type: 'string', description: 'What to do and what to report back' },
+        read_only: { type: 'boolean', description: 'true: the helper may only look (read files, search), not change anything' },
+        ...MODEL_CHOICE,
+      }, ['title', 'task']),
+      fn('start_session', 'Start a new chat nested under this one that works on a task by itself in the background, so this reply can go on. '
+        + 'It can look and read, not change things. Check on it later with read_session.',
+      { title: { type: 'string' }, task: { type: 'string' }, ...MODEL_CHOICE }, ['title', 'task']),
+      fn('list_models', 'List the models you can give a helper or background chat, best first for each kind of work.'),
+    );
+  }
+  return defs;
+}
+
+const prevDescribe = describeAgentTool;
+export function describeTeamTool(name, args = {}) {
+  const s = (v, n = 60) => String(v ?? '').replace(/\s+/g, ' ').slice(0, n);
+  switch (name) {
+    case 'run_subagent': return `Helper "${s(args.title)}"`;
+    case 'start_session': return `Start chat "${s(args.title)}"`;
+    case 'list_sessions': return 'List chats';
+    case 'list_models': return 'List models for helpers';
+    case 'read_session': return 'Read another chat';
+    case 'message_session': return `Message another chat: "${s(args.message)}"`;
+    default: return prevDescribe(name, args);
+  }
+}
+
+// ---- remembering and scheduling ----
+
+export const MEMORY_TOOL_RISK = { remember: 'edit', schedule_task: 'edit', list_scheduled_tasks: 'read' };
+Object.assign(AGENT_TOOL_RISK, MEMORY_TOOL_RISK);
+
+export function memoryToolDefinitions({ memory = true } = {}) {
+  return [
+    ...(memory ? [fn('remember', 'Save a lasting fact about the person or their work to Bunny AI\'s memory, so every future chat knows it '
+      + '(for example their name, preferences, or a project rule). Only when they ask you to remember something or say something clearly lasting.',
+    { text: { type: 'string', description: 'One short sentence' } }, ['text'])] : []),
+    fn('schedule_task', 'Set up a task Bunny AI runs on its own, again and again (for example "every morning, summarise my repos\' new issues"). '
+      + 'Each run happens in a new chat with this model while the app is open.',
+    { name: { type: 'string' }, prompt: { type: 'string', description: 'What to do each time, as a full instruction' },
+      every_minutes: { type: 'integer', description: 'How often, in minutes (60 = hourly, 1440 = daily)' } }, ['name', 'prompt', 'every_minutes']),
+    fn('list_scheduled_tasks', 'List the tasks Bunny AI runs on a schedule.'),
+  ];
+}
+
+const describeTeam = describeTeamTool;
+export function describeAnyAgentTool(name, args = {}) {
+  const s = (v, n = 60) => String(v ?? '').replace(/\s+/g, ' ').slice(0, n);
+  switch (name) {
+    case 'remember': return `Remember: "${s(args.text)}"`;
+    case 'schedule_task': return `Schedule "${s(args.name)}" every ${Math.round(Number(args.every_minutes) || 60)} min`;
+    case 'list_scheduled_tasks': return 'List scheduled tasks';
+    case 'update_tasks': {
+      const list = Array.isArray(args.tasks) ? args.tasks : [];
+      return `Plan: ${list.filter((t) => t?.done).length} of ${list.length} done`;
+    }
+    default: return describeTeam(name, args);
+  }
+}
+
+// ---- a task list the person watches ----
+
+export const PLAN_TOOL_RISK = { update_tasks: 'own' };
+Object.assign(AGENT_TOOL_RISK, PLAN_TOOL_RISK);
+
+export function planToolDefinition() {
+  return fn('update_tasks', 'Show the person your plan as a checklist under your reply, and keep it current: call it at the start of a job with several steps, '
+    + 'then again as each step is done. Send the whole list each time.',
+  { tasks: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' }, done: { type: 'boolean' } }, required: ['text'] } } }, ['tasks']);
+}
+
+/** The list as stored: at most 20 short steps. */
+export function cleanTasks(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).slice(0, 20)
+    .map((t) => ({ text: String(t?.text ?? t ?? '').replace(/\s+/g, ' ').trim().slice(0, 160), done: Boolean(t?.done) }))
+    .filter((t) => t.text);
+}

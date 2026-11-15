@@ -718,3 +718,38 @@ pre.code:not(.is-folded) .code-foot { border-top: 1px solid var(--line); }
 .md-table th, .md-table td { padding: var(--sp-3) var(--sp-6); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .md-table th { font-weight: var(--fw-medium); color: var(--text-dim); border-bottom-color: var(--line-strong); }
 .md-table tbody tr:last-child td { border-bottom: 0; }
+
+/* a helper or background chat linked from a step */
+.artifact-card .thumb-chat { background: var(--hover); color: var(--text-dim); }
+.agent-tag { margin-left: var(--sp-2); }
+.agent-tag.is-working { color: var(--accent); background: var(--accent-soft); }
+
+/* Settings: GitHub and Google sign-in */
+.account-row .right { display: flex; flex-wrap: wrap; gap: var(--sp-3); justify-content: flex-end; }
+.account-who { display: inline-flex; align-items: center; gap: var(--sp-3); color: var(--text); }
+.account-who img { border-radius: 50%; }
+.account-token { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-4); flex-wrap: wrap; }
+.account-token input { flex: 1; min-width: 200px; }
+.account-apps { display: block; }
+.account-apps summary { cursor: pointer; }
+.account-apps .desc { margin: var(--sp-4) 0; }
+.account-apps .field { display: block; margin-top: var(--sp-4); }
+.account-apps .field input { width: 100%; }
+
+/* undo the files a reply changed */
+.undo-bar { display: flex; align-items: center; gap: var(--sp-5); margin-top: var(--sp-3); font-size: var(--fs-xs); }
+
+/* Terminal pane: the shell and the programs the AI started */
+.terminal-tabs { display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); overflow-x: auto; align-items: center; }
+.terminal-tab { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-xs); padding: var(--sp-1) var(--sp-4); border-radius: var(--r-sm); color: var(--text-dim); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.terminal-tab:hover { background: var(--hover); color: var(--text); }
+.terminal-tab.is-active { background: var(--hover); color: var(--text); font-weight: var(--fw-medium); }
+.terminal-tab .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+.terminal-tab .dot.is-off { background: var(--text-faint); }
+.terminal-stop { margin-left: auto; }
+
+/* the model's checklist */
+.task-item.is-done .text { color: var(--text-dim); text-decoration: line-through; }
+.live-tasks .task-list { margin-left: var(--sp-8); }
+.tasks-progress { padding: var(--sp-4) var(--sp-6) 0; }
+#tasks-content .task-list { padding: var(--sp-4) var(--sp-6); }

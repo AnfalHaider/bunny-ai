@@ -79,6 +79,7 @@ export async function streamAt(path, body, handlers = {}) {
       else if (event === 'permission') handlers.onPermission?.(parsed);
       else if (event === 'browser') handlers.onBrowser?.(parsed);
       else if (event === 'capability') handlers.onCapability?.(parsed);
+      else if (event === 'tasks') handlers.onTasks?.(parsed);
     }
   }
 }

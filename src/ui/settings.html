@@ -27,10 +27,38 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Account</div>
-          <div class="desc">Bunny AI has no cloud account. Your chats and keys stay on this computer.</div>
+          <div class="desc">Bunny AI has no cloud account. Signing in links your GitHub or Google identity to this copy of Bunny AI; your chats and keys still stay on this computer.</div>
         </div>
         <div class="right"><span class="tag">Local</span></div>
       </div>
+      <div class="row account-row" id="github-row">
+        <div class="meta-col">
+          <div class="name">GitHub</div>
+          <div class="desc" id="github-desc">Sign in so the AI can work with your repositories, issues and pull requests.</div>
+          <div class="account-token" id="github-token-box" hidden>
+            <input id="github-token" type="password" autocomplete="off" placeholder="ghp_… or github_pat_…" aria-label="GitHub personal access token" />
+            <button type="button" class="primary small" id="github-token-save">Sign in</button>
+            <a class="hint" href="https://github.com/settings/tokens/new?scopes=repo,read:user,user:email&amp;description=Bunny%20AI" target="_blank" rel="noreferrer">Make a token</a>
+          </div>
+          <div class="err" role="alert" id="github-err"></div>
+        </div>
+        <div class="right" id="github-actions"></div>
+      </div>
+      <div class="row account-row" id="google-row">
+        <div class="meta-col">
+          <div class="name">Google</div>
+          <div class="desc" id="google-desc">Sign in with your Google (Gmail) account.</div>
+          <div class="err" role="alert" id="google-err"></div>
+        </div>
+        <div class="right" id="google-actions"></div>
+      </div>
+      <details class="row account-apps">
+        <summary class="name">Sign-in apps <span class="opt">(advanced)</span></summary>
+        <p class="desc">GitHub's "Sign in with GitHub" and Google sign-in need an OAuth app you register once with them. GitHub: Settings → Developer settings → OAuth Apps, tick "Enable Device Flow". Google: Cloud console → APIs &amp; Services → Credentials → OAuth client ID → Desktop app.</p>
+        <label class="field" for="github-client-id"><span>GitHub OAuth app client ID</span><input id="github-client-id" autocomplete="off" spellcheck="false" placeholder="Ov23li…" /></label>
+        <label class="field" for="google-client-id"><span>Google client ID</span><input id="google-client-id" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" /></label>
+        <label class="field" for="google-client-secret"><span>Google client secret <span class="opt">(Desktop apps get one; Google does not treat it as secret)</span></span><input id="google-client-secret" type="password" autocomplete="off" spellcheck="false" /></label>
+      </details>
     </div>
   </section>
 
@@ -404,6 +432,83 @@
     await save({ memoryEnabled: e.target.checked });
   });
 
+  // ---- signing in with GitHub and Google ----
+  const btn = (label, cls, onclick) => Object.assign(document.createElement('button'), { type: 'button', className: cls, textContent: label, onclick });
+  const whoBadge = (p, extra) => {
+    const span = document.createElement('span');
+    span.className = 'account-who';
+    if (p.avatar) span.append(Object.assign(document.createElement('img'), { src: p.avatar, alt: '', width: 20, height: 20 }));
+    span.append(document.createTextNode(extra));
+    return span;
+  };
+  async function renderAccount() {
+    let a;
+    try { a = await getJSON('/api/account'); } catch { return; }
+    const gh = $('github-actions');
+    gh.replaceChildren();
+    $('github-err').textContent = '';
+    $('github-token-box').hidden = true;
+    const run = (errId, fn) => async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      $(errId).textContent = '';
+      try { await fn(); await renderAccount(); } catch (err) { $(errId).textContent = err.message; } finally { b.disabled = false; }
+    };
+    if (a.github) {
+      $('github-desc').replaceChildren(whoBadge(a.github, `${a.github.name} (@${a.github.login}) · via ${a.github.method}`));
+      gh.append(btn('Sign out', 'ghost small', run('github-err', () => sendJSON('/api/account/github', 'DELETE'))));
+    } else {
+      $('github-desc').textContent = 'Sign in so the AI can work with your repositories, issues and pull requests.';
+      gh.append(btn('Use GitHub CLI sign-in', 'primary small', run('github-err', () => sendJSON('/api/account/github/cli', 'POST'))));
+      if (a.githubDeviceReady) {
+        gh.append(btn('Sign in with GitHub', 'ghost small', run('github-err', async () => {
+          const flow = await sendJSON('/api/account/github/device/start', 'POST');
+          $('github-desc').textContent = `Type the code ${flow.userCode} at ${flow.verificationUri} (a browser tab is opening). Waiting…`;
+          window.open(flow.verificationUri, '_blank');
+          await sendJSON('/api/account/github/device/finish', 'POST');
+        })));
+      }
+      gh.append(btn('Paste a token', 'ghost small', () => { $('github-token-box').hidden = false; $('github-token').focus(); }));
+    }
+    const go = $('google-actions');
+    go.replaceChildren();
+    $('google-err').textContent = '';
+    if (a.google) {
+      $('google-desc').replaceChildren(whoBadge(a.google, `${a.google.name}${a.google.email ? ` · ${a.google.email}` : ''}`));
+      go.append(btn('Sign out', 'ghost small', run('google-err', () => sendJSON('/api/account/google', 'DELETE'))));
+    } else {
+      $('google-desc').textContent = a.googleReady ? 'Sign in with your Google (Gmail) account.' : 'Sign in with your Google (Gmail) account. Needs a Google client ID under Sign-in apps first.';
+      const b = btn('Sign in with Google', 'primary small', run('google-err', async () => {
+        const { url } = await sendJSON('/api/account/google/start', 'POST');
+        window.open(url, '_blank');
+        $('google-desc').textContent = 'Finish signing in in your browser, then come back here.';
+        // The browser comes back to Bunny AI's own address; look for the result for a few minutes.
+        for (let i = 0; i < 90; i += 1) {
+          await new Promise((r) => setTimeout(r, 2000));
+          if ((await getJSON('/api/account')).google) return;
+        }
+        throw new Error('The Google sign-in was not finished.');
+      }));
+      b.disabled = !a.googleReady;
+      go.append(b);
+    }
+  }
+  $('github-token-save').addEventListener('click', async () => {
+    $('github-err').textContent = '';
+    try {
+      await sendJSON('/api/account/github/token', 'POST', { token: $('github-token').value.trim() });
+      $('github-token').value = '';
+      await renderAccount();
+    } catch (err) { $('github-err').textContent = err.message; }
+  });
+  function bindSignInApps(settings) {
+    for (const [id, key] of [['github-client-id', 'githubClientId'], ['google-client-id', 'googleClientId'], ['google-client-secret', 'googleClientSecret']]) {
+      const input = $(id);
+      input.value = settings[key] ?? '';
+      input.addEventListener('change', async () => { await save({ [key]: input.value.trim() || null }); renderAccount(); });
+    }
+  }
+
   // ---- tools the AI built: see each script, remove what you no longer want ----
   async function renderCustomTools() {
     const host = $('custom-tools');
@@ -573,6 +678,8 @@
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);
     renderCustomTools();
+    bindSignInApps(settings);
+    renderAccount();
     getJSON('/api/speech/voices').then(({ voices }) => {
       const sel = $('speech-voice');
       for (const v of voices) sel.append(Object.assign(document.createElement('option'), { value: v, textContent: v.replace(/^Microsoft\s+|\s+Desktop$/g, '') }));

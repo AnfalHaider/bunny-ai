@@ -35,7 +35,7 @@ const DEFAULT_STALL_MS = 120_000;
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
-  maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null,
+  maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null,
 }) {
   if (fake) {
     yield* fakeStream(model, messages, signal);
@@ -92,16 +92,19 @@ export async function* streamChat({
     // A tool may answer with pictures too (a screenshot): tool messages carry text
     // only, so the pictures follow the answers as one message the model can see.
     const pictures = [];
-    for (const call of toolCalls) {
-      let result = '';
+    const runOne = async (call) => {
       try {
-        result = await runTool({
-          name: call.function.name,
-          arguments: call.function.arguments,
-        });
+        return await runTool({ name: call.function.name, arguments: call.function.arguments });
       } catch (err) {
-        result = `The tool failed: ${err.message}`;
+        return `The tool failed: ${err.message}`;
       }
+    };
+    // Calls that can run side by side (helper agents) do; everything else runs in order,
+    // because two edits or two browser steps at once would trip over each other.
+    const together = typeof parallel === 'function' && toolCalls.length > 1 && toolCalls.every((c) => parallel(c.function.name));
+    const results = together ? await Promise.all(toolCalls.map(runOne)) : [];
+    for (const [i, call] of toolCalls.entries()) {
+      let result = together ? results[i] : await runOne(call);
       if (result && typeof result === 'object') {
         for (const url of result.images ?? []) pictures.push({ name: call.function.name, url });
         result = result.content ?? '';

@@ -11,6 +11,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
 import { findProvider } from '../providers/catalog.js';
@@ -37,16 +38,29 @@ import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
 import { streamChat } from './chat.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
+import { rankModels } from '../ui/model-abilities.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
-  computerToolDefinitions, buildToolDefinition, isAgentTool, describeAgentTool, screenLinesText,
+  computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
+  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, describeAnyAgentTool as describeAgentTool,
 } from './agentTools.js';
+
+import { createAccounts } from './accounts.js';
+import { githubClient, githubToolDefinitions, isGithubTool, describeGithubTool, runGithubTool, GITHUB_TOOL_RISK } from './github.js';
+import { startDeviceFlow as startGithubDevice, waitForToken as waitGithubToken } from '../providers/oauth.js';
+
+// GitHub tools are judged by the same risk table as the other agent tools.
+Object.assign(AGENT_TOOL_RISK, GITHUB_TOOL_RISK);
+
+// Which helper agent (if any) a tool step belongs to, carried through async calls.
+const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
+import { createCheckpoints } from './checkpoints.js';
 import { readScreenLines } from './ocr.js';
 
 // The project root, found from this file rather than the working directory, so the
@@ -160,12 +174,21 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   // Programs the model started and left running, and tools it built for itself.
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
+  const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
+  const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
+  let githubDevice = null;
   // Capability cards waiting for the person's choice.
   const pendingCapabilities = new Map();
   // The scale of each chat's last screen picture, so clicks land where the model meant.
   const screenScale = new Map();
 
 
+  // Providers the person added come back before their connections do.
+  const customProvidersFile = join(dataDir, 'custom-providers.json');
+  for (const def of await readJson(customProvidersFile, [])) {
+    try { registry.addProvider(def); } catch { /* a name a later built-in took: skipped */ }
+  }
   registry.hydrate(await readJson(connectionsFile, []));
   let settings = await readJson(settingsFile, {
     providerId: null,
@@ -277,11 +300,16 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         }
         const session = await sessions.create({ title: schedule.name, providerId, model });
         await sessions.append(session.id, { role: 'user', content: schedule.prompt });
-        const history = [{ role: 'user', content: schedule.prompt }];
+        // A scheduled run is told the date, so "today" and "this week" mean something.
+        const history = [
+          { role: 'system', content: `Today is ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. This is the scheduled task "${schedule.name}", running on its own in Bunny AI.` },
+          { role: 'user', content: schedule.prompt },
+        ];
         const apiKey = await secrets.get(`provider:${providerId}`);
         let assembled = '';
         for await (const delta of streamChat({
-          baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages: history, fake,
+          // auth: providers that want the key in their own header (Anthropic, some custom ones).
+          baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages: history, fake, auth: provider.auth ?? null,
         })) {
           assembled += delta;
         }
@@ -331,6 +359,92 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       return sendJson(res, 200, registry.list());
     }
 
+    // ---- signing in with GitHub or Google ----
+    if (path.startsWith('/api/account')) {
+      const fail = (err, status = 400) => sendJson(res, status, { code: err.code ?? 'account.failed', message: err.message });
+      try {
+        if (path === '/api/account' && method === 'GET') return sendJson(res, 200, await accounts.status());
+        if (path === '/api/account/github/cli' && method === 'POST') return sendJson(res, 200, await accounts.githubFromCli());
+        if (path === '/api/account/github/token' && method === 'POST') return sendJson(res, 200, await accounts.githubFromToken((await readBody(req)).token));
+        if (path === '/api/account/github/device/start' && method === 'POST') {
+          const config = accounts.githubDeviceConfig();
+          const flow = await startGithubDevice(config);
+          githubDevice = { config, flow, at: Date.now() };
+          return sendJson(res, 200, { userCode: flow.userCode, verificationUri: flow.verificationUri, expiresIn: flow.expiresIn });
+        }
+        if (path === '/api/account/github/device/finish' && method === 'POST') {
+          if (!githubDevice) throw Object.assign(new Error('Start the GitHub sign-in first.'), { code: 'github.notStarted' });
+          const { config, flow } = githubDevice;
+          const done = await waitGithubToken(config, flow.deviceCode, { interval: flow.interval, expiresIn: Math.min(flow.expiresIn, 300) });
+          githubDevice = null;
+          return sendJson(res, 200, await accounts.saveGithub(done.token, 'GitHub sign-in'));
+        }
+        const signOut = path.match(/^\/api\/account\/(github|google)$/);
+        if (signOut && method === 'DELETE') { await accounts.signOut(signOut[1]); return sendJson(res, 200, await accounts.status()); }
+        if (path === '/api/account/google/start' && method === 'POST') {
+          return sendJson(res, 200, accounts.googleStart(`http://${req.headers.host}`));
+        }
+        if (path === '/api/account/google/callback' && method === 'GET') {
+          // Google sends the browser back here; the page says what happened and can be closed.
+          let message;
+          try {
+            if (url.searchParams.get('error')) throw new Error(`Google said: ${url.searchParams.get('error')}`);
+            const who = await accounts.googleFinish({ code: url.searchParams.get('code'), state: url.searchParams.get('state') });
+            message = `Signed in to Bunny AI as ${who.email ?? who.name}. You can close this tab.`;
+          } catch (err) {
+            message = `The Google sign-in did not finish: ${err.message}`;
+          }
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+          return res.end(`<!doctype html><meta charset="utf-8"><title>Bunny AI</title><body style="font:16px system-ui;margin:48px;color:#222">${message.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c])}</body>`);
+        }
+      } catch (err) {
+        return fail(err);
+      }
+    }
+
+    // ---- providers the person adds: any OpenAI-compatible server ----
+    if (path === '/api/providers/custom' && method === 'POST') {
+      const body = await readBody(req);
+      const name = String(body.name ?? '').trim().slice(0, 60);
+      if (!name) return sendJson(res, 400, { code: 'name.required', message: 'Give the provider a name', field: 'name' });
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'provider';
+      const id = `custom-${slug}`;
+      const apiKey = String(body.apiKey ?? '').trim();
+      const header = String(body.authHeader ?? '').trim();
+      if (header && !/^[A-Za-z0-9-]{1,60}$/.test(header)) return sendJson(res, 400, { code: 'header.invalid', message: 'A header name is letters, digits and dashes', field: 'authHeader' });
+      const def = {
+        id, name, tagline: String(body.baseUrl ?? '').trim(),
+        // With a key it is checked like any key provider; without one it is reached like a local server.
+        kind: apiKey ? 'apiKey' : 'local',
+        defaultBaseUrl: String(body.baseUrl ?? '').trim(),
+        ...(header && header.toLowerCase() !== 'authorization' ? { auth: { header } } : {}),
+        abilities: ['coding', 'tool-use'],
+      };
+      const previous = registry.find(id);
+      try {
+        registry.addProvider(def);
+        const result = await registry.connect(id, { apiKey, baseUrl: def.defaultBaseUrl });
+        await writeJson(customProvidersFile, [...(await readJson(customProvidersFile, [])).filter((p) => p.id !== id), def]);
+        await persistConnections();
+        return sendJson(res, 200, result);
+      } catch (err) {
+        // A provider that could not be reached is not kept half-added.
+        if (previous?.custom) registry.addProvider(previous); else await registry.removeProvider(id).catch(() => {});
+        return sendJson(res, 400, { code: err.code ?? 'connect.failed', message: err.message, field: err.field });
+      }
+    }
+    const customProviderMatch = path.match(/^\/api\/providers\/(custom-[a-z0-9-]+)$/);
+    if (customProviderMatch && method === 'DELETE') {
+      try {
+        await registry.removeProvider(customProviderMatch[1]);
+        await writeJson(customProvidersFile, (await readJson(customProvidersFile, [])).filter((p) => p.id !== customProviderMatch[1]));
+        await persistConnections();
+        return sendJson(res, 200, { ok: true });
+      } catch (err) {
+        return sendJson(res, 400, { code: err.code ?? 'remove.failed', message: err.message });
+      }
+    }
+
     const connectMatch = path.match(/^\/api\/providers\/([a-z0-9-]+)\/connect$/);
     if (connectMatch && method === 'POST') {
       try {
@@ -371,8 +485,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
     // Model ability labels, for the picker to group by ability.
     if (path === '/api/abilities' && method === 'GET') {
-      const { PROVIDERS } = await import('../providers/catalog.js');
-      return sendJson(res, 200, PROVIDERS.map((p) => ({ id: p.id, name: p.name, abilities: p.abilities ?? [] })));
+      return sendJson(res, 200, registry.list().map((p) => ({ id: p.id, name: p.name, abilities: registry.find(p.id)?.abilities ?? [] })));
     }
 
     if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, settings);
@@ -836,6 +949,36 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       return sendJson(res, 200, { ok: true });
     }
 
+    // ---- programs the AI started, for the Terminal pane ----
+    if (path === '/api/processes' && method === 'GET') {
+      return sendJson(res, 200, processes.list(url.searchParams.get('sessionId') || undefined));
+    }
+    const processMatch = path.match(/^\/api\/processes\/(p\d+)\/(log|stop)$/);
+    if (processMatch) {
+      try {
+        if (processMatch[2] === 'log' && method === 'GET') return sendJson(res, 200, processes.log(processMatch[1]));
+        if (processMatch[2] === 'stop' && method === 'POST') {
+          const p = processes.log(processMatch[1]);
+          await processes.stop(p.id, p.owner);
+          return sendJson(res, 200, { ok: true });
+        }
+      } catch (err) {
+        return sendJson(res, 404, { code: 'process.notFound', message: err.message });
+      }
+    }
+
+    // ---- undo the files a reply changed ----
+    const restoreMatch2 = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/checkpoints\/([a-f0-9-]{36})\/restore$/);
+    if (restoreMatch2 && method === 'POST') {
+      try {
+        const result = await checkpoints.restore(restoreMatch2[1], restoreMatch2[2]);
+        await sessions.markCheckpointRestored(restoreMatch2[1], restoreMatch2[2]);
+        return sendJson(res, 200, result);
+      } catch (err) {
+        return sendJson(res, err.code === 'checkpoint.notFound' ? 404 : 409, { code: err.code ?? 'checkpoint.failed', message: err.message });
+      }
+    }
+
     // ---- a capability card: the person's choice ----
     const capabilityMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/capability\/([a-f0-9-]{36})$/);
     if (capabilityMatch && method === 'POST') {
@@ -1123,14 +1266,38 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         connection: 'keep-alive',
       });
 
-      const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      // Tool steps and questions from a helper agent carry its name, so the person
+      // can tell its work from the main reply. A helper working in the background
+      // may outlive this reply: once it has ended, nothing more is written.
+      const send = (event, data) => {
+        if (res.writableEnded || res.destroyed) return;
+        const helper = agentScope.getStore()?.label;
+        let out = data;
+        if (helper && event === 'tool') out = { ...data, tool: `${helper} › ${data.tool}`, agent: helper };
+        if (helper && event === 'permission') out = { ...data, title: `${helper} › ${data.title}` };
+        res.write(`event: ${event}\ndata: ${JSON.stringify(out)}\n\n`);
+      };
+      // A helper's own steps are kept in its own chat; the main chat keeps its own.
+      const logStep = (entry) => {
+        const scope = agentScope.getStore();
+        return sessions.append(scope?.logTo ?? id, entry);
+      };
 
       // ---- the work mode decides what the model may do ----
       //   chat      conversation only, no tools
       //   code      works inside the chosen folder with file and command tools, plus connectors
       const permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask';
       const folder = session.folder ? await checkFolder(session.folder) : null;
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder) : null;
+      // Undo: the first time this reply changes a file, the file is copied as it was.
+      let checkpoint = null;
+      // The plan the model shows as a checklist (update_tasks), kept with the reply.
+      let currentTasks = [];
+      const beforeWrite = async (abs) => {
+        checkpoint ??= checkpoints.begin(id, workspace?.root ?? '');
+        await checkpoint.capture(abs);
+      };
+      const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite }) : null;
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
@@ -1141,7 +1308,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
       const modeText = {
         chat: 'Mode: Chat. Have a conversation. You can search and read the web and find, install and use plugins, skills and connectors. '
-          + 'You cannot read or change files or run commands in Chat mode: if that is needed, call request_capability with code_mode.',
+          + 'You cannot read or change files or run commands in Chat mode: if that is needed, call request_capability with code_mode straight away. '
+          + 'Do not ask in words first: the card is the question, and the person answers it with one click.',
         code: 'Mode: Code. You are working on the project in the workspace folder. Look before you change: list and read the files you need, '
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it.',
       }[workMode];
@@ -1162,7 +1330,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         + 'and never claim you did something a tool did not do. '
         + (artifactsOn ? 'When you make something the person will look at or use (a page, app, game, document, diagram or long code), put it in an artifact with create_artifact instead of pasting it into your reply. ' : '')
         + 'When you need something you do not have, do not work around it: call request_capability so the person can give it to you '
-        + '(code_mode for files, commands and programs; computer_use to control this computer; new_tool for anything else). '
+        + '(code_mode for files, commands and programs; computer_use to control this computer; new_tool for anything else) '
+        + 'straight away, without asking in words first. '
+        + 'For a big job made of independent parts, hand the parts to helpers with run_subagent, several in one go, and combine their reports; '
+        + 'give each helper the kind of work (job: code, research, see or chat) so it runs on the model best suited to it. '
         + 'For a job no tool can do, first look for a plugin or connector with search_plugins and offer to install it'
         + (buildOn ? '; if none fits, build one with create_tool.' : '; if none fits, ask for custom_tools so you can build one.');
       history.unshift({ role: 'system', content: [honesty, modeText, folderText].filter(Boolean).join('\n') });
@@ -1170,6 +1341,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Tools from the MCP servers the person has switched on (not in Chat mode).
       const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
       const builtTools = buildOn ? await customTools.list() : [];
+      const githubToken = await accounts.githubToken().catch(() => null);
+      const githubAccount = githubToken ? (await accounts.status()).github : null;
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit']),
         capabilityToolDefinition(),
@@ -1178,7 +1351,14 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...(workspace ? processToolDefinitions(risks) : []),
         ...(aiComputerOn ? computerToolDefinitions(risks) : []),
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
+        ...teamToolDefinitions(),
+        planToolDefinition(),
+        ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
+        ...(githubToken ? githubToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'], { canClone: Boolean(workspace) }) : []),
       ];
+      if (githubToken && githubAccount) {
+        history.unshift({ role: 'system', content: `The person is signed in to GitHub as ${githubAccount.login}. Use the github_ tools only for GitHub itself: repositories, issues and pull requests online. "My folder", "my project", "my files" or anything on this computer means local files: use the file tools, or ask for code_mode if you do not have them. Never read a GitHub repository in place of a local folder.` });
+      }
       // The model does not see earlier tool steps, so it is told which artifacts this chat has.
       if (artifactsOn) {
         const mine = await artifacts.list({ sessionId: id }).catch(() => []);
@@ -1208,6 +1388,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
       // Ask the person, and wait for the answer (or for them to leave).
       const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
+        // Nobody is there to answer once the reply has ended (a background chat): that is a no.
+        if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
         const timer = setTimeout(() => { pendingPermissions.delete(pid); resolveAnswer(false); }, 10 * 60_000);
         pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { clearTimeout(timer); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
@@ -1259,7 +1441,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           const fresh = await sessions.get(id);
           const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
           if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder);
+          workspace = createWorkspace(checked.folder, { beforeWrite });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           return `Code mode is on. Workspace folder: ${workspace.root}; paths are relative to it. You now have: `
@@ -1289,10 +1471,206 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         return text;
       };
 
+      // ---- helper agents and other chats ----
+      const riskOf = (name) => AGENT_TOOL_RISK[name] ?? APP_TOOL_RISK[name] ?? TOOL_RISK[name]
+        ?? (toolIndex.has(name) ? (toolIndex.get(name).tool.readOnly ? 'read' : 'run') : 'run');
+      // What a helper never gets: it cannot ask the person, build tools, start chats,
+      // or share the one browser panel and screen with the main reply.
+      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'start_session', 'message_session']);
+
+      /**
+       * Run a helper: a fresh conversation with a task, this chat's model and tools,
+       * kept as a chat nested under this one. Waits for its report, or, for a
+       * background chat, starts it and returns the new chat at once.
+       */
+      const runHelper = async ({ title, task, readOnly = false, background = false, job = null, model: wanted = null }) => {
+        const depth = agentScope.getStore()?.depth ?? 0;
+        if (depth >= 2) throw new Error('Helpers cannot start helpers this deep. Do the task yourself.');
+        if (!String(task ?? '').trim()) throw new Error('Give the helper a task.');
+        if (helpersStarted >= MAX_HELPERS_PER_REPLY) throw new Error(`This reply has already started ${MAX_HELPERS_PER_REPLY} helpers. Combine what you have.`);
+        helpersStarted += 1;
+        if (!background) await helperSlot();
+        const label = String(title || 'Helper').trim().slice(0, 40) || 'Helper';
+        const lookOnly = readOnly || background;
+        // The model best suited to the work, which may not be this chat's own.
+        let use = await pickHelperModel({ job, wanted });
+        const child = await sessions.create({
+          title: label, parentId: id, providerId: use.providerId, model: use.model, folder: session.folder, permissionMode, effort: session.effort,
+          agent: background ? 'chat' : 'helper', agentStatus: 'working', workMode: workspace ? 'code' : 'chat',
+        });
+        await sessions.append(child.id, { role: 'user', content: String(task) });
+        const allowed = (d) => {
+          const n = d.function.name;
+          if (HELPER_NEVER.has(n) || isBrowserTool(n) || n.startsWith('computer_')) return false;
+          if (n === 'run_subagent') return depth === 0 && !background;
+          if (lookOnly) return riskOf(n) === 'read' || n === 'create_artifact' || n === 'update_artifact';
+          return true;
+        };
+        const helperHistory = [
+          { role: 'system', content: `${today}You are "${label}", a helper agent working for another assistant in Bunny AI. `
+            + 'Do the task completely with your tools, then reply with a short, complete report: what you found or did, with exact names, paths and numbers. '
+            + 'That report is all the other assistant will see. You cannot ask the person anything; if something is missing, say what in your report.'
+            + (workspace ? ` Workspace folder: ${workspace.root}; paths are relative to it.` : '')
+            + (lookOnly ? ' You may only look and read, not change anything.' : '') },
+          { role: 'user', content: String(task) },
+        ];
+        let text = '';
+        let fellBack = '';
+        const once = () => (async () => {
+          for await (const delta of streamChat({
+            baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake,
+            signal: background ? undefined : controller.signal,
+            tools: toolDefinitions.filter(allowed), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
+            // OpenRouter's reasoning setting belongs to this chat's provider only.
+            extraBody: use.providerId === providerId ? extraBody : null, auth: use.provider.auth ?? null, parallel: (n) => n === 'run_subagent',
+          })) text += delta;
+        })();
+        const work = async () => {
+          try {
+            await once();
+          } catch (err) {
+            // The chosen model failed before doing anything: the helper goes on with this chat's model.
+            if (use.providerId === providerId && use.model === model) throw err;
+            if (text.trim() || controller.signal.aborted) throw err;
+            fellBack = `${use.model} did not answer (${err.message.slice(0, 120)}), so this chat's model took over`;
+            use = { ...parentModel() };
+            await once();
+          }
+        };
+        const finish = async (ok, err) => {
+          if (!ok) text = text.trim() ? `${text}\n\n(The helper stopped: ${err.message})` : `The helper could not finish: ${err.message}`;
+          await sessions.append(child.id, { role: 'assistant', content: text.trim() || '(The helper sent no report.)', model: use.model, providerId: use.providerId });
+          await sessions.update(child.id, { agentStatus: ok ? 'done' : 'failed', providerId: use.providerId, model: use.model });
+          return { ok, text: text.trim() || '(The helper sent no report.)', child, model: use.model, why: fellBack || use.why };
+        };
+        const scoped = () => agentScope.run({ label, depth: depth + 1, logTo: child.id }, work);
+        if (background) {
+          scoped().then(() => finish(true), (err) => finish(false, err)).catch(() => {});
+          return child;
+        }
+        try {
+          await scoped();
+          return await finish(true);
+        } catch (err) {
+          return finish(false, err);
+        } finally {
+          releaseHelperSlot();
+        }
+      };
+      // ---- which model a helper uses ----
+      const parentModel = () => ({ providerId, model, provider, apiKey, why: 'the model of this chat' });
+      // The models a helper may be given: the same ones the picker offers.
+      const helperModels = async () => {
+        const all = await allModels().catch(() => []);
+        const offered = settings.modelFilter === 'all' ? all
+          : all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
+        return offered.filter((m) => !m.unavailable);
+      };
+      const pickHelperModel = async ({ job, wanted }) => {
+        if (!job && !wanted) return parentModel();
+        const list = await helperModels();
+        let chosen = null;
+        let why = '';
+        if (wanted) {
+          const name = String(wanted).trim();
+          chosen = list.find((m) => m.id === name || `${m.providerId}/${m.id}` === name || `${m.providerId}:${m.id}` === name)
+            ?? (await allModels().catch(() => [])).find((m) => m.id === name && !m.unavailable) ?? null;
+          why = 'asked for by name';
+        }
+        if (!chosen && ['chat', 'code', 'research', 'see'].includes(job)) {
+          const ranked = rankModels(list, job);
+          // This chat's model stays when it is already among the best for the work.
+          chosen = ranked.slice(0, 3).find((m) => m.id === model && m.providerId === providerId) ?? ranked[0] ?? null;
+          why = `the best suited for ${job}`;
+        }
+        if (!chosen || (chosen.id === model && chosen.providerId === providerId)) return parentModel();
+        const p = registry.list().find((x) => x.id === chosen.providerId && x.status === 'connected');
+        if (!p) return parentModel();
+        return { providerId: p.id, model: chosen.id, provider: p, apiKey: await secrets.get(`provider:${p.id}`), why };
+      };
+      const listHelperModels = async () => {
+        const list = await helperModels();
+        if (!list.length) return 'No models are available.';
+        const lines = [`This chat uses ${model} (${providerId}).`];
+        for (const job of ['code', 'research', 'see', 'chat']) {
+          const top = rankModels(list, job).slice(0, 6);
+          if (top.length) lines.push(`Best for ${job}: ${top.map((m) => m.id).join(', ')}`);
+        }
+        return lines.join('\n');
+      };
+
+      // At most a few helpers talk to the provider at once (rate limits); the rest wait their turn.
+      const MAX_HELPERS_AT_ONCE = 4;
+      const MAX_HELPERS_PER_REPLY = 12;
+      let helpersStarted = 0;
+      let helpersRunning = 0;
+      const helperQueue = [];
+      const helperSlot = () => (helpersRunning < MAX_HELPERS_AT_ONCE
+        ? (helpersRunning += 1, Promise.resolve())
+        : new Promise((go) => helperQueue.push(go)));
+      const releaseHelperSlot = () => {
+        const next = helperQueue.shift();
+        if (next) next(); else helpersRunning -= 1;
+      };
+
+      const chatLine = (s, relation) => `- ${s.id}: ${s.title}${relation ? ` (${relation})` : ''}${s.agent ? ` [${s.agent === 'helper' ? 'helper' : 'background chat'}${s.agentStatus ? `, ${s.agentStatus}` : ''}]` : ''}`;
+      const listLinkedChats = async () => {
+        const all = await sessions.list({ includeArchived: false });
+        const lines = [];
+        const seen = new Set([id]);
+        const add = (s, relation) => { if (s && !seen.has(s.id)) { seen.add(s.id); lines.push(chatLine(s, relation)); } };
+        for (const s of all.filter((x) => x.parentId === id)) add(s, 'nested under this chat');
+        if (session.parentId) {
+          add(all.find((x) => x.id === session.parentId), 'this chat\'s parent');
+          for (const s of all.filter((x) => x.parentId === session.parentId)) add(s, 'sibling');
+        }
+        for (const s of all.filter((x) => !x.incognito).slice(0, 12)) add(s, 'recent');
+        return lines.length ? lines.join('\n') : 'There are no other chats yet.';
+      };
+      const otherChat = async (sid) => {
+        const target = await sessions.get(String(sid ?? '').trim()).catch(() => null);
+        if (!target) throw new Error('There is no chat with that id. list_sessions shows them.');
+        if (target.id === id) throw new Error('That is this chat.');
+        if (target.incognito) throw new Error('Incognito chats cannot be read.');
+        return target;
+      };
+      const readChat = async (sid, last) => {
+        const target = await otherChat(sid);
+        const n = Math.max(1, Math.min(40, Number(last) || 10));
+        const rows = target.messages.slice(-n).map((m) => (m.kind === 'tool_call'
+          ? `[step] ${m.tool} (${m.status ?? ''})`
+          : `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 1500)}`));
+        return `Chat "${target.title}"${target.agentStatus ? ` (${target.agentStatus})` : ''}, last ${rows.length} of ${target.messages.length} messages:\n${rows.join('\n')}`;
+      };
+      const messageChat = async (sid, message) => {
+        const target = await otherChat(sid);
+        const text = String(message ?? '').trim();
+        if (!text) throw new Error('Say what to send.');
+        // The other chat answers with its own model when that is still connected.
+        const theirProvider = registry.list().find((p) => p.id === target.providerId && p.status === 'connected');
+        const useProvider = theirProvider ?? provider;
+        const useModel = theirProvider ? target.model : model;
+        const useKey = theirProvider ? await secrets.get(`provider:${theirProvider.id}`) : apiKey;
+        const incoming = `Message from the chat "${session.title}": ${text}`;
+        const history = [
+          { role: 'system', content: `${today}You are Bunny AI in the chat "${target.title}". Another chat is sending you a message. Answer it from what this conversation knows, briefly.` },
+          ...target.messages.filter((m) => m.kind !== 'tool_call' && m.kind !== 'permission_prompt').map((m) => toModelMessage(m, { vision: false })),
+          { role: 'user', content: incoming },
+        ];
+        let reply = '';
+        for await (const delta of streamChat({
+          baseUrl: useProvider.baseUrl, apiKey: useKey ?? undefined, model: useModel, messages: history, fake,
+          signal: controller.signal, maxTokens, extraBody: theirProvider ? null : extraBody, auth: useProvider.auth ?? null,
+        })) reply += delta;
+        await sessions.append(target.id, { role: 'user', content: incoming });
+        await sessions.append(target.id, { role: 'assistant', content: reply, model: useModel, providerId: useProvider.id });
+        return { target, text: reply.trim() || '(no reply)' };
+      };
+
       const runAgentTool = async (name, parsed) => {
         const custom = !isAgentTool(name);
         if (!toolDefinitions.some((d) => d.function.name === name)) throw new Error(`There is no tool called ${name}`);
-        const summary = custom ? `Use tool ${name}` : describeAgentTool(name, parsed);
+        const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : describeAgentTool(name, parsed);
         const risk = custom ? 'run' : AGENT_TOOL_RISK[name];
         let detail = '';
         let checkedTool = null;
@@ -1302,10 +1680,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         } else if (name === 'start_process') detail = parsed.command;
         else if (name === 'computer_type') detail = parsed.text;
         else if (custom) detail = JSON.stringify(parsed, null, 2);
+        else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
+          detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
+        }
         if (needsOk(risk)) {
           const allowed = await askPermission(summary, detail);
           if (!allowed) {
-            await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
@@ -1316,6 +1697,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         let attachments = [];
         let images = [];
         let artifact = null;
+        let linked = null;
+        // What the person sees under the step, when the model's answer is full of ids and addresses.
+        let shown = null;
         const scaled = (v) => Math.round(Number(v) / (screenScale.get(id) ?? 1));
         try {
           switch (name) {
@@ -1324,6 +1708,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               if (!String(parsed.content ?? '').trim()) throw new Error('The artifact needs content.');
               const made = await artifacts.create({ sessionId: id, title: parsed.title || 'Artifact', kind, language: parsed.language ?? '', content: artifactContent(kind, parsed.content, parsed.language) });
               artifact = { id: made.id, title: made.title, kind };
+              shown = 'Opened in the Artifacts panel.';
               result = `Made the artifact "${made.title}" (id ${made.id}). It is open in the Artifacts panel.`
                 + (kind === 'html' && browserControl ? ` To check that it works, browser_open ${origin}/api/artifacts/${made.id}/raw` : '');
               break;
@@ -1334,6 +1719,51 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               const updated = await artifacts.update(current.id, { content: artifactContent(current.kind, parsed.content, current.language), ...(parsed.title ? { title: parsed.title } : {}) });
               artifact = { id: updated.id, title: updated.title, kind: updated.kind };
               result = `Updated "${updated.title}" to version ${updated.versions.length}.`;
+              shown = `Saved as version ${updated.versions.length}.`;
+              break;
+            }
+            case 'run_subagent': {
+              const done = await runHelper({ title: parsed.title, task: parsed.task, readOnly: parsed.read_only === true, job: parsed.job, model: parsed.model });
+              linked = { id: done.child.id, title: done.child.title, status: done.ok ? 'done' : 'failed', model: done.model };
+              if (!done.ok) status = 'failed';
+              result = `Report from the helper "${done.child.title}" (model ${done.model}, ${done.why}):\n${done.text}`;
+              break;
+            }
+            case 'start_session': {
+              const child = await runHelper({ title: parsed.title, task: parsed.task, background: true, job: parsed.job, model: parsed.model });
+              linked = { id: child.id, title: child.title, status: 'working', model: child.model };
+              result = `Started the chat "${child.title}" (id ${child.id}) with ${child.model}. It works in the background; check on it with read_session.`;
+              shown = `Working in the background with ${child.model}.`;
+              break;
+            }
+            case 'list_models':
+              result = await listHelperModels();
+              break;
+            case 'remember': {
+              const saved = await memory.add({ text: parsed.text, source: 'assistant', chatId: id });
+              result = `Saved to memory: "${saved.text}". Every new chat will know it; the person can edit or remove it in Automation, Memory.`;
+              break;
+            }
+            case 'schedule_task': {
+              const task = await schedules.add({ name: parsed.name, prompt: parsed.prompt, everyMinutes: parsed.every_minutes, providerId, model });
+              result = `Scheduled "${task.name}" every ${task.everyMinutes} minutes with ${model}. It runs while Bunny AI is open; the person can change or stop it in Automation, Schedules.`;
+              break;
+            }
+            case 'list_scheduled_tasks': {
+              const all = await schedules.list();
+              result = all.length ? all.map((t) => `- ${t.name}: every ${t.everyMinutes} min${t.enabled ? '' : ' (paused)'}${t.lastRun ? `, last ran ${t.lastRun}` : ''}`).join('\n') : 'No scheduled tasks.';
+              break;
+            }
+            case 'list_sessions':
+              result = await listLinkedChats();
+              break;
+            case 'read_session':
+              result = await readChat(parsed.session_id, parsed.last);
+              break;
+            case 'message_session': {
+              const answer = await messageChat(parsed.session_id, parsed.message);
+              linked = { id: answer.target.id, title: answer.target.title, status: 'done' };
+              result = `Reply from "${answer.target.title}":\n${answer.text}`;
               break;
             }
             case 'request_capability':
@@ -1403,15 +1833,17 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               break;
             }
             default:
-              result = await customTools.run(name.slice(CUSTOM_PREFIX.length), parsed, workspace?.root);
+              result = isGithubTool(name)
+                ? await runGithubTool(githubClient(githubToken), name, parsed, { workspaceRoot: workspace?.root ?? null, token: githubToken })
+                : await customTools.run(name.slice(CUSTOM_PREFIX.length), parsed, workspace?.root);
           }
         } catch (err) {
           status = 'failed';
           result = `The tool failed: ${err.message}`;
         }
         result = String(result).slice(0, 12000);
-        await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200), attachments, ...(artifact ? { artifact } : {}) });
-        send('tool', { tool: summary, status, result: result.slice(0, 600), attachments, ...(artifact ? { artifact } : {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: (shown ?? result).slice(0, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
+        send('tool', { tool: summary, status, result: (shown ?? result).slice(0, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
       };
 
@@ -1426,13 +1858,20 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           return `Your call to ${name} could not be read: its arguments were not complete JSON, probably cut off because they were too long. `
             + 'Try again with shorter content (for an artifact, make it smaller, or create it and then add to it with update_artifact).';
         }
+        // The checklist changes quietly: no step line for each update.
+        if (name === 'update_tasks') {
+          if (agentScope.getStore()) return 'Noted.'; // a helper keeps its plan to itself
+          currentTasks = cleanTasks(parsed.tasks);
+          send('tasks', { tasks: currentTasks });
+          return `The person now sees your plan: ${currentTasks.filter((t) => t.done).length} of ${currentTasks.length} done.`;
+        }
         if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
           const summary = describeBrowserTool(name, parsed);
           if (needsOk(BROWSER_TOOL_RISK[name])) {
             const allowed = await askPermission(summary, '');
             if (!allowed) {
-              await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+              await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
               send('tool', { tool: summary, status: 'denied' });
               return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
             }
@@ -1448,7 +1887,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             result = `The browser action failed: ${err.message}`;
           }
           result = String(result).slice(0, 9000);
-          await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200), attachments });
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200), attachments });
           send('tool', { tool: summary, status, result: result.slice(0, 600), attachments });
           return result;
         }
@@ -1464,7 +1903,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (needsOk(risk)) {
           const allowed = await askPermission(summary, detail);
           if (!allowed) {
-            await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
@@ -1483,7 +1922,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           result = `The tool failed: ${err.message}`;
         }
         result = String(result).slice(0, 8000);
-        await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200) });
         send('tool', { tool: summary, status, result: result.slice(0, 1200) });
         return result;
       };
@@ -1552,6 +1991,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             maxTokens,
             maxToolRounds,
             extraBody,
+            parallel: (name) => name === 'run_subagent',
             auth: provider.auth ?? null,
           })) {
             assembled += delta;
@@ -1562,7 +2002,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             // Stopped: keep what arrived, and do not pretend there was a reply
             // when nothing had arrived yet.
             if (assembled.trim()) {
-              await sessions.append(id, { role: 'assistant', content: assembled, kind: 'partial' });
+              await sessions.append(id, { role: 'assistant', content: assembled, kind: 'partial', ...undoInfo() });
             }
           } else {
             // Speech job: turn the reply into audio with a Windows voice, kept with the message.
@@ -1575,7 +2015,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
                 send('error', { code: 'speech.failed', message: `The reply is here, but it could not be spoken: ${err.message}` });
               }
             }
-            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy });
+            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}) });
             session = await sessions.get(id);
             send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
@@ -1588,7 +2028,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         } catch (err) {
           if (clientGone) {
             if (assembled.trim()) {
-              await sessions.append(id, { role: 'assistant', content: assembled, kind: 'partial' });
+              await sessions.append(id, { role: 'assistant', content: assembled, kind: 'partial', ...undoInfo() });
             }
             break;
           }
@@ -1658,7 +2098,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       try {
         const apiKey = await secrets.get(`provider:${providerId}`);
         for await (const delta of streamChat({
-          baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages, fake,
+          baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages, fake, auth: provider.auth ?? null,
         })) {
           assembled += delta;
           send('delta', { text: delta });

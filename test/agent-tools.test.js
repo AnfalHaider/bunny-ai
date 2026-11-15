@@ -27,7 +27,7 @@ test('risk levels: artifacts and asking need no OK, building always asks, progra
   assert.equal(describeAgentTool('create_artifact', { title: 'Todo app' }), 'Make artifact "Todo app"');
 });
 
-test('screen text is given at the centre of each line, in the shown picture\'s pixels', () => {
+test('screen text is given at the centre of each line, in the pixels of the shown picture', () => {
   const text = screenLinesText([{ text: 'File', x: 100, y: 40, width: 40, height: 20 }], 0.5);
   assert.equal(text, '(60, 25) File');
   assert.equal(screenLinesText([]), 'No text was found on the screen.');

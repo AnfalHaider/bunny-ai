@@ -69,6 +69,8 @@ Which model answers, and how a key gets there honestly.
 | 2.17 | A silent provider is reported instead of hanging | core | **D** | `a provider that goes silent is reported instead of hanging` |
 | 2.18 | The provider's own error explanation reaches the person | core | **D** | `the provider explanation reaches the person` |
 | 2.19 | An unverifiable key is not waved through | core | **D** | `the google 404-on-models quirk does not wave a bad key through` |
+| 2.20 | Custom OpenAI-compatible providers | app | **D** | `a custom provider is added, chats with its own key header, survives a restart, and can be removed` |
+| 2.21 | ModelScope, SiliconFlow, Gitee AI and other popular providers | app | **D** | `ModelScope, SiliconFlow and Gitee AI are ready to connect with their own addresses` |
 
 ## 3. Artifacts
 
@@ -85,6 +87,7 @@ The defining surface: something the model made, shown beside the chat.
 | 3.7 | Star an artifact | app | **D** | `an artifact can be starred and deleted` |
 | 3.8 | Charts and diagrams in artifacts | app | **D** | `an artifact that is data is drawn as a chart` |
 | 3.9 | Artifact thumbnails | app | **D** | `an artifact shows a thumbnail and can be printed` |
+| 3.10 | The model makes artifacts itself | app | **D** | `in Chat mode the model can make an artifact, which opens as a sandboxed page` |
 
 ## 4. Sessions and structure
 
@@ -121,6 +124,7 @@ The frame around the conversation.
 | 5.12 | Accessibility labels and focus order | core | **D** | `every connect button has its own name` |
 | 5.13 | Open chat title in the topbar | app | **D** | `the topbar names the open chat` |
 | 5.14 | Session rail show / hide | app | **D** | `the session rail shows environment and connectors` |
+| 5.15 | Sign in with GitHub or Google | app | **D** | `signing in to GitHub: from the CLI, from a token, and out again; tokens never come back` |
 
 ## 6. Memory, connectors and automation
 
@@ -134,44 +138,53 @@ The agentic surfaces: memory, tools, schedules.
 | 6.4 | MCP tools in a conversation | app | **D** | `a tool the model asks for is run and the answer comes back` |
 | 6.5 | Connectors with OAuth | app | **D** | `the token arrives once the person has signed in` |
 | 6.6 | Scheduled and recurring tasks | app | **D** | `a due schedule runs and leaves a chat behind` |
-| 6.7 | Computer use | enterprise | **M** | deliberately out of scope: needs OS-level control and an entitlement |
+| 6.7 | Computer use | enterprise | **D** | `screen text is given at the centre of each line, in the pixels of the shown picture` |
 | 6.8 | Skills | app | **D** | `a skill that is on reaches the model` |
 | 6.9 | Hooks | app | **D** | `a hook runs when a message is sent` |
-| 6.10 | Plugins and marketplaces | app | **M** | a plugin would mean running third-party code; this app runs no code it did not write |
+| 6.10 | Plugins and marketplaces | app | **P** | plugins install from GitHub and connectors from the MCP registry, but no automated test covers the install yet |
 | 6.11 | Memories suggested from a chat | app | **D** | `a chat can suggest a memory, and it is kept only when accepted` |
+| 6.12 | The model asks for a capability it lacks | app | **D** | `asking for Code mode: the person picks a folder and the file tools arrive in the same reply` |
+| 6.13 | Programs that keep running | app | **D** | `a started program keeps running, is read in pieces, and stops` |
+| 6.14 | Tools the model builds, with approval | app | **D** | `building a tool always asks, even in Auto mode, and the tool is usable at once` |
+| 6.15 | Sub-agents working side by side | app | **D** | `two helpers run side by side, report back, and are kept as chats nested under this one` |
+| 6.16 | Chats that message each other | app | **D** | `one chat can message another and read it; a background chat works on its own` |
+| 6.17 | GitHub repositories, issues and pull requests | app | **D** | `the GitHub tools read and write through the API with the signed-in token` |
+| 6.18 | Undo the model's file changes | app | **D** | `the file changes of a reply can be undone, once` |
+| 6.19 | A plan the model keeps visible | app | **D** | `the plan is shown as a live checklist and kept with the reply, without a step line per update` |
+| 6.20 | The model remembers and schedules | app | **D** | `the AI can remember a fact and schedule a task; both ask first in Manual` |
 
 ---
 
 ## Score
 
-**82 of 84** features are done and covered by a test.
+**96 of 97** features are done and covered by a test.
 
 | Status | Count |
 |---|---|
-| done | 82 |
-| partial | 0 |
-| missing | 2 |
+| done | 96 |
+| partial | 1 |
+| missing | 0 |
 
 ### By area
 
 | Area | done | partial | missing | total |
 |---|---|---|---|---|
 | Conversation | 23 | 0 | 0 | 23 |
-| Providers | 19 | 0 | 0 | 19 |
-| Artifacts | 9 | 0 | 0 | 9 |
+| Providers | 21 | 0 | 0 | 21 |
+| Artifacts | 10 | 0 | 0 | 10 |
 | Structure | 8 | 0 | 0 | 8 |
-| Shell | 14 | 0 | 0 | 14 |
-| Automation | 9 | 0 | 2 | 11 |
+| Shell | 15 | 0 | 0 | 15 |
+| Automation | 19 | 1 | 0 | 20 |
 
 ### What this means
 
 Bunny AI now covers the surfaces a desktop AI app is known for: the chat and
 providers spine, artifacts beside the chat, branching, projects, memory, MCP tools,
-schedules, hooks, skills, import, search, a command palette and four languages.
+schedules, hooks, skills, import, search, a command palette and four languages,
+and an agent that makes artifacts, asks for what it lacks, runs helpers side by side,
+works with GitHub, controls the desktop when allowed, and can undo its file changes.
 
-Two rows are still open, both on purpose: **computer use** needs OS-level control
-and an entitlement, and **plugins and marketplaces** would mean running third-party
-code, which this app does not do.
+Still open: **plugins and marketplaces** (plugins install from GitHub and connectors from the MCP registry, but no automated test covers the install yet).
 
 This file is generated by `scripts/feature-tally.mjs` from `docs/features.js`;
 `test/tally.test.js` fails when the committed file is stale.

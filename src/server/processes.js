@@ -88,7 +88,14 @@ export function createProcessStore() {
     await Promise.all([...procs.values()].filter((p) => p.exitCode === null).map((p) => killTree(p).catch(() => {})));
   }
 
-  return { start, read, settle, stop, list, stopAll };
+  /** Everything kept from a program's output, for the person to look at; the model's place is not moved. */
+  function log(id) {
+    const p = procs.get(String(id ?? ''));
+    if (!p) throw new Error('No such program.');
+    return { id: p.id, command: p.command, running: p.exitCode === null, exitCode: p.exitCode, owner: p.owner, output: p.out };
+  }
+
+  return { start, read, settle, stop, list, stopAll, log };
 }
 
 /** A shell starts children of its own: stop the whole tree, not just the shell. */

@@ -37,10 +37,24 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
   async function save(session) {
     await ensureDir();
     const target = fileFor(session.id);
-    const temp = `${target}.${process.pid}.tmp`;
+    // A temp name of its own: two saves must never share one half-written file.
+    const temp = `${target}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
     session.updatedAt = new Date().toISOString();
     await writeFile(temp, JSON.stringify(session, null, 2), 'utf8');
-    await rename(temp, target);
+    // Windows refuses to replace a file another request is reading at that moment
+    // (EPERM, EACCES, EBUSY). It clears in milliseconds, so try again a few times.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await rename(temp, target);
+        return;
+      } catch (err) {
+        if (attempt >= 8 || !['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) {
+          await rm(temp, { force: true }).catch(() => {});
+          throw err;
+        }
+        await new Promise((r) => setTimeout(r, 15 * (attempt + 1)));
+      }
+    }
   }
 
   /** Bring an older file up to the current shape without losing anything. */
@@ -106,6 +120,9 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       pinned: Boolean(session.pinned),
       archived: Boolean(session.archived),
       incognito: Boolean(session.incognito),
+      // A chat a helper agent or another chat started: who made it, and how its work is going.
+      agent: session.agent ?? null,
+      agentStatus: session.agentStatus ?? null,
       messageCount: session.messages?.length ?? 0,
       preview: String(last?.content ?? '').replace(/\s+/g, ' ').slice(0, 90),
       context: context(session),
@@ -144,7 +161,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     });
   }
 
-  async function create({ title = 'New chat', providerId = null, model = null, parentId = null, branchFrom = null, projectId = null, folder = null, branch = null, permissionMode = 'ask', effort = null, incognito = false, messages = [] } = {}) {
+  async function create({ title = 'New chat', providerId = null, model = null, parentId = null, branchFrom = null, projectId = null, folder = null, branch = null, permissionMode = 'ask', effort = null, incognito = false, messages = [], agent = null, agentStatus = null, workMode = null } = {}) {
     const now = new Date().toISOString();
     const session = normalise({
       id: randomUUID(),
@@ -161,6 +178,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       pinned: false,
       archived: false,
       incognito,
+      ...(agent ? { agent: String(agent).slice(0, 40), agentStatus } : {}),
+      ...(workMode ? { workMode: workMode === 'code' ? 'code' : 'chat' } : {}),
       createdAt: now,
       updatedAt: now,
       messages: messages.map((m) => ({ ...m, id: m.id ?? randomUUID(), at: m.at ?? now })),
@@ -183,6 +202,18 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
     for (const key of ['tool', 'status', 'result', 'model', 'providerId', 'job', 'auto', 'fellBackFrom']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
+    }
+    // The checklist the model kept while it worked (update_tasks).
+    if (Array.isArray(message.tasks) && message.tasks.length) {
+      entry.tasks = message.tasks.slice(0, 20).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));
+    }
+    // The files this reply changed can be put back (see checkpoints.js).
+    if (message.checkpoint && /^[a-f0-9-]{36}$/.test(String(message.checkpoint.id))) {
+      entry.checkpoint = { id: message.checkpoint.id, files: Number(message.checkpoint.files) || 0, restored: false };
+    }
+    // Another chat a tool step started or talked to (a helper, a background chat).
+    if (message.linked && typeof message.linked === 'object' && /^[a-f0-9-]{36}$/.test(String(message.linked.id))) {
+      entry.linked = { id: message.linked.id, title: String(message.linked.title ?? 'Chat').slice(0, 120), status: String(message.linked.status ?? '').slice(0, 20), ...(message.linked.model ? { model: String(message.linked.model).slice(0, 120) } : {}) };
     }
     // An artifact a tool step made: kept so the chat can show its card again later.
     if (message.artifact && typeof message.artifact === 'object' && /^[a-f0-9-]{36}$/.test(String(message.artifact.id))) {
@@ -213,6 +244,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.permissionMode !== undefined) session.permissionMode = patch.permissionMode;
     if (patch.effort !== undefined) session.effort = patch.effort ?? null;
     if (patch.incognito !== undefined) session.incognito = Boolean(patch.incognito);
+    if (patch.agentStatus !== undefined) session.agentStatus = patch.agentStatus;
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;
@@ -345,8 +377,31 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     };
   }
 
+  /** Note that a reply's file changes were undone, so its button goes away. */
+  async function markCheckpointRestored(id, checkpointId) {
+    const session = await get(requireId(id));
+    if (!session) throw new Error('Session not found');
+    for (const m of session.messages) if (m.checkpoint?.id === checkpointId) m.checkpoint.restored = true;
+    await save(session);
+    return session;
+  }
+
+  // Changes to one chat take turns. Each change reads the file, edits it and writes it
+  // back; two at once (helpers finishing together) would otherwise lose one of them.
+  const locks = new Map();
+  const locked = (fn) => (id, ...args) => {
+    const key = String(id);
+    const run = (locks.get(key) ?? Promise.resolve()).then(() => fn(id, ...args));
+    const tail = run.catch(() => {});
+    locks.set(key, tail);
+    tail.then(() => { if (locks.get(key) === tail) locks.delete(key); });
+    return run;
+  };
+
   return {
-    list, get, create, append, update, remove, truncateFrom, editMessage,
-    fork, children, compact, compactIfFull, exportSession, context, summary,
+    list, get, create, remove, fork, children, exportSession, context, summary,
+    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom),
+    editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
+    markCheckpointRestored: locked(markCheckpointRestored),
   };
 }

@@ -18,6 +18,19 @@
   <h2 style="margin-top:28px">Popular providers</h2>
   <div class="group" id="available"></div>
 
+  <h2 style="margin-top:28px">Add a custom provider</h2>
+  <div class="group">
+    <form class="inline" id="custom-form" novalidate style="display:block">
+      <p class="desc" style="margin-bottom:12px">Any server that speaks the OpenAI API (<code>/chat/completions</code> and <code>/models</code>): a company gateway, a cloud not listed above, or a server on your network.</p>
+      <label class="field" for="custom-name"><span>Name</span><input id="custom-name" name="name" autocomplete="off" placeholder="My provider" /></label>
+      <label class="field" for="custom-url"><span>Base URL</span><input id="custom-url" name="baseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1" /><span class="fhint">The address that ends before /chat/completions, usually with /v1</span></label>
+      <label class="field" for="custom-key"><span>API key <span class="opt">(optional)</span></span><input id="custom-key" name="apiKey" type="password" autocomplete="off" placeholder="Leave empty for a server that needs no key" /></label>
+      <label class="field" for="custom-header"><span>Key header <span class="opt">(optional)</span></span><input id="custom-header" name="authHeader" autocomplete="off" spellcheck="false" placeholder="Authorization (Bearer), or e.g. api-key" /></label>
+      <div class="actions"><button class="primary" type="submit" id="custom-add">Add and connect</button></div>
+      <div class="err" role="alert" id="custom-err"></div>
+    </form>
+  </div>
+
   <p class="note">
     Keys are encrypted with Windows DPAPI for your user account — never stored in plain text,
     never sent anywhere except the provider you chose.
@@ -67,7 +80,11 @@
     if (p.status === 'connected' && p.kind === 'apiKey' && p.keyVerified === false) {
       name.append(el('span', { className: 'tag warn', textContent: 'key unverified', title: 'This provider publishes its model list publicly, so the key cannot be checked until first use.' }));
     }
-    meta.append(name, el('div', { className: 'desc', textContent: p.tagline }));
+    const desc = el('div', { className: 'desc', textContent: p.tagline });
+    if (p.docsUrl && p.status !== 'connected' && p.kind === 'apiKey') {
+      desc.append(' · ', el('a', { href: p.docsUrl, target: '_blank', rel: 'noreferrer', textContent: 'Get a key' }));
+    }
+    meta.append(name, desc);
     row.append(meta, el('div', { className: 'right' }));
     return row;
   }
@@ -211,7 +228,7 @@
     for (const p of connected) {
       const row = rowShell(p);
       const right = row.querySelector('.right');
-      right.append(el('span', { className: 'tag', textContent: p.kind === 'local' ? 'Local' : 'API key' }));
+      right.append(el('span', { className: 'tag', textContent: p.custom ? 'Custom' : p.kind === 'local' ? 'Local' : 'API key' }));
       right.append(el('span', { className: 'hint' }, el('span', { className: 'dot' }), el('span', { textContent: p.maskedKey || 'ready' })));
       right.append(el('button', {
         className: 'danger',
@@ -223,6 +240,17 @@
           await reload();
         },
       }));
+      if (p.custom) {
+        right.append(el('button', {
+          className: 'ghost', textContent: 'Remove', 'aria-label': `Remove ${p.name}`,
+          onclick: async () => {
+            if (!confirm(`Remove ${p.name}? Its key is deleted from this computer.`)) return;
+            await sendJSON(`/api/providers/${p.id}`, 'DELETE');
+            state.models.delete(p.id);
+            await reload();
+          },
+        }));
+      }
       connectedEl.append(row);
 
       const slot = el('div', { className: 'row', style: 'display:block' },
@@ -274,6 +302,27 @@
     state.providers = await getJSON('/api/providers');
     await render();
   }
+
+  // ---- a provider the person describes ----
+  document.getElementById('custom-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const errEl = document.getElementById('custom-err');
+    const add = document.getElementById('custom-add');
+    errEl.textContent = '';
+    add.disabled = true;
+    add.textContent = 'Connecting…';
+    try {
+      await sendJSON('/api/providers/custom', 'POST', Object.fromEntries(new FormData(form)));
+      form.reset();
+      await reload();
+    } catch (ex) {
+      errEl.textContent = ex.message ?? 'Could not add that provider';
+    } finally {
+      add.disabled = false;
+      add.textContent = 'Add and connect';
+    }
+  });
 
   await reload();
 </script>

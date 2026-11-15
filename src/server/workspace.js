@@ -99,7 +99,8 @@ export function gitBranch(folder) {
   });
 }
 
-export function createWorkspace(rootFolder) {
+/** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
+export function createWorkspace(rootFolder, { beforeWrite = null } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -205,6 +206,7 @@ export function createWorkspace(rootFolder) {
 
   async function write_file({ path, content = '' } = {}) {
     const abs = await inside(path, { mustExist: false });
+    await beforeWrite?.(abs);
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, String(content), 'utf8');
     return `Wrote ${show(abs)} (${String(content).split('\n').length} lines)`;
@@ -218,6 +220,7 @@ export function createWorkspace(rootFolder) {
     const count = text.split(old).length - 1;
     if (count === 0) throw new Error(`old_text was not found in ${path}`);
     if (count > 1) throw new Error(`old_text appears ${count} times in ${path}; include more surrounding lines`);
+    await beforeWrite?.(abs);
     await writeFile(abs, text.replace(old, String(new_text ?? '')), 'utf8');
     return `Edited ${show(abs)}`;
   }

@@ -8,6 +8,7 @@ import { request } from 'node:http';
 import { createApp } from '../src/server/app.js';
 import { memorySecretStore } from '../src/providers/connections.js';
 import { ConnectError } from '../src/providers/errors.js';
+import { PROVIDERS } from '../src/providers/catalog.js';
 
 const MODELS = [
   { id: 'test-model-1', displayName: 'Test One', ownedBy: 'test', contextLength: null },
@@ -74,7 +75,7 @@ test('health reports the app is up', async (t) => {
 test('every catalogue provider is listed and disconnected at first', async (t) => {
   const { base } = await startApp(t);
   const { body } = await json(base, '/api/providers');
-  assert.equal(body.length, 10);
+  assert.equal(body.length, PROVIDERS.length);
   assert.ok(body.every((p) => p.status === 'disconnected'));
   assert.deepEqual(body.map((p) => p.name).slice(0, 3), ['Nvidia', 'OpenCode Go', 'OpenCode Console']);
 });
