@@ -681,3 +681,40 @@ html.embedded .cz-bar { margin-top: 0; }
 /* Artifacts in the sidebar (under Incognito); it opens in the side panel */
 .nav-row#artifacts-toggle .count { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .nav-row#artifacts-toggle[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+
+/* long code in a reply: folded to a few lines with a fade, opened by the person */
+pre.code .code-bar { gap: var(--sp-3); }
+pre.code .code-bar .code-lang { margin-right: auto; }
+.code-fold, .code-keep { font-size: var(--fs-xs); color: var(--text-dim); padding: var(--sp-1) var(--sp-4); border-radius: var(--r-sm); }
+.code-fold:hover, .code-keep:hover { background: var(--hover); color: var(--text); }
+pre.code.is-folded code { max-height: calc(1.6em * 8 + var(--sp-6) * 2); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+.is-streaming pre.code.is-folded code { -webkit-mask-image: linear-gradient(to top, #000 55%, transparent); mask-image: linear-gradient(to top, #000 55%, transparent); }
+pre.code .code-foot { display: flex; gap: var(--sp-3); padding: var(--sp-2) var(--sp-5) var(--sp-3); border-top: 1px solid var(--line); font-family: var(--font-sans); }
+pre.code:not(.is-folded) .code-foot { border-top: 1px solid var(--line); }
+
+/* an artifact the model made, shown in the chat */
+.artifact-card { display: flex; align-items: center; gap: var(--sp-6); margin: var(--sp-4) 0 var(--sp-2) var(--sp-8); padding: var(--sp-5) var(--sp-6); max-width: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.artifact-card .artifact-thumb { width: 36px; height: 36px; border: 0; border-radius: var(--r-md); color: var(--text-dim); }
+.artifact-card .thumb-html { background: var(--accent-soft); color: var(--accent); }
+.artifact-card .thumb-code { background: var(--ok-soft); color: var(--ok); }
+.artifact-card .thumb-markdown { background: var(--warn-soft); color: var(--warn); }
+.artifact-card .artifact-thumb svg { width: 18px; height: 18px; }
+.artifact-card-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.artifact-card-title { font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.artifact-card-kind { font-size: var(--fs-xs); color: var(--text-dim); }
+
+/* the model asking for a capability */
+.capability-card .capability-eyebrow { margin: 0 0 var(--sp-2); font-size: var(--fs-2xs); font-weight: var(--fw-medium); letter-spacing: .02em; color: var(--accent); text-transform: uppercase; }
+.capability-card .capability-reason { color: var(--text); }
+.capability-card .hint { font-size: var(--fs-xs); }
+
+/* Settings: the script of a tool the AI built */
+.tool-script { margin-top: var(--sp-4); padding: var(--sp-5) var(--sp-6); max-height: 260px; overflow: auto; background: var(--bg-sidebar); border-radius: var(--r-md); font-family: var(--font-mono); font-size: var(--fs-xs); white-space: pre; }
+#custom-tools .right { display: flex; gap: var(--sp-3); }
+
+/* Markdown tables in replies */
+.md-table-wrap { margin: var(--sp-5) 0; overflow-x: auto; }
+.md-table { border-collapse: collapse; font-size: var(--fs-md); }
+.md-table th, .md-table td { padding: var(--sp-3) var(--sp-6); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.md-table th { font-weight: var(--fw-medium); color: var(--text-dim); border-bottom-color: var(--line-strong); }
+.md-table tbody tr:last-child td { border-bottom: 0; }

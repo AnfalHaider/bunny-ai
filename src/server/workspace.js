@@ -8,7 +8,7 @@
  *   edit  - write_file, edit_file
  *   run   - run_command
  */
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
@@ -20,6 +20,19 @@ const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
+
+/**
+ * Said before every command the model runs. In Windows PowerShell 5.1 "curl" is
+ * Invoke-WebRequest, which can stop on a hidden Internet Explorer prompt; the real
+ * curl.exe ships with Windows, so curl means that. Web requests skip the IE engine,
+ * and progress bars (which slow output to a crawl) are off.
+ */
+export const POWERSHELL_PRELUDE = [
+  "$ProgressPreference = 'SilentlyContinue'",
+  "$PSDefaultParameterValues['Invoke-WebRequest:UseBasicParsing'] = $true",
+  'Remove-Item Alias:curl -ErrorAction SilentlyContinue',
+  'Remove-Item Alias:wget -ErrorAction SilentlyContinue',
+].join('; ');
 
 export const TOOL_RISK = {
   list_files: 'read', read_file: 'read', search_files: 'read',
@@ -213,12 +226,15 @@ export function createWorkspace(rootFolder) {
     const cmd = String(command ?? '').trim();
     if (!cmd) throw new Error('run_command needs a command');
     return new Promise((done) => {
-      exec(cmd, { cwd: root, shell: 'powershell.exe', timeout: COMMAND_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
-        let out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
-        if (err && err.killed) out += '\n[stopped after 2 minutes]';
-        else if (err) out += `\n[exit code ${err.code ?? 1}]`;
-        done(out.length > MAX_OUTPUT ? `${out.slice(0, MAX_OUTPUT)}\n… (output truncated)` : out || '(no output)');
-      });
+      const child = execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
+        { cwd: root, timeout: COMMAND_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
+          let out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
+          if (err && err.killed) out += '\n[stopped after 2 minutes: for a program that keeps running, use start_process]';
+          else if (err) out += `\n[exit code ${err.code ?? 1}]`;
+          done(out.length > MAX_OUTPUT ? `${out.slice(0, MAX_OUTPUT)}\n… (output truncated)` : out || '(no output)');
+        });
+      // Nobody can type into it: a command that waits for input ends instead of hanging.
+      child.stdin?.end();
     });
   }
 

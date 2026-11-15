@@ -158,6 +158,25 @@
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="computerUseEnabled" /><span>on</span></label></div>
       </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Let the AI control the desktop</div>
+          <div class="desc">The AI may look at the screen, click, type and press keys to do what you ask. Clicks and typing still ask first in Manual and Accept edits. The AI can also ask you to switch this on when it needs it.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="aiComputerUse" data-cap-default="off" /><span>off</span></label></div>
+      </div>
+    </div>
+
+    <h2>Tools the AI builds</h2>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Let the AI build its own tools</div>
+          <div class="desc">When nothing Bunny AI has can do a job, the AI may write a small PowerShell script that becomes a tool. You read and approve every one before it is saved, and each run follows your permission mode.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="customToolsEnabled" data-cap-default="off" /><span>off</span></label></div>
+      </div>
+      <div id="custom-tools"></div>
     </div>
   </section>
 
@@ -385,12 +404,51 @@
     await save({ memoryEnabled: e.target.checked });
   });
 
+  // ---- tools the AI built: see each script, remove what you no longer want ----
+  async function renderCustomTools() {
+    const host = $('custom-tools');
+    if (!host) return;
+    let tools = [];
+    try { tools = await getJSON('/api/tools'); } catch { tools = []; }
+    host.replaceChildren();
+    for (const tool of tools) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const meta = document.createElement('div');
+      meta.className = 'meta-col';
+      const name = Object.assign(document.createElement('div'), { className: 'name', textContent: `my_${tool.name}` });
+      const desc = Object.assign(document.createElement('div'), { className: 'desc', textContent: `${tool.description} · ${tool.lines} line${tool.lines === 1 ? '' : 's'} · built ${new Date(tool.created).toLocaleDateString()}` });
+      const script = Object.assign(document.createElement('pre'), { className: 'tool-script', hidden: true });
+      meta.append(name, desc, script);
+      const right = Object.assign(document.createElement('div'), { className: 'right' });
+      const view = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost small', textContent: 'View script' });
+      view.addEventListener('click', async () => {
+        if (!script.textContent) script.textContent = (await getJSON(`/api/tools/${tool.name}`)).script;
+        script.hidden = !script.hidden;
+        view.textContent = script.hidden ? 'View script' : 'Hide script';
+      });
+      const remove = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost small', textContent: 'Remove' });
+      remove.addEventListener('click', async () => {
+        if (!confirm(`Remove the tool my_${tool.name}? The AI will no longer be able to use it.`)) return;
+        await sendJSON(`/api/tools/${tool.name}`, 'DELETE');
+        renderCustomTools();
+      });
+      right.append(view, remove);
+      row.append(meta, right);
+      host.append(row);
+    }
+    if (!tools.length) {
+      host.append(Object.assign(document.createElement('div'), { className: 'row desc', textContent: 'No tools built yet.' }));
+    }
+  }
+
   // ---- capabilities: each switch is one settings key, on unless set to false ----
   function bindCapabilities(settings) {
     for (const box of document.querySelectorAll('[data-cap]')) {
       const key = box.dataset.cap;
       const label = box.nextElementSibling;
-      box.checked = settings[key] !== false;
+      // Most switches are on until turned off; the ones that give the AI more reach are off until turned on.
+      box.checked = box.dataset.capDefault === 'off' ? settings[key] === true : settings[key] !== false;
       label.textContent = box.checked ? 'on' : 'off';
       box.addEventListener('change', async () => {
         label.textContent = box.checked ? 'on' : 'off';
@@ -514,6 +572,7 @@
     $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);
+    renderCustomTools();
     getJSON('/api/speech/voices').then(({ voices }) => {
       const sel = $('speech-voice');
       for (const v of voices) sel.append(Object.assign(document.createElement('option'), { value: v, textContent: v.replace(/^Microsoft\s+|\s+Desktop$/g, '') }));

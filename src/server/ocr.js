@@ -77,3 +77,40 @@ export async function readTextInPictures(dataUrls) {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+const BOX_SCRIPT = SCRIPT
+  .replace("$text = ''", "$rows = @()")
+  .replace("$text = ($result.Lines | ForEach-Object { $_.Text }) -join \"\`n\"",
+    "foreach ($line in $result.Lines) { $x1 = 1e9; $y1 = 1e9; $x2 = 0.0; $y2 = 0.0; foreach ($w in @($line.Words)) { $b = @($w.BoundingRect)[0]; if ($b.X -lt $x1) { $x1 = $b.X }; if ($b.Y -lt $y1) { $y1 = $b.Y }; if ($b.X + $b.Width -gt $x2) { $x2 = $b.X + $b.Width }; if ($b.Y + $b.Height -gt $y2) { $y2 = $b.Y + $b.Height } }; $wd = [int]($x2 - $x1); $ht = [int]($y2 - $y1); $rows += (\"{0}`t{1}`t{2}`t{3}`t{4}\" -f [int]$x1, [int]$y1, $wd, $ht, $line.Text) }\n    $text = $rows -join \"`n\"")
+  .replace("} catch { $text = '' }", "} catch { $text = '' }");
+
+/**
+ * The lines of text on a screen picture (a file path), each with its box in that
+ * picture's pixels: [{ text, x, y, width, height }]. [] when nothing is found.
+ */
+export async function readScreenLines(path) {
+  if (!ocrAvailable) return [];
+  const dir = join(tmpdir(), `bunny-ocr-${randomUUID()}`);
+  try {
+    await mkdir(dir, { recursive: true });
+    const listFile = join(dir, 'list.txt');
+    await writeFile(listFile, path, 'utf8');
+    const scriptFile = join(dir, 'ocr.ps1');
+    await writeFile(scriptFile, `\uFEFF${BOX_SCRIPT}`, 'utf8');
+    const out = await new Promise((resolve, reject) => {
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, listFile],
+        { timeout: 90_000, windowsHide: true, maxBuffer: 8 << 20 },
+        (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
+    });
+    const line = out.split(/\r?\n/).find((l) => l.startsWith('T:'));
+    if (!line) return [];
+    return Buffer.from(line.slice(2).trim(), 'base64').toString('utf8').split('\n').map((row) => {
+      const [x, y, width, height, ...rest] = row.split('\t');
+      return { text: rest.join('\t').trim(), x: Number(x), y: Number(y), width: Number(width), height: Number(height) };
+    }).filter((r) => r.text && Number.isFinite(r.x));
+  } catch {
+    return [];
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}

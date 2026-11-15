@@ -783,6 +783,7 @@ function renderMessage(m) {
     }
     wrap.append(tc);
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
+    if (m.artifact) wrap.append(artifactCard(m.artifact));
     return wrap;
   }
 
@@ -815,7 +816,7 @@ function renderMessage(m) {
       textContent: `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} did not answer)` : ''}` }));
   }
   const body = element('div', { className: 'body' });
-  if (m.role === 'assistant') body.append(renderMarkdown(m.content));
+  if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
   else body.textContent = m.content;
   wrap.append(body);
 
@@ -1121,13 +1122,31 @@ async function streamInto(bodyEl, { path, payload }) {
   let assembled = '';
   let meter = null;
   let aborted = false;
+  // The reply is drawn as Markdown while it streams, a few times a second, so long
+  // code arrives already folded instead of as a wall of text.
+  let paintQueued = false;
+  const paintLive = () => {
+    if (paintQueued) return;
+    paintQueued = true;
+    requestAnimationFrame(() => {
+      paintQueued = false;
+      const opened = new Set([...bodyEl.querySelectorAll('pre.is-foldable')].map((pre, i) => (pre.classList.contains('is-folded') ? -1 : i)));
+      bodyEl.replaceChildren(renderMarkdown(assembled, { foldCode: true }));
+      bodyEl.classList.add('is-streaming');
+      [...bodyEl.querySelectorAll('pre.is-foldable')].forEach((pre, i) => {
+        if (opened.has(i)) setFolded(pre, false);
+        else { const code = pre.querySelector('code'); if (code) code.scrollTop = code.scrollHeight; }
+      });
+      bodyEl.scrollIntoView({ block: 'end' });
+    });
+  };
   bodyEl.textContent = '…';
 
   const handlers = {
     signal: controller.signal,
     onDelta: (delta) => {
       assembled += delta;
-      bodyEl.textContent = assembled;
+      paintLive();
       bodyEl.scrollIntoView({ block: 'end' });
     },
     onCompacted: (info) => {
@@ -1139,6 +1158,7 @@ async function streamInto(bodyEl, { path, payload }) {
     onTool: (info) => showLiveTool(bodyEl, info),
     onPermission: (info) => showLivePermission(bodyEl, info),
     onBrowser: (info) => runBrowserAction(info),
+    onCapability: (info) => showLiveCapability(bodyEl, info),
   };
 
   try {
@@ -1153,6 +1173,7 @@ async function streamInto(bodyEl, { path, payload }) {
   } finally {
     state.streaming = null;
     setStreaming(false);
+    bodyEl.classList.remove('is-streaming');
   }
 
   return { assembled, meter, aborted };
@@ -1178,7 +1199,78 @@ function showLiveTool(bodyEl, info) {
     res.textContent = `→ ${String(info.result).slice(0, 500)}`;
   }
   if ((info.attachments ?? []).length && !line.querySelector('.attachments')) line.append(renderAttachments(info.attachments));
+  if (info.artifact && info.status === 'done') {
+    line.querySelector('.artifact-card')?.remove();
+    line.append(artifactCard(info.artifact));
+    // What the model made opens beside the chat, unless the browser is showing its work.
+    loadArtifacts().then(() => (currentView() === 'browser' ? null : showArtifact(info.artifact.id))).catch(() => {});
+  }
   msg.scrollIntoView({ block: 'end' });
+}
+
+/** A card in the chat for an artifact the model made: its name, what it is, and Open. */
+function artifactCard(a) {
+  const kind = { html: 'Page', code: 'Code', markdown: 'Document' }[a.kind] ?? 'Artifact';
+  const card = element('div', { className: 'artifact-card' },
+    element('span', { className: `artifact-thumb thumb-${a.kind ?? 'markdown'}`, 'aria-hidden': 'true' }, icon('artifact')),
+    element('span', { className: 'artifact-card-info' },
+      element('span', { className: 'artifact-card-title', textContent: a.title ?? 'Artifact' }),
+      element('span', { className: 'artifact-card-kind', textContent: kind })));
+  card.append(button('Open', {
+    className: 'ghost sm', 'aria-label': `Open ${a.title ?? 'artifact'}`,
+    onclick: () => showArtifact(a.id).catch((err) => { $('error').textContent = err.message.includes('404') ? 'That artifact was deleted.' : err.message; }),
+  }));
+  return card;
+}
+
+/** Fold or unfold a long code block in a reply. */
+function setFolded(pre, folded) {
+  pre.classList.toggle('is-folded', folded);
+  const lines = pre.dataset.lines ?? '';
+  for (const b of pre.querySelectorAll('[data-fold]')) {
+    b.setAttribute('aria-expanded', String(!folded));
+    b.textContent = b.classList.contains('code-fold-top') ? (folded ? 'Expand' : 'Collapse') : (folded ? `Show all ${lines} lines` : 'Show less');
+  }
+}
+
+/** The model asked for something it does not have: the person chooses. */
+function showLiveCapability(bodyEl, info) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  const yesLabel = {
+    code_mode: info.hasFolder ? 'Switch to Code mode' : 'Choose a folder',
+    computer_use: 'Let Bunny control this computer',
+    custom_tools: 'Let Bunny build tools',
+    new_tool: 'Find or build it',
+  }[info.capability] ?? 'Allow';
+  const card = element('div', { className: 'permission-prompt live-permission capability-card' });
+  card.append(
+    element('p', { className: 'capability-eyebrow', textContent: 'Bunny needs a capability' }),
+    element('h4', { textContent: info.title ?? info.capability }),
+  );
+  if (info.reason) card.append(element('p', { className: 'capability-reason', textContent: info.reason }));
+  if (info.capability === 'computer_use') card.append(element('p', { className: 'hint', textContent: 'Clicks and typing still ask first in Manual and Accept edits. You can switch this off in Settings, Capabilities.' }));
+  if (info.capability === 'custom_tools') card.append(element('p', { className: 'hint', textContent: 'You read and approve every tool before it is saved. Settings, Capabilities lists them and can remove them.' }));
+  const actions = element('div', { className: 'permission-actions' });
+  const answer = async (granted) => {
+    try {
+      if (granted && info.capability === 'code_mode') {
+        if (!info.hasFolder) await chooseFolder();
+        applyWorkMode('code', { save: true });
+      }
+      actions.replaceChildren(element('span', { className: 'hint', textContent: granted ? 'Given' : 'Not now' }));
+      await sendJSON(`/api/sessions/${state.sessionId}/capability/${info.id}`, 'POST', { granted });
+    } catch (err) {
+      actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
+    }
+  };
+  actions.append(
+    button(yesLabel, { className: 'primary', onclick: () => answer(true) }),
+    button('Not now', { className: 'ghost', onclick: () => answer(false) }),
+  );
+  card.append(actions);
+  msg.before(card);
+  card.scrollIntoView({ block: 'end' });
 }
 
 /** The model asked to do something in the browser panel: show the panel, do it, answer. */
@@ -2435,6 +2527,28 @@ async function boot() {
 
   // Code blocks: copy from anywhere inside a rendered reply.
   $('messages').addEventListener('click', async (e) => {
+    const fold = e.target.closest('[data-fold]');
+    if (fold) {
+      const pre = fold.closest('pre');
+      if (pre) setFolded(pre, !pre.classList.contains('is-folded'));
+      return;
+    }
+    const keep = e.target.closest('[data-to-artifact]');
+    if (keep) {
+      if (state.incognito) { $('error').textContent = 'Incognito chats save nothing, artifacts included. Use Copy instead.'; return; }
+      const pre = keep.closest('pre');
+      const lang = pre?.querySelector('code')?.className.replace('language-', '') ?? '';
+      const code = pre?.querySelector('code')?.textContent ?? '';
+      try {
+        const made = await sendJSON('/api/artifacts', 'POST', {
+          sessionId: state.sessionId, title: /^(html|htm|svg)$/i.test(lang) ? 'Page from chat' : `${lang ? lang.toUpperCase() : 'Code'} from chat`,
+          kind: inferKind(`\`\`\`${lang}\n${code}\n\`\`\``), content: `\`\`\`${lang}\n${code}\n\`\`\``,
+        });
+        await loadArtifacts();
+        await showArtifact(made.id);
+      } catch (err) { $('error').textContent = err.message; }
+      return;
+    }
     const target = e.target.closest('[data-copy]');
     if (!target) return;
     const pre = target.closest('pre');

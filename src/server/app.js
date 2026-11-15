@@ -7,7 +7,7 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -41,6 +41,13 @@ import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } fr
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
+import {
+  AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
+  computerToolDefinitions, buildToolDefinition, isAgentTool, describeAgentTool, screenLinesText,
+} from './agentTools.js';
+import { createProcessStore } from './processes.js';
+import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
+import { readScreenLines } from './ocr.js';
 
 // The project root, found from this file rather than the working directory, so the
 // server also finds its UI when it runs inside the packaged desktop app.
@@ -146,13 +153,17 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const skills = createSkillStore({ file: join(dataDir, 'skills.json') });
   const speech = createSpeech({ dataDir });
   // Tools for Bunny AI itself and the web (search, read, install plugins and skills).
-  const appTools = createAppTools({
-    skills, mcp,
-    getSettings: () => settings,
-    saveSettings: async (patch) => { settings = { ...settings, ...patch }; await writeJson(settingsFile, settings); return settings; },
-  });
+  const saveSettings = async (patch) => { settings = { ...settings, ...patch }; await writeJson(settingsFile, settings); return settings; };
+  const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings });
   const computer = createComputerStore();
   const terminals = createTerminalStore();
+  // Programs the model started and left running, and tools it built for itself.
+  const processes = createProcessStore();
+  const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
+  // Capability cards waiting for the person's choice.
+  const pendingCapabilities = new Map();
+  // The scale of each chat's last screen picture, so clicks land where the model meant.
+  const screenScale = new Map();
 
 
   registry.hydrate(await readJson(connectionsFile, []));
@@ -494,7 +505,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const type = shown.kind === 'html' ? 'text/html; charset=utf-8'
         : shown.kind === 'markdown' ? 'text/markdown; charset=utf-8'
           : 'text/plain; charset=utf-8';
-      res.writeHead(200, { 'content-type': type });
+      // The page runs in a sandbox of its own, so its scripts cannot reach Bunny AI's API.
+      res.writeHead(200, { 'content-type': type, 'content-security-policy': 'sandbox allow-scripts allow-forms allow-modals allow-popups' });
       return res.end(shown.kind === 'html' ? htmlDocument(shown.body) : shown.body);
     }
 
@@ -824,6 +836,31 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       return sendJson(res, 200, { ok: true });
     }
 
+    // ---- a capability card: the person's choice ----
+    const capabilityMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/capability\/([a-f0-9-]{36})$/);
+    if (capabilityMatch && method === 'POST') {
+      const pending = pendingCapabilities.get(capabilityMatch[2]);
+      if (!pending || pending.sessionId !== capabilityMatch[1]) {
+        return sendJson(res, 404, { code: 'capability.gone', message: 'That question is no longer waiting' });
+      }
+      pending.resolve(await readBody(req));
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // ---- tools the model built: listed and removed in Settings ----
+    if (path === '/api/tools' && method === 'GET') {
+      return sendJson(res, 200, (await customTools.list()).map(({ script, ...t }) => ({ ...t, lines: script.split('\n').length })));
+    }
+    const customToolMatch = path.match(/^\/api\/tools\/([a-z][a-z0-9_]{1,39})$/);
+    if (customToolMatch && method === 'GET') {
+      const tool = await customTools.get(customToolMatch[1]);
+      return tool ? sendJson(res, 200, tool) : sendJson(res, 404, { code: 'tool.notFound', message: 'No such tool' });
+    }
+    if (customToolMatch && method === 'DELETE') {
+      await customTools.remove(customToolMatch[1]);
+      return sendJson(res, 200, { ok: true });
+    }
+
     // ---- a browser action the window has done: its answer ----
     const browserMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/browser\/([a-f0-9-]{36})$/);
     if (browserMatch && method === 'POST') {
@@ -1093,17 +1130,18 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       //   code      works inside the chosen folder with file and command tools, plus connectors
       const permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask';
       const folder = session.folder ? await checkFolder(session.folder) : null;
-      const workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder) : null;
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
       const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
-      const needsOk = (risk) => (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
+      const needsOk = (risk) => risk === 'build'
+        || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
 
       const modeText = {
         chat: 'Mode: Chat. Have a conversation. You can search and read the web and find, install and use plugins, skills and connectors. '
-          + 'You cannot read or change files on this computer in Chat mode: if the person wants that, ask them to switch to Code mode and choose a folder.',
+          + 'You cannot read or change files or run commands in Chat mode: if that is needed, call request_capability with code_mode.',
         code: 'Mode: Code. You are working on the project in the workspace folder. Look before you change: list and read the files you need, '
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it.',
       }[workMode];
@@ -1111,18 +1149,43 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ? `Workspace folder: ${workspace.root}. All file paths are relative to it. Permission mode: ${permissionMode}`
           + (permissionMode === 'plan' ? ' (read-only: propose a plan, do not change anything).' : '.')
         : workMode === 'code'
-          ? 'No workspace folder is chosen yet. Ask the person to pick one with the folder button under the message box before you can read or change files.'
+          ? 'No workspace folder is chosen yet. Call request_capability with code_mode so the person can pick one.'
           : '';
-      const honesty = 'You are Bunny AI. Use your tools instead of guessing: search before you describe something you have not read, '
-        + 'and never claim you did something a tool did not do. If no tool can do what is asked, say so plainly.';
+      const artifactsOn = settings.artifactsEnabled !== false;
+      const aiComputerOn = settings.aiComputerUse === true && process.platform === 'win32';
+      const buildOn = settings.customToolsEnabled === true && process.platform === 'win32';
+      // Models do not know the date; without it "next new year" lands in the past.
+      const now = new Date();
+      const today = `Today is ${now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, `
+        + `${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). `;
+      const honesty = today + 'You are Bunny AI. Use your tools instead of guessing: search before you describe something you have not read, '
+        + 'and never claim you did something a tool did not do. '
+        + (artifactsOn ? 'When you make something the person will look at or use (a page, app, game, document, diagram or long code), put it in an artifact with create_artifact instead of pasting it into your reply. ' : '')
+        + 'When you need something you do not have, do not work around it: call request_capability so the person can give it to you '
+        + '(code_mode for files, commands and programs; computer_use to control this computer; new_tool for anything else). '
+        + 'For a job no tool can do, first look for a plugin or connector with search_plugins and offer to install it'
+        + (buildOn ? '; if none fits, build one with create_tool.' : '; if none fits, ask for custom_tools so you can build one.');
       history.unshift({ role: 'system', content: [honesty, modeText, folderText].filter(Boolean).join('\n') });
 
       // Tools from the MCP servers the person has switched on (not in Chat mode).
       const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
+      const builtTools = buildOn ? await customTools.list() : [];
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit']),
+        capabilityToolDefinition(),
+        ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
+        ...(workspace ? processToolDefinitions(risks) : []),
+        ...(aiComputerOn ? computerToolDefinitions(risks) : []),
+        ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
       ];
+      // The model does not see earlier tool steps, so it is told which artifacts this chat has.
+      if (artifactsOn) {
+        const mine = await artifacts.list({ sessionId: id }).catch(() => []);
+        if (mine.length) {
+          history.unshift({ role: 'system', content: `Artifacts in this chat (update_artifact changes one):\n${mine.slice(0, 20).map((a) => `- ${a.id}: ${a.title}`).join('\n')}` });
+        }
+      }
       // The browser panel, when the window can drive it (the desktop app says so).
       const browserControl = body.browserControl === true;
       if (browserControl) {
@@ -1172,9 +1235,198 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         return { text: browserResultText(answer), attachments };
       };
 
+      // ---- asking for a capability, and the tools it brings ----
+      let computerOn = aiComputerOn;
+      let buildEnabled = buildOn;
+      const vision = body.vision !== false;
+      const origin = `http://${req.headers.host ?? '127.0.0.1'}`;
+      const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
+        const cid = randomUUID();
+        const timer = setTimeout(() => pendingCapabilities.get(cid)?.resolve({ granted: false }), 10 * 60_000);
+        pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
+        res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
+        send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, 400), hasFolder: Boolean(folder?.ok) });
+      });
+      const grantCapability = async (capability, reason) => {
+        if (!CAPABILITIES[capability]) return `There is no such capability. Choose one of: ${Object.keys(CAPABILITIES).join(', ')}.`;
+        if (capability === 'code_mode' && workspace) return `Code mode is already on in ${workspace.root}.`;
+        if (capability === 'computer_use' && computerOn) return 'You can already control this computer.';
+        if (capability === 'custom_tools' && buildEnabled) return 'You can already build tools with create_tool.';
+        if ((capability === 'computer_use' || capability === 'custom_tools') && process.platform !== 'win32') return 'That needs Bunny AI on Windows.';
+        const answer = await askCapability(capability, reason);
+        if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+        if (capability === 'code_mode') {
+          const fresh = await sessions.get(id);
+          const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
+          if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
+          workspace = createWorkspace(checked.folder);
+          await sessions.update(id, { workMode: 'code' });
+          toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
+          return `Code mode is on. Workspace folder: ${workspace.root}; paths are relative to it. You now have: `
+            + [...workspaceToolDefinitions(risks), ...processToolDefinitions(risks)].map((d) => d.function.name).join(', ') + '.';
+        }
+        if (capability === 'computer_use') {
+          await saveSettings({ aiComputerUse: true });
+          computerOn = true;
+          toolDefinitions.push(...computerToolDefinitions(risks));
+          return 'You can now control this computer: start with computer_screenshot to see the screen.';
+        }
+        if (capability === 'custom_tools') {
+          await saveSettings({ customToolsEnabled: true });
+          buildEnabled = true;
+          if (permissionMode !== 'plan') toolDefinitions.push(buildToolDefinition(), ...customTools.definitions(await customTools.list()));
+          return permissionMode === 'plan' ? 'Building tools is on, but Plan mode cannot build. Propose the tool instead.' : 'You can now build tools with create_tool. The person approves each one.';
+        }
+        return 'The person agreed. Look for a plugin or connector with search_plugins, say which fits best, and install it with install_plugin or add_connector. '
+          + (buildEnabled ? 'If none fits, build it with create_tool.' : 'If none fits, ask for custom_tools so you can build it.');
+      };
+
+      // Artifact content is stored the way a saved reply is: a page or code in a fenced block.
+      const artifactContent = (kind, content, language) => {
+        const text = String(content ?? '');
+        if (kind === 'html') return /^\s*</.test(text) ? text : `\`\`\`html\n${text}\n\`\`\``;
+        if (kind === 'code') return `\`\`\`${String(language ?? '').replace(/[^\w+#.-]/g, '')}\n${text}\n\`\`\``;
+        return text;
+      };
+
+      const runAgentTool = async (name, parsed) => {
+        const custom = !isAgentTool(name);
+        if (!toolDefinitions.some((d) => d.function.name === name)) throw new Error(`There is no tool called ${name}`);
+        const summary = custom ? `Use tool ${name}` : describeAgentTool(name, parsed);
+        const risk = custom ? 'run' : AGENT_TOOL_RISK[name];
+        let detail = '';
+        let checkedTool = null;
+        if (name === 'create_tool') {
+          try { checkedTool = customTools.check(parsed); } catch (err) { return `The tool was not built: ${err.message}`; }
+          detail = `${checkedTool.description}\nArguments: ${Object.keys(checkedTool.parameters).join(', ') || 'none'}\n\n${checkedTool.script}`;
+        } else if (name === 'start_process') detail = parsed.command;
+        else if (name === 'computer_type') detail = parsed.text;
+        else if (custom) detail = JSON.stringify(parsed, null, 2);
+        if (needsOk(risk)) {
+          const allowed = await askPermission(summary, detail);
+          if (!allowed) {
+            await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            send('tool', { tool: summary, status: 'denied' });
+            return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
+          }
+        }
+        send('tool', { tool: summary, status: 'running' });
+        let status = 'done';
+        let result = '';
+        let attachments = [];
+        let images = [];
+        let artifact = null;
+        const scaled = (v) => Math.round(Number(v) / (screenScale.get(id) ?? 1));
+        try {
+          switch (name) {
+            case 'create_artifact': {
+              const kind = ['html', 'markdown', 'code'].includes(parsed.kind) ? parsed.kind : 'markdown';
+              if (!String(parsed.content ?? '').trim()) throw new Error('The artifact needs content.');
+              const made = await artifacts.create({ sessionId: id, title: parsed.title || 'Artifact', kind, language: parsed.language ?? '', content: artifactContent(kind, parsed.content, parsed.language) });
+              artifact = { id: made.id, title: made.title, kind };
+              result = `Made the artifact "${made.title}" (id ${made.id}). It is open in the Artifacts panel.`
+                + (kind === 'html' && browserControl ? ` To check that it works, browser_open ${origin}/api/artifacts/${made.id}/raw` : '');
+              break;
+            }
+            case 'update_artifact': {
+              const current = await artifacts.get(String(parsed.id ?? ''));
+              if (!current) throw new Error('There is no artifact with that id.');
+              const updated = await artifacts.update(current.id, { content: artifactContent(current.kind, parsed.content, current.language), ...(parsed.title ? { title: parsed.title } : {}) });
+              artifact = { id: updated.id, title: updated.title, kind: updated.kind };
+              result = `Updated "${updated.title}" to version ${updated.versions.length}.`;
+              break;
+            }
+            case 'request_capability':
+              result = await grantCapability(parsed.capability, parsed.reason);
+              break;
+            case 'start_process': {
+              if (!workspace) throw new Error('Programs run in Code mode, inside the workspace folder.');
+              const p = processes.start({ command: String(parsed.command ?? ''), cwd: workspace.root, owner: id });
+              const r = await processes.settle(p.id, id, parsed.wait_seconds ?? 5);
+              result = `${r.running ? `Started ${r.id}; it is still running.` : `${r.id} finished with exit code ${r.exitCode}.`}\nOutput:\n${r.output.slice(-6000) || '(nothing yet)'}`;
+              if (r.running && browserControl && /https?:\/\/(localhost|127\.0\.0\.1)/i.test(r.output)) result += '\nOpen its address with browser_open to look at it.';
+              break;
+            }
+            case 'read_process': {
+              const wait = Math.max(0, Math.min(30, Number(parsed.wait_seconds) || 0));
+              const r = wait ? await processes.settle(parsed.id, id, wait) : processes.read(parsed.id, id);
+              result = `${r.id} is ${r.running ? 'still running' : `finished (exit code ${r.exitCode})`}.\nNew output:\n${r.output.slice(-6000) || '(nothing new)'}`;
+              break;
+            }
+            case 'stop_process':
+              await processes.stop(parsed.id, id);
+              result = `Stopped ${parsed.id}.`;
+              break;
+            case 'list_processes': {
+              const all = processes.list(id);
+              result = all.length ? all.map((p) => `${p.id}: ${p.command} (${p.running ? 'running' : `exit ${p.exitCode}`})`).join('\n') : 'No programs were started in this chat.';
+              break;
+            }
+            case 'computer_screenshot': {
+              const cap = await computer.capture();
+              const lines = await readScreenLines(cap.fullPath);
+              await rm(cap.fullPath, { force: true }).catch(() => {});
+              screenScale.set(id, cap.scale);
+              const sid = randomUUID();
+              await mkdir(screensDir, { recursive: true });
+              await writeFile(join(screensDir, `${sid}.png`), Buffer.from(cap.data, 'base64'));
+              attachments = [{ kind: 'image', name: 'Screen.png', mime: 'image/png', data: `/api/screens/${sid}.png` }];
+              if (vision) images = [`data:image/png;base64,${cap.data}`];
+              result = `The screen, ${cap.shownWidth} by ${cap.shownHeight} pixels${vision ? ' (picture attached)' : ''}. Text on screen, with the centre of each line:\n${screenLinesText(lines, cap.scale)}`;
+              break;
+            }
+            case 'computer_click':
+              await computer.click(id, { x: scaled(parsed.x), y: scaled(parsed.y), button: parsed.button === 'right' ? 'right' : 'left', count: parsed.double ? 2 : 1 });
+              result = 'Clicked. Take a computer_screenshot to see what changed.';
+              break;
+            case 'computer_type':
+              await computer.type(id, { text: String(parsed.text ?? '') });
+              result = 'Typed.';
+              break;
+            case 'computer_key': {
+              const keys = (Array.isArray(parsed.keys) ? parsed.keys : String(parsed.keys ?? '').split('+')).map((k) => String(k).trim()).filter(Boolean);
+              if (!keys.length) throw new Error('Say which keys to press.');
+              await computer.key(id, { keys });
+              result = `Pressed ${keys.join('+')}.`;
+              break;
+            }
+            case 'computer_scroll':
+              await computer.scroll(id, { x: scaled(parsed.x), y: scaled(parsed.y), direction: parsed.direction, amount: parsed.amount });
+              result = 'Scrolled.';
+              break;
+            case 'create_tool': {
+              const saved = await customTools.save(checkedTool);
+              const def = customTools.definitions([saved])[0];
+              const at = toolDefinitions.findIndex((d) => d.function.name === def.function.name);
+              if (at >= 0) toolDefinitions.splice(at, 1, def); else toolDefinitions.push(def);
+              result = `Built ${def.function.name}. You can use it now.`;
+              break;
+            }
+            default:
+              result = await customTools.run(name.slice(CUSTOM_PREFIX.length), parsed, workspace?.root);
+          }
+        } catch (err) {
+          status = 'failed';
+          result = `The tool failed: ${err.message}`;
+        }
+        result = String(result).slice(0, 12000);
+        await sessions.append(id, { role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: result.slice(0, 1200), attachments, ...(artifact ? { artifact } : {}) });
+        send('tool', { tool: summary, status, result: result.slice(0, 600), attachments, ...(artifact ? { artifact } : {}) });
+        return images.length ? { content: result, images } : result;
+      };
+
       const runTool = async ({ name, arguments: args }) => {
         let parsed = {};
-        try { parsed = JSON.parse(args || '{}'); } catch { parsed = {}; }
+        try {
+          parsed = JSON.parse(args || '{}');
+        } catch {
+          // Usually a reply limit cut the arguments short. Running the tool on nothing
+          // would fail in a confusing way; the model is told and can send less.
+          send('tool', { tool: `${name}: arguments cut off`, status: 'failed' });
+          return `Your call to ${name} could not be read: its arguments were not complete JSON, probably cut off because they were too long. `
+            + 'Try again with shorter content (for an artifact, make it smaller, or create it and then add to it with update_artifact).';
+        }
+        if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
           const summary = describeBrowserTool(name, parsed);
           if (needsOk(BROWSER_TOOL_RISK[name])) {
@@ -1452,8 +1704,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     });
   });
 
+  // Programs the model left running stop with the server.
+  server.on('close', () => { processes.stopAll().catch(() => {}); });
+
   return {
-    server, registry, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
+    server, registry, processes, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
     computer, terminals,
     getSettings: () => settings,
     dataDir,

@@ -369,3 +369,41 @@ test('a project groups chats and filters the sidebar', async ({ page }) => {
   await expect(page.locator('#sessions .tag')).toHaveText('Contracts');
   await expect(page.locator('#sessions .session-row')).toHaveCount(1);
 });
+
+test('long code in a reply starts folded and opens on request', async ({ page }) => {
+  // The test reply repeats the message, so a long block in the message comes back in the reply.
+  const lines = Array.from({ length: 30 }, (_, i) => `  <li>Item ${i + 1}</li>`);
+  await connectAndChat(page, ['Here is a list:', '```html', '<ul>', ...lines, '</ul>', '```'].join('\n'));
+  const body = page.locator('.msg.assistant .body').last();
+  const long = body.locator('pre.code.is-foldable');
+  await expect(long).toHaveCount(1);
+  await expect(long).toHaveClass(/is-folded/);
+  // The short block in the same reply is not folded.
+  await expect(body.locator('pre.code:not(.is-foldable)')).toHaveCount(1);
+
+  const show = long.locator('.code-foot [data-fold]');
+  await expect(show).toHaveText('Show all 32 lines');
+  const folded = await long.locator('code').evaluate((el) => el.clientHeight);
+  await show.click();
+  await expect(long).not.toHaveClass(/is-folded/);
+  await expect(show).toHaveText('Show less');
+  await expect(long.locator('.code-fold-top')).toHaveText('Collapse');
+  expect(await long.locator('code').evaluate((el) => el.clientHeight)).toBeGreaterThan(folded * 2);
+
+  // Collapse folds it again.
+  await long.locator('.code-fold-top').click();
+  await expect(long).toHaveClass(/is-folded/);
+
+  // An HTML block can become an artifact that opens beside the chat.
+  await long.locator('[data-to-artifact]').click();
+  await expect(page.locator('#artifacts')).toBeVisible();
+  await expect(page.locator('#artifact-count')).toHaveText('1');
+});
+
+test('a Markdown table in a reply is drawn as a table', async ({ page }) => {
+  await connectAndChat(page, ['Disk space:', '| Drive | Free |', '|---|---:|', '| C: | 185 GB |', '| D: | 107 GB |'].join('\n'));
+  const table = page.locator('.msg.assistant .body').last().locator('table.md-table');
+  await expect(table.locator('th')).toHaveText(['Drive', 'Free']);
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(table.locator('tbody tr').first().locator('td').last()).toHaveText('185 GB');
+});

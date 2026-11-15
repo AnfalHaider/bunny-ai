@@ -39,9 +39,11 @@ let win = null;
 let tray = null;
 let origin = '';
 let quitting = false;
+let bunnyApp = null;
 
 async function startServer() {
   const bunny = await createApp({ dataDir });
+  bunnyApp = bunny;
   await new Promise((resolve, reject) => {
     bunny.server.once('error', reject);
     bunny.server.listen(0, '127.0.0.1', resolve);
@@ -147,7 +149,15 @@ ipcMain.handle('browser:act', async (event, name, action, args) => {
 });
 
 app.on('second-instance', showWindow);
-app.on('before-quit', () => { quitting = true; });
+// Programs the AI started (dev servers and the like) stop before the app does.
+let programsStopped = false;
+app.on('before-quit', (event) => {
+  quitting = true;
+  if (programsStopped || !bunnyApp) return;
+  event.preventDefault();
+  programsStopped = true;
+  bunnyApp.processes.stopAll().catch(() => {}).finally(() => app.quit());
+});
 app.on('window-all-closed', () => {
   if (!prefs.closeToTray) app.quit();
 });

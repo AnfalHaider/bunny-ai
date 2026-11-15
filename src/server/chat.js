@@ -62,19 +62,36 @@ export async function* streamChat({
     if (offerTools) body.tools = tools;
     if (extraBody) Object.assign(body, extraBody);
 
-    const { text, toolCalls } = yield* streamRound({
+    let { text, toolCalls, finish, aborted } = yield* streamRound({
       baseUrl, headers, body, signal, fetchImpl, stallMs,
     });
+    if (aborted) return; // stopped: what arrived is kept, nothing more is asked
+
+    // A thinking model can spend the whole reply limit thinking and stop with
+    // nothing to show. Once, ask again with more room before giving up.
+    if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length' && !signal?.aborted) {
+      const roomier = { ...body, max_tokens: Math.min(32_000, (body.max_tokens || 4096) * 4) };
+      ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs }));
+      if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
+        throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
+      }
+    }
 
     if (!offerTools || !toolCalls.length) {
       // Some models use their tools and then stop without a word. Ask once for the answer.
       if (round > 0 && !String(text ?? '').trim()) yield* finalAnswer();
+      else if (round === 0 && !String(text ?? '').trim() && !signal?.aborted) {
+        throw new ConnectError('chat.empty', 'The model sent back an empty reply. Try again, or pick another model.');
+      }
       return;
     }
 
     // Run what the model asked for and put the answers back into the
     // conversation, so the model can finish its answer.
     conversation.push({ role: 'assistant', content: text || null, tool_calls: toolCalls });
+    // A tool may answer with pictures too (a screenshot): tool messages carry text
+    // only, so the pictures follow the answers as one message the model can see.
+    const pictures = [];
     for (const call of toolCalls) {
       let result = '';
       try {
@@ -85,7 +102,20 @@ export async function* streamChat({
       } catch (err) {
         result = `The tool failed: ${err.message}`;
       }
-      conversation.push({ role: 'tool', tool_call_id: call.id, content: String(result).slice(0, 8000) });
+      if (result && typeof result === 'object') {
+        for (const url of result.images ?? []) pictures.push({ name: call.function.name, url });
+        result = result.content ?? '';
+      }
+      conversation.push({ role: 'tool', tool_call_id: call.id, content: String(result).slice(0, 12000) });
+    }
+    if (pictures.length) {
+      conversation.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: `The picture${pictures.length > 1 ? 's' : ''} from ${pictures.map((p) => p.name).join(', ')}:` },
+          ...pictures.slice(-2).map((p) => ({ type: 'image_url', image_url: { url: p.url } })),
+        ],
+      });
     }
   }
   // Out of tool steps: the person still gets an answer from what was found so far.
@@ -144,6 +174,9 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
   else signal?.addEventListener('abort', forwardAbort, { once: true });
 
   let res;
+  // The same watchdog covers the wait for the first answer: without it a provider
+  // that takes the request and never replies holds the chat for five minutes.
+  const firstTimer = setTimeout(() => { stalled = true; stallController.abort(); }, stallMs);
   try {
     res = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -152,14 +185,17 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
       body: JSON.stringify(body),
     });
   } catch (err) {
-    if (stalled) throw new ConnectError('chat.stalled', 'The provider stopped responding');
-    if (err?.name === 'AbortError') return { text: '', toolCalls: [] };
+    if (stalled) throw new ConnectError('chat.stalled', 'The provider did not answer in time');
+    if (err?.name === 'AbortError') return { text: '', toolCalls: [], aborted: true };
     throw new ConnectError('chat.unreachable', `Could not reach ${baseUrl}`);
+  } finally {
+    clearTimeout(firstTimer);
   }
 
   let reader = null;
   let buffer = '';
   let text = '';
+  let finish = null;
   const toolCalls = new Map();
   try {
     if (res.status === 401 || res.status === 403) throw new ConnectError('chat.unauthorized', `The provider rejected that key`);
@@ -185,7 +221,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
         ({ done, value } = await reader.read());
       } catch (err) {
         if (stalled) throw new ConnectError('chat.stalled', 'The provider stopped sending data');
-        if (err?.name === 'AbortError') return { text: '', toolCalls: [] };
+        if (err?.name === 'AbortError') return { text: '', toolCalls: [], aborted: true };
         throw err;
       } finally {
         clearTimeout(timer);
@@ -200,7 +236,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
         if (!line.startsWith('data:')) continue;
 
         const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return { text, toolCalls: finishCalls(toolCalls) };
+        if (payload === '[DONE]') return { text, toolCalls: finishCalls(toolCalls), finish };
 
         let parsed;
         try {
@@ -209,6 +245,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
           continue; // keep-alive or a comment frame
         }
         const delta = parsed?.choices?.[0]?.delta;
+        if (parsed?.choices?.[0]?.finish_reason) finish = parsed.choices[0].finish_reason;
         if (typeof delta?.content === 'string' && delta.content) {
           text += delta.content;
           yield delta.content;
@@ -233,7 +270,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
     reader?.releaseLock?.();
   }
 
-  return { text, toolCalls: finishCalls(toolCalls) };
+  return { text, toolCalls: finishCalls(toolCalls), finish };
 }
 
 /** Turn the gathered fragments into complete tool calls. */

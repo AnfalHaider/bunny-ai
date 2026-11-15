@@ -184,6 +184,11 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     for (const key of ['tool', 'status', 'result', 'model', 'providerId', 'job', 'auto', 'fellBackFrom']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
+    // An artifact a tool step made: kept so the chat can show its card again later.
+    if (message.artifact && typeof message.artifact === 'object' && /^[a-f0-9-]{36}$/.test(String(message.artifact.id))) {
+      const { id: artifactId, title, kind } = message.artifact;
+      entry.artifact = { id: artifactId, title: String(title ?? 'Artifact').slice(0, 120), kind: ['html', 'code', 'markdown'].includes(kind) ? kind : 'markdown' };
+    }
     session.messages.push(entry);
     // First user line becomes the title, so the sidebar is useful immediately.
     if (session.title === 'New chat' && message.role === 'user') {

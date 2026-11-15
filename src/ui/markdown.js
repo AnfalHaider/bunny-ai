@@ -61,9 +61,13 @@ function inline(text) {
   return out;
 }
 
-function codeBlock(language, code) {
+/** Code longer than this many lines is folded in a reply until the person opens it. */
+export const FOLD_LINES = 15;
+
+function codeBlock(language, code, { fold = false } = {}) {
   const pre = document.createElement('pre');
   pre.className = 'code';
+  const lineCount = code ? code.split('\n').length : 0;
   const bar = document.createElement('div');
   bar.className = 'code-bar';
   const label = document.createElement('span');
@@ -75,11 +79,36 @@ function codeBlock(language, code) {
   copy.dataset.copy = '1';
   copy.textContent = 'Copy';
   copy.setAttribute('aria-label', `Copy ${language || 'code'} block`);
-  bar.append(label, copy);
+  bar.append(label);
   const body = document.createElement('code');
   body.append(highlight(code, language));
   if (language) body.className = `language-${language}`;
   pre.append(bar, body);
+  if (fold && lineCount > FOLD_LINES) {
+    // Long code starts folded: a few lines, a fade, and a button to see it all.
+    pre.classList.add('is-foldable', 'is-folded');
+    pre.dataset.lines = String(lineCount);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'code-fold';
+    toggle.dataset.fold = '1';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.textContent = `Show all ${lineCount} lines`;
+    const foot = document.createElement('div');
+    foot.className = 'code-foot';
+    const keep = document.createElement('button');
+    keep.type = 'button';
+    keep.className = 'code-keep';
+    keep.dataset.toArtifact = '1';
+    keep.textContent = /^(html|htm|svg)$/i.test(language) ? 'Open as artifact' : 'Save as artifact';
+    foot.append(toggle, keep);
+    const top = toggle.cloneNode(true);
+    top.className = 'code-fold code-fold-top';
+    top.textContent = 'Expand';
+    bar.append(top);
+    pre.append(foot);
+  }
+  bar.append(copy);
   return pre;
 }
 
@@ -87,7 +116,7 @@ function codeBlock(language, code) {
  * @param {string} markdown
  * @returns {DocumentFragment}
  */
-export function renderMarkdown(markdown) {
+export function renderMarkdown(markdown, { foldCode = false } = {}) {
   const frag = document.createDocumentFragment();
   const lines = String(markdown ?? '').replace(/\r\n/g, '\n').split('\n');
 
@@ -114,11 +143,50 @@ export function renderMarkdown(markdown) {
         code.push(lines[i]);
         i += 1;
       }
-      frag.append(codeBlock(language, code.join('\n')));
+      frag.append(codeBlock(language, code.join('\n'), { fold: foldCode }));
       continue;
     }
 
     if (!line.trim()) { flush(); continue; }
+
+    // Table: a row of cells, then a |---|---| line, then more rows.
+    const cells = (row) => row.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+    if (/^\s*\|?.*\|.*$/.test(line) && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1] ?? '')) {
+      flush();
+      const head = cells(line);
+      const align = cells(lines[i + 1]).map((c) => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : ''));
+      const table = document.createElement('table');
+      table.className = 'md-table';
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      head.forEach((c, k) => {
+        const th = document.createElement('th');
+        th.innerHTML = inline(c);
+        if (align[k]) th.style.textAlign = align[k];
+        hr.append(th);
+      });
+      thead.append(hr);
+      const tbody = document.createElement('tbody');
+      i += 2;
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+        const tr = document.createElement('tr');
+        cells(lines[i]).slice(0, head.length).forEach((c, k) => {
+          const td = document.createElement('td');
+          td.innerHTML = inline(c);
+          if (align[k]) td.style.textAlign = align[k];
+          tr.append(td);
+        });
+        tbody.append(tr);
+        i += 1;
+      }
+      i -= 1;
+      table.append(thead, tbody);
+      const wrap = document.createElement('div');
+      wrap.className = 'md-table-wrap';
+      wrap.append(table);
+      frag.append(wrap);
+      continue;
+    }
 
     const heading = line.match(/^(#{1,4})\s+(.*)$/);
     if (heading) {
