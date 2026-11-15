@@ -2,6 +2,20 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Owner's approval before sleeping
+
+**Owner's words (typed in this chat):** "i am going to sleep, handle everything yourself. in the morning i
+want to see the best possible application. you have my approval. if you can relay it to tech lead do it,
+otherwise handle everything that can be done." Relayed to Tech Lead under 7E (exact words, date, context).
+
+- S-1: Security signed FAIL at ca01243 (bf059e0): every attack refused, but the Google sign-in return is
+  blocked. Sent back to Builder: allow only the OAuth callback with a valid one-time state; rebase D1 onto it.
+- Librarian's S-1 and D1 sign-offs and register committed by the Chief of Staff (4c0ddc9), on the owner's
+  instruction "can you run librarians commits and pushes".
+- Decided under the delegation: T-4 asks once per folder before using a stranger's AGENTS.md.
+- Found: prepush counts a complete sign-off set as covering every ancestor commit, so D1's set would cover
+  S-1. Rule for tonight: S-1 is signed in full before any push. Sent to Tech Lead as guard item F.
+
 ## 2026-11-16 - Overnight run under the owner's delegation
 
 **Owner's words (typed in this chat):** "get all sessions to work through all the issues, fix every known
