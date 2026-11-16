@@ -6,3 +6,6 @@
 | L001 | 2026-11-12 | builder | [Browser tests find the bugs the code hides](lessons/L001-browser-tests-find-the-bugs-the-code-hides.md) | playwright, e2e, aria, render, test | live |
 | L002 | 2026-11-12 | builder | [A stopped reply is still a reply](lessons/L002-a-stopped-reply-is-still-a-reply.md) | stream, abort, stop, sse, chat | live |
 | L003 | 2026-11-12 | builder | [Profile state leaks between browser tests](lessons/L003-profile-state-leaks-between-browser-tests.md) | playwright, e2e, isolation, settings, profile | live |
+| L004 | 2026-11-14 | builder | [A provider's error body is data, not noise](lessons/L004-provider-errors-are-data.md) | provider, 404, probe, retry, nvidia, openrouter, google, stream, stall | live |
+| L005 | 2026-11-15 | builder | [A redesign keeps the tested hooks, even when every DOM node moves](lessons/L005-a-redesign-keeps-the-tested-hooks.md) | ui, ux, sidebar, rail, composer, playwright, e2e, i18n | live |
+| L006 | 2026-11-16 | chief-of-staff | [Count conflict markers after resolving, before committing the merge](lessons/L006-check-for-markers-before-committing-a-merge.md) | merge, conflict, release, board, crlf, union | live |
