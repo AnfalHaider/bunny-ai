@@ -184,7 +184,7 @@
           <div class="desc">Tell me when a reply is ready and this window is in the background.</div>
         </div>
         <div class="right">
-          <label class="switch"><input type="checkbox" id="notifications" /><span id="notifications-state">off</span></label>
+          <label class="switch"><input type="checkbox" id="notifications" aria-label="Notifications" /><span id="notifications-state">off</span></label>
         </div>
       </div>
     </div>
@@ -249,35 +249,35 @@
           <div class="name">Artifacts</div>
           <div class="desc">Keep replies as artifacts and open them in their own panel next to your chat.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="artifactsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="artifactsEnabled" aria-label="Artifacts" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Draw charts in artifacts</div>
           <div class="desc">An artifact that holds chart data is drawn as a chart instead of shown as text.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="chartsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="chartsEnabled" aria-label="Charts" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Use skills</div>
           <div class="desc">Add the skills you switched on (Customize) to the model's instructions in every chat.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="skillsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="skillsEnabled" aria-label="Skills" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Use connectors</div>
           <div class="desc">Offer the tools of your switched-on connectors (Customize) to the model. Off keeps every chat offline from them.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" aria-label="Connectors" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name" data-i18n="settings.fallbackName">Try another model when yours is busy</div>
           <div class="desc" data-i18n="settings.fallbackDesc">When the model you picked hits a rate limit or does not answer, the reply goes to the best other model for the job, and the reply says which answered.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" aria-label="Switch model when busy" /><span>on</span></label></div>
       </div>
     </div>
 
@@ -299,14 +299,14 @@
           <div class="name">Enable computer use</div>
           <div class="desc">Allow screenshots, clicks and typing on this computer through Bunny AI. Off refuses every such request.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="computerUseEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="computerUseEnabled" aria-label="Computer use" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name" data-i18n="settings.aiDesktopName">Let the AI control the desktop</div>
           <div class="desc" data-i18n="settings.aiDesktopDesc">The AI may look at the screen, click, type and press keys to do what you ask. Clicks and typing still ask first in Manual and Accept edits. The AI can also ask you to switch this on when it needs it.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="aiComputerUse" data-cap-default="off" /><span>off</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="aiComputerUse" aria-label="Let the AI use the desktop" data-cap-default="off" /><span>off</span></label></div>
       </div>
     </div>
 
@@ -317,7 +317,7 @@
           <div class="name" data-i18n="settings.buildName">Let the AI build its own tools</div>
           <div class="desc" data-i18n="settings.buildDesc">When nothing Bunny AI has can do a job, the AI may write a small PowerShell script that becomes a tool. You read and approve every one before it is saved, and each run follows your permission mode.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="customToolsEnabled" data-cap-default="off" /><span>off</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="customToolsEnabled" aria-label="Let the AI build its own tools" data-cap-default="off" /><span>off</span></label></div>
       </div>
       <div id="custom-tools"></div>
     </div>
@@ -503,7 +503,7 @@
           <div class="desc">Open Bunny AI when you sign in to Windows.</div>
         </div>
         <div class="right">
-          <label class="switch"><input type="checkbox" id="launch-at-login" /><span id="launch-state">off</span></label>
+          <label class="switch"><input type="checkbox" id="launch-at-login" aria-label="Open at login" /><span id="launch-state">off</span></label>
         </div>
       </div>
       <div class="row">
@@ -512,7 +512,7 @@
           <div class="desc">Closing the window keeps Bunny AI in the system tray, so schedules keep running.</div>
         </div>
         <div class="right">
-          <label class="switch"><input type="checkbox" id="close-to-tray" /><span id="tray-state">off</span></label>
+          <label class="switch"><input type="checkbox" id="close-to-tray" aria-label="Keep running in the tray" /><span id="tray-state">off</span></label>
         </div>
       </div>
     </div>
@@ -533,7 +533,7 @@
           <div class="name">Update automatically</div>
           <div class="desc">Bunny AI checks GitHub Releases for a new version, downloads it in the background, checks it against its published fingerprint, and installs it when you restart.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoUpdate" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoUpdate" aria-label="Update automatically" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="right"><button id="check-update" class="primary">Check for updates</button> <button id="restart-update" class="ghost" hidden>Restart to update</button></div>

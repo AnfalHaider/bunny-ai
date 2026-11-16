@@ -11,7 +11,7 @@
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
 import { globMatcher } from './glob.js';
@@ -570,6 +570,21 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
 }
 
 /**
+ * Is the server answering on the port this folder's own? Q2-21: another project's site on the same port
+ * must not show as "running". Own = the page names the package or the folder.
+ */
+async function probeDevServer(folder, pkg, port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) });
+    if (!(res.status > 0)) return { running: false };
+    const body = (await res.text().catch(() => '')).slice(0, 200_000).toLowerCase();
+    const names = [pkg.name, basename(String(folder).replace(/[\/]+$/, ''))].filter((n) => typeof n === 'string' && n.length >= 2).map((n) => n.toLowerCase().replace(/^@[^/]+\//, ''));
+    const own = names.some((n) => body.includes(n));
+    return own ? { running: true } : { running: false, otherSite: true };
+  } catch { return { running: false }; }
+}
+
+/**
  * The dev server a folder would run, read from its package.json:
  * the first of dev / start / serve / preview, and the port it is likely to use.
  */
@@ -587,10 +602,6 @@ export async function detectDevServer(folder) {
         : /\bng serve\b/.test(script) ? 4200
           : 3000;
   const port = Number(explicit ?? guess);
-  let running = false;
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) });
-    running = res.status > 0;
-  } catch { running = false; }
-  return { command: name === 'start' ? 'npm start' : `npm run ${name}`, script, port, running };
+  const { running, otherSite } = await probeDevServer(folder, pkg, port);
+  return { command: name === 'start' ? 'npm start' : `npm run ${name}`, script, port, running, ...(otherSite ? { otherSite: true } : {}) };
 }

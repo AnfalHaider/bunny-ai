@@ -2744,7 +2744,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
     // --- static files (the UI ships as plain files; nothing else is exposed) ---
     if (path === '/') {
-      res.writeHead(302, { location: '/src/ui/index.html' }).end();
+      res.writeHead(302, { location: '/src/ui/index.html' + url.search }).end(); // keeps ?s=<chat id> (Q2-22)
       return;
     }
 

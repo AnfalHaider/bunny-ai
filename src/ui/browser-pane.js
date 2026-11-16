@@ -198,7 +198,7 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
     try {
       const { devServer } = await sendJSON('/api/folder/devserver', 'POST', { folder });
       if (!devServer || !$('browser-empty') || $('browser-empty').hidden) return;
-      $('devserver-port').textContent = `port ${devServer.port}${devServer.running ? ' · running' : ''}`;
+      $('devserver-port').textContent = `port ${devServer.port}${devServer.running ? ' · running' : devServer.otherSite ? ' · another site answers there' : ''}`;
       $('devserver-command').textContent = devServer.command;
       const use = $('devserver-use');
       use.textContent = devServer.running ? 'Open it' : 'Run and open';

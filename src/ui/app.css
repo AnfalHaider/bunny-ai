@@ -1279,7 +1279,7 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
 /* ---------- palette & import modal ---------- */
 .palette { padding: 0; }
 .palette-item { display: flex; align-items: baseline; gap: var(--sp-5); width: 100%; padding: var(--sp-4) var(--sp-5); border-radius: var(--r-md); text-align: left; }
-.palette-item:hover, .palette-item.active, .palette-item[aria-selected="true"] { background: var(--hover); }
+.palette-item:hover, .palette-item.active, .palette-item.is-active, .palette-item[aria-selected="true"] { background: var(--hover); }
 .palette-name { font-size: var(--fs-base); }
 .palette-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); }
 .modal-foot.actions { align-items: center; }

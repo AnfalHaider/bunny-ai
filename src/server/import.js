@@ -101,6 +101,13 @@ export function parseMarkdown(text, { title = null } = {}) {
       const next = USER.test(label) ? 'you' : ASSISTANT.test(label) ? 'assistant' : null;
       if (next || line.startsWith('##')) { flush(); heading = next; continue; }
     }
+    // "User: hello" / "Assistant: hi" with the text on the same line (Q2-16).
+    const inline = line.match(/^(you|user|human|assistant|claude|chatgpt|ai|model|bunny):\s+(\S.*)$/i);
+    if (inline) {
+      const who = inline[1].toLowerCase();
+      flush(); heading = USER.test(who) ? 'you' : 'assistant'; buffer.push(inline[2]);
+      continue;
+    }
     buffer.push(line);
   }
   flush();
