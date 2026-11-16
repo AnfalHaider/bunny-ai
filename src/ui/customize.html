@@ -78,6 +78,7 @@
     <div id="cz-list" role="rowgroup"></div>
   </div>
   <p class="hint cz-note" id="cz-note"></p>
+  <p class="hint text-bad" id="cz-error" role="alert" hidden></p>
 
   <p class="note page-links"><a href="./index.html">← Back to chat</a></p>
 </main>
@@ -208,7 +209,7 @@
           id: p.id,
           name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
           status: 'Installed', statusClass: 'text-ok',
-          actions: [act('Uninstall', () => uninstall(p), 'btn btn-danger btn-sm')],
+          actions: [act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
         }));
       }
     }
@@ -228,7 +229,13 @@
         name: item.name, sub: item.desc ?? item.description,
         type: view.kind === 'connectors' ? 'Remote' : view.kind === 'skills' ? 'Skill' : 'Plugin', typeTag: 'No sign-in',
         status: added ? '✓ Added' : '', statusClass: added ? 'text-ok' : '',
-        actions: [added ? null : act('Add', async (e) => { e.currentTarget.textContent = 'Adding…'; await add(); await load(); }, 'btn btn-sm')],
+        actions: [added ? null : act('Add', async (e) => {
+          const button = e.currentTarget;
+          if (button.disabled) return;
+          button.disabled = true; button.textContent = 'Adding…'; showError('');
+          try { await add(); } catch (err) { showError(`${item.name} could not be added: ${err.message}`); }
+          await load();
+        }, 'btn btn-sm')],
       }));
     }
   }
@@ -270,27 +277,26 @@
     return kind === 'plugins' ? data.plugins.map((p) => p.id) : data[kind].map((x) => x.id);
   }
 
-  // ---- plugins: install adds each part and records what was added ----
-  async function install(bundle) {
-    const name = String(bundle?.name ?? '').trim();
-    if (!name) throw new Error('A plugin needs a name');
-    const record = { id: crypto.randomUUID(), name: name.slice(0, 60), description: String(bundle.description ?? '').slice(0, 200), connectors: [], skills: [] };
-    for (const c of bundle.connectors ?? []) {
-      const added = await sendJSON('/api/mcp', 'POST', { name: c.name, url: c.url, enabled: true });
-      if (added?.id) record.connectors.push(added.id);
-    }
-    for (const s of bundle.skills ?? []) {
-      const added = await sendJSON('/api/skills', 'POST', { name: s.name, description: s.description ?? '', instructions: s.instructions, enabled: true });
-      if (added?.id) record.skills.push(added.id);
-    }
-    await sendJSON('/api/settings', 'PUT', { plugins: [...data.plugins, record] });
-  }
+  // ---- plugins: the server adds and removes every part, one plugin at a time, from its own list (W4-10) ----
+  const install = (bundle) => sendJSON('/api/plugins', 'POST', bundle);
 
+  // A failure is shown in words in a line under the list, never swallowed.
+  function showError(text) {
+    const box = $('cz-error');
+    box.textContent = text || '';
+    box.hidden = !text;
+  }
   async function uninstall(plugin) {
-    for (const id of plugin.connectors ?? []) await sendJSON(`/api/mcp/${id}`, 'DELETE');
-    for (const id of plugin.skills ?? []) await sendJSON(`/api/skills/${id}`, 'DELETE');
-    await sendJSON('/api/settings', 'PUT', { plugins: data.plugins.filter((p) => p.id !== plugin.id) });
+    showError('');
+    try {
+      await sendJSON(`/api/plugins/${plugin.id}`, 'DELETE');
+    } catch (err) {
+      showError(`${plugin.name} could not be uninstalled: ${err.message}`);
+      await load();
+      return false;
+    }
     await load();
+    return true;
   }
 
   // ---- controls ----
@@ -327,7 +333,7 @@
     $('cz-bulk-note').textContent = 'Working…';
     try {
       if (kind === 'plugins') {
-        for (const id of ids) { const p = data.plugins.find((x) => x.id === id); if (p) await uninstall(p); }
+        for (const id of ids) { const p = data.plugins.find((x) => x.id === id); if (p && !(await uninstall(p))) break; }
       } else {
         const base = kind === 'connectors' ? '/api/mcp' : '/api/skills';
         for (const id of ids) {
@@ -410,7 +416,7 @@
       document.querySelector('.cz-scope [data-scope="yours"]').click();
       await load();
     } catch (err) {
-      $('cz-note').textContent = `That plugin could not be installed: ${err.message}`;
+      showError(`That plugin could not be installed: ${err.message}`);
     }
   });
 

@@ -226,7 +226,6 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const speech = createSpeech({ dataDir });
   // Tools for Bunny AI itself and the web (search, read, install plugins and skills).
   const saveSettings = async (patch) => { settings = { ...settings, ...patch }; await writeJson(settingsFile, settings); return settings; };
-  const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings });
   const computer = createComputerStore();
   const terminals = createTerminalStore();
   // Programs the model started and left running, and tools it built for itself.
@@ -235,6 +234,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
   // Connectors: remote ones over http, local ones as a program on this computer.
   const localMcp = createLocalMcp();
+  const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id) });
   const mcpListTools = (server) => (server.type === 'local' ? localMcp.listTools(server) : httpListTools(server));
   const mcpCallTool = (server, call) => (server.type === 'local' ? localMcp.callTool(server, call) : httpCallTool(server, call));
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
@@ -992,7 +992,23 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const { record, plugin } = await appTools.installFromGithub((await readBody(req)).url);
         return sendJson(res, 200, { plugin: record, skipped: plugin.skipped });
       } catch (err) {
-        return sendJson(res, 400, { code: 'plugin.failed', message: err.message });
+        return sendJson(res, 400, { code: err.code ?? 'plugin.failed', message: err.message });
+      }
+    }
+    // W4-10: a plugin from the catalog or a file, and uninstall, both done here from the server's own list.
+    if (path === '/api/plugins' && method === 'POST') {
+      try {
+        return sendJson(res, 200, { plugin: await appTools.installBundle(await readBody(req)) });
+      } catch (err) {
+        return sendJson(res, 400, { code: err.code ?? 'plugin.failed', message: err.message });
+      }
+    }
+    const pluginMatch = path.match(/^\/api\/plugins\/([a-f0-9-]{36})$/);
+    if (pluginMatch && method === 'DELETE') {
+      try {
+        return sendJson(res, 200, await appTools.uninstall(pluginMatch[1]));
+      } catch (err) {
+        return sendJson(res, 500, { code: 'plugin.uninstallFailed', message: err.message });
       }
     }
 

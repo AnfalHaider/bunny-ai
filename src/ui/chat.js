@@ -2207,7 +2207,11 @@ function startNewChat({ incognito = false } = {}) {
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
   if (!request || typeof request.text !== 'string') return;
-  if (state.streaming) { $('error').textContent = 'Bunny is busy; try your quick ask again in a moment.'; return; }
+  if (state.streaming) { // keep what was typed: it waits in the message box instead of being lost
+    $('input').value = request.text;
+    $('error').textContent = 'Bunny is busy, so your quick ask is waiting in the message box. Send it when the answer finishes.';
+    return;
+  }
   startNewChat();
   state.projectId = null;
   state.pendingFolder = null;

@@ -76,14 +76,63 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ skills, mcp, getSettings, saveSettings, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+  // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
+  // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
+  let queue = Promise.resolve();
+  const serial = (job) => { const next = queue.then(job, job); queue = next.catch(() => {}); return next; };
+
+  const findInstalled = (name, source) => (getSettings().plugins ?? []).find((p) => (source ? p.source === source : !p.source && p.name === name));
+
+  async function removeParts(record) {
+    for (const id of record.connectors ?? []) { await stopConnector(id).catch(() => {}); await mcp.remove(id); }
+    for (const id of record.skills ?? []) await skills.remove(id);
+  }
+
+  /** Add the parts of a plugin and write down what was added. A plugin that is already installed is refused, never added twice. */
+  function installParts(plugin, source) {
+    return serial(async () => {
+      if (findInstalled(plugin.name, source)) throw Object.assign(new Error(`${plugin.name} is already installed. Uninstall it first to install it again.`), { code: 'plugin.installed' });
+      const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), connectors: [], skills: [] };
+      try {
+        for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: true })).id);
+        for (const c of plugin.connectors ?? []) record.connectors.push((await mcp.add({ ...c, enabled: true })).id);
+      } catch (err) { // half an install is undone, so nothing is left behind
+        await removeParts(record);
+        throw err;
+      }
+      await saveSettings({ plugins: [...(getSettings().plugins ?? []), record] });
+      return record;
+    });
+  }
+
   async function installFromGithub(url) {
     const plugin = await readGithubPlugin(url, { fetchImpl });
-    const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, source: plugin.source, connectors: [], skills: [] };
-    for (const s of plugin.skills) record.skills.push((await skills.add({ ...s, enabled: true })).id);
-    for (const c of plugin.connectors) record.connectors.push((await mcp.add({ ...c, enabled: true })).id);
-    await saveSettings({ plugins: [...(getSettings().plugins ?? []), record] });
+    const record = await installParts(plugin, plugin.source);
     return { record, plugin };
+  }
+
+  /** A plugin from a file or the catalog: { name, description, connectors: [{name, url}], skills: [{name, description, instructions}] }. */
+  async function installBundle(bundle) {
+    const name = String(bundle?.name ?? '').trim();
+    if (!name) throw Object.assign(new Error('A plugin needs a name'), { code: 'plugin.nameRequired' });
+    return installParts({
+      name: name.slice(0, 60),
+      description: String(bundle.description ?? '').slice(0, 200),
+      connectors: (bundle.connectors ?? []).map((c) => ({ name: c.name, url: c.url })),
+      skills: (bundle.skills ?? []).map((s) => ({ name: s.name, description: s.description ?? '', instructions: s.instructions })),
+    }, null);
+  }
+
+  /** Remove a plugin and what it added, from the server's own list. A part that is already gone does not stop the rest. */
+  function uninstall(id) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, removed: 0 };
+      await removeParts(record);
+      await saveSettings({ plugins: (getSettings().plugins ?? []).filter((p) => p.id !== id) });
+      return { ok: true, removed: (record.connectors?.length ?? 0) + (record.skills?.length ?? 0) };
+    });
   }
 
   const run = {
@@ -112,5 +161,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, fetchIm
     has: (name) => Object.hasOwn(run, name),
     run: (name, args) => run[name](args ?? {}),
     installFromGithub,
+    installBundle,
+    uninstall,
   };
 }
