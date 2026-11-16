@@ -1622,7 +1622,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
       // Plan mode is read-only on the SERVER, not only in the list of tools the model is offered: a call for a
       // tool it was never offered (a hallucination, or text in a file it read) is refused here, whatever it is.
-      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build', 'send', 'own'].includes(risk);
+      // "own" tools (ask_user, create_artifact...) are fine in Plan mode; only moving a request to a new chat is refused, by name.
+      const planRefuses = (risk, name) => permissionMode === 'plan' && (['edit', 'run', 'build', 'send'].includes(risk) || name === 'move_to_new_chat');
       const planRefusal = (name) => `Plan mode is read-only, so ${name} was not run. Propose what you would do and let the person switch mode.`;
       // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
       // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
@@ -2053,7 +2054,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : isGoogleTool(name) ? describeGoogleTool(name, parsed) : describeAgentTool(name, parsed);
         // A schedule that may change things runs unwatched later: it asks in Manual and Accept edits, and runs in Auto.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
-        if (planRefuses(risk)) return planRefusal(name);
+        if (planRefuses(risk, name)) return planRefusal(name);
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -2321,7 +2322,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
           const summary = describeBrowserTool(name, parsed);
-          if (planRefuses(BROWSER_TOOL_RISK[name])) {
+          if (planRefuses(BROWSER_TOOL_RISK[name], name)) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return planRefusal(name);
@@ -2358,7 +2359,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // A local connector runs a program on this computer: confirmed in Manual and Accept edits, runs in Auto.
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
-        if (planRefuses(risk)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
+        if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `

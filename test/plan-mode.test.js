@@ -22,13 +22,13 @@ async function callerServer(t) {
     let raw = '';
     req.on('data', (c) => { raw += c; });
     req.on('end', () => {
-      if (req.url.endsWith('/models')) { res.writeHead(200, j); res.end(JSON.stringify({ data: [{ id: 'call:browser_click' }, { id: 'call:browser_type' }, { id: 'call:write_file' }, { id: 'call:no_such_tool' }, { id: 'call:move_to_new_chat' }] })); return; }
+      if (req.url.endsWith('/models')) { res.writeHead(200, j); res.end(JSON.stringify({ data: [{ id: 'call:browser_click' }, { id: 'call:browser_type' }, { id: 'call:write_file' }, { id: 'call:no_such_tool' }, { id: 'call:move_to_new_chat' }, { id: 'call:ask_user' }, { id: 'call:create_artifact' }] })); return; }
       const body = JSON.parse(raw);
       const afterTool = body.messages.some((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       if (afterTool) { res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n'); return; }
       const name = body.model.replace('call:', '');
-      const args = name === 'move_to_new_chat' ? { title: 'Other', message: 'something else' } : name === 'write_file' ? { path: 'x.txt', content: 'x' } : name === 'browser_type' ? { text: 'hi' } : name === 'browser_click' ? { selector: 'a' } : {};
+      const args = name === 'ask_user' ? { question: 'Which one?', choices: [{ label: 'A', reason: 'first', recommended: true }, { label: 'B', reason: 'second' }] } : name === 'create_artifact' ? { title: 'Plan sketch', kind: 'html', content: '<p>plan</p>' } : name === 'move_to_new_chat' ? { title: 'Other', message: 'something else' } : name === 'write_file' ? { path: 'x.txt', content: 'x' } : name === 'browser_type' ? { text: 'hi' } : name === 'browser_click' ? { selector: 'a' } : {};
       res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name, arguments: JSON.stringify(args) } }] }) + 'data: [DONE]\n\n');
     });
   });
@@ -63,6 +63,33 @@ test('Plan mode: write_file is refused and nothing is written', async (t) => {
   const { stream, folder } = await run(t, 'call:write_file');
   assert.ok(!ran(stream), stream);
   assert.equal(existsSync(join(folder, 'x.txt')), false);
+});
+
+test('Plan mode still asks questions: ask_user raises the question card', async (t) => {
+  const { base } = await startApp(t, { fake: false });
+  const { post: p } = await import('./helpers.js');
+  await p(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: await callerServer(t) });
+  const { body: s } = await p(base, '/api/sessions', { title: 'plan', providerId: 'openai', model: 'call:ask_user' });
+  await fetch(`${base}/api/sessions/${s.id}/setting/permissionMode`, { method: 'PATCH', headers: j, body: JSON.stringify({ value: 'plan' }) });
+  const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: 'go', providerId: 'openai', model: 'call:ask_user', workMode: 'chat' }) });
+  let text = '';
+  let answered = false;
+  const decoder = new TextDecoder();
+  for await (const chunk of res.body) {
+    text += decoder.decode(chunk, { stream: true });
+    const asked = /event: question[\r\n]+data: (.*)/.exec(text);
+    if (asked && !answered) { // answer it, so the reply finishes and the folder can be cleaned up
+      answered = true;
+      await fetch(`${base}/api/sessions/${s.id}/question/${JSON.parse(asked[1]).id}`, { method: 'POST', headers: j, body: JSON.stringify({ answer: 'A' }) });
+    }
+  }
+  assert.ok(answered, 'the question card was raised in Plan mode: ' + text.slice(0, 300));
+});
+
+test('Plan mode still makes artifacts: create_artifact runs and the artifact exists', async (t) => {
+  const { stream } = await run(t, 'call:create_artifact', { mode: 'plan', workMode: 'chat', browserControl: false });
+  assert.match(stream, /"status":"done"|artifact/i, stream.slice(0, 300));
+  assert.ok(!/"status":"denied"/.test(stream), stream.slice(0, 300));
 });
 
 test('Plan mode: move_to_new_chat is not offered and a call to it is refused (Q2-S2)', async (t) => {
