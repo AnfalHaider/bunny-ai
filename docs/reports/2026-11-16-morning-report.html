@@ -1,0 +1,194 @@
+<title>Bunny AI Morning Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, a status strip up top, then sections that each answer one question; tables scroll on their own. */
+:root{
+  --bg:#f7f6fb; --surface:#ffffff; --fg:#1d1b24; --muted:#5f5b6e; --line:#e3e0ec;
+  --accent:#6a4fd8; --accent-soft:#ece7fd;
+  --good:#1f7a4d; --good-soft:#e2f4ea; --warn:#9a6400; --warn-soft:#fbf0d9; --bad:#b4302a; --bad-soft:#fbe5e3;
+  --display:"Space Grotesk","Segoe UI",system-ui,sans-serif; --text:"Inter","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15131c; --surface:#1d1a27; --fg:#ece9f5; --muted:#a8a2bd; --line:#2f2b3d; --accent:#b3a1ff; --accent-soft:#2a2340;
+  --good:#5fd29a; --good-soft:#163024; --warn:#f0c062; --warn-soft:#33280f; --bad:#ff8a80; --bad-soft:#3a1a18; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15131c; --surface:#1d1a27; --fg:#ece9f5; --muted:#a8a2bd; --line:#2f2b3d; --accent:#b3a1ff; --accent-soft:#2a2340;
+  --good:#5fd29a; --good-soft:#163024; --warn:#f0c062; --warn-soft:#33280f; --bad:#ff8a80; --bad-soft:#3a1a18; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--text);margin:0}
+.wrap{max-width:980px;margin:0 auto;padding-block:36px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:40px}
+h1,h2,h3{font-family:var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1{font-size:clamp(28px,4.4vw,40px);line-height:1.1}
+h2{font-size:22px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h3{font-size:16px}
+p{margin:0;max-width:72ch}
+section{display:grid;gap:14px;min-width:0}
+.eyebrow{font:600 12px var(--text);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);font-size:16px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px;min-width:0}
+.stat b{font:600 22px var(--display);font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+.pill{display:inline-block;font:600 12px var(--text);padding:2px 9px;border-radius:999px;white-space:nowrap}
+.ok{background:var(--good-soft);color:var(--good)} .warn{background:var(--warn-soft);color:var(--warn)} .bad{background:var(--bad-soft);color:var(--bad)} .acc{background:var(--accent-soft);color:var(--accent)}
+ul,ol{margin:0;padding-left:20px;display:grid;gap:6px;max-width:80ch}
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font:600 12px var(--text);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap}
+code{font:13px var(--mono);background:var(--accent-soft);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.decide{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:6px}
+.decide .q{font-weight:600}
+.muted{color:var(--muted);font-size:13px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:8px;align-content:start;min-width:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="wrap">
+
+<header style="display:grid;gap:10px">
+  <div class="eyebrow">Chief of Staff · overnight run · 16 November 2026</div>
+  <h1>Bunny AI: what shipped, what is left, and how it compares</h1>
+  <p class="lede">You asked the session family to fix every known issue, test everything, push to main and update the release, then report the remaining missing features, bugs and gaps against Claude and Cursor. This is that report.</p>
+</header>
+
+<section>
+  <h2>Where things stand</h2>
+  <div class="strip">
+    <div class="stat"><b>0.1.5</b><span>On <code>main</code> (73d3bef). GitHub Release: built, waiting for your "release v0.1.5" in Release Ops</span></div>
+    <div class="stat"><b>5 / 5</b><span>Sign-offs on 2892fa4: QA, Tech Lead, Librarian, Security, Chief of Staff</span></div>
+    <div class="stat"><b>7 / 7</b><span>Gate on the release commit, run alone</span></div>
+    <div class="stat"><b>518 · 135</b><span>Unit tests (510 pass, 8 todo) · browser tests, all pass</span></div>
+    <div class="stat"><b>32</b><span>Audit defects found (Q2-1 to Q2-32); 25 fixed in 0.1.5</span></div>
+  </div>
+  <p>Nothing was pushed past a hook. <code>main</code> moved through the pre-push check with a written release record that quotes your words and the pasted gate output. Every piece was reviewed by at least two other sessions; two late regressions were caught by review and fixed before release.</p>
+</section>
+
+<section>
+  <h2>What shipped in 0.1.5</h2>
+  <div class="grid2">
+    <div class="card"><h3>The chat, like Claude's</h3><ul>
+      <li>Tool steps grouped into one line with a summary; open a group for each step.</li>
+      <li>A failing command shows a red <b>Failed</b> label with the command and output (your "exit code 1 … done" screenshot).</li>
+      <li>Narration between steps; the Stopped report appears at once.</li>
+      <li>The purple hopping bunny, from the accent colour.</li></ul></div>
+    <div class="card"><h3>Model switching and offline</h3><ul>
+      <li>A stuck model is dropped after about 30 s (was 120 s). Measured: picked model 33 s, Auto 64 s, all stalled 93 s (was 363 s).</li>
+      <li>One quiet line says who answered and why; no stacked red errors.</li>
+      <li>Offline only when the browser and a network check agree: your message waits and sends once on reconnect; a local model answers meanwhile.</li></ul></div>
+    <div class="card"><h3>Changes, Files, Session</h3><ul>
+      <li>Changes: real line counts, diffs and Undo to here, in git and plain folders.</li>
+      <li>Files: read-only tree and viewer, Bunny's edits marked.</li>
+      <li>Session: folder, branch, model and Auto's reason, mode, effort, context, tokens, connectors, running programs.</li>
+      <li>The dead Plan pane is gone (Tasks shows the plan).</li></ul></div>
+    <div class="card"><h3>Safety</h3><ul>
+      <li>The local server answers only Bunny's own windows (Host, Origin, per-launch token); the Google sign-in return is the one exception, with a one-time code.</li>
+      <li>Folders are chosen with the desktop picker only; drive roots and Bunny's data folder are refused.</li>
+      <li>Plan mode is read-only on the server, and can still ask and make artifacts.</li>
+      <li>Your rule: in Auto, allowed actions run without asking; Manual and Accept edits ask; email always asks.</li></ul></div>
+  </div>
+  <p class="muted">Also fixed: trailing <code>&amp;</code> in commands, the browser opening before a server was up, a mode choice that reset, a stopped reply that vanished, Rename in the desktop app, a stale page after a restart, phone Settings and top-bar targets, the false "restarted" banner, a cached-page service-worker bug.</p>
+</section>
+
+<section>
+  <h2>Decisions I made for you (overturn any)</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Area</th><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Auto permissions</td><td>In Auto, build actions (new tool, a changing schedule, local connector, computer-use clicks) run unasked; email send always asks</td><td>Your words: "when allowed by me, everything should be allowed". Email keeps asking because a sent message cannot be taken back.</td></tr>
+      <tr><td>Project files (T-4)</td><td>Bunny asks once per folder before using someone else's <code>AGENTS.md</code></td><td>A cloned repo's instructions are a stranger's text Bunny would follow</td></tr>
+      <tr><td>Chat design</td><td>One group per run of steps; failed steps stay collapsed unless the reply ended on one</td><td>Design's recommendation; long replies stay readable</td></tr>
+      <tr><td>Changes pane</td><td>Non-git folders use Bunny's saved pre-edit copies; Files is read-only</td><td>Data already kept for Undo; editing is a separate decision</td></tr>
+      <tr><td>Plan pane</td><td>Removed</td><td>Nothing could open it; Tasks already shows the plan</td></tr>
+      <tr><td>Release scope</td><td>Frozen at 07:33 your time; T-4 and the minor defects moved to 0.1.6</td><td>A solid release beats a half-done one</td></tr>
+      <tr><td>Guard</td><td>Old hook-skip patterns apply always, on top of the new parser</td><td>Closes a quoting bypass; costs some false blocks (commit messages that mention the flag)</td></tr>
+      <tr><td>Rules</td><td>"push to main" in my chat is your standing order; no dev branch; the Chief of Staff may push main with a release record and full sign-offs</td><td>Your words; the security review flags it as self-approval risk, kept because you asked</td></tr>
+    </tbody></table></div>
+</section>
+
+<section>
+  <h2>Needs your decision</h2>
+  <div class="decide"><div class="q">1. Auto mode middle way?</div><p>Security's note: text that injects instructions could, in Auto, now create a tool or schedule or click on your screen without asking. Middle way: in Auto, still ask only for the three that outlive the chat (a new tool, a schedule that changes things, a local connector). <span class="pill acc">Recommended: yes</span></p></div>
+  <div class="decide"><div class="q">2. Go for the 0.1.6 guard round (HIGH)?</div><p>Tech Lead's spec covers <code>gh release</code> / <code>pr merge</code> / <code>api</code> writes not guarded (G1-1, high), sign-off records not checked at commit (G1-2), git aliases and config includes, path canonicalisation, and the false blocks above. <span class="pill acc">Recommended: yes</span></p></div>
+  <div class="decide"><div class="q">3. Fix your Bootstrap-environment plugin upstream?</div><p>The same guard gaps exist in the plugin (AnfalHaider/Bootstrap-environment). Notes with file and line are in <code>docs/plans/upstream-bootstrap-notes.md</code>. Nothing was written to that repo.</p></div>
+  <div class="decide"><div class="q">4. The offline check contacts three outside servers</div><p>Google, Cloudflare and Apple connectivity hosts, with no data, cookies or identifiers (Security PASS). It is named in the help text. Keep it, or make it optional?</p></div>
+</section>
+
+<section>
+  <h2>Bugs and gaps still open</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Id</th><th>What</th><th>Severity</th></tr></thead>
+    <tbody>
+      <tr><td>Untested</td><td>The installed desktop app end to end: native folder picker, tray, a real update download, a real Google sign-in, a real provider key. Tested on invented profiles and the browser build; silent install over your copy is blocked by policy.</td><td><span class="pill warn">Check first</span></td></tr>
+      <tr><td>G1-1</td><td>Guard does not cover <code>gh release</code>, <code>gh pr merge</code>, <code>gh api</code> writes</td><td><span class="pill bad">High</span></td></tr>
+      <tr><td>S-2</td><td>Updater passes when a release has no <code>latest.yml</code>; checksum comes from the same release; installer unsigned</td><td><span class="pill warn">Medium</span></td></tr>
+      <tr><td>S-3 · S-4</td><td>Secrets protected from other users, not other programs; a 300 MB import is held fully in memory</td><td><span class="pill warn">Medium</span></td></tr>
+      <tr><td>G1-2..5</td><td>Records not authenticated at commit; hooks folder removable; git alias and plumbing skips</td><td><span class="pill warn">Medium</span></td></tr>
+      <tr><td>T-4</td><td>Bunny still does not read <code>AGENTS.md</code> / <code>CLAUDE.md</code> / <code>.cursor/rules</code> or offer to create project files (designed and approved, not built)</td><td><span class="pill warn">Medium</span></td></tr>
+      <tr><td>T-3 rest</td><td>Continuing a reply that failed part-way; a provider cool-down across messages; Auto starting from the last model that answered</td><td><span class="pill warn">Medium</span></td></tr>
+      <tr><td>Tests</td><td>All sessions' browser tests share port 5199, so runs at the same time collide; give each worktree its own port</td><td><span class="pill warn">Medium</span></td></tr>
+      <tr><td>Q2-14 · 15</td><td>Command palette: no keyboard navigation; its Settings command leaves the chat</td><td><span class="pill ok">Low</span></td></tr>
+      <tr><td>Q2-16 · 18</td><td>One-line "User: / Assistant:" imports rejected; New terminal does nothing once a shell exists</td><td><span class="pill ok">Low</span></td></tr>
+      <tr><td>Q2-20..22</td><td>Seven switches without accessible names; dev-server card says running for any site on the port; <code>/?s=</code> loses the chat id</td><td><span class="pill ok">Low</span></td></tr>
+      <tr><td>Polish</td><td>Live spinner on a running group; elapsed time and line counts on groups; Undo on the Stopped report; line numbers in Changes diffs; no message when a folder pick is refused</td><td><span class="pill ok">Low</span></td></tr>
+      <tr><td>S-5..S-7</td><td>Model text can become a new chat or a memory without a confirm; secret-store script hardening; updater temp folder</td><td><span class="pill ok">Low</span></td></tr>
+      <tr><td>Unchecked</td><td>Colour contrast ratios (no session measured them)</td><td><span class="pill ok">Unknown</span></td></tr>
+    </tbody></table></div>
+</section>
+
+<section>
+  <h2>Bunny compared with Claude and Cursor</h2>
+  <p class="muted">From the Researcher's inventory (docs/plans/tool-inventory.md), updated with tonight's changes. Claude means Claude Code and Claude desktop.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Capability</th><th>Claude</th><th>Cursor</th><th>Bunny today</th><th>Priority</th></tr></thead>
+    <tbody>
+      <tr><td>Regex search with filters</td><td>Grep</td><td>Instant Grep</td><td><span class="pill warn">Plain text only</span></td><td>Essential</td></tr>
+      <tr><td>Find files by pattern</td><td>Glob</td><td>Yes</td><td><span class="pill warn">Depth listing only</span></td><td>Essential</td></tr>
+      <tr><td>Reads AGENTS.md / CLAUDE.md / rules</td><td>Yes</td><td>Yes</td><td><span class="pill bad">No (T-4 designed)</span></td><td>Essential</td></tr>
+      <tr><td>Permission rules by command and path</td><td>Yes</td><td>Allowlists, sandbox</td><td><span class="pill warn">Modes only</span></td><td>Essential</td></tr>
+      <tr><td>Undo that covers shell commands; rewind the chat</td><td>Checkpoints, /rewind</td><td>Checkpoints</td><td><span class="pill warn">File edits only</span></td><td>Essential</td></tr>
+      <tr><td>Worktree isolation for parallel code chats</td><td>Yes</td><td>Yes</td><td><span class="pill bad">No</span></td><td>Essential</td></tr>
+      <tr><td>See what changed</td><td>Diff views</td><td>Source control</td><td><span class="pill ok">Changes pane (new)</span></td><td>Done</td></tr>
+      <tr><td>Grouped, readable tool transcript</td><td>Yes</td><td>Yes</td><td><span class="pill ok">New in 0.1.5</span></td><td>Done</td></tr>
+      <tr><td>Model fallback, offline handling</td><td>Retries</td><td>Model picker</td><td><span class="pill ok">New in 0.1.5</span></td><td>Done</td></tr>
+      <tr><td>Multi-edit / replace all</td><td>Edit</td><td>Apply edits</td><td><span class="pill warn">One match per call</span></td><td>Important</td></tr>
+      <tr><td>Background output pushed to the agent</td><td>Monitor</td><td>Terminal monitor</td><td><span class="pill warn">Must poll</span></td><td>Important</td></tr>
+      <tr><td>Hooks that can block a tool call</td><td>Yes</td><td>Yes</td><td><span class="pill warn">3 events, no blocking</span></td><td>Important</td></tr>
+      <tr><td>MCP connectors needing sign-in</td><td>Yes</td><td>Yes</td><td><span class="pill warn">Not yet</span></td><td>Important</td></tr>
+      <tr><td>Errors and diagnostics after edits (LSP)</td><td>LSP</td><td>Lints</td><td><span class="pill bad">No</span></td><td>Important</td></tr>
+      <tr><td>Browser console and network</td><td>Chrome tools</td><td>Browser tool</td><td><span class="pill warn">Page only</span></td><td>Important</td></tr>
+      <tr><td>Command sandbox</td><td>Yes</td><td>Yes</td><td><span class="pill bad">No</span></td><td>Important</td></tr>
+      <tr><td>Subagents, task list, ask the user</td><td>Yes</td><td>Yes</td><td><span class="pill ok">Have it</span></td><td>Done</td></tr>
+      <tr><td>Artifacts, skills, plugins, memory</td><td>Yes</td><td>Partly</td><td><span class="pill ok">Have it</span></td><td>Done</td></tr>
+      <tr><td>Gmail, Calendar, Drive, GitHub tools</td><td>Via connectors</td><td>No built-in</td><td><span class="pill ok">Ahead</span></td><td>Done</td></tr>
+      <tr><td>Code review bot, cloud agents, tab completion</td><td>Yes</td><td>Yes</td><td><span class="pill acc">Not a fit now</span></td><td>Nice</td></tr>
+    </tbody></table></div>
+</section>
+
+<section>
+  <h2>Recommended order for 0.1.6</h2>
+  <ol>
+    <li>Install 0.1.5 and click through the desktop-only paths (folder picker, tray, update, a real provider): the one thing nobody could test overnight.</li>
+    <li>Your two decisions above (Auto middle way, guard round).</li>
+    <li>T-4: read project instructions and set up project files.</li>
+    <li>Regex search and glob; permission rules by command; undo that covers commands.</li>
+    <li>Per-worktree test ports, the rest of T-3, the minor defects, security S-2 to S-7.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>How the night went</h2>
+  <ul>
+    <li>Nine role sessions plus the Chief of Staff; Builder wrote the code, and QA, Tech Lead, Security and Design reviewed every piece.</li>
+    <li>Two regressions were caught by review before release: the folder lock not switched on in the desktop app, and Plan mode losing questions.</li>
+    <li>What cost time: the auto-mode safety check refused some sessions' commits (the Librarian's were run by the Chief of Staff on your instruction); landing the new guard broke commits in stale worktrees until each caught up; browser tests collided on one port; two bad merge commits from a line-ending slip (lesson L006).</li>
+    <li>Always-loaded instructions grew from about 1,350 to about 2,900 tokens per session, because your decisions were recorded in <code>AGENTS.md</code>.</li>
+  </ul>
+</section>
+
+</div>
