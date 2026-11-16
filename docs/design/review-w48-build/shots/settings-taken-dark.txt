@@ -1,0 +1,12 @@
+Desktop app
+Quick ask
+Press Ctrl+Alt+Space anywhere to ask Bunny in a small bar. Needs Bunny to keep running in the tray.
+Another app is using Ctrl+Alt+Space. Choose other keys.
+Change
+on
+Start when I sign in
+Open Bunny AI when you sign in to Windows.
+off
+Keep running in the tray
+Closing the window keeps Bunny AI in the system tray, so schedules keep running.
+on
