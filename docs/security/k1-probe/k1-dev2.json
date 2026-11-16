@@ -1,0 +1,4 @@
+[
+["UNC loopback / admin share spellings of a protected file (Write tool)","builder","Write","REFUSED",["UNCR/.bootstrap/policy.json","BSBSlocalhostBSC$BSUsersBSanfalBSAppDataBSLocalBSTempBS__ROOTNAME__BS.bootstrapBSpolicy.json","BSBS127.0.0.1BSC$BSUsersBSanfalBSAppDataBSLocalBSTempBS__ROOTNAME__BS.bootstrapBSpolicy.json","BSBS?BSUNCBSlocalhostBSC$BSUsersBSanfalBSAppDataBSLocalBSTempBS__ROOTNAME__BS.bootstrapBSpolicy.json"]],
+["same, Bash redirect","builder","Bash","REFUSED",["echo x > UNCR/.bootstrap/policy.json","Set-Content UNCR/AGENTS.md x"]]
+]
