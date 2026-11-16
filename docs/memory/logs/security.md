@@ -2,6 +2,12 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - T-3 offline network probe (092cc6d)
+
+**Verdict (log only): PASS.** Three fixed https hosts (Google, Cloudflare, Apple), bare GET, no cookies or custom headers, redirects not followed, nothing of the person sent; asked only when the browser already says offline. Behind the S-1 guard (403 without token, cross-site or foreign origin, checked live on an invented profile). No request input reaches the host list, so no arbitrary fetch. Notes: cancel the unread response body; name the hosts in the help text. Report `docs/security/2026-11-16-t3-network-probe-review.md`. The probe was not called live.
+
+**Lesson:** for a "check connectivity" feature, the review is what leaves the machine and who can trigger it; both are answered by reading one constant and one route.
+
 ## 2026-11-16 - Q2-1 Plan mode and Q2-23 token re-read (4405dc0)
 
 **Verdict (log only):** Q2-23 PASS. Q2-1 FAIL as a read-only guarantee, two bypasses: browser_click and browser_type run in Plan mode (the browser branch of runTool, app.js:2208, has no planRefuses), and move_to_new_chat opens and sends a new chat outside Plan mode. Helpers, scheduled tasks, custom tools and connector tools are covered. Report `docs/security/2026-11-16-q2-1-and-q2-23-review.md`; board row Q2-S1..S3. Read from the code, not exploited.
