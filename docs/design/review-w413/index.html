@@ -1,0 +1,296 @@
+<title>Bunny Model Picker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a short brief, then the live picker over a mock chat composer beside a details panel, then today's picker for comparison. Bunny's own app tokens (src/ui/app.css). */
+:root {
+  --bg:#faf9f6; --bg-side:#f3f1ec; --surface:#ffffff; --hover:#efece6; --line:#e6e2da; --line-strong:#d6d1c6;
+  --text:#1f2023; --dim:#62666f; --faint:#8a8e96;
+  --accent:#6a4fd8; --accent-soft:rgba(106,79,216,.08); --accent-ring:rgba(106,79,216,.35);
+  --ok:#1f9d6a; --ok-soft:rgba(31,157,106,.12); --warn:#c07a12; --warn-soft:rgba(192,122,18,.10); --bad:#cf3f55;
+  --shadow-pop:0 1px 2px rgba(0,0,0,.04),0 8px 28px rgba(0,0,0,.08);
+  --sans:"Inter",ui-sans-serif,system-ui,"Segoe UI",sans-serif; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#141518; --bg-side:#1a1b1f; --surface:#1f2025; --hover:#26272d; --line:#2c2d33; --line-strong:#3a3b42;
+  --text:#ececee; --dim:#a0a2aa; --faint:#6e717a; --accent:#b3a1ff; --accent-soft:rgba(179,161,255,.10); --accent-ring:rgba(179,161,255,.40);
+  --ok:#53cf9b; --ok-soft:rgba(83,207,155,.12); --warn:#e9ad52; --warn-soft:rgba(233,173,82,.12); --bad:#f07a8c; --shadow-pop:0 8px 28px rgba(0,0,0,.45); color-scheme:dark } }
+:root[data-theme="dark"] {
+  --bg:#141518; --bg-side:#1a1b1f; --surface:#1f2025; --hover:#26272d; --line:#2c2d33; --line-strong:#3a3b42;
+  --text:#ececee; --dim:#a0a2aa; --faint:#6e717a; --accent:#b3a1ff; --accent-soft:rgba(179,161,255,.10); --accent-ring:rgba(179,161,255,.40);
+  --ok:#53cf9b; --ok-soft:rgba(83,207,155,.12); --warn:#e9ad52; --warn-soft:rgba(233,173,82,.12); --bad:#f07a8c; --shadow-pop:0 8px 28px rgba(0,0,0,.45); color-scheme:dark }
+body { background:var(--bg); color:var(--text); font:14px/1.5 var(--sans); }
+.wrap { max-width:1080px; margin:0 auto; padding-block:28px 56px; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); display:grid; gap:28px; }
+h1 { font-size:22px; font-weight:600; margin:0; text-wrap:balance; }
+h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; }
+p { margin:0; max-width:68ch; color:var(--dim); }
+code { font-family:var(--mono); font-size:12px; }
+.brief { display:grid; gap:8px; }
+.grid { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:28px; align-items:start; }
+@media (max-width:860px){ .grid { grid-template-columns:minmax(0,1fr); } }
+button { font:inherit; color:inherit; }
+:focus-visible { outline:2px solid var(--accent-ring); outline-offset:2px; }
+.stage { background:var(--bg-side); border:1px solid var(--line); border-radius:14px; padding:18px; display:grid; gap:12px; min-width:0; }
+.msg { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13px; }
+.note { font-size:12.5px; color:var(--warn); background:var(--warn-soft); border-radius:8px; padding:6px 10px; display:flex; gap:8px; align-items:center; }
+.composer { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; display:grid; gap:10px; }
+.composer .ph { color:var(--faint); }
+.composer-row { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.trigger { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px; cursor:pointer; font-size:12.5px; max-width:100%; min-width:0; }
+.trigger b { font-weight:600; color:var(--accent); white-space:nowrap; }
+.trigger .via { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.kbd { font-family:var(--mono); font-size:11px; color:var(--faint); border:1px solid var(--line); border-radius:4px; padding:0 4px; }
+.picker { background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow-pop); display:grid; grid-template-rows:auto auto minmax(0,1fr); max-height:560px; min-width:0; overflow:hidden; }
+.search { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
+.search input { flex:1; min-width:0; border:0; background:transparent; font:inherit; color:var(--text); outline:none; }
+.iconbtn { border:0; background:transparent; cursor:pointer; color:var(--dim); border-radius:6px; padding:3px 6px; font-size:12px; }
+.iconbtn:hover, .iconbtn[aria-pressed="true"] { background:var(--hover); color:var(--text); }
+.iconbtn:disabled { opacity:.35; cursor:default; }
+.filters { display:grid; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); background:var(--bg); }
+.chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.chips .lbl { font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.06em; width:68px; }
+.chip { border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:2px 9px; font-size:12px; cursor:pointer; color:var(--dim); }
+.chip[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+.sortrow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--dim); }
+.sortrow select { font:inherit; background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:2px 6px; }
+.list { overflow:auto; padding:6px; }
+.sec { font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.06em; padding:10px 8px 4px; }
+.row { display:grid; grid-template-columns:16px minmax(0,1fr) auto; gap:8px; align-items:center; padding:7px 8px; border-radius:8px; cursor:pointer; }
+.row:hover, .row.open { background:var(--hover); }
+.row .tick { color:var(--accent); font-size:12px; }
+.row .name { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.row .sub { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
+.ptag { font-size:11px; border-radius:4px; padding:0 5px; background:var(--bg-side); color:var(--dim); border:1px solid var(--line); }
+.ptag.first { color:var(--text); border-color:var(--line-strong); }
+.ptag.out { text-decoration:line-through; color:var(--faint); }
+.free { font-size:10.5px; color:var(--ok); background:var(--ok-soft); border-radius:4px; padding:0 4px; margin-left:3px; }
+.meta { font-size:11.5px; color:var(--faint); text-align:right; white-space:nowrap; }
+.meta .more { color:var(--dim); margin-left:6px; }
+.auto { background:var(--accent-soft); }
+.auto .name { color:var(--accent); }
+.empty { padding:24px 10px; color:var(--faint); text-align:center; font-size:13px; }
+.details { border:1px solid var(--line); border-radius:12px; background:var(--surface); padding:14px; display:grid; gap:14px; min-width:0; }
+.details h3 { margin:0; font-size:15px; font-weight:600; }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.seg button { border:0; background:transparent; padding:4px 10px; font-size:12.5px; cursor:pointer; color:var(--dim); }
+.seg button[aria-pressed="true"] { background:var(--accent-soft); color:var(--accent); }
+.porder { display:grid; gap:4px; margin:0; padding:0; list-style:none; }
+.porder li { display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:8px; padding:5px 8px; font-size:13px; }
+.porder li .n { font-family:var(--mono); color:var(--faint); font-size:11px; width:14px; }
+.porder li .p { flex:1; min-width:0; }
+.st { font-size:11px; } .st.ok { color:var(--ok); } .st.out { color:var(--bad); }
+.k { font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
+.info { font-size:12.5px; color:var(--dim); }
+.demo { display:flex; gap:8px; flex-wrap:wrap; }
+.btn { border:1px solid var(--line-strong); background:var(--surface); border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12.5px; }
+.btn:hover { background:var(--hover); }
+.today { display:grid; grid-template-columns:minmax(0,320px) minmax(0,1fr); gap:20px; align-items:start; }
+@media (max-width:700px){ .today { grid-template-columns:minmax(0,1fr); } }
+.oldpick { background:var(--surface); border:1px solid var(--line); border-radius:10px; font-family:var(--mono); font-size:12px; padding:6px; display:grid; gap:2px; min-width:0; }
+.oldpick div { padding:5px 6px; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.oldpick .s { color:var(--dim); font-size:11px; }
+.oldpick .h { background:var(--hover); }
+.oldpick .dup { outline:1px dashed var(--bad); outline-offset:-1px; }
+ul.points { margin:0; padding-left:18px; color:var(--dim); display:grid; gap:6px; max-width:68ch; }
+ul.points b { color:var(--text); font-weight:600; }
+</style>
+
+<div class="wrap">
+  <section class="brief">
+    <h1>A better model picker</h1>
+    <p>Suggested drawing for W4-13. One row per model, listing every provider that serves it. Filters for provider and what the model can do. When a provider runs out, Bunny switches to the same model on your next provider and says so in one line. Try it: pick a model, reorder its providers, or press the "hits its limit" button.</p>
+  </section>
+
+  <div class="grid">
+    <section class="stage" aria-label="Proposed picker over the chat composer">
+      <div class="msg">Refactor the settings loader so it reads the file once.</div>
+      <div class="note" id="note" hidden>↪ <span id="noteText"></span></div>
+      <div class="picker" id="picker" role="dialog" aria-label="Choose model">
+        <div class="search">
+          <span aria-hidden="true" style="color:var(--faint)">⌕</span>
+          <input id="q" placeholder="Search models" autocomplete="off" aria-label="Search models">
+          <button class="iconbtn" id="filtBtn" aria-pressed="true">Filters</button>
+        </div>
+        <div class="filters" id="filters">
+          <div class="chips" id="provChips"><span class="lbl">Provider</span></div>
+          <div class="chips" id="capChips"><span class="lbl">Can do</span></div>
+          <div class="sortrow">
+            <label><input type="checkbox" id="freeOnly"> Free only</label>
+            <label>Sort <select id="sort"><option value="rec">Recommended</option><option value="name">Name</option><option value="ctx">Context size</option></select></label>
+            <button class="iconbtn" id="clear">Clear filters</button>
+          </div>
+        </div>
+        <div class="list" id="list" role="listbox" aria-label="Models"></div>
+      </div>
+      <div class="composer">
+        <div class="ph">Reply to Bunny…</div>
+        <div class="composer-row">
+          <button class="trigger" id="trigger" aria-expanded="true"><b id="trigName">Auto</b><span class="via" id="trigVia"></span> ▾</button>
+          <span class="kbd">Ctrl '</span>
+        </div>
+      </div>
+    </section>
+    <aside class="details" id="details" aria-live="polite"></aside>
+  </div>
+
+  <section>
+    <h2>Today, for comparison</h2>
+    <div class="today">
+      <div class="oldpick" aria-label="Today's picker, redrawn">
+        <div class="h">Auto</div>
+        <div class="s">Best for Code</div>
+        <div class="dup">deepseek-ai/deepseek-v4.1-flash</div>
+        <div>mistralai/mistral-large-4-1t-a52b</div>
+        <div class="dup">DeepSeek V4.1 Flash Free</div>
+        <div class="dup">GLM-5.3-Flash Free</div>
+        <div class="dup">z-ai/glm-5.3-flash</div>
+        <div class="s">All models · Nvidia</div>
+        <div>bigcode/starcoder2-15b</div>
+        <div class="dup">deepseek-ai/deepseek-v4.1-flash</div>
+        <div>google/gemma-3-12b-it</div>
+      </div>
+      <ul class="points">
+        <li>The rows outlined in red are two models, listed five times across providers.</li>
+        <li>Raw ids such as <code>mistralai/mistral-large-4-1t-a52b</code> instead of names, and the descriptions are cut off.</li>
+        <li>No filters: one long list grouped by provider.</li>
+        <li>Using the same model from another provider means hunting for its other row.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <ul class="points">
+      <li><b>Same model, one row.</b> Ids that clearly match are merged, ignoring the company prefix, "-free" and capital letters, plus a short list of known aliases. Two ids that only might be the same model stay as separate rows.</li>
+      <li><b>Provider order per model.</b> Bunny uses the first provider; the others are the backup line, in your order.</li>
+      <li><b>Automatic switch</b> (your decision: "Yes, with a note"). A limit, an error or no answer within your wait time (W4-9) moves the reply to the same model on the next provider, then to another model, inside the existing "Try another model when yours is busy" setting. One quiet line says who answered and why. A provider that ran out is crossed out until its limit resets.</li>
+      <li><b>Sections.</b> Auto, Favourites, Recent, then all models. Filters stay as you left them.</li>
+      <li><b>Keyboard.</b> Ctrl+' opens, typing searches, arrows move, Enter picks, Ctrl+F marks a favourite.</li>
+      <li><b>Not covered here.</b> Colour contrast is not checked. Names and abilities come from each provider's model list, so a provider that sends poor data can still show a poor row. The models and providers shown are examples.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+const PROV = ['Nvidia','OpenCode','Google','OpenRouter','ModelScope'];
+const CAPS = ['Code','Vision','Tools','Reasoning','Image','Speech'];
+const M = [
+  { id:'deepseek-v4.1-flash', name:'DeepSeek V4.1 Flash', ctx:1048576, caps:['Code','Tools','Speech'], rec:1, prov:[{p:'Nvidia'},{p:'OpenCode',free:1},{p:'OpenRouter'}] },
+  { id:'glm-5.3-flash', name:'GLM-5.3-Flash', ctx:1048576, caps:['Code','Vision','Tools','Reasoning'], rec:2, prov:[{p:'Nvidia'},{p:'OpenCode',free:1}] },
+  { id:'nemotron-3.5-super-vl', name:'Nemotron 3.5 Super VL', ctx:262144, caps:['Vision','Tools','Reasoning'], rec:3, prov:[{p:'Nvidia'},{p:'OpenCode',free:1}] },
+  { id:'mistral-large-4', name:'Mistral Large 4', ctx:262144, caps:['Code','Tools'], rec:4, prov:[{p:'Nvidia'},{p:'OpenRouter'}] },
+  { id:'gemini-flash-lite', name:'Gemini Flash-Lite', ctx:1048576, caps:['Vision','Tools','Speech'], rec:5, prov:[{p:'Google',free:1},{p:'OpenRouter'}] },
+  { id:'qwen-3.5-coder', name:'Qwen 3.5 Coder', ctx:262144, caps:['Code','Tools'], rec:6, prov:[{p:'ModelScope',free:1},{p:'OpenRouter'}] },
+  { id:'beam', name:'Beam', ctx:131072, caps:['Code','Tools'], rec:7, prov:[{p:'OpenCode',free:1}] },
+  { id:'flux-2', name:'FLUX.2', ctx:0, caps:['Image'], rec:8, prov:[{p:'Nvidia'},{p:'OpenRouter'}] },
+  { id:'gemma-3-12b', name:'Gemma 3 12B', ctx:131072, caps:['Vision'], rec:9, prov:[{p:'Nvidia'},{p:'Google',free:1}] },
+  { id:'starcoder2-15b', name:'StarCoder2 15B', ctx:16384, caps:['Code'], rec:10, prov:[{p:'Nvidia'}] },
+];
+const st = { q:'', prov:new Set(), caps:new Set(), free:false, sort:'rec', chosen:'auto', open:'deepseek-v4.1-flash', fav:new Set(['glm-5.3-flash']), recent:['deepseek-v4.1-flash','nemotron-3.5-super-vl','gemini-flash-lite'], think:{}, out:new Set() };
+const $ = (id) => document.getElementById(id);
+const byId = (id) => M.find((m) => m.id === id);
+const fmtCtx = (n) => n ? (n >= 1048576 ? (n/1048576)+'M' : Math.round(n/1024)+'K') : 'n/a';
+const live = (m) => m.prov.filter((x) => !st.out.has(m.id+'|'+x.p));
+function el(t, a, ...kids) {
+  const e = document.createElement(t);
+  for (const [n, v] of Object.entries(a || {})) {
+    if (v == null || v === false) continue;
+    if (n === 'class') e.className = v;
+    else if (n.startsWith('on')) e.addEventListener(n.slice(2), v);
+    else if (n === 'disabled') e.disabled = true;
+    else e.setAttribute(n, v);
+  }
+  for (const c of kids.flat()) if (c != null) e.append(c);
+  return e;
+}
+function chipRow(host, items, set) {
+  for (const it of items) {
+    const b = el('button', { class:'chip', 'aria-pressed':'false', onclick:() => { set.has(it) ? set.delete(it) : set.add(it); b.setAttribute('aria-pressed', String(set.has(it))); paint(); } }, it);
+    host.append(b);
+  }
+}
+chipRow($('provChips'), PROV, st.prov); chipRow($('capChips'), CAPS, st.caps);
+function matches(m) {
+  const q = st.q.toLowerCase();
+  if (q && !(m.name.toLowerCase().includes(q) || m.id.includes(q) || m.prov.some((x) => x.p.toLowerCase().includes(q)))) return false;
+  if (st.prov.size && !m.prov.some((x) => st.prov.has(x.p))) return false;
+  for (const c of st.caps) if (!m.caps.includes(c)) return false;
+  if (st.free && !m.prov.some((x) => x.free)) return false;
+  return true;
+}
+function pick(id) { st.chosen = id; if (id !== 'auto') st.open = id; paint(); }
+function rowFor(m) {
+  const tags = m.prov.map((x, i) => {
+    const out = st.out.has(m.id+'|'+x.p);
+    return el('span', { class:'ptag'+(i===0 && !out ? ' first' : '')+(out ? ' out' : ''), title: out ? x.p+' ran out; back when its limit resets' : null }, x.p, x.free ? el('span', { class:'free' }, 'Free') : null);
+  });
+  return el('div', { class:'row'+(st.open===m.id ? ' open' : ''), role:'option', 'aria-selected':String(st.chosen===m.id), tabindex:'0',
+      onclick:() => pick(m.id), onkeydown:(e) => { if (e.key==='Enter') pick(m.id); } },
+    el('span', { class:'tick' }, st.chosen===m.id ? '✓' : ''),
+    el('div', { style:'min-width:0' }, el('div', { class:'name' }, m.name, st.fav.has(m.id) ? ' ★' : ''), el('div', { class:'sub' }, tags)),
+    el('div', { class:'meta' }, fmtCtx(m.ctx),
+      el('button', { class:'iconbtn more', 'aria-label':'Details for '+m.name, onclick:(e) => { e.stopPropagation(); st.open = m.id; paint(); } }, (st.think[m.id] || 'Default')+' ›')));
+}
+function paint() {
+  const list = $('list'); list.replaceChildren();
+  const shown = M.filter(matches).sort((a, b) => st.sort==='name' ? a.name.localeCompare(b.name) : st.sort==='ctx' ? b.ctx-a.ctx : a.rec-b.rec);
+  const filtering = st.q || st.prov.size || st.caps.size || st.free;
+  if (!filtering) {
+    list.append(el('div', { class:'row auto', role:'option', 'aria-selected':String(st.chosen==='auto'), tabindex:'0', onclick:() => pick('auto'), onkeydown:(e) => { if (e.key==='Enter') pick('auto'); } },
+      el('span', { class:'tick' }, st.chosen==='auto' ? '✓' : ''),
+      el('div', { style:'min-width:0' }, el('div', { class:'name' }, 'Auto'), el('div', { class:'info' }, 'Picks the best model for each message, then the next if one is busy')),
+      el('span', {})));
+    const favs = M.filter((m) => st.fav.has(m.id));
+    if (favs.length) { list.append(el('div', { class:'sec' }, 'Favourites')); favs.forEach((m) => list.append(rowFor(m))); }
+    list.append(el('div', { class:'sec' }, 'Recent')); st.recent.map(byId).forEach((m) => list.append(rowFor(m)));
+    list.append(el('div', { class:'sec' }, 'All models · '+shown.length));
+  } else list.append(el('div', { class:'sec' }, shown.length+' of '+M.length+' models'));
+  shown.forEach((m) => list.append(rowFor(m)));
+  if (!shown.length) list.append(el('div', { class:'empty' }, 'No model matches these filters. Clear a filter to see more.'));
+  paintTrigger(); paintDetails();
+}
+function paintTrigger() {
+  const m = byId(st.chosen==='auto' ? 'deepseek-v4.1-flash' : st.chosen);
+  const p = live(m)[0];
+  $('trigName').textContent = st.chosen==='auto' ? 'Auto' : m.name;
+  $('trigVia').textContent = st.chosen==='auto' ? '· '+m.name+' on '+(p ? p.p : 'another model') : '· '+(p ? p.p : 'no provider left');
+}
+function paintDetails() {
+  const m = byId(st.open); const d = $('details'); d.replaceChildren();
+  if (!m) return;
+  const think = st.think[m.id] || 'Default';
+  const seg = el('div', { class:'seg', role:'group', 'aria-label':'Thinking' },
+    ...['Default','None','Thinking'].map((t) => el('button', { 'aria-pressed':String(think===t), onclick:() => { st.think[m.id] = t; paint(); } }, t)));
+  const order = el('ol', { class:'porder' }, ...m.prov.map((x, i) => {
+    const out = st.out.has(m.id+'|'+x.p);
+    return el('li', {}, el('span', { class:'n' }, String(i+1)), el('span', { class:'p' }, x.p, x.free ? el('span', { class:'free' }, 'Free') : null),
+      el('span', { class:'st '+(out ? 'out' : 'ok') }, out ? 'Ran out' : 'Ready'),
+      el('button', { class:'iconbtn', 'aria-label':'Move '+x.p+' up', disabled:i===0, onclick:() => { [m.prov[i-1], m.prov[i]] = [m.prov[i], m.prov[i-1]]; paint(); } }, '↑'),
+      el('button', { class:'iconbtn', 'aria-label':'Move '+x.p+' down', disabled:i===m.prov.length-1, onclick:() => { [m.prov[i+1], m.prov[i]] = [m.prov[i], m.prov[i+1]]; paint(); } }, '↓'));
+  }));
+  const now = live(m)[0];
+  d.append(
+    el('div', {}, el('h3', {}, m.name), el('div', { class:'info' }, fmtCtx(m.ctx)+' context · '+m.caps.join(', '))),
+    el('div', {}, el('div', { class:'k' }, 'Thinking'), seg),
+    el('div', {}, el('div', { class:'k' }, 'Providers, in the order Bunny tries them'), order,
+      el('div', { class:'info', style:'margin-top:6px' }, m.prov.length > 1 ? 'If the first runs out, Bunny moves to the next and tells you in one line.' : 'Only one provider has this model, so a limit moves the reply to another model.')),
+    el('div', { class:'demo' },
+      el('button', { class:'btn', onclick:() => { st.fav.has(m.id) ? st.fav.delete(m.id) : st.fav.add(m.id); paint(); } }, st.fav.has(m.id) ? '★ Favourite' : '☆ Add to favourites'),
+      el('button', { class:'btn', onclick:() => simulate(m) }, now ? now.p+' hits its limit' : 'Reset limits')));
+}
+function simulate(m) {
+  const now = live(m)[0];
+  if (!now) { m.prov.forEach((x) => st.out.delete(m.id+'|'+x.p)); $('note').hidden = true; paint(); return; }
+  st.out.add(m.id+'|'+now.p);
+  const next = live(m)[0];
+  $('noteText').textContent = next ? 'Switched to '+m.name+' on '+next.p+': '+now.p+' hit its limit.' : 'Switched to another model: no provider has '+m.name+' left ('+now.p+' hit its limit).';
+  $('note').hidden = false; paint();
+}
+$('q').addEventListener('input', (e) => { st.q = e.target.value.trim(); paint(); });
+$('freeOnly').addEventListener('change', (e) => { st.free = e.target.checked; paint(); });
+$('sort').addEventListener('change', (e) => { st.sort = e.target.value; paint(); });
+$('clear').addEventListener('click', () => { st.q=''; $('q').value=''; st.prov.clear(); st.caps.clear(); st.free=false; $('freeOnly').checked=false; document.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed','false')); paint(); });
+$('filtBtn').addEventListener('click', (e) => { const f = $('filters'); f.hidden = !f.hidden; e.currentTarget.setAttribute('aria-pressed', String(!f.hidden)); });
+$('trigger').addEventListener('click', (e) => { const p = $('picker'); p.hidden = !p.hidden; e.currentTarget.setAttribute('aria-expanded', String(!p.hidden)); });
+paint();
+</script>
