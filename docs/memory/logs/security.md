@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W2-7d (`claude/builder-w2-7` @ 8e42b6a): PASS; lane A re-stamped at aebb866
+
+W27c-2 (quoted words) and W27c-3 (leading git options, gh `-R`/`--repo`/`--hostname`, drive and alias wrappers) closed; probe.mjs and probe2.mjs report no bypass; about 90 new spellings checked, 4 LOW misses (a backtick before a git option, and `git ("push")`, `git @("push")`, `git $("push")`). W27c-1 stays with W5-7. Lane A `19e1455..aebb866` is test-only (src diff empty): sign-off re-stamped (`c2f387c`). Review `docs/security/2026-11-16-w2-7d-recheck.md`. Lesson: when a fix is "strip quotes and match again", test the arguments the shell computes (parentheses, arrays), not only the ones it spells.
+
 ## 2026-11-16 - W2-7 re-check (`claude/builder-w2-7` @ 47e2312): PASS with conditions
 
 W27-1 closed: probe.mjs and probe2.mjs report no bypass, and 37 more Allow spellings never applied to a second command. W27-3 closed for the rules and the default mode (403 with the token only; window path via `secure:write`); Builder's 41 tests pass. Open: W27c-1 a token holder can still make an Auto chat or schedule (POST/PATCH sessions, POST/PATCH schedules) and answer permission prompts, so "mode is window-only" is not yet true (S-9/W5-7); W27c-2 `git "push"` dodges a Deny; W27c-3 `gh -R x/y release` and a few git global options. Review `docs/security/2026-11-16-w2-7c-recheck.md`, probe3. Lesson: when a lock is added to one route, list every route that writes the same field; the first route named is rarely the only one.
