@@ -173,6 +173,16 @@ test.describe('on a 390 px phone', () => {
     }
   });
 
+  test('Q2-32: every top-bar button, the sidebar toggle and Export included, is at least 40 px tall and wide', async ({ page }) => {
+    await page.goto('/');
+    for (const selector of ['#sidebar-toggle', '#export', '.toolbar [data-view="diff"]', '.toolbar [data-view="file"]']) {
+      const box = await page.locator(selector).first().boundingBox();
+      expect(box, selector).toBeTruthy();
+      expect(box.height, `${selector} height`).toBeGreaterThanOrEqual(39.5);
+      expect(box.width, `${selector} width`).toBeGreaterThanOrEqual(39.5);
+    }
+  });
+
   test('the status text shows as one dim line above the composer (the top bar hides it at this width)', async ({ page, request }) => {
     await page.goto('/');
     await expect(page.locator('#status')).toBeHidden();
