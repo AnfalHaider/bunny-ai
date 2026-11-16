@@ -20,11 +20,12 @@ import { createContext, Script } from 'node:vm';
 import { fetchLimited } from './download.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
-const MAX_OUTPUT = 50_000;         // characters of command output kept
 const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
+const MAX_COMMAND_SECONDS = 600;   // the longest a run_command may be given (W6-17)
+const KEEP_OUTPUT = 2_000_000;     // characters of command output kept; the app saves the whole of it in .bunny/notes
 const REGEX_TIMEOUT_MS = 1000;     // one file's scan with a model-written regular expression
 const REGEX_BUDGET_MS = 5000;      // all of one search's regex time together (files just under the limit must not add up to minutes)
 const MAX_EDIT_BYTES = 20_000_000; // an edit may not grow a file past this
@@ -168,10 +169,10 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       { path: { type: 'string' },
         edits: { type: 'array', description: 'The replacements, applied in order (at most 50)',
           items: { type: 'object', properties: { old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['old_text', 'new_text'] } } }, ['path', 'edits']),
-    fn('run_command', 'Run a command yourself and get its output (2 minute limit). It runs in Windows PowerShell 5.1: '
+    fn('run_command', 'Run a command yourself and get its output (2 minute limit by default; pass timeout_seconds, up to 600, for a long build or install). It runs in Windows PowerShell 5.1: '
       + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
-      { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' } }, ['command']),
+      { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' }, timeout_seconds: { type: 'integer', description: 'How long it may run before it is stopped: 1 to 600 seconds. Default 120.' } }, ['command']),
   ];
   return all.filter((d) => risks.includes(TOOL_RISK[d.function.name]));
 }
@@ -191,7 +192,7 @@ export function describeToolCall(name, args = {}) {
     case 'download_file': return `Download ${String(args.url ?? '').slice(0, 100)} to ${args.path}`;
     case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
     case 'multi_edit': return `Edit ${args.path} (${Array.isArray(args.edits) ? args.edits.length : 0} changes)`;
-    case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
+    case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}${Number(args.timeout_seconds) > 120 ? ` (up to ${Math.round(Math.min(600, Number(args.timeout_seconds)) / 60 * 10) / 10} min)` : ''}`;
     default: return name;
   }
 }
@@ -492,7 +493,9 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     return `Edited ${show(abs)} (${edits.length} edits, ${total} replacements)`;
   }
 
-  async function run_command({ command, cwd } = {}) {
+  async function run_command({ command, cwd, timeout_seconds } = {}, { onProgress = null } = {}) {
+    // W6-17: the model may ask for longer than the 2 minute default, up to 10 minutes.
+    const limitMs = Math.round(Math.min(MAX_COMMAND_SECONDS, Math.max(1, Number(timeout_seconds) || COMMAND_TIMEOUT_MS / 1000)) * 1000);
     if (endsInBackground(String(command ?? ''))) {
       throw new Error('run_command waits for the command to finish, so a trailing & cannot start a background program here (Windows PowerShell 5.1 rejects it). '
         + 'Use start_process for a server or watcher that should keep running, then browser_open the address once it is up.');
@@ -516,7 +519,10 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
         killedFor = why;
         execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
       };
-      const timer = setTimeout(() => killTree('timeout'), COMMAND_TIMEOUT_MS);
+      const timer = setTimeout(() => killTree('timeout'), limitMs);
+      // A visible countdown: the step line shows how long it has run and how long it may.
+      const startedAt = Date.now();
+      const tick = onProgress && limitMs > 10_000 ? setInterval(() => onProgress(`Running… ${Math.round((Date.now() - startedAt) / 1000)} s of up to ${Math.round(limitMs / 1000)} s`), 5000) : null;
       const sig = typeof signal === 'function' ? signal() : signal;
       const onAbort = () => killTree('stopped');
       sig?.addEventListener?.('abort', onAbort, { once: true });
@@ -525,13 +531,14 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
         if (finished) return;
         finished = true;
         clearTimeout(timer);
+        if (tick) clearInterval(tick);
         sig?.removeEventListener?.('abort', onAbort);
         const stdout = decodeText(Buffer.concat(outBufs)).trim();
         const stderr = decodeText(Buffer.concat(errBufs)).trim();
         const body = `${stdout}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
         let status = '';
         if (spawnErr) status = `[could not start: ${spawnErr.message}]`;
-        else if (killedFor === 'timeout') status = '[stopped after 2 minutes: it may be waiting for input, or it keeps running. Use start_process for a program that keeps running, and non-interactive flags such as --yes]';
+        else if (killedFor === 'timeout') status = `[stopped after ${limitMs >= 120_000 && limitMs % 60_000 === 0 ? `${limitMs / 60_000} minutes` : `${Math.round(limitMs / 1000)} seconds`}: it may be waiting for input, or it keeps running. Give it more time with timeout_seconds (up to ${MAX_COMMAND_SECONDS}), use start_process for a program that keeps running, and non-interactive flags such as --yes]`;
         else if (killedFor === 'stopped') status = '[stopped by the person]';
         else if (code) {
           status = `[exit code ${code}]`;
@@ -543,7 +550,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
           }
         }
         // The status comes first, so it survives even when long output is cut.
-        const out = [status, clip(body, MAX_OUTPUT)].filter(Boolean).join('\n');
+        const out = [status, clip(body, KEEP_OUTPUT)].filter(Boolean).join('\n');
         done(out || '(no output)');
       };
       child.on('error', (err) => finish(null, err));
@@ -565,7 +572,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     has: (name) => Object.hasOwn(tools, name),
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
-    run: (name, args) => tools[name](args ?? {}),
+    run: (name, args, ctx) => tools[name](args ?? {}, ctx ?? {}),
   };
 }
 

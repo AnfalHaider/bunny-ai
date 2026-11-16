@@ -2454,7 +2454,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = isApp ? await appTools.run(name, parsed)
             : isWorkspace
-            ? await workspace.run(name, parsed)
+            ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) })
             : JSON.stringify(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed }) ?? null);
         } catch (err) {
           status = 'failed';
