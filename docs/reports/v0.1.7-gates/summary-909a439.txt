@@ -1,0 +1,40 @@
+start 22:59:57 (7 stuck idle test processes from 17:49-20:38 ignored: 0 CPU, machine 2%)
+HEAD 909a439 W5-7 help text: the window-only line names automatic updates and 'use another model when busy'; the automatic updates switch says it changes only from Bunny's window
+== RUN 1 start 22:59:58
+== RUN 1 exit 1 end 23:06:23
+== PASS  conflict markers  (0s)
+== PASS  request guard stays on  (0s)
+== PASS  unit tests  (103s)
+== FAIL  end-to-end tests  (277s)
+     2 failed
+     157 passed (4.6m)
+== PASS  memory check  (0s)
+== PASS  dependency audit (high+)  (3s)
+== PASS  secret scan  (379 tracked files)
+== PASS  git hooks wired
+GATE FAILED: 7/8 checks passed — failed: end-to-end tests
+== RUN 2 start 23:06:23
+== RUN 2 exit 0 end 23:12:31
+== PASS  conflict markers  (0s)
+== PASS  request guard stays on  (0s)
+== PASS  unit tests  (103s)
+== PASS  end-to-end tests  (261s)
+     159 passed (4.3m)
+== PASS  memory check  (0s)
+== PASS  dependency audit (high+)  (4s)
+== PASS  secret scan  (379 tracked files)
+== PASS  git hooks wired
+GATE PASSED: 8/8 checks passed
+== RUN 3 start 23:12:31
+== RUN 3 exit 0 end 23:18:38
+== PASS  conflict markers  (0s)
+== PASS  request guard stays on  (0s)
+== PASS  unit tests  (102s)
+== PASS  end-to-end tests  (259s)
+     159 passed (4.3m)
+== PASS  memory check  (0s)
+== PASS  dependency audit (high+)  (5s)
+== PASS  secret scan  (379 tracked files)
+== PASS  git hooks wired
+GATE PASSED: 8/8 checks passed
+back on claude/chief-of-staff-0.1.6

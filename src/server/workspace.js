@@ -10,7 +10,7 @@
  */
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
@@ -221,7 +221,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite = null, signal = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
+export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -254,6 +254,29 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
 
   const show = (abs) => relative(root, abs).split(sep).join('/') || '.';
 
+  /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder; false when it cannot be worked out (a dangling link, no permission). For the person's rules. */
+  async function canon(path = '.') {
+    const rest = [];
+    let cur = resolve(root, String(path || '.'));
+    for (let guard = 0; guard < 256; guard += 1) {
+      try {
+        const real = join(await realpath(cur), ...rest.reverse());
+        const rel = relative(await realpath(root), real);
+        return rel.startsWith('..') || isAbsolute(rel) ? null : (rel.split(sep).join('/') || '.');
+      } catch (err) {
+        // A link that points nowhere is not "a file that does not exist yet": where a write through it would land is unknown. Say so (false).
+        if (err?.code !== 'ENOENT') return false;
+        const link = await lstat(cur).catch(() => null);
+        if (link?.isSymbolicLink()) return false;
+        const up = dirname(cur);
+        if (up === cur) return null;
+        rest.push(basename(cur));
+        cur = up;
+      }
+    }
+    return false;
+  }
+
   async function list_files({ path = '.', depth = 2 } = {}) {
     const start = await inside(path);
     const max = Math.min(Math.max(Number(depth) || 2, 1), 4);
@@ -267,6 +290,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
         if (lines.length >= MAX_LIST) { lines.push('… (more not shown)'); return; }
         if (e.isDirectory() && SKIP_DIRS.has(e.name)) continue;
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue; // a path the person's rules do not let Bunny read
         lines.push(`${'  '.repeat(level)}${show(abs)}${e.isDirectory() ? '/' : ''}`);
         if (e.isDirectory() && level + 1 < max) await walk(abs, level + 1);
       }
@@ -389,6 +413,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       entries.sort((a, b) => a.name.localeCompare(b.name));
       for (const e of entries) {
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
         if (e.isFile() && isFile(show(abs))) candidates.push(abs);
       }
@@ -423,6 +448,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
         if (!e.isFile() || !matches(relative(start, abs).split(sep).join('/'))) continue;
         seen += 1;
@@ -586,6 +612,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
     readFileUrl,
+    canon,
     run: (name, args, ctx) => tools[name](args ?? {}, ctx ?? {}),
   };
 }

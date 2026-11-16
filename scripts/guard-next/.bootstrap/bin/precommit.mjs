@@ -10,6 +10,7 @@
 // Fails OPEN, loudly, on an internal error (a bug here must not stop every commit);
 // fails CLOSED only on a definite violation.
 import { pathToFileURL } from 'node:url';
+import { recordChecks } from './lib/records.mjs';
 import { DEFAULT_POLICY, currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolations } from './lib/policy.mjs';
 
 /** Staged paths, renames reported as both sides (so moving a file out of scope is caught). */
@@ -17,6 +18,16 @@ export function stagedPaths(root) {
   const out = git(['diff', '--cached', '--name-only', '-z', '--no-renames', '--diff-filter=ACMRD'], root);
   if (out === null) throw new Error('git diff --cached failed');
   return out.split('\0').filter(Boolean);
+}
+
+/** Staged changes as [{ status, path }], renames as a delete plus an add. */
+export function stagedChanges(root) {
+  const out = git(['diff', '--cached', '--name-status', '-z', '--no-renames', '--diff-filter=ACMRD'], root);
+  if (out === null) throw new Error('git diff --cached failed');
+  const parts = out.split('\0').filter(Boolean);
+  const changes = [];
+  for (let i = 0; i + 1 < parts.length; i += 2) changes.push({ status: parts[i][0] === 'C' ? 'A' : parts[i][0], path: parts[i + 1] });
+  return changes;
 }
 
 function main() {
@@ -39,6 +50,12 @@ function main() {
     role = currentRole(root);
     const brief = degraded ? {} : loadRole(root, role) || {};
     const bad = scopeViolations(stagedPaths(root), policy, brief, role);
+    if (policy.records_check !== false && !degraded) {
+      // G1-2: sign-off and release records are written by the role they name (see lib/records.mjs)
+      const readNew = (p) => git(['show', `:${p}`], root) ?? '';
+      const readOld = (p) => git(['show', `HEAD:${p}`], root) ?? '';
+      bad.push(...recordChecks({ changes: stagedChanges(root), role, policy, readNew, readOld }));
+    }
     if (!bad.length) return process.exit(0);
     for (const b of bad) process.stderr.write(`pre-commit: ${b}\n`);
     process.stderr.write(`pre-commit: commit refused for role "${role}". Unstage those paths, or file a board row for the role that owns them. Never bypass the hook.\n`);

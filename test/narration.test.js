@@ -121,3 +121,17 @@ test('the working bunny picks words that match the step', async () => {
   assert.ok(WORDS.failed.includes('Thumping at that error'));
   assert.ok(WORDS.running.includes('Thumping'));
 });
+
+test('a long step target is cut with ONE ellipsis, never two', async () => {
+  const { moodOf, phrase } = await import('../src/ui/bunny-working.js');
+  const long = moodOf(`Run ${'Start-Sleep -Seconds 1; '.repeat(5)}`);
+  assert.equal([...long.about].filter((c) => c === '…').length, 1);
+  assert.ok(long.about.endsWith('…') && !long.about.endsWith(' …'));
+  const said = phrase('Zooming through', long.about);
+  assert.equal(said.split('…').length - 1, 1, said);
+  assert.ok(said.endsWith('…') && !said.includes('……'));
+  assert.equal(phrase('Zooming through', 'Start-Sleep -Seconds 1'), 'Zooming through Start-Sleep -Seconds 1…');
+  assert.equal(phrase('Hopping', ''), 'Hopping…');
+  assert.equal(phrase('Waiting… (arms crossed)', 'x'), 'Waiting… (arms crossed)');
+  assert.equal(phrase('Nibbling', 'a…'), 'Nibbling a…');
+});

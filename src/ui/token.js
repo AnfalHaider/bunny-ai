@@ -51,10 +51,13 @@
     const url = new URL(typeof input === 'string' || input instanceof URL ? String(input) : input.url, location.href);
     if (!isApi(url)) return nativeFetch(input, init);
     const again = input instanceof Request ? input.clone() : input; // a Request body can be read only once
+    const sent = meta.content; // the token this call went out with
     const res = await withToken(input, init);
     if (res.status !== 403) return res;
     const body = await res.clone().json().catch(() => null);
     if (body?.code !== 'request.noToken') return res;
+    // another call already fetched a new token while this one was on its way: just send this one again with it
+    if (meta.content !== sent) return withToken(again, init);
     const outcome = await refreshToken();
     if (outcome === 'changed') return withToken(again, init);
     if (outcome === 'unreachable') say(); // only say "restarted" when the server really is not answering as before

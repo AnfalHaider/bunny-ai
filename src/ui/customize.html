@@ -369,9 +369,7 @@
     const err = form.querySelector('[data-err]');
     err.textContent = '';
     try {
-      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      const out = await res.json();
-      if (!res.ok) throw new Error(out.message ?? 'That did not work');
+      await sendJSON(url, 'POST', body); // (through the window's own channel in the desktop app: adding a connector is window-only)
       form.reset(); form.hidden = true;
       view.kind = kind; view.scope = 'yours';
       document.querySelector(`.cz-tab[data-kind="${kind}"]`).click();

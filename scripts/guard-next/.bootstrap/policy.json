@@ -11,18 +11,31 @@
     "AGENTS.md",
     "CLAUDE.md",
     ".git/config",
-    ".git/hooks/**"
+    ".git/hooks/**",
+    ".git/bootstrap-role",
+    ".git/worktrees/*/bootstrap-role"
   ],
   "shell_parse": true,
   "shell_write_check": true,
   "scope_check": {
     "commit": true,
     "push": true,
-    "push_exempt_roles": ["release-ops", "hotfix", "chief-of-staff"]
+    "push_exempt_roles": [
+      "release-ops",
+      "hotfix",
+      "chief-of-staff"
+    ]
   },
+  "records_check": true,
   "records": {
-    "globs": ["docs/signoffs/**", "docs/releases/**"],
-    "writers": ["chief-of-staff"]
+    "globs": [
+      "docs/signoffs/**",
+      "docs/releases/**"
+    ],
+    "writers": [
+      "chief-of-staff"
+    ],
+    "owner_patterns": {}
   },
   "destructive_commands": [
     "BUNNY_RESET_PROFILE\\s*=\\s*1",
@@ -32,7 +45,10 @@
     "\\bgit\\s+push\\b.*\\s(--force|-f|--force-with-lease)(\\s|=|$)",
     "\\bgit\\s+reset\\s+--hard\\b",
     "^\\s*(ssh|scp)\\s",
-    "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b"
+    {
+      "pattern": "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b",
+      "whole": true
+    }
   ],
   "legacy_deny_all": [
     "--no-verify\\b",
@@ -41,5 +57,12 @@
     "\\bgit\\b[^|;&]*\\s--no-ve(r(i(f(y)?)?)?)?(\\s|=|$)",
     "\\bgit\\b[^|;&]*\\s-c\\s*[Cc][Oo][Rr][Ee]\\.[Hh][Oo][Oo][Kk][Ss][Pp][Aa][Tt][Hh]",
     "\\bcore\\.hooksPath\\b"
-  ]
+  ],
+  "releases": {
+    "live_pushers": [
+      "release-ops",
+      "hotfix",
+      "chief-of-staff"
+    ]
+  }
 }

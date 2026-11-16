@@ -2,6 +2,26 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - release-0.1.7 build fix, tip `6b06ed9` (91b659f + Builder B's build-css change): PASS stands
+
+Read only. `package.json` is unchanged since 91b659f (`--publish never`, publish block AnfalHaider/bunny-ai). The one new change is in `scripts/build-css.mjs`: it builds the CSS in memory, compares it with `src/ui/app.css` ignoring CR, leaves the file alone when only line endings differ, and otherwise writes it with the file's own endings. It reads two design files and writes one file in `src/ui`; no network, no process, no other path. Lesson: a pre-review of a moving branch should end with the tip's sha, so the stamp names what was read.
+
+## 2026-11-17 - release-0.1.7 build fix (`claude/release-0.1.7-buildfix` @ 91b659f): PASS stands
+
+Read only, no tests. Changes from bf83b01 outside `docs/`: `package.json`, `scripts/build-css.mjs`, `README.md`. `npm run dist` keeps `--publish never` (nothing uploads by itself; it is the only electron-builder call in the scripts); the new `build.publish` block is `provider: github`, `owner: AnfalHaider`, `repo: bunny-ai`, exactly the feed the app's own updater and `RELEASES_FEED` already name (the app does not use electron-updater, so the block only makes electron-builder write `latest.yml`). `build-css.mjs` now writes LF whatever the checkout's line endings, which leaves a rebuilt tree clean (what `release.mjs` checks). The README rewrite is text; its statements about permission modes, window-only settings and what leaves the machine match what I verified. Lesson: a build setting that makes a file appear (latest.yml) can look like a publish setting; the flag that decides publishing is on the command line, so check both.
+
+## 2026-11-16 - release-0.1.7 candidate `bf83b01` (909a439 + the Q2-23 token.js fix): PASS stands
+
+The only source change is 3 lines in `src/ui/token.js` (client side of S-1): a call whose "no token" 403 arrives after another call already refreshed the token is sent once more with the new one. No new way to get a token (the same-origin page refetch is unchanged), the retry is one resend that goes straight to `nativeFetch` (no loop; a second 403 is returned as is), and a 403 means the server refused the request before acting, so a resend repeats nothing. S-1 from outside, guard on (22 requests, `docs/security/s1-probe/zz-s1.test.js`): no token, wrong token, evil Origin, `Origin: null`, rebinding Host, cross-site fetch metadata, text/plain and form posts, preflight, Google callback with a bogus state, dot-segment and trailing-slash variants all answer 403; with the page's token 200. 27 of 27 request-guard tests pass. First run of my probe used the test helper's default (guard off) and proved nothing; `localGuard: true` turns it on. Lesson: a probe that says "all open" first needs a check that the thing under test is switched on.
+
+## 2026-11-16 - release-0.1.7 `909a439`: post-window probes, all as signed (PASS stands)
+
+Token-only probe: 68 of the write attempts answer 403, `autoUpdate`, `fallbackWhenBusy` and `updateUrl` included, `theme` 200; the open list is the same as at 400946b. `probe.mjs` and `probe2.mjs`: no bypass; computed-argument and alias probes: only the three known non-findings. Guard: the original probe's 45 mismatches are identical to those at 900a470 (nothing new, nothing lost); W5B cases, `gh auth --show-token` (every spelling) and tag refusal in the hook as signed. `caps.js`: the token budget is never below 100,000; `secretLike`: Bearer, Basic, `sk_live_`, Cookie and Set-Cookie caught, 12 ms on adversarial input; `procGuard`: `ERN=undefined`, no supervisor left after `stopAll`. `release.mjs --dry-run` on the candidate lists every failing check at once (not main yet, no stamp, no installer, no record), publishes nothing, refuses `--draft`; the throwaway-repo probe refuses every wrong-branch, untracked, stale or junk-stamp case. Not run: gate, e2e (the Chief's two Q2-23 request-guard e2e failures are Builder A's to explain; I will look at any fix that touches the guard). Lesson: re-using a probe file name for a different probe cost me a wrong first comparison; name probes by what they test.
+
+## 2026-11-16 - release-0.1.7 candidate `909a439`: PASS (read-only; probes after the quiet window)
+
+The window-only table, `secure:write`, the token-cap clamp, the secret check, incognito notes, `procGuard` (no `ELECTRON_*`), `release.mjs` with its build-stamp checks and the whole guard are byte-identical to the tips I signed; `app.js` keeps all 9 window-only checks and every marker, and what the merges removed from it was replaced by variants. W4-5c (a "Thought for Ns" row) has no security effect. Review `docs/security/2026-11-16-release-0.1.7-merge-check.md`. Not run: any test or probe (quiet window). Lesson: after a merge of several signed branches, diff the fix-bearing files against each signed tip first; an empty diff is the quickest proof nothing was dropped.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |

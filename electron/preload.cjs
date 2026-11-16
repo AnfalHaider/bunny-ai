@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   setPrefs: (patch) => ipcRenderer.invoke('prefs:set', patch),
   quit: () => ipcRenderer.invoke('app:quit'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  // Security-relevant writes (permission rules and mode) are made by the main process, not by the page.
+  secureWrite: (method, path, body) => ipcRenderer.invoke('secure:write', method, path, body),
   browserAct: (frameName, action, args) => ipcRenderer.invoke('browser:act', frameName, action, args),
   // Zoom for the whole window (Ctrl++ / Ctrl+- / Ctrl+0 and the account menu).
   zoom: {

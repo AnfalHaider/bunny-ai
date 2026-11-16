@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
+import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
 import { createUpdater } from './updater.js';
 import { createQuickAsk } from './quick-ask.js';
@@ -187,6 +188,16 @@ function startQuickChat(request) {
 }
 ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
 // The native "choose a folder" dialog, for the folder a chat works in.
+// W27-3 / W5-7: a security-relevant write (permission rules and mode...) goes through here, so only Bunny's own window can make it: main adds
+// the window-only secret that no page and no other program has. Anything else is refused.
+ipcMain.handle('secure:write', async (event, method, path, body) => {
+  const from = event.senderFrame?.url ?? event.sender.getURL();
+  if (!isOwn(from)) throw new Error('Not a Bunny page.');
+  if (!isWindowOnlyRoute(method, path, body)) throw new Error('That is not a window-only change.');
+  const res = await bunnyApp.adminFetch(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+});
+
 ipcMain.handle('dialog:pickFolder', async (event) => {
   const owner = BrowserWindow.fromWebContents(event.sender) ?? win;
   const result = await dialog.showOpenDialog(owner, { title: 'Choose a folder to work in', properties: ['openDirectory'] });

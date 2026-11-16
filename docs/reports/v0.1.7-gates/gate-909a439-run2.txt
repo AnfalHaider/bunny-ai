@@ -1,0 +1,45 @@
+gate @ 909a439
+
+== PASS  conflict markers  (0s)
+   
+
+== PASS  request guard stays on  (0s)
+   
+
+== PASS  unit tests  (103s)
+         at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+       generatedMessage: false,
+       code: 'ERR_ASSERTION',
+       actual: false,
+       expected: true,
+       operator: '==',
+       diff: 'simple'
+     }
+
+== PASS  end-to-end tests  (261s)
+   [153/159] e2e\workspace.spec.js:14:1 › the command palette opens with Ctrl+K and runs a command
+   [154/159] e2e\workspace.spec.js:33:1 › the command palette finds a chat by name
+   [155/159] e2e\workspace.spec.js:41:1 › a transcript from another tool can be imported
+   [156/159] e2e\workspace.spec.js:58:1 › an empty import is refused with a message
+   [157/159] e2e\workspace.spec.js:65:1 › the settings screen shows what each provider was used for
+   [158/159] e2e\workspace.spec.js:73:1 › the settings screen saves an allowed-model list
+   [159/159] e2e\workspace.spec.js:90:1 › the settings screen saves a model alias
+     159 passed (4.3m)
+
+== PASS  memory check  (0s)
+   always-loaded instructions: ~2900 tokens
+   check OK
+
+== PASS  dependency audit (high+)  (4s)
+         node_modules/electron-builder-squirrel-windows
+   
+   6 moderate severity vulnerabilities
+   
+   To address all issues (including breaking changes), run:
+     npm audit fix --force
+
+== PASS  secret scan  (379 tracked files)
+
+== PASS  git hooks wired
+
+GATE PASSED: 8/8 checks passed
