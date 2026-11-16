@@ -112,6 +112,9 @@ export function refuseDownloadTarget(target, ctx = {}) {
   if (rel.startsWith('..') || isAbsolute(rel)) return `a gh download may only write inside the working folder ("${raw}" leaves it).`;
   // the segments as Windows reads them: no trailing dots or spaces, no :stream, any case
   const segs = rel.split(/[\\/]+/).filter(Boolean).map((seg) => (seg.split(':')[0].replace(/[. ]+$/, '') || seg).toLowerCase());
+  if (segs.some((seg) => /~\d/.test(seg))) return `a gh download target with an 8.3 short name ("${raw}") cannot be checked: use the long name.`;
+  // the repository root, or docs itself, would put downloaded files next to tracked ones (and over them, if the names match)
+  if (segs.length === 0 || (segs.length === 1 && segs[0] === 'docs' && !/\.[A-Za-z0-9]+$/.test(raw))) return `a gh download into the repository root or docs/ could overwrite tracked files; use a folder of its own (for example downloads/).`;
   if (segs.length && PROTECTED_FIRST.has(segs[0])) return `a gh download may not write into "${raw}" (toolkit configuration or the .git folder).`;
   if (segs[0] === 'docs' && (segs[1] === 'signoffs' || segs[1] === 'releases')) return `a gh download may not write into "${raw}" (sign-off and release records).`;
   return null;

@@ -184,7 +184,8 @@ test('W5B-3: git worktree add -B (or --force) with the live branch is refused', 
 test('W5B-4: gh download writes only inside the working folder and never into the toolkit or the records', (t) => {
   for (const c of ['gh run download 5 -D .bootstrap', 'gh run download 5 -D .githooks/', 'gh release download v1 --dir=.git/hooks', 'gh release download v1 -D ..', 'gh release download v1 -D ../out', 'gh release download v1 -D C:\\Windows', 'gh run download 5 -D /etc', 'gh release download v1 -D ~/x',
     'gh release download v1 -O AGENTS.md', 'gh release download v1 --output=docs/signoffs/x.md', 'gh run download 5 -D$X', 'gh release download v1 -D']) denied(t, c);
-  for (const c of ['gh run download 5', 'gh release download v1', 'gh run download 5 -D artifacts', 'gh release download v1 --dir out/dist', 'gh release download v1 -O out.zip', 'gh release download v1 -O -']) allowed(t, c);
+  for (const c of ['gh run download 5 -D artifacts', 'gh release download v1 --dir out/dist', 'gh release download v1 -O out.zip', 'gh release download v1 -O -', 'gh release download v1 -D downloads']) allowed(t, c);
+  for (const c of ['gh run download 5', 'gh release download v1', 'gh run download 5 -D .', 'gh run download 5 -D docs', 'gh run download 5 -D PROGRA~1']) denied(t, c); // the repository root or docs/ itself, and 8.3 names
 });
 
 test('W5B-5: the pre-push hook refuses tag pushes and deletions for a role that may not push live', (t) => {
@@ -210,5 +211,7 @@ test('W5-1c review: attached branch names, Windows spellings of a download targe
   const root = makeRepo(t, 'builder');
   mkdirSync(join(root, '.bootstrap', 'x'), { recursive: true });
   assert.equal(guard.decide({ tool: 'Bash', command: 'gh run download 5', cwd: join(root, '.bootstrap') }).allow, false, 'the folder it runs in is the toolkit');
-  assert.equal(guard.decide({ tool: 'Bash', command: 'gh run download 5', cwd: root }).allow, true);
+  assert.equal(guard.decide({ tool: 'Bash', command: 'gh run download 5', cwd: root }).allow, false, 'the repository root itself');
+  mkdirSync(join(root, 'downloads'), { recursive: true });
+  assert.equal(guard.decide({ tool: 'Bash', command: 'gh run download 5', cwd: join(root, 'downloads') }).allow, true, 'a folder of its own');
 });

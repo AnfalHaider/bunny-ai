@@ -54,7 +54,7 @@ test('G1-1 deny for a builder: publishing, merging and writing through gh', (t) 
 
 test('G1-1 allow for a builder: every read', (t) => {
   for (const c of [
-    'gh release view v1', 'gh release list', 'gh release download v1',
+    'gh release view v1', 'gh release list', 'gh release download v1 -D downloads',
     'gh pr view 12', 'gh pr list', 'gh pr checks 12', 'gh pr diff 12', 'gh pr create --title x --body y --head claude/builder-x',
     'gh run list', 'gh run view 5', 'gh issue view 3', 'gh issue list', 'gh auth status', 'gh repo view',
     'gh api repos/o/r/releases/latest', 'gh api -X GET repos/o/r', 'gh api repos/o/r/pulls -X GET',
