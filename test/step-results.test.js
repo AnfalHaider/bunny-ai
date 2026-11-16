@@ -1,16 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { looksSecret } from '../src/server/secretLike.js';
 import { startApp, post, json } from './helpers.js';
 
 /** One chat that reads a 10,800-character file with read_file; returns what it needs to look at the result. */
-async function readBig(t, { mode = 'auto', prepare = async () => {} } = {}) {
+async function readBig(t, { mode = 'auto', prepare = async () => {}, file = 'big.txt', content = 'row of data\n'.repeat(900) } = {}) {
   const folder = await mkdtemp(join(tmpdir(), 'bunny-notes-'));
   t.after(() => rm(folder, { recursive: true, force: true }));
-  await writeFile(join(folder, 'big.txt'), 'row of data\n'.repeat(900));
+  await writeFile(join(folder, file), content);
   await prepare(folder);
   const seen = [];
   const server = createServer((req, res) => {
@@ -21,7 +22,7 @@ async function readBig(t, { mode = 'auto', prepare = async () => {} } = {}) {
       seen.push(JSON.parse(raw));
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const delta = seen.length === 1
-        ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'read_file', arguments: JSON.stringify({ path: 'big.txt' }) } }] }
+        ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'read_file', arguments: JSON.stringify({ path: file }) } }] }
         : { content: 'ok' };
       res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
     });
@@ -68,4 +69,28 @@ test('the saved note is skipped in Plan mode and through a linked .bunny folder'
   const linked = await readBig(t, { prepare: (folder) => symlink(outside, join(folder, '.bunny'), 'junction') });
   assert.equal(linked.step.resultFile, undefined, 'a linked .bunny is not written through');
   assert.deepEqual(await readdir(outside), [], 'nothing landed outside the workspace');
+});
+
+test('results that look like secrets are neither saved nor replayed in full; old notes are pruned', async (t) => {
+  const env = await readBig(t, { file: '.env', content: `API_KEY=abcdef0123456789abcdef\n${'X=1\n'.repeat(3000)}` });
+  assert.equal(env.step.resultFile, undefined, 'an .env read is not saved');
+  assert.equal(env.step.modelResult, undefined, 'and not replayed in full to a model taking over');
+
+  const pruned = await readBig(t, {
+    prepare: async (folder) => {
+      await mkdir(join(folder, '.bunny', 'notes'), { recursive: true });
+      await writeFile(join(folder, '.bunny', 'notes', 'step-old-1.txt'), 'old');
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 3600 * 1000);
+      await utimes(join(folder, '.bunny', 'notes', 'step-old-1.txt'), tenDaysAgo, tenDaysAgo);
+    },
+  });
+  assert.ok(pruned.step.resultFile, 'a normal result is still saved');
+  assert.ok(!(await readdir(join(pruned.folder, '.bunny', 'notes'))).includes('step-old-1.txt'), 'a note over a week old was removed');
+});
+
+test('looksSecret: keys, tokens, .env and the environment are caught; ordinary output is not', () => {
+  for (const t of ['key sk-abcdefghijklmnopqrstuvwx', `ghp_${'a'.repeat(30)}`, 'password = hunter2hunter2', 'https://u:pw123@host/x', 'https://x.test/a?token=abcdef123456', '-----BEGIN RSA PRIVATE KEY-----']) assert.equal(looksSecret(t), true, t);
+  assert.equal(looksSecret('', 'Read .env'), true);
+  assert.equal(looksSecret('', 'Run printenv'), true);
+  for (const t of ['row of data\n'.repeat(50), 'Built 12 files in 3 s', 'function token() {}']) assert.equal(looksSecret(t, 'Read src/a.js'), false, t);
 });

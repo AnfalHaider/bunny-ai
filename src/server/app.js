@@ -7,7 +7,7 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { lstat, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +66,7 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { looksSecret } from './secretLike.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
@@ -1614,16 +1615,29 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // W6-18: the chat shows a short result; the model gets the whole one back if it has to take over. Past a size it
       // is saved in the workspace (.bunny/notes/step-N.txt) and only its path stays in the chat.
       let stepSeq = 0;
+      // Notes older than a week are removed whenever a new one is saved.
+      const pruneNotes = async (dir) => {
+        const week = Date.now() - 7 * 24 * 3600 * 1000;
+        for (const name of await readdir(dir).catch(() => [])) {
+          if (!/^step-[\w-]+\.txt$/.test(name)) continue;
+          const info = await lstat(join(dir, name)).catch(() => null);
+          if (info?.isFile() && info.mtimeMs < week) await rm(join(dir, name), { force: true }).catch(() => {});
+        }
+      };
       const keepForModel = async (entry) => {
         const { fullResult, saveable, ...rest } = entry;
         const out = { ...rest, ...(currentTasks.length ? { tasks: currentTasks } : {}) };
         const full = String(fullResult ?? '');
         if (full.length <= String(rest.result ?? '').length) return out;
+        // The longer copy that is replayed to a model taking over (maybe another provider) is kept only for the workspace's own
+        // file and command tools, and never when the result looks like it holds a secret.
+        const secretish = looksSecret(full, `${rest.tool ?? ''} ${rest.content ?? ''}`);
+        if (!saveable || secretish) return out;
         out.modelResult = clip(full, 6000);
         // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
         // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
         // inside the workspace. A .bunny/.gitignore keeps the notes out of the person's repository.
-        if (full.length > 6000 && saveable && workspace && permissionMode !== 'plan') {
+        if (full.length > 6000 && workspace && permissionMode !== 'plan') {
           stepSeq += 1;
           const rel = `.bunny/notes/step-${Date.now().toString(36)}-${stepSeq}.txt`;
           try {
@@ -1638,7 +1652,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             }
             if (!(await realpath(notes)).startsWith(root + sep)) throw new Error('outside the workspace');
             await writeFile(join(bunny, '.gitignore'), '*', { encoding: 'utf8', flag: 'wx' }).catch(() => {}); // only the first time
-            await writeFile(join(root, rel), full, 'utf8');
+            await pruneNotes(notes);
+            // 'wx': never into an existing file or link. Then check where it really landed.
+            await writeFile(join(root, rel), full, { encoding: 'utf8', flag: 'wx' });
+            if (!(await realpath(join(root, rel))).startsWith(root + sep)) { await rm(join(root, rel), { force: true }); throw new Error('outside the workspace'); }
             out.resultFile = rel;
           } catch { /* the clipped text still goes to the model */ }
         }
