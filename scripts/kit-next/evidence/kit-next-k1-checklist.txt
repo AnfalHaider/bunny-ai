@@ -5,12 +5,7 @@ warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be re
 warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
@@ -73,6 +68,13 @@ warning: in the working copy of 'README.md', LF will be replaced by CRLF the nex
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
@@ -117,19 +119,7 @@ warning: in the working copy of '.bootstrap/roles/security.md', LF will be repla
 warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
@@ -173,7 +163,19 @@ warning: in the working copy of '.bootstrap/roles/security.md', LF will be repla
 warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
@@ -191,7 +193,14 @@ warning: in the working copy of '.bootstrap/roles/security.md', LF will be repla
 warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
@@ -226,22 +235,8 @@ warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be re
 warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/plans/x.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/plans/x.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
@@ -257,12 +252,6 @@ warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be re
 warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
@@ -298,31 +287,31 @@ warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will b
 warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
-✔ the staged kit is the 0.6.0 kit: flow, kit apply, family and the helper cap are all there (2.3459ms)
-✔ no conflict markers anywhere in the staged files (1.8195ms)
-✔ A1: pushes are read through the tokenizer (git -C, quotes, global options, --repo=) (6617.0247ms)
-✔ A2: protected paths in any case, with Windows tricks (Write tool and shell) (3626.0843ms)
-✔ A3: the CLI refuses ids that are paths (signoff, approve, require, piece), and writes nothing (3762.5894ms)
-✔ B1: shell writes into protected folders are refused (1911.6997ms)
-✔ B2: tags and gh (4227.663ms)
-✔ B3: label, remote and ref moves (2957.5232ms)
-✔ B4/B10: the role cannot be changed from a command, in any spelling (2684.5667ms)
-✔ B5: our commit hooks are staged unchanged (no Claude credit, record and scope checks at commit) (2.0549ms)
-✔ B6: skipping hooks, in every spelling (3679.2387ms)
-✔ B7: a command run inside a nested repository is still judged by the outer policy (683.6423ms)
-✔ B8: the upgrade never adds a broad git push allow rule (nor touches .claude/settings.json) (0.6931ms)
-✔ Tech Lead #4: unassigned is not the owner at a terminal; a role is not signed for another (2142.4538ms)
-✔ Tech Lead #7: a normally signed piece still pushes to main on the upgraded kit (no flow.json, no lanes) (4272.0565ms)
-✔ Security B12 / Tech Lead #5: a change to the guard needs Security on the same commit; a kit record does not replace it (11166.5835ms)
-✔ Tech Lead #6: .md files that steer the agents are code at push, ordinary docs are not (6520.8808ms)
-✔ G1-2: a sign-off whose file name and role disagree is not counted (1871.8808ms)
-✔ Tech Lead #9 (written down, not code): the plugin copy of the guard runs beside ours (0.1118ms)
-✔ review round: a planted policy in a nested repository does not switch the guard off; registry and DWIM refspec spellings; guard paths in any case (2850.193ms)
-✔ review round: guard paths in another case still need Security (1999.656ms)
-✔ Security K1-1: role ids and every other id are plain names; reserved Windows names and a trailing dot are refused (16439.2853ms)
-✔ Security K1-2: the nested-repository check holds wherever the hook runs (CLAUDE_PROJECT_DIR, a cwd inside the nested repo, no project cwd) (8364.6041ms)
-✔ Security 714a0a8: git's default fetch refspec is fine; a glob that can write a branch label or a tag is not (3032.7244ms)
-✔ QA: a command over 256 KB is refused before anything is parsed, quickly, and says why; a long one under the limit is still read (733.9033ms)
+✔ the staged kit is the 0.6.0 kit: flow, kit apply, family and the helper cap are all there (2.0674ms)
+✔ no conflict markers anywhere in the staged files (3.9132ms)
+✔ A1: pushes are read through the tokenizer (git -C, quotes, global options, --repo=) (6849.5682ms)
+✔ A2: protected paths in any case, with Windows tricks (Write tool and shell) (2694.3617ms)
+✔ A3: the CLI refuses ids that are paths (signoff, approve, require, piece), and writes nothing (3081.3808ms)
+✔ B1: shell writes into protected folders are refused (2195.4607ms)
+✔ B2: tags and gh (2962.5635ms)
+✔ B3: label, remote and ref moves (2229.2803ms)
+✔ B4/B10: the role cannot be changed from a command, in any spelling (2155.5246ms)
+✔ B5: our commit hooks are staged unchanged (no Claude credit, record and scope checks at commit) (2.8023ms)
+✔ B6: skipping hooks, in every spelling (2661.358ms)
+✔ B7: a command run inside a nested repository is still judged by the outer policy (500.2822ms)
+✔ B8: the upgrade never adds a broad git push allow rule (nor touches .claude/settings.json) (1.4821ms)
+✔ Tech Lead #4: unassigned is not the owner at a terminal; a role is not signed for another (1297.4161ms)
+✔ Tech Lead #7: a normally signed piece still pushes to main on the upgraded kit (no flow.json, no lanes) (2970.3679ms)
+✔ Security B12 / Tech Lead #5: a change to the guard needs Security on the same commit; a kit record does not replace it (8114.0916ms)
+✔ Tech Lead #6: .md files that steer the agents are code at push, ordinary docs are not (4776.1791ms)
+✔ G1-2: a sign-off whose file name and role disagree is not counted (1357.3427ms)
+✔ Tech Lead #9 (written down, not code): the plugin copy of the guard runs beside ours (0.1132ms)
+✔ review round: a planted policy in a nested repository does not switch the guard off; registry and DWIM refspec spellings; guard paths in any case (2141.3838ms)
+✔ review round: guard paths in another case still need Security (1567.3916ms)
+✔ Security K1-1: role ids and every other id are plain names; reserved Windows names and a trailing dot are refused (14787.9968ms)
+✔ Security K1-2: the nested-repository check holds wherever the hook runs (CLAUDE_PROJECT_DIR, a cwd inside the nested repo, no project cwd) (5492.6112ms)
+✔ Security 714a0a8: git's default fetch refspec is fine; a glob that can write a branch label or a tag is not (1968.3387ms)
+✔ QA: a command over 64 KB, or with over 2,000 parts, is refused before anything is parsed, in well under a second; everyday commands still pass (836.2259ms)
 ℹ tests 25
 ℹ suites 0
 ℹ pass 25
@@ -330,4 +319,4 @@ warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be rep
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 89691.9011
+ℹ duration_ms 70844.0879

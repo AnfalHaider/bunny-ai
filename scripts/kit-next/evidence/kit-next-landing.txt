@@ -23,9 +23,9 @@ landing: files changed or added in the clone: 23
   .bootstrap/kit.json
   .bootstrap/ui/
   docs/research/
-✔ the staged kit folder has everything `upgrade` copies from (26.4336ms)
-✔ upgrading a copy of origin/main: bin is the staged bin; flow.json, settings and our hooks are untouched; policy is kept (4001.567ms)
-✔ the live policy.json needs the staged additions: with its own records.globs the flow and kit record folders are not protected (3.6702ms)
+✔ the staged kit folder has everything `upgrade` copies from (21.8263ms)
+✔ upgrading a copy of origin/main: bin is the staged bin; flow.json, settings and our hooks are untouched; policy is kept (3278.0213ms)
+✔ the live policy.json needs the staged additions: with its own records.globs the flow and kit record folders are not protected (3.6956ms)
 ℹ tests 3
 ℹ suites 0
 ℹ pass 3
@@ -33,4 +33,4 @@ landing: files changed or added in the clone: 23
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 4168.1122
+ℹ duration_ms 3446.8675

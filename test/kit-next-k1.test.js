@@ -285,15 +285,28 @@ test('Security 714a0a8: git\'s default fetch refspec is fine; a glob that can wr
   for (const c of ['git fetch origin +refs/heads/*:refs/heads/*', 'git fetch origin "refs/heads/*:refs/tags/*"', 'git fetch origin x:refs/tags/v1', 'git fetch origin main:main', 'git fetch origin +main:heads/main', 'git fetch origin refs/heads/*:refs/remotes/origin/../../heads/*']) blocked(t, c);
 });
 
-test('QA: a command over 256 KB is refused before anything is parsed, quickly, and says why; a long one under the limit is still read', (t) => {
+test('QA: a command over 64 KB, or with over 2,000 parts, is refused before anything is parsed, in well under a second; everyday commands still pass', (t) => {
   const root = makeRepo(t, 'builder');
-  const t0 = Date.now();
-  const big = guard.decide({ tool: 'Bash', command: `echo ${'x'.repeat(300 * 1024)}`, cwd: root });
-  assert.equal(big.allow, false);
-  assert.match(big.reason, /KB.*256 KB.*Write tool/);
-  assert.ok(Date.now() - t0 < 2000, 'refused at once');
-  const huge = guard.decide({ tool: 'Bash', command: `git push origin main ${'x '.repeat(500_000)}`, cwd: root });
-  assert.equal(huge.allow, false);
-  const ok = guard.decide({ tool: 'Bash', command: `echo ${'x'.repeat(100 * 1024)} > docs/a.md`, cwd: makeRepo(t, 'chief-of-staff') });
-  assert.equal(ok.allow, true, ok.reason);
+  const reason = /too long or has too many parts.*64 KB.*2000 commands.*Write tool/;
+  const timed = (command, role) => { const t0 = Date.now(); const v = guard.decide({ tool: 'Bash', command, cwd: role ? makeRepo(t, role) : root }); return { v, ms: Date.now() - t0 }; };
+  // QA's shape: 21,000 "git status;" and a push to main (about 250 KB)
+  const shape = timed(`${'git status; '.repeat(21_000)}git push origin main`);
+  assert.equal(shape.v.allow, false);
+  assert.match(shape.v.reason, reason);
+  assert.ok(shape.ms < 1000, `answered in ${shape.ms} ms`);
+  // few bytes, many commands
+  const many = timed(`${'a;'.repeat(2500)}git push origin main`);
+  assert.equal(many.v.allow, false);
+  assert.match(many.v.reason, reason);
+  assert.ok(many.ms < 1000, `answered in ${many.ms} ms`);
+  // over the size limit
+  const big = timed(`echo ${'x'.repeat(70 * 1024)}`);
+  assert.equal(big.v.allow, false);
+  assert.ok(big.ms < 1000);
+  assert.equal(timed(`git push origin main ${'x '.repeat(500_000)}`).v.allow, false);
+  // everyday: a 12 KB sign-off note, and 1,500 commands, are still read
+  const note = guard.decide({ tool: 'Bash', command: `node .bootstrap/bin/bootstrap.mjs signoff s-1 --verdict PASS --sha abc1234 --note "${'checked src/app.js:1 and the gate output. '.repeat(280)}"`, cwd: makeRepo(t, 'qa') });
+  assert.doesNotMatch(note.reason ?? '', reason, 'a 12 KB sign-off note is not refused for its size');
+  const some = guard.decide({ tool: 'Bash', command: 'git status; '.repeat(1500).trim(), cwd: root });
+  assert.doesNotMatch(some.reason ?? '', reason, '1,500 commands are still read');
 });
