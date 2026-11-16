@@ -11,7 +11,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSy
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
-import { DEFAULT_POLICY, currentRole, git, globToRegex, loadPolicy, repoRoot } from './lib/policy.mjs';
+import { DEFAULT_POLICY, currentRole, roleFile, git, globToRegex, loadPolicy, repoRoot } from './lib/policy.mjs';
 import { completeSignoffs } from './prepush.mjs';
 
 const KIT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -98,6 +98,8 @@ function role(root, id) {
   const data = parseFrontmatter(readFileSync(brief, 'utf8')).data || {};
   writeFileSync(join(root, '.bootstrap', 'session.json'), JSON.stringify({ role: id, since: new Date().toISOString() }, null, 2) + '\n');
   log('WRITE', `.bootstrap/session.json role=${id}`);
+  const rf = roleFile(root);
+  if (rf) { writeFileSync(rf, `${id}\n`); log('WRITE', `${rf} role=${id}`); }
 
   // Claude Code layer: per-worktree permission denials and plugin narrowing (7C).
   const p = join(root, '.claude', 'settings.local.json');

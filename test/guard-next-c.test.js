@@ -124,7 +124,7 @@ test('Push of every branch is refused for a role that may not push live; allowed
   allowed(t, 'git push --atomic origin claude/x', 'builder');
   allowed(t, 'git push --set-upstream origin claude/x', 'builder');
   allowed(t, 'git push origin claude/builder-x', 'builder');
-  allowed(t, 'git push --tags origin', 'builder');
+  // (W5-1b, Tech Lead's review: --tags and tag refspecs are refused for these roles too; see test/guard-016-w5b.test.js)
   allowed(t, 'echo "git push --all"', 'builder');
   allowed(t, 'git push --all origin', 'release-ops');
 });
