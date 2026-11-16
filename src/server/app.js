@@ -38,7 +38,7 @@ import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions
 import { createLocalMcp } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat, stripToolMarkup } from './chat.js';
+import { streamChat, stripToolMarkup, fitResult } from './chat.js';
 import { clip } from './clip.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
@@ -1633,11 +1633,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // file and command tools, and never when the result looks like it holds a secret.
         const secretish = looksSecret(full, `${rest.tool ?? ''} ${rest.content ?? ''}`);
         if (!saveable || secretish) return out;
-        out.modelResult = clip(full, 6000);
+        out.modelResult = clip(full, 8000);
         // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
         // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
         // inside the workspace. A .bunny/.gitignore keeps the notes out of the person's repository.
-        if (full.length > 6000 && workspace && permissionMode !== 'plan') {
+        if (full.length > 8000 && workspace && permissionMode !== 'plan') {
           stepSeq += 1;
           const rel = `.bunny/notes/step-${Date.now().toString(36)}-${stepSeq}.txt`;
           try {
@@ -2352,7 +2352,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           status = 'failed';
           result = `The tool failed: ${err.message}`;
         }
-        result = clip(String(result), 12000);
+        result = clip(String(result), 30_000);
         await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
         send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
@@ -2449,11 +2449,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           status = 'failed';
           result = `The tool failed: ${err.message}`;
         }
-        result = clip(String(result), 8000);
+        // W6-21: a tool result is no longer cut at 8,000 characters. Up to 50,000 go to the model whole; past that the
+        // middle is left out, and the whole of it is saved in .bunny/notes (below) so it can be read in parts.
+        const wholeResult = String(result);
+        result = fitResult(name, wholeResult);
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result, saveable: isWorkspace });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };

@@ -140,3 +140,17 @@ test('a saved note is in the undo list of a reply that also changed files', asyn
   await post(base, `/api/sessions/${session.id}/checkpoints/${reply.checkpoint.id}/restore`, {});
   assert.deepEqual((await readdir(join(folder, '.bunny', 'notes'))).filter((f) => note.endsWith(f)), [], 'undo removed the note');
 });
+
+// W6-21: results are no longer cut at 8,000 characters.
+test('a 45,000-character read reaches the model whole; a 120,000-character one is cut at 50,000 with the whole saved', async (t) => {
+  const mid = await readBig(t, { content: 'row of data\n'.repeat(3750) }); // 45,000
+  const midTool = mid.seen[1].messages.find((m) => m.role === 'tool').content;
+  assert.ok(midTool.length >= 44_900, `the model read the whole file (${midTool.length})`);
+  assert.doesNotMatch(midTool, /left out/);
+
+  const big = await readBig(t, { content: 'row of data\n'.repeat(10_000) }); // 120,000
+  const bigTool = big.seen[1].messages.find((m) => m.role === 'tool').content;
+  assert.ok(bigTool.length > 49_000 && bigTool.length < 52_000, `cut to about 50,000 (${bigTool.length})`);
+  assert.match(bigTool, /Cut to 50000 characters\. Read the rest with start_line and end_line/);
+  assert.ok((await readFile(join(big.folder, big.step.resultFile), 'utf8')).length >= 119_000, 'the whole read is saved, to page through');
+});

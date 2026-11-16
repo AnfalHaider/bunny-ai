@@ -14,10 +14,10 @@ import { clip } from './clip.js';
 // W6-18: a step's result is kept whole (within a budget), not cut to 300 characters, so a model that takes over
 // (continue, another model after a failure) still knows what was read. The newest steps keep the most; a result
 // that was saved to a file says where, so it can be read again.
-const STEP_RESULT_NEW = 4000;   // characters of each of the newest steps' results
+const STEP_RESULT_NEW = 8000;   // characters of each of the newest steps' results
 const STEP_RESULT_OLD = 400;    // characters of an older step's result
 const NEWEST_STEPS = 12;
-const STEPS_TOTAL = 40_000;     // characters of steps for one turn
+const STEPS_TOTAL = 60_000;     // characters of steps for one turn
 
 const stepLine = (m, limit) => {
   const result = String(m.modelResult ?? m.result ?? '').replace(/[ \t]+/g, ' ').trim();

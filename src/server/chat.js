@@ -14,6 +14,18 @@ import { clip } from './clip.js';
 
 const MAX_TOOL_ROUNDS = 4;
 
+// W6-21: the most characters of one tool result the model reads (it was 8,000 for workspace tools).
+export const RESULT_LIMIT = 50_000;
+
+/** A tool result fitted to the limit; what is left out is said, and how to get it. */
+export function fitResult(name, text) {
+  const s = String(text ?? '');
+  if (s.length <= RESULT_LIMIT) return s;
+  const how = name === 'read_file' ? ' Read the rest with start_line and end_line.' : ' The whole output is saved in .bunny/notes (the step says where): read_file it in parts.';
+  return `${clip(s, RESULT_LIMIT)}
+[Cut to ${RESULT_LIMIT} characters.${how}]`;
+}
+
 // How long a provider may stay silent before the chat gives up on it (T-3). Two limits, because they mean
 // different things: waiting for the FIRST byte (30 s; 60 s for reasoning models and image or video jobs), and
 // silence between chunks once the reply is streaming (60 s). Thinking tokens count as activity. These numbers
@@ -130,7 +142,7 @@ export async function* streamChat({
         for (const url of result.images ?? []) pictures.push({ name: call.function.name, url });
         result = result.content ?? '';
       }
-      conversation.push({ role: 'tool', tool_call_id: call.id, content: clip(result, 12000) });
+      conversation.push({ role: 'tool', tool_call_id: call.id, content: clip(result, RESULT_LIMIT) });
     }
     if (pictures.length) {
       conversation.push({

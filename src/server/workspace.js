@@ -18,7 +18,7 @@ import { globMatcher } from './glob.js';
 import { createContext, Script } from 'node:vm';
 
 const MAX_READ = 200_000;          // characters returned from one read
-const MAX_OUTPUT = 8_000;          // characters of command output kept
+const MAX_OUTPUT = 50_000;         // characters of command output kept
 const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
