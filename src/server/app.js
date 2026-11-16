@@ -26,7 +26,7 @@ import { createArtifactStore } from './artifacts.js';
 import { normaliseAttachments, prepareAttachments, toModelMessage } from './attachments.js';
 import { parseImport } from './import.js';
 import { createUsageStore } from './usage.js';
-import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned } from './unavailable.js';
+import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned, failureKind } from './unavailable.js';
 import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
@@ -2304,6 +2304,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const answeredBy = {
         model, providerId, job, auto: body.auto === true,
         fellBackFrom: typeof body.fellBackFrom === 'string' ? body.fellBackFrom.slice(0, 200) : undefined,
+        // Why the first model was left (timeout, rate-limit, unavailable, empty, refused, unreachable, key) and how many failed.
+        fellBackReason: typeof body.fellBackReason === 'string' ? body.fellBackReason.slice(0, 30) : undefined,
+        fellBackTries: Number.isInteger(body.fellBackTries) && body.fellBackTries > 0 ? Math.min(body.fellBackTries, 9) : undefined,
       };
 
       // When the person presses Stop, the browser closes the connection. What
@@ -2385,6 +2388,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                 }
               } catch { /* memory is a convenience; the reply matters more */ }
             }
+            // A fallback model has answered: the failed attempts' "could not finish" notes are not left behind.
+            if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
             const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking } : {}) });
             session = await sessions.get(id);
             send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
@@ -2425,14 +2430,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           // time instead of offering it again.
           const shape = modelSpecificFailure(err.message);
           if (shape) await unavailable.mark(providerId, model, err.message);
+          const { scope, reason } = failureKind(err, Boolean(shape));
           send('error', {
             code: err.code ?? 'chat.failed',
             message: err.message,
             modelUnavailable: Boolean(shape),
+            scope,
+            reason,
           });
           // Kept in the chat, so after a reload it still says why the reply stopped.
-          // (The model never reads these: history leaves errors out.)
-          await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
+          // (The model never reads these: history leaves errors out.) The page says how many attempts are left;
+          // only the last failure leaves a note, so the person is told once, not once per model.
+          const moreToTry = Number.isInteger(body.attemptsLeft) && body.attemptsLeft > 0 && scope !== 'other';
+          if (!moreToTry) await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
           break;
         }
       }

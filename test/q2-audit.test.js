@@ -95,7 +95,7 @@ test('a model that answers 429 is replaced by the next one and the reply is save
   assert.equal(saved.messages.filter((m) => m.role === 'user').length, 1, 'the user message is saved once');
 });
 
-test('Q2-11: once a fallback model has answered, the failed attempt is not left in the chat as a red "could not finish" line', { todo: 'Q2-11: src/server/app.js:2419 appends an error line per failed attempt and nothing removes it when the retry succeeds' }, async (t) => {
+test('Q2-11: once a fallback model has answered, the failed attempt is not left in the chat as a red "could not finish" line', async (t) => {
   const { base } = await app(t);
   const { body: s } = await post(base, '/api/sessions', { title: 'fallback', providerId: 'openai', model: 'bad-model' });
   await say(base, s.id, 'hello', { model: 'bad-model', workMode: 'chat' });
@@ -104,13 +104,13 @@ test('Q2-11: once a fallback model has answered, the failed attempt is not left 
   assert.equal(saved.messages.filter((m) => m.kind === 'error').length, 0, JSON.stringify(saved.messages.map((m) => m.kind ?? m.role)));
 });
 
-test('Q2-10: a model that sends nothing is given up on within 45 seconds (it is 120 s today, three times over before the person hears anything)', { todo: 'Q2-10: src/server/chat.js:20 DEFAULT_STALL_MS = 120_000, used for the first byte too (:200)' }, async () => {
+test('Q2-10: a model that sends nothing is given up on within 45 seconds (it is 120 s today, three times over before the person hears anything)', async () => {
   const src = await read('src/server/chat.js');
   const ms = Number(/DEFAULT_STALL_MS\s*=\s*([\d_]+)/.exec(src)?.[1].replace(/_/g, ''));
   assert.ok(ms > 0 && ms <= 45_000, `DEFAULT_STALL_MS is ${ms}`);
 });
 
-test('Q2-12: the "answered instead" note does not say "busy" when the model simply did not answer', { todo: 'Q2-12: src/ui/i18n-agent.js:15 has one string, "...because {from} was busy", for every failure' }, async () => {
+test('Q2-12: the "answered instead" note does not say "busy" when the model simply did not answer', async () => {
   const src = await read('src/ui/i18n-agent.js');
   assert.ok(/'model\.answeredInstead\w+'/.test(src) || !/answeredInstead'?:\s*'[^']*was busy/.test(src), 'only a "was busy" wording exists');
 });

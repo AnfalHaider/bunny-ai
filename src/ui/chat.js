@@ -1040,7 +1040,7 @@ function renderMessage(m) {
     wrap.append(element('div', { className: 'msg-meta auto-meta',
       textContent: m.auto
         ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${say('model.didNotAnswer', { model: m.fellBackFrom })})` : ''}`
-        : say('model.answeredInstead', { model: m.model, from: m.fellBackFrom }) }));
+        : `${say('model.answeredInstead', { model: m.model, from: m.fellBackFrom, reason: reasonPhrase(m.fellBackReason) })}${alsoFailed(m.fellBackTries)}` }));
   }
   if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking));
   const body = element('div', { className: 'body' });
@@ -1325,6 +1325,18 @@ function setStreaming(on) {
   renderRail();
 }
 
+/** "did not answer in time", "was busy (rate limit or overloaded)"...: why a model was left. A timeout is never "busy". */
+function reasonPhrase(reason) {
+  const key = `model.reason.${['timeout', 'rate-limit', 'unavailable', 'empty', 'refused', 'unreachable', 'key'].includes(reason) ? reason : 'other'}`;
+  return say(key);
+}
+
+/** " (1 other model also failed)" when more than one model failed before the answer. */
+function alsoFailed(tries) {
+  const others = (Number(tries) || 0) - 1;
+  return others > 0 ? ` (${say('model.alsoFailed', { n: others, models: others === 1 ? 'model' : 'models' })})` : '';
+}
+
 function flashStatus(text, ms = 3000) {
   $('status').textContent = text;
   setTimeout(() => { if (!state.streaming) $('status').textContent = ''; }, ms);
@@ -1340,7 +1352,10 @@ function flashStatus(text, ms = 3000) {
  * @param {{path: string, payload: object}} opts
  * @returns {Promise<{assembled: string, meter: object|null}>}
  */
-async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
+async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError = false }) {
+  // quietError: the caller decides whether and how to show a failure (the fallback loop shows only the last one).
+  let errorInfo = null;
+  const showError = (text) => { errorInfo = { ...(errorInfo ?? {}), message: text }; if (!quietError) $('error').textContent = text; };
   const controller = new AbortController();
   state.streaming = controller;
   setStreaming(true);
@@ -1390,7 +1405,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
       renderContext(info.after);
     },
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; $('error').textContent = err.message ?? 'The request failed.'; },
+    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       flushNote();
       showLiveTool(bodyEl, info);
@@ -1424,14 +1439,14 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
       aborted = true;
     } else {
       errorCode = 'network';
-      $('error').textContent = err.message;
+      showError(err.message);
     }
   } finally {
     // The connection ended with neither an answer nor an error: say so, so it is not just silence
     // (and Auto can try the next model).
     if (!gotDone && !errorCode && !aborted && !controller.signal.aborted) {
       errorCode = 'chat.noReply';
-      $('error').textContent = 'The reply stopped without finishing. Send "continue" to pick up where it stopped.';
+      showError('The reply stopped without finishing. Send "continue" to pick up where it stopped.');
     }
     working.stop();
     state.streaming = null;
@@ -1439,7 +1454,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
     bodyEl.classList.remove('is-streaming');
   }
 
-  return { assembled, meter, aborted, errorCode };
+  return { assembled, meter, aborted, errorCode, errorInfo };
 }
 
 /** Tool calls some models write out as text: they are run, so the markup is not shown. */
@@ -2039,11 +2054,24 @@ async function send() {
   // Errors that are not the model's fault: another model would not help.
   const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
   let result = { meter: null, aborted: false };
-  let failed = null;
-  for (let i = 0; i < candidates.length; i += 1) {
-    const pick = candidates[i];
+  // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
+  // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
+  const MAX_ATTEMPTS = 3;
+  const queue = [...candidates];
+  const failures = []; // { name, providerId, reason }
+  const badProviders = new Set();
+  let attempt = 0;
+  let pick = null;
+  while (queue.length && attempt < MAX_ATTEMPTS) {
+    pick = queue.shift();
+    if (badProviders.has(pick.providerId) && queue.some((q) => !badProviders.has(q.providerId))) continue;
+    const i = attempt;
+    attempt += 1;
+    const stillToTry = () => queue.filter((q) => !badProviders.has(q.providerId)).length;
+    const failed = failures[0]?.name ?? null;
     $('error').textContent = '';
     result = await streamInto(bodyEl, {
+      quietError: true,
       path: `/api/sessions/${state.sessionId}/messages`,
       payload: {
         content: text,
@@ -2057,21 +2085,37 @@ async function send() {
         job,
         auto: Boolean(state.modelAuto),
         fellBackFrom: failed ?? undefined,
+        fellBackReason: failures[0]?.reason,
+        fellBackTries: failures.length || undefined,
+        attemptsLeft: Math.min(MAX_ATTEMPTS - attempt, stillToTry()),
       },
       mood: failed ? 'fallback' : 'waiting',
     });
     // Any failure of the model itself (busy, refused, empty, cut off mid-work, unreachable)
     // goes to the next model. What was already done is saved, so the next one carries on from there.
-    const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode);
-    if (!errored || result.aborted || i === candidates.length - 1) break;
-    failed = pick.displayName ?? pick.id;
-    flashStatus(say('model.fallback', { from: failed, to: candidates[i + 1].displayName ?? candidates[i + 1].id }), 6000);
-    bodyEl.textContent = '…';
+    const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode) && result.errorInfo?.scope !== 'other';
+    if (!errored || result.aborted) break;
+    const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
+    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
+    if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);
+    const next = queue.find((q) => !badProviders.has(q.providerId));
+    if (!next || attempt >= MAX_ATTEMPTS) break;
+    // A calm line while the next model starts: what happened, and who is trying now.
+    const live = say(`model.live.${reason}`) !== `model.live.${reason}` ? say(`model.live.${reason}`) : reasonPhrase(reason);
+    flashStatus(say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id }), 30000);
   }
   const { meter, aborted } = result;
+  const finalFailure = Boolean(result.errorCode) && !aborted && failures.length > 0 && failures.length === attempt
+    ? (failures.length > 1
+      ? say('model.nothingAnswered', { detail: failures.map((f) => `${f.name} ${reasonPhrase(f.reason)}`).join('; ') })
+      : (result.errorInfo?.message ?? 'The request failed.'))
+    : (result.errorCode && !aborted ? (result.errorInfo?.message ?? 'The request failed.') : '');
 
   if (meter) renderContext(meter);
   await refreshSession({ expectAssistant: aborted });
+  // One line, not two: the server kept a note of the last failure, so the live line is shown only if it did not.
+  $('error').textContent = finalFailure && state.messages.at(-1)?.kind !== 'error' ? finalFailure : '';
+  $('status').textContent = '';
   await loadSessions();
   notifyReply();
   const moved = state.pendingNewChat;

@@ -111,3 +111,24 @@ export function modelSpecificFailure(message) {
   ];
   return shapes.find((shape) => text.includes(shape)) ?? null;
 }
+
+/**
+ * Sort a failed reply into who is at fault, so the page knows what to do next (T-3):
+ *   model    this model did not work: try the next one          (timeout, rate-limit, unavailable, empty, refused)
+ *   provider the whole provider is the problem: try another one (unreachable, key)
+ *   other    not the model's fault (speech, no model chosen...): another model would not help
+ */
+export function failureKind(err, unavailable = false) {
+  const code = err?.code ?? '';
+  const message = String(err?.message ?? '');
+  if (code === 'chat.stalled') return { scope: 'model', reason: 'timeout' };
+  if (code === 'chat.unreachable') return { scope: 'provider', reason: 'unreachable' };
+  if (code === 'chat.unauthorized') return { scope: 'provider', reason: 'key' };
+  if (code === 'chat.empty') return { scope: 'model', reason: 'empty' };
+  if (code === 'chat.refused') return { scope: 'model', reason: 'refused' };
+  if (unavailable) return { scope: 'model', reason: 'unavailable' };
+  if (/\b429\b|rate.?limit|overload|too many requests|busy|capacity/i.test(message)) return { scope: 'model', reason: 'rate-limit' };
+  if (/\b5\d\d\b/.test(message)) return { scope: 'model', reason: 'unavailable' };
+  if (/^(speech\.|model\.notSelected|provider\.notConnected|request\.)/.test(code)) return { scope: 'other', reason: 'other' };
+  return { scope: 'model', reason: 'unavailable' };
+}
