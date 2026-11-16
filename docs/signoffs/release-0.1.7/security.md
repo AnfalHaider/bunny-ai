@@ -6,4 +6,4 @@ verdict: PASS
 date: 2026-11-16
 ---
 
-Read-only check during the quiet window: fix-bearing files identical to the signed tips (windowOnly table, secure:write, caps, secretLike, procGuard, release.mjs, guard-next); app.js keeps 9 window-only checks and all markers; W4-5c has no security effect. Merged-tree probes to follow after the window; a differing answer replaces this with FAIL. See docs/security/2026-11-16-release-0.1.7-merge-check.md
+Reading check plus post-window probes on 909a439, all as signed: token-only writes 403 (autoUpdate, fallbackWhenBusy, updateUrl too), rule probes no bypass, guard probe 45 mismatches identical to 900a470, caps/secretLike/procGuard as signed, release.mjs dry run lists all failing checks and publishes nothing. Gate and e2e not run by me; the two Q2-23 request-guard e2e failures are open with Builder A.

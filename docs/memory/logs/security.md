@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - release-0.1.7 `909a439`: post-window probes, all as signed (PASS stands)
+
+Token-only probe: 68 of the write attempts answer 403, `autoUpdate`, `fallbackWhenBusy` and `updateUrl` included, `theme` 200; the open list is the same as at 400946b. `probe.mjs` and `probe2.mjs`: no bypass; computed-argument and alias probes: only the three known non-findings. Guard: the original probe's 45 mismatches are identical to those at 900a470 (nothing new, nothing lost); W5B cases, `gh auth --show-token` (every spelling) and tag refusal in the hook as signed. `caps.js`: the token budget is never below 100,000; `secretLike`: Bearer, Basic, `sk_live_`, Cookie and Set-Cookie caught, 12 ms on adversarial input; `procGuard`: `ERN=undefined`, no supervisor left after `stopAll`. `release.mjs --dry-run` on the candidate lists every failing check at once (not main yet, no stamp, no installer, no record), publishes nothing, refuses `--draft`; the throwaway-repo probe refuses every wrong-branch, untracked, stale or junk-stamp case. Not run: gate, e2e (the Chief's two Q2-23 request-guard e2e failures are Builder A's to explain; I will look at any fix that touches the guard). Lesson: re-using a probe file name for a different probe cost me a wrong first comparison; name probes by what they test.
+
 ## 2026-11-16 - release-0.1.7 candidate `909a439`: PASS (read-only; probes after the quiet window)
 
 The window-only table, `secure:write`, the token-cap clamp, the secret check, incognito notes, `procGuard` (no `ELECTRON_*`), `release.mjs` with its build-stamp checks and the whole guard are byte-identical to the tips I signed; `app.js` keeps all 9 window-only checks and every marker, and what the merges removed from it was replaced by variants. W4-5c (a "Thought for Ns" row) has no security effect. Review `docs/security/2026-11-16-release-0.1.7-merge-check.md`. Not run: any test or probe (quiet window). Lesson: after a merge of several signed branches, diff the fix-bearing files against each signed tip first; an empty diff is the quickest proof nothing was dropped.
