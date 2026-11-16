@@ -39,7 +39,14 @@ export function moodOf(tool) {
           : /^(Browse|Navigate|Visit|Click|Type|Scroll|Press|Screenshot)/i.test(verb) ? 'browsing'
             : /^(Helper|Ask(ed)? a helper|Delegate)/i.test(verb) ? 'helping'
               : 'waiting';
-  return { kind, about: rest.length > 42 ? `${rest.slice(0, 41)}…` : rest };
+  return { kind, about: rest.length > 42 ? `${rest.slice(0, 41).trimEnd()}…` : rest };
+}
+
+/** The word and its target with exactly one ellipsis, at the end of the target: "Zooming through Start-Sleep -Seconds 1…". */
+export function phrase(base, about = '') {
+  if (base.includes('…')) return base;
+  const target = String(about ?? '').replace(/[….]+$/, '').trim();
+  return `${base}${target ? ` ${target}` : ''}…`;
 }
 
 /** "53s", "1m 15s". */
@@ -95,21 +102,38 @@ export function createWorking(start = 'waiting', { model = '', openThinking = fa
     box.hidden = !(can && open);
   };
   const paintTail = () => {
-    tail.textContent = kind === 'slow' ? `waiting for ${modelName || 'the model'}` : thinkingNow() ? 'thinking' : '';
+    if (kind === 'slow') {
+      // only the model's name shortens (with an ellipsis) on a narrow screen; the timer after it stays in view
+      const lead = document.createElement('span');
+      lead.className = 'bunny-tail-lead';
+      lead.textContent = 'waiting for ';
+      const name = document.createElement('span');
+      name.className = 'bunny-model';
+      name.textContent = modelName || 'the model';
+      name.title = name.textContent;
+      tail.replaceChildren(lead, name);
+    } else tail.textContent = thinkingNow() ? 'thinking' : '';
   };
   const paintTime = () => {
     time.textContent = fmtDuration(Date.now() - (thinkingNow() && thinkingStart ? thinkingStart : began));
   };
+  // The word is never empty: the first one is set at once, a new one fades in over the old, and the same word is not swapped.
+  let wanted = '';
+  let swapTimer = 0;
   const show = (text) => {
-    if (word.textContent === text) return;
+    if (text === wanted) return;
+    wanted = text;
+    if (word.textContent === '') { word.textContent = text; return; }
     word.classList.add('is-swapping');
-    setTimeout(() => { word.textContent = text; word.classList.remove('is-swapping'); }, 180);
+    clearTimeout(swapTimer);
+    swapTimer = setTimeout(() => { word.textContent = wanted; word.classList.remove('is-swapping'); }, 180);
   };
   const say = () => {
     el.classList.toggle('is-slow', kind === 'slow');
     // a slow model: the word stays readable ("Hmph…") and the tail says what it waits on
-    const base = kind === 'slow' ? 'Hmph' : pick(WORDS[kind] ?? WORDS.waiting, word.textContent.replace(/ .*|…$/g, ''));
-    show(base.includes('…') ? base : `${base}${about ? ` ${about}` : ''}…`);
+    const base = kind === 'slow' ? 'Hmph' : pick(WORDS[kind] ?? WORDS.waiting, (wanted || word.textContent).replace(/ .*|…$/g, ''));
+    // exactly one ellipsis, at the end of the step target (a target already cut with one does not get a second)
+    show(phrase(base, about));
     lastChange = Date.now();
     paintTail();
     paintTime();
@@ -185,6 +209,6 @@ export function createWorking(start = 'waiting', { model = '', openThinking = fa
       return done;
     },
     isThinking: () => thinkingText !== '',
-    stop() { clearInterval(timer); el.remove(); },
+    stop() { clearInterval(timer); clearTimeout(swapTimer); el.remove(); },
   };
 }

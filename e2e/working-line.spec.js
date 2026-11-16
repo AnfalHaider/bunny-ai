@@ -15,6 +15,14 @@ test.beforeAll(async () => {
       if (req.method !== 'POST' && !req.url.endsWith('/models')) { res.writeHead(200); res.end('ok'); return; }
       if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"thinker"}]}'); return; }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
+      // W4-5c: a reply with a step: it thinks, makes a page (the step), then answers
+      const sent = JSON.parse(raw);
+      if (/make a page/.test(JSON.stringify(sent.messages))) {
+        if (sent.messages.some((m) => m.role === 'tool')) { res.end(`${frame({ content: 'Made it.' })}data: [DONE]\n\n`); return; }
+        res.write(frame({ reasoning_content: 'The user wants a page, so I will make one.' }));
+        setTimeout(() => { res.write(frame({ tool_calls: [{ index: 0, id: 'c_1', function: { name: 'create_artifact', arguments: JSON.stringify({ title: 'Carrot page', kind: 'html', content: '<h1>Carrots</h1>' }) } }] })); res.end('data: [DONE]\n\n'); }, 700);
+        return;
+      }
       res.write(frame({ reasoning_content: 'The page has three price cards ' }));
       setTimeout(() => res.write(frame({ reasoning_content: 'and a comparison table. Keep the card order.' })), 500);
       setTimeout(() => { res.write(frame({ content: 'Done: the cards keep their order.' })); res.end('data: [DONE]\n\n'); }, 2600);
@@ -156,4 +164,103 @@ test('on a phone the word shortens before the time wraps: one line, no sideways 
   expect(m.oneLine).toBe(true);
   expect(m.timeInside).toBe(true);
   expect(m.wide).toBe(false);
+});
+
+// W4-5c
+test('the "Thought for" row comes BEFORE the step it led to, live and after a reload', async ({ page, request }) => {
+  await ask(page, 'make a page about carrots');
+  await expect(page.locator('#messages .live-tool, #messages .tool-group, #messages .tool-call').first()).toBeVisible({ timeout: 15_000 });
+  const order = () => page.evaluate(() => {
+    const kids = [...document.querySelectorAll('#messages > *')];
+    const at = (sel) => kids.findIndex((k) => k.matches(sel) || k.querySelector(sel));
+    return { thought: at('details.thinking'), step: at('.live-tool, .tool-group, .tool-call') };
+  });
+  await expect.poll(async () => (await order()).thought, { timeout: 15_000 }).toBeGreaterThanOrEqual(0);
+  const live = await order();
+  expect(live.thought).toBeLessThan(live.step);
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  const done = await order();
+  expect(done.thought).toBeLessThan(done.step);
+  const id = new URL(page.url()).searchParams.get('s') ?? (await (await request.get('/api/sessions')).json())[0].id;
+  await page.goto(`/src/ui/index.html?s=${id}`);
+  await expect(page.locator('#messages .msg').first()).toBeVisible();
+  await expect(page.locator('details.thinking').first()).toBeVisible();
+  const again = await order();
+  expect(again.thought).toBeGreaterThanOrEqual(0);
+  expect(again.thought).toBeLessThan(again.step);
+});
+
+test('the word is never empty, also across two thinkings, and the same word is not swapped', async ({ page }) => {
+  await page.goto('/');
+  const r = await page.evaluate(async () => {
+    const { createWorking } = await import('/src/ui/bunny-working.js');
+    const w = createWorking('waiting', { model: 'm' });
+    document.body.append(w.el);
+    const word = w.el.querySelector('.bunny-word');
+    const seen = [];
+    const watch = setInterval(() => seen.push(word.textContent), 10);
+    const wait = (ms) => new Promise((x) => setTimeout(x, ms));
+    w.addThinking('first thought');
+    await wait(400);
+    w.endThinking();
+    w.set('tool', 'Read a.txt');
+    w.addThinking('second thought');
+    await wait(400);
+    w.set('tool', 'Read a.txt'); // same step again: the word may change, but never to nothing
+    await wait(400);
+    clearInterval(watch);
+    const immediate = (() => { const v = createWorking('waiting'); document.body.append(v.el); const t = v.el.querySelector('.bunny-word').textContent; v.stop(); return t; })();
+    w.stop();
+    return { empties: seen.filter((t) => t === '').length, total: seen.length, immediate };
+  });
+  expect(r.total).toBeGreaterThan(20);
+  expect(r.empties).toBe(0);
+  expect(r.immediate).not.toBe('');
+});
+
+test('a long step target ends in one ellipsis and the timer stays after it', async ({ page }) => {
+  await page.goto('/');
+  const r = await page.evaluate(async () => {
+    const { createWorking } = await import('/src/ui/bunny-working.js');
+    const w = createWorking('waiting');
+    document.body.append(w.el);
+    w.set('tool', `Run ${'Start-Sleep -Seconds 1; '.repeat(6)}`);
+    await new Promise((x) => setTimeout(x, 400));
+    const out = { word: w.el.querySelector('.bunny-word').textContent, time: w.el.querySelector('.bunny-time').textContent };
+    w.stop();
+    return out;
+  });
+  expect(r.word).not.toContain('……');
+  expect(r.word.split('…').length - 1).toBe(1);
+  expect(r.word.endsWith('…')).toBe(true);
+  expect(r.time).toMatch(/^\d+s$/);
+});
+
+test('on a phone a 60-character model name shortens and the timer stays on screen in the slow state', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/');
+  const r = await page.evaluate(async () => {
+    const { createWorking } = await import('/src/ui/bunny-working.js');
+    const w = createWorking('waiting', { model: `provider/${'very-long-model-name-'.repeat(3)}`.slice(0, 60) });
+    document.body.append(w.el);
+    w.set('slow');
+    await new Promise((x) => setTimeout(x, 400));
+    const model = w.el.querySelector('.bunny-model');
+    const time = w.el.querySelector('.bunny-time').getBoundingClientRect();
+    const out = {
+      tail: w.el.querySelector('.bunny-tail').textContent,
+      cut: model.scrollWidth > model.clientWidth,
+      timeRight: time.right, timeLeft: time.left, view: document.documentElement.clientWidth,
+      wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      after: w.el.querySelector('.bunny-time').compareDocumentPosition(model) & Node.DOCUMENT_POSITION_PRECEDING,
+    };
+    w.stop();
+    return out;
+  });
+  expect(r.tail.startsWith('waiting for provider/')).toBe(true);
+  expect(r.cut).toBe(true);
+  expect(r.timeLeft).toBeGreaterThanOrEqual(0);
+  expect(r.timeRight).toBeLessThanOrEqual(r.view);
+  expect(r.wide).toBe(false);
+  expect(r.after).toBeTruthy(); // the name comes before the timer
 });

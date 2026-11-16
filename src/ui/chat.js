@@ -932,8 +932,23 @@ function paintMessages() {
   let run = [];
   const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
   const groupable = (m) => m.kind === 'tool_call' && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  // W4-5c: a reply saves ONE thinking text; when steps came before its answer, its "Thought for" row goes before the first of them
+  // (thinking, then the step it led to), the same order the live line settles in.
+  const thoughtAt = new Map();
   state.messages.forEach((m, index) => {
-    const el = renderMessage(m);
+    if (m.role !== 'assistant' || m.kind === 'tool_call' || !m.thinking) return;
+    let first = index;
+    while (first > 0 && state.messages[first - 1].kind === 'tool_call') first -= 1;
+    if (first < index) thoughtAt.set(first, m);
+  });
+  const early = new Set(thoughtAt.values());
+  state.messages.forEach((m, index) => {
+    if (thoughtAt.has(index)) {
+      flushRun();
+      const t = thoughtAt.get(index);
+      host.append(thoughtRow(t.thinking, t.thinkingMs));
+    }
+    const el = renderMessage(m, { skipThinking: early.has(m) });
     if (!groupable(m)) { flushRun(); host.append(el); return; }
     if (m.note) flushRun(); // narration starts a new group
     run.push({ m, el, last: index === state.messages.length - 1 });
@@ -1097,7 +1112,7 @@ function renderTitle() {
   el.textContent = state.session?.title || say('chat.new');
 }
 
-function renderMessage(m) {
+function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
   // Tool call block: collapsible, shows the tool name, args and result
@@ -1195,7 +1210,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
         ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} ${reasonPhrase(m.fellBackReason)}${alsoFailed(m.fellBackTries)})` : ''}`
         : `${say('model.answeredInstead', { model: m.model, from: m.fellBackFrom, reason: reasonPhrase(m.fellBackReason) })}${alsoFailed(m.fellBackTries)}` }));
   }
-  if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking, { ms: m.thinkingMs }));
+  if (m.role === 'assistant' && m.thinking && !skipThinking) wrap.append(thinkingBlock(m.thinking, { ms: m.thinkingMs }));
   const body = element('div', { className: 'body' });
   if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
   else body.textContent = m.content;
@@ -1591,7 +1606,8 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     if (!working.isThinking()) return;
     const done = working.endThinking();
     const msg = bodyEl.closest('.msg');
-    if (done.text && msg) msg.insertBefore(thinkingBlock(done.text, { ms: done.ms }), bodyEl);
+    // a sibling above the reply, like the steps (msg.before): so thinking, then the step it led to, in the order they happened
+    if (done.text && msg) msg.before(thoughtRow(done.text, done.ms));
   };
 
   const handlers = {
@@ -1804,6 +1820,11 @@ function answeredQuestionCard(q) {
 /** The model's thinking: folded under "Thinking…", open it to read along. */
 /** How much of a step's result shows: all of it in the Verbose transcript view. */
 const resultLimit = () => (state.settings?.transcriptView === 'verbose' ? 100_000 : 500);
+
+/** The "Thought for" row as its own line in the thread, so it can sit among the steps. */
+function thoughtRow(text, ms) {
+  return element('div', { className: 'msg assistant thinking-row' }, thinkingBlock(text, { ms }));
+}
 
 /** A finished stretch of thinking as a quiet row: "Thought for 21s" (just "Thought" when the time was not kept, as in old chats). */
 function thinkingBlock(text, { ms = 0 } = {}) {

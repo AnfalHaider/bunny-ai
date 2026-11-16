@@ -827,9 +827,12 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .bunny-working .bunny-line:disabled { cursor: default; opacity: 1; }
 .bunny-working .bunny-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .bunny-working .bunny-word { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bunny-working .bunny-tail { color: var(--text-dim); white-space: nowrap; }
+.bunny-working .bunny-tail { color: var(--text-dim); white-space: nowrap; display: flex; min-width: 0; flex: 0 1 auto; }
+.bunny-working .bunny-tail-lead { flex: none; white-space: pre; }
+.bunny-working .bunny-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bunny-working.is-slow .bunny-word { flex: none; }
 .bunny-working .bunny-tail:empty { display: none; }
-.bunny-working .bunny-tail:not(:empty)::after { content: " ·"; }
+.bunny-working .bunny-tail:not(:empty)::after { content: " ·"; white-space: pre; flex: none; }
 .bunny-working .bunny-time { flex: none; }
 .bunny-working .bunny-chev { flex: none; width: 0.5em; height: 0.5em; margin-left: var(--sp-1); border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform var(--t-fast); }
 .bunny-working.is-open .bunny-chev { transform: rotate(45deg); }
