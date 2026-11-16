@@ -101,11 +101,13 @@
 <script type="module">
   import { getJSON, sendJSON } from './api.js';
   import { applyEmbed } from './embed.js';
+  import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
   import { applyLanguage } from './i18n.js';
   getJSON('/api/settings').then((s) => applyLanguage(s.language ?? 'en')).catch(() => {});
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);
+  const flows = createSignInFlows({ getJSON, sendJSON, onChange: () => renderMcp(), onSignedIn: () => renderMcp() });
 
   function row(name, detail, isOn, onToggle, onDelete, toggleLabel = 'On') {
     const line = document.createElement('div');
@@ -238,7 +240,8 @@
   async function renderMcp() {
     const host = $('mcp-list');
     const rows = await getJSON('/api/mcp');
-    host.replaceChildren();
+    await Promise.all(rows.map(async (s) => { s.oauth = s.type === 'local' ? null : await getJSON(`/api/connectors/${s.id}/oauth`).catch(() => null); }));
+    host.replaceChildren(); // after every await, so two paints in a row cannot double the list
     if (!rows.length) {
       const empty = document.createElement('div');
       empty.className = 'row';
@@ -249,10 +252,11 @@
       host.append(empty);
       return;
     }
+    // W3-6b: the status words and the sign-in are the same as on Customize (connectorStatus.js)
     for (const server of rows) {
-      const where = server.type === 'local' ? `Local: ${[server.command, ...(server.args ?? [])].join(' ')}` : server.url;
-      const detail = `${where} · ${server.status ?? 'unknown'}${server.tools?.length ? ` · ${server.tools.length} tools` : ''}`;
-      const line = row(server.name, detail, server.enabled, async (on) => {
+      const local = server.type === 'local';
+      const where = local ? `Local: ${[server.command, ...(server.args ?? [])].join(' ')}` : server.url;
+      const line = row(server.name, where, server.enabled, async (on) => {
         await sendJSON(`/api/mcp/${server.id}`, 'PATCH', { enabled: on });
         await renderMcp();
       }, async () => {
@@ -260,20 +264,33 @@
         await renderMcp();
       }, 'On');
 
-      const check = document.createElement('button');
-      check.type = 'button';
-      check.textContent = 'Check tools';
-      check.className = 'ghost small';
-      check.addEventListener('click', async () => {
+      const st = local ? { word: server.status === 'connected' ? `✓ ${server.tools?.length ?? 0} tools` : server.status === 'error' ? 'Error' : 'Not checked', detail: server.status === 'error' ? server.lastError ?? '' : '', tone: server.status === 'connected' ? 'ok' : server.status === 'error' ? 'bad' : '', canSignIn: false }
+        : connectorStatus(server, flows.get(server.id));
+      line.querySelector('.k').append(renderStatus(st, document));
+      const box = local ? null : flows.clientIdBox(server);
+      if (box) line.querySelector('.k').append(box);
+
+      const addButton = (text, onclick) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = text;
+        b.className = 'ghost small';
+        b.addEventListener('click', onclick);
+        line.querySelector('.v').insertBefore(b, line.querySelector('.v').lastElementChild);
+      };
+      if (st.wait) addButton('Cancel', () => { flows.clear(server.id); renderMcp(); });
+      if (st.canSignIn) addButton(st.signInLabel, () => flows.start(server));
+      if (server.oauth?.signedIn) addButton('Sign out', async () => { $('automation-error').textContent = ''; await flows.signOut(server); await renderMcp(); });
+      addButton('Check tools', async () => {
         try {
           const res = await fetch(`/api/mcp/${server.id}/tools`);
           const body = await res.json();
-          if (!res.ok) throw new Error(body.message ?? 'The server did not answer');
+          flows.clear(server.id);
+          if (!res.ok && !['mcp.needsSignIn', 'mcp.keyRefused'].includes(body.code)) throw new Error(body.message ?? 'The server did not answer');
           $('automation-error').textContent = '';
           await renderMcp();
         } catch (err) { showError(err); }
       });
-      line.querySelector('.v').insertBefore(check, line.querySelector('.v').lastElementChild);
       host.append(line);
     }
   }

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,7 +16,7 @@ import { startFake } from './fake-mcp-oauth.js';
 const TOKEN = 'a'.repeat(64);
 const j = { 'content-type': 'application/json' };
 
-async function setup(t, { folderPickerOnly = false, fake: fakeOpts = {}, upstream = false } = {}) {
+async function setup(t, { folderPickerOnly = false, fake: fakeOpts = {}, upstream = false, headers = null } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), 'bunny-signin-'));
   const secrets = memorySecretStore();
   const app = await createApp({ dataDir, fake: !upstream, secretStore: secrets, apiToken: TOKEN, folderPickerOnly, probe: async () => ({ ok: true, keyVerified: true }), discover: async () => [] });
@@ -39,6 +39,11 @@ async function setup(t, { folderPickerOnly = false, fake: fakeOpts = {}, upstrea
     return { status: res.status, body: await res.json().catch(() => null) };
   };
   const call = folderPickerOnly ? asWindow : withToken;
+  if (headers) { // a connector that came with a key of its own (the store reads its file on first use, so this lands before any request)
+    const id = '11111111-2222-3333-4444-555555555555';
+    await writeFile(join(dataDir, 'mcp.json'), JSON.stringify([{ id, name: 'Keyed', url: f.server.url, headers, enabled: true, status: 'unknown', tools: [], lastError: null }]));
+    return { app, base, dataDir, secrets, f, id, withToken, asWindow, call };
+  }
   const added = await call('/api/mcp', { method: 'POST', body: JSON.stringify({ name: 'Fake', url: f.server.url, enabled: true }) });
   assert.equal(added.status, 200, JSON.stringify(added.body));
   return { app, base, dataDir, secrets, f, id: added.body.id, withToken, asWindow, call };
@@ -273,4 +278,38 @@ test('in a chat, a tool on a connector that needs a sign-in fails with the exact
   assert.equal(step.result, 'This connector needs you to sign in.');
   assert.equal(step.needsSignIn, true);
   assert.equal(step.serverId, s.id);
+});
+
+test('a connector with its own key that answers 401 says the key was refused and offers no sign-in', async (t) => {
+  const s = await setup(t, { headers: { Authorization: 'Bearer wrong-key' } });
+  const r = await s.withToken(`/api/mcp/${s.id}/tools`);
+  assert.equal(r.status, 502);
+  assert.equal(r.body.code, 'mcp.keyRefused');
+  assert.equal(r.body.status, 'error');
+  assert.equal(r.body.message, 'The service refused the key. Check it in Customize.');
+  assert.doesNotMatch(JSON.stringify(r.body), /sign in|secret raw 401|wrong-key/);
+  const { body: list } = await s.withToken('/api/mcp');
+  assert.equal(list[0].status, 'error');
+  assert.equal(list[0].lastError, 'The service refused the key. Check it in Customize.');
+  // the same connector with no key still asks for a sign-in
+  const plain = await setup(t);
+  assert.equal((await plain.withToken(`/api/mcp/${plain.id}/tools`)).body.code, 'mcp.needsSignIn');
+});
+
+test('a sign-in that can no longer be renewed is marked expired, with the same words for the chat, and the saved sign-in is gone', async (t) => {
+  const s = await setup(t, { fake: { expiresIn: 30 } }); // inside the renewal margin: the next call tries to renew
+  await signIn(s);
+  s.f.opts.refreshFails = true;
+  const r = await s.withToken(`/api/mcp/${s.id}/tools`);
+  assert.equal(r.status, 502);
+  assert.equal(r.body.code, 'mcp.needsSignIn');
+  assert.equal(r.body.message, 'This connector needs you to sign in.');
+  assert.equal(r.body.expired, true);
+  const { body: list } = await s.withToken('/api/mcp');
+  assert.equal(list[0].status, 'needsSignIn');
+  assert.equal(list[0].lastError, 'Your sign-in expired. Sign in again.');
+  assert.equal((await s.withToken(`/api/connectors/${s.id}/oauth`)).body.signedIn, false);
+  // a connector that was never signed in is not "expired"
+  const fresh = await setup(t);
+  assert.equal((await fresh.withToken(`/api/mcp/${fresh.id}/tools`)).body.expired, undefined);
 });

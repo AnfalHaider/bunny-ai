@@ -85,6 +85,7 @@
 <script type="module">
   import { getJSON, sendJSON, applyTheme, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
+  import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);
@@ -131,62 +132,14 @@
     paint();
   }
 
-  // ---- signing in to a connector (W3-6) ----
-  // signIn: connector id -> { phase: 'waiting' | 'needsClientId' | 'error', message?, until? } for the sign-in the person is in the middle of.
-  const signIn = new Map();
+  // ---- signing in to a connector (W3-6; the states and the flow are in connectorStatus.js, shared with Automation) ----
   let notice = '';
-  const WAIT_MS = 5 * 60_000;
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  async function startSignIn(s, clientId = '') {
-    notice = '';
-    try {
-      const out = await sendJSON(`/api/connectors/${s.id}/oauth/start`, 'POST', clientId ? { clientId } : {});
-      signIn.set(s.id, { phase: 'waiting', until: Date.now() + WAIT_MS });
-      window.open(out.authUrl, '_blank', 'noopener'); // the desktop app hands https/http links to the person's own browser
-      paint();
-      watchSignIn(s);
-    } catch (e) {
-      signIn.set(s.id, e.code === 'mcp.oauth.needsClientId'
-        ? { phase: 'needsClientId', message: 'This service does not let apps register themselves. Paste the client ID from its developer settings.' }
-        : { phase: 'error', message: e.message });
-      paint();
-    }
-  }
-
-  /** Ask the server every couple of seconds whether the person has finished in their browser. */
-  async function watchSignIn(s) {
-    while (signIn.get(s.id)?.phase === 'waiting') {
-      await wait(1500);
-      const flow = signIn.get(s.id);
-      if (flow?.phase !== 'waiting') return;
-      const now = await getJSON(`/api/connectors/${s.id}/oauth`).catch(() => null);
-      if (now?.signedIn) { signIn.delete(s.id); notice = `Signed in to ${s.name} as ${now.account ?? 'your account'}.`; await load(); return; }
-      if (now?.error) { signIn.set(s.id, { phase: 'error', message: now.error }); paint(); return; }
-      if (Date.now() > flow.until) { signIn.set(s.id, { phase: 'error', message: 'The sign-in was not finished in 5 minutes. Try again.' }); paint(); return; }
-    }
-  }
-
-  async function signOut(s) {
-    notice = '';
-    try {
-      const out = await sendJSON(`/api/connectors/${s.id}/oauth/signout`, 'POST', {});
-      notice = out.message;
-    } catch (e) { notice = e.message; }
-    await load();
-  }
-
-  /** The line under a connector's name while it is not simply on or off: a client ID box or a failure. */
-  function signInExtra(s) {
-    const flow = signIn.get(s.id);
-    if (!flow || flow.phase === 'waiting') return null;
-    const box = el('span', { className: 'cz-signin-note' }, el('span', { text: flow.message }));
-    if (flow.phase === 'needsClientId') {
-      const input = el('input', { className: 'input', placeholder: 'Client ID', 'aria-label': `Client ID for ${s.name}`, spellcheck: 'false' });
-      box.append(input, act('Continue', () => { if (input.value.trim()) startSignIn(s, input.value.trim()); }, 'btn btn-primary btn-sm'));
-    }
-    return box;
-  }
+  const flows = createSignInFlows({
+    getJSON, sendJSON, onChange: () => paint(),
+    onSignedIn: async (s, now) => { notice = `Signed in to ${s.name} as ${now.account ?? 'your account'}.`; await load(); },
+  });
+  async function startSignIn(s) { notice = ''; await flows.start(s); }
+  async function signOut(s) { notice = await flows.signOut(s); await load(); }
 
   const pluginOf = (kind, id) => data.plugins.find((p) => (p[kind] ?? []).includes(id));
   const initial = (name) => (String(name).match(/\p{L}|\p{N}/u)?.[0] ?? '?').toUpperCase();
@@ -204,7 +157,7 @@
     return n;
   }
 
-  function row({ id, name, sub, type, typeTag, status, statusClass, actions = [], extra = null }) {
+  function row({ id, name, sub, type, typeTag, status, statusClass, statusNode = null, actions = [], extra = null }) {
     let box = null;
     if (id && view.scope === 'yours') {
       shownIds.push(id);
@@ -218,7 +171,7 @@
         el('span', { className: 'cz-logo', 'aria-hidden': 'true', text: initial(name) }),
         el('span', { className: 'cz-text' }, el('b', { text: name }), sub ? el('small', { text: sub }) : null, extra)),
       el('span', { className: 'cz-type', role: 'cell' }, document.createTextNode(type), typeTag ? el('span', { className: 'badge', text: typeTag }) : null),
-      el('span', { className: `cz-status ${statusClass ?? ''}`, role: 'cell', text: status }),
+      statusNode ?? el('span', { className: `cz-status ${statusClass ?? ''}`, role: 'cell', text: status }),
       el('span', { className: 'cz-actions', role: 'cell' }, ...actions));
   }
 
@@ -233,25 +186,22 @@
     if (view.kind === 'connectors') {
       for (const s of data.connectors.filter((s) => matches(s.name, s.url))) {
         const plugin = pluginOf('connectors', s.id);
-        const flow = signIn.get(s.id);
+        const flow = flows.get(s.id);
         const signedIn = s.oauth?.signedIn === true;
-        const needs = !signedIn && s.status === 'needsSignIn';
-        const status = flow?.phase === 'waiting' ? 'Waiting for you to finish in your browser… (5 minutes)'
-          : flow?.phase === 'error' ? 'Sign-in failed'
-          : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}`
-          : needs ? 'Needs sign-in'
-          : !s.enabled ? 'Off' : s.status === 'connected' ? `✓ ${s.tools?.length ?? 0} tools` : s.status === 'error' ? 'Error' : 'Not checked';
+        const st = connectorStatus(s, flow);
+        const statusNode = renderStatus(st, document);
+        statusNode.setAttribute('role', 'cell');
         list.append(row({
           id: s.id,
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.url,
           type: 'Remote', typeTag: plugin ? 'Plugin' : 'Custom',
-          status, statusClass: s.status === 'error' || flow?.phase === 'error' ? 'text-bad' : needs || flow ? 'is-warn' : signedIn || (s.status === 'connected' && s.enabled) ? 'text-ok' : '',
-          extra: signInExtra(s),
+          statusNode,
+          extra: flows.clientIdBox(s),
           actions: [
-            flow?.phase === 'waiting' ? act('Cancel', () => { signIn.delete(s.id); paint(); }) : null,
-            (!flow || flow.phase === 'error') && needs ? act('Sign in', () => startSignIn(s), 'btn btn-primary btn-sm') : null,
+            st.wait ? act('Cancel', () => { flows.clear(s.id); paint(); }) : null,
+            st.canSignIn ? act(st.signInLabel, () => startSignIn(s)) : null,
             signedIn ? act('Sign out', () => signOut(s)) : null,
-            act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; notice = ''; await fetch(`/api/mcp/${s.id}/tools`); signIn.delete(s.id); await load(); }),
+            act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); }),
             toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on })),
             plugin ? null : act('Remove', async () => { await sendJSON(`/api/mcp/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
           ],

@@ -371,7 +371,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
   }
 
   async function doRefresh(id, saved, server) {
-    const needsSignIn = () => new McpError('This connector needs you to sign in.', 'mcp.needsSignIn', { signInUrl: null });
+    const needsSignIn = () => new McpError('This connector needs you to sign in.', 'mcp.needsSignIn', { signInUrl: null, expired: true });
     if (!saved.refresh_token) {
       await secrets.delete(tokenKey(id));
       throw needsSignIn();

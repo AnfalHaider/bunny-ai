@@ -13,6 +13,10 @@ import { McpError } from './mcp.js';
 import { createMcpOAuth } from './mcpOAuth.js';
 
 export const NEEDS_SIGN_IN = 'This connector needs you to sign in.';
+export const SIGN_IN_EXPIRED = 'Your sign-in expired. Sign in again.';
+export const KEY_REFUSED = 'The service refused the key. Check it in Customize.';
+/** A connector given a key of its own (a static Authorization or token header) is not signed in to: a 401 means the key is wrong. */
+export const hasStaticKey = (server) => server?.type !== 'local' && Object.keys(server?.headers ?? {}).some((k) => /authorization|token|api[-_]?key|secret/i.test(k));
 const UUID = '[a-f0-9-]{36}';
 const escapeHtml = (s) => String(s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -110,9 +114,13 @@ export function createConnectorSignIn({ secrets, mcp, getBase, now = () => Date.
     authFor: (server) => (server?.type === 'local' ? undefined : oauth().authFor(server)),
     /** A connector answered 401: remember where its sign-in starts, mark it, and say it in the shape the window and the chat use. */
     async needsSignIn(server, err) {
+      if (hasStaticKey(server)) { // it has its own key: signing in would not help, so say the key was refused and offer no Sign in
+        await mcp.setStatus(server.id, { status: 'error', error: KEY_REFUSED }).catch(() => {});
+        return { code: 'mcp.keyRefused', message: KEY_REFUSED, signInUrl: null, serverId: server.id };
+      }
       if (err?.signInUrl) hints.set(server.id, err.signInUrl);
-      await mcp.setStatus(server.id, { status: 'needsSignIn', error: NEEDS_SIGN_IN }).catch(() => {});
-      return { code: 'mcp.needsSignIn', message: NEEDS_SIGN_IN, signInUrl: err?.signInUrl ?? null, serverId: server.id };
+      await mcp.setStatus(server.id, { status: 'needsSignIn', error: err?.expired ? SIGN_IN_EXPIRED : NEEDS_SIGN_IN }).catch(() => {});
+      return { code: 'mcp.needsSignIn', message: NEEDS_SIGN_IN, signInUrl: err?.signInUrl ?? null, serverId: server.id, ...(err?.expired ? { expired: true } : {}) };
     },
     /** Deleting a connector ends its sign-in first. Best effort, and the stored token goes whatever the provider says. */
     async signOutQuietly(server) {
