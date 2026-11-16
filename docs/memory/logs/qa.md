@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Builder batch re-checked at d2dbf82
+
+Gate 7 of 7 (130 e2e). Verified fixed: Q2-28 (D1 walk 24 of 24), Q2-27 (S-1 walk 33 of 33), Q2-24 and Q2-26 (per-mode tests pass, Auto computer-use click not driven), both T-3 gaps ("is slow, trying ..." at 32 s; Auto names the other failure), draft kept when a waiting message is cancelled by leaving, "Checking your connection..." then one send. New `test/q2-escape.test.js`: a junction pointing outside cannot be written through or read through the panes. Still open: Q2-7 (Plan pane unreachable), Q2-29, Q2-30, Q2-31. Final sign-offs (release-0.1.5, D1 PASS) wait for the release sha. **Lesson:** after a decision flips a safety default, re-read every test that drives the dangerous case (Auto computer-use click) before running it: now it really clicks.
+
 ## 2026-11-16 - D-2 panes walked at 5f36e04
 
 Gate 7 of 7 (128 e2e). Changes (git and plain folders, checkpoint cards, counts, diff, Undo to here), Files (tree, read-only file view, changed lines marked), Session (folder, branch, model, mode, effort, tokens, running programs, Auto's pick) all pass in four widths and themes: Q2-4, Q2-5, Q2-6 fixed. Q2-7 partly: the Plan pane fills but has no tab to open it. Path-escape tests (17 attempts on each route, a junction pointing outside, UNC and drive paths, unchosen folders) all refused. Permission tests now follow the Chief of Staff's decision (Auto: build runs without asking; Manual and Accept edits ask; computer-use clicks follow the mode; the Auto click is not driven because it would click this screen). **Lesson:** a phone has one pane at a time, so a walk that sends a message must close the pane first; a script that does not looks like a bug in the app.

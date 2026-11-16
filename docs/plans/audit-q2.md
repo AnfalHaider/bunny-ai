@@ -153,6 +153,23 @@ Gate on `5f36e04`: 7 of 7 (128 e2e). `e2e/q2-panes2-walk.mjs`, invented profile,
 
 **Path escapes** (`/api/sessions/:id/files` and `/file`, 17 attempts each: `../`, `..`, `..%2F`, `%2e%2e%2f`, `src/../../secret.txt`, backslash forms, `C:\Windows\win.ini`, `C:/Windows/win.ini`, a UNC `\localhost\c$\...`, `/etc/passwd`, `README.md%00.txt`, and a Windows junction inside the folder that points outside): none returned anything outside the folder, none answered 200. `/api/folder/files` and `/file` refuse (403) every folder not chosen in this launch (`C:\Windows`, `C:\`, an outside folder, even the project before it is chosen), and after `folder/check` they still refuse `../`, the junction and a drive path. A chat that does not exist or has no folder answers without a server error. A 2 MB file comes back cut off (`truncated: true`); a binary file is flagged `binary: true`, not dumped. (The Tech Lead's `changesFor` finding was not exercised by a link that escapes: a write through the junction was not attempted.)
 
+### Builder batch at `d2dbf82` (includes `fde15a5` and `78f49fe`) (QA, 2026-11-16)
+
+Gate on `d2dbf82`: 7 of 7 (130 e2e). Invented profile, guard on, scripts re-run:
+
+| Item | Result | Evidence |
+|---|---|---|
+| Q2-28 D1 phone Settings pills | **FIXED** | `q2-d1-walk.mjs` 24 of 24 (pills size to their text, the strip scrolls, several fully visible) |
+| Q2-27 false "restarted" banner | **FIXED** | `q2-s1-walk.mjs` 33 of 33, including the terminal after the browser pane opened Bunny's own API address (the banner no longer covers the toolbar) |
+| Q2-24, Q2-26 permissions | **FIXED** as decided | Auto: creating a tool runs with no card; Manual and Accept edits ask for it; computer-use clicks ask in Manual and Accept edits (answered Deny; the Auto click is not driven, it would click this screen); Builder's `test/permission-modes.test.js` and mine both pass (24 tests, 4 `todo` of which Q2-26 now passes) |
+| T-3 gap 1: nothing on screen for 30 s | **FIXED** | at 32 s the status line says "offline/bunny-code is slow. Trying Bunny Large (offline)..." |
+| T-3 gap 2: Auto names only the first failure | **FIXED** | "Auto · Chat → offline/bunny-small (Bunny Code (offline) did not answer in time (1 other model also failed))" |
+| Waiting text kept as a draft | **FIXED** | offline, send, leave to New chat: the bubble is gone, the text is back in the box, nothing sent |
+| "Checking your connection..." on reconnect | **FIXED** | the status shows it, then "Streaming...", and exactly one request ("queued again") |
+| Link (junction) escape through Changes, Files, file and a model write | **no escape** | new `test/q2-escape.test.js`: the model's `write_file link/secret.txt` does not touch the outside file; none of `changes`, `files`, `file`, `files?path=link` shows outside text |
+| Q2-7 Plan pane | still open | filled, but no tab opens it (8 of 8 combinations) |
+| Q2-29 exit code not Failed, Q2-30 closed local provider offline, Q2-31 Stop report after steps | still open | `q2-t3d2-walk.mjs` D2, T4b, D3 unchanged; D2b (a failing tool) and the 26 older chats pass |
+
 ### Open question (UNKNOWN, not counted)
 
 - **Q2-U1.** Headless Chromium reported "Page crashed" / "Target crashed" three times in about ten long walks (at the Settings window, the palette, `page.goto`). It did not repeat when the same rows were run alone, so it may be the test setup (many iframes, parallel runs) and not the app. Needs a look in the real window for a repeat.
