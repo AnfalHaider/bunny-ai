@@ -21,7 +21,7 @@ Docs and tests only. Nothing in `src/` was changed. Nothing here touched `%LOCAL
 | Controls inventoried (live DOM, 5 pages) | 316 (`docs/plans/audit-q2-inventory.md`, one row each) |
 | Verdicts in the inventory | 245 PASS, 23 FAIL, 48 UNKNOWN |
 | Checks driven in this audit | 79 (`controls` 43, `panes` 17, `pages` 19) plus the six fallback and Code-mode reproductions |
-| Defects | 22 (5 High, 9 Medium, 8 Low) and 1 open question |
+| Defects | 23 (5 High, 10 Medium, 8 Low) and 1 open question |
 | New tests | 23 unit (6 pass, 17 todo = defects), 17 browser (7 pass, 10 expected-fail = defects); the gate passes 6/6 with them |
 
 The owner's reports are all real. Four of the six panes the owner mentioned are partly or wholly empty shells, and the model fallback is slower and messier than the screen suggests.
@@ -77,6 +77,7 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 | Q2-20 | Low | Seven switches have no accessible name (a screen reader says "on, checkbox"): the eight Capabilities switches, Notifications, "Also let Bunny use Gmail…", the About row. | `src/ui/settings.html:187`, `:252-320` (no `aria-label`). | `q2-inventory.mjs` rows with an empty name. | (accessibility; no test yet) |
 | Q2-21 | Low | The dev-server card says "running" if **anything** answers on the guessed port, even another project's site (on this machine port 3001 serves an unrelated site). | `src/server/workspace.js:373-377` (`running = res.status > 0`). | `q2-code-mode.mjs` screenshot: pane on `localhost:3001` showed a different site. | (needs a port in use; see note) |
 | Q2-22 | Low | `/?s=<id>` loses the chat id (the root redirects to `/src/ui/index.html` without the query); `GET /api/sessions` reads every chat: 5 ms empty, 97 ms at 155 chats, 182 ms at 317. | the root redirect at `src/server/app.js:2474-2475`; `sessions.list`. | `q2-perf.mjs`. | (observation) |
+| Q2-23 | Medium | **S-1 (Builder branch, `09b35e4`): a browser tab left open across a restart of Bunny fails silently.** The tab holds the old launch token; the next send clears the box and shows nothing: no message, no error, no "out of date" notice, until the page is reloaded. The server's words ("This window is out of date. Close it and open Bunny AI again (or reload the page).") never reach the screen. Does not affect the desktop app (the window is recreated with each launch); affects `npm start` and the plain-browser preview. | the UI has no handler for the 403 `request.noToken` answer (`src/ui/token.js`, `src/ui/api.js` `sendJSON`/`getJSON`); found on the Builder branch, not in this branch's tree | `e2e/q2-s1-walk.mjs` restart probe: after the restart `#error`, `#status` and the transcript are all empty; screenshot `%TEMP%\qa-q2\s1\stale-window.png`. | unit Q2-23 (todo) |
 
 ### Open question (UNKNOWN, not counted)
 

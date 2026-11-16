@@ -222,3 +222,8 @@ test('Q2-9: the browser pane tells the person when a page is not reachable inste
   const js = await read('src/ui/browser-pane.js');
   assert.ok(/chrome-error|ERR_CONNECTION|not reachable|could not reach|is not running/i.test(js), 'no handling for an unreachable page');
 });
+
+test('Q2-23: when the server answers 403 "request.noToken" (a window left open across a restart), the page tells the person to reload', { todo: 'Q2-23: found on the Builder branch at 09b35e4 (S-1): nothing in src/ui handles the answer, so the next send shows nothing at all' }, async () => {
+  const ui = (await Promise.all(['api.js', 'chat.js', 'token.js'].map((f) => read(`src/ui/${f}`).catch(() => '')))).join(' ');
+  assert.ok(/noToken|out of date/i.test(ui), 'no UI code handles the out-of-date window answer');
+});
