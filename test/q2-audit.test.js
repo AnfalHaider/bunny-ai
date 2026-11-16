@@ -153,29 +153,29 @@ test('Q2-16: a transcript written as "User: ..." / "Assistant: ..." on one line 
 
 // ---------------------------------------------------------------- screens that are wired (source checks, same idea as the existing structure tests)
 
-const panes = async () => ({ html: await read('src/ui/index.html'), js: (await Promise.all(['chat.js', 'browser-pane.js', 'pane-layout.js', 'embed.js', 'api.js'].map((f) => read(`src/ui/${f}`)))).join('\n') });
+const panes = async () => ({ html: await read('src/ui/index.html'), js: (await Promise.all(['chat.js', 'browser-pane.js', 'pane-layout.js', 'embed.js', 'api.js', 'work-panes.js'].map((f) => read(`src/ui/${f}`)))).join('\n') });
 
 test('the Tasks, Terminal and Browser panes have code that fills them', async () => {
   const { js } = await panes();
   for (const id of ['tasks-content', 'terminal-output', 'browser-tabs-content']) assert.ok(js.includes(`'${id}'`), `no code uses #${id}`);
 });
 
-test('Q2-4: the Changes pane has code that fills it and a Refresh that does something', { todo: 'Q2-4: src/ui/index.html:312-315 is markup only; nothing in src/ui/*.js uses #diff-content or #pane-diff-refresh and the server has no route that lists changed files' }, async () => {
+test('Q2-4: the Changes pane has code that fills it and a Refresh that does something', async () => {
   const { js } = await panes();
   assert.ok(js.includes("'diff-content'") && js.includes("'pane-diff-refresh'"), 'no UI code touches the Changes pane');
 });
 
-test('Q2-5: the Files pane has code that fills it', { todo: 'Q2-5: src/ui/index.html:354-356 is markup only; nothing in src/ui/*.js uses #file-content and the server has no route that lists or reads a folder for the UI' }, async () => {
+test('Q2-5: the Files pane has code that fills it', async () => {
   const { js } = await panes();
   assert.ok(js.includes("'file-content'"), 'no UI code touches the Files pane');
 });
 
-test('Q2-7: the Plan pane has code that fills it and a way to reach it', { todo: 'Q2-7: #pane-plan (src/ui/index.html:362-364) is never filled and #tab-plan is not visible; the toolbar has no Plan button' }, async () => {
+test('Q2-7: the Plan pane has code that fills it and a way to reach it', async () => {
   const { js } = await panes();
   assert.ok(js.includes("'plan-content'"), 'no UI code touches the Plan pane');
 });
 
-test('Q2-6: the Session pane shows more than "This computer", the project, the context meter, connectors and outputs', { todo: 'Q2-6: src/ui/chat.js:1267-1320 renderRail and src/ui/index.html:261-285 show five things; the folder, branch, model, mode, effort, counts, changed files, tasks and programs are missing' }, async () => {
+test('Q2-6: the Session pane shows more than "This computer", the project, the context meter, connectors and outputs', async () => {
   const { html, js } = await panes();
   const rail = html.slice(html.indexOf('id="rail"'), html.indexOf('id="side-pane"'));
   const has = ['rail-model', 'rail-folder', 'rail-branch', 'rail-mode', 'rail-messages', 'rail-tokens'].filter((id) => rail.includes(id) || js.includes(`'${id}'`));

@@ -209,7 +209,6 @@ test('Q2-3: choosing a permission mode before the first message sends no request
 });
 
 test('Q2-4: the Changes pane lists a file Bunny changed in a git repo', async ({ page }) => {
-  test.fail(true, 'Q2-4: nothing fills #diff-content (src/ui/index.html:312-315)');
   const dir = gitRepo();
   await open(page, 'code'); await useFolder(page, dir); await pickMode(page, 'Auto');
   await send(page, 'change readme');
@@ -218,7 +217,6 @@ test('Q2-4: the Changes pane lists a file Bunny changed in a git repo', async ({
 });
 
 test('Q2-4b: the Changes pane lists changes in a folder that is not a git repo too', async ({ page }) => {
-  test.fail(true, 'Q2-4: owner report (d), "No changes yet" after files changed in a non-git folder');
   const dir = mkdtempSync(join(tmpdir(), 'bunny-q2-e2e-plain-'));
   await open(page, 'code'); await useFolder(page, dir); await pickMode(page, 'Auto');
   await send(page, 'write one');
@@ -228,7 +226,6 @@ test('Q2-4b: the Changes pane lists changes in a folder that is not a git repo t
 });
 
 test('Q2-5: the Files pane lists the working folder', async ({ page }) => {
-  test.fail(true, 'Q2-5: nothing fills #file-content (src/ui/index.html:354-356)');
   const dir = gitRepo();
   await open(page, 'code'); await useFolder(page, dir);
   await page.locator('.toolbar [data-view="file"]').click();
@@ -236,7 +233,6 @@ test('Q2-5: the Files pane lists the working folder', async ({ page }) => {
 });
 
 test('Q2-6: the Session pane shows the folder, the branch, the model and the permission mode', async ({ page }) => {
-  test.fail(true, 'Q2-6: src/ui/chat.js:1267-1320 renders only environment, project, context, connectors and outputs');
   const dir = gitRepo();
   await open(page, 'code'); await useFolder(page, dir); await send(page, 'hello');
   await page.locator('#rail-toggle').click();

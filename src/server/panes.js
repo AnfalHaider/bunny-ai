@@ -76,7 +76,7 @@ export function lineDiff(before, after) {
   const a = before === '' ? [] : before.split('\n');
   const b = after === '' ? [] : after.split('\n');
   if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) {
-    return { added: b.length, removed: a.length, lines: [], tooLarge: true };
+    return { added: b.length, removed: a.length, lines: [], addedAt: [], tooLarge: true };
   }
   // longest common subsequence table
   const rows = a.length + 1;
@@ -97,7 +97,10 @@ export function lineDiff(before, after) {
   while (j < b.length) { ops.push(['+', b[j]]); j += 1; }
   const added = ops.filter((o) => o[0] === '+').length;
   const removed = ops.filter((o) => o[0] === '-').length;
-  if (!added && !removed) return { added: 0, removed: 0, lines: [], tooLarge: false };
+  if (!added && !removed) return { added: 0, removed: 0, lines: [], addedAt: [], tooLarge: false };
+  const addedAt = [];
+  let newLine = 0;
+  for (const o of ops) { if (o[0] !== '-') newLine += 1; if (o[0] === '+') addedAt.push(newLine); }
   // keep changed lines with 3 lines of context either side
   const keep = new Array(ops.length).fill(false);
   ops.forEach((o, k) => { if (o[0] !== ' ') for (let c = Math.max(0, k - 3); c <= Math.min(ops.length - 1, k + 3); c += 1) keep[c] = true; });
@@ -106,7 +109,7 @@ export function lineDiff(before, after) {
   ops.forEach((o, k) => {
     if (keep[k]) { lines.push(`${o[0]}${o[1]}`); skipped = false; } else if (!skipped) { lines.push('@@'); skipped = true; }
   });
-  return { added, removed, lines, tooLarge: false };
+  return { added, removed, lines, addedAt, tooLarge: false };
 }
 
 /**
@@ -135,7 +138,7 @@ export async function changesFor(root, checkpointList) {
       let gone = false;
       try { after = (await readFile(resolve(f.path))).toString('utf8'); } catch { gone = true; }
       const d = lineDiff(before, after);
-      entry.files.push({ path: rel, status: !f.existed ? 'new' : gone ? 'removed' : 'edited', added: d.added, removed: d.removed, lines: d.lines, tooLarge: d.tooLarge });
+      entry.files.push({ path: rel, status: !f.existed ? 'new' : gone ? 'removed' : 'edited', added: d.added, removed: d.removed, lines: d.lines, addedAt: d.addedAt, tooLarge: d.tooLarge });
       added += d.added; removed += d.removed; files += 1;
     }
     out.push(entry);

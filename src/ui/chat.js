@@ -20,6 +20,7 @@ import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument } from './artifact-content.js';
 import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
+import { initWorkPanes } from './work-panes.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -972,6 +973,12 @@ function summariseSteps(steps) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Show the Files pane with this file open. */
+function openInFilesPane(path) {
+  document.querySelector('[data-view="file"]')?.click();
+  state.workPanes?.openFile(path.replace(/^["']|["']$/g, ''));
+}
+
 function chevron() { return element('span', { className: 'step-chev', 'aria-hidden': 'true' }); }
 
 /** One collapsed line for a run of steps; opening it shows one sub-row per step, each opening to its detail. */
@@ -1078,7 +1085,13 @@ function renderMessage(m) {
     const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
     header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
     const failedStep = m.status === 'failed' || m.status === 'denied';
-    if (m.status) header.append(element('span', { className: `tag${failedStep ? ' is-failed' : ''}`, textContent: failedStep ? 'Failed' : m.status }));
+    if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
+    else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
+    // A read step opens that file in the Files pane.
+    const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
+    if (readPath && state.session?.folder && !failedStep) {
+      header.append(button('Open', { className: 'ghost small tool-call-open', onclick: (e) => { e.stopPropagation(); openInFilesPane(readPath); } }));
+    }
     const toggle = () => { const open = tc.classList.toggle('is-open'); header.setAttribute('aria-expanded', String(open)); };
     header.addEventListener('click', toggle);
     header.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
@@ -1402,6 +1415,7 @@ function renderRail() {
     className: project ? 'rail-value' : 'rail-empty',
     textContent: project || say('rail.noProject'),
   }));
+  renderRailDetails();
 
   const connectors = $('rail-connectors');
   connectors.replaceChildren();
@@ -1431,6 +1445,42 @@ function renderRail() {
       row.addEventListener('click', () => { if (!state.artifactOpen) toggleArtifacts(); showArtifact(a.id); });
       outputs.append(row);
     }
+  }
+}
+
+/** The Session pane's facts: where, which model and why, permissions, context and cost, running programs. Only what is known. */
+function renderRailDetails() {
+  const put = (id, text) => { const node = $(id); if (node) node.textContent = text; };
+  const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
+  const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
+  put('rail-folder', folder ? folder.split(/[\\/]/).filter(Boolean).pop() : 'No folder');
+  $('rail-folder')?.setAttribute('title', folder ?? '');
+  put('rail-branch', branch ?? (folder ? 'Not a git folder' : 'No branch'));
+  const picked = state.selected;
+  put('rail-model', picked ? picked.model : 'No model chosen');
+  const autoPick = state.modelAuto && state.autoPick;
+  const why = $('rail-why-row');
+  if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}`); }
+  const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
+  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  put('rail-mode', modes[mode] ?? mode);
+  put('rail-effort', ((state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium').replace(/^./, (c) => c.toUpperCase()));
+  const ctx = state.session?.context;
+  put('rail-tokens', ctx ? `${ctx.used.toLocaleString()} of ${ctx.limit.toLocaleString()}` : 'none yet');
+  put('rail-messages', String(state.session?.messages?.length ?? state.messages.filter((m) => !m.local).length));
+  // programs the AI left running (from the same list the Terminal pane uses)
+  const running = $('rail-running');
+  if (running && state.sessionId) {
+    getJSON(`/api/processes?sessionId=${encodeURIComponent(state.sessionId)}`).then((list) => {
+      running.replaceChildren();
+      const live = list.filter((p) => p.running);
+      if (!live.length) { running.append(element('div', { className: 'rail-empty', textContent: 'Nothing running.' })); return; }
+      for (const p of live) {
+        const row = element('div', { className: 'rail-row' }, element('span', { className: 'dot', role: 'img', 'aria-label': 'Running' }), element('span', { className: 'rail-value', textContent: p.command }));
+        row.append(button('Stop', { className: 'ghost small', onclick: async () => { await sendJSON(`/api/processes/${p.id}/stop`, 'POST'); renderRailDetails(); } }));
+        running.append(row);
+      }
+    }).catch(() => {});
   }
 }
 
@@ -1767,6 +1817,9 @@ function showLiveTasks(bodyEl, tasks) {
 }
 /** The Tasks pane shows the latest plan in this chat. */
 function renderTasksPane(tasks) {
+  // The Plan pane shows the same plan the Tasks pane does (it had nothing filling it: Q2-7).
+  const plan = $('plan-content');
+  if (plan) plan.replaceChildren(tasks?.length ? taskList(tasks) : element('div', { className: 'pane-empty' }, element('span', { textContent: 'No plan yet.' })));
   const host = $('tasks-content');
   if (!host) return;
   if (!tasks?.length) {
@@ -2070,9 +2123,11 @@ async function refreshSession({ expectAssistant = false } = {}) {
   }
   paintMessages();
   renderContext(state.session.context);
+  if (state.sidePaneOpen) state.workPanes?.refresh();
 }
 
 async function openSession(id) {
+  state.workPanes?.reset();
   cancelQueued({ silent: true }); // a message waiting for the network belongs to the chat it was typed in
   state.sessionId = id;
   state.incognito = false;
@@ -2297,6 +2352,7 @@ async function send() {
   const bodyEl = $('messages').lastElementChild?.querySelector('.body');
 
   const job = jobFor(text, files);
+  state.lastJob = job;
   const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
@@ -3440,6 +3496,12 @@ async function boot() {
       if (!state.terminalId) await terminalStart();
       if (state.terminalId) await terminalWrite(state.terminalId, command + '\n');
     },
+  });
+  state.workPanes = initWorkPanes({
+    getSessionId: () => state.sessionId,
+    getPendingFolder: () => state.pendingFolder?.folder ?? null,
+    onChanged: () => refreshSession(),
+    copy: async (text) => { flashStatus((await copyText(text)) ? 'Path copied' : 'Could not copy'); },
   });
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();

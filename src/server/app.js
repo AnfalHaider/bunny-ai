@@ -163,6 +163,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
 
   let fakeOffline = false; // test mode only: see /api/network
+  const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check)
   const secrets = secretStore ?? dpapiSecretStore({ dir: join(dataDir, 'secrets') });
   const connectionsFile = join(dataDir, 'connections.json');
   const settingsFile = join(dataDir, 'settings.json');
@@ -1219,7 +1220,21 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/folder/check' && method === 'POST') {
       const result = await checkFolder((await readBody(req)).folder);
       if (!result.ok) return sendJson(res, 400, { code: 'folder.invalid', message: result.reason });
+      chosenFolders.add(result.folder); // the person pointed Bunny at it: the Files pane may list it (read-only) before a chat exists
       return sendJson(res, 200, { folder: result.folder, branch: await gitBranch(result.folder) });
+    }
+
+    // The Files pane in a new chat, before its first message: only a folder the person chose in this launch, read-only.
+    if ((path === '/api/folder/files' || path === '/api/folder/file') && method === 'GET') {
+      const result = await checkFolder(url.searchParams.get('folder') ?? '');
+      if (!result.ok || !chosenFolders.has(result.folder)) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder in this chat first.' });
+      try {
+        return sendJson(res, 200, path === '/api/folder/files'
+          ? await listFolder(result.folder, url.searchParams.get('path') ?? '')
+          : await readTextFile(result.folder, url.searchParams.get('path') ?? ''));
+      } catch (err) {
+        return sendJson(res, err.code === 'path.notFound' ? 404 : 400, { code: err.code ?? 'pane.failed', message: err.message });
+      }
     }
 
     // ---- the dev server a folder would run (for the browser panel) ----

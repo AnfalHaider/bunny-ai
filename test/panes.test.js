@@ -70,7 +70,8 @@ test('lineDiff: added, removed, context, and a summary for huge files', () => {
   assert.ok(d.lines.includes('-e') && d.lines.includes('+E') && d.lines.includes('+k'));
   assert.deepEqual(lineDiff('', 'x\ny\n').lines.filter((l) => l[0] === '+'), ['+x', '+y', '+']);
   assert.equal(lineDiff('a\n'.repeat(3000), 'b\n').tooLarge, true);
-  assert.deepEqual(lineDiff('same', 'same'), { added: 0, removed: 0, lines: [], tooLarge: false });
+  assert.deepEqual(lineDiff('same', 'same'), { added: 0, removed: 0, lines: [], addedAt: [], tooLarge: false });
+  assert.deepEqual(lineDiff('a\nb\nc', 'a\nX\nc\nd').addedAt, [2, 4], 'the lines of the NEW file that changed');
 });
 
 test('changesFor: new and edited files from the saved copies, files outside the folder left out', async (t) => {
@@ -136,6 +137,24 @@ test('the routes: a reply that wrote a file shows in Changes and Files, and a pa
   assert.equal((await fetch(`${base}/api/sessions/${s.id}/changes`)).status, 403, 'no token: refused');
   const none = (await post(base, '/api/sessions', { title: 'x' })).body;
   assert.deepEqual((await json(base, `/api/sessions/${none.id}/changes`)).status, 403);
+});
+
+test('before a chat exists, only a folder the person chose this launch can be listed, read-only', async (t) => {
+  const { base } = await startApp(t, { localGuard: true, apiToken: 'panes-token' });
+  const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
+  const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  const dir = await folder(t);
+  const q = (p, extra = '') => `folder=${encodeURIComponent(dir)}&path=${encodeURIComponent(p)}${extra}`;
+  assert.equal((await call(`/api/folder/files?${q('')}`)).status, 403, 'not chosen yet: refused');
+  assert.equal((await call('/api/folder/check', { method: 'POST', body: JSON.stringify({ folder: dir }) })).status, 200);
+  const list = await (await call(`/api/folder/files?${q('')}`)).json();
+  assert.ok(list.entries.some((e) => e.name === 'README.md'));
+  assert.equal((await (await call(`/api/folder/file?${q('README.md')}`)).json()).text, '# hi\n');
+  for (const bad of ['..%2F..', '%2Fetc', 'C%3A%5CWindows']) assert.equal((await call(`/api/folder/files?folder=${encodeURIComponent(dir)}&path=${bad}`)).status, 400, bad);
+  const other = await mkdtemp(join(tmpdir(), 'bunny-other-'));
+  t.after(() => rm(other, { recursive: true, force: true }));
+  assert.equal((await call(`/api/folder/files?folder=${encodeURIComponent(other)}&path=`)).status, 403, 'a folder never chosen is refused');
+  assert.equal((await fetch(`${base}/api/folder/files?${q('')}`)).status, 403, 'no token');
 });
 
 test('no routes write: POST, PUT and DELETE on the pane paths do nothing', async (t) => {

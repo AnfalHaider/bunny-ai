@@ -262,18 +262,29 @@
     <section class="pane-view rail" id="rail" hidden aria-label="Session overview">
       <div class="pane-head"><b>Session</b><span class="end"><button class="icon-btn" data-close aria-label="Close panel">✕</button></span></div>
       <div class="pane-section">
-        <h5 data-i18n="rail.environment">Environment</h5>
-        <div class="pane-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M2 19h20"/></svg>
-          <span data-i18n="rail.thisComputer">This computer</span>
-        </div>
-        <div class="pane-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
-          <span id="rail-project"></span>
-        </div>
+        <h5>Where</h5>
+        <div class="kv"><span class="k">Environment</span><span class="v" data-i18n="rail.thisComputer">This computer</span></div>
+        <div class="kv"><span class="k">Project</span><span class="v" id="rail-project"></span></div>
+        <div class="kv"><span class="k">Folder</span><span class="v" id="rail-folder"></span></div>
+        <div class="kv"><span class="k">Branch</span><span class="v" id="rail-branch"></span></div>
       </div>
       <div class="pane-section">
+        <h5>Model</h5>
+        <div class="kv"><span class="k">Model</span><span class="v" id="rail-model"></span></div>
+        <div class="kv" id="rail-why-row" hidden><span class="k">Why</span><span class="v" id="rail-why"></span></div>
+        <div class="kv"><span class="k">Permissions</span><span class="v" id="rail-mode"></span></div>
+        <div class="kv"><span class="k">Effort</span><span class="v" id="rail-effort"></span></div>
+      </div>
+      <div class="pane-section">
+        <h5>Context and cost</h5>
         <div class="pane-row"><span data-i18n="chat.context">Context</span><span class="end"><span id="rail-context-text">0%</span> <span class="meter"><span id="rail-context-fill"></span></span></span></div>
+        <div class="kv"><span class="k">Tokens</span><span class="v" id="rail-tokens"></span></div>
+        <div class="kv"><span class="k">Messages</span><span class="v" id="rail-messages"></span></div>
+        <div class="kv"><span class="k">Cost</span><span class="v" id="rail-cost">not reported</span></div>
+      </div>
+      <div class="pane-section">
+        <h5>Running programs</h5>
+        <div id="rail-running"><div class="rail-empty">Nothing running.</div></div>
       </div>
       <div class="pane-section">
         <h5 data-i18n="rail.connectors">Connectors</h5>
