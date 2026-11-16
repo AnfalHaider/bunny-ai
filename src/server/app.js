@@ -67,6 +67,7 @@ import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
 import { looksSecret } from './secretLike.js';
+import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
@@ -2527,12 +2528,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let assembled = '';
       let thinking = '';
       const replyStartedAt = Date.now();
-      // How far one reply may go, clamped whatever Settings holds. A scheduled run has nobody watching: it gets less.
-      // A stored 0 means "off" (the reply stops at its normal step limit); anything else is clamped into range.
-      const clamp = (v, lo, hi, fallback) => { const n = Number(v ?? fallback); return n === 0 ? 0 : Math.min(hi, Math.max(lo, Math.round(n) || fallback)); };
-      const replyCaps = scheduledTask
-        ? { steps: clamp(settings.scheduledContinueSteps, 1, 2000, 100), minutes: clamp(settings.scheduledContinueMinutes, 1, 600, 30), tokens: 2_000_000 }
-        : { steps: clamp(settings.autoContinueSteps, 1, 2000, 500), minutes: clamp(settings.autoContinueMinutes, 1, 600, 120), tokens: clamp(settings.autoContinueTokens, 100_000, 100_000_000, 5_000_000) };
+      // How far one reply may go, clamped whatever Settings holds (see caps.js). A scheduled run has nobody watching: it gets less.
+      const replyCaps = capsFor(settings, Boolean(scheduledTask));
       let permissionNudges = 0;
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);

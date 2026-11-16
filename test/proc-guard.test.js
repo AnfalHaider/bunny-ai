@@ -13,7 +13,7 @@ const wait = async (cond, ms) => { const end = Date.now() + ms; while (Date.now(
 // The program (and the shell that started it) must be gone afterwards.
 test('a started program is gone after the server that started it is killed', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'bunny-guard-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }));
   const server = spawn(process.execPath, [fileURLToPath(new URL('./fixtures/proc-guard-server.mjs', import.meta.url)), dir], { stdio: ['ignore', 'pipe', 'inherit'] });
   t.after(() => { try { server.kill('SIGKILL'); } catch { /* gone */ } });
   let out = '';
