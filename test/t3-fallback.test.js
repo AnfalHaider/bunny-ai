@@ -91,16 +91,29 @@ test('T3-2/Q2-11: a fallback answer leaves no "could not finish" line, and carri
   assert.deepEqual([answer.fellBackFrom, answer.fellBackReason, answer.fellBackTries], ['quiet', 'timeout', 2]);
 });
 
-test('T3-7/T3-8: only the last failure leaves a note, so the person is told once', async (t) => {
+test('T3-7/T3-8: every failure is saved, but a retry replaces the last note, so the chat holds exactly one', async (t) => {
   const { base, id } = await app(t);
-  await say(base, id, 'limited', { attemptsLeft: 2 }); // more to try: no note yet
-  assert.equal((await saved(base, id)).filter((m) => m.kind === 'error').length, 0);
+  const notes = async () => (await saved(base, id)).filter((m) => m.kind === 'error');
+  await say(base, id, 'limited', { attemptsLeft: 2 });
+  assert.equal((await notes()).length, 1, 'a reload would show why the reply stopped');
   await say(base, id, 'down', { retry: true, attemptsLeft: 1 });
-  assert.equal((await saved(base, id)).filter((m) => m.kind === 'error').length, 0);
-  await say(base, id, 'empty', { retry: true, attemptsLeft: 0 }); // the last one
+  assert.equal((await notes()).length, 1);
+  await say(base, id, 'empty', { retry: true, attemptsLeft: 0 });
+  const last = await notes();
+  assert.equal(last.length, 1);
+  assert.match(last[0].content, /^empty could not finish/);
+});
+
+test('a provider-wide failure with only one provider connected still leaves exactly one note (nothing else to switch to)', async (t) => {
+  const { base, id } = await app(t);
+  await say(base, id, 'limited', { attemptsLeft: 1 }); // the page found no next model and stopped here
   const notes = (await saved(base, id)).filter((m) => m.kind === 'error');
   assert.equal(notes.length, 1);
-  assert.match(notes[0].content, /empty.*could not finish|could not finish/);
+});
+
+test('reasoning models get the longer first-byte limit (o-series, gpt-5)', () => {
+  for (const id of ['o1', 'o3-mini', 'openai/o4-mini', 'gpt-5', 'gpt-5-mini', 'deepseek-r1', 'qwq-thinking']) assert.equal(firstByteLimit(id), SLOW_FIRST_BYTE_MS, id);
+  for (const id of ['gpt-4o', 'gpt-4.1', 'claude-sonnet', 'llama-3.1-8b', 'solo-model']) assert.equal(firstByteLimit(id), DEFAULT_STALL_MS, id);
 });
 
 test('an error that is not about the model is saved even when attempts remain (another model would not help)', async (t) => {

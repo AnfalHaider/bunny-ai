@@ -21,7 +21,8 @@ const MAX_TOOL_ROUNDS = 4;
 export const DEFAULT_STALL_MS = 30_000;
 export const SLOW_FIRST_BYTE_MS = 60_000;
 export const DEFAULT_GAP_MS = 60_000;
-const SLOW_MODEL = /reason|think|r1\b|image|video|dall-e|imagen|veo|sora/i;
+// Reasoning models (o-series, gpt-5, r1, anything named reason or think) and image or video jobs wait longer for a first byte.
+const SLOW_MODEL = /reason|think|r1\b|image|video|dall-e|imagen|veo|sora|gpt-5|(^|[/:-])o[1-9](-|$)/i;
 export const firstByteLimit = (model) => (SLOW_MODEL.test(String(model ?? '')) ? SLOW_FIRST_BYTE_MS : DEFAULT_STALL_MS);
 
 /**

@@ -2450,10 +2450,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             reason,
           });
           // Kept in the chat, so after a reload it still says why the reply stopped.
-          // (The model never reads these: history leaves errors out.) The page says how many attempts are left;
-          // only the last failure leaves a note, so the person is told once, not once per model.
-          const moreToTry = Number.isInteger(body.attemptsLeft) && body.attemptsLeft > 0 && scope !== 'other';
-          if (!moreToTry) await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
+          // (The model never reads these: history leaves errors out.) Every failure is saved, so a reload always says
+          // why, but a retry REPLACES the note of the attempt before it and a later success removes it: the chat
+          // never holds more than one, and none once a model has answered (T3-7, T3-8).
+          if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
+          await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
           break;
         }
       }
