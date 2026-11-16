@@ -1517,6 +1517,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
       const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
+      // Plan mode is read-only on the SERVER, not only in the list of tools the model is offered: a call for a
+      // tool it was never offered (a hallucination, or text in a file it read) is refused here, whatever it is.
+      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build'].includes(risk);
+      const planRefusal = (name) => `Plan mode is read-only, so ${name} was not run. Propose what you would do and let the person switch mode.`;
       const needsOk = (risk) => risk === 'build'
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
@@ -1942,6 +1946,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : isGoogleTool(name) ? describeGoogleTool(name, parsed) : describeAgentTool(name, parsed);
         // A schedule that may change things runs unwatched later, so it always asks, whatever the mode.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
+        if (planRefuses(risk)) return planRefusal(name);
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -2235,6 +2240,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // A local connector runs a program on this computer: always confirmed, whatever the mode.
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
+        if (planRefuses(risk)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
