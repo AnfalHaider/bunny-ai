@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Final v0.1.7 re-stamps: W5-7 `400946b` PASS, W5-8 `349061d` PASS
+
+W5-7: 68 of the 109 token-only attempts now answer 403; the continue keys, `maxTokens`, `helpersEnabled`, `modelFilter` and the question route are window-only; unknown settings keys answer 400; W27d-1 (computed arguments ask) closed, all W2-7 probes clean. W5-8: HEAD must be the target, untracked files count, `dist/build-sha.txt` must equal the target, only `--notes-file` goes to gh; all three of my conditions closed and verified on a throwaway repo; 18 of 18 tests. Review `docs/security/2026-11-16-w5-7-w5-8-recheck.md`. Lesson: when a fix adds a stamp, test the stamp that is missing, stale, dirty and junk, not only the one that matches.
+
 ## 2026-11-16 - W5-7 (`32a3a8c`) PASS; W5-8 (`70bd964`) PASS with conditions
 
 W5-7: with only the page token in the desktop-app configuration, 66 write routes and 43 settings keys tried; the whole W27c-1 list, connectors, schedules, hooks, skills, plugins, custom tools, permission and capability answers, computer, terminal, providers, sign-ins and 16 settings keys answer 403. Open (low): five continue keys and `maxTokens`, `helpersEnabled`, `unrelatedTask`, `modelFilter`, unknown keys; the question route. W5-8: the release target check holds for which commit is tagged, not which commit was built: `--target origin/main` from another branch, an untracked file under `src/`, and a stale `dist/` all pass. Review `docs/security/2026-11-16-w5-7-w5-8-review.md`. Lesson: a check on the tag is not a check on the artifact; tie the two with a build stamp.

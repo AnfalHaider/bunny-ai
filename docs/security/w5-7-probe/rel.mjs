@@ -1,9 +1,10 @@
+// W5-8 target-check probe (Security), updated for 349061d (build stamp and gh args). Usage: node rel.mjs <checkout>
 // W5-8 probe (Security): what the target check can and cannot see. Usage: node rel.mjs <checkout of 70bd964>
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const { checkTarget, gatherGitState, parseArgs } = await import('file:///' + process.argv[2].split(String.fromCharCode(92)).join('/') + '/scripts/release.mjs');
+const { checkTarget, checkBuild, checkGhArgs, gatherGitState, parseArgs } = await import('file:///' + process.argv[2].split(String.fromCharCode(92)).join('/') + '/scripts/release.mjs');
 const top = mkdtempSync(join(tmpdir(), 'bunny-rel-'));
 const sh = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' });
 const remote = join(top, 'remote.git'); mkdirSync(remote); sh(remote, 'init', '-q', '--bare', '-b', 'main');
@@ -12,7 +13,7 @@ sh(work, 'remote', 'add', 'origin', remote);
 mkdirSync(join(work, 'src')); writeFileSync(join(work, 'src', 'a.js'), '1'); writeFileSync(join(work, '.gitignore'), 'dist\n');
 sh(work, 'add', '-A'); sh(work, 'commit', '-qm', 'one'); sh(work, 'push', '-q', 'origin', 'main');
 const git = (args) => execFileSync('git', args, { cwd: work, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-const verdict = (label, target = 'HEAD') => { const st = gatherGitState({ git, target }); const v = checkTarget(st); console.log((v.ok ? 'ALLOWED ' : 'REFUSED ') + label + (v.ok ? '' : '  -> ' + v.reason.slice(0, 90))); };
+const verdict = (label, target = 'HEAD', built = null) => { const st = gatherGitState({ git, target }); let v = checkTarget(st); if (v.ok && built !== 'skip') v = checkBuild({ target: st.target, builtSha: built ?? st.head }); console.log((v.ok ? 'ALLOWED ' : 'REFUSED ') + label + (v.ok ? '' : '  -> ' + v.reason.slice(0, 90))); };
 verdict('clean, HEAD = origin/main');
 writeFileSync(join(work, 'src', 'untracked.js'), 'evil'); verdict('an UNTRACKED file under src/ (it would be packaged)');
 writeFileSync(join(work, 'src', 'a.js'), '2'); verdict('a tracked file edited');
@@ -23,3 +24,14 @@ sh(work, 'push', '-q', 'origin', 'main'); verdict('after push');
 sh(work, 'checkout', '-q', '-b', 'claude/x'); sh(work, 'commit', '-q', '--allow-empty', '-m', 'three'); verdict('branch ahead of main, target HEAD'); verdict('target origin/main from that branch', 'origin/main');
 for (const t of ['--help', '-x', 'HEAD~1', 'main', 'refs/heads/claude/x', '']) verdict(`target ${JSON.stringify(t)}`, t);
 console.log(JSON.stringify(parseArgs(['--target', 'a', '--draft', '--repo', 'other/repo', '--notes-file', 'n.md', '--target=b'])));
+console.log('--- W5-8 fix: build stamp and gh args');
+const w = (f, t) => writeFileSync(join(work, f), t);
+sh(work, 'checkout', '-q', 'main'); sh(work, 'clean', '-fdq'); sh(work, 'reset', '-q', '--hard', 'origin/main');
+verdict('on main, stamp = HEAD');
+verdict('on main, stamp from another sha', 'HEAD', 'deadbeefdeadbeef');
+verdict('on main, stamp "-dirty"', 'HEAD', sh(work, 'rev-parse', 'HEAD').trim() + '-dirty');
+verdict('on main, no stamp', 'HEAD', '');
+verdict('on main, stamp has junk', 'HEAD', 'not a sha');
+sh(work, 'checkout', '-q', 'claude/x'); verdict('on claude/x, target origin/main (was ALLOWED)', 'origin/main'); sh(work, 'checkout', '-q', 'main');
+writeFileSync(join(work, 'src', 'untracked.js'), 'x'); verdict('untracked file under src'); sh(work, 'clean', '-fdq');
+for (const a of [['--notes-file', 'n.md'], ['--notes-file=n.md'], ['--draft'], ['--repo', 'o/r'], ['--latest=false'], ['--prerelease'], ['--notes-file', '--repo'], ['--title', 'x'], ['--target', 'x'], ['-R', 'o/r'], ['--notes-file', 'n.md', '--draft']]) console.log(JSON.stringify(a).padEnd(40), checkGhArgs(a).ok ? 'ALLOWED' : 'REFUSED');
