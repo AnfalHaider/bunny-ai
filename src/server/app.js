@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { dirname, extname, join, normalize, sep } from 'node:path';
+import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -45,6 +45,7 @@ import { rankModels } from '../ui/model-abilities.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
+import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
@@ -613,6 +614,52 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
       return sendJson(res, 200, settings);
+    }
+
+    // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
+    if (path === '/api/permission-rules' && method === 'GET') return sendJson(res, 200, normaliseRules(settings.permissionRules));
+    if (path === '/api/permission-rules' && method === 'PUT') {
+      const body = await readBody(req);
+      const bad = (message, scope, index) => sendJson(res, 400, { code: 'rules.bad', message, scope, index });
+      const tidy = (list, scope) => {
+        if (!Array.isArray(list)) return { error: bad('The rules must be a list.', scope, -1) };
+        if (list.length > MAX_RULES) return { error: bad(`At most ${MAX_RULES} rules per list.`, scope, -1) };
+        const out = [];
+        for (let i = 0; i < list.length; i += 1) {
+          const checked = checkRule(list[i]);
+          if (checked.error) return { error: bad(checked.error, scope, i) };
+          out.push(checked.rule);
+        }
+        return { out };
+      };
+      const global = tidy(body.global ?? [], 'global');
+      if (global.error) return global.error;
+      const folders = {};
+      for (const [folder, list] of Object.entries(body.folders && typeof body.folders === 'object' ? body.folders : {})) {
+        if (!isAbsolute(folder)) return bad('A folder rule list needs the full path of the folder.', folder, -1);
+        const t = tidy(list, folder);
+        if (t.error) return t.error;
+        if (t.out.length) folders[folder] = t.out;
+      }
+      settings = { ...settings, permissionRules: { global: global.out, folders } };
+      await writeJson(settingsFile, settings);
+      return sendJson(res, 200, normaliseRules(settings.permissionRules));
+    }
+    // "Try a command": the outcome and the rule behind it, without running anything.
+    if (path === '/api/permission-rules/try' && method === 'POST') {
+      const body = await readBody(req);
+      const rules = rulesFor(settings.permissionRules, typeof body.folder === 'string' ? body.folder : null);
+      const verdict = typeof body.command === 'string' ? checkCommand(rules, body.command)
+        : typeof body.path === 'string' ? checkPath(rules, body.path, body.op === 'reads' ? 'reads' : 'edits') : null;
+      return sendJson(res, 200, { outcome: verdict?.effect ?? 'none', rule: verdict ? { pattern: verdict.rule.pattern, scope: verdict.rule.scope, effect: verdict.effect } : null });
+    }
+    // Would a new Allow ever apply? (a Deny that already covers it wins)
+    if (path === '/api/permission-rules/check' && method === 'POST') {
+      const body = await readBody(req);
+      const checked = checkRule(body.rule);
+      if (checked.error) return sendJson(res, 200, { ok: false, message: checked.error });
+      const covering = coveredByDeny(rulesFor(settings.permissionRules, typeof body.folder === 'string' ? body.folder : null), checked.rule);
+      return sendJson(res, 200, { ok: true, coveredBy: covering ? { pattern: covering.pattern, scope: covering.scope } : null });
     }
 
     // ---- profile photo: kept as a file on this computer, shown in the sidebar ----
@@ -1615,7 +1662,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
@@ -1628,6 +1675,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
       // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
       // email speaks for the person, so it asks in every mode. A project file can grant none of this.
+      // W2-7: the person's permission rules for this folder (its own, then the global ones), read fresh at every call.
+      const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       const needsOk = (risk) => risk === 'send'
         || (risk === 'build' && permissionMode !== 'auto')
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
@@ -1819,7 +1868,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           const fresh = await sessions.get(id);
           const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
           if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal });
+          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.
@@ -2055,6 +2104,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // A schedule that may change things runs unwatched later: it asks in Manual and Accept edits, and runs in Auto.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
         if (planRefuses(risk, name)) return planRefusal(name);
+        const ruledProcess = name === 'start_process' ? checkToolCall(activeRules(), name, parsed) : null;
+        if (ruledProcess?.effect === 'deny') {
+          const why = `Blocked by your permission rule ${describeRule(ruledProcess)}.`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+          send('tool', { tool: summary, status: 'denied', result: why });
+          return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+        }
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -2071,8 +2127,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
-        if (needsOk(risk)) {
-          const allowed = await askPermission(summary, detail);
+        if (ruledProcess?.effect === 'ask' || (needsOk(risk) && ruledProcess?.effect !== 'allow')) {
+          const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -2360,13 +2416,22 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
+        // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
+        // ask always asks, in every mode; allow skips the question.
+        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed) : null;
+        if (ruled?.effect === 'deny') {
+          const why = `Blocked by your permission rule ${describeRule(ruled)}.`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+          send('tool', { tool: summary, status: 'denied', result: why });
+          return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+        }
         const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
-        if (needsOk(risk)) {
-          const allowed = await askPermission(summary, detail);
+        if (ruled?.effect === 'ask' || (needsOk(risk) && ruled?.effect !== 'allow')) {
+          const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });

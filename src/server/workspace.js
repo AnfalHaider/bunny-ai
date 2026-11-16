@@ -210,7 +210,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null, signal = null } = {}) {
+export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, hidden = null } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -256,6 +256,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
         if (lines.length >= MAX_LIST) { lines.push('… (more not shown)'); return; }
         if (e.isDirectory() && SKIP_DIRS.has(e.name)) continue;
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue; // a path the person's rules do not let Bunny read
         lines.push(`${'  '.repeat(level)}${show(abs)}${e.isDirectory() ? '/' : ''}`);
         if (e.isDirectory() && level + 1 < max) await walk(abs, level + 1);
       }
@@ -371,6 +372,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
       entries.sort((a, b) => a.name.localeCompare(b.name));
       for (const e of entries) {
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
         if (e.isFile() && isFile(show(abs))) candidates.push(abs);
       }
@@ -402,6 +404,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
       try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
         if (!e.isFile() || !matches(relative(start, abs).split(sep).join('/'))) continue;
         seen += 1;

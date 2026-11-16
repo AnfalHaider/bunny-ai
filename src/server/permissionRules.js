@@ -1,0 +1,183 @@
+/**
+ * Permission rules (W2-7): "always allow npm test*", "never run Remove-Item -Recurse*", "never edit secrets/**".
+ *
+ * A rule is { id, kind: 'command' | 'path', pattern, effect: 'deny' | 'ask' | 'allow', ops?: 'edits' | 'reads' }, kept globally
+ * and per folder. Rules are checked BEFORE the permission mode; Plan mode still refuses edits whatever a rule says.
+ * Precedence: deny, then ask, then allow. Patterns are simple wildcards (* and **), never regular expressions.
+ *
+ * What a command rule matches is the command the model asked to run, cut into its simple commands (; && || | & and new lines,
+ * quotes respected). A deny or ask rule fires if ANY of them matches (the whole text and the text inside $( ) and backticks too);
+ * an allow rule applies only if EVERY simple command matches an allow rule and the command has no command substitution and no
+ * redirection to a file, so "npm test; rm -rf x" is not allowed by "npm test*". Path rules judge the paths Bunny's own file tools
+ * are given (read_file, list_files, search_files, find_files, write_file, edit_file, multi_edit); they do not look inside what a
+ * command does.
+ */
+import { globMatcher } from './glob.js';
+
+export const MAX_RULES = 200;
+export const MAX_PATTERN = 200;
+const EFFECTS = ['deny', 'ask', 'allow'];
+const STRENGTH = { deny: 3, ask: 2, allow: 1 };
+
+/** Validate and tidy one rule from the settings screen. Returns { rule } or { error }. */
+export function checkRule(raw) {
+  const kind = raw?.kind === 'path' ? 'path' : raw?.kind === 'command' ? 'command' : null;
+  if (!kind) return { error: 'Choose Command or Path.' };
+  if (!EFFECTS.includes(raw?.effect)) return { error: 'Choose Deny, Ask or Allow.' };
+  const pattern = String(raw?.pattern ?? '').replace(/\s+/g, ' ').trim();
+  if (!pattern) return { error: 'Type a pattern first.' };
+  if (pattern.length > MAX_PATTERN) return { error: `A pattern can be at most ${MAX_PATTERN} characters.` };
+  if (/[\r\n\0]/.test(String(raw?.pattern ?? ''))) return { error: 'A pattern is one line.' };
+  const rule = { id: typeof raw?.id === 'string' && raw.id ? raw.id.slice(0, 64) : `r_${Math.random().toString(36).slice(2, 10)}`, kind, pattern, effect: raw.effect };
+  if (kind === 'path') {
+    const text = pattern.replace(/\\/g, '/');
+    if (/^([A-Za-z]:|\/|~)/.test(text)) return { error: 'A path pattern is relative to the folder: it cannot start with a drive, a slash or ~.' };
+    if (text.split('/').includes('..')) return { error: 'A path pattern cannot leave the folder. Remove the ..\\ and try again.' };
+    if ((text.match(/\*/g) ?? []).length > 12) return { error: 'That pattern has too many * in it.' };
+    rule.ops = raw?.ops === 'reads' ? 'reads' : 'edits';
+  }
+  return { rule };
+}
+
+/** The stored rules, tidied: unknown or broken entries are dropped, never trusted. */
+export function normaliseRules(stored) {
+  const clean = (list) => (Array.isArray(list) ? list : []).slice(0, MAX_RULES).map((r) => checkRule(r).rule).filter(Boolean);
+  const folders = {};
+  for (const [folder, list] of Object.entries(stored?.folders && typeof stored.folders === 'object' ? stored.folders : {})) {
+    const rules = clean(list);
+    if (rules.length) folders[folder] = rules;
+  }
+  return { global: clean(stored?.global), folders };
+}
+
+/** Rules that apply in a folder, strongest scope first: that folder's own, then the global ones. */
+export function rulesFor(stored, folder) {
+  const all = normaliseRules(stored);
+  const key = Object.keys(all.folders).find((f) => folder && f.toLowerCase() === String(folder).toLowerCase());
+  return [
+    ...(key ? all.folders[key].map((r) => ({ ...r, scope: 'This folder' })) : []),
+    ...all.global.map((r) => ({ ...r, scope: 'All folders' })),
+  ];
+}
+
+// ---- commands
+
+function wildcard(pattern, text) {
+  const pat = pattern.toLowerCase();
+  const str = text.toLowerCase();
+  let p = 0; let t = 0; let star = -1; let mark = 0;
+  while (t < str.length) {
+    if (p < pat.length && pat[p] === '*') { star = p; p += 1; mark = t; }
+    else if (p < pat.length && pat[p] === str[t]) { p += 1; t += 1; }
+    else if (star >= 0) { p = star + 1; mark += 1; t = mark; }
+    else return false;
+  }
+  while (p < pat.length && pat[p] === '*') p += 1;
+  return p === pat.length;
+}
+
+/** The command cut into simple commands. `unsafe` = it has a command substitution or a redirection to a file. */
+export function commandParts(command) {
+  const src = String(command ?? '');
+  const parts = [];
+  const inner = [];
+  let cur = '';
+  let quote = null;
+  let unsafe = false;
+  const flush = () => { const t = cur.replace(/\s+/g, ' ').trim(); if (t) parts.push(t); cur = ''; };
+  for (let i = 0; i < src.length; i += 1) {
+    const c = src[i];
+    if (quote) {
+      if (c === '\\' && quote === '"' && i + 1 < src.length) { cur += c + src[i + 1]; i += 1; continue; }
+      if (c === quote) quote = null;
+      if (quote === '"' && (c === '`' || (c === '$' && src[i + 1] === '('))) unsafe = true;
+      cur += c;
+      continue;
+    }
+    if (c === '\\' && i + 1 < src.length) { cur += c + src[i + 1]; i += 1; continue; }
+    if (c === '"' || c === "'") { quote = c; cur += c; continue; }
+    if (c === '`' || (c === '$' && src[i + 1] === '(') || ((c === '<' || c === '>') && src[i + 1] === '(')) { unsafe = true; cur += c; continue; }
+    if (c === '>' || c === '<') {
+      // 2>&1 and >&2 are plumbing, not a file; anything else that redirects counts as a write
+      if (c === '>' && (src[i + 1] === '&' || /\d$/.test(cur) && src[i + 1] === '&')) { cur += c; continue; }
+      if (c === '>') unsafe = true;
+      cur += c;
+      continue;
+    }
+    if (c === ';' || c === '\n' || c === '|' || c === '&') {
+      if (c === '&' && (src[i - 1] === '>' || src[i + 1] === '>')) { cur += c; continue; } // 2>&1, &>
+      if ((c === '|' || c === '&') && src[i + 1] === c) i += 1;
+      flush();
+      continue;
+    }
+    cur += c;
+  }
+  flush();
+  // the text inside $( ) and `...` is judged too, for deny and ask rules
+  for (const m of src.matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)) inner.push(...commandParts(m[1] ?? m[2]).parts);
+  return { parts, inner, unsafe, whole: src.replace(/\s+/g, ' ').trim() };
+}
+
+/** A rule's verdict on a command: { effect, rule } or null. Deny beats ask beats allow. */
+export function checkCommand(rules, command) {
+  const list = rules.filter((r) => r.kind === 'command');
+  if (!list.length) return null;
+  const { parts, inner, unsafe, whole } = commandParts(command);
+  const texts = [...new Set([whole, ...parts, ...inner])].filter(Boolean);
+  for (const effect of ['deny', 'ask']) {
+    for (const r of list) if (r.effect === effect && texts.some((t) => wildcard(r.pattern, t))) return { effect, rule: r };
+  }
+  const allows = list.filter((r) => r.effect === 'allow');
+  if (!allows.length || unsafe || !parts.length) return null;
+  const covering = [];
+  for (const part of parts) {
+    const r = allows.find((a) => wildcard(a.pattern, part));
+    if (!r) return null;
+    covering.push(r);
+  }
+  return { effect: 'allow', rule: covering[0] };
+}
+
+// ---- paths
+
+const norm = (p) => String(p ?? '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+
+/** A rule's verdict on one path for an operation ('edits' or 'reads'): { effect, rule } or null. */
+export function checkPath(rules, rel, op) {
+  const path = norm(rel);
+  const list = rules.filter((r) => r.kind === 'path' && r.ops === op);
+  let best = null;
+  for (const r of list) {
+    if (!globMatcher(r.pattern)(path === '' ? '.' : path)) continue;
+    if (!best || STRENGTH[r.effect] > STRENGTH[best.effect]) best = { effect: r.effect, rule: r };
+  }
+  return best;
+}
+
+/** Is reading this path denied? For the file listings, which skip such paths. */
+export function readDenied(rules, rel) {
+  return checkPath(rules, rel, 'reads')?.effect === 'deny';
+}
+
+const EDIT_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit']);
+const READ_TOOLS = new Set(['read_file', 'list_files', 'search_files', 'find_files']);
+
+/** The verdict for one workspace tool call, or null when no rule speaks. */
+export function checkToolCall(rules, name, args = {}) {
+  if (name === 'run_command' || name === 'start_process') return checkCommand(rules, args.command);
+  if (EDIT_TOOLS.has(name)) return checkPath(rules, args.path, 'edits');
+  if (READ_TOOLS.has(name)) return checkPath(rules, args.path ?? '.', 'reads');
+  return null;
+}
+
+/** "Your rule "git push*" (All folders)" */
+export function describeRule(verdict) {
+  return `"${verdict.rule.pattern}" (${verdict.rule.scope ?? 'All folders'})`;
+}
+
+/** A new Allow that a Deny already covers never applies: say so. Returns the covering rule or null. */
+export function coveredByDeny(rules, rule) {
+  if (rule.effect !== 'allow') return null;
+  if (rule.kind === 'command') return rules.find((r) => r.kind === 'command' && r.effect === 'deny' && wildcard(r.pattern, rule.pattern)) ?? null;
+  return rules.find((r) => r.kind === 'path' && r.effect === 'deny' && r.ops === rule.ops && globMatcher(r.pattern)(norm(rule.pattern))) ?? null;
+}
