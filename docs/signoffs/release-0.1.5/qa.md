@@ -1,0 +1,9 @@
+---
+piece: release-0.1.5
+role: qa
+sha: e94f224
+verdict: PASS
+date: 2026-11-16
+---
+
+Gate on e94f224: 7 of 7 (unit tests pass, 135 e2e pass, mem check, dependency audit, secret scan). Run on this Windows machine after clearing stray servers on port 5199; two earlier gate attempts failed only because another session's server held port 5199. Checked on invented profiles with the request guard on, both themes where noted: chat transcript walk 27 of 27 (grouped steps with narration, a failing command shows the red Failed label with the command and error, stop report shows at once and after reload, 26 chats from an older build still render, offline wait with calm line and Offline chip, Cancel, replace, exactly one send on reconnect, local model answers offline, closed local model does not turn the wait red, one saved failure note that survives a reload); model fallback with a model that never answers: picked model switches in 33 s, Auto in 64 s, the status line says X is slow and trying Y, the answer says why, no red lines; panes walk 49 of 49 (Changes in git and plain folders with real counts and Undo to here, Files read-only with changed lines marked, Session facts, no dead pane); path escapes refused (dot-dot, drive, UNC, junction, hidden .git and node_modules, 1 MB cap, drive root and data folder never browsable); D1 walk 24 of 24 including phone Settings pills; S-1 walk 33 of 33 (foreign Origin, wrong Host and missing token refused; every provider type connects and answers; speech audio plays; artifact sandbox; in-app browser); phone top bar buttons at least 40 px; shell walk 40 of 43 where the 3 remaining lows are out of the 0.1.5 scope (palette keyboard, palette Settings command leaves the chat, one-line User/Assistant import labels); permission tests pass per mode. Not checked: the installed Electron app (desktop folder gate, native folder picker, tray) and the real update download.
