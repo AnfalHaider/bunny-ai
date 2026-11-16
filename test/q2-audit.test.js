@@ -123,7 +123,7 @@ test('translateChains turns && and || into PowerShell 5.1 form and leaves quoted
   assert.equal(translateChains('echo "x && y"'), 'echo "x && y"');
 });
 
-test('Q2-8: a trailing & (background job) is not passed to Windows PowerShell 5.1, which rejects it', { todo: 'Q2-8: src/server/workspace.js:66-90 translateChains only handles && and ||; run_command then fails with AmpersandNotAllowed (seen in the owner\'s screenshot)' }, () => {
+test('Q2-8: a trailing & (background job) is not passed to Windows PowerShell 5.1, which rejects it', () => {
   const out = translateChains('npx serve -l 3001 &');
   assert.ok(!/(^|[^&])&\s*$/.test(out), `still ends with a bare &: ${out}`);
 });
