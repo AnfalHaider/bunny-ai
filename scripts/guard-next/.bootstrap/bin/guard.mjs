@@ -78,7 +78,7 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
       }
     }
     if (parsed) {
-      const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers });
+      const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers, cwd });
       if (why) return { allow: false, reason: `Blocked for role "${role}": ${why}` };
       // A2 and E: a seatbelt over the files a command writes (A1 is the authoritative check, at commit).
       if (policy.shell_write_check !== false) {

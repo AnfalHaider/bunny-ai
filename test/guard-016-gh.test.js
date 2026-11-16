@@ -83,3 +83,23 @@ test('G1-1: a refusal says what to do instead', (t) => {
   assert.match(denied(t, 'gh release create v9'), /release-ops|Chief of Staff/);
   assert.match(denied(t, 'gh api -X $M repos/o/r'), /spell the method out/);
 });
+
+test('G1-1 review: the owner-only edits are refused for every role, however they are spelled', (t) => {
+  for (const role of ['builder', 'release-ops', 'chief-of-staff']) {
+    for (const c of [
+      'gh release delete-asset v1 x.zip', 'gh release upload v1 x.zip --clobber',
+      'gh api -X DELETE repos/o/r/releases/12', 'gh api -X PATCH repos/o/r/releases/12 -f draft=false',
+      'gh api -X DELETE repos/o/r/git/refs/tags/v1', 'gh api repos/o/r/releases/12 -f name=x',
+    ]) denied(t, c, role);
+  }
+  allowed(t, 'gh api repos/o/r/releases/latest', 'release-ops');
+  allowed(t, 'gh release upload v1 x.zip', 'release-ops');
+});
+
+test('G1-1 review: a variable where the group or method should be, other launchers, aliases and tokens', (t) => {
+  for (const c of ['gh $G create v9', 'gh release $S v9', 'gh api $X repos/o/r', 'gh api repos/o/r $FLAGS',
+    'xargs gh release create v9', 'timeout 5 gh release create v9', 'gh alias set a b', 'gh alias delete a', 'gh auth token',
+    'git -c "alias.x=!gh release create v9" x']) denied(t, c);
+  allowed(t, 'gh pr view $N');
+  allowed(t, 'gh api repos/o/$R/releases/latest');
+});
