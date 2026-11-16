@@ -111,7 +111,7 @@ const ALIASES = new Map(Object.entries({
   cp: 'Copy-Item', cpi: 'Copy-Item', copy: 'Copy-Item', mv: 'Move-Item', mi: 'Move-Item', move: 'Move-Item',
   ren: 'Rename-Item', rni: 'Rename-Item', sc: 'Set-Content', ac: 'Add-Content', clc: 'Clear-Content', ni: 'New-Item', md: 'mkdir',
   iex: 'Invoke-Expression', icm: 'Invoke-Command', saps: 'Start-Process', start: 'Start-Process', kill: 'Stop-Process', spps: 'Stop-Process',
-  sal: 'Set-Alias', nal: 'New-Alias', sajb: 'Start-Job', ii: 'Invoke-Item',
+  sal: 'Set-Alias', nal: 'New-Alias', sajb: 'Start-Job', ii: 'Invoke-Item', ipal: 'Import-Alias', epal: 'Export-Alias', si: 'Set-Item',
   ls: 'Get-ChildItem', dir: 'Get-ChildItem', gci: 'Get-ChildItem', cat: 'Get-Content', type: 'Get-Content', gc: 'Get-Content',
   sl: 'Set-Location', cd: 'Set-Location', chdir: 'Set-Location', iwr: 'Invoke-WebRequest', curl: 'Invoke-WebRequest', wget: 'Invoke-WebRequest', irm: 'Invoke-RestMethod',
 }));
@@ -221,10 +221,8 @@ export function analyseCommand(command, depth = 0) {
       }
     }
   }
-  // the alias: and function: drives redefine what a name means (Set-Item alias:rm ...)
-  if (/(alias|function|variable):/i.test(String(command ?? ''))) wrapper = true;
-  // the alias: and function: drives redefine what a name means (Set-Item alias:rm ...)
-  if (/\b(alias|function|variable):/i.test(String(command ?? ''))) wrapper = true;
+  // the alias:, function: and variable: drives redefine what a name means (Set-Item alias:rm ...), spelled any way
+  if (/(alias|function|variable):/i.test(String(command ?? '').replace(/`/g, '').replace(/["']/g, ''))) wrapper = true;
   // a call operator followed by a variable, a group or a script block (& $x, & (Get-Command ...), . $profile): the name is computed
   if (/(?:^|[;|&\n\r{(])\s*[&.]\s*(?:[$(@]|["'][^"']*\$)/.test(String(command ?? ''))) wrapper = true;
   // the text inside $( ) and backtick pairs, for a Deny or Ask
