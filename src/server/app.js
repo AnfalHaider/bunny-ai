@@ -2434,7 +2434,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result, saveable: true });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result, saveable: isWorkspace });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
