@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - release-0.1.7 build fix, tip `6b06ed9` (91b659f + Builder B's build-css change): PASS stands
+
+Read only. `package.json` is unchanged since 91b659f (`--publish never`, publish block AnfalHaider/bunny-ai). The one new change is in `scripts/build-css.mjs`: it builds the CSS in memory, compares it with `src/ui/app.css` ignoring CR, leaves the file alone when only line endings differ, and otherwise writes it with the file's own endings. It reads two design files and writes one file in `src/ui`; no network, no process, no other path. Lesson: a pre-review of a moving branch should end with the tip's sha, so the stamp names what was read.
+
 ## 2026-11-17 - release-0.1.7 build fix (`claude/release-0.1.7-buildfix` @ 91b659f): PASS stands
 
 Read only, no tests. Changes from bf83b01 outside `docs/`: `package.json`, `scripts/build-css.mjs`, `README.md`. `npm run dist` keeps `--publish never` (nothing uploads by itself; it is the only electron-builder call in the scripts); the new `build.publish` block is `provider: github`, `owner: AnfalHaider`, `repo: bunny-ai`, exactly the feed the app's own updater and `RELEASES_FEED` already name (the app does not use electron-updater, so the block only makes electron-builder write `latest.yml`). `build-css.mjs` now writes LF whatever the checkout's line endings, which leaves a rebuilt tree clean (what `release.mjs` checks). The README rewrite is text; its statements about permission modes, window-only settings and what leaves the machine match what I verified. Lesson: a build setting that makes a file appear (latest.yml) can look like a publish setting; the flag that decides publishing is on the command line, so check both.
