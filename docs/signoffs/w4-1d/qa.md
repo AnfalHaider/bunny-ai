@@ -1,9 +1,9 @@
 ---
 piece: w4-1d
 role: qa
-sha: 643c7da
+sha: 0bdb7f3
 verdict: PASS
 date: 2026-11-16
 ---
 
-Re-stamp at 643c7da (claude/builder-b-w6-loop-017, the integration of w4-1c, w4-1d, w6-2, w6-3, w6-4, w6-18 and the W6-3b no-plan nudge, cut from main e3c3157 lineage, already merged so no scratch merge was needed). Rehearsal e2e/w6-rehearsal.mjs (branch claude/qa-w6-rehearsal-2) run in both modes on an invented profile, scripted model, local fixture repo and site; every process it started was stopped. GATE at 643c7da, one run on a loaded machine (16 other Playwright runs): 6 of 7; unit tests PASS (46 s); the one failure is e2e/workspace.spec.js:14 the command palette opens with Ctrl+K and runs a command (138 passed otherwise); it passes 8 of 9 runs alone, and it is a test race: it presses Control+k right after goto without waiting for the page to be ready, so the key press can land before the handler exists (also failed in my 47e2312 gate); not caused by this branch. Electron not run. S12: a program started with start_process (a server on a free port) was listening before the kill and was gone 8 s after the Bunny server was killed hard (the supervisor and the pipe guard of d3f5904). At lane A without the piece it kept listening.
+Re-stamp at 0bdb7f3 (claude/builder-b-w6-loop-017: 643c7da plus the token cap never 0 (clamped to a 100,000 minimum, steps and minutes keep 0 meaning off), the Cookie and Set-Cookie secret check, proc-guard cleanup retries, and a Ctrl+K palette test that waits for the page). Rehearsal e2e/w6-rehearsal.mjs (branch claude/qa-w6-rehearsal-2) run again on an invented profile for the scenarios the delta touches, every process stopped afterwards. Unit tests at 0bdb7f3: 588 pass, 0 fail, 48 s. The race named in my 643c7da stamp (e2e/workspace.spec.js:14, the command palette test) is GONE: 12 of 12 runs of that test alone and 3 of 3 runs of the whole workspace.spec.js (7 passed each) on a machine with 14 other Playwright runs and CPU at 88 percent. A full gate was not run by QA at this sha; the 643c7da gate had that one named failure and nothing else. Electron not run. S12: a started server was listening before the kill and gone 8 s after the Bunny server was killed hard. The proc-guard cleanup change is test-only (test/proc-guard.test.js passes inside the 588 pass).
