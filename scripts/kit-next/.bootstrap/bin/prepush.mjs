@@ -17,6 +17,8 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
 import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, scopeViolations } from './lib/policy.mjs';
+import { laneOf, loadFlow, requiredFor, wordRecordProblems, wordsFor } from './lib/flow.mjs';
+import { hasEvidence } from './lib/ops.mjs';
 
 const ZERO = /^0+$/;
 
@@ -91,24 +93,19 @@ function sameSha(a, b) {
   return n >= 7 && a.slice(0, n) === b.slice(0, n);
 }
 
-export function completeSignoffs(root, sha, policy) {
-  // Returns [{piece, sha}] for every piece whose required roles all signed PASS on one sha.
+export function piecesAt(root, sha, policy) {
+  // [{piece, lane, extra, required (legacy _required roles or null), signed: {role: sha}}]
   const byPiece = new Map();
   for (const f of lsTree(root, sha, policy.signoffs.dir)) {
     const m = new RegExp(`^${policy.signoffs.dir}/([^/]+)/([^/]+)\\.md$`).exec(f);
     if (m) (byPiece.get(m[1]) || byPiece.set(m[1], []).get(m[1])).push([m[2], f]);
   }
-  const done = [];
+  const out = [];
   for (const [piece, files] of byPiece) {
-    let required = policy.signoffs.default_required;
-    const signed = {};
+    const p = { piece, lane: null, extra: [], required: null, signed: {}, words: {} };
     for (const [name, f] of files) {
-      const { data } = parseFrontmatter(show(root, sha, f));
+      const { data, body } = parseFrontmatter(show(root, sha, f));
       if (!data) continue;
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-      if (name === '_required') { if (Array.isArray(data.roles)) required = data.roles; continue; }
-      if (String(data.verdict || '').toUpperCase() === 'PASS' && data.sha) signed[data.role || name] = data.sha;
-=======
       if (name === '_required') { if (Array.isArray(data.roles)) { p.required = data.roles; p.extra = data.roles; } continue; }
       if (name === '_piece') { p.lane = data.lane || null; continue; }
       if (name === '_approve' || name === '_go') { p.words[name.slice(1)] = data; continue; }
@@ -157,12 +154,18 @@ export function completeSignoffs(root, sha, policy, { flow = null, codeCommits =
       const wordIssues = wordsFor(flow, lane.id, files).flatMap((w) => wordRecordProblems(p.words[w], w, flow).map((x) => `${w}: ${x}`));
       if (!missing.length && !wordIssues.length) { done.push({ piece: p.piece, sha: S, required }); why = ''; break; }
       why = `${p.piece} @ ${S.slice(0, 9)}: ${[missing.length ? `missing sign-off from ${missing.join(', ')}` : '', wordIssues.length ? `owner's word ${wordIssues.join('; ')}` : ''].filter(Boolean).join('; ')}`;
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
     }
-    const shas = required.map((r) => signed[r]);
-    if (shas.every(Boolean) && shas.every((s) => sameSha(s, shas[0]))) done.push({ piece, sha: shas[0] });
+    if (why) notes.push(why);
   }
   return done;
+}
+
+export function flowFor(root, baseSha, localSha) {
+  // The flow that judges a push is the one ALREADY accepted (the remote side), so a commit that
+  // loosens the flow cannot use its own looser flow to get through. New branch: the pushed tree.
+  const ref = baseSha && git(['cat-file', '-e', `${baseSha}:.bootstrap/flow.json`], root) !== null ? baseSha
+    : git(['cat-file', '-e', `${localSha}:.bootstrap/flow.json`], root) !== null ? localSha : null;
+  return ref ? loadFlow(root, { ref }).flow : null;
 }
 
 export function releaseRecordFor(root, treeSha, policy, wanted = treeSha) {
@@ -274,12 +277,16 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
 
   const exempt = branch === policy.branches.live && policy.releases.exempt_from_signoffs.includes(role);
   if (codeCommits.length && !exempt) {
-    const signed = completeSignoffs(root, localSha, policy);
+    const flow = flowFor(root, ZERO.test(remoteSha) ? null : remoteSha, localSha);
+    const notes = [];
+    const signed = completeSignoffs(root, localSha, policy, { flow, codeCommits, role, notes });
     const unsigned = codeCommits.filter((c) =>
       !signed.some((s) => git(['merge-base', '--is-ancestor', c, s.sha], root) !== null));
     if (unsigned.length) {
+      const need = flow ? "a piece with a lane set by the Chief of Staff, its lane's sign-offs plus any its files' conditions add, and any owner's word they need"
+        : `${policy.signoffs.default_required.join(', ')} or the piece's _required.md`;
       errors.push(`${unsigned.length} code commit(s) have no complete sign-off: ${unsigned.map((c) => c.slice(0, 9)).join(', ')} ` +
-        `(need PASS from ${policy.signoffs.default_required.join(', ')} or the piece's _required.md, all on one sha — O10, 7F)`);
+        `(need ${need}, all on one sha — O10, 7F)${notes.length ? `. Pieces: ${notes.join(' | ')}` : '. No piece covers them yet'}`);
     }
   }
   return errors;

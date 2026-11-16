@@ -9,7 +9,8 @@ export const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 // Once G-1 has landed (the new pre-commit checker exists in the live .bootstrap/), these tests exercise the LIVE guard;
 // before that they exercise the staged copy in scripts/guard-next/.
-export const NEXT = !process.env.GUARD_STAGED && existsSync(join(ROOT, '.bootstrap', 'bin', 'precommit.mjs')) ? ROOT : join(ROOT, 'scripts', 'guard-next'); // GUARD_STAGED=1 runs this suite against the staged copy (what the Chief of Staff will land)
+// KIT_NEXT=1 (K-1) runs the same suites against the 0.6.0 kit with our G-1 hardening put back (scripts/kit-next/).
+export const NEXT = process.env.KIT_NEXT ? join(ROOT, 'scripts', 'kit-next') : !process.env.GUARD_STAGED && existsSync(join(ROOT, '.bootstrap', 'bin', 'precommit.mjs')) ? ROOT : join(ROOT, 'scripts', 'guard-next'); // GUARD_STAGED=1 runs this suite against the staged copy (what the Chief of Staff will land)
 export const BIN = join(NEXT, '.bootstrap', 'bin');
 export const fileUrl = (p) => new URL(`file:///${p.replace(/\\/g, '/')}`);
 

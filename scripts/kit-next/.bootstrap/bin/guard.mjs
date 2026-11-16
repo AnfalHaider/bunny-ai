@@ -9,13 +9,10 @@
 // Output: exit 0 = allow. Exit 2 + reason on stderr = block (Claude Code, Codex and
 // Copilot-style hooks all treat exit 2 as "deny and tell the agent why").
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-import { readFileSync } from 'node:fs';
-=======
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
 import { pathToFileURL } from 'node:url';
+import { loadFlow } from './lib/flow.mjs';
 import { currentRole, git, loadPolicy, loadRole, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
@@ -50,7 +47,6 @@ export function pushTargets(command, cwd) {
   return out;
 }
 
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
 /** Destination branches of every `git push` in a parsed command line (global options and quotes understood). */
 export function tokenPushTargets(parsed, cwd) {
   const out = [];
@@ -62,49 +58,6 @@ export function tokenPushTargets(parsed, cwd) {
       const call = gitCall(words);
       if (call.sub === 'push') out.push(...pushDestinations(call.args, current));
     }
-=======
-// Who may write which record. A session signs only as itself; only the Chief of Staff sets a piece's
-// lane and records the owner's approval/go; Security may also add required roles (tightening only).
-const RECORD_WRITERS = { _piece: ['chief-of-staff'], _approve: ['chief-of-staff'], _go: ['chief-of-staff'], _required: ['chief-of-staff', 'security'] };
-const RELEASE_WRITERS = ['chief-of-staff', 'release-ops', 'hotfix'];
-const WRITE_OPS = /(>>?|\btee\b|\bcp\b|\bmv\b|\brm\b|sed\s+-i|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Remove-Item|\bdel\b|\bln\b|git\s+(checkout|restore)\b)/;
-
-export function recordRule(rel, role, policy) {
-  const sd = policy.signoffs.dir.replace(/\/$/, '');
-  const m = new RegExp(`^${sd}/([^/]+)/([^/]+)\\.md$`).exec(rel);
-  if (m) {
-    const name = m[2];
-    if (RECORD_WRITERS[name]) return RECORD_WRITERS[name].includes(role) ? null
-      : `${rel} is a ${name.slice(1)} record. Only ${RECORD_WRITERS[name].join(' / ')} writes it (you are "${role}").`;
-    if (name.startsWith('_')) return `${rel}: unknown record type.`;
-    return name === role ? null
-      : `${rel} is ${name}'s sign-off. A session signs only as itself (you are "${role}"). Ask ${name} to review and sign.`;
-  }
-  if (rel.startsWith(`${sd}/`)) return role === 'chief-of-staff' ? null : `${rel}: only the Chief of Staff manages sign-off folders.`;
-  if (rel.startsWith('docs/flow-changes/') || rel.startsWith('docs/kit-changes/')) return role === 'chief-of-staff' ? null : `${rel} is a record of the owner's yes to a ${rel.includes('kit-') ? 'kit upgrade' : 'flow change'}. Only the Chief of Staff writes it (you are "${role}").`;
-  if (rel.startsWith(`${policy.releases.dir.replace(/\/$/, '')}/`)) return RELEASE_WRITERS.includes(role) ? null
-    : `${rel} is a release record. Only ${RELEASE_WRITERS.join(' / ')} writes it (you are "${role}").`;
-  return null;
-}
-
-function shellRecordCheck(command, role, policy) {
-  if (/\bBOOTSTRAP_ROLE\s*=|\$env:BOOTSTRAP_ROLE/.test(command)) return 'Setting BOOTSTRAP_ROLE in a command is not allowed: a session acts only as its own role (`bootstrap role` sets it once per worktree).';
-  if (/\.bootstrap[\\/]session\.json/.test(command) && WRITE_OPS.test(command) && !/bootstrap(\.mjs)?\s+role\b/.test(command)) return 'Changing .bootstrap/session.json by hand is not allowed; the session role is set once with `bootstrap role`.';
-  // The toolkit's own record commands
-  const cli = /bootstrap(?:\.mjs)?\s+(signoff|require|piece|approve|release|flow\s+apply|kit\s+apply|upgrade)\b(.*)$/m.exec(command);
-  if (cli) {
-    const [, rawSub, rest] = cli;
-    const sub = rawSub.replace(/\s+/g, ' ');
-    if (sub === 'signoff') { const as = /--role\s+(\S+)/.exec(rest); if (as && as[1] !== role) return `Signing as "${as[1]}" is not allowed; you are "${role}". A session signs only as itself.`; if (role === 'unassigned') return 'This session has no role; run `bootstrap role <id>` first. Only the owner signs outside a session.'; }
-    const who = { 'flow apply': ['chief-of-staff'], 'kit apply': ['chief-of-staff'], upgrade: ['chief-of-staff'], require: RECORD_WRITERS._required, piece: RECORD_WRITERS._piece, approve: RECORD_WRITERS._approve, release: RELEASE_WRITERS }[sub];
-    if (who && !who.includes(role)) return `\`bootstrap ${sub}\` is for ${who.join(' / ')} only (you are "${role}").`;
-  }
-  // Raw writes into the record folders
-  if (WRITE_OPS.test(command)) {
-    const sd = policy.signoffs.dir.replace(/\/$/, ''), rd = policy.releases.dir.replace(/\/$/, '');
-    const paths = command.match(new RegExp(`(?:${sd}|${rd})/[^\\s"'>|;&]*`, 'g')) || [];
-    for (const p of paths) { const why = recordRule(p.replace(/\\/g, '/'), role, policy) || (!/\.md$/.test(p) && role !== 'chief-of-staff' ? `${p}: only the Chief of Staff manages record folders.` : null); if (why) return why; }
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
   }
   return out;
 }
@@ -136,7 +89,11 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   const policy = loadPolicy(root);
   if (!policy) return { allow: true };
   const role = currentRole(root);
-  const brief = loadRole(root, role) || {};
+  // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
+  let brief = loadRole(root, role) || {};
+  if (existsSync(join(root, '.bootstrap', 'flow.json'))) {
+    try { const r = loadFlow(root).flow.roles[role]; if (r) brief = { ...brief, ...r, deny_commands: r.deny_commands || brief.deny_commands }; } catch { /* keep the brief */ }
+  }
 
   if (AGENT_TOOLS.has(tool)) {
     let flow = null; try { flow = loadFlow(root).flow; } catch { /* defaults */ }

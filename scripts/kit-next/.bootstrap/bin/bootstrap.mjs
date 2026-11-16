@@ -6,15 +6,6 @@
 //   bootstrap signoff <piece> --verdict PASS|FAIL [--sha S] [--role R] [--note "..."]
 //   bootstrap require <piece> <role> [<role>...]                 set which roles must sign a piece
 //   bootstrap release <scope> --shas a,b --words "..." --question "..." --said-at "..." --check <file> [--relayed-by chief-of-staff]
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-//   bootstrap status                                             role, policy, hooksPath, sign-offs at HEAD
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parseFrontmatter } from './lib/fm.mjs';
-import { DEFAULT_POLICY, currentRole, git, globToRegex, loadPolicy, repoRoot } from './lib/policy.mjs';
-import { completeSignoffs } from './prepush.mjs';
-=======
 //   bootstrap piece <piece> --lane <lane-id> [--title "..."]    put a piece of work on a lane of the flow
 //   bootstrap approve <piece> --word approve|go --words "..." --question "..." --said-at ... [--artifact <link>]
 //   bootstrap status                                             role, policy, hooksPath, flow, sign-offs at HEAD
@@ -42,10 +33,13 @@ import { loadFlow, renderMarkdown } from './lib/flow.mjs';
 import { boardArchive, boardMine, brief, cost, family, helpersOf, newestCode, next, suggest } from './lib/ops.mjs';
 import { FLOW_CHANGES_DIR, KIT_CHANGES_DIR, completeSignoffs, hashText } from './prepush.mjs';
 import { runFlowUi } from './flow-ui.mjs';
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
 
-const KIT = join(dirname(fileURLToPath(import.meta.url)), '..');
+// G-1 (K-1): ids become folder and file names, so only plain names pass: letters, digits, dot, dash.
 const PLAIN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function plainId(id, what) {
+  if (!PLAIN_ID.test(String(id ?? '')) || String(id).includes('..')) { console.error(`"${id}" is not a plain ${what} id (letters, digits, dot, dash).`); process.exit(1); }
+}
+const KIT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const today = () => new Date().toISOString().slice(0, 10);
 const log = (state, what) => console.log(`${state.padEnd(7)} ${what}`);
 
@@ -92,13 +86,15 @@ function init(root, args, { upgrading = false } = {}) {
   else log('BRANCH', `live: ${live}${arg(args, 'live') ? '' : ' (detected)'} · dev: ${dev || 'none: pieces go to live through a release'}${arg(args, 'dev') ? '' : ' (detected)'}`);
   // Toolkit code is refreshed on every init (it is ours); everything else is written once.
   copyTree(join(KIT, 'bin'), join(root, '.bootstrap', 'bin'), { overwrite: true });
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-=======
   writeFileSync(join(root, '.bootstrap', 'kit.json'), JSON.stringify({ version: kitVersion() }, null, 2) + '\n');
   copyTree(join(KIT, 'flow'), join(root, '.bootstrap', 'flow'), { overwrite: true });
   copyTree(join(KIT, 'ui'), join(root, '.bootstrap', 'ui'), { overwrite: true });
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
   copyTree(join(KIT, 'roles'), join(root, '.bootstrap', 'roles'));
+  // --size picks a starting preset so small projects are not buried in process: prototype → solo, small → small team, live → full.
+  const size = arg(args, 'size', 'live');
+  const preset = { prototype: 'solo', small: 'small', live: 'full' }[size];
+  if (!preset) { console.error('--size prototype|small|live'); process.exit(1); }
+  writeOnce(join(root, '.bootstrap', 'flow.json'), JSON.stringify({ version: 1, preset, size }, null, 2) + '\n');
   writeOnce(join(root, '.bootstrap', 'policy.json'),
     JSON.stringify({ version: 1, branches: { live, dev }, destructive_commands: [], deny_all: DEFAULT_POLICY.deny_all }, null, 2) + '\n');
   copyTree(join(KIT, 'templates', 'project'), root);
@@ -176,26 +172,18 @@ function role(root, id) {
   backup(p);
   s.permissions ||= {};
   s.permissions.deny = [...new Set([...(s.permissions.deny || []), ...(data.deny || [])])];
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-  const kit = Array.isArray(data.kit_plugins) ? data.kit_plugins : [];
-  const projectSettings = join(root, '.claude', 'settings.json');
-  const projectEnabled = existsSync(projectSettings) ? JSON.parse(readFileSync(projectSettings, 'utf8')).enabledPlugins || {} : {};
-  const installed = Object.keys(projectEnabled);
-=======
   // The kit comes from the merged flow (so editor changes count), falling back to the role file.
   let kit = Array.isArray(data.kit_plugins) ? data.kit_plugins : [];
   try { const fr = loadFlow(root).flow.roles[id]; if (fr && Array.isArray(fr.plugins) && fr.plugins.length) kit = fr.plugins; } catch { /* keep the role file's kit */ }
   // Every plugin that would load in this folder: enabled for the user (all projects) or for this project.
   // Both must be narrowed, or user-level plugins ride along in every permanent session.
   const installed = enabledPluginIds(root);
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
   if (installed.length && kit.length) {
     s.enabledPlugins ||= {};
     // kit entries are plugin names, optionally with * wildcards ("*-lsp" = every language server).
-    // Narrowing only: a plugin the project switches off stays off, whatever the kit says (D).
     for (const id2 of installed) {
       const name = id2.split('@')[0];
-      s.enabledPlugins[id2] = projectEnabled[id2] !== false && (name === 'bootstrap-environment' || kit.some((k) => globToRegex(k).test(name)));
+      s.enabledPlugins[id2] = name === 'bootstrap-environment' || kit.some((k) => globToRegex(k).test(name));
     }
   }
   mkdirSync(dirname(p), { recursive: true });
@@ -204,15 +192,6 @@ function role(root, id) {
   console.log('Verify (R14): open this session\'s skill/tool list and confirm it shows only its kit.');
 }
 
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-function signoff(root, piece, args) {
-  const r = arg(args, 'role', currentRole(root));
-  // Ids become folder and file names: plain names only, and a role signs for itself (the Chief of Staff for anyone).
-  if (!PLAIN_ID.test(piece) || piece.includes('..')) { console.error(`"${piece}" is not a plain piece id (letters, digits, dot, dash).`); process.exit(1); }
-  if (!PLAIN_ID.test(r) || r.includes('..')) { console.error(`"${r}" is not a plain role id.`); process.exit(1); }
-  if (r !== currentRole(root) && currentRole(root) !== 'chief-of-staff') { console.error(`a sign-off is signed by its own role: you are "${currentRole(root)}", not "${r}".`); process.exit(1); }
-  const sha = arg(args, 'sha', git(['rev-parse', 'HEAD'], root));
-=======
 // A session acts only as its own role. Outside a session (no .bootstrap/session.json) it is the owner at
 // a terminal, who may record anything. Inside one, record commands are limited the same way the guard is.
 function kitVersion() {
@@ -266,28 +245,44 @@ function mustBe(root, allowed, what) {
 function signoff(root, piece, args) {
   const me = currentRole(root);
   const r = arg(args, 'role', me);
+  plainId(piece, 'piece');
+  plainId(r, 'role');
   if (me !== 'unassigned' && r !== me) { console.error(`This session is "${me}"; it cannot sign as "${r}". A session signs only as itself.`); process.exit(1); }
   // Sign the code, not the tip: other sessions' sign-off commits (docs only) sit on top of it.
   const policy = loadPolicy(root);
   const sha = arg(args, 'sha', (policy && newestCode(root, policy)) || git(['rev-parse', 'HEAD'], root));
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
   const verdict = (arg(args, 'verdict', '') || '').toUpperCase();
   if (!['PASS', 'FAIL'].includes(verdict)) { console.error('--verdict PASS|FAIL is required'); process.exit(1); }
-  if (r === 'unassigned') { console.error('no role: run `bootstrap role <id>` or pass --role'); process.exit(1); }
+  if (r === 'unassigned') { console.error('no role: run `bootstrap role <id>` (or, as the owner outside a session, pass --role)'); process.exit(1); }
+  const evidence = arg(args, 'evidence-file') ? readFileSync(arg(args, 'evidence-file'), 'utf8').trim() : (arg(args, 'note', '') || '').trim();
+  if (verdict === 'PASS' && evidence.length < 20) { console.error('A PASS needs evidence: --note "<command and its output, or file:line>" (20+ characters) or --evidence-file <file>. Without it the push check ignores the sign-off.'); process.exit(1); }
   const p = join(root, 'docs', 'signoffs', piece, `${r}.md`);
   mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, `---\npiece: ${piece}\nrole: ${r}\nsha: ${sha}\nverdict: ${verdict}\ndate: ${today()}\n---\n\n${arg(args, 'note', '') || '<evidence: command, output, file:line>'}\n`);
+  writeFileSync(p, `---\npiece: ${piece}\nrole: ${r}\nsha: ${sha}\nverdict: ${verdict}\ndate: ${today()}\n---\n\n${evidence || '<evidence: command, output, file:line>'}\n`);
   log('WRITE', `${p} (${verdict} @ ${sha.slice(0, 9)}) — commit it as a docs-only commit`);
 }
 
+function approve(root, piece, args) {
+  mustBe(root, ['chief-of-staff'], '`bootstrap approve`');
+  plainId(piece, 'piece');
+  const word = arg(args, 'word', 'approve');
+  if (!['approve', 'go'].includes(word)) { console.error('--word approve|go'); process.exit(1); }
+  const missing = ['words', 'question', 'said-at'].filter((n) => !arg(args, n));
+  if (word === 'approve' && !arg(args, 'artifact')) missing.push('artifact');
+  if (missing.length) { console.error(`missing --${missing.join(', --')}  (the owner's exact words, the question exactly as asked, when${word === 'approve' ? ', and the approved artifact link' : ''})`); process.exit(1); }
+  const relayed = arg(args, 'relayed-by', 'none (typed in this chat)');
+  const { flow } = loadFlow(root);
+  if (relayed.startsWith('chief-of-staff') && flow.words[word] && flow.words[word].relay === false) { console.error(`Relays of "${word}" are turned off in the flow; the owner must type it in the acting session.`); process.exit(1); }
+  const p = join(root, 'docs', 'signoffs', piece, `_${word}.md`);
+  mkdirSync(dirname(p), { recursive: true });
+  const q = (s) => `"${String(s).replace(/"/g, "'")}"`;
+  writeFileSync(p, `---\npiece: ${piece}\nword: ${word}\nowner_words: ${q(arg(args, 'words'))}\nquestion: ${q(arg(args, 'question'))}\nsaid_at: ${arg(args, 'said-at')}\nrelayed_by: ${relayed}\n${word === 'approve' ? `artifact: ${arg(args, 'artifact')}\n` : ''}date: ${today()}\n---\n`);
+  log('WRITE', `${p} — commit it as a docs-only commit`);
+}
+
 function requireRoles(root, piece, roles) {
-  if (!['chief-of-staff', 'security'].includes(currentRole(root))) {
-    console.error(`only the Chief of Staff or Security sets which roles must sign a piece (you are "${currentRole(root)}").`);
-    process.exit(1);
-  }
-  for (const id of [piece, ...roles]) {
-    if (!PLAIN_ID.test(id) || id.includes('..')) { console.error(`"${id}" is not a plain id (letters, digits, dot, dash).`); process.exit(1); }
-  }
+  mustBe(root, ['chief-of-staff', 'security'], '`bootstrap require`');
+  for (const id of [piece, ...roles]) plainId(id, '');
   const p = join(root, 'docs', 'signoffs', piece, '_required.md');
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, `---\npiece: ${piece}\nroles: [${roles.join(', ')}]\nset_by: ${currentRole(root)}\ndate: ${today()}\n---\n`);
@@ -295,6 +290,7 @@ function requireRoles(root, piece, roles) {
 }
 
 function release(root, scope, args) {
+  mustBe(root, ['chief-of-staff', 'release-ops', 'hotfix'], '`bootstrap release`');
   const need = ['shas', 'words', 'question', 'said-at', 'check'];
   const missing = need.filter((n) => !arg(args, n));
   if (missing.length) { console.error(`missing --${missing.join(', --')}  (7E: words + question + date, shas, pasted check)`); process.exit(1); }
@@ -312,17 +308,21 @@ function status(root) {
   console.log(`policy:      ${policy ? `live=${policy.branches.live} dev=${policy.branches.dev || 'none'}` : 'NOT BOOTSTRAPPED'}`);
   console.log(`hooksPath:   ${git(['config', 'core.hooksPath'], root) || 'UNSET (pre-push checks will not run)'}`);
   if (policy) {
+    const hasFlow = existsSync(join(root, '.bootstrap', 'flow.json'));
+    const { flow, findings } = loadFlow(root);
+    console.log(`flow:        ${hasFlow ? `${flow.lanes.map((l) => l.id).join(', ')} (preset ${flow.preset})` : 'built-in defaults (no .bootstrap/flow.json)'}${flow.company ? ` · inherits ${flow.company.name}` : ''}`);
+    const errs = findings.filter((f) => f.level === 'error');
+    if (errs.length) console.log(`flow errors: ${errs.map((f) => f.msg).join(' | ')}`);
     const head = git(['rev-parse', 'HEAD'], root);
     const done = head ? completeSignoffs(root, head, policy) : [];
-    console.log(`signed off:  ${done.length ? done.map((d) => `${d.piece}@${d.sha.slice(0, 9)}`).join(', ') : 'nothing complete at HEAD'}`);
+    console.log(`signed off:  ${done.length ? done.map((d) => `${d.piece}@${d.sha.slice(0, 9)}`).join(', ') : 'nothing complete at HEAD (legacy count; the pre-push hook applies the flow per piece)'}`);
   }
 }
 
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-=======
 function piece(root, id, args) {
   if (args.includes('--suggest')) { const f = arg(args, 'files'); return console.log(suggest(root, id, f ? f.split(',').map((x) => x.trim()) : null)); }
   mustBe(root, ['chief-of-staff'], '`bootstrap piece`');
+  plainId(id, 'piece');
   const laneId = arg(args, 'lane', null);
   if (!laneId) { console.error('--lane <lane-id> is required: the Chief of Staff decides the lane for every piece.'); process.exit(1); }
   const { flow } = loadFlow(root);
@@ -401,20 +401,21 @@ function companyInit(dir, args) {
   console.log(`Edit it with: bootstrap flow --company ${dir}\nProjects inherit it by setting "Defaults live in" to github:<owner>/<repo>@<sha> (or a path) in their flow editor.`);
 }
 
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
 function main() {
   const [cmd, ...args] = process.argv.slice(2);
+  if (cmd === 'company' && args[0] === 'init' && args[1]) return companyInit(args[1], args.slice(2));
+  if (cmd === 'flow' && args.includes('--company')) return runFlowUi(args);
   const root = repoRoot(process.cwd());
   if (!root) { console.error('not inside a git repository'); process.exit(1); }
   if (cmd === 'init') init(root, args);
+  else if (cmd === 'piece' && args[0]) piece(root, args[0], args.slice(1));
+  else if (cmd === 'approve' && args[0]) approve(root, args[0], args.slice(1));
+  else if (cmd === 'flow') flowCmd(root, args);
   else if (cmd === 'role' && args[0]) role(root, args[0]);
   else if (cmd === 'signoff' && args[0]) signoff(root, args[0], args.slice(1));
   else if (cmd === 'require' && args[1]) requireRoles(root, args[0], args.slice(1));
   else if (cmd === 'release' && args[0]) release(root, args[0], args.slice(1));
   else if (cmd === 'status') status(root);
-<<<<<<< C:/Users/anfal/AppData/Local/Temp/m/ours
-  else { console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).map((l) => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(cmd ? 1 : 0); }
-=======
   else if (cmd === 'brief' && args[0]) process.stdout.write(brief(root, args[0]));
   else if (cmd === 'next' && args[0]) { const f = arg(args, 'files'); console.log(next(root, args[0], f ? f.split(',').map((x) => x.trim()) : null)); }
   else if (cmd === 'board' && args[0] === '--mine') console.log(boardMine(root));
@@ -424,7 +425,6 @@ function main() {
   else if (cmd === 'upgrade') upgrade(root, args);
   else if (cmd === 'kit' && args[0] === 'apply') kitApply(root, args.slice(1));
   else { console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1).filter((l, i, a) => a.slice(0, i + 1).every((x) => x.startsWith('//'))).map((l) => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(cmd ? 1 : 0); }
->>>>>>> C:/Users/anfal/AppData/Local/Temp/m/theirs
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main();
