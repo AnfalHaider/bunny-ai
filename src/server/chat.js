@@ -63,6 +63,7 @@ export async function* streamChat({
 
   // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
   const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
+  let cutOffCalls = 0;
   for (let round = 0; round < roundLimit(); round += 1) {
     const body = { model, messages: conversation, stream: true };
     // Without a limit, some providers assume the largest window the model
@@ -98,6 +99,21 @@ export async function* streamChat({
         for (const c of written) c.unoffered = !offered.has(c.function.name);
       } else if (shown < String(text ?? '').length) {
         yield text.slice(shown); // it only looked like a call: show what was held back
+      }
+    }
+
+    // A call cut off by the reply limit is never run: half a write_file would overwrite a file with half its content.
+    // The model is told, and asked to send it again in smaller pieces.
+    if (offerTools && toolCalls.length && finish === 'length') {
+      const writtenOut = toolCalls.some((c) => String(c.id).startsWith('text_call_'));
+      const brokenJson = toolCalls.some((c) => { try { JSON.parse(c.function.arguments || '{}'); return false; } catch { return true; } });
+      if (writtenOut || brokenJson) {
+        cutOffCalls += 1;
+        if (cutOffCalls > 3) throw new ConnectError('chat.tooLong', 'The model kept running out of room in the middle of a tool call. Raise Max tokens in Settings, or pick another model.');
+        conversation.push({ role: 'assistant', content: stripToolMarkup(text) || '(cut off)' },
+          { role: 'user', content: 'Your last reply hit the length limit in the middle of a tool call, so that call was NOT run. Send it again in smaller pieces: '
+            + 'for a big file, write it in several steps (create it with the first part, then add the rest with edit_file or run_command), and keep each call short.' });
+        continue;
       }
     }
 

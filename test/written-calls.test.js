@@ -56,3 +56,32 @@ test('text that only mentions a tag is not swallowed when no call can be read fr
   const out = await collect(streamChat({ ...base, fetchImpl, runTool: async () => 'x' }));
   assert.match(out, /Use the <function= syntax/);
 });
+
+// Tech Lead review of W6-4: a call cut off by the length limit must not run.
+test('a write_file cut off by the length limit is not run; the model is told to send it in smaller pieces', async () => {
+  let n = 0;
+  const ran = [];
+  const seen = [];
+  const frame = (delta, finish) => `data: ${JSON.stringify({ choices: [{ delta, finish_reason: finish ?? null }] })}\n\n`;
+  const fetchImpl = async (_u, init) => { n += 1; seen.push(JSON.parse(init.body)); return sse(n === 1
+    // written out as text, and cut off before it closed: half a file
+    ? [frame({ content: '<tool_call><function=write_file><parameter=path>big.js</parameter><parameter=content>const a = 1;\nconst b = ' }, 'length'), done]
+    // a proper call whose JSON arguments were cut off
+    : n === 2
+      ? [frame({ tool_calls: [{ index: 0, id: 'c2', function: { name: 'write_file', arguments: '{"path":"big.js","content":"const a = 1;\nconst b' } }] }, 'length'), done]
+      : [text('Written in parts.'), done]); };
+  const writeTools = [{ type: 'function', function: { name: 'write_file', description: 'w', parameters: { type: 'object', properties: {} } } }];
+  const out = await collect(streamChat({ ...base, tools: writeTools, fetchImpl, runTool: async (c) => { ran.push(c.name); return 'ok'; } }));
+  assert.deepEqual(ran, [], 'neither half-call ran');
+  assert.equal(out, 'Written in parts.');
+  assert.match(seen[1].messages.at(-1).content, /NOT run\. Send it again in smaller pieces/);
+  assert.ok(!JSON.stringify(seen[1].messages).includes('const b ='), 'the half file is not sent back');
+});
+
+test('a complete call that ended normally still runs, even without its closing tags', async () => {
+  let n = 0;
+  const ran = [];
+  const fetchImpl = async () => { n += 1; return sse(n === 1 ? [text('<function=run_command><parameter=command>dir'), done] : [text('ok'), done]); };
+  await collect(streamChat({ ...base, fetchImpl, runTool: async (c) => { ran.push(JSON.parse(c.arguments)); return 'x'; } }));
+  assert.deepEqual(ran, [{ command: 'dir' }]);
+});
