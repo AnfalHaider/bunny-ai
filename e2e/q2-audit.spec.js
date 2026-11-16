@@ -189,7 +189,6 @@ test('Code mode in a git repo shows the folder and its branch', async ({ page })
 // ============================================================ defects (expected to fail until fixed)
 
 test('Q2-2: a permission mode chosen in a new chat is still chosen after the folder or branch chip is touched', async ({ page }) => {
-  test.fail(true, 'Q2-2: src/ui/chat.js:259 renderComposerHeader resets the mode to the default when there is no session yet');
   const dir = gitRepo();
   await open(page, 'code'); await useFolder(page, dir); await pickMode(page, 'Plan');
   await expect(page.locator('#mode-button')).toContainText('Plan');
@@ -200,7 +199,6 @@ test('Q2-2: a permission mode chosen in a new chat is still chosen after the fol
 });
 
 test('Q2-3: choosing a permission mode before the first message sends no request for session "null"', async ({ page }) => {
-  test.fail(true, 'Q2-3: src/ui/chat.js:3297 PATCH /api/sessions/null/setting/permissionMode answers 404');
   const bad = []; page.on('response', (r) => { if (r.status() >= 400) bad.push(`${r.status()} ${r.url()}`); });
   const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
   await open(page); await pickMode(page, 'Plan'); await page.waitForTimeout(500);
@@ -267,7 +265,6 @@ test('Q2-15: the palette\'s Settings command opens the Settings window in place'
 });
 
 test('Q2-19: after Stop in a chat that already has replies, the stopped reply stays on screen', async ({ page }) => {
-  test.fail(true, 'Q2-19: src/ui/chat.js:1864-1865 refreshSession stops polling as soon as ANY assistant message exists, so it reads the transcript before the stopped reply is saved');
   await open(page);
   await send(page, 'hello');
   await page.reload();

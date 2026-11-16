@@ -256,9 +256,10 @@ function renderComposerHeader() {
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
   $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
   if (branchText) branchText.textContent = branch ?? say('composer.noBranch');
-  if (permMode) permMode.value = state.session?.permissionMode ?? state.settings?.defaultPermissionMode ?? 'ask';
+  // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
+  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
-  if (effortLevel) effortLevel.value = state.session?.effort ?? state.settings?.defaultEffort ?? 'medium';
+  if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
     const modelAbilities = ab ? ab.abilities : [];
@@ -1857,11 +1858,15 @@ async function streamReply({ retry = true } = {}) {
 async function refreshSession({ expectAssistant = false } = {}) {
   // A stopped reply is written by the server just after the browser gives up,
   // so poll briefly rather than read the transcript too early and lose it.
+  // "A reply has arrived" means MORE assistant messages than the last transcript this page read, not "any":
+  // in a chat that already has replies, any would stop the wait before the stopped reply is saved (Q2-19).
+  const assistants = (list) => list.filter((m) => m.role === 'assistant').length;
+  const known = assistants(state.session?.messages ?? []);
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const session = await getJSON(`/api/sessions/${state.sessionId}`);
     state.session = session;
     state.messages = session.messages;
-    const hasReply = session.messages.some((m) => m.role === 'assistant');
+    const hasReply = assistants(session.messages) > known;
     if (!expectAssistant || hasReply) break;
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -1900,6 +1905,8 @@ function startNewChat({ incognito = false } = {}) {
   state.greeting = null; // a fresh chat gets a fresh greeting
   state.greetingSeed = 1 + Math.floor(Math.random() * 2147483645);
   state.session = null;
+  state.pendingMode = null;
+  state.pendingEffort = null;
   state.messages = [];
   state.incognito = incognito;
   history.replaceState(null, '', './index.html');
@@ -1982,6 +1989,8 @@ async function send() {
     if (permission) await sessionSetting(session.id, 'permissionMode', permission);
     const effort = $('effort-level')?.value;
     if (effort) await sessionSetting(session.id, 'effort', effort);
+    state.pendingMode = null;
+    state.pendingEffort = null;
   }
 
   state.messages.push({ id: `pending-u-${Date.now()}`, role: 'user', content: text, local: true, attachments: files });
@@ -3298,11 +3307,13 @@ async function boot() {
 
   // ---- permission mode ----
   $('permission-mode')?.addEventListener('change', async (e) => {
+    if (!state.sessionId) { state.pendingMode = e.target.value; return; } // no session yet: kept until the first message
     await sessionSetting(state.sessionId, 'permissionMode', e.target.value);
   });
 
   // ---- effort level ----
   $('effort-level')?.addEventListener('change', async (e) => {
+    if (!state.sessionId) { state.pendingEffort = e.target.value; return; }
     await sessionSetting(state.sessionId, 'effort', e.target.value);
   });
 
