@@ -12,6 +12,7 @@
  * are given (read_file, list_files, search_files, find_files, write_file, edit_file, multi_edit); they do not look inside what a
  * command does.
  */
+import { posix } from 'node:path';
 import { globMatcher } from './glob.js';
 
 export const MAX_RULES = 200;
@@ -104,6 +105,9 @@ export function commandParts(command) {
       cur += c;
       continue;
     }
+    // grouping, script blocks, a carriage return, Unicode line breaks and control characters: other shells read these as more commands,
+    // so they separate parts (deny and ask see each) and keep an allow rule from applying
+    if (c === '(' || c === ')' || c === '{' || c === '}' || c === '\r' || c === '\u2028' || c === '\u2029' || c === '\u0085' || (c < ' ' && c !== '\t' && c !== '\n')) { unsafe = true; flush(); continue; }
     if (c === ';' || c === '\n' || c === '|' || c === '&') {
       if (c === '&' && (src[i - 1] === '>' || src[i + 1] === '>')) { cur += c; continue; } // 2>&1, &>
       if ((c === '|' || c === '&') && src[i + 1] === c) i += 1;
@@ -154,6 +158,16 @@ export function checkPath(rules, rel, op) {
   return best;
 }
 
+/**
+ * The verdict on a path given as several spellings (as typed, collapsed, and the real file the tool will touch): a Deny or Ask on
+ * any of them stands; an Allow needs every one of them to be allowed.
+ */
+export function checkPaths(rules, candidates, op) {
+  const results = candidates.filter((c) => typeof c === 'string').map((c) => checkPath(rules, c, op));
+  for (const effect of ['deny', 'ask']) { const hit = results.find((r) => r?.effect === effect); if (hit) return hit; }
+  return results.length && results.every((r) => r?.effect === 'allow') ? results[0] : null;
+}
+
 /** Is reading this path denied? For the file listings, which skip such paths. */
 export function readDenied(rules, rel) {
   return checkPath(rules, rel, 'reads')?.effect === 'deny';
@@ -163,10 +177,12 @@ const EDIT_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit']);
 const READ_TOOLS = new Set(['read_file', 'list_files', 'search_files', 'find_files']);
 
 /** The verdict for one workspace tool call, or null when no rule speaks. */
-export function checkToolCall(rules, name, args = {}) {
+export function checkToolCall(rules, name, args = {}, canonPath = null) {
   if (name === 'run_command' || name === 'start_process') return checkCommand(rules, args.command);
-  if (EDIT_TOOLS.has(name)) return checkPath(rules, args.path, 'edits');
-  if (READ_TOOLS.has(name)) return checkPath(rules, args.path ?? '.', 'reads');
+  // "a/../secrets/x" is collapsed first, and the real file (after links) is judged too
+  const spellings = (p) => [norm(p), posix.normalize(norm(p) || '.'), canonPath];
+  if (EDIT_TOOLS.has(name)) return checkPaths(rules, spellings(args.path), 'edits');
+  if (READ_TOOLS.has(name)) return checkPaths(rules, spellings(args.path ?? '.'), 'reads');
   return null;
 }
 

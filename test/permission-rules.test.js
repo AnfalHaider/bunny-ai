@@ -134,3 +134,25 @@ test('pathological patterns and commands finish at once', () => {
   assert.ok(commandParts('echo '.repeat(20000)).parts.length >= 1);
   assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
 });
+
+test('review: grouping, script blocks, carriage returns and control characters are other commands (deny and ask see them, allow never covers them)', () => {
+  const rules = [cmd('allow', 'npm test*'), cmd('deny', 'rm *'), cmd('ask', 'git push*')];
+  for (const sneaky of ['npm test (rm x)', 'npm test; (rm x)', 'npm test @(rm x)', 'npm test { rm x }', 'npm test\rrm x', 'npm test rm x', 'npm test\u0085rm x', 'npm test\u000brm x']) {
+    assert.notEqual(checkCommand(rules, sneaky)?.effect, 'allow', JSON.stringify(sneaky));
+  }
+  assert.equal(checkCommand(rules, 'npm test\rrm x')?.effect, 'deny');
+  assert.equal(checkCommand(rules, 'echo (git push origin x)')?.effect, 'ask');
+  assert.equal(checkCommand(rules, '& { git push origin x }')?.effect, 'ask');
+  assert.equal(checkCommand(rules, 'echo hi rm -rf x')?.effect, 'deny');
+  assert.equal(checkCommand(rules, 'npm test --grep "a (b)"')?.effect, 'allow', 'parentheses inside quotes are text');
+});
+
+test('review: a path is judged as typed, collapsed, and as the real file; an Allow needs every spelling allowed', () => {
+  const rules = [path('deny', 'secrets/**', 'edits'), path('allow', 'docs/**', 'edits')];
+  assert.equal(checkToolCall(rules, 'write_file', { path: 'docs/../secrets/key.txt' })?.effect, 'deny', 'collapsed ".."');
+  assert.equal(checkToolCall(rules, 'write_file', { path: 'a/b/../../secrets/key.txt' })?.effect, 'deny');
+  assert.equal(checkToolCall(rules, 'write_file', { path: 'docs/a.md' }, 'secrets/real.md')?.effect, 'deny', 'a link that leads into secrets/');
+  assert.equal(checkToolCall(rules, 'write_file', { path: 'docs/a.md' }, 'docs/a.md')?.effect, 'allow');
+  assert.equal(checkToolCall(rules, 'write_file', { path: 'docs/a.md' }, 'src/x.md'), null, 'the real file is not under docs/: the Allow does not apply');
+  assert.equal(checkToolCall(rules, 'edit_file', { path: 'docs/./sub//a.md' })?.effect, 'allow');
+});

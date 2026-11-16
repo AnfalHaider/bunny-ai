@@ -11,7 +11,7 @@
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
 import { globMatcher } from './glob.js';
@@ -242,6 +242,25 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
   }
 
   const show = (abs) => relative(root, abs).split(sep).join('/') || '.';
+
+  /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder. For the person's rules. */
+  async function canon(path = '.') {
+    const rest = [];
+    let cur = resolve(root, String(path || '.'));
+    for (let guard = 0; guard < 256; guard += 1) {
+      try {
+        const real = join(await realpath(cur), ...rest.reverse());
+        const rel = relative(await realpath(root), real);
+        return rel.startsWith('..') || isAbsolute(rel) ? null : (rel.split(sep).join('/') || '.');
+      } catch {
+        const up = dirname(cur);
+        if (up === cur) return null;
+        rest.push(basename(cur));
+        cur = up;
+      }
+    }
+    return null;
+  }
 
   async function list_files({ path = '.', depth = 2 } = {}) {
     const start = await inside(path);
@@ -539,6 +558,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
     has: (name) => Object.hasOwn(tools, name),
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
+    canon,
     run: (name, args) => tools[name](args ?? {}),
   };
 }

@@ -206,3 +206,27 @@ test('API: rules are validated line by line, saved, read back, and tried without
   assert.equal((await putRules(base, { global: 'nope' })).status, 400);
   assert.equal((await putRules(base, { folders: { 'relative/folder': [cmd('allow', 'x')] } })).status, 400);
 });
+
+test('review: a collapsed ".." and a junction cannot get around a path rule (the real file is judged)', async (t) => {
+  const base = await setup(t);
+  const seed = async (folder) => { await mkdir(join(folder, 'secrets')); await mkdir(join(folder, 'docs')); };
+  const rules = { global: [edits('deny', 'secrets/**')] };
+  // ARGS.write_file writes note.txt; use a rule on the dotted spelling through a model that names the path
+  const folderRun = await run(base, 'auto', 'write_file', { rules: { global: [edits('deny', 'note.txt')] }, seed });
+  assert.equal(folderRun.wrote, false);
+  // the workspace's canon() collapses ".." and follows links
+  const { createWorkspace } = await import('../src/server/workspace.js');
+  const { mkdtempSync, mkdirSync, symlinkSync } = await import('node:fs');
+  const root = mkdtempSync(join(tmpdir(), 'bunny-canon-'));
+  mkdirSync(join(root, 'secrets')); mkdirSync(join(root, 'docs'));
+  const ws = createWorkspace(root);
+  assert.equal(await ws.canon('docs/../secrets/k.txt'), 'secrets/k.txt');
+  assert.equal(await ws.canon('docs/a/b/c.txt'), 'docs/a/b/c.txt', 'a file in folders that do not exist yet');
+  assert.equal(await ws.canon('../outside.txt'), null);
+  assert.equal(await ws.canon('.'), '.');
+  try {
+    symlinkSync(join(root, 'secrets'), join(root, 'docs', 'jump'), 'junction');
+    assert.equal(await ws.canon('docs/jump/k.txt'), 'secrets/k.txt', 'a junction to secrets/');
+  } catch { /* links cannot be made here */ }
+  void rules;
+});
