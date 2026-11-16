@@ -7,7 +7,25 @@ export async function getJSON(path) {
   return body;
 }
 
+// Writes that only Bunny's own window may make (a copy of src/server/windowOnly.js; test/window-only.test.js keeps them equal).
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode'];
+export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode'];
+export function isWindowOnlyRoute(method, path, body = null) {
+  const m = String(method).toUpperCase();
+  if (path === '/api/permission-rules' && m === 'PUT') return true;
+  if (path === '/api/settings' && m === 'PUT') return Boolean(body) && typeof body === 'object' && WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(body, k));
+  const session = /^\/api\/sessions\/[a-f0-9-]{36}\/setting\/([A-Za-z-]+)$/.exec(path);
+  if (session && m === 'PATCH') return WINDOW_ONLY_SESSION_SETTINGS.includes(session[1]);
+  return false;
+}
+
 export async function sendJSON(path, method, body) {
+  // In the desktop app those writes go to the main process (preload and IPC), which makes the request; in a plain browser they go over HTTP.
+  if (typeof window !== 'undefined' && window.bunnyDesktop?.secureWrite && isWindowOnlyRoute(method, path, body)) {
+    const r = await window.bunnyDesktop.secureWrite(method, path, body ?? {});
+    if (r.status >= 400) throw Object.assign(new Error(r.data?.message ?? `HTTP ${r.status}`), r.data);
+    return r.data;
+  }
   const res = await fetch(path, {
     method,
     headers: { 'content-type': 'application/json' },
