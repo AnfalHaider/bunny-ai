@@ -7,6 +7,7 @@
 // (A2) and the record-folder rules (E) live in lib/shellwrites.mjs.
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
 import { resolve as pathResolve } from 'node:path';
+import { ghNotAllowed, pushShape, refuseLabelMove, refusePush, refuseRemote } from './shellextra.mjs';
 import { ALIAS_DEPTH, GIT_BUILTINS, GIT_DIR_ENV, aliasValue, refuseGitConfigs } from './shellgit.mjs';
 
 const SHELLS = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd'];
@@ -92,15 +93,7 @@ function pushForces(args) {
 
 /** Destination branch names of a parsed `git push`, as guard.pushTargets returned them. */
 export function pushDestinations(args, currentBranch) {
-  const VALUE_OPTS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec']);
-  const positional = [];
-  for (let k = 0; k < args.length; k += 1) {
-    const a = args[k];
-    if (VALUE_OPTS.has(a)) { k += 1; continue; }
-    if (a.startsWith('-')) continue;
-    positional.push(a);
-  }
-  const refspecs = positional.slice(1);
+  const { refspecs } = pushShape(args); // --repo=origin (or --repo origin) names the remote, so every word left is a refspec
   if (!refspecs.length) return currentBranch() ? [currentBranch()] : [];
   return refspecs.map((r0) => {
     const r = r0.replace(/^\+/, '');
@@ -215,9 +208,7 @@ function refuseGh(words, ctx) {
   const positional = group === 'api' ? at.slice(0, 1) : at;
   if (positional.some((k) => words[k].dynamic && !words[k].quoted && BARE_VARIABLE.test(words[k].text))) return 'a gh command whose group or subcommand is a variable cannot be read: spell it out.'; // release-ops, hotfix and the Chief of Staff: their own limits are the pre-push scope check
   const offer = 'Ask release-ops (npm run release) or the Chief of Staff.';
-  if (group === 'release' && !GH_READ_RELEASE.has(sub)) return `"gh release ${sub ?? ''}" publishes to every installed copy. ${offer}`;
-  if (group === 'repo' && GH_REPO_WRITES.has(sub)) return `"gh repo ${sub}" changes the repository itself. ${offer}`;
-  if (GH_REFUSED_FOR_NON_LIVE.some(([g, s]) => g === group && (s === '*' || s === sub))) return `"gh ${group} ${sub ?? ''}" changes the repository, its releases or how it is built. ${offer}`;
+  if (group !== 'api') return ghNotAllowed(words, group, sub, ctx); // W5S-2: reads, pr comment, pr create on claude/*; everything else is refused
   if (group === 'api') {
     const method = ghApiMethod(words);
     if (method === null) return 'gh api with a method the guard cannot read (a variable) is refused: spell the method out.';
@@ -236,6 +227,9 @@ function refuseGitMore(call, cmd, ctx, depth) {
   const why = refuseGitConfigs(call);
   if (why) return why;
   const { sub } = call;
+  if (sub === 'push') { const why3 = refusePush(call.args); if (why3) return why3; }
+  if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
+  if (sub === 'branch' || sub === 'checkout' || sub === 'switch') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }
   if (!sub || GIT_BUILTINS.has(sub)) return null;
   // the alias is looked up where git will run: every -C moves the folder, in order
   let where = ctx.cwd ?? process.cwd();

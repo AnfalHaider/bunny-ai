@@ -103,7 +103,7 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
       return { allow: false, reason: `Blocked for role "${role}": command matches a rule in .bootstrap/policy.json or roles/${role}.md (${patterns[0]}). If the owner wants this, they run it themselves, or the Chief of Staff records their word first.` };
     }
     if (parsed) {
-      const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers, cwd });
+      const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers, cwd, liveBranch: policy.branches.live });
       if (why) return { allow: false, reason: `Blocked for role "${role}": ${why}` };
       // A2 and E: a seatbelt over the files a command writes (A1 is the authoritative check, at commit).
       if (policy.shell_write_check !== false) {

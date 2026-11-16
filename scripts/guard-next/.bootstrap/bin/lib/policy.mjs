@@ -59,10 +59,20 @@ export function roleFile(root) {
 }
 
 /** Is this path the role file of some worktree (<git dir>/bootstrap-role)? It sits outside the working files, so toRepoPath calls it "outside"; it is still not a file a role writes. */
-export function isRoleFile(text, cwd, p = path) {
+export function isRoleFile(text, cwd, p = path, opts = {}) {
   if (typeof text !== 'string' || !text) return false;
-  const abs = p.isAbsolute(text) ? text : p.join(cwd || process.cwd(), text);
-  return /(^|\/)\.git\/(worktrees\/[^/]+\/)?bootstrap-role$/i.test(abs.replace(/\\/g, '/'));
+  const stripped = stripDevicePrefix(text, p);
+  if (stripped === null) return true; // a device path the guard cannot read: treated as the role file, so refused
+  const abs = p.normalize(p.isAbsolute(stripped) ? stripped : p.join(cwd || process.cwd(), stripped));
+  const clean = (str) => str.replace(/\\/g, '/').split('/').map((seg) => (p === path.win32 ? (seg.split(':')[0].replace(/[. ]+$/, '') || seg) : seg)).join('/');
+  const looksLike = (str) => /(^|\/)\.git\/(worktrees\/[^/]+\/)?bootstrap-role$/i.test(clean(str));
+  if (looksLike(abs)) return true;
+  // links, junctions and 8.3 names: the file the path really leads to
+  if (opts.canonical ?? p === path) {
+    const real = canonicalPath(abs, p, opts.realpath ?? ((x) => realpathSync.native(x)));
+    if (real && looksLike(real)) return true;
+  }
+  return false;
 }
 
 export function currentRole(root) {

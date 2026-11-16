@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 
 /** git's own subcommands (from `git help -a`, plus the ones Git for Windows ships). Anything else is an alias or an external program. */
-export const GIT_BUILTINS = new Set(`add am annotate apply archive bisect blame branch bundle cat-file check-attr check-ignore check-ref-format checkout cherry cherry-pick
+export const GIT_BUILTINS = new Set(`add am annotate apply archive bisect blame branch bundle cat-file check-attr check-ignore check-ref-format checkout checkout-index cherry cherry-pick
   citool clean clone column commit commit-graph commit-tree config count-objects credential describe diff diff-files diff-index diff-tree difftool
   fast-export fast-import fetch fetch-pack filter-branch fmt-merge-msg for-each-ref for-each-repo format-patch fsck gc get-tar-commit-id gitk gui
   grep hash-object help hook index-pack init interpret-trailers lfs log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base
