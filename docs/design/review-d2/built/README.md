@@ -1,5 +1,4 @@
-# D-2 transcript built states (Builder, invented profile)
+# D-2 built states (Builder, invented profile)
 
-Seeded chats in a throwaway profile (BUNNY_DATA_DIR temp, fake upstream, name "Pat"). Names: group-collapsed, group-open, narrated, failed-collapsed (opened), failed-ended, stopped, reply-failed (opened); each light/dark, d = 1440, m = 390.
-Not yet built from the notes: the live spinner on a running group, the Session/Changes/Files panes.
-Panes (pane-session, pane-changes, pane-files-file): invented profile, a scripted model that wrote src/greet.js and note.txt in an Auto-mode chat. Desktop (1440) light and dark for all three; at 390 only pane-session was taken: the Changes and Files toolbar buttons were not reachable by the scripted phone walk (the toolbar is not clickable at that width), which is itself worth a look.
+Transcript: group-collapsed, group-open, narrated, failed-collapsed, failed-ended, stopped, reply-failed. Panes: pane-session, pane-changes (a card expanded to its diff), pane-files-file, and at 390 also pane-files-tree. A scripted model wrote src/greet.js and note.txt in an Auto-mode chat; every theme uses a fresh demo folder so the counts are real (+5 -1 across two checkpoints). Light and dark, d = 1440, m = 390.
+Not built from the notes: the live spinner on a running group, elapsed time and +N -N on a group line, "Since checkpoint" tabs, Open in Explorer.

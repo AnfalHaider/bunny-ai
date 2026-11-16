@@ -116,6 +116,11 @@ test('T3-15: offline with a model on this computer connected: it answers, and th
   }
 });
 
+test.beforeEach(async ({ page }) => {
+  if (process.env.T3_WIDTH) await page.setViewportSize({ width: Number(process.env.T3_WIDTH), height: Number(process.env.T3_WIDTH) < 500 ? 844 : 900 });
+  if (process.env.T3_SCHEME) await page.emulateMedia({ colorScheme: process.env.T3_SCHEME });
+});
+
 test('a model that did not answer: a calm "is slow. Trying ..." line while the next model starts, then one line under the reply', async ({ page }) => {
   await ready(page);
   let hits = 0;
@@ -127,7 +132,9 @@ test('a model that did not answer: a calm "is slow. Trying ..." line while the n
   });
   await page.locator('#input').fill('please answer');
   await page.locator('#send').click();
-  await expect(page.locator('#status')).toContainText(/is slow\. Trying /);
+  await expect(page.locator('#status')).toContainText(/is slow[.] Trying /);
+  // Pictures for Design (not part of the gate): T3_SHOT=<file> T3_SCHEME=dark T3_WIDTH=390 writes one at this moment.
+  if (process.env.T3_SHOT) await page.screenshot({ path: process.env.T3_SHOT });
   await expect(page.locator('.msg.assistant .body').last()).not.toHaveText('', { timeout: 15_000 });
   await expect(page.locator('.msg.assistant .auto-meta').last()).toContainText('did not answer in time');
   await expect(page.locator('.error-note')).toHaveCount(0);
