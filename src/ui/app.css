@@ -1227,6 +1227,7 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
 .picker-item .model-desc { font-size: var(--fs-xs); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .picker-item.unavailable { opacity: .55; }
 .picker-empty { padding: var(--sp-8); text-align: center; font-size: var(--fs-md); color: var(--text-faint); }
+.empty-note { display: block; margin-bottom: var(--sp-4); }
 
 /* ---------- right pane: what chat.js fills ---------- */
 .pane > .pane-view:not([hidden]) { display: flex; }

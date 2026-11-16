@@ -343,14 +343,16 @@ function renderPicker() {
   } else {
     trigger.append(element('span', {
       className: 'label',
-      textContent: state.models.length ? say('chat.chooseModel') : say('chat.noModels'),
+      textContent: state.models.length ? say('chat.chooseModel') : hiddenModelCount() ? `${hiddenModelCount()} ${hiddenModelCount() === 1 ? 'model is' : 'models are'} hidden` : say('chat.noModels'),
     }));
   }
   trigger.append(icon('chevron'));
   host.append(trigger);
 
   if (!state.models.length) {
-    trigger.addEventListener('click', () => { location.href = './providers.html'; });
+    // Models exist but the "Show models" setting hides them: one click shows them. Otherwise there is nothing yet: add a provider.
+    if (hiddenModelCount()) trigger.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+    else trigger.addEventListener('click', () => { location.href = './providers.html'; });
     return;
   }
 
@@ -377,6 +379,13 @@ function openPicker(host, trigger) {
   const list = element('div', { className: 'picker-list', role: 'listbox' });
 
   panel.append(search, list);
+  const hidden = hiddenModelCount();
+  if (hidden) {
+    // The default setting shows only free and Nvidia models; say what is left out and how to see it.
+    const more = button(`Show all models (${hidden} more)`, { className: 'picker-item picker-show-all' });
+    more.addEventListener('click', () => { closePicker(); showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+    panel.append(more);
+  }
   host.append(panel);
   search.focus();
 
@@ -3219,6 +3228,27 @@ function visibleModels(all) {
   return all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
 }
 
+/** How many models the "Show models" setting is hiding right now. */
+function hiddenModelCount() {
+  if (state.settings?.modelFilter === 'all') return 0;
+  return Math.max(0, (state.allModelCount ?? 0) - (state.models?.length ?? 0));
+}
+
+/** Settings, Models, "Show models": everything a connected provider offers. */
+async function showAllModels() {
+  await sendJSON('/api/settings', 'PUT', { modelFilter: 'all' });
+  state.settings = { ...state.settings, modelFilter: 'all' };
+  state.models = visibleModels(await getJSON('/api/models'));
+  if (!state.selected && state.models.length) {
+    const first = state.models[0];
+    state.selected = { providerId: first.providerId, providerName: first.providerName, model: first.id };
+    const empty = $('empty-text');
+    if (empty) { empty.replaceChildren(); empty.setAttribute('data-i18n', 'chat.startText'); applyLanguage(state.language); }
+  }
+  renderPicker();
+  renderComposerHeader();
+}
+
 function applyCapabilities(settings) {
   // Settings, Capabilities, Artifacts: off hides the button and the save action.
   const on = settings?.artifactsEnabled !== false;
@@ -3772,7 +3802,17 @@ async function boot() {
       // Nothing to pick yet: the one way forward is a button, not a line of small print.
       const empty = $('empty-text');
       empty.removeAttribute('data-i18n');
-      empty.replaceChildren(element('a', { className: 'primary empty-cta', href: './providers.html', textContent: say('chat.addProvider') }));
+      const connected = state.providers.some((p) => p.status === 'connected');
+      if (connected && hiddenModelCount()) {
+        const n = hiddenModelCount();
+        const show = element('button', { type: 'button', className: 'primary empty-cta', textContent: 'Show all models' });
+        show.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+        empty.replaceChildren(element('span', { className: 'empty-note', textContent: `${n} ${n === 1 ? 'model is' : 'models are'} hidden by your "Show models" setting.` }), show);
+      } else if (connected) {
+        empty.replaceChildren(element('span', { className: 'empty-note', textContent: 'Your connected providers offer no models right now.' }), element('a', { className: 'primary empty-cta', href: './providers.html', textContent: 'Manage providers' }));
+      } else {
+        empty.replaceChildren(element('a', { className: 'primary empty-cta', href: './providers.html', textContent: say('chat.addProvider') }));
+      }
     }
   } catch (err) {
     $('error').textContent = err.message;
