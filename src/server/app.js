@@ -1654,6 +1654,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             await writeFile(join(bunny, '.gitignore'), '*', { encoding: 'utf8', flag: 'wx' }).catch(() => {}); // only the first time
             await pruneNotes(notes);
             // 'wx': never into an existing file or link. Then check where it really landed.
+            // If this reply already changes files, the note is in its undo list too (Undo removes it with the rest).
+            if (checkpoint) await checkpoint.capture(join(root, rel));
             await writeFile(join(root, rel), full, { encoding: 'utf8', flag: 'wx' });
             if (!(await realpath(join(root, rel))).startsWith(root + sep)) { await rm(join(root, rel), { force: true }); throw new Error('outside the workspace'); }
             out.resultFile = rel;

@@ -104,3 +104,39 @@ test('looksSecret keeps its reach: aligned and multiline YAML, long keys, and to
   looksSecret(`${'token '.repeat(20_000)}`);
   assert.ok(Date.now() - start < 1000, 'and a worst-case input is still quick');
 });
+
+test('a saved note is in the undo list of a reply that also changed files', async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-undo-note-'));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  await writeFile(join(folder, 'big.txt'), 'row of data\n'.repeat(900));
+  const calls = [
+    { name: 'write_file', args: { path: 'a.txt', content: 'hello' } },
+    { name: 'read_file', args: { path: 'big.txt' } },
+  ];
+  let n = 0;
+  const server = createServer((req, res) => {
+    req.on('data', () => {});
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      n += 1;
+      const c = calls[n - 1];
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const delta = c ? { tool_calls: [{ index: 0, id: `c${n}`, function: { name: c.name, arguments: JSON.stringify(c.args) } }] } : { content: 'ok' };
+      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => server.close(r)));
+  const { base } = await startApp(t, { fake: false });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
+  const { body: session } = await post(base, '/api/sessions', { title: 'Undo note' });
+  const patch = (key, value) => fetch(`${base}/api/sessions/${session.id}/setting/${key}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) });
+  await patch('permissionMode', 'auto');
+  await patch('folder', folder);
+  await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'go', providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) }).then((r) => r.text());
+  const reply = (await json(base, `/api/sessions/${session.id}`)).body.messages.at(-1);
+  assert.equal(reply.checkpoint.files, 2, 'the file it wrote and the note');
+  const note = (await json(base, `/api/sessions/${session.id}`)).body.messages.find((m) => m.resultFile).resultFile;
+  await post(base, `/api/sessions/${session.id}/checkpoints/${reply.checkpoint.id}/restore`, {});
+  assert.deepEqual((await readdir(join(folder, '.bunny', 'notes'))).filter((f) => note.endsWith(f)), [], 'undo removed the note');
+});
