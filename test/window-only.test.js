@@ -131,12 +131,12 @@ test('what is window-only and what is not', () => {
   const yes = [
     ['POST', '/api/mcp'], ['PATCH', `/api/mcp/${id}`], ['DELETE', `/api/mcp/${id}`], ['POST', `/api/mcp/${id}/call`], ['POST', '/api/schedules'], ['PATCH', `/api/schedules/${id}`], ['DELETE', `/api/schedules/${id}`],
     ['POST', '/api/hooks'], ['DELETE', `/api/hooks/${id}`], ['POST', '/api/skills'], ['PATCH', `/api/skills/${id}`], ['POST', '/api/plugins/install'], ['DELETE', '/api/tools/my_tool'],
-    ['POST', `/api/sessions/${id}/permission/${pid}`], ['POST', `/api/sessions/${id}/capability/${pid}`], ['POST', '/api/computer/click'], ['POST', '/api/computer/type'], ['POST', '/api/terminal/write'], ['POST', '/api/terminal/create'],
+    ['POST', `/api/sessions/${id}/permission/${pid}`], ['POST', `/api/sessions/${id}/capability/${pid}`], ['POST', `/api/sessions/${id}/question/${pid}`], ['POST', '/api/computer/click'], ['POST', '/api/computer/type'], ['POST', '/api/terminal/write'], ['POST', '/api/terminal/create'],
     ['POST', '/api/providers/custom'], ['DELETE', '/api/providers/custom-abc'], ['POST', '/api/providers/openai/connect'], ['POST', '/api/account/github/token'], ['POST', '/api/connectors/x/oauth/start'], ['DELETE', '/api/connectors/x'],
     ['PUT', '/api/permission-rules'],
   ];
   for (const [m, p] of yes) assert.equal(isWindowOnlyRoute(m, p), true, `${m} ${p}`);
-  const no = [['GET', '/api/mcp'], ['GET', `/api/mcp/${id}/tools`], ['GET', '/api/schedules'], ['POST', `/api/sessions/${id}/question/${pid}`], ['GET', '/api/terminal/read'], ['POST', '/api/memory'], ['POST', '/api/import'], ['POST', '/api/profile/photo'], ['PUT', '/api/settings'], ['POST', '/api/sessions'], ['PATCH', `/api/sessions/${id}`], ['POST', `/api/sessions/${id}/messages`], ['POST', '/api/permission-rules/try']];
+  const no = [['GET', '/api/mcp'], ['GET', `/api/mcp/${id}/tools`], ['GET', '/api/schedules'], ['GET', '/api/terminal/read'], ['POST', '/api/memory'], ['POST', '/api/import'], ['POST', '/api/profile/photo'], ['PUT', '/api/settings'], ['POST', '/api/sessions'], ['PATCH', `/api/sessions/${id}`], ['POST', `/api/sessions/${id}/messages`], ['POST', '/api/permission-rules/try']];
   for (const [m, p] of no) assert.equal(isWindowOnlyRoute(m, p), false, `${m} ${p}`);
   // judged by what the body changes
   assert.equal(isWindowOnlyRoute('POST', '/api/sessions', { permissionMode: 'auto' }), true);
@@ -224,4 +224,22 @@ test('desktop app: instructions in settings and in a project are refused over HT
   assert.equal((await post(base, '/api/projects', { name: 'plain' })).status, 200);
   assert.equal((await app.adminFetch('/api/settings', { method: 'PUT', headers: j, body: JSON.stringify({ instructions: 'be brief' }) })).status, 200);
   assert.equal((await app.adminFetch('/api/projects', { method: 'POST', headers: j, body: JSON.stringify({ name: 'p2', instructions: 'be brief' }) })).status, 200);
+});
+
+test('W5-7 leftovers: the long-reply caps, the helpers switch and the model filter are window-only; unknown settings keys are refused', async (t) => {
+  for (const key of ['autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter']) {
+    assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: 1 }), true, key);
+  }
+  for (const key of ['providerId', 'model', 'theme']) assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: 'x' }), false, key);
+  const { app, base } = await startApp(t, { folderPickerOnly: true });
+  assert.equal((await put(base, '/api/settings', { helpersEnabled: false })).status, 403);
+  assert.equal((await put(base, '/api/settings', { maxTokens: 99999 })).status, 403);
+  const bad = await put(base, '/api/settings', { theme: 'dark', surprise: 'x' });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.body.code, 'settings.unknownKey');
+  assert.equal((await json(base, '/api/settings')).body.surprise, undefined);
+  assert.equal((await put(base, '/api/settings', { theme: 'dark' })).status, 200);
+  assert.equal((await app.adminFetch('/api/settings', { method: 'PUT', headers: j, body: JSON.stringify({ helpersEnabled: false }) })).status, 200);
+  const q = '/api/sessions/11111111-1111-1111-1111-111111111111/question/22222222-2222-2222-2222-222222222222';
+  assert.equal((await post(base, q, {})).status, 403);
 });
