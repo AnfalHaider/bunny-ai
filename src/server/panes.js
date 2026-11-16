@@ -5,13 +5,16 @@
  * resolved against the folder, its real location (links and junctions followed) must still be inside it, and
  * anything else is refused. Large and binary files are described, never sent.
  */
-import { readdir, readFile, realpath, stat, lstat } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { open, readdir, realpath, stat, lstat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 
 export const MAX_READ = 1024 * 1024; // a file bigger than this is cut off
 const MAX_ENTRIES = 500;
 const MAX_DIFF_LINES = 2000;
 const HIDDEN_DIRS = new Set(['.git', 'node_modules']);
+const MAX_CHECKPOINTS = 20; // newest first; the answer says when there are more
+const MAX_FILES_PER_CHECKPOINT = 40;
+const DIFF_BUDGET_LINES = 20_000; // total lines diffed in one answer, so a long chat cannot hold the server for seconds
 
 const refuse = (code, message) => Object.assign(new Error(message), { code });
 
@@ -32,7 +35,36 @@ export async function inside(root, rel = '') {
   }
   const relation = relative(base, real);
   if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation)) throw refuse('path.outside', 'That path is outside the folder.');
+  // The list hides .git and node_modules; reading them is refused too, so the two agree (.git/config can hold a token).
+  if (HIDDEN_DIRS.has(relation.split(sep)[0].toLowerCase())) throw refuse('path.hidden', 'That folder is not shown.');
   return { base, real, rel: relation.split(sep).join('/') };
+}
+
+/** The first `length` bytes of a file, and no more. */
+async function readHead(path, length) {
+  const handle = await open(path, 'r');
+  try {
+    const buf = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buf, 0, length, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
+/** A folder Bunny never browses for the Files pane: its own data, a parent of it, or a drive root. */
+export async function neverBrowse(folder, dataDir) {
+  const real = await realpath(folder);
+  if (parse(real).root === real) return 'That is a whole drive, not a project folder.';
+  if (dataDir) {
+    let data;
+    try { data = await realpath(dataDir); } catch { data = resolve(dataDir); }
+    const inData = relative(data, real);
+    if (inData === '' || (!inData.startsWith('..') && !isAbsolute(inData))) return 'That is where Bunny keeps its own data.';
+    const dataIn = relative(real, data);
+    if (!dataIn.startsWith('..') && !isAbsolute(dataIn)) return 'That folder contains where Bunny keeps its own data.';
+  }
+  return null;
 }
 
 /** One level of a folder: folders first, then files, by name. */
@@ -60,11 +92,10 @@ export async function readTextFile(root, rel) {
   const { real, rel: at } = await inside(root, rel);
   const info = await stat(real);
   if (info.isDirectory()) throw refuse('path.notFile', 'That is a folder, not a file.');
-  const buf = await readFile(real);
-  const head = buf.subarray(0, 4096);
-  if (head.includes(0)) return { path: at, name: basename(real), binary: true, bytes: info.size };
-  const truncated = buf.length > MAX_READ;
-  const text = buf.subarray(0, MAX_READ).toString('utf8');
+  const buf = await readHead(real, Math.min(info.size, MAX_READ)); // never the whole file: a 300 MB file costs 1 MB
+  if (buf.subarray(0, 4096).includes(0)) return { path: at, name: basename(real), binary: true, bytes: info.size };
+  const truncated = info.size > MAX_READ;
+  const text = buf.toString('utf8');
   return { path: at, name: basename(real), binary: false, bytes: info.size, truncated, text, lines: text.split('\n').length };
 }
 
@@ -114,34 +145,46 @@ export function lineDiff(before, after) {
 
 /**
  * What a chat changed, from the copies Bunny saved before each reply's first change to a file (works in any
- * folder, git or not). One entry per checkpoint; each file says new or edited, how many lines, and the diff
- * against the file as it is now. Files outside the folder are left out.
+ * folder, git or not). One entry per checkpoint (newest 20); each file says new or edited, how many lines, and
+ * the diff against the file as it is now. Every path goes through inside(): a file whose real location leaves the
+ * folder (a link) is left out, and nothing is read beyond MAX_READ.
  */
 export async function changesFor(root, checkpointList) {
+  const base = await realpath(root);
+  const all = checkpointList.slice(-MAX_CHECKPOINTS);
   const out = [];
   let files = 0;
   let added = 0;
   let removed = 0;
-  for (const cp of checkpointList) {
+  let budget = DIFF_BUDGET_LINES;
+  for (const cp of all) {
     const entry = { id: cp.id, at: cp.at, restored: Boolean(cp.restored), files: [] };
-    for (const f of cp.files ?? []) {
-      let rel;
+    for (const f of (cp.files ?? []).slice(0, MAX_FILES_PER_CHECKPOINT)) {
+      let rel = relative(base, resolve(f.path));
+      if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) continue;
+      rel = rel.split(sep).join('/');
+      // where is the file now? Its real location must be inside the folder; a file that is gone must at least sit in a real folder inside it.
+      let real = null;
+      let gone = false;
       try {
-        const base = await realpath(root);
-        rel = relative(base, resolve(f.path));
-        if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) continue;
-        rel = rel.split(sep).join('/');
-      } catch { continue; }
-      if (f.skipped) { entry.files.push({ path: rel, status: 'edited', added: 0, removed: 0, lines: [], tooLarge: true }); continue; }
+        real = (await inside(root, rel)).real;
+      } catch (err) {
+        if (err.code !== 'path.notFound') continue; // outside, hidden, invalid: left out
+        try { await inside(root, dirname(rel) === '.' ? '' : dirname(rel)); gone = true; } catch { continue; }
+      }
+      if (f.skipped) { entry.files.push({ path: rel, status: 'edited', added: 0, removed: 0, lines: [], addedAt: [], tooLarge: true }); continue; }
       const before = f.existed ? Buffer.from(f.data ?? '', 'base64').toString('utf8') : '';
       let after = '';
-      let gone = false;
-      try { after = (await readFile(resolve(f.path))).toString('utf8'); } catch { gone = true; }
-      const d = lineDiff(before, after);
+      if (real) {
+        try { const info = await stat(real); after = (await readHead(real, Math.min(info.size, MAX_READ))).toString('utf8'); } catch { gone = true; }
+      }
+      const size = before.split('\n').length + after.split('\n').length;
+      const d = budget - size < 0 ? { added: 0, removed: 0, lines: [], addedAt: [], tooLarge: true } : lineDiff(before, after);
+      budget -= size;
       entry.files.push({ path: rel, status: !f.existed ? 'new' : gone ? 'removed' : 'edited', added: d.added, removed: d.removed, lines: d.lines, addedAt: d.addedAt, tooLarge: d.tooLarge });
       added += d.added; removed += d.removed; files += 1;
     }
     out.push(entry);
   }
-  return { checkpoints: out, totals: { files, added, removed } };
+  return { checkpoints: out, totals: { files, added, removed }, more: checkpointList.length > all.length };
 }

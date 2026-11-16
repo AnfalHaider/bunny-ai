@@ -70,7 +70,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
 import { probeNetwork } from './network.js';
-import { listFolder, readTextFile, changesFor } from './panes.js';
+import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
 // The project root, found from this file rather than the working directory, so the
 // server also finds its UI when it runs inside the packaged desktop app.
@@ -155,7 +155,7 @@ export function stoppedReport(steps) {
 /**
  * @param {{ dataDir: string, fake?: boolean, secretStore?: any, probe?: any, discover?: any }} options
  */
-export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork } = {}) {
+export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
   await mkdir(dataDir, { recursive: true });
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
@@ -163,7 +163,14 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
 
   let fakeOffline = false; // test mode only: see /api/network
-  const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check)
+  const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check and chooseFolder)
+  // Record a folder the person chose (the desktop app calls this with what its native picker returned). Never a drive root or Bunny's own data.
+  const chooseFolder = async (folder) => {
+    const result = await checkFolder(folder);
+    if (!result.ok || (await neverBrowse(result.folder, dataDir))) return false;
+    chosenFolders.add(result.folder);
+    return true;
+  };
   const secrets = secretStore ?? dpapiSecretStore({ dir: join(dataDir, 'secrets') });
   const connectionsFile = join(dataDir, 'connections.json');
   const settingsFile = join(dataDir, 'settings.json');
@@ -1136,6 +1143,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const session = await sessions.get(paneMatch[1]);
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
       const folder = session.folder ? await checkFolder(session.folder) : null;
+      const never = folder?.ok ? await neverBrowse(folder.folder, dataDir) : null;
+      if (never) return sendJson(res, 403, { code: 'folder.never', message: never });
       if (!folder?.ok) return sendJson(res, 200, paneMatch[2] === 'changes' ? { checkpoints: [], totals: { files: 0, added: 0, removed: 0 }, folder: null } : { folder: null, entries: [] });
       try {
         if (paneMatch[2] === 'changes') return sendJson(res, 200, { ...(await changesFor(folder.folder, await checkpoints.list(session.id))), folder: folder.folder, git: Boolean(session.branch) });
@@ -1220,7 +1229,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/folder/check' && method === 'POST') {
       const result = await checkFolder((await readBody(req)).folder);
       if (!result.ok) return sendJson(res, 400, { code: 'folder.invalid', message: result.reason });
-      chosenFolders.add(result.folder); // the person pointed Bunny at it: the Files pane may list it (read-only) before a chat exists
+      // Plain-browser dev mode: typing a path is choosing it. In the desktop app only the native picker chooses (folderPickerOnly):
+      // a script in a page could otherwise "choose" any folder and read the disk through the Files pane.
+      if (!folderPickerOnly) await chooseFolder(result.folder);
       return sendJson(res, 200, { folder: result.folder, branch: await gitBranch(result.folder) });
     }
 
@@ -1228,6 +1239,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if ((path === '/api/folder/files' || path === '/api/folder/file') && method === 'GET') {
       const result = await checkFolder(url.searchParams.get('folder') ?? '');
       if (!result.ok || !chosenFolders.has(result.folder)) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder in this chat first.' });
+      const never = await neverBrowse(result.folder, dataDir);
+      if (never) return sendJson(res, 403, { code: 'folder.never', message: never });
       try {
         return sendJson(res, 200, path === '/api/folder/files'
           ? await listFolder(result.folder, url.searchParams.get('path') ?? '')
@@ -2608,6 +2621,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
     computer, terminals,
     getSettings: () => settings,
+    chooseFolder,
     dataDir,
     apiToken: guard.token,
     runHooks,

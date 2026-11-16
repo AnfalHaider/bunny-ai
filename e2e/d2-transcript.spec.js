@@ -112,3 +112,20 @@ test('a reply that failed outright is one "The reply failed" line that opens to 
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Choose another model' })).toBeVisible();
 });
+
+test('a chat saved before D-2 (old message shapes) renders without errors', async ({ page, request }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  const made = await (await request.post('/api/sessions', { data: { title: 'old', messages: [
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', kind: 'tool_call', content: 'x' },
+    { role: 'assistant', kind: 'tool_call', tool: 'Run npm test', content: 'npm test', result: 'exit code 1' },
+    { role: 'assistant', kind: 'error' },
+    { role: 'assistant', kind: 'partial', content: 'cut off' },
+    { role: 'assistant', content: 'plain reply' },
+  ] } })).json();
+  await page.goto(`/src/ui/index.html?s=${made.id}`);
+  await expect(page.locator('#messages .msg').first()).toBeVisible();
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('plain reply');
+  expect(errors).toEqual([]);
+});

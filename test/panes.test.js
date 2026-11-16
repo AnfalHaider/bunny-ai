@@ -157,6 +157,108 @@ test('before a chat exists, only a folder the person chose this launch can be li
   assert.equal((await fetch(`${base}/api/folder/files?${q('')}`)).status, 403, 'no token');
 });
 
+// ---- Security and Tech Lead's review of 5f36e04
+
+test('Changes: a path through a link that leaves the folder is left out, and its content never appears (D2-1)', async (t) => {
+  const dir = await folder(t);
+  const outside = await mkdtemp(join(tmpdir(), 'bunny-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await writeFile(join(outside, 'secret.txt'), 'OUTSIDE-SECRET\n');
+  try { await symlink(outside, join(dir, 'dirlink'), 'junction'); } catch { t.skip('links cannot be made here'); return; }
+  const out = await changesFor(dir, [{ id: 'c1', at: 'x', files: [
+    { path: join(dir, 'dirlink', 'secret.txt'), existed: false },
+    { path: join(dir, 'README.md'), existed: true, data: Buffer.from('old\n').toString('base64') },
+  ] }]);
+  assert.deepEqual(out.checkpoints[0].files.map((f) => f.path), ['README.md']);
+  assert.ok(!JSON.stringify(out).includes('OUTSIDE-SECRET'));
+});
+
+test('Changes: edited files carry real counts, in a git folder and in a plain one (the +0 -0 report)', async (t) => {
+  const { createCheckpoints } = await import('../src/server/checkpoints.js');
+  const { execFileSync } = await import('node:child_process');
+  for (const git of [false, true]) {
+    const dir = await folder(t);
+    if (git) { execFileSync('git', ['init', '-q'], { cwd: dir }); execFileSync('git', ['-c', 'user.email=a@example.test', '-c', 'user.name=T', 'add', '-A'], { cwd: dir }); execFileSync('git', ['-c', 'user.email=a@example.test', '-c', 'user.name=T', 'commit', '-qm', 'x'], { cwd: dir }); }
+    const cps = createCheckpoints({ dir: join(dir, '.cp-store-outside-test') });
+    const cp = cps.begin('11111111-1111-1111-1111-111111111111', dir);
+    await cp.capture(join(dir, 'src', 'a.js'));
+    await writeFile(join(dir, 'src', 'a.js'), 'one\nTWO\nthree\nfour\n');
+    await cp.capture(join(dir, 'brand-new.txt'));
+    await writeFile(join(dir, 'brand-new.txt'), 'hello\nthere\n');
+    const out = await changesFor(dir, await cps.list('11111111-1111-1111-1111-111111111111'));
+    const byPath = Object.fromEntries(out.checkpoints[0].files.map((f) => [f.path, f]));
+    assert.deepEqual([byPath['src/a.js'].status, byPath['src/a.js'].added, byPath['src/a.js'].removed], ['edited', 2, 1], `git=${git}`);
+    assert.deepEqual([byPath['brand-new.txt'].status, byPath['brand-new.txt'].added], ['new', 3], `git=${git}`);
+    assert.deepEqual(out.totals, { files: 2, added: 5, removed: 1 });
+  }
+});
+
+test('Changes: a long chat is capped, newest first, and says there is more', async (t) => {
+  const dir = await folder(t);
+  const cps = Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, at: String(i), files: [{ path: join(dir, 'README.md'), existed: true, data: Buffer.from('x\n').toString('base64') }] }));
+  const out = await changesFor(dir, cps);
+  assert.equal(out.checkpoints.length, 20);
+  assert.equal(out.checkpoints.at(-1).id, 'c29');
+  assert.equal(out.more, true);
+});
+
+test('Reading: .git and node_modules are refused everywhere, the same as they are hidden from the list (D2-4)', async (t) => {
+  const dir = await folder(t);
+  await writeFile(join(dir, '.git', 'config'), '[remote "origin"]\n\turl = https://token@example.invalid/x.git\n');
+  await mkdir(join(dir, 'node_modules', 'pkg'), { recursive: true });
+  await writeFile(join(dir, 'node_modules', 'pkg', 'index.js'), 'x');
+  for (const bad of ['.git', '.git/config', '.GIT/config', 'node_modules', 'node_modules/pkg/index.js']) {
+    await assert.rejects(() => readTextFile(dir, bad), (e) => e.code === 'path.hidden' || e.code === 'path.notFile', bad);
+    await assert.rejects(() => listFolder(dir, bad), (e) => e.code === 'path.hidden', bad);
+  }
+});
+
+test('Reading a huge file costs one chunk, not the file (D2-2)', async (t) => {
+  const dir = await folder(t);
+  await writeFile(join(dir, 'huge.txt'), Buffer.alloc(MAX_READ * 8, 97));
+  const before = process.memoryUsage().arrayBuffers;
+  const f = await readTextFile(dir, 'huge.txt');
+  assert.equal(f.text.length, MAX_READ);
+  assert.equal(f.bytes, MAX_READ * 8, 'the size reported is the real size');
+  assert.equal(f.truncated, true);
+  assert.ok(process.memoryUsage().arrayBuffers - before < MAX_READ * 4, 'the whole file was not held');
+});
+
+test('Folders Bunny never browses: a drive root, its own data folder, a folder that holds it (D2-5)', async (t) => {
+  const { app, base, dataDir } = await startApp(t, { localGuard: true, apiToken: 'panes-token' });
+  const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
+  const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  const { parse, dirname } = await import('node:path');
+  for (const bad of [dataDir, dirname(dataDir), parse(dataDir).root]) {
+    await call('/api/folder/check', { method: 'POST', body: JSON.stringify({ folder: bad }) });
+    assert.equal(await app.chooseFolder(bad), false, bad);
+    assert.equal((await call(`/api/folder/files?folder=${encodeURIComponent(bad)}&path=`)).status, 403, bad);
+  }
+});
+
+test('In the desktop app only the native picker chooses a folder; a typed check does not (D2-5)', async (t) => {
+  const { app, base } = await startApp(t, { localGuard: true, apiToken: 'panes-token', folderPickerOnly: true });
+  const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
+  const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  const dir = await folder(t);
+  assert.equal((await call('/api/folder/check', { method: 'POST', body: JSON.stringify({ folder: dir }) })).status, 200);
+  assert.equal((await call(`/api/folder/files?folder=${encodeURIComponent(dir)}&path=`)).status, 403, 'checking is not choosing');
+  assert.equal(await app.chooseFolder(dir), true); // what the main process does with the native picker's answer
+  assert.equal((await call(`/api/folder/files?folder=${encodeURIComponent(dir)}&path=`)).status, 200);
+});
+
+test('a chat saved before D-2 (old message shapes) still loads through every pane route', async (t) => {
+  const { base } = await startApp(t);
+  const dir = await folder(t);
+  const made = await (await fetch(`${base}/api/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'old', folder: dir, messages: [
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', kind: 'tool_call', content: 'x' },
+    { role: 'assistant', kind: 'error' },
+    { role: 'assistant', kind: 'partial', content: 'cut' },
+  ] }) })).json();
+  for (const p of ['changes', 'files', 'file?path=README.md']) assert.equal((await fetch(`${base}/api/sessions/${made.id}/${p}`)).status, 200, p);
+});
+
 test('no routes write: POST, PUT and DELETE on the pane paths do nothing', async (t) => {
   const { base } = await startApp(t);
   const s = (await post(base, '/api/sessions', { title: 'x' })).body;
