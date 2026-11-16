@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W2-7 re-check (`claude/builder-w2-7` @ 47e2312): PASS with conditions
+
+W27-1 closed: probe.mjs and probe2.mjs report no bypass, and 37 more Allow spellings never applied to a second command. W27-3 closed for the rules and the default mode (403 with the token only; window path via `secure:write`); Builder's 41 tests pass. Open: W27c-1 a token holder can still make an Auto chat or schedule (POST/PATCH sessions, POST/PATCH schedules) and answer permission prompts, so "mode is window-only" is not yet true (S-9/W5-7); W27c-2 `git "push"` dodges a Deny; W27c-3 `gh -R x/y release` and a few git global options. Review `docs/security/2026-11-16-w2-7c-recheck.md`, probe3. Lesson: when a lock is added to one route, list every route that writes the same field; the first route named is rarely the only one.
+
 ## 2026-11-16 - W2-7 permission rules (`claude/builder-w2-7` @ 791dc98): FAIL
 
 Path rules hold (25 spellings, real reads and writes, links, 8.3, streams). Command rules do not: W27-1 HIGH, the splitter treats a backslash as an escape but run_command is PowerShell, so `npm test \; Remove-Item x` is one part to the rules and two commands to PowerShell: an Allow covers any command and a Deny is skipped (checked against PowerShell's own parser). W27-2 aliases (`rm`, `ri`, `del`, `rd`) and git options (`-C x`, `--no-pager`) slip past a text Deny. W27-3 any local program gets the page token from a plain GET and can erase the rules over the local API, in Auto with no question. Review: `docs/security/2026-11-16-w2-7-rules-review.md`, probes in `docs/security/w2-7-probe/`. Lesson: test a parser against the real shell's parser, not against what the shell is assumed to be.
