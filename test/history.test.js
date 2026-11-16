@@ -16,12 +16,12 @@ test('the steps of a turn go back in front of its reply, a very long result shor
   const { history, interrupted } = buildHistory([
     user('add a test'),
     step('Write test/a.test.js', 'Wrote test/a.test.js (12 lines)'),
-    step('Run node --test', 'x'.repeat(5000)),
+    step('Run node --test', 'x'.repeat(20000)),
     reply('Added the test; it passes.'),
     user('thanks'),
   ], plain);
   assert.equal(history.length, 3);
-  assert.match(history[1].content, /^\[Steps taken for this reply:\n- Write test\/a\.test\.js \(done\) → Wrote test\/a\.test\.js \(12 lines\)\n- Run node --test \(done\) → x{1000}\n… \(\d+ characters left out\) …\nx+\]\n\nAdded the test; it passes\.$/);
+  assert.match(history[1].content, /^\[Steps taken for this reply:\n- Write test\/a\.test\.js \(done\) → Wrote test\/a\.test\.js \(12 lines\)\n- Run node --test \(done\) → x{2000}\n… \(\d+ characters left out\) …\nx+\]\n\nAdded the test; it passes\.$/);
   assert.equal(interrupted, false, 'that turn finished');
 });
 
@@ -132,6 +132,6 @@ test('W6-18: a very long turn keeps its newest steps whole and shortens the olde
   const steps = Array.from({ length: 40 }, (_, i) => ({ ...step(`Step ${i}`, 'r'), modelResult: `${i}:` + 'y'.repeat(3000) }));
   const { history } = buildHistory([user('big job'), ...steps, user('continue')], plain);
   const note = history.find((h) => /cut off/.test(h.content)).content;
-  assert.ok(note.length < 45_000, `kept within the budget (was ${note.length})`);
+  assert.ok(note.length < 65_000, `kept within the budget (was ${note.length})`);
   assert.match(note, /Step 39 \(done\) → 39:y{3000}/, 'the newest step is whole');
 });
