@@ -11,6 +11,7 @@
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
@@ -275,6 +276,10 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
 
   async function read_file({ path, start_line, end_line } = {}) {
     const abs = await inside(path);
+    if ((await stat(abs)).isDirectory()) {
+      const listing = (await list_files({ path })).split('\n').slice(0, 200).join('\n');
+      return `(that is a folder; its contents:)\n${listing}`;
+    }
     const kind = documentKind(abs);
     let text;
     if (kind && kind !== 'html') {
@@ -559,12 +564,21 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     return checkEnvironment({ folder: await inside(path || '.'), root, run: envRunner });
   }
 
+  // read_url on a file:// address: read-only, only a real path inside this folder (links out are refused by inside()).
+  async function readFileUrl(url) {
+    let path;
+    try { path = fileURLToPath(String(url)); } catch { throw new Error('That file address is not valid.'); }
+    const abs = await inside(path).catch(() => { throw new Error('read_url can only read files inside the workspace folder.'); });
+    return read_file({ path: abs });
+  }
+
   const tools = { list_files, read_file, search_files, find_files, check_environment, write_file, download_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
+    readFileUrl,
     run: (name, args) => tools[name](args ?? {}),
   };
 }
