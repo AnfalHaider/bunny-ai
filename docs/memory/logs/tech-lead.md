@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Q2-1 re-review at 3d90265: PASS (sign-off not yet recorded; needs the Chief's piece id)
+
+Read `git diff 4405dc0 3d90265` for `app.js`: the browser branch now applies `planRefuses(BROWSER_TOOL_RISK[name])` (logs the step, sends denied, returns the plan refusal), and one `toolDefinitions` membership check sits before every dispatch path (after `update_tasks`, which answers earlier). Dynamically added tools are pushed into `toolDefinitions` before use, so they still run. Run on a scratch checkout of 3d90265: `test/plan-mode.test.js` plus `q2-audit.test.js` 20 pass, 0 fail. Red check: the same plan-mode tests against 4405dc0's `app.js` hang on the browser case (the server waits 90 s for the page's answer), so the tests do detect the old fault. Not run: e2e. The same range also holds T-3 parts (`unavailable.js`, fallback notes, `t3-fallback.test.js`); not reviewed here, they belong to the T-3 review.
+
 ## 2026-11-16 - Review of Builder batch 2 (09b35e4 to 4405dc0): one fix needed before PASS
 
 **Verdict: NOT YET PASS. One required fix (Q2-1, HIGH). Everything else reads correct.** Sign-off not recorded; held for the fix.
