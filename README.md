@@ -2,66 +2,72 @@
   <img src="docs/design/logo/bunny-mark.svg" width="88" alt="Bunny AI logo" />
 </p>
 
-<h1 align="center">Bunny AI</h1>
+<h1 align="center">Hi, I'm Bunny.</h1>
 
 <p align="center">
-  <b>Your AI workspace. Your models, your keys, your computer.</b><br/>
-  A desktop AI app that chats, codes, builds apps, browses, reads your documents and works with GitHub,<br/>
-  with any model you like, and nothing leaving your machine except the request to the model you chose.
+  <b>I'm an AI that lives on your computer, works with any model you like, and actually does the work.</b><br/>
+  I chat, write code, build little apps, browse, read your documents and work with GitHub.<br/>
+  Your chats and keys stay with me, on your machine. The only thing I send out is your request, to the model you chose.
 </p>
 
 <p align="center">
-  <img src="docs/images/artifact.png" alt="Bunny AI made a carrot-themed to-do app, opened it beside the chat and tested it" width="900" />
+  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app, opened it beside the chat and tested it" width="900" />
 </p>
 
 ---
 
-## Why Bunny AI
+## A little about me
 
-Most AI apps lock you into one company's models and one company's cloud. Bunny AI turns that around.
+Most AI apps come with one company's models and one company's cloud. I'd rather you choose.
 
-- **Bring any model.** 23 providers built in, from OpenAI and Google to ModelScope, SiliconFlow and Gitee AI, plus any OpenAI-compatible server you add yourself. Free models work too.
-- **It does the work, not just the talking.** Bunny makes apps, edits code, runs programs, browses the web, reads PDFs and Word files, and opens pull requests.
-- **You stay in charge.** Every change follows the permission mode you pick, every file edit can be undone, and when Bunny needs something new it asks with one clear card.
-- **Private by design.** Chats, keys and files stay on your computer. Keys are encrypted with Windows' own protection.
+- **Pick any model.** I know 23 providers out of the box, from OpenAI, Anthropic and Google to DeepSeek, Qwen, ModelScope and Ollama on your own PC, plus any OpenAI-compatible server you point me at. Free models are welcome.
+- **I do things, not just talk about them.** I make apps, edit code, run programs, browse the web, read PDFs and Word files, and open pull requests.
+- **You stay in charge.** I follow the permission mode and the rules you set, I can undo my file changes, and when I need something new I ask with one clear card.
+- **I keep your things private.** Chats, keys and files stay on your computer. Keys are locked with Windows' own encryption.
 
 ---
 
-## What it can do
+## What I can do for you
 
-### Build apps and pages you can use straight away
-Ask for a to-do app, a game or a landing page and Bunny builds it as an **artifact**: a live page that opens beside the chat, in its own sandbox. The chat gets a short summary instead of a wall of code, and Bunny can open the page in its browser and click through it to check it works. Every change is kept as a new version.
+### I keep going until the job is done
+Give me a big task and I'll work through it without stopping to ask you to say "continue". I keep a task list, tell you "Still working · step 140" so you know where I am, and if one model stumbles I hand the job to the next one without losing what I've read so far. I only stop when it's finished, when you press **Stop**, or when I genuinely need you to decide something, and then I ask with a card instead of quietly waiting. I also watch the budget: I check with you before a single job uses more than 5 million tokens, and I notice if I'm going round in circles.
 
-### Asks for what it needs, instead of working around it
-When a job needs something Bunny does not have yet, it says so with a card: switch to Code mode, control the desktop, build a new tool, or find a plugin. One click and the new abilities arrive in the same reply.
+### You can see what I'm thinking, on one tidy line
+While I work, one little line at the bottom of my reply shows me hopping along with what I'm up to ("Snuggling the code… thinking · 12s"). Open it to read my thinking as it happens. When I move on, it settles into a quiet "Thought for 12s" you can open any time, and if a model is being slow I'll tell you exactly which one I'm waiting for.
+
+### I build apps and pages you can use straight away
+Ask for a to-do app, a game or a landing page and I build it as an **artifact**: a live page that opens beside our chat, in its own sandbox. You get a short summary instead of a wall of code, and I can open the page in my browser and click through it to check it works. Every change is kept as a new version.
+
+### Real coding, with a plan you can follow and an undo button
+In Code mode I read your project, search it properly (regular expressions, file patterns, context lines), edit files (one change, every match, or several at once), run your tests and show my plan as a checklist that ticks off as I go. Every reply that changed files has an **Undo** button that puts them back exactly as they were.
+
+<p align="center"><img src="docs/images/plan-undo.png" alt="A checklist ticked off step by step, tests passing, and an Undo button" width="900" /></p>
+
+### I ask for what I need, instead of working around it
+When a job needs something I don't have yet, I say so with a card: switch to Code mode, control the desktop, build a new tool, or find a plugin. One click and I carry on in the same reply.
 
 <p align="center"><img src="docs/images/capability.png" alt="A card asking to switch to Code mode so Bunny can read the project folder" width="820" /></p>
 
-### A team of helpers, each on the right model
-Big jobs get split up. Bunny hands parts to **helper agents** that work side by side, then combines their reports. Each helper can run on the model best suited to its part (a coding model for the code review, a writing model for the product blurb) instead of the model you are chatting with. Every helper's work is kept as a chat nested under yours, so you can open it and see exactly what it did. Chats can also start background chats and message each other.
+### I bring friends for big jobs
+I can split a big job between **helper agents** that work side by side, each on the model that suits its part, then put their reports together. Every helper's work is kept as a chat nested under yours, so you can see exactly what it did.
 
 <p align="center"><img src="docs/images/helpers.png" alt="Two helpers reviewed the code and wrote a product blurb; their chats are nested in the sidebar" width="900" /></p>
 
-### Real coding, with a plan you can follow and an undo button
-In Code mode Bunny reads your project, edits files, runs your tests and shows its plan as a checklist that ticks off as it goes. Every reply that changed files has an **Undo file changes** button that puts them back exactly as they were.
-
-<p align="center"><img src="docs/images/plan-undo.png" alt="A checklist ticked off step by step, tests passing, and an Undo file changes button" width="900" /></p>
-
-### Runs your dev server and keeps an eye on it
-Bunny can start programs that keep running, such as a dev server or a watcher, read their output, open the page in its browser, and stop them when it is done. Each one gets its own tab in the Terminal pane, with live output and a Stop button.
+### I run your dev server and keep an eye on it
+I can start programs that keep running, like a dev server or a watcher, read their output, open the page in my browser, and stop them when I'm done. Each gets its own tab in the Terminal pane with live output and a Stop button, and if I'm closed, the programs I started close with me.
 
 <p align="center"><img src="docs/images/terminal.png" alt="A preview server started by Bunny, with its own tab and live output in the Terminal pane" width="900" /></p>
 
 ### Tidy answers
-Long code arrives folded with **Show all**, **Copy** and **Save as artifact**, so a reply stays readable. Tables, highlighting and Markdown all render while the answer streams in.
+Long code arrives folded with **Show all**, **Copy** and **Save as artifact**, so a reply stays readable. Tables, highlighting and Markdown render while I'm still typing.
 
 <p align="center"><img src="docs/images/folded-code.png" alt="A 253-line script folded to a few lines with a Show all button" width="820" /></p>
 
-### Works with GitHub
-Sign in with the GitHub CLI you already use, or a token, and Bunny can list and search repositories, read files, issues and pull requests (with their checks), open issues and pull requests, comment, and clone private repositories. Anything that writes to GitHub asks first.
+### I work with GitHub
+Sign me in with the GitHub CLI you already use, or a token, and I can search repositories, read files, issues and pull requests (with their checks), open issues and pull requests, comment, and clone private repositories. Anything that writes to GitHub, I ask first.
 
 ### Any model, from anywhere
-ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Alibaba Qwen, Groq, Together, Mistral, xAI, Fireworks, Cerebras, OpenAI, Anthropic, Google, OpenRouter, Nvidia, Vercel, GitHub Copilot, OpenCode and Ollama on your own machine. Each one has a **Get a key** link. And any other OpenAI-compatible server is one form away, with its own key header if it needs one.
+ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Alibaba Qwen, Groq, Together, Mistral, xAI, Fireworks, Cerebras, OpenAI, Anthropic, Google, OpenRouter, Nvidia, Vercel, GitHub Copilot, OpenCode and Ollama on your own machine, each with a **Get a key** link. Any other OpenAI-compatible server is one form away. When you first connect a provider, I tell you if my "free models only" filter is hiding some of its models, and show them all with one click.
 
 <p align="center">
   <img src="docs/images/providers.png" alt="ModelScope, SiliconFlow, Gitee AI and more, each with a Connect button" width="440" />
@@ -69,37 +75,38 @@ ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Aliba
 </p>
 
 ### Sign in with GitHub or Google
-Link your GitHub or Google account to Bunny. There is still no cloud account: your chats and keys stay on this computer.
+Link your GitHub or Google account. There's still no cloud account: your chats and keys stay on this computer.
 
 <p align="center"><img src="docs/images/sign-in.png" alt="GitHub and Google sign-in in Settings" width="720" /></p>
 
 ### And a lot more
-- **Reads your documents:** PDF, Word (including old .doc), Excel, PowerPoint, OpenDocument, EPUB and RTF, plus the words inside pictures and scanned pages, using text recognition built into Windows.
-- **Sees pictures** with models that can, and reads their text for models that cannot.
-- **Uses a browser panel:** opens pages, reads them, clicks and types, with you watching.
-- **Controls the desktop** when you allow it: looks at the screen, clicks, types and presses keys.
-- **Builds its own tools** when nothing else fits: small scripts you read and approve before they are saved.
-- **Remembers** lasting facts you share and **runs tasks on a schedule**.
-- **Auto picks the model:** it chooses one for each message, falls back when one does not answer, and tells you which answered.
-- **Projects, branches, search, incognito chats, voice input, read-aloud, import and export**, and the interface in English, Spanish, French and Arabic (the newest screens are English for now).
+- **I read your documents:** PDF, Word (even old .doc), Excel, PowerPoint, OpenDocument, EPUB and RTF, plus the words inside pictures and scanned pages, using text recognition built into Windows.
+- **I see pictures** with models that can, and read their text for models that can't.
+- **I use a browser panel:** I open pages, read them, click and type, with you watching.
+- **I can control the desktop** when you allow it: look at the screen, click, type and press keys.
+- **I build my own tools** when nothing else fits: small scripts you read and approve before I save them.
+- **I remember** lasting facts you share and **run tasks on a schedule**.
+- **Auto picks the model** for each message, moves on when one doesn't answer, and tells you who answered.
+- **Projects, branches, search, incognito chats, voice input, read-aloud, import and export.**
 - **Connectors (MCP), skills and plugins** to add more abilities, including local connectors that run as a program on your PC (you confirm the exact command).
-- **Gmail, Calendar and Drive** when you allow them at Google sign-in: search and read mail, write drafts (sending always asks), see and add events, read Docs and Sheets.
-- **Never stuck on a busy model:** when the model you picked hits a rate limit, the best other model answers, and the reply says so.
-- **See how it thinks:** models that share their reasoning show it folded above the reply.
-- **Scheduled tasks that use tools,** and background chats that tell you when they finish.
+- **Gmail, Calendar and Drive** when you allow them at Google sign-in: I search and read mail, write drafts (sending always asks), see and add events, and read Docs and Sheets.
 
 ---
 
-## You decide what it may do
+## You decide what I may do
 
-| Mode | What happens |
+| Mode | What I do |
 |---|---|
-| **Manual** | Bunny asks before every edit, command or click |
-| **Accept edits** | File edits go ahead; commands and desktop clicks still ask |
-| **Auto** | Bunny works on its own; building a new tool still asks |
-| **Plan** | Bunny can only look, and proposes a plan |
+| **Manual** | I ask before every edit, command or click |
+| **Accept edits** | I make file edits; commands and desktop clicks still ask |
+| **Auto** | I work on my own; I still ask before building a new tool, setting up a schedule that changes things, adding a local connector, or sending email |
+| **Plan** | I only look, and propose a plan |
 
-Desktop control and tool-building are off until you switch them on, either in Settings or from the card Bunny shows when it needs them.
+**Permission rules** go further: in **Settings → Code** you can say "always allow `npm test*`", "always ask before `git push*`" or "never touch `secrets/**`", for every folder or just one. Deny always wins, Plan mode still means look-only, and **Try a command** shows what I'd do without running anything. Rules are a guard rail against my mistakes, not a sandbox.
+
+**Only you can change the important settings.** In the desktop app, my permission mode, rules, connectors, schedules, sign-ins, providers, update settings and similar switches change only from my own window, so another program on your PC can't quietly change what I'm allowed to do.
+
+Desktop control and tool-building stay off until you switch them on, in Settings or from the card I show when I need them.
 
 ---
 
@@ -107,11 +114,11 @@ Desktop control and tool-building are off until you switch them on, either in Se
 
 **Download for Windows**
 
-Get the **Bunny-AI-Setup** installer from the [latest release](../../releases/latest), run it, open **Providers**, connect a model (Nvidia and OpenRouter have free ones), and start chatting.
+Get the **Bunny-AI-Setup** installer from the [latest release](../../releases/latest), run it, open **Providers**, connect a model (Nvidia and OpenRouter have free ones), and say hi.
 
-The installer is not code-signed yet, so Windows SmartScreen may say it does not recognise the app: choose **More info**, then **Run anyway**.
+I'm not code-signed yet, so Windows SmartScreen may say it doesn't recognise me: choose **More info**, then **Run anyway**.
 
-**Or build the installer yourself**
+**Or build me yourself**
 
 ```bash
 npm install
@@ -122,7 +129,7 @@ This writes the installer to `dist/`.
 
 **Updates**
 
-The installed app checks GitHub Releases a few seconds after it starts and every few hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, it installs then. Switch it off, or check at once, in **Settings → About**.
+I check GitHub Releases a few seconds after I start and every few hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, I install it then. Switch this off, or check at once, in **Settings → About**.
 
 **Publishing a new version**
 
@@ -130,14 +137,16 @@ The installed app checks GitHub Releases a few seconds after it starts and every
 2. `npm run dist`
 3. `npm run release` (uses the GitHub CLI; add `-- --notes-file notes.md` for your own notes)
 
-**Run it in your browser instead**
+`npm run release -- --dry-run` runs every check and prints all the ones that fail, publishing nothing. `--target <sha>` names the commit to release (default `HEAD`). A release is refused unless the checked-out commit is the target and is exactly `origin/main`, the working tree has no uncommitted or untracked files, and `dist/build-sha.txt` (written by `npm run dist`) names the same commit, so the installer is always built from what is released. Only `--notes-file` is passed on to `gh`.
+
+**Run me in your browser instead**
 
 ```bash
 npm install
 npm start
 ```
 
-Then open the address it prints.
+Then open the address I print.
 
 **Run the tests**
 
@@ -145,15 +154,15 @@ Then open the address it prints.
 npm run test:all
 ```
 
-285 unit tests and 77 end-to-end tests cover the features above. `docs/FEATURE-TALLY.md` lists every feature with the test that proves it.
+More than 700 unit tests and about 150 end-to-end tests check what I can do, and `node scripts/gate.mjs` runs them together with a dependency audit and a secret scan. `docs/FEATURE-TALLY.md` lists features with the test that proves each one.
 
 ---
 
 ## Privacy
 
-- Chats, artifacts, memories and settings are stored in your user folder on this computer.
-- Keys and sign-in tokens are encrypted with Windows' own protection and are never shown again in full.
-- The only network traffic is to the model provider you chose, the sites you or Bunny open, and GitHub or Google when you sign in.
-- Pages Bunny builds run in a sandbox and cannot reach the app.
+- Your chats, artifacts, memories and settings are stored in your user folder on this computer.
+- Keys and sign-in tokens are encrypted with Windows' own protection and never shown again in full.
+- What I send out: your requests to the model provider you chose; the pages you or I open; GitHub or Google when you sign in; a check for updates on GitHub Releases; and, when the network seems down, a tiny "am I online?" check to Google, Cloudflare or Apple connectivity addresses (no data, cookies or identifiers).
+- Pages I build run in a sandbox and can't reach the app, and only my own windows can talk to my local server.
 
-<p align="center"><sub>Built for people who want a capable AI on their own terms.</sub></p>
+<p align="center"><sub>Made for people who want a capable AI on their own terms. 🐰</sub></p>
