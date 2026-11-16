@@ -14,6 +14,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { ghCliToken, githubClient } from './github.js';
 import { GOOGLE_WORKSPACE_SCOPES } from './google.js';
 
+// A Google sign-in return is honoured for a few minutes after it started, once.
+const GOOGLE_FLOW_MS = 10 * 60_000;
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USER = 'https://openidconnect.googleapis.com/v1/userinfo';
@@ -102,7 +104,7 @@ export function createAccounts({ file, secrets, getSettings, fetchImpl = globalT
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const redirectUri = `${origin}/api/account/google/callback`;
     googleFlows.set(state, { verifier, redirectUri, at: Date.now() });
-    for (const [k, v] of googleFlows) if (Date.now() - v.at > 15 * 60_000) googleFlows.delete(k);
+    for (const [k, v] of googleFlows) if (Date.now() - v.at > GOOGLE_FLOW_MS) googleFlows.delete(k);
     const url = new URL(GOOGLE_AUTH);
     url.search = new URLSearchParams({
       client_id: s.googleClientId, redirect_uri: redirectUri, response_type: 'code',
@@ -113,9 +115,16 @@ export function createAccounts({ file, secrets, getSettings, fetchImpl = globalT
     return { url: url.toString() };
   }
 
+  /** Is this `state` a sign-in Bunny started a few minutes ago and nobody has finished? (peek: does not use it up) */
+  function googleFlowKnown(state) {
+    const flow = googleFlows.get(String(state ?? ''));
+    return Boolean(flow) && Date.now() - flow.at <= GOOGLE_FLOW_MS;
+  }
+
   async function googleFinish({ code, state }) {
     const flow = googleFlows.get(String(state ?? ''));
-    if (!flow) throw new Error('This sign-in link has expired. Start again from Bunny AI.');
+    if (flow && Date.now() - flow.at > GOOGLE_FLOW_MS) googleFlows.delete(String(state));
+    if (!googleFlowKnown(state)) throw new Error('This sign-in link has expired. Start again from Bunny AI.');
     googleFlows.delete(state);
     const s = getSettings();
     const res = await fetchImpl(GOOGLE_TOKEN, {
@@ -157,5 +166,5 @@ export function createAccounts({ file, secrets, getSettings, fetchImpl = globalT
     return fresh.access_token;
   }
 
-  return { googleAccessToken, status, githubFromCli, githubFromToken, githubDeviceConfig, saveGithub, githubToken, signOut, googleStart, googleFinish };
+  return { googleAccessToken, status, githubFromCli, githubFromToken, githubDeviceConfig, saveGithub, githubToken, signOut, googleStart, googleFinish, googleFlowKnown };
 }

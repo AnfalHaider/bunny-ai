@@ -115,7 +115,7 @@ export const FEATURES = [
   { id: '6.11', area: 'Automation', name: 'Memories suggested from a chat', scope: 'app', status: 'D', test: 'a chat can suggest a memory, and it is kept only when accepted' },
   { id: '6.12', area: 'Automation', name: 'The model asks for a capability it lacks', scope: 'app', status: 'D', test: 'asking for Code mode: the person picks a folder and the file tools arrive in the same reply' },
   { id: '6.13', area: 'Automation', name: 'Programs that keep running', scope: 'app', status: 'D', test: 'a started program keeps running, is read in pieces, and stops' },
-  { id: '6.14', area: 'Automation', name: 'Tools the model builds, with approval', scope: 'app', status: 'D', test: 'building a tool always asks, even in Auto mode, and the tool is usable at once' },
+  { id: '6.14', area: 'Automation', name: 'Tools the model builds, with approval', scope: 'app', status: 'D', test: 'building a tool asks in Manual and runs without asking in Auto, and the tool is usable at once' },
   { id: '6.15', area: 'Automation', name: 'Sub-agents working side by side', scope: 'app', status: 'D', test: 'two helpers run side by side, report back, and are kept as chats nested under this one' },
   { id: '6.16', area: 'Automation', name: 'Chats that message each other', scope: 'app', status: 'D', test: 'one chat can message another and read it; a background chat works on its own' },
   { id: '6.17', area: 'Automation', name: 'GitHub repositories, issues and pull requests', scope: 'app', status: 'D', test: 'the GitHub tools read and write through the API with the signed-in token' },

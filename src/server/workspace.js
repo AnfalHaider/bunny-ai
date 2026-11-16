@@ -64,6 +64,9 @@ export function decodeText(buf) {
  * rewritten into the form 5.1 understands: a && b  ->  a; if ($?) { b }. Quoted text is left alone.
  */
 export function translateChains(command) {
+  // A trailing "&" (run in the background) is not PowerShell 5.1 syntax and fails with AmpersandNotAllowed.
+  // run_command refuses it with a pointer to start_process; start_process is already the background form.
+  if (endsInBackground(command)) command = command.replace(/\s*&\s*$/, '');
   const parts = [];
   const ops = [];
   let current = '';
@@ -88,6 +91,26 @@ export function translateChains(command) {
     out = ops[i] === '&&' ? `${parts[i]}; if ($?) { ${out} }` : `${parts[i]}; if (-not $?) { ${out} }`;
   }
   return out;
+}
+
+/** Does the command end with an unquoted single "&" (a background job in bash)? */
+export function endsInBackground(command) {
+  let quote = null;
+  let last = '';
+  let before = '';
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    if (quote) {
+      if (ch === '`' && i + 1 < command.length) { i += 1; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; before = last; last = ch; continue; }
+    if (/\s/.test(ch)) continue;
+    before = last;
+    last = ch;
+  }
+  return !quote && last === '&' && before !== '&';
 }
 
 export const TOOL_RISK = {
@@ -115,7 +138,7 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
     fn('edit_file', 'Replace one exact snippet in a file. old_text must appear exactly once.',
       { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' } }, ['path', 'old_text', 'new_text']),
     fn('run_command', 'Run a command yourself and get its output (2 minute limit). It runs in Windows PowerShell 5.1: '
-      + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you). '
+      + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
       { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' } }, ['command']),
   ];
@@ -284,6 +307,10 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
   }
 
   async function run_command({ command, cwd } = {}) {
+    if (endsInBackground(String(command ?? ''))) {
+      throw new Error('run_command waits for the command to finish, so a trailing & cannot start a background program here (Windows PowerShell 5.1 rejects it). '
+        + 'Use start_process for a server or watcher that should keep running, then browser_open the address once it is up.');
+    }
     const cmd = translateChains(String(command ?? '').trim());
     if (!cmd) throw new Error('run_command needs a command');
     const where = cwd ? await inside(cwd) : root;

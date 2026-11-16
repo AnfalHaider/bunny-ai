@@ -11,7 +11,7 @@
  * Risk levels match the rest of Bunny AI: read runs freely, edit and run follow
  * the permission mode. Two more: "own" never needs an OK (it only touches
  * Bunny AI's own artifacts, or is itself a question to the person), and
- * "build" always asks, whatever the mode, because it adds code that runs later.
+ * "build" asks in Manual and Accept edits and runs in Auto (it adds code that runs later); "send" (an email) asks in every mode.
  */
 
 export const AGENT_TOOL_RISK = {
