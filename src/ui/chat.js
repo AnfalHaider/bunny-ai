@@ -2203,6 +2203,22 @@ function startNewChat({ incognito = false } = {}) {
   $('input').focus();
 }
 
+/** A message from the quick-ask bar: a NEW chat in Chat mode with no folder, the text and the optional screenshot sent as the first message. */
+async function runQuickAsk() {
+  const request = await window.bunnyDesktop.quickAsk.take();
+  if (!request || typeof request.text !== 'string') return;
+  if (state.streaming) { $('error').textContent = 'Bunny is busy; try your quick ask again in a moment.'; return; }
+  startNewChat();
+  state.projectId = null;
+  state.pendingFolder = null;
+  applyWorkMode('chat');
+  state.pendingFiles = Array.isArray(request.files) ? request.files.slice(0, 1) : [];
+  renderPendingFiles();
+  // A quick ask is always a message, never a slash command: a leading invisible word joiner stops "/..." from being run as one.
+  $('input').value = request.text.startsWith('/') ? `⁠${request.text}` : request.text;
+  await send();
+}
+
 function renderMode() {
   const host = $('mode');
   if (!host) return;
@@ -3864,6 +3880,12 @@ async function boot() {
   renderRail();
   renderComposerHeader();
   input.focus();
+
+  // W4-8 quick ask: the bar over any app asks this window to start a new chat with its message.
+  if (window.bunnyDesktop?.quickAsk) {
+    window.bunnyDesktop.quickAsk.onNewChat(() => { runQuickAsk().catch((err) => { $('error').textContent = err.message; }); });
+    runQuickAsk().catch((err) => { $('error').textContent = err.message; });
+  }
 
   // The app can be installed as a desktop app, and opened in its own window.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
