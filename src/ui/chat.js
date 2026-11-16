@@ -379,13 +379,6 @@ function openPicker(host, trigger) {
   const list = element('div', { className: 'picker-list', role: 'listbox' });
 
   panel.append(search, list);
-  const hidden = hiddenModelCount();
-  if (hidden) {
-    // The default setting shows only free and Nvidia models; say what is left out and how to see it.
-    const more = button(`Show all models (${hidden} more)`, { className: 'picker-item picker-show-all' });
-    more.addEventListener('click', () => { closePicker(); showAllModels().catch((err) => { $('error').textContent = err.message; }); });
-    panel.append(more);
-  }
   host.append(panel);
   search.focus();
 
@@ -409,6 +402,17 @@ function openPicker(host, trigger) {
     }
   };
 
+  // The default setting shows only free and Nvidia models: the last row says what is left out and shows it. It is
+  // part of the list, so the arrow keys reach it and Enter uses it.
+  const addShowAll = () => {
+    const hidden = hiddenModelCount();
+    if (!hidden) return;
+    const more = button(`Show all models (${hidden} more)`, { className: 'picker-item picker-show-all', role: 'option', 'aria-selected': 'false' });
+    more.id = 'model-show-all';
+    more.addEventListener('click', () => { closePicker(); showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+    list.append(more);
+  };
+
   const paint = (query) => {
     const q = query.trim().toLowerCase();
     list.replaceChildren();
@@ -416,6 +420,7 @@ function openPicker(host, trigger) {
       !q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q));
     if (!matches.length) {
       list.append(element('div', { className: 'picker-empty', textContent: say('chat.noModelMatches') }));
+      addShowAll();
       active = 0;
       highlight();
       return;
@@ -450,6 +455,7 @@ function openPicker(host, trigger) {
       }
       list.append(pickerItem(m));
     }
+    addShowAll();
     active = 0;
     highlight();
   };
@@ -3239,6 +3245,7 @@ async function showAllModels() {
   await sendJSON('/api/settings', 'PUT', { modelFilter: 'all' });
   state.settings = { ...state.settings, modelFilter: 'all' };
   state.models = visibleModels(await getJSON('/api/models'));
+  if ($('greeting')) $('greeting').hidden = false;
   if (!state.selected && state.models.length) {
     const first = state.models[0];
     state.selected = { providerId: first.providerId, providerName: first.providerName, model: first.id };
@@ -3805,6 +3812,7 @@ async function boot() {
       const connected = state.providers.some((p) => p.status === 'connected');
       if (connected && hiddenModelCount()) {
         const n = hiddenModelCount();
+        if ($('greeting')) $('greeting').hidden = true; // the hidden-models note replaces the "Pick a model…" greeting
         const show = element('button', { type: 'button', className: 'primary empty-cta', textContent: 'Show all models' });
         show.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
         empty.replaceChildren(element('span', { className: 'empty-note', textContent: `${n} ${n === 1 ? 'model is' : 'models are'} hidden by your "Show models" setting.` }), show);
