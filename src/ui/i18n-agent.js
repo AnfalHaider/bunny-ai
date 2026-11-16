@@ -74,7 +74,7 @@ export const AGENT_STRINGS = {
     'terminal.ai': 'AI',
     'terminal.stop': 'Stop',
     'settings.fallbackName': 'Try another model when yours is busy',
-    'settings.fallbackDesc': 'When the model you picked hits a rate limit or does not answer, the reply goes to the best other model for the job, and the reply says which answered.',
+    'settings.fallbackDesc': 'When the model you picked hits a rate limit, is not available, sends an empty reply or does not answer in about 30 seconds, the reply goes to the best other model for the job (at most three tries), and the reply says which answered and why. If your computer is offline no model is tried: the message waits and is sent when the network is back. To tell, Bunny sends a bare request to a few neutral hosts (www.gstatic.com, cp.cloudflare.com, captive.apple.com) only after a failure; nothing of yours is sent.',
     'settings.aiDesktopName': 'Let the AI control the desktop',
     'settings.aiDesktopDesc': 'The AI may look at the screen, click, type and press keys to do what you ask. Clicks and typing still ask first in Manual and Accept edits.',
     'settings.toolsTitle': 'Tools the AI builds',
