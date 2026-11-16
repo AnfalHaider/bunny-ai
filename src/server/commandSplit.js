@@ -199,14 +199,15 @@ export function normalisePart(part, depth = 0) {
 }
 
 /**
- * W27d-1: arguments PowerShell works out before the command runs: git ("push"), git @("push"), git $("push"), git `-f. What they become
- * cannot be read from the text, so the line is treated like a wrapper (it asks whenever a Deny or Ask rule exists). Words inside plain
- * quotes are not computed ("fix (x)"), so those are left out first.
+ * W27d-1: arguments PowerShell works out before the command runs: git ("push"), git @("push"), git $("push"), git $x, git @args, git `-f.
+ * What they become cannot be read from the text, so the line is treated like a wrapper (it asks whenever a Deny or Ask rule exists).
+ * Fails closed: the whole line is read (not cut into statements first), only a plain string with no $ or backtick in it counts as text,
+ * and a quote that is left unpaired counts as computed.
  */
-export function computedArguments(part) {
-  const { rest } = firstWord(String(part ?? '').trim());
-  const bare = rest.replace(/'[^']*'/g, "''").replace(/"(?:[^"`$]|`.)*"/g, '""'); // a quoted string without $ or ` in it is only text
-  return /[(]|@\(|\$\(|`-/.test(bare) || /(?:^|\s)@\{|\$\{/.test(bare);
+export function computedArguments(line) {
+  const bare = String(line ?? '').replace(/'[^']*'/g, "''").replace(/"(?:[^"`$]|`.)*"/g, '""'); // text that cannot compute anything
+  if (/["']/.test(bare.replace(/''|""/g, ''))) return true; // an unpaired quote: do not guess
+  return /[(]|`-|\$[A-Za-z_{(?]|(?:^|\s)@[({A-Za-z_$]/.test(bare);
 }
 
 /**
@@ -246,8 +247,8 @@ export function analyseCommand(command, depth = 0) {
       }
     }
   }
-  // computed arguments (W27d-1): the parts above are cut at the brackets, so look at each statement of the line itself
-  if (String(command ?? '').split(/[;|&\r\n]+/).some(computedArguments)) wrapper = true;
+  // computed arguments (W27d-1): the parts above are cut at the brackets, so look at the line itself
+  if (computedArguments(command)) wrapper = true;
   // a new drive or a provider named Alias, Function or Variable can redefine names too
   if (/\b(new-psdrive|ndr|mount)\b/i.test(String(command ?? '').replace(/`/g, '').replace(/["']/g, '')) || /-psprovider\s+(alias|function|variable)/i.test(String(command ?? ''))) wrapper = true;
   // the alias:, function: and variable: drives redefine what a name means (Set-Item alias:rm ...), spelled any way
