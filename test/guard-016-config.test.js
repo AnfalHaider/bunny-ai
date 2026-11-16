@@ -101,3 +101,19 @@ test('item 2: the Chief of Staff and release-ops are not held to these rules (th
   // the skip flag itself stays refused for everyone
   assert.equal(verdict(t, 'git commit -n -m x', 'chief-of-staff').allow, false);
 });
+
+test('item 2 review: git config set/unset forms, more value options, more location variables, and aliases looked up after -C', (t) => {
+  for (const c of [
+    'git config set alias.ci "commit -n"', 'git config set core.hooksPath x', 'git config set --global user.name x', 'git config unset core.hooksPath',
+    'git config --comment why --add remote.origin.push HEAD:main', 'git config --type=bool core.fsmonitor true',
+    'GIT_CONFIG_GLOBAL=x git status', '$env:GIT_CONFIG_SYSTEM = "x"', 'env:GIT_EXEC_PATH=x',
+  ]) denied(t, c);
+  allowed(t, 'git config get alias.ci');
+  allowed(t, 'git config list');
+  allowed(t, 'git config set user.name x');
+  const root = makeRepo(t, 'builder');
+  const other = makeRepo(t, 'builder');
+  execFileSync('git', ['config', 'alias.zz', 'commit -n'], { cwd: other });
+  const v = decide(root, `git -C "${other}" zz -m x`);
+  assert.equal(v.allow, false, 'the alias is read in the folder -C names, not in the starting folder');
+});

@@ -6,6 +6,7 @@
 // role from a command), the live-branch push target parse, and force pushes. The write-target rules
 // (A2) and the record-folder rules (E) live in lib/shellwrites.mjs.
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
+import { resolve as pathResolve } from 'node:path';
 import { ALIAS_DEPTH, GIT_BUILTINS, GIT_DIR_ENV, aliasValue, refuseGitConfigs } from './shellgit.mjs';
 
 const SHELLS = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd'];
@@ -29,6 +30,7 @@ export function gitCall(words) {
   const configs = [];
   let i = 1;
   let sub = null;
+  const dirs = [];
   const SEP_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--attr-source']);
   while (i < words.length) {
     const w = words[i].text;
@@ -36,13 +38,14 @@ export function gitCall(words) {
     if (w.length > 2 && w.startsWith('-c') && w[2] !== '-') { configs.push(w.slice(2)); i += 1; continue; } // the attached form: -ckey=value
     if (w === '--config-env') { configs.push(words[i + 1]?.text ?? ''); i += 2; continue; }
     if (w.startsWith('--config-env=')) { configs.push(w.slice('--config-env='.length)); i += 1; continue; }
+    if (w === '-C') dirs.push(words[i + 1]?.text ?? '');
     if (SEP_VALUE.has(w)) { i += 2; continue; }
     if (w.startsWith('-')) { i += 1; continue; }
     sub = w;
     break;
   }
   const argWords = words.slice(i + 1);
-  return { sub, args: argWords.map((x) => x.text), argWords, configs, globals: words.slice(1, i).map((x) => x.text) };
+  return { sub, args: argWords.map((x) => x.text), argWords, configs, dirs, globals: words.slice(1, i).map((x) => x.text) };
 }
 
 /** Does `git commit` get a hook-skip flag? Message and file values are skipped so a message can say anything. */
@@ -188,7 +191,7 @@ function ghApiMethod(words) {
     } else if (/^-X./.test(t)) method = t.slice(2).toUpperCase();
     else if (t.startsWith('--method=')) method = t.slice('--method='.length).toUpperCase();
     else if (GH_BODY_FLAGS.test(t)) body = true;
-    else if (w.dynamic && !w.quoted && BARE_VARIABLE.test(t)) return null;
+    else if (w.dynamic && BARE_VARIABLE.test(t)) return null; // quoted or not: its value cannot be read
   }
   return method ?? (body ? 'POST' : 'GET');
 }
@@ -230,7 +233,10 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if (why) return why;
   const { sub } = call;
   if (!sub || GIT_BUILTINS.has(sub)) return null;
-  const value = aliasValue(sub, ctx);
+  // the alias is looked up where git will run: every -C moves the folder, in order
+  let where = ctx.cwd ?? process.cwd();
+  for (const d of call.dirs ?? []) where = pathResolve(where, d);
+  const value = aliasValue(sub, { ...ctx, cwd: where });
   if (value === null) return `"git ${sub}" is not a git command the guard knows (not a built-in, not an alias here): an unknown subcommand can run any program.`;
   if (depth >= ALIAS_DEPTH) return `the git alias "${sub}" is nested too deep to read.`;
   const expanded = value.startsWith('!') ? value.slice(1) : `git ${value}`;

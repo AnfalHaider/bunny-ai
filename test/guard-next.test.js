@@ -62,7 +62,8 @@ test('B: Windows name tricks do not hide a protected path (trailing dots and spa
 test('B: malformed paths never throw', () => {
   const rel = (p) => lib.toRepoPath(WROOT, p, WROOT, W);
   assert.equal(rel(''), null);
-  assert.equal(rel('a\0b'), null);
+  const nul = rel('a\0b'); // the 0.1.4 guard said null; the 0.1.6 one refuses (fail closed): either way it is never "inside"
+  assert.ok(nul === null || typeof nul?.refused === 'string', 'null or refused');
   assert.equal(typeof rel('docs/' + 'x'.repeat(300) + '.md'), 'string');
   assert.equal(rel('NUL'), 'NUL');
   assert.equal(lib.toRepoPath(WROOT, undefined, WROOT, W), null);

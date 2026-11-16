@@ -89,28 +89,72 @@ export function matchesAny(file, globs, { ci = false } = {}) {
   return globs.some((g) => globToRegex(g, ci ? 'i' : '').test(p));
 }
 
+/** Returned by toRepoPath when a path cannot be read safely: callers block it ("that path could not be read safely"). */
+export const isRefusedPath = (v) => v !== null && typeof v === 'object' && typeof v.refused === 'string';
+
+// Windows reads \\?\D:\x and \\.\D:\x as D:\x, and \\?\UNC\srv\sh as \\srv\sh.
+function stripDevicePrefix(text, p) {
+  if (p !== path.win32) return text;
+  return text.replace(/^[\\/]{2}[?.][\\/]UNC[\\/]/i, '\\\\').replace(/^[\\/]{2}[?.][\\/]/, '');
+}
+
 /**
- * The repo-relative form of a path ("docs/a.md"), or null when the path is outside the repo
- * (another drive, a sibling folder, a UNC share, "..\x"). Null means "not ours to police".
- * An in-repo file whose NAME starts with two dots ("..foo.md") is inside, and is policed.
- * `p` is the path module (win32 or posix), so the rules can be tested on any machine.
+ * The canonical form of `abs`: links, junctions and 8.3 names resolved. A path that does not exist yet is canonicalised
+ * through its nearest existing parent (a junction in the middle is followed). Returns the path, or null when nothing
+ * on the way can be read (permission, a broken link, a loop): the caller fails closed.
  */
-export function toRepoPath(root, filePath, cwd, p = path) {
-  if (typeof filePath !== 'string' || !filePath || filePath.includes('\0')) return null;
-  const abs = p.isAbsolute(filePath) ? filePath : p.join(cwd || root, filePath);
-  let rel = p.relative(root, abs).replace(/\\/g, '/');
+function canonicalPath(abs, p, realpath) {
+  const rest = [];
+  let cur = abs;
+  for (let guard = 0; guard < 256; guard += 1) {
+    try {
+      const real = realpath(cur);
+      return rest.length ? p.join(real, ...rest.reverse()) : real;
+    } catch (err) {
+      if (err?.code !== 'ENOENT' && err?.code !== 'ENOTDIR') return null; // EACCES, ELOOP, ...: cannot be read safely
+      const up = p.dirname(cur);
+      if (up === cur) return null;
+      rest.push(p.basename(cur));
+      cur = up;
+    }
+  }
+  return null;
+}
+
+/**
+ * The repo-relative form of a path ("docs/a.md"); null when the path canonicalises to somewhere outside the repo
+ * (another drive, a sibling folder, a UNC share, "..\x"): not ours to police; or { refused } when it cannot be read
+ * safely (NUL, a drive-relative "C:x", a link loop, a folder with no read permission): the caller blocks it.
+ * An in-repo file whose NAME starts with two dots ("..foo.md") is inside, and is policed.
+ *
+ * Links, junctions, 8.3 names and case are resolved through the file system (the path and then its nearest existing
+ * parent), so "docs/j/x" where "docs/j" is a junction to ".bootstrap" is read as ".bootstrap/x".
+ * `p` is the path module (win32 or posix); `opts.canonical` turns the file-system step on or off (default: on for the
+ * real path module when the root exists, so tests that use an invented root and a foreign path module stay text-only);
+ * `opts.realpath` replaces realpathSync.native in tests.
+ */
+export function toRepoPath(root, filePath, cwd, p = path, opts = {}) {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  if (filePath.includes('\0') || String(cwd ?? '').includes('\0')) return { refused: 'the path has a NUL character in it' };
+  const realpath = opts.realpath ?? ((x) => realpathSync.native(x));
+  const text = stripDevicePrefix(filePath, p);
+  const rootText = stripDevicePrefix(String(root), p);
+  const cwdText = cwd ? stripDevicePrefix(String(cwd), p) : rootText;
+  if (p === path.win32 && /^[A-Za-z]:(?![\\/])/.test(text)) return { refused: 'a drive-relative path (C:x) cannot be resolved' };
+  let abs = p.isAbsolute(text) ? text : p.join(cwdText, text);
+  let base = rootText;
+  const canonical = opts.canonical ?? (p === path && existsSync(rootText));
+  if (canonical) {
+    base = canonicalPath(rootText, p, realpath);
+    abs = base === null ? null : canonicalPath(abs, p, realpath);
+    if (base === null || abs === null) return { refused: 'the path or the repository folder could not be read' };
+  }
+  let rel = p.relative(base, abs).replace(/\\/g, '/');
   if (rel === '..' || rel.startsWith('../') || /^[A-Za-z]:/.test(rel) || rel.startsWith('/')) return null;
   if (p === path.win32) {
-    // Windows reads ".bootstrap." and ".bootstrap " as ".bootstrap", and "x::$DATA" / "x:stream" as "x".
+    // Windows reads ".bootstrap." and ".bootstrap " as ".bootstrap", and "x::$DATA" / "x:stream" as "x" (the file system does not
+    // fold these for names that do not exist yet).
     rel = rel.split('/').map((seg) => seg.split(':')[0].replace(/[. ]+$/, '') || seg).join('/');
-    // 8.3 short names ("BOOTST~1") cannot be read from the text: ask the file system for the long form.
-    if (/~\d/.test(rel) && process.platform === 'win32') {
-      try {
-        const real = realpathSync.native(p.join(root, rel));
-        const back = p.relative(realpathSync.native(root), real).replace(/\\/g, '/');
-        if (back && !back.startsWith('..') && !/^[A-Za-z]:/.test(back)) rel = back;
-      } catch { /* the file does not exist yet: the text form stands */ }
-    }
   }
   return rel;
 }

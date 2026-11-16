@@ -11,7 +11,7 @@
 // path or a record folder outright. Behind policy.shell_write_check (default on).
 import path from 'node:path';
 import { baseName, commandStarts, isCmd } from './shellparse.mjs';
-import { recordViolation, scopeViolation, toRepoPath } from './policy.mjs';
+import { isRefusedPath, recordViolation, scopeViolation, toRepoPath } from './policy.mjs';
 import { gitCall, innerParsed } from './shellrules.mjs';
 
 const NULLISH = new Set(['/dev/null', 'nul', 'con', '/dev/stdout', '/dev/stderr', '/dev/stdin', '-']);
@@ -126,6 +126,7 @@ function judge(word, ctx, cwd) {
     return null;
   }
   const rel = toRepoPath(ctx.root, text, cwd ?? ctx.cwd);
+  if (isRefusedPath(rel)) return `${text}: that path could not be read safely (${rel.refused}).`;
   if (rel === null) return null;
   return scopeViolation(rel, ctx.policy, ctx.brief, ctx.role) ?? recordViolation(rel, ctx.policy, ctx.role);
 }

@@ -11,7 +11,7 @@
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { currentRole, git, loadPolicy, loadRole, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, isRefusedPath, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 import { checkWrites } from './lib/shellwrites.mjs';
@@ -103,6 +103,7 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
 
   if (WRITE_TOOLS.has(tool) && filePath) {
     const rel = toRepoPath(root, filePath, cwd);
+    if (isRefusedPath(rel)) return { allow: false, reason: `Blocked: that path could not be read safely (${rel.refused}).` };
     if (rel === null) return { allow: true }; // outside the project: not ours to police
     const why = scopeViolation(rel, policy, brief, role) ?? recordViolation(rel, policy, role);
     if (why) return { allow: false, reason: `Blocked: ${why}` };

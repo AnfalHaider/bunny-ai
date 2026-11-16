@@ -18,8 +18,10 @@ const CONFIG_HARD_KEYS = /^(include\.path|includeif\..*\.path|core\.(hookspath|f
 const CONFIG_READ_FLAGS = /^(--get|--get-all|--get-regexp|--get-urlmatch|-l|--list|--show-origin|--show-scope|--name-only|--get-color|--get-colorbool)$/;
 const CONFIG_WRITE_FLAGS = /^(--add|--replace-all|--unset|--unset-all|--rename-section|--remove-section|-e|--edit)$/;
 const CONFIG_SCOPE_FLAGS = /^(--global|--system|--file|-f|--includes|--blob)(=|$)/;
-const CONFIG_VALUE_FLAGS = new Set(['--file', '-f', '--blob', '--type', '--default']);
-export const GIT_DIR_ENV = /^(\$env:)?(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_COMMON_DIR)(\s*=|$)/i;
+const CONFIG_VALUE_FLAGS = new Set(['--file', '-f', '--blob', '--type', '--default', '--comment', '--value', '--fixed-value']);
+// git 2.46 subcommand forms: "git config set key value"
+const CONFIG_FORMS = new Set(['set', 'unset', 'get', 'list', 'edit', 'rename-section', 'remove-section']);
+export const GIT_DIR_ENV = /^(\$env:|env:)?(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_COMMON_DIR|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|GIT_EXEC_PATH)(\s*=|$)/i;
 
 /** Is this key/value one a role may not set (from "git config" or "git -c")? Returns a reason or null. */
 export function configRefusal(key, value = '') {
@@ -39,8 +41,10 @@ export function configCall(args) {
     const a = args[i];
     if (a.startsWith('-')) { flags.push(a); if (CONFIG_VALUE_FLAGS.has(a)) i += 1; } else pos.push(a);
   }
-  const reads = flags.some((f) => CONFIG_READ_FLAGS.test(f));
-  const write = flags.some((f) => CONFIG_WRITE_FLAGS.test(f)) || (!reads && pos.length >= 2);
+  let form = null;
+  if (CONFIG_FORMS.has(pos[0]) && (pos.length >= 2 || pos[0] === 'list' || pos[0] === 'edit')) form = pos.shift(); // "set", "unset"...: the key is the next word
+  const reads = flags.some((f) => CONFIG_READ_FLAGS.test(f)) || form === 'get' || form === 'list';
+  const write = flags.some((f) => CONFIG_WRITE_FLAGS.test(f)) || ['set', 'unset', 'edit', 'rename-section', 'remove-section'].includes(form) || (!reads && pos.length >= 2);
   return { flags, key: pos[0] ?? '', value: pos[1] ?? '', write, scoped: flags.some((f) => CONFIG_SCOPE_FLAGS.test(f)) };
 }
 
