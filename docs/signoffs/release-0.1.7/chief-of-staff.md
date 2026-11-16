@@ -1,9 +1,9 @@
 ---
 piece: release-0.1.7
 role: chief-of-staff
-sha: bf83b01
+sha: 6b06ed9
 verdict: PASS
 date: 2026-11-16
 ---
 
-Combined v0.1.7 candidate: lane A, W2-7 rules, W5-7 window-only, Builder B's W6 loop batch, W4-5b/c working line, W5-8 release checks, guard 74fe7ba, version 0.1.7, help text, and the Q2-23 token.js fix. I checked each merge parent against the reviewed shas, read the merge resolutions, ran three quiet gates at 909a439 (run 1 failed only Q2-23, now fixed and proved by Builder A's 8/8 gate at bf83b01 and 210/210 repeat runs). QA, Tech Lead, Librarian and Security PASS at bf83b01. My own quiet gates at bf83b01 were waived by the owner.
+Re-signed for the v0.1.7 build fix: 41d7ac1 (main, release-0.1.7 at bf83b01) plus 91b659f and 6b06ed9 (build-css leaves app.css alone when only line endings differ; electron-builder publish config with --publish never so latest.yml is written). QA proved a clean tree after a rebuild on an autocrlf checkout; Security confirmed nothing publishes by itself and the feed is AnfalHaider/bunny-ai. QA, Tech Lead, Librarian and Security PASS at 6b06ed9.
