@@ -51,3 +51,23 @@ The gate `inside()` is unchanged and still holds (all escape cases refused, junc
 
 ### Required before sign-off
 D2-1, D2-2 and D2-5 are mandatory. D2-3 may follow; D2-4 belongs with D2-5.
+
+
+---
+
+## Second re-review: `9ca3f77` — verdict **FAIL** (two things left, both small)
+
+Probes run on a scratch checkout of `9ca3f77` (throwaway folders, invented profile).
+
+**Fixed and verified**
+- D2-1: the junction leak is gone (`probe.mjs`: the outside file is no longer reported; changesFor now goes through `inside()`).
+- D2-2: reading a 300 MB file takes 2 ms and 1 MB of memory (was +301 MB).
+- D2-3: the Changes answer is capped (20 checkpoints, 40 files each, 20,000 diff lines, a `more` flag).
+- D2-4: `.git` and `node_modules` are refused by read and by list (`path.hidden`), including `.git/config`.
+- D2-5 on the server, when `folderPickerOnly` is on (`createApp({ folderPickerOnly: true })`, tested in-process): a typed `POST /api/folder/check` of `C:/` or the profile folder no longer opens them (`files` → 403); only `app.chooseFolder(path)` does; it refuses a drive root, Bunny's data folder and a parent of it; creating or patching a chat with a typed folder → 403; a picked folder works.
+
+**Still open**
+1. **D2-5 is not on in the desktop app.** At `9ca3f77`, `electron/main.js` line 46 is `createApp({ dataDir })`: it does not pass `folderPickerOnly`, and the `dialog:pickFolder` handler (lines 135-139) returns the path without calling `chooseFolder`. There is no `folderPickerOnly` or `chooseFolder` anywhere under `electron/` on the branch. As shipped, the real app behaves as it did at `5f36e04`: any token holder can mark any folder chosen. (Builder's note says main.js passes it; that change is not in the commit, perhaps still uncommitted.) It also has to be wired both ways: turn the flag on and call `chooseFolder` with the picked path, or desktop chats will get 403 when the person picks a folder.
+2. **Two other routes store a folder unchecked, even with the flag on.** `POST /api/schedules` with `folder` = the profile folder returned 200, and `POST /api/projects` with a folder returned 200. A scheduled run opens a chat in that folder and the pane routes then list and read it (the never-browse list only stops drive roots and Bunny's data). Same gate (`folderToStore`) on both.
+
+Everything else holds; once these two are in I expect to sign PASS after one re-run.

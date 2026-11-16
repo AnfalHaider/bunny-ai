@@ -2,6 +2,12 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - D-2 panes second re-review (9ca3f77): FAIL, two small things left
+
+D2-1 to D2-4 fixed and verified (junction leak gone, 1 MB read, caps, .git and node_modules refused). D2-5 works on the server when folderPickerOnly is on, but the desktop app never turns it on: electron/main.js still calls createApp with only dataDir and never records the picker's result. Also /api/schedules and /api/projects still store any folder. Signed FAIL at 9ca3f77 (d-2 security sign-off); details in the review's second addendum. Expect PASS after the Electron wiring and the two routes.
+
+**Lesson:** "passes the flag in main.js" is a claim about a file; open the file at the sha before signing.
+
 ## 2026-11-16 - Auto mode runs build actions without asking (fde15a5, seen at 78f49fe)
 
 **(1) Does it match the owner's rule? Yes, exactly.** `needsOk` (`src/server/app.js`, the line after "Whatever the person allowed applies in full"): `send` asks in every mode; `build` asks unless the mode is Auto; Manual asks for edit and run; Accept edits asks for run; Plan refuses edit, run, build and send (`planRefuses`). Email send moved from build to its own `send` risk (`gmail_send`), so it asks in Auto and is refused in Plan. Capability switches (computer use, tool building, Code mode) still ask the person through their own question in every mode. A project file cannot set the mode (`test/permission-modes.test.js` checks the source line). Test coverage: the schedule action in all four modes, the risk table, and the source check. Not tested by behaviour: create tool, local connector, computer click and type in Auto (only the table).
