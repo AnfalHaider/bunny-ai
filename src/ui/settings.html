@@ -416,6 +416,7 @@
       <div class="rules" id="perm-rules">
         <h3>Permission rules</h3>
         <p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say. A command pattern like <code>npm test*</code> matches what Bunny is about to run; a path pattern like <code>secrets/**</code> matches the files Bunny's own tools read or edit (not what a command does). Simple wildcards only: <code>*</code> and <code>**</code>.</p>
+        <p class="lead"><b>A guard rail, not a sandbox.</b> Command rules read the command Bunny is about to run; they do not cover custom tools, MCP or local connectors, computer-use typing, the browser tools or schedules, and a wrapper such as <code>cmd /c</code> or <code>powershell -Command</code> can hide what it runs (Bunny asks about those when you have a Deny or Ask rule).</p>
         <div class="tabs2" role="tablist" aria-label="Where the rules apply">
           <button type="button" class="tab" role="tab" id="rules-tab-all" aria-selected="true">All folders</button>
           <button type="button" class="tab" role="tab" id="rules-tab-folder" aria-selected="false">One folder</button>
@@ -890,7 +891,7 @@
     const EFFECTS = [['deny', 'Deny', 'Bunny is told no'], ['ask', 'Ask', 'Bunny always asks first'], ['allow', 'Allow', 'Bunny goes ahead']];
     const STARTERS = [
       { label: 'Ask before git push*', rule: { kind: 'command', effect: 'ask', pattern: 'git push*' } },
-      { label: 'Deny Remove-Item -Recurse*', rule: { kind: 'command', effect: 'deny', pattern: 'Remove-Item -Recurse*' } },
+      { label: 'Deny Remove-Item -Recurse', rule: { kind: 'command', effect: 'deny', pattern: 'Remove-Item*-r*' } },
       { label: 'Deny edits under secrets/**', rule: { kind: 'path', effect: 'deny', pattern: 'secrets/**', ops: 'edits' } },
     ];
     // One change at a time: a second click waits for the first to be saved, so it never works from a stale list.

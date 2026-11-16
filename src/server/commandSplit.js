@@ -111,10 +111,12 @@ const ALIASES = new Map(Object.entries({
   cp: 'Copy-Item', cpi: 'Copy-Item', copy: 'Copy-Item', mv: 'Move-Item', mi: 'Move-Item', move: 'Move-Item',
   ren: 'Rename-Item', rni: 'Rename-Item', sc: 'Set-Content', ac: 'Add-Content', clc: 'Clear-Content', ni: 'New-Item', md: 'mkdir',
   iex: 'Invoke-Expression', icm: 'Invoke-Command', saps: 'Start-Process', start: 'Start-Process', kill: 'Stop-Process', spps: 'Stop-Process',
+  sal: 'Set-Alias', nal: 'New-Alias', sajb: 'Start-Job', ii: 'Invoke-Item',
   ls: 'Get-ChildItem', dir: 'Get-ChildItem', gci: 'Get-ChildItem', cat: 'Get-Content', type: 'Get-Content', gc: 'Get-Content',
   sl: 'Set-Location', cd: 'Set-Location', chdir: 'Set-Location', iwr: 'Invoke-WebRequest', curl: 'Invoke-WebRequest', wget: 'Invoke-WebRequest', irm: 'Invoke-RestMethod',
 }));
-const WRAPPER_WORDS = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'wsl', 'zsh', 'invoke-expression', 'invoke-command', 'start-process']);
+// things that run other text, or rename a command so a name no longer means what it says
+const WRAPPER_WORDS = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'wsl', 'zsh', 'invoke-expression', 'invoke-command', 'start-process', 'set-alias', 'new-alias', 'start-job', 'invoke-item', 'register-scheduledjob', 'schtasks']);
 const INNER_FLAG = /^(\/c|\/k|-c|-command|-commandwithargs|-encodedcommand|-ec|-e)$/i;
 const GIT_GLOBAL_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
 
@@ -159,6 +161,7 @@ export function normalisePart(part, depth = 0) {
     variants.add(text);
   }
   if (/^[&.]\s*[$(]/.test(part) || /^[&.]\s+\$/.test(part)) wrapper = true; // & $x, & (Get-Command ...): the command name is computed
+  if (/[$(]/.test(commandName(firstWord(text).raw))) wrapper = true; // a name that still has a variable or a group in it
   const { raw, rest } = firstWord(text);
   if (!raw) return { variants: [...variants], inner, wrapper };
   const name = commandName(raw);
@@ -189,6 +192,14 @@ export function normalisePart(part, depth = 0) {
  *   wrapper   something that runs other text (cmd /c, powershell -Command, iex, & $x, bash -c)
  */
 export function analyseCommand(command, depth = 0) {
+  // PowerShell reads the typographic quotes as quotes. Read the line with them as plain quotes too, and let nothing be allowed if they are there.
+  const typographic = /[\u2018\u2019\u201A\u201B\u201C\u201D\u201E]/.test(String(command ?? ''));
+  if (typographic && depth < 4) {
+    const plain = String(command).replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E]/g, '"');
+    const other = analyseCommand(plain, depth + 1);
+    const own = analyseCommand(String(command).replace(/[\u2018\u2019\u201A\u201B\u201C\u201D\u201E]/g, ''), depth + 1);
+    return { readings: [...other.readings, ...own.readings], texts: [...new Set([...other.texts, ...own.texts])], unsafe: true, wrapper: other.wrapper || own.wrapper, whole: other.whole };
+  }
   const whole = String(command ?? '').replace(/\s+/g, ' ').trim();
   const a = splitPowerShell(String(command ?? ''));
   const b = splitBlind(String(command ?? ''));
@@ -210,7 +221,7 @@ export function analyseCommand(command, depth = 0) {
     }
   }
   // a call operator followed by a variable, a group or a script block (& $x, & (Get-Command ...), . $profile): the name is computed
-  if (/(?:^|[;|&\n\r{(])\s*[&.]\s*[$(@]/.test(String(command ?? ''))) wrapper = true;
+  if (/(?:^|[;|&\n\r{(])\s*[&.]\s*(?:[$(@]|["'][^"']*\$)/.test(String(command ?? ''))) wrapper = true;
   // the text inside $( ) and backtick pairs, for a Deny or Ask
   for (const m of String(command ?? '').matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)) {
     if (depth < 3) for (const t of analyseCommand(m[1] ?? m[2], depth + 1).texts) texts.add(t);

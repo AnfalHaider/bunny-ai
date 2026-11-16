@@ -225,3 +225,17 @@ test('W27-2: the Remove-Item starter matches the flag anywhere in the command', 
   for (const c of ['Remove-Item -Recurse build', 'Remove-Item build -Recurse', 'Remove-Item build -r -Force', 'rm build -Rec', 'ri -Recurse x']) assert.equal(checkCommand(deny, c)?.effect, 'deny', c);
   assert.equal(checkCommand(deny, 'Remove-Item build/file.txt'), null);
 });
+
+test('review: typographic quotes (PowerShell reads them as quotes), computed names through quotes, and alias redefinition', () => {
+  const allow = [cmd('allow', 'npm test*'), cmd('allow', 'echo*')];
+  for (const c of ['npm test “; Remove-Item y; ”', "echo ‘x’ ; Remove-Item y", 'echo “x” > f.txt', 'npm test “” ; Remove-Item y']) {
+    assert.notEqual(checkCommand(allow, c)?.effect, 'allow', JSON.stringify(c));
+  }
+  const deny = [cmd('deny', 'Remove-Item*')];
+  assert.equal(checkCommand(deny, 'echo “” ; Remove-Item y')?.effect, 'deny');
+  assert.equal(checkCommand(deny, '‘Remove-Item’ x')?.effect, 'deny');
+  for (const c of ['& "$c" x', "& '$c' x", '& "Remove-$x" y', 'sal zz Remove-Item; zz x', 'Set-Alias zz Remove-Item', 'nal zz Remove-Item', 'New-Alias zz Remove-Item', 'start-job { 1 }', 'sajb { 1 }', 'ii x.ps1']) {
+    const v = checkCommand(deny, c);
+    assert.ok(v?.effect === 'ask' || v?.effect === 'deny', `${c} -> ${v?.effect}`);
+  }
+});

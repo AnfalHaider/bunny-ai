@@ -245,3 +245,19 @@ test('W2-7b: canon() says false for a link that points nowhere, and null for a p
   if (!linked) return t.skip('links cannot be made here');
   assert.equal(await ws.canon('docs/dangling/x.txt'), false, 'a junction to a folder that does not exist');
 });
+
+test('Q-W27-1 (QA 995c8d4): a bad rules list answers 400 and leaves every saved rule where it was', async (t) => {
+  const base = await setup(t);
+  assert.equal((await putRules(base, { global: [cmd('deny', 'rm *')], folders: {} })).status, 200);
+  const bad = await putRules(base, { global: [{ kind: 'path', effect: 'deny', pattern: '../x', ops: 'edits' }], folders: {} });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).message, /cannot leave the folder/);
+  const after = await (await fetch(`${base}/api/permission-rules`)).json();
+  assert.equal(after.global.length, 1, 'the good rule is still there');
+  assert.equal(after.global[0].pattern, 'rm *');
+  // every other way a list can be bad
+  for (const body of [{ global: 'nope' }, { global: [{ kind: 'command', effect: 'maybe', pattern: 'x' }] }, { global: [], folders: { 'relative/dir': [cmd('allow', 'x')] } }, { global: [], folders: { [tmpdir()]: [{ kind: 'url', effect: 'allow', pattern: 'x' }] } }]) {
+    assert.equal((await putRules(base, body)).status, 400, JSON.stringify(body));
+    assert.equal((await (await fetch(`${base}/api/permission-rules`)).json()).global[0]?.pattern, 'rm *', `still intact after ${JSON.stringify(body).slice(0, 40)}`);
+  }
+});

@@ -546,7 +546,7 @@ html.embedded .cz-bar { margin-top: 0; }
 .devserver-card code { background: none; padding: 0; font-size: var(--fs-sm); color: var(--text); }
 /* tool steps shown live while a reply streams */
 .live-tool .tool-call { margin: var(--sp-1) 0; }
-.live-permission pre.code { max-height: 220px; overflow: auto; margin: var(--sp-4) 0 0; }
+.live-permission pre.code { max-height: 220px; overflow: auto; margin: var(--sp-4) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ==========================================================================
    PANEL LAYOUT: resize, dock left / right / bottom, fill, sidebar toggle
@@ -973,6 +973,8 @@ details.thinking.is-live summary { color: var(--accent); }
 .tool-group-summary { color: var(--text-dim); font-weight: var(--fw-medium); }
 .tool-group-meta { margin-left: auto; color: var(--text-faint, var(--text-dim)); font-size: var(--fs-xs); white-space: nowrap; }
 .tool-group-meta.is-failed, .tool-call-header .tag.is-failed { color: var(--bad); font-weight: var(--fw-medium); }
+/* a step stopped by a rule, the mode or the person: amber "Blocked", not red "Failed" (nothing broke) */
+.tool-group-meta.is-blocked, .tool-call-header .tag.is-blocked { color: var(--warn); font-weight: var(--fw-medium); }
 .step-chev { width: 0; height: 0; flex: none; border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .12s; opacity: .7; }
 .tool-group.is-open > .tool-group-line .step-chev, .tool-call.is-open > .tool-call-header .step-chev { transform: rotate(90deg); }
 .tool-group-rows { display: none; margin-left: var(--sp-6); border-left: 1px solid var(--line); padding-left: var(--sp-4); }
