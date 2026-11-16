@@ -82,3 +82,13 @@ A single function, `splitCommand(text)` in a new `lib/shellparse.mjs`, returning
 5. F (needs a `_piece.md` schema change and a one-release compatibility flag; the owner decides whether to hold stacked work until it lands, or to rely on the Chief of Staff naming each piece's base by hand in the meantime).
 
 Until then, in this project: A3 is covered by the repo's own `policy.json` (29e34fb); E and C remain false-block sources, worked around by editing text files with the Write and Edit tools; D is worked around by re-checking the enabled plugin list after `bootstrap role`; F is real, so **a stacked branch must have a complete sign-off set per piece, and the Chief of Staff should confirm S-1's sign-offs (including Security) exist before relying on D1's.**
+
+## Added 2026-11-16 (after G-1 landed): items G1 follow-ups
+
+The full spec with tests is `docs/plans/guard-0.1.6-spec.md`; carry it to the plugin repository as is. Summary of what the plugin needs beyond E, C, A3, D, F above:
+- `gh release|pr merge|api` writes are unguarded (G1-1, HIGH).
+- Persisted git `alias.*`, `include.path`, `remote.*.push|mirror`, `push.default`, and non-builtin subcommands resolved through their alias.
+- `toRepoPath` canonical paths (`realpathSync.native` of the nearest existing parent, strip `\?\` and `\.\`, fail closed).
+- Records authenticated at commit and push (filename equals front-matter role equals committer; `_required.md` and releases by their owners only).
+- Applying the legacy deny patterns to the whole command string reintroduces the false blocks of E and C (seen 2026-11-16 with a push chained to `worktree remove --force`): run them per simple command with quoted text blanked, and keep `$'...'` forms in view.
+
