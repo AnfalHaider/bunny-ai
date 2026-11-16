@@ -117,3 +117,12 @@ test('item 2 review: git config set/unset forms, more value options, more locati
   const v = decide(root, `git -C "${other}" zz -m x`);
   assert.equal(v.allow, false, 'the alias is read in the folder -C names, not in the starting folder');
 });
+
+test('item 2 review: editing or renaming config sections, and the GIT_CONFIG_* and editor variables', (t) => {
+  for (const c of [
+    'git config rename-section remote.origin remote.evil', 'git config --rename-section core x', 'git config remove-section alias', 'git config --remove-section core',
+    'git config edit', 'git config -e', 'git config --edit',
+    'GIT_CONFIG_COUNT=1 git status', 'GIT_CONFIG_PARAMETERS="x" git status', 'GIT_CONFIG_KEY_0=core.hooksPath git status', 'GIT_EDITOR=evil git commit', 'GIT_SSH_COMMAND=evil git fetch', 'GIT_ASKPASS=evil git fetch',
+  ]) denied(t, c);
+  allowed(t, 'git config --fixed-value --unset user.signingkey');
+});

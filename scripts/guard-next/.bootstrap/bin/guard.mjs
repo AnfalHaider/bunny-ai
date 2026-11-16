@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { currentRole, git, loadPolicy, loadRole, isRefusedPath, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
+import { simpleCommandTexts } from './lib/shellblank.mjs';
 import { checkWrites } from './lib/shellwrites.mjs';
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace', 'edit_file']);
@@ -72,10 +73,25 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
     // switch is off, the old regexes over the raw text apply as well: stricter, with their false blocks.
     const parsed = policy.shell_parse === false ? null : parseShell(command);
     const strict = !parsed || parsed.uncertain;
-    for (const pat of [...policy.deny_all, ...(policy.destructive_commands || []), ...(brief.deny_commands || []), ...(strict ? policy.legacy_deny_all || [] : [])]) {
-      if (new RegExp(pat).test(command)) {
-        return { allow: false, reason: `Blocked for role "${role}": command matches a rule in .bootstrap/policy.json or roles/${role}.md (${pat}). If the owner wants this, they run it themselves, or the Chief of Staff records their word first.` };
-      }
+    // Item 5: a deny_all pattern is judged against each simple command with quoted text and here-document bodies blanked, so a flag in a
+    // message, or in the next command of a chain, no longer trips it. Patterns marked "whole" and every pattern on a command that cannot be
+    // read with confidence (strict) still see the raw text; so do the project's own destructive commands and the role's deny_commands.
+    // ANSI-C ($'...') and locale ($"...") quoting can spell a flag the tokenizer reads differently: then the hook-skip patterns
+    // (legacy_deny_all) run over the raw text too.
+    const ansi = command.includes("$'") || command.includes('$"');
+    const texts = strict ? null : simpleCommandTexts(command);
+    const denyAll = policy.deny_all.map((e) => (typeof e === 'string' ? { pattern: e } : e));
+    const hits = (e) => {
+      const re = new RegExp(e.pattern);
+      if (strict || e.whole) return re.test(command);
+      return texts.some((t) => re.test(t)) || (ansi && re.test(command));
+    };
+    const patterns = [
+      ...denyAll.filter(hits).map((e) => e.pattern),
+      ...[...(policy.destructive_commands || []), ...(brief.deny_commands || []), ...(strict || ansi ? policy.legacy_deny_all || [] : [])].filter((pat) => new RegExp(pat).test(command)),
+    ];
+    if (patterns.length) {
+      return { allow: false, reason: `Blocked for role "${role}": command matches a rule in .bootstrap/policy.json or roles/${role}.md (${patterns[0]}). If the owner wants this, they run it themselves, or the Chief of Staff records their word first.` };
     }
     if (parsed) {
       const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers, cwd });

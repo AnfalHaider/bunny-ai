@@ -24,6 +24,7 @@
       "chief-of-staff"
     ]
   },
+  "records_check": true,
   "records": {
     "globs": [
       "docs/signoffs/**",
@@ -31,7 +32,8 @@
     ],
     "writers": [
       "chief-of-staff"
-    ]
+    ],
+    "owner_patterns": {}
   },
   "destructive_commands": [
     "BUNNY_RESET_PROFILE\\s*=\\s*1",
@@ -41,13 +43,10 @@
     "\\bgit\\s+push\\b.*\\s(--force|-f|--force-with-lease)(\\s|=|$)",
     "\\bgit\\s+reset\\s+--hard\\b",
     "^\\s*(ssh|scp)\\s",
-    "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b",
-    "--no-verify\\b",
-    "\\bgit\\s+config\\b.*\\bcore\\.hooksPath\\b",
-    "\\bgit\\b[^|;&]*\\scommit\\b[^|;&]*\\s-[A-Za-z]*n[A-Za-z]*(\\s|$)",
-    "\\bgit\\b[^|;&]*\\s--no-ve(r(i(f(y)?)?)?)?(\\s|=|$)",
-    "\\bgit\\b[^|;&]*\\s-c\\s*[Cc][Oo][Rr][Ee]\\.[Hh][Oo][Oo][Kk][Ss][Pp][Aa][Tt][Hh]",
-    "\\bcore\\.hooksPath\\b"
+    {
+      "pattern": "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b",
+      "whole": true
+    }
   ],
   "legacy_deny_all": [
     "--no-verify\\b",

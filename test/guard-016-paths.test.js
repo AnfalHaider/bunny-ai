@@ -107,3 +107,19 @@ test('item 3: a refused path blocks a shell write too (shellwrites)', (t) => {
   const v = guard.decide({ tool: 'Bash', command: 'echo x > "a\0b"', cwd: repo });
   assert.equal(typeof v.allow, 'boolean');
 });
+
+test('item 3 review: ".." after a junction is applied to the junction\'s target, as the file system does', (t) => {
+  const { root, made } = link(t);
+  if (!made) return t.skip('links cannot be made here');
+  mkdirSync(join(root, '.bootstrap', 'sub'));
+  writeFileSync(join(root, '.bootstrap', 'sub', 'keep.txt'), 'x');
+  symlinkSync(join(root, '.bootstrap', 'sub'), join(root, 'docs', 'k'), 'junction');
+  // docs/k/../policy.json is .bootstrap/policy.json on disk, though its text reads docs/policy.json
+  assert.equal(lib.toRepoPath(root, 'docs/k/../policy.json', root), '.bootstrap/policy.json');
+  assert.equal(lib.toRepoPath(root, 'docs/k/../../docs/a.md', root), 'docs/a.md');
+});
+
+test('item 3 review: a Windows device path that is neither a drive nor a UNC share is refused', () => {
+  for (const p of ['\\\\?\\GLOBALROOT\\Device\\x', '\\\\.\\pipe\\x', '\\\\?\\Volume{abc}\\x']) assert.ok(refused(text(p)), p);
+  assert.equal(text('\\\\?\\D:\\repo\\docs\\a.md'), 'docs/a.md');
+});

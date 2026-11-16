@@ -18,10 +18,10 @@ const CONFIG_HARD_KEYS = /^(include\.path|includeif\..*\.path|core\.(hookspath|f
 const CONFIG_READ_FLAGS = /^(--get|--get-all|--get-regexp|--get-urlmatch|-l|--list|--show-origin|--show-scope|--name-only|--get-color|--get-colorbool)$/;
 const CONFIG_WRITE_FLAGS = /^(--add|--replace-all|--unset|--unset-all|--rename-section|--remove-section|-e|--edit)$/;
 const CONFIG_SCOPE_FLAGS = /^(--global|--system|--file|-f|--includes|--blob)(=|$)/;
-const CONFIG_VALUE_FLAGS = new Set(['--file', '-f', '--blob', '--type', '--default', '--comment', '--value', '--fixed-value']);
+const CONFIG_VALUE_FLAGS = new Set(['--file', '-f', '--blob', '--type', '--default', '--comment', '--value']);
 // git 2.46 subcommand forms: "git config set key value"
 const CONFIG_FORMS = new Set(['set', 'unset', 'get', 'list', 'edit', 'rename-section', 'remove-section']);
-export const GIT_DIR_ENV = /^(\$env:|env:)?(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_COMMON_DIR|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|GIT_EXEC_PATH)(\s*=|$)/i;
+export const GIT_DIR_ENV = /^(\$env:|env:)?(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_COMMON_DIR|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS|GIT_CONFIG_KEY_\d+|GIT_CONFIG_VALUE_\d+|GIT_CONFIG|GIT_EXEC_PATH|GIT_EDITOR|GIT_SEQUENCE_EDITOR|GIT_SSH_COMMAND|GIT_SSH|GIT_ASKPASS)(\s*=|$)/i;
 
 /** Is this key/value one a role may not set (from "git config" or "git -c")? Returns a reason or null. */
 export function configRefusal(key, value = '') {
@@ -45,7 +45,7 @@ export function configCall(args) {
   if (CONFIG_FORMS.has(pos[0]) && (pos.length >= 2 || pos[0] === 'list' || pos[0] === 'edit')) form = pos.shift(); // "set", "unset"...: the key is the next word
   const reads = flags.some((f) => CONFIG_READ_FLAGS.test(f)) || form === 'get' || form === 'list';
   const write = flags.some((f) => CONFIG_WRITE_FLAGS.test(f)) || ['set', 'unset', 'edit', 'rename-section', 'remove-section'].includes(form) || (!reads && pos.length >= 2);
-  return { flags, key: pos[0] ?? '', value: pos[1] ?? '', write, scoped: flags.some((f) => CONFIG_SCOPE_FLAGS.test(f)) };
+  return { form, flags, key: pos[0] ?? '', value: pos[1] ?? '', write, scoped: flags.some((f) => CONFIG_SCOPE_FLAGS.test(f)) };
 }
 
 /**
@@ -63,6 +63,7 @@ export function refuseGitConfigs(call) {
   if (sub === 'config') {
     const c = configCall(args);
     if (c.write) {
+      if (c.form === 'edit' || c.flags.some((f) => /^(-e|--edit|--rename-section|--remove-section)$/.test(f)) || c.form === 'rename-section' || c.form === 'remove-section') return 'editing or renaming git configuration sections is not allowed: the guard cannot see what it changes. Set one key at a time.';
       if (c.scoped) return 'writing git configuration to the global or system scope, or to another file, is not allowed; set it in this repository only.';
       const why = configRefusal(c.key, c.value);
       if (why) return `"git config ${c.key}": ${why}`;

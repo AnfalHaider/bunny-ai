@@ -112,16 +112,22 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   // G1-2: records are authenticated at push too, so a commit made with the hooks off is caught. Roles whose job is to move
   // other roles' commits (release-ops, hotfix) are not asked; the Chief of Staff is, for the removal line and flipped verdicts.
   if (policy.records_check !== false && (role === 'chief-of-staff' || !(sc.push_exempt_roles || []).includes(role))) {
-    const own = (git(['rev-list', '--first-parent', '--no-merges', ...range], root) || '').split('\n').filter(Boolean);
+    // First-parent commits, merges included: a merge brings in other roles' records legitimately (not asked), but a record the
+    // merge itself changes (a conflict resolved by hand) differs from every parent, and that is the pusher's doing (git --cc).
+    const own = (git(['rev-list', '--first-parent', ...range], root) || '').split('\n').filter(Boolean);
     for (const c of own) {
-      const out = git(['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--no-renames', '--root', c], root) || '';
+      const isMerge = (git(['rev-list', '--parents', '-n', '1', c], root) || '').split(' ').length > 2;
+      const out = (isMerge
+        ? git(['diff-tree', '--no-commit-id', '--name-only', '-r', '--cc', '-z', '--root', c], root)
+        : git(['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--no-renames', '--root', c], root)) || '';
       const parts = out.split('\0').filter(Boolean);
       const changes = [];
-      for (let i = 0; i + 1 < parts.length; i += 2) changes.push({ status: parts[i][0], path: parts[i + 1] });
+      if (isMerge) for (const f of parts) changes.push({ status: 'M', path: f });
+      else for (let i = 0; i + 1 < parts.length; i += 2) changes.push({ status: parts[i][0], path: parts[i + 1] });
       if (!changes.some((x) => /^docs\/(signoffs|releases)\//.test(x.path.replace(/\\/g, '/')))) continue;
       const message = git(['log', '-1', '--format=%B', c], root) ?? '';
       const readNew = (p) => git(['show', `${c}:${p}`], root) ?? '';
-      const readOld = (p) => git(['show', `${c}^:${p}`], root) ?? '';
+      const readOld = (p) => git(['show', `${c}^1:${p}`], root) ?? '';
       for (const why of recordChecks({ changes, role, policy, readNew, readOld, message })) errors.push(`commit ${c.slice(0, 9)}: ${why}`);
     }
   }

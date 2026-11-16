@@ -167,3 +167,31 @@ test('item 4: a normal sign-off flow end to end is unaffected (own role, own fil
   commitAll(root, 'qa signs');
   assert.deepEqual(push(root, 'qa'), []);
 });
+
+test('item 4 review: a record written inside a merge commit is caught; a record a merge merely brings in is not', (t) => {
+  const root = repo(t, 'builder');
+  stage(root, { 'docs/a.md': 'base' });
+  commitAll(root, 'base');
+  const main = git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
+  const base = git(root, 'rev-parse', 'HEAD');
+  git(root, 'checkout', '-q', '-b', 'side');
+  as(root, 'qa');
+  stage(root, { 'docs/signoffs/x/qa.md': sign('qa') }); // QA's own sign-off, on a side branch
+  commitAll(root, 'qa signs');
+  as(root, 'builder');
+  git(root, 'checkout', '-q', main);
+  stage(root, { 'docs/b.md': 'b' });
+  commitAll(root, 'work');
+  git(root, 'merge', '-q', '--no-ff', '-m', 'merge side', 'side');
+  assert.deepEqual(push(root, 'builder', base).filter((e) => /signoffs/.test(e)), [], 'merging in QA\'s own sign-off is fine');
+  // now an evil merge: the builder adds a forged sign-off inside the merge commit itself
+  git(root, 'checkout', '-q', '-b', 'side2', base);
+  stage(root, { 'docs/c.md': 'c' });
+  commitAll(root, 'other work');
+  git(root, 'checkout', '-q', main);
+  git(root, 'merge', '-q', '--no-ff', '--no-commit', 'side2');
+  stage(root, { 'docs/signoffs/x/security.md': sign('security') });
+  git(root, 'commit', '-q', '-m', 'evil merge');
+  const errs = push(root, 'builder', base);
+  assert.ok(errs.some((e) => /security\.md/.test(e) && /its own role/.test(e)), errs.join('\n'));
+});

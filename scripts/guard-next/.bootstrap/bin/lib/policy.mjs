@@ -95,7 +95,10 @@ export const isRefusedPath = (v) => v !== null && typeof v === 'object' && typeo
 // Windows reads \\?\D:\x and \\.\D:\x as D:\x, and \\?\UNC\srv\sh as \\srv\sh.
 function stripDevicePrefix(text, p) {
   if (p !== path.win32) return text;
-  return text.replace(/^[\\/]{2}[?.][\\/]UNC[\\/]/i, '\\\\').replace(/^[\\/]{2}[?.][\\/]/, '');
+  if (/^[\\/]{2}[?.][\\/]UNC[\\/]/i.test(text)) return text.replace(/^[\\/]{2}[?.][\\/]UNC[\\/]/i, '\\\\');
+  if (/^[\\/]{2}[?.][\\/][A-Za-z]:([\\/]|$)/.test(text)) return text.replace(/^[\\/]{2}[?.][\\/]/, '');
+  if (/^[\\/]{2}[?.][\\/]/.test(text)) return null; // GLOBALROOT, Volume{...}, pipes: not a file path the guard can judge
+  return text;
 }
 
 /**
@@ -122,6 +125,25 @@ function canonicalPath(abs, p, realpath) {
 }
 
 /**
+ * Canonical form of `text` taken one segment at a time, so a ".." that follows a link or junction is applied to the link's
+ * target (as the file system does), not to the link's own name. `from` is the folder a relative text starts in. null = unreadable.
+ */
+function walkCanonical(p, from, text, realpath) {
+  const parsed = p.parse(text);
+  const absolute = p.isAbsolute(text);
+  let cur = absolute ? canonicalPath(parsed.root || p.sep, p, realpath) : canonicalPath(from, p, realpath);
+  if (cur === null) return null;
+  const segs = (absolute ? text.slice(parsed.root.length) : text).split(/[\\/]+/).filter((s) => s && s !== '.');
+  for (const seg of segs) {
+    if (seg === '..') { cur = p.dirname(cur); continue; }
+    const next = canonicalPath(p.join(cur, seg), p, realpath);
+    if (next === null) return null;
+    cur = next;
+  }
+  return cur;
+}
+
+/**
  * The repo-relative form of a path ("docs/a.md"); null when the path canonicalises to somewhere outside the repo
  * (another drive, a sibling folder, a UNC share, "..\x"): not ours to police; or { refused } when it cannot be read
  * safely (NUL, a drive-relative "C:x", a link loop, a folder with no read permission): the caller blocks it.
@@ -140,13 +162,14 @@ export function toRepoPath(root, filePath, cwd, p = path, opts = {}) {
   const text = stripDevicePrefix(filePath, p);
   const rootText = stripDevicePrefix(String(root), p);
   const cwdText = cwd ? stripDevicePrefix(String(cwd), p) : rootText;
+  if (text === null || rootText === null || cwdText === null) return { refused: 'a Windows device path (\\\\?\\ or \\\\.\\ other than a drive or a UNC share) cannot be judged' };
   if (p === path.win32 && /^[A-Za-z]:(?![\\/])/.test(text)) return { refused: 'a drive-relative path (C:x) cannot be resolved' };
   let abs = p.isAbsolute(text) ? text : p.join(cwdText, text);
   let base = rootText;
   const canonical = opts.canonical ?? (p === path && existsSync(rootText));
   if (canonical) {
     base = canonicalPath(rootText, p, realpath);
-    abs = base === null ? null : canonicalPath(abs, p, realpath);
+    abs = base === null ? null : walkCanonical(p, p.isAbsolute(text) ? null : cwdText, text, realpath);
     if (base === null || abs === null) return { refused: 'the path or the repository folder could not be read' };
   }
   let rel = p.relative(base, abs).replace(/\\/g, '/');
