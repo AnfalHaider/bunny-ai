@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { startApp, post, json } from './helpers.js';
+import { readdir, readFile } from 'node:fs/promises';
+import { ORDINARY_SETTING_KEYS } from '../src/server/settingKeys.js';
 import { WINDOW_ONLY_ROUTES, WINDOW_ONLY_SETTING_KEYS, WINDOW_ONLY_SESSION_SETTINGS, isWindowOnlyRoute } from '../src/server/windowOnly.js';
 // the page module touches window when it loads: give it an empty one
 globalThis.window = {};
@@ -242,4 +244,24 @@ test('W5-7 leftovers: the long-reply caps, the helpers switch and the model filt
   assert.equal((await app.adminFetch('/api/settings', { method: 'PUT', headers: j, body: JSON.stringify({ helpersEnabled: false }) })).status, 200);
   const q = '/api/sessions/11111111-1111-1111-1111-111111111111/question/22222222-2222-2222-2222-222222222222';
   assert.equal((await post(base, q, {})).status, 403);
+});
+
+test('Tech Lead 51562ee: every setting the screens write is a known key (no screen gets settings.unknownKey)', async () => {
+  const dir = new URL('../src/ui/', import.meta.url);
+  const known = new Set([...WINDOW_ONLY_SETTING_KEYS, ...ORDINARY_SETTING_KEYS]);
+  const seen = new Map(); // key -> the file that writes it
+  const note = (key, file) => { if (!seen.has(key)) seen.set(key, file); };
+  for (const name of await readdir(dir)) {
+    if (!/\.(html|js)$/.test(name)) continue;
+    const text = await readFile(new URL(name, dir), 'utf8');
+    for (const m of text.matchAll(/data-(?:key|cap)="([A-Za-z]+)"/g)) note(m[1], name);
+    // save({ a: 1, b: 2 }) and sendJSON('/api/settings', 'PUT', { a: 1 }): the keys of a plain object written to the settings
+    for (const m of text.matchAll(/(?:\bsave\(|sendJSON\('\/api\/settings', 'PUT',)\s*\{([^{}]*)\}/g)) {
+      for (const k of m[1].matchAll(/(?:^|,)\s*([A-Za-z]+)\s*:/g)) note(k[1], name);
+    }
+  }
+  assert.ok(seen.size > 25, `the scan found the settings the screens write: ${seen.size}`);
+  const unknown = [...seen].filter(([key]) => !known.has(key)).map(([key, file]) => `${key} (${file})`);
+  assert.deepEqual(unknown, [], 'a screen writes a setting the server refuses');
+  for (const key of ['chartsEnabled', 'fallbackWhenBusy', 'statusLabels', 'transcriptView', 'promptSuggestions', 'autoUpdate']) assert.ok(known.has(key), key);
 });
