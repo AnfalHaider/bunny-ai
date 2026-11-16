@@ -952,7 +952,7 @@ details.thinking.is-live summary { color: var(--accent); }
   .settings-search, .settings-sep { display: none; }
   .settings-nav-list { flex-direction: row; overflow-x: auto; gap: 4px; scrollbar-width: none; }
   .settings-nav-list::-webkit-scrollbar { display: none; }
-  .settings-nav-list .nav-row { white-space: nowrap; flex: none; border-radius: 999px; padding: 7px 14px; }
+  .settings-nav-list .nav-row { width: auto; white-space: nowrap; flex: none; border-radius: 999px; padding: 7px 14px; }
 }
 
 /* 4. Phone: every Add button on Automation is full width. */

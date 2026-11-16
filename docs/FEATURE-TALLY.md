@@ -148,7 +148,7 @@ The agentic surfaces: memory, tools, schedules.
 | 6.11 | Memories suggested from a chat | app | **D** | `a chat can suggest a memory, and it is kept only when accepted` |
 | 6.12 | The model asks for a capability it lacks | app | **D** | `asking for Code mode: the person picks a folder and the file tools arrive in the same reply` |
 | 6.13 | Programs that keep running | app | **D** | `a started program keeps running, is read in pieces, and stops` |
-| 6.14 | Tools the model builds, with approval | app | **D** | `building a tool always asks, even in Auto mode, and the tool is usable at once` |
+| 6.14 | Tools the model builds, with approval | app | **D** | `building a tool asks in Manual and runs without asking in Auto, and the tool is usable at once` |
 | 6.15 | Sub-agents working side by side | app | **D** | `two helpers run side by side, report back, and are kept as chats nested under this one` |
 | 6.16 | Chats that message each other | app | **D** | `one chat can message another and read it; a background chat works on its own` |
 | 6.17 | GitHub repositories, issues and pull requests | app | **D** | `the GitHub tools read and write through the API with the signed-in token` |

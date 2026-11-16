@@ -32,6 +32,7 @@ function label(url) {
  */
 export async function reachable(url, ms = 2500) {
   if (!/^https?:/i.test(url)) return true;
+  try { if (new URL(url).origin === location.origin) return true; } catch { return true; } // Bunny's own address: it is up (it is serving this page)
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {

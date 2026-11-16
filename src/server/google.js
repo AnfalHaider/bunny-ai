@@ -14,7 +14,7 @@ export const GOOGLE_WORKSPACE_SCOPES = [
 ];
 
 export const GOOGLE_TOOL_RISK = {
-  gmail_search: 'read', gmail_read: 'read', gmail_draft: 'edit', gmail_send: 'build',
+  gmail_search: 'read', gmail_read: 'read', gmail_draft: 'edit', gmail_send: 'send',
   calendar_events: 'read', calendar_create_event: 'edit',
   drive_search: 'read', drive_read: 'read',
 };

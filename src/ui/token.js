@@ -17,9 +17,10 @@
       try {
         const res = await nativeFetch(location.pathname + location.search, { cache: 'no-store', headers: { accept: 'text/html' } });
         const fresh = /<meta name="bunny-token" content="([^"<>]+)">/.exec(await res.text())?.[1];
-        if (fresh && fresh !== meta.content) { meta.content = fresh; return true; }
+        if (fresh && fresh !== meta.content) { meta.content = fresh; return 'changed'; }
+        return 'same'; // the server answered with the token this window already has: this 403 is not about a restart
       } catch { /* the server is not there */ }
-      return false;
+      return 'unreachable';
     })().finally(() => { refreshing = null; });
     return refreshing;
   };
@@ -54,8 +55,9 @@
     if (res.status !== 403) return res;
     const body = await res.clone().json().catch(() => null);
     if (body?.code !== 'request.noToken') return res;
-    if (await refreshToken()) return withToken(again, init);
-    say();
+    const outcome = await refreshToken();
+    if (outcome === 'changed') return withToken(again, init);
+    if (outcome === 'unreachable') say(); // only say "restarted" when the server really is not answering as before
     return res;
   };
 })();

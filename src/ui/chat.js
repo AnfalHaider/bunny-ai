@@ -2128,8 +2128,9 @@ async function refreshSession({ expectAssistant = false } = {}) {
 
 async function openSession(id) {
   state.workPanes?.reset();
-  cancelQueued({ silent: true }); // a message waiting for the network belongs to the chat it was typed in
+  cancelQueued({ silent: true, keepDraft: true }); // a message waiting for the network belongs to the chat it was typed in
   state.sessionId = id;
+  if (state.drafts?.has(id)) { $('input').value = state.drafts.get(id); state.drafts.delete(id); }
   state.incognito = false;
   renderMode();
   const session = await getJSON(`/api/sessions/${id}?seen=1`);
@@ -2155,8 +2156,9 @@ async function openSession(id) {
 // sending
 
 function startNewChat({ incognito = false } = {}) {
-  cancelQueued({ silent: true });
+  cancelQueued({ silent: true, keepDraft: true });
   state.sessionId = null;
+  if (state.drafts?.has('new')) { $('input').value = state.drafts.get('new'); state.drafts.delete('new'); }
   state.greeting = null; // a fresh chat gets a fresh greeting
   state.greetingSeed = 1 + Math.floor(Math.random() * 2147483645);
   state.session = null;
@@ -2230,8 +2232,10 @@ function queueTurn(entry) {
   watchNetwork();
 }
 
-function cancelQueued({ silent = false } = {}) {
+function cancelQueued({ silent = false, keepDraft = false } = {}) {
   if (!state.queued) return;
+  // Leaving the chat: the waiting text goes back to that chat's composer as a draft, never lost.
+  if (keepDraft && state.queued.mode !== 'retry' && state.queued.text) (state.drafts ??= new Map()).set(state.sessionId ?? 'new', state.queued.text);
   state.queued = null;
   clearTimeout(state.networkTimer);
   setOfflineChip(false);
@@ -2245,7 +2249,9 @@ function watchNetwork() {
   let wait = 10_000;
   const tick = async () => {
     if (!state.queued) return;
-    if (navigator.onLine !== false && !(await networkDown())) { await resumeQueued(); return; }
+    // The probe decides: it may succeed even when the browser's own flag is stuck on "offline".
+    const probed = await getJSON('/api/network').then((r) => r.online !== false).catch(() => false);
+    if (probed) { await resumeQueued(); return; }
     wait = Math.min(30_000, wait + 5_000);
     state.networkTimer = setTimeout(tick, wait);
   };
@@ -2267,7 +2273,13 @@ async function resumeQueued() {
   await send();
 }
 
-window.addEventListener('online', () => { if (state.queued) { flashStatus(say('offline.checking'), 3000); resumeQueued(); } });
+window.addEventListener('online', async () => {
+  if (!state.queued) return;
+  flashStatus(say('offline.checking'), 10_000);
+  // The browser says it is back; the probe confirms before the waiting message goes (a cut-off or captive network stays "offline").
+  const online = await getJSON('/api/network').then((r) => r.online !== false).catch(() => true);
+  if (online) resumeQueued();
+});
 
 async function send() {
   const input = $('input');

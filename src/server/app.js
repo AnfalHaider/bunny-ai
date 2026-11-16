@@ -1558,9 +1558,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
       // Plan mode is read-only on the SERVER, not only in the list of tools the model is offered: a call for a
       // tool it was never offered (a hallucination, or text in a file it read) is refused here, whatever it is.
-      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build'].includes(risk);
+      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build', 'send'].includes(risk);
       const planRefusal = (name) => `Plan mode is read-only, so ${name} was not run. Propose what you would do and let the person switch mode.`;
-      const needsOk = (risk) => risk === 'build'
+      // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
+      // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
+      // email speaks for the person, so it asks in every mode. A project file can grant none of this.
+      const needsOk = (risk) => risk === 'send'
+        || (risk === 'build' && permissionMode !== 'auto')
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
 
@@ -1640,7 +1644,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...(scheduledTask || unrelatedTask === 'here' ? [] : [newChatToolDefinition()]),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
-        ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']) : []),
+        ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'send']) : []),
         ...(githubToken ? githubToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'], { canClone: Boolean(workspace) }) : []),
       ];
       if (googleOn) {
@@ -1983,7 +1987,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const custom = !isAgentTool(name);
         if (!toolDefinitions.some((d) => d.function.name === name)) throw new Error(`There is no tool called ${name}`);
         const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : isGoogleTool(name) ? describeGoogleTool(name, parsed) : describeAgentTool(name, parsed);
-        // A schedule that may change things runs unwatched later, so it always asks, whatever the mode.
+        // A schedule that may change things runs unwatched later: it asks in Manual and Accept edits, and runs in Auto.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
         if (planRefuses(risk)) return planRefusal(name);
         let detail = '';
@@ -2287,7 +2291,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (!isApp && !isWorkspace && !entry) throw new Error(`There is no tool called ${name}`);
         const summary = isApp ? describeAppTool(name, parsed)
           : isWorkspace ? describeToolCall(name, parsed) : `${entry.server.name}: ${entry.tool.name}`;
-        // A local connector runs a program on this computer: always confirmed, whatever the mode.
+        // A local connector runs a program on this computer: confirmed in Manual and Accept edits, runs in Auto.
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
         if (planRefuses(risk)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
