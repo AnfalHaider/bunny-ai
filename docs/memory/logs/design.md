@@ -2,6 +2,13 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - D-2 and T-3 sign-offs against Builder's shots
+
+**Verdicts (sign-off files under docs/signoffs/):** d2-transcript PASS at f07b3d2; d2-session PASS at 5f36e04; d2-changes FAIL at 5f36e04 (+0 -0 counts) then PASS at 9ca3f77; d2-files PASS at 9ca3f77; t3 FAIL at 78f49fe (status lines hidden on phone) then PASS at 9ca3f77. Build notes for D-2 at f0ce5eb.
+**Method:** compared Builder's invented-profile shots with my artifacts. I opened a subset of the shots, not all of them (the sign-off notes say which). Phone decisions I made: the Changes and Files buttons stay in the top bar with 40px targets; on phone the status line sits above the composer.
+**Not covered:** contrast (UNKNOWN), a real network drop, the git-folder variant of Changes, T-4 (not built).
+**Lesson:** a verdict that says "FAIL" about a counter should first ask whether the shot script reused data; Builder's +0 -0 was a shot artefact, though the guarantee test it led to is useful.
+
 ## 2026-11-16 - 0.1.4 screens review (first task)
 
 **Asked (Chief of Staff, about 8f01146):** a design review of the 0.1.4 screens that shipped without an artifact, on an invented profile only: today as built with proposed fixes beside it, both themes, 1440 and 390.
