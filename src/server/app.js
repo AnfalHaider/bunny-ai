@@ -38,7 +38,7 @@ import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
 import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions, toolPrefix } from './mcp.js';
-import { createLocalMcp } from './mcpLocal.js';
+import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
 import { streamChat, stripToolMarkup } from './chat.js';
@@ -242,7 +242,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const localMcp = createLocalMcp();
   // W3-6: signing in to a connector that needs it; its tokens live only in the secret store. The engine is made on first use (it needs the real port).
   const connectorSignIn = createConnectorSignIn({ secrets, mcp, getBase: () => `http://127.0.0.1:${server.address().port}` });
-  const mcpListTools = (server) => (server.type === 'local' ? localMcp.listTools(server) : httpListTools(server, { auth: connectorSignIn.authFor(server) }));
+  const mcpListTools = (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(server, extra) : httpListTools(server, { auth: connectorSignIn.authFor(server) }));
   const mcpCallTool = (server, call) => (server.type === 'local' ? localMcp.callTool(server, call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
@@ -1832,7 +1832,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // A connector that was never checked has no tools on file yet: ask it once now.
         if (!server.tools?.length && server.status !== 'error') {
           try {
-            server.tools = await mcpListTools(server);
+            // A local connector's first start can take minutes: the chat shows a step with the seconds so far.
+            const startStep = `Start ${server.name}`;
+            server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }) });
+            if (server.type === 'local') send('tool', { tool: startStep, status: 'done', result: `${server.tools.length} tool(s) ready` });
             await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
           } catch (err) {
             if (err.code === 'mcp.needsSignIn') { // no tools until the person signs in; the chat shows a step with Sign in and Skip it
@@ -1841,6 +1844,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               else send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id });
               continue;
             }
+            if (server.type === 'local') send('tool', { tool: `Start ${server.name}`, status: 'failed', result: err.message });
             await mcp.setStatus(server.id, { status: 'error', error: err.message }).catch(() => {});
           }
         }
@@ -2464,6 +2468,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           : isWorkspace ? describeToolCall(name, parsed) : `${entry.server.name}: ${entry.tool.name}`;
         // A local connector runs a program on this computer: confirmed in Manual and Accept edits, runs in Auto.
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
+        if (localConnector) { // a program outside the short list is refused before any card is shown
+          try { checkProposedCommand(parsed.command, parsed.args); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; }
+        }
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
@@ -2477,10 +2484,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         }
         const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
-${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
+${[parsed.command, ...(Array.isArray(parsed.args) ? parsed.args : [])].map((a) => (/\s|"/.test(String(a)) ? JSON.stringify(String(a)) : String(a))).join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
-        if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
+        if (localConnector || ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
           const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -2497,7 +2505,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           result = isApp ? await appTools.run(name, parsed)
             : isWorkspace
             ? await workspace.run(name, parsed)
-            : JSON.stringify(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed }) ?? null);
+            : JSON.stringify(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed, signal: controller.signal, onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) }) ?? null);
         } catch (err) {
           status = 'failed';
           if (err?.code === 'mcp.needsSignIn' && entry) {
