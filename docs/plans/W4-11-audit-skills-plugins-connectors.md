@@ -113,10 +113,34 @@ Fix: land W3-6 (OAuth or token, kept in the DPAPI secret store, never in `mcp.js
 
 **PV-3 (L). `fake` mode answers text only.** `chat.js:48` (`fakeStream`), by design; but it means no automated test reaches connectors through a real chat. Fix: let the fake provider script tool calls (a header in the user message such as `[[call tool_name {json}]]`), which the tests above need.
 
+## G. W4-14: "Bunny was not able to run commands and asked the person to" (owner, 2026-11-17: "bunny was not able to do this, this also needs to be fixed in 0.1.8")
+
+The screenshot: asked to bootstrap a project from a GitHub link, Bunny made an artifact, then showed a "Bunny asked" card: "The `run_command` tool doesn't seem to be available in this environment ... Can you run these commands in PowerShell for me?" I did not read the owner's chat (it is their private profile); the causes below are what the **code** makes possible, ranked. Builder B must find which one the owner hit by reproducing each with the fake provider (item PV-3), and fix all that reproduce.
+
+**W4-14 (H). The model is told it can run commands in situations where it cannot, and nothing stops it asking the person to run them.**
+Evidence:
+1. **Plan mode inside a Code chat (most likely).** `risks` is `['read']` in Plan mode (`app.js:1758`), so `run_command` and `start_process` are left out of the tool list (`app.js:1848-1849`, filtered by `workspaceToolDefinitions(risks)` and `processToolDefinitions(risks)`). But the Code prompt says "You run commands yourself with run_command ... never ask the person to run a command ... never say you are not able to run commands" (`app.js:1789-1796`, built from `modeTexts.code`, chosen only by `workMode` at `app.js:1798`, not by the permission mode). The model is told it has a tool it was not given, finds it "doesn't seem to be available", and is then free to use `ask_user` (offered in every mode, `app.js:1847`; its description allows any question, `agentTools.js:278-282`) to ask the person to run the commands. This matches the screenshot's words exactly.
+2. **Chat mode.** The Chat prompt says to call `request_capability` with `code_mode` "straight away" (`app.js:1782-1784`), and that path works (card at `ui/chat.js:1992` and `2009`, `grantCapability` at `app.js:1963-1976`). A model that prefers `ask_user` ignores it; nothing server-side redirects it. No card appears because the model never calls `request_capability`.
+3. **Code chat without a usable folder.** `workspace` is null when the chat's folder is missing or fails `checkFolder` (`app.js:1744`), yet `workMode` is still `code`, so the full "you run commands yourself" prompt is sent and only the folder line says a folder is missing (`app.js:1802-1804`). Same contradiction as 1.
+4. **After a granted `code_mode` in Plan mode:** `grantCapability` pushes `workspaceToolDefinitions(risks)` with the Plan `risks` (`app.js:1969-1973`), then says "Ignore what you were told about Chat mode. <the Code prompt>" (`:1974-1975`): again run commands are promised and not given.
+Not found: a provider path that drops tools. Tools are built once per reply (`app.js:1844-1860`) and passed to every provider, helper and retry alike (`app.js:2049`, `2675`); I saw no place where a provider path removes them (and the opposite problem, PV-1, is the one that exists).
+
+Fix (all four parts; the first two are the ones that matter):
+a. **Build the mode text from the tools actually offered.** One function `modeText({ workMode, permissionMode, workspace })` that mentions `run_command` only if `run_command` is in `toolDefinitions`. In Plan mode (Code or after a grant) it says: "You are in Plan mode: you cannot run commands or change files. Write the commands you would run as a plan. Never ask the person to run them in a terminal. If they want them run, call request_capability with leave_plan_mode." In Code without a workspace it uses the Chat text.
+b. **A new capability `leave_plan_mode` (HIGH, SEC: a permission control).** A card "Switch to Ask mode and run these now?". The answer must come only from the window (the capability answer route is already window-only, `windowOnly.js` table); on yes the server sets this chat's `permissionMode` to `ask` (never `auto`), adds the run tools, and tells the model so. The model can never change the mode itself (that stays window-only, W5-7). I review this part.
+c. **A server guard on `ask_user`.** If an `ask_user` question or choices ask the person to run commands, paste output, or "run these in PowerShell/terminal/cmd" (a short pattern list, English only), answer the model without showing a card: "Do not ask the person to run commands. If you have run_command, use it; if not, call request_capability (code_mode, or leave_plan_mode in Plan mode)." Count refusals; after three, show the card (a real choice may look like this). Same idea as W6-3's nudge, kept narrow.
+d. **Say it once to the person** when a Code chat has no usable folder: a one-line notice in the chat ("No folder is chosen, so Bunny cannot run commands yet: choose one") with the folder picker, instead of relying on the model.
+Tests (use the scripted fake provider, PV-3; `test/ask-dont-stop.test.js` is the pattern):
+- `W4-14-a`: Code chat, Plan mode: the system text has no "run_command" promise, `toolDefinitions` has no `run_command`, and the text mentions `leave_plan_mode`.
+- `W4-14-b`: scripted model calls `request_capability leave_plan_mode`; the card is sent; answering yes **only through the window route** (token-only request gets 403) sets the session's mode to `ask` and the next request contains `run_command`; answering through plain HTTP does not.
+- `W4-14-c`: scripted model calls `ask_user` with "Can you run these commands in PowerShell for me?": no `question` event is sent and the model's tool message tells it to use `request_capability`; the fourth identical ask does show a card.
+- `W4-14-d`: Chat mode: the same scripted `ask_user` gets the same refusal; the scripted follow-up `request_capability code_mode` sends the capability card (with `hasFolder` false when there is no folder).
+- `W4-14-e`: Code chat whose folder does not exist: the prompt contains no promise of `run_command`, and the notice with the picker is sent.
+
 # Order for Builder B
 
 1. Test support first: PV-3 (scripted tool calls in the fake provider) and the fake MCP servers (HTTP with sessions, SSE, paging; stdio with instructions). Every test above depends on them.
-2. The ones that stop a chat entirely: R-3, R-4, PV-1, PV-2.
+2. The ones that stop a chat entirely or send the person to a terminal: R-3, R-4, PV-1, PV-2, W4-14.
 3. The ones that make a kind "not work": S-1, S-2, D-1, R-2, R-1 (with W3-6), P-1, P-3, L-1.
 4. The rest, M then L.
 SEC items (R-1, L-4, P-6): Security reviews the design before the build.
@@ -131,6 +155,7 @@ HIGH here means: touches credentials, a permission or window-only surface, the g
 | W4-11 fixes R-1, L-4, P-6 | **HIGH** (those three) | credentials and an auto-enabled remote address; the rest of W4-11 is MEDIUM |
 | W4-8 quick-ask bar | **HIGH** | a global shortcut, a new window with IPC in the main process, sends text to the model from outside the app window |
 | G-1/K-1 follow-ups: the `heads/main` push spelling, allow-only `gh auth`, landing the kit | **HIGH** | the guard |
+| W4-14 leave_plan_mode capability (new) | **HIGH** | a permission control: only the window may answer, only to Ask, never Auto |
 | W4-12 "Bunny asked" card cannot be answered | **HIGH to check** | the card posts to `/api/sessions/:id/question/:id`, which W5-7 made window-only (`windowOnly.js`); a broken answer path may be the window-only channel, not the card. Review before changing the route |
 | W4-10 plugin uninstall | MEDIUM | deletes through window-only routes; P-5 shares the code |
 | W4-9 fallback timeout setting | MEDIUM | a setting; keep it out of the window-only list only if it cannot widen what Bunny may do (it cannot) |
