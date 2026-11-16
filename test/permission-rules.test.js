@@ -144,7 +144,7 @@ test('review: grouping, script blocks, carriage returns and control characters a
   assert.equal(checkCommand(rules, 'echo (git push origin x)')?.effect, 'ask');
   assert.equal(checkCommand(rules, '& { git push origin x }')?.effect, 'ask');
   assert.equal(checkCommand(rules, 'echo hi rm -rf x')?.effect, 'deny');
-  assert.equal(checkCommand(rules, 'npm test --grep "a (b)"')?.effect, 'allow', 'parentheses inside quotes are text');
+  assert.equal(checkCommand(rules, 'npm test --grep "a (b)"'), null, 'parentheses are doubt, and doubt is a question (the quote-blind reading cuts there)');
 });
 
 test('review: a path is judged as typed, collapsed, and as the real file; an Allow needs every spelling allowed', () => {
@@ -173,4 +173,55 @@ test('W2-7b: Windows spellings of a denied path (stream suffix, trailing dot or 
   for (const p of ['secrets/key.txt::$DATA', 'secrets/key.txt.', 'secrets/key.txt ', 'secrets./key.txt', 'secrets \\key.txt', 'docs/../secrets/key.txt:stream']) {
     assert.equal(checkToolCall(rules, 'write_file', { path: p })?.effect, 'deny', p);
   }
+});
+
+// ---- W27-1 / W27-2 (Tech Lead 8f3a7b6, Security 1c72e42): the command is PowerShell, not bash
+
+test('W27-1: an Allow does not cover a second command hidden behind PowerShell quoting (Tech Lead and Security strings)', () => {
+  const rules = [cmd('allow', 'npm test*'), cmd('allow', 'echo*')];
+  for (const sneaky of [
+    'npm test "C:\\x\\" ; Remove-Item -Recurse foo',
+    'npm test \\; Remove-Item x', 'npm test \\| Remove-Item x', 'npm test \\\nRemove-Item x',
+    'echo "x\\" ; Remove-Item y ; echo "', 'echo "x\\" | Remove-Item y ; echo "',
+    'npm test `" ; Remove-Item y ; "', 'npm test -- --a="b`" ; Remove-Item y ; "', 'echo "a""b" ; Remove-Item y', "echo 'it''s' ; Remove-Item y",
+  ]) assert.notEqual(checkCommand(rules, sneaky)?.effect, 'allow', JSON.stringify(sneaky));
+});
+
+test('W27-1: a Deny sees the hidden command whichever way the quotes are read', () => {
+  const rules = [cmd('deny', 'Remove-Item*')];
+  for (const sneaky of [
+    'npm test "C:\\x\\" ; Remove-Item -Recurse foo', 'npm test \\; Remove-Item x', 'npm test \\| Remove-Item x', 'npm test \\\nRemove-Item x',
+    'echo "x\\" ; Remove-Item y ; echo "', 'npm test `" ; Remove-Item y ; "', "echo 'it''s' ; Remove-Item y",
+  ]) assert.equal(checkCommand(rules, sneaky)?.effect, 'deny', JSON.stringify(sneaky));
+});
+
+test('W27-2: names are normalised before a Deny or Ask is matched (aliases, quoted or backtick names, call operators, .exe, git options)', () => {
+  const deny = [cmd('deny', 'Remove-Item*'), cmd('deny', 'git push*')];
+  for (const c of [
+    'rm -r x', 'ri -r x', 'del x', 'erase x', 'rd x', 'rmdir x', 'RM x', 'Remove-Item x', 'remove-item x', '& Remove-Item x', '& "Remove-Item" x', '. Remove-Item x', '"Remove-Item" x', "'Remove-Item' x",
+    'Re`move-Item x', 'Remove-Item`  x', 'Microsoft.PowerShell.Management\\Remove-Item x', 'Remove-Item.exe x', 'Get-ChildItem | Remove-Item', 'gci | ri', 'ls x | rm',
+    'git push', 'git  push', 'git -C . push', 'git -c a=b push', 'git --no-pager push', 'git -P push', 'git.exe push', '"git" push', 'git `push', 'g`it push', 'GIT_X=1 git push', '& git push',
+    'git -C "a b" -c x=y -P push origin main',
+  ]) assert.equal(checkCommand(deny, c)?.effect, 'deny', c);
+  assert.equal(checkCommand(deny, 'git status'), null);
+  assert.equal(checkCommand(deny, 'git -C . status'), null);
+});
+
+test('W27-2: a wrapper (cmd /c, powershell -Command, iex, & $x) asks whenever a Deny or Ask rule exists, and its inner text is judged', () => {
+  const deny = [cmd('deny', 'Remove-Item*'), cmd('deny', 'git push*')];
+  for (const c of ['cmd /c del x', 'cmd /c "rd /s x"', 'powershell -c "Remove-Item x"', 'pwsh -Command "Remove-Item x"', 'iex "Remove-Item x"', 'Invoke-Expression "Remove-Item x"', 'cmd /c git push', 'powershell -c "git push"']) {
+    assert.equal(checkCommand(deny, c)?.effect, 'deny', `${c} (the inner command is denied)`);
+  }
+  for (const c of ['$c="Remove-Item"; & $c x', '& $x', '& (Get-Command Remove-Item) x', 'cmd /c echo hi', 'powershell -c "echo hi"', 'bash -c "echo hi"', 'iex $y', 'start Remove-Item', '. $profile']) {
+    const v = checkCommand(deny, c);
+    assert.ok(v?.effect === 'ask' || v?.effect === 'deny', `${c} -> ${v?.effect}`);
+  }
+  assert.match(checkCommand([cmd('ask', 'git push*')], 'cmd /c echo hi').rule.pattern, /wrapper/);
+  assert.equal(checkCommand([cmd('allow', 'npm test*')], 'cmd /c echo hi'), null, 'with only Allow rules a wrapper is not special (and not allowed)');
+});
+
+test('W27-2: the Remove-Item starter matches the flag anywhere in the command', () => {
+  const deny = [cmd('deny', 'Remove-Item*-r*')];
+  for (const c of ['Remove-Item -Recurse build', 'Remove-Item build -Recurse', 'Remove-Item build -r -Force', 'rm build -Rec', 'ri -Recurse x']) assert.equal(checkCommand(deny, c)?.effect, 'deny', c);
+  assert.equal(checkCommand(deny, 'Remove-Item build/file.txt'), null);
 });

@@ -13,6 +13,7 @@
  * command does.
  */
 import { posix } from 'node:path';
+import { analyseCommand, splitPowerShell } from './commandSplit.js';
 import { globMatcher } from './glob.js';
 
 export const MAX_RULES = 200;
@@ -77,69 +78,41 @@ function wildcard(pattern, text) {
   return p === pat.length;
 }
 
-/** The command cut into simple commands. `unsafe` = it has a command substitution or a redirection to a file. */
+/** The command cut into simple commands (PowerShell quoting). `unsafe` = grouping, a redirection to a file, a substitution or a control character. */
 export function commandParts(command) {
-  const src = String(command ?? '');
-  const parts = [];
-  const inner = [];
-  let cur = '';
-  let quote = null;
-  let unsafe = false;
-  const flush = () => { const t = cur.replace(/\s+/g, ' ').trim(); if (t) parts.push(t); cur = ''; };
-  for (let i = 0; i < src.length; i += 1) {
-    const c = src[i];
-    if (quote) {
-      if (c === '\\' && quote === '"' && i + 1 < src.length) { cur += c + src[i + 1]; i += 1; continue; }
-      if (c === quote) quote = null;
-      if (quote === '"' && (c === '`' || (c === '$' && src[i + 1] === '('))) unsafe = true;
-      cur += c;
-      continue;
-    }
-    if (c === '\\' && i + 1 < src.length) { cur += c + src[i + 1]; i += 1; continue; }
-    if (c === '"' || c === "'") { quote = c; cur += c; continue; }
-    if (c === '`' || (c === '$' && src[i + 1] === '(') || ((c === '<' || c === '>') && src[i + 1] === '(')) { unsafe = true; cur += c; continue; }
-    if (c === '>' || c === '<') {
-      // 2>&1 and >&2 are plumbing, not a file; anything else that redirects counts as a write
-      if (c === '>' && (src[i + 1] === '&' || /\d$/.test(cur) && src[i + 1] === '&')) { cur += c; continue; }
-      if (c === '>') unsafe = true;
-      cur += c;
-      continue;
-    }
-    // grouping, script blocks, a carriage return, Unicode line breaks and control characters: other shells read these as more commands,
-    // so they separate parts (deny and ask see each) and keep an allow rule from applying
-    if (c === '(' || c === ')' || c === '{' || c === '}' || c === '\r' || c === '\u2028' || c === '\u2029' || c === '\u0085' || (c < ' ' && c !== '\t' && c !== '\n')) { unsafe = true; flush(); continue; }
-    if (c === ';' || c === '\n' || c === '|' || c === '&') {
-      if (c === '&' && (src[i - 1] === '>' || src[i + 1] === '>')) { cur += c; continue; } // 2>&1, &>
-      if ((c === '|' || c === '&') && src[i + 1] === c) i += 1;
-      flush();
-      continue;
-    }
-    cur += c;
-  }
-  flush();
-  // the text inside $( ) and `...` is judged too, for deny and ask rules
-  for (const m of src.matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)) inner.push(...commandParts(m[1] ?? m[2]).parts);
-  return { parts, inner, unsafe, whole: src.replace(/\s+/g, ' ').trim() };
+  const { parts, unsafe } = splitPowerShell(String(command ?? ''));
+  return { parts, inner: [], unsafe, whole: String(command ?? '').replace(/\s+/g, ' ').trim() };
 }
 
-/** A rule's verdict on a command: { effect, rule } or null. Deny beats ask beats allow. */
+const WRAPPER_NOTE = 'a wrapper (cmd /c, powershell -Command, iex, & $x) can hide what it runs';
+
+/**
+ * A rule's verdict on a command: { effect, rule } or null. Deny beats ask beats allow.
+ * Deny and Ask are matched against every spelling of every part, read three ways (see commandSplit.js). An Allow applies only when
+ * every part of all three readings is covered and nothing in the line is unsafe. A wrapper (cmd /c, powershell -Command, iex, & $x)
+ * asks whenever any Deny or Ask rule exists, because what it runs cannot be read.
+ */
 export function checkCommand(rules, command) {
   const list = rules.filter((r) => r.kind === 'command');
   if (!list.length) return null;
-  const { parts, inner, unsafe, whole } = commandParts(command);
-  const texts = [...new Set([whole, ...parts, ...inner])].filter(Boolean);
+  const analysis = analyseCommand(command);
   for (const effect of ['deny', 'ask']) {
-    for (const r of list) if (r.effect === effect && texts.some((t) => wildcard(r.pattern, t))) return { effect, rule: r };
+    for (const r of list) if (r.effect === effect && analysis.texts.some((t) => wildcard(r.pattern, t))) return { effect, rule: r };
   }
+  const guard = list.find((r) => r.effect === 'deny' || r.effect === 'ask');
+  if (analysis.wrapper && guard) return { effect: 'ask', rule: { pattern: WRAPPER_NOTE, scope: guard.scope ?? 'All folders', effect: 'ask' } };
   const allows = list.filter((r) => r.effect === 'allow');
-  if (!allows.length || unsafe || !parts.length) return null;
-  const covering = [];
-  for (const part of parts) {
-    const r = allows.find((a) => wildcard(a.pattern, part));
-    if (!r) return null;
-    covering.push(r);
+  if (!allows.length || analysis.unsafe) return null;
+  let first = null;
+  for (const reading of analysis.readings) {
+    if (!reading.length) return null;
+    for (const part of reading) {
+      const r = allows.find((x) => wildcard(x.pattern, part));
+      if (!r) return null;
+      first ??= r;
+    }
   }
-  return { effect: 'allow', rule: covering[0] };
+  return { effect: 'allow', rule: first };
 }
 
 // ---- paths
