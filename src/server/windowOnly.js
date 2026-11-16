@@ -14,7 +14,7 @@
  */
 
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens'];
 
 /** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode'];
