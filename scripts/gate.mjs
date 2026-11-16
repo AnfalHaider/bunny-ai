@@ -52,6 +52,8 @@ function secretScan() {
 
 console.log(`gate @ ${spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim()}${quick ? ' (quick: no end-to-end, not valid for a push)' : ''}`);
 step('conflict markers', 'git', ['grep', '-nE', '^(<<<<<<<|>>>>>>>)( |$)', '--', '.', ':!node_modules'], { ok: (r) => r.status === 1, tail: 10 });
+// S-1: the request guard has one off switch, for tests. It must never be set in code that ships.
+step('request guard stays on', 'git', ['grep', '-nE', 'localGuard\\s*:\\s*false', '--', 'src', 'electron', 'scripts', 'e2e'], { ok: (r) => r.status === 1, tail: 4 });
 step('unit tests', npm, ['test', '--silent'], { tail: 8 });
 if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });

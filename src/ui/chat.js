@@ -20,6 +20,8 @@ import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument } from './artifact-content.js';
 import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
+import { initWorkPanes } from './work-panes.js';
+import { reachable } from './browser-pane.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -256,9 +258,10 @@ function renderComposerHeader() {
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
   $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
   if (branchText) branchText.textContent = branch ?? say('composer.noBranch');
-  if (permMode) permMode.value = state.session?.permissionMode ?? state.settings?.defaultPermissionMode ?? 'ask';
+  // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
+  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
-  if (effortLevel) effortLevel.value = state.session?.effort ?? state.settings?.defaultEffort ?? 'medium';
+  if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
     const modelAbilities = ab ? ab.abilities : [];
@@ -763,7 +766,7 @@ function renderSessionMenu(s) {
   };
 
   menu.append(item('Rename', async () => {
-    const next = window.prompt('Rename chat', s.title);
+    const next = await askText({ title: 'Rename chat', value: s.title, label: 'Chat name', action: 'Rename' });
     if (next === null) return;
     await sendJSON(`/api/sessions/${s.id}`, 'PATCH', { title: next });
     await loadSessions();
@@ -910,8 +913,104 @@ function paintMessages() {
   $('main')?.classList.toggle('is-empty', empty);
   if (empty) paintGreeting();
   renderTitle();
-  for (const m of state.messages) host.append(renderMessage(m));
+  // D-2: consecutive tool steps between two pieces of narration are ONE group line, collapsed once finished.
+  let run = [];
+  const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
+  const groupable = (m) => m.kind === 'tool_call' && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  state.messages.forEach((m, index) => {
+    const el = renderMessage(m);
+    if (!groupable(m)) { flushRun(); host.append(el); return; }
+    if (m.note) flushRun(); // narration starts a new group
+    run.push({ m, el, last: index === state.messages.length - 1 });
+  });
+  flushRun();
+  paintQueued(host);
   if (state.messages.length) host.lastElementChild?.scrollIntoView({ block: 'end' });
+}
+
+// ---------------------------------------------------------------------------
+// D-2: tool steps as one line per run of steps
+
+const STEP_KINDS = {
+  read: { ok: ['Read a file', 'Read {n} files'], tried: ['tried to read a file', 'tried to read {n} files'], other: 'tried to read another' },
+  write: { ok: ['Wrote a file', 'Wrote {n} files'], tried: ['tried to write a file', 'tried to write {n} files'], other: 'tried to write another' },
+  edit: { ok: ['Edited a file', 'Edited {n} files'], tried: ['tried to edit a file', 'tried to edit {n} files'], other: 'tried to edit another' },
+  run: { ok: ['Ran a command', 'Ran {n} commands'], tried: ['tried to run a command', 'tried to run {n} commands'], other: 'tried to run another' },
+  search: { ok: ['Searched for a word', 'Searched {n} times'], tried: ['tried to search', 'tried to search {n} times'], other: 'tried to search again' },
+  list: { ok: ['Listed a folder', 'Listed {n} folders'], tried: ['tried to list a folder', 'tried to list {n} folders'], other: 'tried to list another' },
+  other: { ok: ['Used a tool', 'Used {n} tools'], tried: ['tried to use a tool', 'tried to use {n} tools'], other: 'tried to use another' },
+};
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+
+/** What kind of step is "Read src/app.js" or "Run npm test": by its first word, never the raw tool id. */
+function stepKind(tool) {
+  const verb = String(tool ?? '').replace(/^.* › /, '').trim().split(/\s+/)[0].toLowerCase();
+  if (/^(read|open|show|get|inspect|view)$/.test(verb)) return 'read';
+  if (/^(write|create|make|save)$/.test(verb)) return 'write';
+  if (/^(edit|update|replace|rename|delete)$/.test(verb)) return 'edit';
+  if (/^(run|start|stop|install|build|test|execute)$/.test(verb)) return 'run';
+  if (/^(search|find|grep|look)$/.test(verb)) return 'search';
+  if (/^list$/.test(verb)) return 'list';
+  return 'other';
+}
+
+/** "Read 3 files, tried to read another", in the order the steps ran, numbers under ten in words. */
+function summariseSteps(steps) {
+  const parts = [];
+  for (const s of steps) {
+    const failed = s.status === 'failed' || s.status === 'denied';
+    const kind = stepKind(s.tool);
+    const part = parts.find((p) => p.kind === kind && p.failed === failed);
+    if (part) part.n += 1; else parts.push({ kind, failed, n: 1 });
+  }
+  const text = parts.map((p, i) => {
+    const t = STEP_KINDS[p.kind];
+    if (p.failed && p.n === 1 && parts.some((q) => q.kind === p.kind && !q.failed)) return t.other;
+    const [one, many] = p.failed ? t.tried : t.ok;
+    const n = p.n < 10 ? NUMBER_WORDS[p.n] : String(p.n);
+    const phrase = p.n === 1 ? one : many.replace('{n}', n);
+    return i === 0 ? phrase : phrase.charAt(0).toLowerCase() + phrase.slice(1); // only the first part starts a sentence
+  }).join(', ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Show the Files pane with this file open. */
+function openInFilesPane(path) {
+  document.querySelector('[data-view="file"]')?.click();
+  state.workPanes?.openFile(path.replace(/^["']|["']$/g, ''));
+}
+
+function chevron() { return element('span', { className: 'step-chev', 'aria-hidden': 'true' }); }
+
+/** One collapsed line for a run of steps; opening it shows one sub-row per step, each opening to its detail. */
+function buildToolGroup(run) {
+  const steps = run.map((r) => r.m);
+  const failedCount = steps.filter((s) => s.status === 'failed' || s.status === 'denied').length;
+  const last = run.at(-1);
+  // A failed group stays collapsed, except the last failed step of a reply that ended on it.
+  const openLast = last.last && last.m.status === 'failed';
+  const group = element('div', { className: `tool-group${openLast ? ' is-open' : ''}` });
+  const line = element('button', { className: 'tool-group-line', type: 'button', 'aria-expanded': String(Boolean(openLast)) });
+  line.append(chevron(), element('span', { className: 'tool-group-summary', textContent: summariseSteps(steps) }));
+  const meta = failedCount
+    ? element('span', { className: 'tool-group-meta is-failed', textContent: steps.length === 1 ? 'Failed' : `${failedCount} failed` })
+    : element('span', { className: 'tool-group-meta', textContent: steps.length === 1 ? '' : `${steps.length} steps` });
+  line.append(meta);
+  line.addEventListener('click', () => {
+    const open = !group.classList.contains('is-open');
+    group.classList.toggle('is-open', open);
+    line.setAttribute('aria-expanded', String(open));
+  });
+  const rows = element('div', { className: 'tool-group-rows' });
+  for (const r of run) rows.append(r.el);
+  group.append(line, rows);
+  // The narration that led into the first step stays visible above the line, whether or not the group is open.
+  const out = [];
+  const note = run[0].el.querySelector(':scope > .step-note');
+  if (note) out.push(note);
+  out.push(group);
+  if (openLast) last.el.querySelector('.tool-call')?.classList.add('is-open');
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -984,9 +1083,19 @@ function renderMessage(m) {
     if (m.note) wrap.append(stepNote(m.note, true));
     if (m.question) { wrap.append(answeredQuestionCard(m.question)); return wrap; }
     const tc = element('div', { className: 'tool-call' });
-    const header = element('div', { className: 'tool-call-header' });
-    header.append(element('span', { textContent: m.tool ?? 'tool' }));
-    if (m.status) header.append(element('span', { className: 'tag', textContent: m.status }));
+    const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
+    header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
+    const failedStep = m.status === 'failed' || m.status === 'denied';
+    if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
+    else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
+    // A read step opens that file in the Files pane.
+    const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
+    if (readPath && state.session?.folder && !failedStep) {
+      header.append(button('Open', { className: 'ghost small tool-call-open', onclick: (e) => { e.stopPropagation(); openInFilesPane(readPath); } }));
+    }
+    const toggle = () => { const open = tc.classList.toggle('is-open'); header.setAttribute('aria-expanded', String(open)); };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     tc.append(header);
     const body = element('div', { className: 'tool-call-body' });
     body.textContent = m.content ?? '';
@@ -995,6 +1104,13 @@ function renderMessage(m) {
       const res = element('div', { className: 'tool-call-result' });
       res.textContent = `→ ${String(m.result).slice(0, resultLimit())}`;
       tc.append(res);
+    }
+    if (failedStep) {
+      // The exact command and the error, in one click.
+      const copy = button('Copy', { className: 'ghost small tool-call-copy' });
+      copy.addEventListener('click', async () => { flash(copy, (await copyText(`${m.content ?? ''}
+${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
+      tc.append(copy);
     }
     wrap.append(tc);
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
@@ -1007,7 +1123,22 @@ function renderMessage(m) {
   // A reply that failed: why, kept in the chat.
   if (m.kind === 'error') {
     wrap.classList.add('error-note');
-    wrap.append(element('p', { className: 'error-note-text', textContent: m.content ?? 'The reply failed.' }));
+    // One line that opens to the provider's own words, with a way on: Try again, or choose another model.
+    const group = element('div', { className: 'tool-group' });
+    const line = element('button', { className: 'tool-group-line', type: 'button', 'aria-expanded': 'false' });
+    line.append(chevron(), element('span', { className: 'tool-group-summary', textContent: 'The reply failed' }), element('span', { className: 'tool-group-meta is-failed', textContent: 'Failed' }));
+    line.addEventListener('click', () => { const open = !group.classList.contains('is-open'); group.classList.toggle('is-open', open); line.setAttribute('aria-expanded', String(open)); });
+    const rows = element('div', { className: 'tool-group-rows error-note-detail' });
+    rows.append(element('p', { className: 'error-note-text', textContent: m.content ?? 'The reply failed.' }));
+    const copyErr = button('Copy', { className: 'ghost small' });
+    copyErr.addEventListener('click', async () => { flash(copyErr, (await copyText(m.content ?? '')) ? 'Copied' : 'Copy failed'); });
+    const again = button('Try again', { className: 'primary small' });
+    again.addEventListener('click', () => retry(m)); // drops this note, then asks again with the same history
+    const another = button('Choose another model', { className: 'ghost small' });
+    another.addEventListener('click', () => $('picker-button')?.click());
+    rows.append(element('div', { className: 'error-note-actions' }, copyErr, again, another));
+    group.append(line, rows);
+    wrap.append(group);
     return wrap;
   }
 
@@ -1038,8 +1169,8 @@ function renderMessage(m) {
     const job = JOBS[m.job]?.label ?? 'Chat';
     wrap.append(element('div', { className: 'msg-meta auto-meta',
       textContent: m.auto
-        ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${say('model.didNotAnswer', { model: m.fellBackFrom })})` : ''}`
-        : say('model.answeredInstead', { model: m.model, from: m.fellBackFrom }) }));
+        ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} ${reasonPhrase(m.fellBackReason)}${alsoFailed(m.fellBackTries)})` : ''}`
+        : `${say('model.answeredInstead', { model: m.model, from: m.fellBackFrom, reason: reasonPhrase(m.fellBackReason) })}${alsoFailed(m.fellBackTries)}` }));
   }
   if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking));
   const body = element('div', { className: 'body' });
@@ -1054,6 +1185,10 @@ function renderMessage(m) {
     if (m.kind === 'summary') meta.append(element('span', { className: 'hint', textContent: ' The messages above stay here; to save room, Bunny now reads this summary instead of them.' }));
     if (m.kind === 'partial') meta.append(element('span', { className: 'hint', textContent: ' Send "continue" and Bunny picks up where it stopped.' }));
     wrap.append(meta);
+    if (m.kind === 'partial') {
+      const report = stoppedReport(m);
+      if (report) wrap.append(report);
+    }
   }
 
   // The files this reply changed can be put back.
@@ -1281,6 +1416,7 @@ function renderRail() {
     className: project ? 'rail-value' : 'rail-empty',
     textContent: project || say('rail.noProject'),
   }));
+  renderRailDetails();
 
   const connectors = $('rail-connectors');
   connectors.replaceChildren();
@@ -1313,15 +1449,65 @@ function renderRail() {
   }
 }
 
+/** The Session pane's facts: where, which model and why, permissions, context and cost, running programs. Only what is known. */
+function renderRailDetails() {
+  const put = (id, text) => { const node = $(id); if (node) node.textContent = text; };
+  const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
+  const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
+  put('rail-folder', folder ? folder.split(/[\\/]/).filter(Boolean).pop() : 'No folder');
+  $('rail-folder')?.setAttribute('title', folder ?? '');
+  put('rail-branch', branch ?? (folder ? 'Not a git folder' : 'No branch'));
+  const picked = state.selected;
+  put('rail-model', picked ? picked.model : 'No model chosen');
+  const autoPick = state.modelAuto && state.autoPick;
+  const why = $('rail-why-row');
+  if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}`); }
+  const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
+  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  put('rail-mode', modes[mode] ?? mode);
+  put('rail-effort', ((state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium').replace(/^./, (c) => c.toUpperCase()));
+  const ctx = state.session?.context;
+  put('rail-tokens', ctx ? `${ctx.used.toLocaleString()} of ${ctx.limit.toLocaleString()}` : 'none yet');
+  put('rail-messages', String(state.session?.messages?.length ?? state.messages.filter((m) => !m.local).length));
+  // programs the AI left running (from the same list the Terminal pane uses)
+  const running = $('rail-running');
+  if (running && state.sessionId) {
+    getJSON(`/api/processes?sessionId=${encodeURIComponent(state.sessionId)}`).then((list) => {
+      running.replaceChildren();
+      const live = list.filter((p) => p.running);
+      if (!live.length) { running.append(element('div', { className: 'rail-empty', textContent: 'Nothing running.' })); return; }
+      for (const p of live) {
+        const row = element('div', { className: 'rail-row' }, element('span', { className: 'dot', role: 'img', 'aria-label': 'Running' }), element('span', { className: 'rail-value', textContent: p.command }));
+        row.append(button('Stop', { className: 'ghost small', onclick: async () => { await sendJSON(`/api/processes/${p.id}/stop`, 'POST'); renderRailDetails(); } }));
+        running.append(row);
+      }
+    }).catch(() => {});
+  }
+}
+
 // ---------------------------------------------------------------------------
 // streaming
 
 function setStreaming(on) {
   $('send').disabled = on;
   $('stop').hidden = !on;
-  $('status').textContent = on ? 'Streaming…' : '';
+  // While the next model starts after a failure, the calm "X is slow. Trying Y…" line stays instead of "Streaming…".
+  $('status').textContent = on ? (state.tryingNote || 'Streaming…') : '';
+  if (!on) state.tryingNote = null;
   renderSidebar();
   renderRail();
+}
+
+/** "did not answer in time", "was busy (rate limit or overloaded)"...: why a model was left. A timeout is never "busy". */
+function reasonPhrase(reason) {
+  const key = `model.reason.${['timeout', 'rate-limit', 'unavailable', 'empty', 'refused', 'unreachable', 'key'].includes(reason) ? reason : 'other'}`;
+  return say(key);
+}
+
+/** " (1 other model also failed)" when more than one model failed before the answer. */
+function alsoFailed(tries) {
+  const others = (Number(tries) || 0) - 1;
+  return others > 0 ? ` (${say('model.alsoFailed', { n: others, models: others === 1 ? 'model' : 'models' })})` : '';
 }
 
 function flashStatus(text, ms = 3000) {
@@ -1339,7 +1525,10 @@ function flashStatus(text, ms = 3000) {
  * @param {{path: string, payload: object}} opts
  * @returns {Promise<{assembled: string, meter: object|null}>}
  */
-async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
+async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError = false }) {
+  // quietError: the caller decides whether and how to show a failure (the fallback loop shows only the last one).
+  let errorInfo = null;
+  const showError = (text) => { errorInfo = { ...(errorInfo ?? {}), message: text }; if (!quietError) $('error').textContent = text; };
   const controller = new AbortController();
   state.streaming = controller;
   setStreaming(true);
@@ -1389,7 +1578,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
       renderContext(info.after);
     },
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; $('error').textContent = err.message ?? 'The request failed.'; },
+    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       flushNote();
       showLiveTool(bodyEl, info);
@@ -1423,14 +1612,14 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
       aborted = true;
     } else {
       errorCode = 'network';
-      $('error').textContent = err.message;
+      showError(err.message);
     }
   } finally {
     // The connection ended with neither an answer nor an error: say so, so it is not just silence
     // (and Auto can try the next model).
     if (!gotDone && !errorCode && !aborted && !controller.signal.aborted) {
       errorCode = 'chat.noReply';
-      $('error').textContent = 'The reply stopped without finishing. Send "continue" to pick up where it stopped.';
+      showError('The reply stopped without finishing. Send "continue" to pick up where it stopped.');
     }
     working.stop();
     state.streaming = null;
@@ -1438,7 +1627,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting' }) {
     bodyEl.classList.remove('is-streaming');
   }
 
-  return { assembled, meter, aborted, errorCode };
+  return { assembled, meter, aborted, errorCode, errorInfo };
 }
 
 /** Tool calls some models write out as text: they are run, so the markup is not shown. */
@@ -1631,6 +1820,9 @@ function showLiveTasks(bodyEl, tasks) {
 }
 /** The Tasks pane shows the latest plan in this chat. */
 function renderTasksPane(tasks) {
+  // The Plan pane shows the same plan the Tasks pane does (it had nothing filling it: Q2-7).
+  const plan = $('plan-content');
+  if (plan) plan.replaceChildren(tasks?.length ? taskList(tasks) : element('div', { className: 'pane-empty' }, element('span', { textContent: 'No plan yet.' })));
   const host = $('tasks-content');
   if (!host) return;
   if (!tasks?.length) {
@@ -1639,6 +1831,42 @@ function renderTasksPane(tasks) {
   }
   const done = tasks.filter((t) => t.done).length;
   host.replaceChildren(element('p', { className: 'hint tasks-progress', textContent: say('tasks.progress', { done, total: tasks.length }) }), taskList(tasks));
+}
+
+/**
+ * A stop is a report, not silence: how many steps ran, what was done, and a way on.
+ * Shown only when steps ran before the stop (a stopped plain answer needs no report).
+ */
+function stoppedReport(m) {
+  const at = state.messages.indexOf(m);
+  const steps = [];
+  for (let i = at - 1; i >= 0 && state.messages[i].role !== 'user'; i -= 1) {
+    if (state.messages[i].kind === 'tool_call' && !state.messages[i].question) steps.unshift(state.messages[i]);
+  }
+  if (!steps.length) return null;
+  const count = steps.length < 10 ? NUMBER_WORDS[steps.length] : String(steps.length);
+  const box = element('div', { className: 'stopped-report', role: 'status' });
+  box.append(
+    element('h4', { textContent: 'Stopped' }),
+    element('p', { textContent: `You stopped Bunny after ${count} ${steps.length === 1 ? 'step' : 'steps'}.` }),
+    element('p', { className: 'stopped-done-label', textContent: 'Done:' }),
+  );
+  const done = element('ul', { className: 'stopped-done' });
+  for (const part of summariseSteps(steps).split(', ')) done.append(element('li', { textContent: part.charAt(0).toUpperCase() + part.slice(1) }));
+  box.append(done);
+  const actions = element('div', { className: 'stopped-actions' });
+  actions.append(button('Continue', {
+    className: 'primary small',
+    onclick: () => { $('input').value = 'continue'; send(); },
+  }));
+  if (m.checkpoint?.files && !m.checkpoint.restored) {
+    actions.append(button('Undo these changes', {
+      className: 'ghost small',
+      onclick: () => box.closest('.msg')?.querySelector('.undo-bar button')?.click(),
+    }));
+  }
+  box.append(actions);
+  return box;
 }
 
 /** "Undo file changes": put back every file this reply wrote or edited. */
@@ -1854,23 +2082,58 @@ async function streamReply({ retry = true } = {}) {
   return assembled;
 }
 
+/**
+ * A one-line question in an in-app dialog. The desktop app (Electron) has no window.prompt, so nothing here uses it.
+ * Resolves with the text, or null when the person cancels (Esc, Cancel, or a click outside).
+ */
+function askText({ title, value = '', label = title, action = 'OK' }) {
+  return new Promise((resolve) => {
+    const input = element('input', { className: 'input', type: 'text', value, 'aria-label': label, maxLength: 200 });
+    const cancel = element('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancel' });
+    const ok = element('button', { className: 'btn btn-primary', type: 'button', textContent: action });
+    const card = element('div', { className: 'palette modal ask-text', role: 'dialog', 'aria-label': title },
+      element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: title })),
+      element('div', { className: 'modal-body' }, input),
+      element('div', { className: 'modal-foot actions' }, element('span', { className: 'spacer' }), cancel, ok));
+    const backdrop = element('div', { className: 'palette-backdrop modal-backdrop', id: 'ask-text-backdrop' }, card);
+    const done = (result) => { backdrop.remove(); resolve(result); };
+    cancel.addEventListener('click', () => done(null));
+    ok.addEventListener('click', () => done(input.value.trim() ? input.value : null));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); ok.click(); } else if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    });
+    document.body.append(backdrop);
+    input.focus();
+    input.select();
+  });
+}
+
 async function refreshSession({ expectAssistant = false } = {}) {
   // A stopped reply is written by the server just after the browser gives up,
   // so poll briefly rather than read the transcript too early and lose it.
+  // "A reply has arrived" means MORE assistant messages than the last transcript this page read, not "any":
+  // in a chat that already has replies, any would stop the wait before the stopped reply is saved (Q2-19).
+  const assistants = (list) => list.filter((m) => m.role === 'assistant' && m.kind !== 'tool_call').length; // a tool step is not the reply (Q2-31)
+  const known = assistants(state.session?.messages ?? []);
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const session = await getJSON(`/api/sessions/${state.sessionId}`);
     state.session = session;
     state.messages = session.messages;
-    const hasReply = session.messages.some((m) => m.role === 'assistant');
+    const hasReply = assistants(session.messages) > known;
     if (!expectAssistant || hasReply) break;
     await new Promise((r) => setTimeout(r, 200));
   }
   paintMessages();
   renderContext(state.session.context);
+  if (state.sidePaneOpen) state.workPanes?.refresh();
 }
 
 async function openSession(id) {
+  state.workPanes?.reset();
+  cancelQueued({ silent: true, keepDraft: true }); // a message waiting for the network belongs to the chat it was typed in
   state.sessionId = id;
+  if (state.drafts?.has(id)) { $('input').value = state.drafts.get(id); state.drafts.delete(id); }
   state.incognito = false;
   renderMode();
   const session = await getJSON(`/api/sessions/${id}?seen=1`);
@@ -1896,10 +2159,14 @@ async function openSession(id) {
 // sending
 
 function startNewChat({ incognito = false } = {}) {
+  cancelQueued({ silent: true, keepDraft: true });
   state.sessionId = null;
+  if (state.drafts?.has('new')) { $('input').value = state.drafts.get('new'); state.drafts.delete('new'); }
   state.greeting = null; // a fresh chat gets a fresh greeting
   state.greetingSeed = 1 + Math.floor(Math.random() * 2147483645);
   state.session = null;
+  state.pendingMode = null;
+  state.pendingEffort = null;
   state.messages = [];
   state.incognito = incognito;
   history.replaceState(null, '', './index.html');
@@ -1920,11 +2187,110 @@ function renderMode() {
   host.hidden = !state.incognito;
 }
 
+// ---------------------------------------------------------------------------
+// T-3: a dead network is its own calm state. The window decides it once, from two signals that must agree:
+// the browser says it is offline AND a bare probe of a few neutral hosts (asked only now, after a failure or before
+// a send while the browser says offline) cannot reach any. Then no model is tried: the message waits, and goes
+// once when the network is back, unless the person cancelled it or typed something new.
+
+/** Both signals agree the network is down. */
+async function networkDown() {
+  if (navigator.onLine !== false) return false;
+  try {
+    const answer = await getJSON('/api/network'); // reaches this computer's own server even with the internet down
+    return answer?.online === false;
+  } catch {
+    return true; // this window cannot reach anything: that is offline too
+  }
+}
+
+/** A model served from this computer (a loopback address) still works offline. */
+function localModel() {
+  const local = new Set(state.providers.filter((p) => p.status === 'connected' && /^https?:[/][/](localhost|127[.]0[.]0[.]1|[[]::1[]])/i.test(p.baseUrl ?? '')).map((p) => p.id));
+  const m = state.models.find((x) => local.has(x.providerId));
+  return m ? { providerId: m.providerId, id: m.id, displayName: m.displayName ?? m.id } : null;
+}
+
+function setOfflineChip(on) { const chip = $('offline-chip'); if (chip) chip.hidden = !on; }
+
+function paintQueued(host) {
+  const q = state.queued;
+  if (!q) return;
+  if (q.mode !== 'retry') {
+    const bubble = element('div', { className: 'msg user is-waiting', id: 'queued-msg' });
+    bubble.append(element('div', { className: 'body', textContent: q.text }));
+    const row = element('div', { className: 'waiting-row' }, element('span', { textContent: say('offline.waiting') }),
+      button(say('offline.cancel'), { className: 'ghost small', onclick: () => cancelQueued() }));
+    bubble.append(row);
+    host.append(bubble);
+  }
+  host.append(element('div', { className: 'offline-line', role: 'status', textContent: q.note ?? say('offline.line') }));
+}
+
+function queueTurn(entry) {
+  state.queued = { ...entry, id: `q-${Date.now()}` };
+  setOfflineChip(true);
+  $('empty').hidden = true;
+  paintMessages();
+  watchNetwork();
+}
+
+function cancelQueued({ silent = false, keepDraft = false } = {}) {
+  if (!state.queued) return;
+  // Leaving the chat: the waiting text goes back to that chat's composer as a draft, never lost.
+  if (keepDraft && state.queued.mode !== 'retry' && state.queued.text) (state.drafts ??= new Map()).set(state.sessionId ?? 'new', state.queued.text);
+  state.queued = null;
+  clearTimeout(state.networkTimer);
+  setOfflineChip(false);
+  paintMessages();
+  if (!silent) flashStatus(say('offline.cancelled'), 6000);
+}
+
+/** Listen for the browser's `online` event and re-check every 10 seconds, easing to 30. */
+function watchNetwork() {
+  clearTimeout(state.networkTimer);
+  let wait = 10_000;
+  const tick = async () => {
+    if (!state.queued) return;
+    // The probe decides: it may succeed even when the browser's own flag is stuck on "offline".
+    const probed = await getJSON('/api/network').then((r) => r.online !== false).catch(() => false);
+    if (probed) { await resumeQueued(); return; }
+    wait = Math.min(30_000, wait + 5_000);
+    state.networkTimer = setTimeout(tick, wait);
+  };
+  state.networkTimer = setTimeout(tick, wait);
+}
+
+async function resumeQueued() {
+  const q = state.queued;
+  if (!q) return;
+  clearTimeout(state.networkTimer);
+  state.queued = null; // cleared BEFORE sending: one pending turn, sent once
+  setOfflineChip(false);
+  flashStatus(say('offline.back'), 6000);
+  paintMessages();
+  if (q.mode === 'retry') { await streamReply({ retry: true }); return; }
+  $('input').value = q.text;
+  state.pendingFiles = q.files ?? [];
+  renderPendingFiles();
+  await send();
+}
+
+window.addEventListener('online', async () => {
+  if (!state.queued) return;
+  flashStatus(say('offline.checking'), 10_000);
+  // The browser says it is back; the probe confirms before the waiting message goes (a cut-off or captive network stays "offline").
+  const online = await getJSON('/api/network').then((r) => r.online !== false).catch(() => true);
+  if (online) resumeQueued();
+});
+
 async function send() {
   const input = $('input');
   const text = input.value.trim();
   $('error').textContent = '';
   if (!text && !state.pendingFiles.length) return;
+  // Typing something new while a message waits for the network: the waiting one is cancelled, not sent later.
+  if (state.queued) cancelQueued(); // the waiting message is cancelled, not sent later (and the person is told)
 
   if (text.startsWith('/')) {
     const handled = await runCommand(text);
@@ -1939,6 +2305,20 @@ async function send() {
   const files = state.pendingFiles;
   state.pendingFiles = [];
   renderPendingFiles();
+
+  // Offline (both signals agree): no model is tried. A model on this computer still answers; otherwise the message waits.
+  let offlineLocal = null;
+  if (navigator.onLine === false && await networkDown()) {
+    offlineLocal = localModel();
+    // A local server that is not running (Ollama closed) is no help: the message waits instead of failing in red (Q2-30).
+    if (offlineLocal) {
+      const owner = state.providers.find((p) => p.id === offlineLocal.providerId);
+      if (!(await reachable(owner?.baseUrl ?? ''))) offlineLocal = null;
+    }
+    if (!offlineLocal) { queueTurn({ text, files }); return; }
+    flashStatus(say('offline.local', { m: offlineLocal.displayName }), 8000);
+    setOfflineChip(true);
+  } else setOfflineChip(false);
 
   if (state.incognito) {
     state.messages.push({ id: `local-u-${Date.now()}`, role: 'user', content: text, local: true, attachments: files });
@@ -1982,6 +2362,8 @@ async function send() {
     if (permission) await sessionSetting(session.id, 'permissionMode', permission);
     const effort = $('effort-level')?.value;
     if (effort) await sessionSetting(session.id, 'effort', effort);
+    state.pendingMode = null;
+    state.pendingEffort = null;
   }
 
   state.messages.push({ id: `pending-u-${Date.now()}`, role: 'user', content: text, local: true, attachments: files });
@@ -1990,12 +2372,13 @@ async function send() {
   const bodyEl = $('messages').lastElementChild?.querySelector('.body');
 
   const job = jobFor(text, files);
+  state.lastJob = job;
   const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
-  const candidates = state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed;
+  const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
-  const fallbackOn = !state.modelAuto && state.settings?.fallbackWhenBusy !== false;
+  const fallbackOn = !state.modelAuto && !offlineLocal && state.settings?.fallbackWhenBusy !== false;
   if (fallbackOn) {
     const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
     candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
@@ -2003,11 +2386,24 @@ async function send() {
   // Errors that are not the model's fault: another model would not help.
   const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
   let result = { meter: null, aborted: false };
-  let failed = null;
-  for (let i = 0; i < candidates.length; i += 1) {
-    const pick = candidates[i];
+  // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
+  // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
+  const MAX_ATTEMPTS = 3;
+  const queue = [...candidates];
+  const failures = []; // { name, providerId, reason }
+  const badProviders = new Set();
+  let attempt = 0;
+  let pick = null;
+  while (queue.length && attempt < MAX_ATTEMPTS) {
+    pick = queue.shift();
+    if (badProviders.has(pick.providerId) && queue.some((q) => !badProviders.has(q.providerId))) continue;
+    const i = attempt;
+    attempt += 1;
+    const stillToTry = () => queue.filter((q) => !badProviders.has(q.providerId)).length;
+    const failed = failures[0]?.name ?? null;
     $('error').textContent = '';
     result = await streamInto(bodyEl, {
+      quietError: true,
       path: `/api/sessions/${state.sessionId}/messages`,
       payload: {
         content: text,
@@ -2021,21 +2417,46 @@ async function send() {
         job,
         auto: Boolean(state.modelAuto),
         fellBackFrom: failed ?? undefined,
+        fellBackReason: failures[0]?.reason,
+        fellBackTries: failures.length || undefined,
+        attemptsLeft: Math.min(MAX_ATTEMPTS - attempt, stillToTry()),
       },
       mood: failed ? 'fallback' : 'waiting',
     });
     // Any failure of the model itself (busy, refused, empty, cut off mid-work, unreachable)
     // goes to the next model. What was already done is saved, so the next one carries on from there.
-    const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode);
-    if (!errored || result.aborted || i === candidates.length - 1) break;
-    failed = pick.displayName ?? pick.id;
-    flashStatus(say('model.fallback', { from: failed, to: candidates[i + 1].displayName ?? candidates[i + 1].id }), 6000);
-    bodyEl.textContent = '…';
+    const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode) && result.errorInfo?.scope !== 'other';
+    if (!errored || result.aborted) break;
+    const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
+    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
+    if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);
+    const next = queue.find((q) => !badProviders.has(q.providerId));
+    if (!next || attempt >= MAX_ATTEMPTS) break;
+    // A calm line while the next model starts: what happened, and who is trying now.
+    const live = say(`model.live.${reason}`) !== `model.live.${reason}` ? say(`model.live.${reason}`) : reasonPhrase(reason);
+    state.tryingNote = say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
+    flashStatus(state.tryingNote, 30000);
   }
   const { meter, aborted } = result;
+  // The reply failed because the network is down (both signals agree): not a model fault. Say so calmly,
+  // keep the turn, and send it once when the network is back. No red line.
+  if (!aborted && result.errorCode && navigator.onLine === false && await networkDown()) {
+    await refreshSession().catch(() => {});
+    $('error').textContent = '';
+    queueTurn({ mode: 'retry' });
+    return;
+  }
+  const finalFailure = Boolean(result.errorCode) && !aborted && failures.length > 0 && failures.length === attempt
+    ? (failures.length > 1
+      ? say('model.nothingAnswered', { detail: failures.map((f) => `${f.name} ${reasonPhrase(f.reason)}`).join('; ') })
+      : (result.errorInfo?.message ?? 'The request failed.'))
+    : (result.errorCode && !aborted ? (result.errorInfo?.message ?? 'The request failed.') : '');
 
   if (meter) renderContext(meter);
   await refreshSession({ expectAssistant: aborted });
+  // One line, not two: the server kept a note of the last failure, so the live line is shown only if it did not.
+  $('error').textContent = finalFailure && state.messages.at(-1)?.kind !== 'error' ? finalFailure : '';
+  $('status').textContent = '';
   await loadSessions();
   notifyReply();
   const moved = state.pendingNewChat;
@@ -2226,13 +2647,16 @@ async function compactChat() {
 
 async function exportChat() {
   if (!state.sessionId) { $('error').textContent = 'Start a chat before exporting.'; return; }
-  const link = element('a', {
-    href: `/api/sessions/${state.sessionId}/export?format=markdown`,
-    download: '',
-  });
+  // A plain download link cannot carry the page's token, so fetch the file and save it from memory.
+  const res = await fetch(`/api/sessions/${state.sessionId}/export?format=markdown`);
+  if (!res.ok) { $('error').textContent = 'Could not export this chat.'; return; }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? `${state.sessionId}.md`;
+  const href = URL.createObjectURL(await res.blob());
+  const link = element('a', { href, download: name });
   document.body.append(link);
   link.click();
   link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }
 
 // ---------------------------------------------------------------------------
@@ -2854,7 +3278,7 @@ function showSettingsSection(section) {
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     const on = b.dataset.section === section;
     b.classList.toggle('is-active', on);
-    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    if (on) { b.setAttribute('aria-current', 'page'); b.scrollIntoView?.({ inline: 'center', block: 'nearest' }); } else b.removeAttribute('aria-current');
   });
 }
 
@@ -3047,7 +3471,7 @@ async function runImport() {
 async function boot() {
   $('new-chat').addEventListener('click', () => startNewChat({ incognito: state.incognito }));
   $('send').addEventListener('click', send);
-  $('stop').addEventListener('click', () => state.streaming?.abort());
+  $('stop').addEventListener('click', () => { state.streaming?.abort(); cancelQueued(); });
 
   const input = $('input');
   input.addEventListener('keydown', (e) => {
@@ -3093,6 +3517,19 @@ async function boot() {
       if (!state.terminalId) await terminalStart();
       if (state.terminalId) await terminalWrite(state.terminalId, command + '\n');
     },
+  });
+  // The status text (Checking…, Back online. Sending…, X is slow. Trying Y…) also shows above the composer at phone width.
+  const statusEl = $('status');
+  if (statusEl && $('status-line')) {
+    const mirror = () => { $('status-line').textContent = statusEl.textContent; };
+    new MutationObserver(mirror).observe(statusEl, { childList: true, characterData: true, subtree: true });
+    mirror();
+  }
+  state.workPanes = initWorkPanes({
+    getSessionId: () => state.sessionId,
+    getPendingFolder: () => state.pendingFolder?.folder ?? null,
+    onChanged: () => refreshSession(),
+    copy: async (text) => { flashStatus((await copyText(text)) ? 'Path copied' : 'Could not copy'); },
   });
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -3295,11 +3732,13 @@ async function boot() {
 
   // ---- permission mode ----
   $('permission-mode')?.addEventListener('change', async (e) => {
+    if (!state.sessionId) { state.pendingMode = e.target.value; return; } // no session yet: kept until the first message
     await sessionSetting(state.sessionId, 'permissionMode', e.target.value);
   });
 
   // ---- effort level ----
   $('effort-level')?.addEventListener('change', async (e) => {
+    if (!state.sessionId) { state.pendingEffort = e.target.value; return; }
     await sessionSetting(state.sessionId, 'effort', e.target.value);
   });
 
@@ -3333,7 +3772,10 @@ async function boot() {
       const first = state.models[0];
       state.selected = { providerId: first.providerId, providerName: first.providerName, model: first.id };
     } else {
-      $('empty-text').innerHTML = 'No models yet. Add a provider in <a href="./providers.html">Providers</a>.';
+      // Nothing to pick yet: the one way forward is a button, not a line of small print.
+      const empty = $('empty-text');
+      empty.removeAttribute('data-i18n');
+      empty.replaceChildren(element('a', { className: 'primary empty-cta', href: './providers.html', textContent: say('chat.addProvider') }));
     }
   } catch (err) {
     $('error').textContent = err.message;

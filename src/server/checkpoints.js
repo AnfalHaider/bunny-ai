@@ -6,7 +6,7 @@
  * Undoing the reply puts every one of those files back. Changes made by commands
  * the model ran are not tracked: only write_file and edit_file are.
  */
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -54,6 +54,19 @@ export function createCheckpoints({ dir }) {
     try { return JSON.parse(await readFile(fileFor(sessionId, id), 'utf8')); } catch { return null; }
   }
 
+  /** Every checkpoint of a chat, oldest first (read-only: the Changes pane). */
+  async function list(sessionId) {
+    if (!safe(sessionId)) return [];
+    let names;
+    try { names = await readdir(join(dir, sessionId)); } catch { return []; }
+    const all = [];
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      try { all.push(JSON.parse(await readFile(join(dir, sessionId, name), 'utf8'))); } catch { /* skip a damaged one */ }
+    }
+    return all.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  }
+
   /** Put every file the reply changed back the way it was. */
   async function restore(sessionId, id) {
     const cp = await get(sessionId, id);
@@ -76,5 +89,5 @@ export function createCheckpoints({ dir }) {
     return { restored: done.length, skipped, files: done };
   }
 
-  return { begin, get, restore };
+  return { begin, get, restore, list };
 }

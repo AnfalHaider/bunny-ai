@@ -26,7 +26,7 @@ import { createArtifactStore } from './artifacts.js';
 import { normaliseAttachments, prepareAttachments, toModelMessage } from './attachments.js';
 import { parseImport } from './import.js';
 import { createUsageStore } from './usage.js';
-import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned } from './unavailable.js';
+import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned, failureKind } from './unavailable.js';
 import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
@@ -68,6 +68,9 @@ import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
+import { createRequestGuard, makeToken } from './requestGuard.js';
+import { probeNetwork } from './network.js';
+import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
 // The project root, found from this file rather than the working directory, so the
 // server also finds its UI when it runs inside the packaged desktop app.
@@ -152,9 +155,31 @@ export function stoppedReport(steps) {
 /**
  * @param {{ dataDir: string, fake?: boolean, secretStore?: any, probe?: any, discover?: any }} options
  */
-export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover } = {}) {
+export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
   await mkdir(dataDir, { recursive: true });
 
+  // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
+  // and is handed to the pages the server itself serves.
+  const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
+
+  let fakeOffline = false; // test mode only: see /api/network
+  const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check and chooseFolder)
+  // Record a folder the person chose (the desktop app calls this with what its native picker returned). Never a drive root or Bunny's own data.
+  const isChosen = async (folder) => { const r = await checkFolder(folder); return r.ok && chosenFolders.has(r.folder); };
+  // Every path that writes a chat's folder goes through this: in the desktop app only a picked folder is accepted, and the
+  // normalised real path is what is stored. Returns the value to store, or null when it is refused.
+  const folderToStore = async (value) => {
+    if (!value) return '';
+    if (!folderPickerOnly) return value;
+    const r = await checkFolder(value);
+    return r.ok && chosenFolders.has(r.folder) ? r.folder : null;
+  };
+  const chooseFolder = async (folder) => {
+    const result = await checkFolder(folder);
+    if (!result.ok || (await neverBrowse(result.folder, dataDir))) return false;
+    chosenFolders.add(result.folder);
+    return true;
+  };
   const secrets = secretStore ?? dpapiSecretStore({ dir: join(dataDir, 'secrets') });
   const connectionsFile = join(dataDir, 'connections.json');
   const settingsFile = join(dataDir, 'settings.json');
@@ -368,7 +393,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             permissionMode: schedule.permissionMode === 'auto' ? 'auto' : 'plan', workMode: schedule.folder ? 'code' : 'chat',
           });
           const res = await fetch(`http://127.0.0.1:${port}/api/sessions/${run.id}/messages`, {
-            method: 'POST', headers: { 'content-type': 'application/json' },
+            method: 'POST', headers: { 'content-type': 'application/json', 'x-bunny-token': guard.token },
             body: JSON.stringify({ content: schedule.prompt, providerId, model, workMode: schedule.folder ? 'code' : 'chat', scheduledTask: schedule.name }),
           });
           const stream = await res.text();
@@ -434,6 +459,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
+
+    if (localGuard !== false) {
+      const verdict = guard.check(req, path, method, url.searchParams);
+      if (!verdict.ok) return sendJson(res, 403, { code: verdict.code, message: verdict.message });
+    }
 
     if (path === '/api/health') return sendJson(res, 200, { ok: true, fake });
 
@@ -560,6 +590,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       }
     }
 
+    // Is this computer online? A bare request to neutral hosts, asked only after a failure (T-3); nothing of the person's is sent.
+    // In test mode (invented profile) the network can be declared down, because a browser that is really offline cannot reach this server.
+    if (path === '/api/network' && method === 'PUT' && fake) { fakeOffline = Boolean((await readBody(req)).offline); return sendJson(res, 200, { online: !fakeOffline }); }
+    if (path === '/api/network' && method === 'GET') return sendJson(res, 200, fake && fakeOffline ? { online: false } : await networkProbe());
+
     if (path === '/api/models' && method === 'GET') {
       const models = await allModels({ refresh: url.searchParams.get('refresh') === '1' });
       return sendJson(res, 200, models);
@@ -586,7 +621,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       if (!settings.profilePhoto) return sendJson(res, 404, { code: 'photo.none', message: 'No profile photo' });
       try {
         const bytes = await readFile(photoFile);
-        res.writeHead(200, { 'content-type': settings.profilePhoto.mime, 'cache-control': 'no-cache', 'content-length': bytes.length });
+        res.writeHead(200, { 'content-type': settings.profilePhoto.mime, 'cache-control': 'no-cache', 'content-length': bytes.length, 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
         return res.end(bytes);
       } catch {
         return sendJson(res, 404, { code: 'photo.none', message: 'No profile photo' });
@@ -666,6 +701,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
+      // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
+      if (body.folder) {
+        const stored = await folderToStore(body.folder);
+        if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+        body.folder = stored;
+      }
       const session = await sessions.create(body);
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
@@ -904,7 +945,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (audioMatch && method === 'GET') {
       try {
         const body = await readFile(join(speech.dir, `${audioMatch[1]}.wav`));
-        res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': body.length, 'cache-control': 'private, max-age=31536000' });
+        res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': body.length, 'cache-control': 'private, max-age=31536000', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
         return res.end(body);
       } catch {
         return sendJson(res, 404, { code: 'audio.notFound', message: 'No such audio' });
@@ -1111,6 +1152,24 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       }
     }
 
+    // ---- the Changes and Files panes: read-only, inside the chat's own folder ----
+    const paneMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/(changes|files|file)$/);
+    if (paneMatch && method === 'GET') {
+      const session = await sessions.get(paneMatch[1]);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
+      const folder = session.folder ? await checkFolder(session.folder) : null;
+      const never = folder?.ok ? await neverBrowse(folder.folder, dataDir) : null;
+      if (never) return sendJson(res, 403, { code: 'folder.never', message: never });
+      if (!folder?.ok) return sendJson(res, 200, paneMatch[2] === 'changes' ? { checkpoints: [], totals: { files: 0, added: 0, removed: 0 }, folder: null } : { folder: null, entries: [] });
+      try {
+        if (paneMatch[2] === 'changes') return sendJson(res, 200, { ...(await changesFor(folder.folder, await checkpoints.list(session.id))), folder: folder.folder, git: Boolean(session.branch) });
+        if (paneMatch[2] === 'files') return sendJson(res, 200, await listFolder(folder.folder, url.searchParams.get('path') ?? ''));
+        return sendJson(res, 200, await readTextFile(folder.folder, url.searchParams.get('path') ?? ''));
+      } catch (err) {
+        return sendJson(res, err.code === 'path.notFound' ? 404 : 400, { code: err.code ?? 'pane.failed', message: err.message });
+      }
+    }
+
     // ---- undo the files a reply changed ----
     const restoreMatch2 = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/checkpoints\/([a-f0-9-]{36})\/restore$/);
     if (restoreMatch2 && method === 'POST') {
@@ -1174,7 +1233,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (screenMatch && method === 'GET') {
       try {
         const png = await readFile(join(screensDir, `${screenMatch[1]}.png`));
-        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'private, max-age=31536000' });
+        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'private, max-age=31536000', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
         return res.end(png);
       } catch {
         return sendJson(res, 404, { code: 'screen.notFound', message: 'No such screenshot' });
@@ -1185,7 +1244,25 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/folder/check' && method === 'POST') {
       const result = await checkFolder((await readBody(req)).folder);
       if (!result.ok) return sendJson(res, 400, { code: 'folder.invalid', message: result.reason });
+      // Plain-browser dev mode: typing a path is choosing it. In the desktop app only the native picker chooses (folderPickerOnly):
+      // a script in a page could otherwise "choose" any folder and read the disk through the Files pane.
+      if (!folderPickerOnly) await chooseFolder(result.folder);
       return sendJson(res, 200, { folder: result.folder, branch: await gitBranch(result.folder) });
+    }
+
+    // The Files pane in a new chat, before its first message: only a folder the person chose in this launch, read-only.
+    if ((path === '/api/folder/files' || path === '/api/folder/file') && method === 'GET') {
+      const result = await checkFolder(url.searchParams.get('folder') ?? '');
+      if (!result.ok || !chosenFolders.has(result.folder)) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder in this chat first.' });
+      const never = await neverBrowse(result.folder, dataDir);
+      if (never) return sendJson(res, 403, { code: 'folder.never', message: never });
+      try {
+        return sendJson(res, 200, path === '/api/folder/files'
+          ? await listFolder(result.folder, url.searchParams.get('path') ?? '')
+          : await readTextFile(result.folder, url.searchParams.get('path') ?? ''));
+      } catch (err) {
+        return sendJson(res, err.code === 'path.notFound' ? 404 : 400, { code: err.code ?? 'pane.failed', message: err.message });
+      }
     }
 
     // ---- the dev server a folder would run (for the browser panel) ----
@@ -1199,6 +1276,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const sessionSettingMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/setting\/([A-Za-z-]+)$/);
     if (sessionSettingMatch && method === 'PATCH') {
       try {
+        if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
+          const stored = await folderToStore((await readBody(req)).value);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          const session = await sessions.update(sessionSettingMatch[1], { folder: stored });
+          return sendJson(res, 200, { ...session, context: sessions.context(session) });
+        }
         const session = await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value });
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
@@ -1278,7 +1361,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (sessionMatch && method === 'PATCH') {
       try {
-        const session = await sessions.update(sessionMatch[1], await readBody(req));
+        const patch = await readBody(req);
+        if (patch.folder !== undefined) {
+          const stored = await folderToStore(patch.folder);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          patch.folder = stored;
+        }
+        const session = await sessions.update(sessionMatch[1], patch);
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'session.failed', message: err.message });
@@ -1507,7 +1596,15 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
       const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
-      const needsOk = (risk) => risk === 'build'
+      // Plan mode is read-only on the SERVER, not only in the list of tools the model is offered: a call for a
+      // tool it was never offered (a hallucination, or text in a file it read) is refused here, whatever it is.
+      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build', 'send'].includes(risk);
+      const planRefusal = (name) => `Plan mode is read-only, so ${name} was not run. Propose what you would do and let the person switch mode.`;
+      // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
+      // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
+      // email speaks for the person, so it asks in every mode. A project file can grant none of this.
+      const needsOk = (risk) => risk === 'send'
+        || (risk === 'build' && permissionMode !== 'auto')
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
 
@@ -1587,7 +1684,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...(scheduledTask || unrelatedTask === 'here' ? [] : [newChatToolDefinition()]),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
-        ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']) : []),
+        ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'send']) : []),
         ...(githubToken ? githubToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'], { canClone: Boolean(workspace) }) : []),
       ];
       if (googleOn) {
@@ -1930,8 +2027,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const custom = !isAgentTool(name);
         if (!toolDefinitions.some((d) => d.function.name === name)) throw new Error(`There is no tool called ${name}`);
         const summary = custom ? `Use tool ${name}` : isGithubTool(name) ? describeGithubTool(name, parsed) : isGoogleTool(name) ? describeGoogleTool(name, parsed) : describeAgentTool(name, parsed);
-        // A schedule that may change things runs unwatched later, so it always asks, whatever the mode.
+        // A schedule that may change things runs unwatched later: it asks in Manual and Accept edits, and runs in Auto.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
+        if (planRefuses(risk)) return planRefusal(name);
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -2190,9 +2288,20 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           send('tasks', { tasks: currentTasks });
           return `The person now sees your plan: ${currentTasks.filter((t) => t.done).length} of ${currentTasks.length} done.`;
         }
+        // One check for every path: a tool that was not offered to the model in this reply never runs, whatever
+        // it is (a hallucinated call, or text in a file telling it to). Plan mode relies on this.
+        if (!toolDefinitions.some((d) => d.function?.name === name)) {
+          send('tool', { tool: name, status: 'denied' });
+          return `${name} is not available in this reply, so it was not run.`;
+        }
         if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
           const summary = describeBrowserTool(name, parsed);
+          if (planRefuses(BROWSER_TOOL_RISK[name])) {
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            send('tool', { tool: summary, status: 'denied' });
+            return planRefusal(name);
+          }
           if (needsOk(BROWSER_TOOL_RISK[name])) {
             const allowed = await askPermission(summary, '');
             if (!allowed) {
@@ -2222,9 +2331,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (!isApp && !isWorkspace && !entry) throw new Error(`There is no tool called ${name}`);
         const summary = isApp ? describeAppTool(name, parsed)
           : isWorkspace ? describeToolCall(name, parsed) : `${entry.server.name}: ${entry.tool.name}`;
-        // A local connector runs a program on this computer: always confirmed, whatever the mode.
+        // A local connector runs a program on this computer: confirmed in Manual and Accept edits, runs in Auto.
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
+        if (planRefuses(risk)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
@@ -2252,7 +2362,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 8000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200) });
+        // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
+        if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
+        const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200) });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
@@ -2288,6 +2401,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const answeredBy = {
         model, providerId, job, auto: body.auto === true,
         fellBackFrom: typeof body.fellBackFrom === 'string' ? body.fellBackFrom.slice(0, 200) : undefined,
+        // Why the first model was left (timeout, rate-limit, unavailable, empty, refused, unreachable, key) and how many failed.
+        fellBackReason: typeof body.fellBackReason === 'string' ? body.fellBackReason.slice(0, 30) : undefined,
+        fellBackTries: Number.isInteger(body.fellBackTries) && body.fellBackTries > 0 ? Math.min(body.fellBackTries, 9) : undefined,
       };
 
       // When the person presses Stop, the browser closes the connection. What
@@ -2369,6 +2485,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                 }
               } catch { /* memory is a convenience; the reply matters more */ }
             }
+            // A fallback model has answered: the failed attempts' "could not finish" notes are not left behind.
+            if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
             const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking } : {}) });
             session = await sessions.get(id);
             send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
@@ -2409,13 +2527,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           // time instead of offering it again.
           const shape = modelSpecificFailure(err.message);
           if (shape) await unavailable.mark(providerId, model, err.message);
+          const { scope, reason } = failureKind(err, Boolean(shape));
           send('error', {
             code: err.code ?? 'chat.failed',
             message: err.message,
             modelUnavailable: Boolean(shape),
+            scope,
+            reason,
           });
           // Kept in the chat, so after a reload it still says why the reply stopped.
-          // (The model never reads these: history leaves errors out.)
+          // (The model never reads these: history leaves errors out.) Every failure is saved, so a reload always says
+          // why, but a retry REPLACES the note of the attempt before it and a later success removes it: the chat
+          // never holds more than one, and none once a model has answered (T3-7, T3-8).
+          if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
           await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
           break;
         }
@@ -2488,7 +2612,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     }
     try {
       const body = await readFile(target);
-      res.writeHead(200, { 'content-type': TYPES[extname(target)] ?? 'application/octet-stream' });
+      const type = TYPES[extname(target)] ?? 'application/octet-stream';
+      if (extname(target) === '.html') {
+        // Bunny's own pages are given the launch token, and are never cached with a stale one.
+        const page = body.toString('utf8').replace(/<head>/i, `<head>
+<meta name="bunny-token" content="${guard.token}">
+<script src="/src/ui/token.js"></script>`);
+        res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', 'content-security-policy': "frame-ancestors 'self'" });
+        res.end(page);
+        return;
+      }
+      res.writeHead(200, { 'content-type': type });
       res.end(body);
     } catch {
       res.writeHead(404).end('not found');
@@ -2517,7 +2651,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
     computer, terminals,
     getSettings: () => settings,
+    chooseFolder,
     dataDir,
+    apiToken: guard.token,
     runHooks,
     runDueSchedules,
   };

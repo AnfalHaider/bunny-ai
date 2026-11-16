@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>0.1.4 design review</title>
+<style>
+:root{--bg:#faf9f7;--surface:#fff;--text:#1d1d22;--dim:#5d5d68;--line:#e3e0da;--accent:#5b3fd1;--bad:#b3261e;--ok:#1d7a46}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141418;--surface:#1d1d22;--text:#ececf1;--dim:#a0a0ad;--line:#33333b;--accent:#a99bff;--bad:#ff8a80;--ok:#6fd49a}}
+:root[data-theme=dark]{--bg:#141418;--surface:#1d1d22;--text:#ececf1;--dim:#a0a0ad;--line:#33333b;--accent:#a99bff;--bad:#ff8a80;--ok:#6fd49a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,"Segoe UI",sans-serif}
+main{max-width:1280px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:19px;margin:0}p{margin:6px 0}
+.dim{color:var(--dim)}
+.bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--text);padding:6px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--text);color:var(--bg)}
+section.screen{margin-top:40px;border-top:1px solid var(--line);padding-top:20px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:13px;color:var(--dim)}
+.tag.risk{color:var(--text)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+.pair.single{grid-template-columns:minmax(0,640px)}
+figure{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;min-width:0}
+figcaption{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:14px}
+figcaption.p{color:var(--accent)}
+.imgbox{padding:10px;max-height:760px;overflow:auto;text-align:center}
+.imgbox img{max-width:100%;height:auto;display:inline-block;border:1px solid var(--line)}
+ul.notes{margin:12px 0 0;padding-left:20px}ul.notes li{margin:4px 0}
+code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.verdict-pass{color:var(--ok);font-weight:600}.verdict-fix{color:var(--bad);font-weight:600}
+@media (max-width:900px){.pair{grid-template-columns:1fr}}
+</style></head><body>
+<div class="bar">
+  <strong>0.1.4 design review</strong>
+  <span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></span>
+  <span class="seg" id="size"><button data-v="d" aria-pressed="true">Desktop 1440</button><button data-v="m" aria-pressed="false">Phone 390</button></span>
+</div>
+<main>
+<h1>0.1.4 screens built without a design: today, with proposed fixes beside it</h1>
+<p class="dim"><strong>Update 2026-11-16 (owner's answer, relayed by the Chief of Staff):</strong> fixes 1, 3, 7 and 8 approved; the bunny is purple, from the accent tokens (screens 6 and 6b redrawn). Original review text follows.</p><p class="dim">Design session, 2026-11-16, against 8f01146 on initial-import (version 0.1.4). Every picture is an invented profile (<code>BUNNY_DATA_DIR</code> temp folder, <code>BUNNY_FAKE_UPSTREAM=1</code>), user "Ada Example"; nothing from the real profile. <strong>Today</strong> is the app as built, unedited. <strong>Proposed</strong> is the same real page with the proposed change applied in the browser (same positions, same labels), so the drawing is what a build would produce. No code has been changed; nothing is built until the owner approves. Screens with no proposal are marked pass.</p>
+<p class="dim">Not covered, stated plainly: no contrast ratios were measured (UNKNOWN); only the empty profile was shot (no connected-provider rows, no filled instructions or memory list, no filled Automation rows); the hopping bunny is the real module mounted in the real page, not driven by a live reply; this is a single-user local app, so there is one role; the Desktop-only Settings section was not shot; Ctrl+/Ctrl- zoom was not exercised in the desktop shell.</p>
+<div id="out"></div>
+</main>
+<script>
+const S=[
+ {title:'1. Two-part greeting and empty chat',today:'greeting',prop:'proposed-greeting',files:'src/ui/greetings.js; src/ui/index.html:163-167; src/ui/app.css:561,1874-1877; src/ui/chat.js:3336',risk:'LOW',verdict:'fix',notes:[
+  'Hierarchy is right at the top: greeting, then the bunny one-liner as the subline (<code>.greeting-more</code>).',
+  'Problem: the generic tagline ("Pick a model, then tell me what you need.") is bolder and darker than the playful subline above it, so the two compete. Proposal: tagline in regular weight, dim colour.',
+  'Problem: with no model, the line "No models yet. Add a provider in Providers." is small grey text with a small link, and it is the only way forward on a new install. Proposal: replace that line with one primary button "Add a provider" (links to <code>providers.html</code>). The old line goes away; there is not both.',
+  'The greeting wraps to two lines for longer phrases because of <code>max-width:22ch</code>; acceptable, no change. The greeting is random by time of day, so the two pictures can show different phrases.']},
+ {title:'2. Zoom row in the account menu',today:'zoom',prop:null,files:'src/ui/index.html:83-91; src/ui/app.css:1884-1889',risk:'LOW',verdict:'pass',notes:[
+  'Fits the menu: label left, a joined minus / 100% / plus control right, same row height and icon column as its neighbours. Both themes ok.',
+  'On phone the menu opens above the account button inside the sidebar and is fully visible.']},
+ {title:'3. Settings: Appearance',today:'modal-appearance',prop:'modalproposed-appearance',phoneOnly:true,files:'src/ui/index.html:415-440 (section list); src/ui/app.css:1389-1411 (modal; 40vh list on phone); src/ui/settings.html:85-156',risk:'LOW',verdict:'fix',notes:[
+  'Desktop: pass. Rows, labels and controls line up with the other sections; the two code-theme previews show a light and a dark sample at once and stay readable in both themes.',
+  'Phone problem (every Settings section, shown here once): the section list takes up to 40% of the screen height (<code>max-height:40vh</code>), so the section you opened starts halfway down. Proposal: the list becomes one row of pills that scrolls sideways, with the active section brought into view; search and group dividers are hidden on phone only.',
+  'The proposed phone picture shows only the active pill because the row has scrolled to it; the others are one swipe away. Owner to say whether the search box should stay on phone.']},
+ {title:'4. Settings: My Dear Bunny',today:'modal-mydearbunny',prop:'modalproposed-mydearbunny',phoneOnly:true,files:'src/ui/settings.html:193-237',risk:'LOW',verdict:'pass',notes:[
+  'Desktop: pass. Instructions box, then Memory rows with on/off switches; the "0 / 20000" counter is small but present.',
+  'Phone: the same section-list change as Appearance applies (proposal beside). The section itself needs no change.',
+  'Not shot: the Manage memory list and the Import memory flow (they open further panels).']},
+ {title:'5. Settings: Code rows',today:'modal-code',prop:'modalproposed-code',phoneOnly:true,files:'src/ui/settings.html:399-468',risk:'LOW',verdict:'pass',notes:[
+  'Desktop: pass. Ten rows, each with a one-line description. "Code theme and font" hands off to Appearance with a neutral button, the right weight for a link-out.',
+  'Phone: selects and the text field wrap under their description while the on/off switches stay beside it. Inconsistent but readable; flagged only, no change proposed.',
+  'The same section-list change as Appearance applies (proposal beside).']},
+ {title:'6. Hopping bunny with step words (normal state)',today:'hopping-hop',prop:'hoppingpurple-hop',files:'src/ui/app.css:1769-1784 (fills at :1772-1775); docs/design/bunny-app-bindings.css:824-827; src/ui/bunny-working.js (no change)',risk:'LOW',verdict:'fix',notes:[
+  'Owner decision, 2026-11-16: "the bunny should be purple". The pink (#ED93B1 ears, #D4537E face) was hard-coded and in no token. Proposal draws the mark from the existing accent tokens only, no new colour: face <code>fill: var(--accent)</code>; ears <code>fill: var(--accent); fill-opacity: .55</code>; eyes and nose <code>fill: var(--on-accent)</code>.',
+  'Readable in both themes: light is #6a4fd8 with white eyes; dark is #b3a1ff with dark eyes (the token pair already flips). The ears stay lighter than the face so the shape still reads.',
+  'The word, then the dim timer ("0s"), is unchanged. Reduced motion (<code>app.css:1784</code>) is unchanged; not verifiable in a still picture.']},
+ {title:'6b. Hopping bunny, grumpy state',today:'hopping-grumpy',prop:'hoppingpurple-grumpy',files:'src/ui/app.css:1779-1780; src/ui/bunny-working.js (thump)',risk:'LOW',verdict:'fix',notes:[
+  'Same colour change as 6. The grumpy state still changes only the ears (rotated and flattened) and the word; at 22px that difference is subtle in purple as it was in pink. No further change proposed.']},
+ {title:'7. Custom provider form',today:'provider',prop:'proposed-provider',files:'src/ui/providers.html:21-30, 311-330',risk:'LOW',verdict:'fix',notes:[
+  'Problem: the form sits below all 25 popular providers; on desktop it starts about 1950px down. Anyone with a company gateway or a local server must scroll the whole list to find it. Proposal: move it directly under "Connected providers" so it is the second block on the page; heading gains "(any OpenAI-compatible server)".',
+  'Alternative (not drawn): keep it at the bottom and add an "Add custom provider" link at the top that scrolls to it. Recommendation: the move, as drawn; it adds no new element.',
+  'The grey hint under Base URL pushes the next row down and leaves a gap under Name. Minor; not changed.',
+  'Phone: provider rows put the Connect button under the description, making each row tall (the page is about 3700px). Outside the eight screens; noted for a later pass.']},
+ {title:'8. Automation page',today:'automation',prop:'proposed-automation',files:'src/ui/automation.html:11-94; add buttons at :37, :45, :59, :77, :91',risk:'LOW',verdict:'fix',notes:[
+  'Five sections (Memory, MCP servers, Schedules, Hooks, Skills), each a card with an empty state on top and its add form below, in one consistent style.',
+  'Problem (phone): the Add buttons are full width except "Add local connector" and "Add skill", which are right-aligned and content-width, so the page has two button shapes. Proposal: every Add button full width on phone.',
+  'Desktop: no change; a single 760px column reads fine.',
+  'Not shot: filled states (rows with toggles and delete buttons); the invented profile was empty.']}
+];
+let theme='light',size='d';
+const q=(s)=>document.querySelector(s);
+function render(){
+ const out=q('#out');out.innerHTML='';
+ for(const s of S){
+  const sec=document.createElement('section');sec.className='screen';
+  const img=(b)=>'shots/'+b+'-'+theme+'-'+size+'.png';
+  const showProp=s.prop&&(!s.phoneOnly||size==='m');
+  let h='<h2>'+s.title+' <span class="'+(s.verdict==='pass'?'verdict-pass':'verdict-fix')+'">'+(s.verdict==='pass'?'pass: no change':'fix proposed')+'</span></h2>';
+  h+='<div class="meta"><span class="tag risk">Risk: '+s.risk+'</span><span class="tag">'+s.files+'</span></div>';
+  h+='<div class="pair '+(showProp?'':'single')+'"><figure><figcaption>Today, as built ('+theme+', '+(size==='d'?'1440':'390')+')</figcaption><div class="imgbox"><img src="'+img(s.today)+'" alt="'+s.title+': today"></div></figure>';
+  if(showProp)h+='<figure><figcaption class="p">'+(s.propLabel||'Proposed')+'</figcaption><div class="imgbox"><img src="'+img(s.prop)+'" alt="'+s.title+': proposed"></div></figure>';
+  h+='</div>';
+  if(s.prop&&s.phoneOnly&&size==='d')h+='<p class="dim">No desktop change proposed; switch to Phone 390 to see the proposal.</p>';
+  h+='<ul class="notes">'+s.notes.map(n=>'<li>'+n+'</li>').join('')+'</ul>';
+  sec.innerHTML=h;out.append(sec);
+ }
+}
+for(const [id,set] of [['theme',v=>{theme=v;document.documentElement.dataset.theme=v}],['size',v=>{size=v}]])
+ q('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  q('#'+id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));set(b.dataset.v);render();});
+if(matchMedia('(prefers-color-scheme:dark)').matches){theme='dark';q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='dark'))}
+render();
+</script></body></html>

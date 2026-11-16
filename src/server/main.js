@@ -15,7 +15,9 @@ if (process.env.BUNNY_RESET_PROFILE === '1') {
   await rm(dataDir, { recursive: true, force: true });
 }
 
-const app = await createApp({ dataDir });
+// A fixed token only for the invented-profile test run, so the e2e `request` fixture can send it.
+const fixedToken = process.env.BUNNY_FAKE_UPSTREAM === '1' && process.env.BUNNY_API_TOKEN ? process.env.BUNNY_API_TOKEN : undefined;
+const app = await createApp({ dataDir, apiToken: fixedToken });
 
 app.server.listen(port, '127.0.0.1', () => {
   const mode = process.env.BUNNY_FAKE_UPSTREAM === '1' ? ' (test mode)' : '';
