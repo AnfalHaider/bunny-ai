@@ -1,9 +1,9 @@
 ---
 piece: release-0.1.5.1
 role: librarian
-sha: 1456b5a
-verdict: FAIL
+sha: 75e02c1
+verdict: PASS
 date: 2026-11-16
 ---
 
-Librarian FAIL until one help line is added. Commit message has no Claude credit. Lesson L008 is due and written: e2e set modelFilter all everywhere, so the default first-run path was not tested. The new models-default-filter spec covers that path. Missing help text: src/ui/settings.html line 359 describes Show models and does not say the chat's Show all models button changes this setting. Add one sentence there, then re-sign at the new sha. Builder adds it.
+Librarian re-check of 1456b5a to 75e02c1. Help text: src/ui/settings.html line 359 now says the chat's Show all models button sets this to All, so the FAIL is cleared. Commit message has no Claude credit. L008 applied: models-default-filter spec covers the default path, and it now checks the greeting hides and returns. L005 applied: greeting id kept, the new row has its own id. L001 to L004 and L006 L007 checked, not applicable to this delta or already clean at the sha. Owner works in English only, so no i18n keys, as the Chief of Staff noted. Minor, not blocking: greeting stays hidden after boot in the empty-picker state until Show all models is used, check New chat still shows it.
