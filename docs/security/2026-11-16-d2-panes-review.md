@@ -23,3 +23,31 @@ A sensitive file inside the chosen folder (`.env`) is readable: the person picke
 
 ## Next
 When Builder sends the final sha with D2-1 and D2-2 fixed (D2-3 and D2-4 can follow), I re-run the probe against it and sign: `node .bootstrap/bin/bootstrap.mjs signoff d-2 --verdict PASS --sha <sha>`.
+
+---
+
+## Addendum: re-review of the final `5f36e04` — verdict **FAIL**
+
+Builder's final commit changed `panes.js` only to add `addedAt` to the diff output; **D2-1 to D2-4 above are all still there** (re-run of `probe.mjs` against `panes.js` from `5f36e04`: the link leak is still `**LEAK**`, a 300 MB file still adds 301 MB, `.git/config` is still readable). My four requests had not reached Builder when they built the last commit, so this is a relay gap, not a refusal. The new routes add one more finding, and it is the most serious.
+
+### D2-5 MEDIUM-HIGH — `/api/folder/files` and `/api/folder/file` read any folder on the computer for anyone holding the page token
+The routes only answer for a folder "chosen this launch", but `POST /api/folder/check` is what marks a folder as chosen, and it accepts any existing folder (`checkFolder`). Tested live on an invented profile with the launch token:
+
+| Request | Result |
+|---|---|
+| `files?folder=C:/Windows`, never chosen | 403 `folder.notChosen` |
+| `POST /api/folder/check {folder:"C:/"}` | 200 (now "chosen") |
+| `files?folder=C:/` | 200, lists the whole drive |
+| `file?folder=C:/&path=Windows/win.ini` | 200, the file's text |
+| `POST /api/folder/check` with the user's profile folder, then `files?…&path=.ssh` | 200, lists the SSH folder |
+| no token / cross-site | 403 (the S-1 guard holds) |
+
+So the "chosen" set is self-service: it is not a decision by the person, it is one more call by whoever runs script in a Bunny page. Before D-2 the API had no route that reads arbitrary files; this adds one. The routes are not reachable by foreign pages, but any cross-site-scripting flaw in Bunny's own pages (chat rendering, an artifact, a connector result) would now read the whole disk, where before it could only touch chats.
+
+**Fix.** Make "chosen" something only the person can do: in the desktop app, the folder picker (`dialog:pickFolder` in `electron/main.js`, a main-process dialog) records the picked path with the server (for example a one-time handle the server checks), and `/api/folder/check` no longer adds to the set. In plain-browser dev mode keep today's behaviour (no dialog exists). Also refuse a folder that is a drive root or a parent of the data folder, and apply D2-4 (`.git`, `node_modules`) to these routes.
+
+### What passes
+The gate `inside()` is unchanged and still holds (all escape cases refused, junction included). The new routes are `GET` only and token-guarded, and the "never chosen → 403" test is real.
+
+### Required before sign-off
+D2-1, D2-2 and D2-5 are mandatory. D2-3 may follow; D2-4 belongs with D2-5.
