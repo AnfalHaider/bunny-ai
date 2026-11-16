@@ -121,3 +121,24 @@ test('installing and uninstalling a plugin are window-only, like connectors and 
   assert.equal(isWindowOnlyRoute('POST', '/api/plugins', { name: 'x' }), true);
   assert.equal(isWindowOnlyRoute('DELETE', `/api/plugins/${id}`), true);
 });
+
+test('W3-6: uninstalling a plugin signs its remote connectors out, so no sign-in token stays behind', async () => {
+  let settings = { plugins: [] };
+  const servers = new Map();
+  const signedOut = [];
+  const tools = createAppTools({
+    skills: { add: async (s) => ({ id: `s-${s.name}` }), remove: async () => true },
+    mcp: {
+      add: async (c) => { const server = { id: `c-${c.name}`, type: c.command ? 'local' : 'remote', url: c.url }; servers.set(server.id, server); return server; },
+      get: async (id) => servers.get(id) ?? null,
+      remove: async (id) => servers.delete(id),
+    },
+    getSettings: () => settings,
+    saveSettings: async (patch) => { settings = { ...settings, ...patch }; },
+    signOutConnector: async (server) => { signedOut.push(server.id); },
+  });
+  const record = await tools.installBundle({ ...PACK, connectors: [...PACK.connectors] });
+  await tools.uninstall(record.id);
+  assert.deepEqual(signedOut.sort(), ['c-Context7', 'c-DeepWiki']);
+  assert.equal(servers.size, 0);
+});

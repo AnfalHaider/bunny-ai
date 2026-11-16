@@ -33,6 +33,7 @@ import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
+import { createConnectorSignIn, NEEDS_SIGN_IN } from './connectorSignIn.js';
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
@@ -180,7 +181,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
     return true;
   };
-  const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
+  const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true, validConnectorState: (state) => connectorSignIn?.flowKnown(state) === true });
 
   let fakeOffline = false; // test mode only: see /api/network
   const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check and chooseFolder)
@@ -246,9 +247,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
   // Connectors: remote ones over http, local ones as a program on this computer.
   const localMcp = createLocalMcp();
-  const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id) });
-  const mcpListTools = (server) => (server.type === 'local' ? localMcp.listTools(server) : httpListTools(server));
-  const mcpCallTool = (server, call) => (server.type === 'local' ? localMcp.callTool(server, call) : httpCallTool(server, call));
+  // W3-6: signing in to a connector that needs it; its tokens live only in the secret store. The engine is made on first use (it needs the real port).
+  const connectorSignIn = createConnectorSignIn({ secrets, mcp, getBase: () => `http://127.0.0.1:${server.address().port}` });
+  const mcpListTools = (server) => (server.type === 'local' ? localMcp.listTools(server) : httpListTools(server, { auth: connectorSignIn.authFor(server) }));
+  const mcpCallTool = (server, call) => (server.type === 'local' ? localMcp.callTool(server, call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
+  const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -932,6 +935,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       return sendJson(res, 200, { ok: await memory.remove(memoryMatch[1]) });
     }
 
+    // ---- signing in to a connector (W3-6): the routes are in connectorSignIn.js ----
+    if (path.startsWith('/api/connectors/') && await connectorSignIn.handle(req, res, path, method, url, () => readBody(req))) return;
+
     // ---- MCP servers ----
     if (path === '/api/mcp' && method === 'GET') return sendJson(res, 200, await mcp.list());
     if (path === '/api/mcp' && method === 'POST') {
@@ -950,13 +956,20 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (mcpMatch && method === 'PATCH') {
       try {
         await localMcp.stop(mcpMatch[1]);
-        return sendJson(res, 200, await mcp.update(mcpMatch[1], await readBody(req)));
+        const before = await mcp.get(mcpMatch[1]);
+        const was = before ? { ...before } : null; // update may change the stored object itself
+        const updated = await mcp.update(mcpMatch[1], await readBody(req));
+        // W36-1: a connector pointed somewhere else is signed out of the old place, so its token is not sent to the new one
+        if (was && was.type !== 'local' && was.url !== updated.url) await connectorSignIn.signOutQuietly(was);
+        return sendJson(res, 200, updated);
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'mcp.failed', message: err.message });
       }
     }
     if (mcpMatch && method === 'DELETE') {
       await localMcp.stop(mcpMatch[1]);
+      const leaving = await mcp.get(mcpMatch[1]);
+      if (leaving && leaving.type !== 'local') await connectorSignIn.signOutQuietly(leaving); // its sign-in ends with it
       return sendJson(res, 200, { ok: await mcp.remove(mcpMatch[1]) });
     }
     const mcpToolsMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/tools$/);
@@ -968,6 +981,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await mcp.setStatus(server.id, { status: 'connected', tools, error: null });
         return sendJson(res, 200, { status: 'connected', tools });
       } catch (err) {
+        if (err.code === 'mcp.needsSignIn') return sendJson(res, 502, { status: 'needsSignIn', ...(await connectorSignIn.needsSignIn(server, err)) });
         await mcp.setStatus(server.id, { status: 'error', error: err.message });
         return sendJson(res, 502, { code: err.code ?? 'mcp.failed', message: err.message });
       }
@@ -981,6 +995,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const result = await mcpCallTool(server, { name: body.name, arguments: body.arguments ?? {} });
         return sendJson(res, 200, { result });
       } catch (err) {
+        if (err.code === 'mcp.needsSignIn') return sendJson(res, 502, await connectorSignIn.needsSignIn(server, err));
         return sendJson(res, 502, { code: err.code ?? 'mcp.failed', message: err.message });
       }
     }
@@ -1912,6 +1927,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             server.tools = await mcpListTools(server);
             await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
           } catch (err) {
+            if (err.code === 'mcp.needsSignIn') { // no tools until the person signs in; the chat shows a step with Sign in and Skip it
+              await connectorSignIn.needsSignIn(server, err);
+              send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id });
+              continue;
+            }
             await mcp.setStatus(server.id, { status: 'error', error: err.message }).catch(() => {});
           }
         }
@@ -2569,6 +2589,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         send('tool', { tool: summary, status: 'running' });
         let result;
         let status = 'done';
+        let signIn = null; // a connector that needs the person to sign in: { needsSignIn: true, serverId }
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await appTools.run(name, parsed)
@@ -2577,7 +2598,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             : JSON.stringify(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed }) ?? null);
         } catch (err) {
           status = 'failed';
-          result = `The tool failed: ${err.message}`;
+          if (err?.code === 'mcp.needsSignIn' && entry) {
+            await connectorSignIn.needsSignIn(entry.server, err);
+            result = NEEDS_SIGN_IN;
+            signIn = { needsSignIn: true, serverId: entry.server.id };
+          } else result = `The tool failed: ${err.message}`;
         }
         // W6-21: a tool result is no longer cut at 8,000 characters. Up to 50,000 go to the model whole; past that the
         // middle is left out, and the whole of it is saved in .bunny/notes (below) so it can be read in parts.
@@ -2586,9 +2611,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace });
-        send('tool', { tool: summary, status, result: clip(result, 1200) });
-        return result;
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace, ...(signIn ?? {}) });
+        send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}) });
+        return signIn ? `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.` : result;
       };
       // Effort: how long a reply may be, how many tool steps it may take, and (where the
       // provider understands it) how hard the model reasons.

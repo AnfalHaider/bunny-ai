@@ -76,7 +76,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   let queue = Promise.resolve();
@@ -85,7 +85,13 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
   const findInstalled = (name, source) => (getSettings().plugins ?? []).find((p) => (source ? p.source === source : !p.source && p.name === name));
 
   async function removeParts(record) {
-    for (const id of record.connectors ?? []) { await stopConnector(id).catch(() => {}); await mcp.remove(id); }
+    for (const id of record.connectors ?? []) {
+      // W3-6: a remote connector's sign-in ends with it, as when the connector itself is deleted, so no stored token is left behind.
+      const leaving = await mcp.get?.(id);
+      if (leaving && leaving.type !== 'local') await signOutConnector(leaving).catch(() => {});
+      await stopConnector(id).catch(() => {});
+      await mcp.remove(id);
+    }
     for (const id of record.skills ?? []) await skills.remove(id);
   }
 

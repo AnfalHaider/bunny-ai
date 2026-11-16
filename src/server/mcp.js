@@ -12,14 +12,49 @@
 const PROTOCOL_VERSION = '2025-06-18';
 
 export class McpError extends Error {
-  constructor(message, code = 'mcp.failed') {
+  constructor(message, code = 'mcp.failed', extra = {}) {
     super(message);
     this.code = code;
+    if (extra.signInUrl !== undefined) this.signInUrl = extra.signInUrl;
+  }
+}
+
+/** The resource_metadata address a 401 names (RFC 9728), or null. */
+export function resourceMetadataFrom(res) {
+  const header = res?.headers?.get?.('www-authenticate') ?? '';
+  const m = /resource_metadata="([^"]+)"/i.exec(header);
+  return m ? m[1] : null;
+}
+
+/**
+ * Send one JSON-RPC request. With an `auth` function (returns extra headers,
+ * called per request) a 401 gets one refresh-and-retry when a token was sent,
+ * then becomes mcp.needsSignIn; the raw 401 text never reaches the model or the window.
+ */
+async function send(url, server, body, { signal, auth, fetchImpl }) {
+  for (let attempt = 0; ; attempt++) {
+    const extra = auth ? ((await auth({ refresh: attempt > 0 })) ?? {}) : {};
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...(server.headers ?? {}),
+        ...extra,
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (res.status === 401 && auth) {
+      if (attempt === 0 && Object.keys(extra).length > 0) continue;
+      throw new McpError('This connector needs you to sign in.', 'mcp.needsSignIn', { signInUrl: resourceMetadataFrom(res) });
+    }
+    return res;
   }
 }
 
 /** @param {{name: string, url: string, headers?: object}} server */
-export async function callTool(server, { name, arguments: args = {}, timeoutMs = 30_000, fetchImpl = globalThis.fetch }) {
+export async function callTool(server, { name, arguments: args = {}, timeoutMs = 30_000, fetchImpl = globalThis.fetch, auth = null }) {
   const url = String(server?.url ?? '').trim();
   if (!url) throw new McpError('This MCP server has no address', 'mcp.noUrl');
   if (!/^https?:\/\//i.test(url)) throw new McpError('An MCP server must be reached over http or https', 'mcp.badUrl');
@@ -28,21 +63,8 @@ export async function callTool(server, { name, arguments: args = {}, timeoutMs =
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetchImpl(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        ...(server.headers ?? {}),
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name, arguments: args },
-      }),
-      signal: controller.signal,
-    });
+    const res = await send(url, server, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
+      { signal: controller.signal, auth, fetchImpl });
 
     if (!res.ok) {
       throw new McpError(`The server answered ${res.status}`, 'mcp.http');
@@ -62,7 +84,7 @@ export async function callTool(server, { name, arguments: args = {}, timeoutMs =
 }
 
 /** The tools a server offers. */
-export async function listTools(server, { timeoutMs = 15_000, fetchImpl = globalThis.fetch } = {}) {
+export async function listTools(server, { timeoutMs = 15_000, fetchImpl = globalThis.fetch, auth = null } = {}) {
   const url = String(server?.url ?? '').trim();
   if (!url) throw new McpError('This MCP server has no address', 'mcp.noUrl');
   if (!/^https?:\/\//i.test(url)) throw new McpError('An MCP server must be reached over http or https', 'mcp.badUrl');
@@ -71,21 +93,8 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetchImpl(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        ...(server.headers ?? {}),
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      }),
-      signal: controller.signal,
-    });
+    const res = await send(url, server, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+      { signal: controller.signal, auth, fetchImpl });
 
     if (!res.ok) throw new McpError(`The server answered ${res.status}`, 'mcp.http');
     const payload = await readPayload(res);

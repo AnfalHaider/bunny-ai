@@ -932,7 +932,7 @@ function paintMessages() {
   // D-2: consecutive tool steps between two pieces of narration are ONE group line, collapsed once finished.
   let run = [];
   const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
-  const groupable = (m) => m.kind === 'tool_call' && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  const groupable = (m) => m.kind === 'tool_call' && !m.needsSignIn && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
   // W4-5c: a reply saves ONE thinking text; when steps came before its answer, its "Thought for" row goes before the first of them
   // (thinking, then the step it led to), the same order the live line settles in.
   const thoughtAt = new Map();
@@ -1116,6 +1116,47 @@ function renderTitle() {
   el.textContent = state.session?.title || say('chat.new');
 }
 
+/**
+ * W3-6: a connector that needs the person to sign in. The step says "Needs sign-in" and offers Sign in (the person's own browser opens,
+ * and the chat carries on by itself once they are back) and Skip it (just dismisses; a later message works as usual once signed in).
+ */
+function signInStep(info) {
+  const box = element('div', { className: 'signin-step' });
+  const note = element('span', { className: 'hint' });
+  const clientBox = element('input', { className: 'input', placeholder: 'Client ID', hidden: true });
+  clientBox.setAttribute('aria-label', 'Client ID');
+  const signIn = button('Sign in', { className: 'primary small' });
+  const skip = button('Skip it', { className: 'ghost small', onclick: () => box.remove() });
+  const finish = async (account) => {
+    note.textContent = `Signed in as ${account ?? 'your account'}.`;
+    signIn.remove(); skip.remove(); clientBox.hidden = true;
+    if (!state.streaming && !$('input').value.trim()) { $('input').value = 'I have signed in. Please carry on.'; await send(); }
+  };
+  const begin = async () => {
+    note.textContent = '';
+    signIn.disabled = true;
+    try {
+      const out = await sendJSON(`/api/connectors/${info.serverId}/oauth/start`, 'POST', clientBox.value.trim() ? { clientId: clientBox.value.trim() } : {});
+      window.open(out.authUrl, '_blank', 'noopener'); // the desktop app hands the link to the person's own browser
+      note.textContent = 'Waiting for you to finish in your browser… (5 minutes)';
+      const until = Date.now() + 5 * 60_000;
+      while (box.isConnected && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const now = await getJSON(`/api/connectors/${info.serverId}/oauth`).catch(() => null);
+        if (now?.signedIn) return finish(now.account);
+        if (now?.error) { note.textContent = now.error; break; }
+      }
+      if (box.isConnected && note.textContent.startsWith('Waiting')) note.textContent = 'The sign-in was not finished in 5 minutes. Try again.';
+    } catch (e) {
+      if (e.code === 'mcp.oauth.needsClientId') { note.textContent = 'This service does not let apps register themselves. Paste the client ID from its developer settings.'; clientBox.hidden = false; } else note.textContent = e.message;
+    }
+    signIn.disabled = false;
+  };
+  signIn.addEventListener('click', begin);
+  box.append(signIn, skip, clientBox, note);
+  return box;
+}
+
 function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
@@ -1128,7 +1169,8 @@ function renderMessage(m, { skipThinking = false } = {}) {
     const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
     header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
     const failedStep = m.status === 'failed' || m.status === 'denied';
-    if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
+    if (m.needsSignIn) header.append(element('span', { className: 'tag is-blocked', textContent: 'Needs sign-in' }));
+    else if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
     else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
     // A read step opens that file in the Files pane.
@@ -1156,6 +1198,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       tc.append(copy);
     }
     wrap.append(tc);
+    if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
     if (m.linked) wrap.append(linkedChatCard(m.linked));
@@ -1715,7 +1758,11 @@ function showLiveTool(bodyEl, info) {
     msg.before(line);
   }
   line.dataset.status = info.status;
-  line.querySelector('.tag')?.replaceChildren(info.status);
+  line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
+  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
+    line.querySelector('.tag')?.classList.add('is-blocked');
+    line.append(signInStep(info));
+  }
   if (info.result) {
     let res = line.querySelector('.tool-call-result');
     if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }

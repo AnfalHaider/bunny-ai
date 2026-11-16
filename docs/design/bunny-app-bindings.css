@@ -508,9 +508,19 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-status { color: var(--text-dim); font-size: var(--fs-md); }
 .cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
 .cz-note { margin-top: var(--sp-6); }
+.cz-status.is-warn { color: var(--warn); font-weight: var(--fw-medium); }
+.cz-signin-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-md); color: var(--text-dim); }
+.cz-signin-note .input { flex: 1 1 200px; min-width: 0; }
+/* Phone: each item is a card, with its status under the name (the Type column is not drawn) */
 @media (max-width: 760px) {
-  .cz-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .cz-row .cz-type, .cz-row .cz-status { display: none; }
+  .cz-table { border-top: 0; }
+  .cz-head { grid-template-columns: minmax(0, 1fr); border-bottom: 0; }
+  .cz-head > :not(.cz-name) { display: none; }
+  #cz-list { display: flex; flex-direction: column; gap: var(--sp-4); }
+  .cz-row[role="row"]:not(.cz-head) { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+  .cz-row .cz-type { display: none; }
+  .cz-row .cz-status { display: block; overflow-wrap: anywhere; }
+  .cz-actions { justify-content: flex-start; flex-wrap: wrap; }
 }
 
 /* Chat | Code switch sits in the sidebar header, right of the logo */
@@ -1113,3 +1123,7 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .rules .res.ask { color: var(--warn); background: var(--warn-soft); }
 .rules .res.allow { color: var(--ok); background: var(--ok-soft); }
 .rules .res.none { color: var(--text-dim); background: var(--bg); border: 1px solid var(--line); }
+
+/* W3-6: a connector in a chat that needs the person to sign in */
+.signin-step { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin: var(--sp-3) 0 var(--sp-4) var(--sp-8); font-size: var(--fs-md); }
+.signin-step .input { flex: 1 1 200px; min-width: 0; }
