@@ -14,6 +14,7 @@ import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/pro
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
+import { globMatcher } from './glob.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_OUTPUT = 8_000;          // characters of command output kept
@@ -131,8 +132,19 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
         depth: { type: 'integer', description: 'How many levels deep, 1 to 4. Default 2' } }, []),
     fn('read_file', 'Read a file from the workspace: text and code, and documents (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, old .doc/.xls/.ppt) as their text, with the words in their pictures. Optionally a line range.',
       { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
-    fn('search_files', 'Search file contents in the workspace for a plain-text string (case-insensitive). Returns path:line: text.',
-      { query: { type: 'string' }, path: { type: 'string', description: 'Folder to search, default "."' } }, ['query']),
+    fn('search_files', 'Search file contents in the workspace. By default query is plain text, case-insensitive; set regex for a regular expression and case_sensitive for exact case. '
+      + 'include / exclude are file patterns such as "*.js", "src/**" or "*.{ts,tsx}" (comma-separated for several). context adds lines around each match. '
+      + 'output: "lines" (path:line: text, the default), "files" (only the names of files that match) or "counts" (matches per file). '
+      + 'Skips .git, node_modules, build output and binary files, and says so when it stops at the limit.',
+      { query: { type: 'string', description: 'Text, or a regular expression when regex is true' },
+        path: { type: 'string', description: 'Folder (or one file) to search, default "."' },
+        regex: { type: 'boolean', description: 'Treat query as a regular expression' },
+        case_sensitive: { type: 'boolean', description: 'Match case exactly. Default false' },
+        include: { type: 'string', description: 'Only files matching this pattern, e.g. "*.js,src/**"' },
+        exclude: { type: 'string', description: 'Skip files matching this pattern, e.g. "*.test.js"' },
+        context: { type: 'integer', description: 'Lines to show before and after each match, 0 to 10' },
+        output: { type: 'string', enum: ['lines', 'files', 'counts'], description: 'Result shape. Default "lines"' },
+        limit: { type: 'integer', description: 'Most results to return, up to 1000. Default 80' } }, ['query']),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
     fn('edit_file', 'Replace one exact snippet in a file. old_text must appear exactly once.',
@@ -150,7 +162,10 @@ export function describeToolCall(name, args = {}) {
   switch (name) {
     case 'list_files': return `List ${args.path || '.'}`;
     case 'read_file': return `Read ${args.path}`;
-    case 'search_files': return `Search "${String(args.query ?? '').slice(0, 60)}"`;
+    case 'search_files': {
+      const q = String(args.query ?? '').slice(0, 60);
+      return `Search ${args.regex ? `/${q}/` : `"${q}"`}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}${args.include ? ` (${String(args.include).slice(0, 40)})` : ''}`;
+    }
     case 'write_file': return `Write ${args.path}`;
     case 'edit_file': return `Edit ${args.path}`;
     case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
@@ -256,33 +271,93 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     return text.length > MAX_READ ? `${text.slice(0, MAX_READ)}\n… (file truncated)` : text;
   }
 
-  async function search_files({ query, path = '.' } = {}) {
-    const needle = String(query ?? '').toLowerCase();
-    if (!needle) throw new Error('search_files needs a query');
+  async function search_files({ query, path = '.', regex = false, case_sensitive = false, include, exclude, context = 0, output = 'lines', limit } = {}) {
+    const text0 = String(query ?? '');
+    if (!text0) throw new Error('search_files needs a query');
+    const shape = String(output || 'lines').toLowerCase();
+    if (!['lines', 'files', 'counts'].includes(shape)) throw new Error('search_files output must be "lines", "files" or "counts"');
+    let re;
+    try {
+      re = new RegExp(regex ? text0 : text0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), case_sensitive ? '' : 'i');
+    } catch (err) {
+      throw new Error(`The search pattern is not a valid regular expression: ${err.message}`);
+    }
+    const around = Math.min(Math.max(Number(context) || 0, 0), 10);
+    const max = Math.min(Math.max(Number(limit) || MAX_MATCHES, 1), 1000);
     const start = await inside(path);
-    const hits = [];
+    const wanted = globMatcher(include);
+    const unwanted = exclude ? globMatcher(exclude) : () => false;
+    const out = [];
+    let found = 0;       // result rows counted against the limit
+    let cut = false;
+    let filesSeen = 0;
+    const isFile = (rel) => wanted(rel) && !unwanted(rel);
+
+    // Files are read a few at a time (the disk, not the CPU, is the wait), then judged in order so the output stays stable.
+    async function load(abs) {
+      try {
+        const buf = await readFile(abs);
+        if (buf.length > 1_000_000 || buf.subarray(0, 8192).includes(0)) return null; // too big, or binary
+        return buf.toString('utf8').split('\n');
+      } catch { return null; }
+    }
+
+    function scan(abs, lines) {
+      const rel = show(abs);
+      if (!lines) return;
+      filesSeen += 1;
+      const hitAt = [];
+      for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) hitAt.push(i);
+      if (!hitAt.length) return;
+      if (shape !== 'lines') {
+        if (found >= max) { cut = true; return; }
+        out.push(shape === 'files' ? rel : `${rel}: ${hitAt.length}`);
+        found += 1;
+        return;
+      }
+      const shown = new Set();
+      const keep = [];
+      for (const i of hitAt) {
+        if (found >= max) { cut = true; break; }
+        found += 1;
+        for (let j = Math.max(0, i - around); j <= Math.min(lines.length - 1, i + around); j += 1) {
+          if (!shown.has(j)) { shown.add(j); keep.push(j); }
+        }
+      }
+      keep.sort((a, b) => a - b);
+      const hitSet = new Set(hitAt);
+      let prev = -2;
+      for (const j of keep) {
+        if (around && prev >= 0 && j > prev + 1) out.push('--');
+        out.push(`${rel}${hitSet.has(j) ? ':' : '-'}${j + 1}${hitSet.has(j) ? ':' : '-'} ${lines[j].replace(/\r$/, '').trim().slice(0, 200)}`);
+        prev = j;
+      }
+      if (around) out.push('--');
+    }
+
+    const candidates = [];
     async function walk(dir) {
-      if (hits.length >= MAX_MATCHES) return;
       let entries = [];
       try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
       for (const e of entries) {
-        if (hits.length >= MAX_MATCHES) return;
         const abs = join(dir, e.name);
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
-        let text;
-        try {
-          const info = await stat(abs);
-          if (info.size > 1_000_000) continue;
-          text = await readFile(abs, 'utf8');
-        } catch { continue; }
-        if (text.includes('\u0000')) continue; // binary
-        text.split('\n').forEach((line, i) => {
-          if (hits.length < MAX_MATCHES && line.toLowerCase().includes(needle)) hits.push(`${show(abs)}:${i + 1}: ${line.trim().slice(0, 200)}`);
-        });
+        if (e.isFile() && isFile(show(abs))) candidates.push(abs);
       }
     }
-    await walk(start);
-    return hits.join('\n') || 'No matches.';
+
+    const info = await stat(start);
+    if (info.isFile()) candidates.push(start); else await walk(start);
+    for (let i = 0; i < candidates.length && !cut; i += 48) {
+      const batch = candidates.slice(i, i + 48);
+      const loaded = await Promise.all(batch.map(load));
+      for (let k = 0; k < batch.length && !cut; k += 1) scan(batch[k], loaded[k]);
+    }
+    while (out.length && out[out.length - 1] === '--') out.pop();
+    if (!out.length) return `No matches in ${filesSeen} file${filesSeen === 1 ? '' : 's'} searched.`;
+    if (cut) out.push(`… (stopped at the limit of ${max} ${shape === 'lines' ? 'matches' : 'files'}; narrow the search with path or include, or raise limit)`);
+    return out.join('\n');
   }
 
   async function write_file({ path, content = '' } = {}) {
