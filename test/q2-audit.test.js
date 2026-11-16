@@ -184,13 +184,13 @@ test('Q2-6: the Session pane shows more than "This computer", the project, the c
 
 // ---------------------------------------------------------------- composer and palette
 
-test('Q2-3: choosing a permission mode or effort before the first message does not send a request for session "null"', { todo: 'Q2-3: src/ui/chat.js:3297-3304 calls sessionSetting(state.sessionId, ...) with no session: PATCH /api/sessions/null/setting/permissionMode answers 404 and the page logs an unhandled error' }, async () => {
+test('Q2-3: choosing a permission mode or effort before the first message does not send a request for session "null"', async () => {
   const js = await read('src/ui/chat.js');
   const handler = /\$\('permission-mode'\)\?\.addEventListener\('change', async \(e\) => \{([\s\S]*?)\}\);/.exec(js)?.[1] ?? '';
   assert.ok(/state\.sessionId\s*(&&|\?)|if \(!state\.sessionId\)/.test(handler), 'the handler does not check for a session');
 });
 
-test('Q2-2: the chosen permission mode survives a redraw of the composer in a new chat', { todo: 'Q2-2: src/ui/chat.js:259 renderComposerHeader sets the mode select to the default whenever there is no session yet, so choosing Plan and then touching the folder or branch chip silently turns it back to Manual' }, async () => {
+test('Q2-2: the chosen permission mode survives a redraw of the composer in a new chat', async () => {
   const js = await read('src/ui/chat.js');
   assert.ok(!/^\s*if \(permMode\) permMode\.value = state\.session\?\.permissionMode \?\?/m.test(js), 'renderComposerHeader resets the mode select unconditionally');
 });
@@ -218,7 +218,7 @@ test('Q2-18: "New terminal" (＋) opens another shell when one is already runnin
 
 // ---------------------------------------------------------------- browser pane
 
-test('Q2-9: the browser pane tells the person when a page is not reachable instead of showing a browser error page', { todo: 'Q2-9: src/ui/browser-pane.js:81-84 sets the frame source with no reachability check; checkBlocked (:131-139) only handles about:blank; act("open") (:229-236) reports success; the dev-server card waits a fixed 4 s (:158)' }, async () => {
+test('Q2-9: the browser pane tells the person when a page is not reachable instead of showing a browser error page', async () => {
   const js = await read('src/ui/browser-pane.js');
   assert.ok(/chrome-error|ERR_CONNECTION|not reachable|could not reach|is not running/i.test(js), 'no handling for an unreachable page');
 });

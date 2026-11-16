@@ -26,6 +26,24 @@ function label(url) {
   try { return new URL(url).host || url; } catch { return url; }
 }
 
+/**
+ * Is anything answering at this address? A no-cors request resolves for any answer (even an error page)
+ * and rejects only when the connection itself fails, which is exactly "the server is not running".
+ */
+export async function reachable(url, ms = 2500) {
+  if (!/^https?:/i.test(url)) return true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function initBrowserPane({ getFolder, runInTerminal }) {
   const host = $('browser-tabs-content');
   if (!host) return null;
@@ -78,12 +96,45 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
     if (empty) paintDevServer();
   }
 
+  // Shown in place of the browser's own error page when nothing answers at the address.
+  function unreachableNote() {
+    let note = $('browser-unreachable');
+    if (!note) {
+      note = document.createElement('div');
+      note.id = 'browser-unreachable';
+      note.className = 'browser-blocked';
+      note.setAttribute('role', 'status');
+      note.hidden = true;
+      const text = document.createElement('p');
+      const retry = document.createElement('button');
+      retry.className = 'btn btn-sm';
+      retry.textContent = 'Try again';
+      retry.addEventListener('click', () => { const t = current(); if (t) show(t); });
+      note.append(text, retry);
+      host.append(note);
+    }
+    return note;
+  }
+
+  async function checkReachable(tab) {
+    const url = tab.history[tab.index];
+    const note = unreachableNote();
+    if (!url || !/^https?:/i.test(url)) { note.hidden = true; return true; }
+    const ok = await reachable(url);
+    if (tab.history[tab.index] !== url || tab.id !== active) return ok; // the person moved on
+    note.hidden = ok;
+    if (!ok) note.firstChild.textContent = `Could not reach ${url}. Nothing is answering there: the server may not be running yet.`;
+    return ok;
+  }
+
   function show(tab) {
     const url = tab.history[tab.index];
     tab.frame.hidden = !url || tab.id !== active;
     if (url) tab.frame.src = url;
+    unreachableNote().hidden = true;
     paintTabs();
     paintBar();
+    if (url) checkReachable(tab);
   }
 
   function newTab(url = '') {
@@ -154,8 +205,12 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
         if (!devServer.running) {
           await runInTerminal(devServer.command);
           use.textContent = 'Starting…';
-          // Give the server a moment, then open it; reload once more if it was slow.
-          setTimeout(() => navigate(`http://localhost:${devServer.port}`), 4000);
+          // Open it when something answers on the port, not after a guess: wait up to 40 seconds.
+          const address = `http://localhost:${devServer.port}`;
+          const until = Date.now() + 40_000;
+          while (Date.now() < until && !(await reachable(address, 1500))) await new Promise((r) => setTimeout(r, 800));
+          if (await reachable(address, 1500)) navigate(address);
+          else use.textContent = 'Not answering yet: check the Terminal';
         } else {
           navigate(`http://localhost:${devServer.port}`);
         }
@@ -233,6 +288,7 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
       const ready = loaded(tab);
       navigate(url);
       await ready;
+      if (!(await reachable(url))) return { error: `Could not reach ${url}: nothing is answering there. Start the server first (start_process), wait for it to print its address, then open it again.` };
       if (!bridge) return { note: `Opened ${url} in the browser panel. Reading and clicking pages needs the desktop app; use read_url to read it.` };
       action = 'read';
     } else if (action === 'back') {

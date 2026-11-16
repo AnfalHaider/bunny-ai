@@ -245,7 +245,6 @@ test('Q2-6: the Session pane shows the folder, the branch, the model and the per
 });
 
 test('Q2-9: opening a page whose server is not running says so in the pane', async ({ page }) => {
-  test.fail(true, 'Q2-9: src/ui/browser-pane.js:81-84 shows the browser\'s own error page and the pane says nothing');
   await open(page); await page.locator('.toolbar [data-view="browser"]').click();
   await page.locator('#browser-url').fill('http://127.0.0.1:9'); await page.locator('#browser-url').press('Enter');
   await expect(page.locator('#browser-tabs-content')).toContainText(/not running|not reachable|could not reach|refused/i, { timeout: 6000 });
