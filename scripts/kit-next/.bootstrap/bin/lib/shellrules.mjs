@@ -232,6 +232,17 @@ function refuseGitMore(call, cmd, ctx, depth) {
   const where0 = (c, cx) => { let w = cx.cwd ?? process.cwd(); for (const d of c.dirs ?? []) w = pathResolve(w, d); return w; };
   if (sub === 'checkout-index' && call.args.some((a) => isLong(a, '--prefix', 3) || isLong(a, '--all', 3) || isLong(a, '--stdin', 4) || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
   if (sub === 'push') { const why3 = refusePush(call.args, where0(call, ctx)); if (why3) return why3; }
+  // K-1 (Security B6): `git hook run` runs a hook by hand, outside the commit
+  if (sub === 'hook') return '"git hook" runs hooks outside the commit; not allowed for this role.';
+  // K-1 (Security B3): a fetch or pull whose refspec writes the live branch label (git fetch origin +main:main)
+  if ((sub === 'fetch' || sub === 'pull') && ctx.liveBranch) {
+    const live = String(ctx.liveBranch).toLowerCase();
+    if (call.args.some((x) => /^--refmap(=|$)/.test(x))) return '"git fetch --refmap" can write the live branch label; not allowed for this role.';
+    for (const a of call.args.filter((x) => !x.startsWith('-'))) {
+      const dest = a.replace(/^\+/, '').split(':')[1];
+      if (dest !== undefined && (dest.includes('*') || dest.replace(/^refs\/heads\//i, '').toLowerCase() === live)) return `fetching into "${ctx.liveBranch}" moves the live branch label; not allowed for this role.`;
+    }
+  }
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
   if (sub === 'symbolic-ref') { const why6 = refuseSymbolicRef(call.args); if (why6) return why6; }
   if (sub === 'branch' || sub === 'checkout' || sub === 'switch' || sub === 'worktree') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }
@@ -273,11 +284,21 @@ function checkBootstrapCli(args, ctx) {
     const role = at >= 0 ? args[at + 1] : null;
     if (role) {
       if (!okId(role)) return 'a sign-off role id must be a plain name, never a path.';
-      if (role.text !== ctx.role && ctx.role !== 'chief-of-staff') {
+      if (role.text !== ctx.role) { // kit 0.6.0: nobody signs for another role, the Chief of Staff included
         return `a sign-off is signed by its own role: you are "${ctx.role}", not "${role.text}". Ask that role to sign.`;
       }
     }
   }
+  // K-1 (kit 0.6.0): who may run the record commands, refused here before the command runs (the command checks again itself)
+  const second = args[1]?.text;
+  const only = (who, what) => (who.includes(ctx.role) ? null : `\`bootstrap ${what}\` is for ${who.join(' / ')} only (you are "${ctx.role}").`);
+  if (sub === 'upgrade') { const w = only(['chief-of-staff'], 'upgrade'); if (w) return w; }
+  if (sub === 'kit' && second === 'apply') { const w = only(['chief-of-staff'], 'kit apply'); if (w) return w; }
+  if (sub === 'flow' && second === 'apply') { const w = only(['chief-of-staff'], 'flow apply'); if (w) return w; }
+  if (sub === 'approve') { const w = only(['chief-of-staff'], 'approve'); if (w) return w; }
+  if (sub === 'piece' && !args.some((x) => x.text === '--suggest')) { const w = only(['chief-of-staff'], 'piece'); if (w) return w; }
+  if (sub === 'release') { const w = only(['chief-of-staff', 'release-ops', 'hotfix'], 'release'); if (w) return w; }
+  if ((sub === 'approve' || sub === 'piece') && args[1] && !args[1].text.startsWith('-') && !okId(args[1])) return 'a piece id must be a plain name (letters, digits, dot, dash), never a path.';
   if (sub === 'require' && ctx.role !== 'chief-of-staff' && ctx.role !== 'security') {
     return `only the Chief of Staff or Security sets which roles must sign a piece (you are "${ctx.role}").`;
   }
@@ -310,6 +331,8 @@ export function checkShell(parsed, ctx, depth = 0) {
     }
     // A5: the role is not set from a command line.
     if (cmd.words.some((w) => ROLE_WORD.test(w.text))) return 'the session role cannot be set from a command. The Chief of Staff assigns roles.';
+    // K-1 (Security B4): and not through the Windows environment either ([Environment]::SetEnvironmentVariable, setx, Set-Item env:)
+    if (cmd.words.some((w) => /BOOTSTRAP_ROLE/i.test(w.text)) && cmd.words.some((w) => /SetEnvironmentVariable|^setx(\.exe)?$|^set-item$|^si$|^new-itemproperty$/i.test(w.text))) return 'the session role cannot be set from a command. The Chief of Staff assigns roles.';
     if (!(ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role) && cmd.words.some((w) => GIT_DIR_ENV.test(w.text))) {
       return 'setting GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE or GIT_COMMON_DIR points git at other files than the ones the hooks watch.';
     }

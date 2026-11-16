@@ -10,7 +10,7 @@
 // Copilot-style hooks all treat exit 2 as "deny and tell the agent why").
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve as resolvePath, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadFlow } from './lib/flow.mjs';
 import { currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
@@ -88,8 +88,16 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   let root = repoRoot(cwd);
   if (!root && cwd !== process.cwd()) { root = repoRoot(process.cwd()); if (root) cwd = process.cwd(); }
   if (!root) return { allow: true };
-  const policy = loadPolicy(root);
-  if (!policy) return { allow: true };
+  let policy = loadPolicy(root);
+  if (!policy) {
+    // K-1 (Security B7): a repository inside the project (git init sub; cd sub) has no policy of its own: the project that the hook runs in judges it.
+    const outer = repoRoot(process.cwd());
+    const inside = outer && outer !== root && resolvePath(root).toLowerCase().startsWith(resolvePath(outer).toLowerCase() + sep);
+    const outerPolicy = inside ? loadPolicy(outer) : null;
+    if (!outerPolicy) return { allow: true };
+    root = outer;
+    policy = outerPolicy;
+  }
   const role = currentRole(root);
   // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
   let brief = loadRole(root, role) || {};
@@ -107,6 +115,10 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
     // The hook-skip, hooks-folder and role rules read WORDS through the tokenizer (policy.shell_parse).
     // When the command cannot be read with confidence (unclosed quote, bash/PowerShell ambiguity) or the
     // switch is off, the old regexes over the raw text apply as well: stricter, with their false blocks.
+    // K-1 (Security B4): the session role cannot be set through the Windows environment either ([Environment]::SetEnvironmentVariable, setx, Set-Item env:)
+    if (/BOOTSTRAP_ROLE/i.test(command) && /SetEnvironmentVariable|\bsetx(\.exe)?\b|\bSet-Item\b|\bNew-ItemProperty\b/i.test(command)) {
+      return { allow: false, reason: `Blocked for role "${role}": the session role cannot be set from a command. The Chief of Staff assigns roles.` };
+    }
     const parsed = policy.shell_parse === false ? null : parseShell(command);
     const strict = !parsed || parsed.uncertain;
     // Item 5: a deny_all pattern is judged against each simple command with quoted text and here-document bodies blanked, so a flag in a

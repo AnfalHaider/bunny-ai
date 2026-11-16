@@ -143,9 +143,17 @@ export function completeSignoffs(root, sha, policy, { flow = null, codeCommits =
   const done = [];
   for (const p of piecesAt(root, sha, policy, forged)) {
     if (!flow) {
-      const required = p.required || policy.signoffs.default_required;
-      const shas = required.map((r) => p.signed[r]);
-      if (shas.every(Boolean) && shas.every((s) => sameSha(s, shas[0]))) done.push({ piece: p.piece, sha: shas[0] });
+      let required = p.required || policy.signoffs.default_required;
+      let shas = required.map((r) => p.signed[r]);
+      if (shas.every(Boolean) && shas.every((s) => sameSha(s, shas[0]))) {
+        // K-1 (Security B12): the code this sign-off covers touches the guard: then Security signed it on the same sha too
+        const covered = codeCommits.filter((c) => git(['merge-base', '--is-ancestor', c, shas[0]], root) !== null);
+        const files = covered.flatMap((c) => (git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', c], root) || '').split('\n').filter(Boolean));
+        required = needsSecurity(files, required);
+        shas = required.map((r) => p.signed[r]);
+        if (shas.every(Boolean) && shas.every((s) => sameSha(s, shas[0]))) done.push({ piece: p.piece, sha: shas[0] });
+        else notes.push(`${p.piece}: changes the guard (${files.filter((f) => matchesAny(f, GUARD_GLOBS)).slice(0, 3).join(', ')}), so it also needs Security's sign-off on the same commit`);
+      }
       continue;
     }
     if (!p.lane) { notes.push(`${p.piece}: no lane set (the Chief of Staff runs \`bootstrap piece ${p.piece} --lane <lane>\`)`); continue; }

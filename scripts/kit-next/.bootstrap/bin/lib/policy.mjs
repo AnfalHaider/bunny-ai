@@ -24,6 +24,8 @@ export const DEFAULT_POLICY = {
   destructive_commands: [],
   // A1: the scope check on changed paths. Pushers listed here move other roles' commits, so are not re-checked at push.
   scope_check: { commit: true, push: true, push_exempt_roles: ['release-ops', 'hotfix', 'chief-of-staff'] },
+  // K-1: the record folders are written through the bootstrap command; only these roles write there by hand. In the DEFAULT policy, so a project made by `init` has it too.
+  records: { globs: ['docs/signoffs/**', 'docs/releases/**', 'docs/flow-changes/**', 'docs/kit-changes/**'], writers: ['chief-of-staff'] },
 };
 
 export function git(args, cwd, opts = {}) {
@@ -62,6 +64,7 @@ export function loadPolicy(root) {
     signoffs: { ...DEFAULT_POLICY.signoffs, ...user.signoffs },
     releases: { ...DEFAULT_POLICY.releases, ...user.releases },
     scope_check: { ...DEFAULT_POLICY.scope_check, ...user.scope_check },
+    records: { ...DEFAULT_POLICY.records, ...user.records },
   };
 }
 
