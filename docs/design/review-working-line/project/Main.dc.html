@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bunny working line</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#6a4fd8}a:hover{color:#5a3fc8}
+</style>
+</helmet>
+<div style="width: 1280px; min-height: 1500px; box-sizing: border-box; padding: 48px 56px; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, ui-sans-serif, system-ui, sans-serif; display: flex; flex-direction: column; gap: 32px;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.01em;">Thinking and the hopping bunny, as one line</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 1.55; color: {{c.dim}}; max-width: 860px;">Today Bunny shows two things for one moment: a grey "Thinking…" row inside the reply, and the hopping bunny with its word and timer at the bottom. Proposed: one live line. The bunny, its word and the timer are the thinking row, and opening it shows the thinking. When the model moves on, the line settles into "Thought for 53s" where it was, like Claude. Invented example; drawn with Bunny's own colours.</p>
+  </div>
+
+  <div style="display: flex; gap: 32px; align-items: stretch;">
+
+    <section style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.dim}};">Today (0.1.6)</h2>
+      <div style="background: {{c.bg}}; border: 1px solid {{c.line}}; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-height: 360px;">
+        <div style="align-self: flex-end; background: {{c.side}}; border-radius: 14px; padding: 10px 14px; font-size: 15px; max-width: 80%;">Tidy up the pricing page and keep the layout.</div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.dim}};"><span>›</span><span>Ran a command</span><span style="margin-left: auto; font-size: 12px; color: {{c.faint}};">done</span></div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: {{c.accent}};"><span>›</span><span>Thinking…</span></div>
+        <div style="font-size: 15px; line-height: 1.6;">I have the page. Now I'll tidy the markup and keep every section where it is.</div>
+        <div style="flex-grow: 1;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{c.dim}};">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><ellipse cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><ellipse cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><circle cx="12" cy="15" r="7" fill="{{c.accent}}"></circle><circle cx="9.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="14.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="12" cy="16.6" r=".9" fill="{{c.onAccent}}"></circle></svg>
+          <span style="color: {{c.text}};">Snuggling the code…</span><span style="font-size: 13px; color: {{c.faint}};">53s</span>
+        </div>
+      </div>
+      <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: {{c.dim}};">
+        <li>Two indicators for one moment, far apart: "Thinking…" mid-reply, the bunny at the bottom.</li>
+        <li>"Thinking…" has no time; the bunny's timer is not tied to the thinking.</li>
+        <li>When slow, the bunny line greys to "Hmph… 1m 15s" with no hint of what it waits on.</li>
+      </ul>
+    </section>
+
+    <section style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.accent}};">Proposed</h2>
+      <div style="background: {{c.bg}}; border: 2px solid {{c.accentRing}}; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-height: 360px;">
+        <div style="align-self: flex-end; background: {{c.side}}; border-radius: 14px; padding: 10px 14px; font-size: 15px; max-width: 80%;">Tidy up the pricing page and keep the layout.</div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.dim}};"><span>›</span><span>Ran a command</span><span style="margin-left: auto; font-size: 12px; color: {{c.faint}};">done</span></div>
+        <div style="font-size: 15px; line-height: 1.6;">I have the page. Now I'll tidy the markup and keep every section where it is.</div>
+        <button type="button" aria-expanded="false" style="all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{c.dim}}; padding: 6px 8px; margin-left: -8px; border-radius: 8px; min-height: 32px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><ellipse cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><ellipse cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><circle cx="12" cy="15" r="7" fill="{{c.accent}}"></circle><circle cx="9.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="14.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="12" cy="16.6" r=".9" fill="{{c.onAccent}}"></circle></svg>
+          <span style="color: {{c.text}};">Snuggling the code…</span>
+          <span style="font-size: 13px; color: {{c.faint}};">thinking · 53s</span>
+          <span style="font-size: 14px; color: {{c.faint}};">›</span>
+        </button>
+        <div style="flex-grow: 1;"></div>
+      </div>
+      <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: {{c.dim}};">
+        <li>One live line, always the last thing in the reply.</li>
+        <li>While the model thinks, the line says so ("thinking · 53s") and opens to show the thinking.</li>
+        <li>The separate "Thinking…" row is gone; the word and the timer stay.</li>
+      </ul>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <h2 style="margin: 0; font-size: 20px; font-weight: 600;">The line through one reply</h2>
+    <p style="margin: 0; font-size: 14px; color: {{c.dim}};">Five moments, top to bottom. Only one line is ever alive; finished thinking stays as a quiet row you can open.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;">
+
+    <div style="border: 1px solid {{c.line}}; border-radius: 14px; padding: 20px; background: {{c.surface}}; display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.faint}};">1 · Thinking, folded (default)</div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{c.dim}};">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><ellipse cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><ellipse cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><circle cx="12" cy="15" r="7" fill="{{c.accent}}"></circle><circle cx="9.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="14.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="12" cy="16.6" r=".9" fill="{{c.onAccent}}"></circle></svg>
+        <span style="color: {{c.text}};">Whisker-wiggling…</span><span style="font-size: 13px; color: {{c.faint}};">thinking · 12s</span><span style="color: {{c.faint}};">›</span>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: {{c.dim}};">The bunny hops, the word rotates from the "thinking" set, the time ticks. Click or Enter opens it.</p>
+    </div>
+
+    <div style="border: 1px solid {{c.line}}; border-radius: 14px; padding: 20px; background: {{c.surface}}; display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.faint}};">2 · Thinking, opened</div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{c.dim}};">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><ellipse cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><ellipse cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><circle cx="12" cy="15" r="7" fill="{{c.accent}}"></circle><circle cx="9.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="14.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="12" cy="16.6" r=".9" fill="{{c.onAccent}}"></circle></svg>
+        <span style="color: {{c.text}};">Whisker-wiggling…</span><span style="font-size: 13px; color: {{c.faint}};">thinking · 18s</span><span style="color: {{c.faint}};">⌄</span>
+      </div>
+      <div style="margin-left: 32px; padding: 8px 14px; border-left: 2px solid {{c.lineStrong}}; font-size: 13px; line-height: 1.6; color: {{c.dim}}; white-space: pre-wrap;">The page has three price cards and a comparison table. Keep the card order. The table header repeats the plan names, so tidy those together…▍</div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: {{c.dim}};">The thinking streams under the line, as today's open "Thinking…" does. "Show thinking" in Settings opens it by default.</p>
+    </div>
+
+    <div style="border: 1px solid {{c.line}}; border-radius: 14px; padding: 20px; background: {{c.surface}}; display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.faint}};">3 · Moves on to a step</div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.dim}};"><span>›</span><span>Thought for 21s</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.dim}};"><span>›</span><span>Read 2 files</span></div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{c.dim}};">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><ellipse cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><ellipse cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><circle cx="12" cy="15" r="7" fill="{{c.accent}}"></circle><circle cx="9.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="14.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="12" cy="16.6" r=".9" fill="{{c.onAccent}}"></circle></svg>
+        <span style="color: {{c.text}};">Bunnifying pricing.html…</span><span style="font-size: 13px; color: {{c.faint}};">34s</span>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: {{c.dim}};">The thinking settles in place as "Thought for 21s" (open it any time). The live line keeps hopping below, now naming the step; no chevron when there is no thinking to show.</p>
+    </div>
+
+    <div style="border: 1px solid {{c.line}}; border-radius: 14px; padding: 20px; background: {{c.surface}}; display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.faint}};">4 · Slow model (grumpy)</div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{c.dim}};">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><ellipse cx="7.5" cy="9" rx="2.2" ry="4" transform="rotate(-55 7.5 9)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><ellipse cx="16.5" cy="9" rx="2.2" ry="4" transform="rotate(55 16.5 9)" fill="{{c.accent}}" fill-opacity=".55"></ellipse><circle cx="12" cy="15" r="7" fill="{{c.accent}}"></circle><circle cx="9.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="14.5" cy="14" r="1" fill="{{c.onAccent}}"></circle><circle cx="12" cy="16.6" r=".9" fill="{{c.onAccent}}"></circle></svg>
+        <span style="color: {{c.text}};">Hmph…</span><span style="font-size: 13px; color: {{c.faint}};">waiting for Claude Sonnet · 1m 15s</span>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: {{c.dim}};">Ears back, as today, but the word stays readable and the line says what it waits on. At about 30 s Bunny moves to the next model and says so in one quiet line (as built in 0.1.5).</p>
+    </div>
+
+    <div style="border: 1px solid {{c.line}}; border-radius: 14px; padding: 20px; background: {{c.surface}}; display: flex; flex-direction: column; gap: 12px; grid-column: span 2;">
+      <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: {{c.faint}};">5 · Reply finished</div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.dim}};"><span>›</span><span>Thought for 21s</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.dim}};"><span>›</span><span>Read 2 files, edited a file</span><span style="font-size: 12px; color: {{c.faint}};">3 steps · +12 −3 · 34s</span></div>
+      <div style="font-size: 15px; line-height: 1.6;">The pricing page is tidied: the three cards and the table keep their order, and the repeated plan names now match.</div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: {{c.dim}};">No bunny once the reply is done. Saved replies keep "Thought for …" rows, so reopening a chat looks the same as watching it.</p>
+    </div>
+  </div>
+
+  <div style="border-top: 1px solid {{c.line}}; padding-top: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.6; color: {{c.dim}};">
+    <div><b style="color: {{c.text}};">Where it changes:</b> src/ui/chat.js thinkingBlock (:1790) and showLiveThinking (:1800); src/ui/bunny-working.js gains an open state and a "thinking" tail; app.css .thinking and .bunny-working.</div>
+    <div><b style="color: {{c.text}};">Accessibility:</b> the live line is a real button with aria-expanded; the time is not read aloud every second (role=status announces the word only).</div>
+    <div><b style="color: {{c.text}};">Phone:</b> same single line; the word shortens before the time wraps.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1280,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? false;
+    const c = dark
+      ? { bg: '#141518', side: '#1a1b1f', surface: '#1f2025', line: '#2c2d33', lineStrong: '#3a3b42', text: '#ececee', dim: '#a0a2aa', faint: '#8a8d95', accent: '#b3a1ff', accentRing: 'rgba(179,161,255,.40)', onAccent: '#141518' }
+      : { bg: '#faf9f6', side: '#f3f1ec', surface: '#ffffff', line: '#e6e2da', lineStrong: '#d6d1c6', text: '#1f2023', dim: '#62666f', faint: '#6f737b', accent: '#6a4fd8', accentRing: 'rgba(106,79,216,.35)', onAccent: '#ffffff' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>
