@@ -2,6 +2,13 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - T-3 offline and fixes at d0d4b95 (6d98b9e, 092cc6d, d0d4b95): PASS for what is built
+
+Read the diffs of `app.js`, `chat.js`, `network.js`, `ui/chat.js`, `i18n-agent.js`, `t3-network.test.js`. Ran on a scratch checkout of d0d4b95: t3-network, t3-fallback, plan-mode, request-guard unit tests 45 pass, 0 fail. e2e (`t3-offline.spec.js`) NOT run by me (the scratch checkout picked the global Playwright and failed to load its config); it rests on Builder's gate and QA. The range also holds D-2 (transcript) work, not reviewed here.
+**My two findings are fixed.** Every failure is saved and a retry replaces the previous note (`dropTrailingErrors` before the append), so a reload always says why and the chat never holds two; the o-series and gpt-5 pattern `gpt-5|(^|[/:-])o[1-9](-|$)` matches `o1`, `openai/o3-mini`, `o4-mini` and not `gpt-4o`.
+**Offline matches the spec.** Offline only when the browser says offline AND the probe agrees (`networkDown`); the probe is a bare GET to three https hosts, parallel, 3 s, any answer is online, bad entries are failed probes, no body, headers or cookies (tested); `GET /api/network` is behind the token; the test-only `PUT /api/network` works only when `fake` is on. The queued message is cleared before it is sent (once), cancelled by Cancel, Stop, a new message or leaving the chat; a loopback model answers offline and the line says so.
+**Notes, not blocking:** (1) leaving the chat cancels a waiting message silently, so the typed text is lost; put it back in the composer. (2) Resume relies on `navigator.onLine` or the `online` event, so a browser stuck on "offline" keeps the message waiting until Cancel. (3) The probe adds a new contact with three third-party hosts (gstatic, Cloudflare, Apple), disclosed in the setting's help text; the owner should know, it is my spec's choice. (4) Still owed: T3-4 partial text, T3-5 cool-down, T3-16 Auto starts from the last answerer, schedules' offline line.
+
 ## 2026-11-16 - T-3 core at dd1f436 (diff 4405dc0..dd1f436): core correct, ONE fix needed, rest not built yet
 
 Read the whole diff (`chat.js`, `unavailable.js`, `sessions.js`, `app.js`, `ui/chat.js`, `i18n-agent.js`, tests). Ran on a scratch checkout: `t3-fallback.test.js` plus `q2-audit.test.js` 21 pass, 0 fail (T3-1, 2, 3, 7, 8 covered by name). e2e not run.
