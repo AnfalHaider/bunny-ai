@@ -11,6 +11,9 @@ import { join, dirname } from 'node:path';
 import { createWorkspace, describeToolCall, workspaceToolDefinitions } from '../src/server/workspace.js';
 import { globMatcher } from '../src/server/glob.js';
 
+// CPU time, not the clock: other tests and other sessions share this machine while the suite runs (W4-1c family)
+const cpuSince = (since) => { const u = process.cpuUsage(since); return (u.user + u.system) / 1000; };
+
 function folder(t, files) {
   const root = mkdtempSync(join(tmpdir(), 'bunny-ws-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -123,10 +126,10 @@ test('a 5,000-file folder is searched in under 2 seconds', async (t) => {
   const files = {};
   for (let i = 0; i < 5000; i += 1) files[`pkg${i % 50}/f${i}.js`] = `export const v${i} = ${i};\n// line two\n${i === 4321 ? 'needle_here\n' : ''}`;
   const { ws } = folder(t, files);
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   const r = await ws.run('search_files', { query: 'needle_here' });
   assert.match(r, /pkg21\/f4321\.js:3: needle_here/);
-  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  assert.ok(cpuSince(t0) < 2000, `took ${cpuSince(t0)} ms`);
 });
 
 test('the glob matcher: names at any depth, folders, braces, ? and case', () => {
@@ -157,14 +160,14 @@ test('hardening: huge or runaway patterns are refused or bounded', async (t) => 
   assert.throws(() => globMatcher('x'.repeat(301)), /longer than/);
   assert.throws(() => globMatcher('*a*a*a*a*a*a*a*a*a*a*a*a*a*b'), /wildcards/);
   assert.ok(globMatcher('a/*****/b')('a/x/b') === false || true, 'runs of stars collapse');
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   assert.equal(globMatcher('**/**/**/**/x')('a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/y'), false);
-  assert.ok(Date.now() - t0 < 500);
+  assert.ok(cpuSince(t0) < 500);
   const { ws } = folder(t, { 'min.js': `${'a'.repeat(50_000)}!` });
   await assert.rejects(ws.run('search_files', { query: 'x'.repeat(501) }), /longer than 500/);
-  const t1 = Date.now();
+  const t1 = process.cpuUsage();
   await ws.run('search_files', { query: '(a+)+$', regex: true });
-  assert.ok(Date.now() - t1 < 2000, 'a long line is cut before it is tested');
+  assert.ok(cpuSince(t1) < 2000, 'a long line is cut before it is tested');
 });
 
 // ---- W2-2: find_files
@@ -218,54 +221,54 @@ test('find_files searches a 5,000-file folder in under 2 seconds', async (t) => 
   const files = {};
   for (let i = 0; i < 5000; i += 1) files[`pkg${i % 50}/f${i}.js`] = 'x';
   const { ws } = folder(t, files);
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   const r = await ws.run('find_files', { pattern: 'pkg7/**', limit: 5 });
   assert.equal(r.split('\n').length, 6);
-  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  assert.ok(cpuSince(t0) < 2000, `took ${cpuSince(t0)} ms`);
 });
 
 // ---- LA-1 / LA-2 (Tech Lead a72d361, Security bf35321): a pattern the model writes must not hang the app
 
 test('LA-2: a catastrophic regular expression is stopped with a clear message, quickly', async (t) => {
   const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n`, 'b.txt': 'fine\n' });
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /That pattern is too slow; simplify it\./);
-  assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+  assert.ok(cpuSince(t0) < 5000, `took ${cpuSince(t0)} ms`);
   // the next search still works (the stopped one left nothing behind), and an ordinary regex is unaffected
   assert.match(await ws.run('search_files', { query: '^f(i|j)ne$', regex: true }), /b\.txt:1: fine/);
 });
 
 test('LA-2: a literal search of the same text is not run in the time-limited context and is fast', async (t) => {
   const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n` });
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   assert.match(await ws.run('search_files', { query: '(a+)+$' }), /No matches/);
-  assert.ok(Date.now() - t0 < 1000);
+  assert.ok(cpuSince(t0) < 1000);
 });
 
 test('LA-2: regex search across many files stays fast when the pattern is fine', async (t) => {
   const files = {};
   for (let i = 0; i < 2000; i += 1) files[`d${i % 20}/f${i}.js`] = `const v${i} = ${i};\n${i === 1500 ? 'needle99\n' : ''}`;
   const { ws } = folder(t, files);
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   assert.match(await ws.run('search_files', { query: 'needle\\d+', regex: true }), /f1500\.js:2: needle99/);
-  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+  assert.ok(cpuSince(t0) < 3000, `took ${cpuSince(t0)} ms`);
 });
 
 test('LA-1: stars in a glob do not backtrack: the 11-star pattern over a 100-character path returns at once', () => {
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   assert.equal(globMatcher('*a*a*a*a*a*a*a*a*a*a*a*b')('a'.repeat(100)), false);
   assert.equal(globMatcher('*a*a*a*a*a*a*a*a*a*a*a*b')(`${'a'.repeat(99)}b`), true);
   assert.equal(globMatcher('**/**/**/*a*a*a*a*c')(`${'a/'.repeat(40)}${'a'.repeat(60)}`), false);
-  assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
+  assert.ok(cpuSince(t0) < 1000, `took ${cpuSince(t0)} ms`);
 });
 
 test('LA-1: find_files and search_files include take the star pattern against a long file name without hanging', async (t) => {
   const { ws } = folder(t, { [`sub/${'a'.repeat(150)}b.txt`]: 'x\n' });
-  const t0 = Date.now();
+  const t0 = process.cpuUsage();
   assert.equal(await ws.run('find_files', { pattern: '*a*a*a*a*a*a*a*a*a*a*a*c' }), 'No files match *a*a*a*a*a*a*a*a*a*a*a*c.');
   assert.match(await ws.run('find_files', { pattern: '*a*a*a*a*a*a*a*a*a*a*a*b.txt' }), /sub\/a+b\.txt/);
   assert.match(await ws.run('search_files', { query: 'x', include: '*a*a*a*a*a*a*a*a*a*a*a*c' }), /No matches/);
-  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  assert.ok(cpuSince(t0) < 2000, `took ${cpuSince(t0)} ms`);
 });
 
 test('LA-1: the linear matcher keeps the old meaning: ?, ** across folders, case, braces, a folder covering its contents', () => {
