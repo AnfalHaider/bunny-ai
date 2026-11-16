@@ -43,6 +43,8 @@ export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
+  extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
+  onReplyEnd = null,
 }) {
   if (fake) {
     yield* fakeStream(model, messages, signal);
@@ -63,7 +65,31 @@ export async function* streamChat({
 
   // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
   const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
-  for (let round = 0; round < roundLimit(); round += 1) {
+  let cutOffCalls = 0;
+  let inputTokens = 0; let repeats = 0; let sinceNew = 0; let lastSig = '';
+  const seenCalls = new Set();
+  for (let round = 0; ; round += 1) {
+    // W6-2: out of steps is not the end of the job. The caller may grant more (up to its own cap) and the work goes on.
+    if (round >= roundLimit()) {
+      let more = false;
+      try { more = typeof extendRounds === 'function' && !signal?.aborted && Boolean(await extendRounds(round)); } catch { more = false; }
+      if (!more) break;
+    }
+    // A long job must not outgrow the model's window: older results and big arguments are shortened, the newest kept whole.
+    if (contextChars) shrinkConversation(conversation, contextChars);
+    // Limits that need a person: a token budget for the reply, the same step three times in a row, no new step in 25 rounds.
+    // The caller asks them (ask_user); "keep going" resets the counters, anything else ends the work with a report.
+    if (typeof onLimit === 'function' && round > 0) {
+      const kind = tokenBudget && inputTokens >= tokenBudget ? 'tokens' : repeats >= 3 ? 'repeat' : sinceNew >= 25 ? 'stalled' : null;
+      if (kind) {
+        let go = false;
+        try { go = !signal?.aborted && Boolean(await onLimit({ kind, round, inputTokens, repeats, sinceNew, step: lastSig.split('|')[0] })); } catch { go = false; }
+        if (!go) break;
+        if (kind === 'tokens') inputTokens = 0;
+        repeats = 0; sinceNew = 0; lastSig = '';
+      }
+    }
+    inputTokens += Math.ceil(conversation.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0), 0) / 4);
     const body = { model, messages: conversation, stream: true };
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
@@ -71,8 +97,8 @@ export async function* streamChat({
     if (offerTools) body.tools = tools;
     if (extraBody) Object.assign(body, extraBody);
 
-    let { text, toolCalls, finish, aborted } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking,
+    let { text, toolCalls, finish, aborted, shown } = yield* streamRound({
+      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools,
     });
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
@@ -80,7 +106,7 @@ export async function* streamChat({
     // nothing to show. Once, ask again with more room before giving up.
     if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length' && !signal?.aborted) {
       const roomier = { ...body, max_tokens: Math.min(32_000, (body.max_tokens || 4096) * 4) };
-      ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking }));
+      ({ text, toolCalls, finish, shown } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools }));
       if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
         throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
       }
@@ -90,10 +116,29 @@ export async function* streamChat({
     // Those are read and run, so the work goes on instead of stopping on a line of markup.
     if (offerTools && !toolCalls.length) {
       const offered = new Set(tools.map((d) => d.function?.name).filter(Boolean));
-      const written = parseTextToolCalls(text, offered);
+      // A call for a tool that is not offered is read too, and answered with an error, so it is never left on screen as text.
+      const written = parseTextToolCalls(text, null);
       if (written.length) {
         toolCalls = written;
         text = stripToolMarkup(text);
+        for (const c of written) c.unoffered = !offered.has(c.function.name);
+      } else if (shown < String(text ?? '').length) {
+        yield text.slice(shown); // it only looked like a call: show what was held back
+      }
+    }
+
+    // A call cut off by the reply limit is never run: half a write_file would overwrite a file with half its content.
+    // The model is told, and asked to send it again in smaller pieces.
+    if (offerTools && toolCalls.length && finish === 'length') {
+      const writtenOut = toolCalls.some((c) => String(c.id).startsWith('text_call_'));
+      const brokenJson = toolCalls.some((c) => { try { JSON.parse(c.function.arguments || '{}'); return false; } catch { return true; } });
+      if (writtenOut || brokenJson) {
+        cutOffCalls += 1;
+        if (cutOffCalls > 3) throw new ConnectError('chat.tooLong', 'The model kept running out of room in the middle of a tool call. Raise Max tokens in Settings, or pick another model.');
+        conversation.push({ role: 'assistant', content: stripToolMarkup(text) || '(cut off)' },
+          { role: 'user', content: 'Your last reply hit the length limit in the middle of a tool call, so that call was NOT run. Send it again in smaller pieces: '
+            + 'for a big file, write it in several steps (create it with the first part, then add the rest with edit_file or run_command), and keep each call short.' });
+        continue;
       }
     }
 
@@ -104,16 +149,34 @@ export async function* streamChat({
         if (finish === 'content_filter') throw new ConnectError('chat.refused', 'The model declined to answer.');
         throw new ConnectError('chat.empty', 'The model sent back an empty reply. Try again, or pick another model.');
       }
+      // W6-3: a reply that stops to ask permission for work already asked for is turned into "carry on".
+      if (offerTools && String(text ?? '').trim() && !signal?.aborted && typeof onReplyEnd === 'function') {
+        const nudge = onReplyEnd({ text, round });
+        if (nudge) {
+          conversation.push({ role: 'assistant', content: text }, { role: 'user', content: nudge });
+          continue;
+        }
+      }
       return;
     }
 
     // Run what the model asked for and put the answers back into the
     // conversation, so the model can finish its answer.
-    conversation.push({ role: 'assistant', content: text || null, tool_calls: toolCalls });
+    conversation.push({ role: 'assistant', content: text || null, tool_calls: toolCalls.map(({ unoffered, ...c }) => c) });
+    let fresh = false;
+    for (const c of toolCalls) {
+      const sig = `${c.function.name}|${c.function.arguments}`;
+      repeats = sig === lastSig ? repeats + 1 : 1;
+      lastSig = sig;
+      if (!seenCalls.has(sig)) { seenCalls.add(sig); fresh = true; }
+    }
+    sinceNew = fresh ? 0 : sinceNew + 1;
     // A tool may answer with pictures too (a screenshot): tool messages carry text
     // only, so the pictures follow the answers as one message the model can see.
     const pictures = [];
+    const offeredNames = new Set((tools ?? []).map((d) => d.function?.name).filter(Boolean));
     const runOne = async (call) => {
+      if (call.unoffered) return `There is no tool called ${call.function.name} here. The tools you have: ${[...offeredNames].join(', ')}.`;
       try {
         return await runTool({ name: call.function.name, arguments: call.function.arguments });
       } catch (err) {
@@ -157,8 +220,48 @@ export async function* streamChat({
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
-    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking });
+    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: true });
   }
+}
+
+/**
+ * Keep a long conversation within a size (characters). Newest messages stay whole; older tool results are cut to a short
+ * head and tail, and big arguments of older tool calls (a file written in full) are replaced by a short summary (W6-22).
+ * Changes the array in place; the first message(s) and the last KEEP_WHOLE messages are never touched.
+ */
+const KEEP_WHOLE = 16;
+export function shrinkConversation(conversation, budget) {
+  const size = () => conversation.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length)
+    + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0), 0);
+  if (size() <= budget) return false;
+  const limit = conversation.length - KEEP_WHOLE;
+  // Pass 1: big arguments of tool calls (a whole file written) become a one-line summary.
+  for (let i = 0; i < limit; i += 1) {
+    const m = conversation[i];
+    if (m.role !== 'assistant' || !m.tool_calls) continue;
+    m.tool_calls = m.tool_calls.map((c) => {
+      const raw = c.function?.arguments;
+      if (typeof raw !== 'string' || raw.length <= 1500) return c;
+      let summary;
+      try {
+        const a = JSON.parse(raw);
+        summary = Object.fromEntries(Object.entries(a).map(([k, v]) => [k, typeof v === 'string' && v.length > 300 ? `${v.slice(0, 120)}… (${v.length} characters, left out of the history)` : v]));
+      } catch { summary = { note: `${raw.slice(0, 200)}… (${raw.length} characters)` }; }
+      return { ...c, function: { ...c.function, arguments: JSON.stringify(summary) } };
+    });
+  }
+  // Pass 2: older tool results, oldest first, until the conversation fits.
+  for (let i = 0; i < limit && size() > budget; i += 1) {
+    const m = conversation[i];
+    if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 600) m.content = `${clip(m.content, 600)}
+(older result shortened; read the file again if you need it)`;
+  }
+  // Pass 3: pictures from older messages go.
+  for (let i = 0; i < limit && size() > budget; i += 1) {
+    const m = conversation[i];
+    if (Array.isArray(m.content)) m.content = m.content.filter((p) => p.type !== 'image_url').map((p) => p.text ?? '').join(' ') || '(picture left out)';
+  }
+  return true;
 }
 
 /**
@@ -187,11 +290,14 @@ async function errorDetail(res) {
   }
 }
 
+const MARKERS = ['<tool_call', '<function='];
+const MARKUP_START = /<tool_call|<function=/;
+
 /**
  * One round of streaming.
  * @returns {AsyncGenerator<string, {text: string, toolCalls: object[]}>}
  */
-async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstByteMs = DEFAULT_STALL_MS, gapMs = DEFAULT_GAP_MS, onThinking = null }) {
+async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstByteMs = DEFAULT_STALL_MS, gapMs = DEFAULT_GAP_MS, onThinking = null, hideMarkup = false }) {
   // The provider can accept the request and then never send a byte. Without a
   // watchdog the chat spins forever, so silence longer than stallMs is an
   // error, not a wait. The person's own stop signal still cuts in first.
@@ -224,6 +330,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstBy
   let buffer = '';
   let text = '';
   let finish = null;
+  let shown = 0; // how much of `text` was passed on (all of it, unless a written-out tool call is being held back)
   const toolCalls = new Map();
   try {
     if (res.status === 401 || res.status === 403) throw new ConnectError('chat.unauthorized', `The provider rejected that key`);
@@ -264,7 +371,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstBy
         if (!line.startsWith('data:')) continue;
 
         const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return { text, toolCalls: finishCalls(toolCalls), finish };
+        if (payload === '[DONE]') return { text, toolCalls: finishCalls(toolCalls), finish, shown };
 
         let parsed;
         try {
@@ -280,7 +387,13 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstBy
         if (typeof thought === 'string' && thought && onThinking) onThinking(thought);
         if (typeof delta?.content === 'string' && delta.content) {
           text += delta.content;
-          yield delta.content;
+          if (!hideMarkup) { yield delta.content; shown = text.length; } else {
+            // W6-4: a written-out tool call is run, not shown: hold text back from its first marker on.
+            const at = text.search(MARKUP_START);
+            let end = at >= 0 ? at : text.length;
+            if (at < 0) { const lt = text.lastIndexOf('<'); if (lt >= text.length - 14 && MARKERS.some((m) => m.startsWith(text.slice(lt)))) end = lt; }
+            if (end > shown) { yield text.slice(shown, end); shown = end; }
+          }
         }
         // Image models (OpenRouter) return pictures beside the text: show them in the reply.
         for (const img of Array.isArray(delta?.images) ? delta.images : []) {
@@ -302,7 +415,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstBy
     reader?.releaseLock?.();
   }
 
-  return { text, toolCalls: finishCalls(toolCalls), finish };
+  return { text, toolCalls: finishCalls(toolCalls), finish, shown };
 }
 
 /**
@@ -315,12 +428,12 @@ export function parseTextToolCalls(text, offered) {
   const calls = [];
   const src = String(text ?? '');
   const add = (name, args) => {
-    if (!offered.has(name)) return;
+    if (offered && !offered.has(name)) return;
     calls.push({ id: `text_call_${calls.length}`, type: 'function', function: { name, arguments: JSON.stringify(args ?? {}) } });
   };
   for (const m of src.matchAll(/<function=([\w.-]+)>([\s\S]*?)(?:<\/function>|<\/tool_call>|$)/g)) {
     const args = {};
-    for (const p of m[2].matchAll(/<parameter=([\w.-]+)>([\s\S]*?)<\/parameter>/g)) {
+    for (const p of m[2].matchAll(/<parameter=([\w.-]+)>([\s\S]*?)(?:<\/parameter>|(?=<parameter=)|$)/g)) {
       const raw = p[2].replace(/^\n/, '').replace(/\n$/, '');
       try { args[p[1]] = /^[[{]|^(true|false|null|-?\d+(\.\d+)?)$/.test(raw.trim()) ? JSON.parse(raw.trim()) : raw; } catch { args[p[1]] = raw; }
     }
@@ -392,4 +505,14 @@ export async function* fakeStream(model, messages, signal) {
     await new Promise((r) => setTimeout(r, gap));
     yield word;
   }
+}
+
+/**
+ * W6-3: does this reply stop to ask permission for the work it was given ("Please confirm that you would like me to...")?
+ * A real decision is asked with ask_user, which waits; a closing question like this one is a stop that should not happen.
+ */
+export function asksPermissionToContinue(text) {
+  const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
+  // Handing the turn back, as a question or as a statement.
+  return /\b(please confirm|would you like( me)? to|do you want me to|shall i|should i\b|want me to|ready for me to|can i (proceed|go ahead|continue)|may i (proceed|go ahead|continue)|let me know (if|when|whether|how|once)|tell me (if|when|whether|to)|say the word|just say|awaiting your|once you (confirm|say|approve)|when you('re| are) ready|whenever you('re| are) ready|if you('d| would) like|if you want me to)\b/i.test(tail);
 }

@@ -11,16 +11,24 @@
 import { sinceSummary } from './sessions.js';
 import { clip } from './clip.js';
 
-const STEP_RESULT = 300;   // characters of each step's result
-const STEPS_TOTAL = 6000;  // characters of steps for one turn
+// W6-18: a step's result is kept whole (within a budget), not cut to 300 characters, so a model that takes over
+// (continue, another model after a failure) still knows what was read. The newest steps keep the most; a result
+// that was saved to a file says where, so it can be read again.
+const STEP_RESULT_NEW = 4000;   // characters of each of the newest steps' results
+const STEP_RESULT_OLD = 400;    // characters of an older step's result
+const NEWEST_STEPS = 12;
+const STEPS_TOTAL = 40_000;     // characters of steps for one turn
 
-const stepLine = (m) => {
-  const result = String(m.result ?? '').replace(/\s+/g, ' ').trim();
+const stepLine = (m, limit) => {
+  const result = String(m.modelResult ?? m.result ?? '').replace(/[ \t]+/g, ' ').trim();
   const note = String(m.note ?? '').replace(/\s+/g, ' ').trim();
-  return `${note ? `(you said: ${note.slice(0, 200)})\n` : ''}- ${m.tool ?? 'step'} (${m.status ?? 'done'})${result ? ` → ${clip(result, STEP_RESULT)}` : ''}`;
+  const file = m.resultFile ? ` [full output saved in ${m.resultFile}: read_file it if you need the rest]` : '';
+  return `${note ? `(you said: ${note.slice(0, 200)})\n` : ''}- ${m.tool ?? 'step'} (${m.status ?? 'done'})${result ? ` → ${clip(result, limit)}` : ''}${file}`;
 };
 
-function stepsText(lines) {
+// Steps are the stored tool_call messages of one turn, oldest first.
+function stepsText(steps) {
+  const lines = steps.map((m, i) => stepLine(m, steps.length - i <= NEWEST_STEPS ? STEP_RESULT_NEW : STEP_RESULT_OLD));
   let text = lines.join('\n');
   if (text.length > STEPS_TOTAL) text = `…\n${text.slice(-STEPS_TOTAL)}`;
   return text;
@@ -47,7 +55,7 @@ export function buildHistory(allMessages, toModel) {
 
   for (const m of messages.slice(start)) {
     if (m.kind === 'permission_prompt') continue;
-    if (m.kind === 'tool_call') { steps.push(stepLine(m)); continue; }
+    if (m.kind === 'tool_call') { steps.push(m); continue; }
     if (m.kind === 'summary') {
       history.push({ role: 'system', content: `Summary of the earlier conversation (the older messages are not repeated here):\n${String(m.content ?? '')}` });
       continue;
@@ -89,7 +97,14 @@ export function buildHistory(allMessages, toModel) {
     const last = turn.at(-1);
     interrupted = !replies.length || replies.at(-1).kind === 'partial' || last?.kind === 'tool_call';
   }
-  return { history, interrupted };
+  // The plan and the latest pictures of the turn that is being taken over (W6-18).
+  const unfinished = view.slice(interrupted ? prevUser + 1 : lastUser + 1);
+  const tasks = [...view].reverse().find((m) => m.tasks?.length)?.tasks ?? [];
+  const pictures = unfinished.filter((m) => m.kind === 'tool_call').flatMap((m) => m.attachments ?? []).filter((a) => a.kind === 'image').slice(-2);
+  if (tasks.length && (interrupted || tail || unfinished.some((m) => m.kind === 'tool_call'))) {
+    history.push({ role: 'user', content: `[Your plan so far:\n${tasks.map((t) => `${t.done ? '[x]' : '[ ]'} ${t.text}`).join('\n')}\nKeep it up to date with update_tasks.]` });
+  }
+  return { history, interrupted, pictures };
 }
 
 /** Said to the model when the last turn was cut off. */

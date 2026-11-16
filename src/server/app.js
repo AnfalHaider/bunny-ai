@@ -7,7 +7,7 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,7 +40,7 @@ import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions
 import { createLocalMcp } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat, stripToolMarkup } from './chat.js';
+import { streamChat, stripToolMarkup, asksPermissionToContinue } from './chat.js';
 import { clip } from './clip.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
@@ -69,6 +69,8 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { looksSecret } from './secretLike.js';
+import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
@@ -1620,7 +1622,17 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const project = session.projectId ? await projects.get(session.projectId) : null;
       // What the model reads: the chat since the latest summary, with the steps it took,
       // so it remembers what it already did (vision: whether this model can see pictures).
-      const { history, interrupted } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
+      const { history, interrupted, pictures } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
+      // W6-18: the latest pictures of work that was cut off (screenshots the model took) go back in, if this model can see.
+      if (pictures.length && body.vision !== false) {
+        const urls = [];
+        for (const pic of pictures) {
+          const m = /^\/api\/screens\/([a-f0-9-]{36})\.png$/.exec(String(pic.data ?? ''));
+          if (!m) continue;
+          try { urls.push(`data:image/png;base64,${(await readFile(join(screensDir, `${m[1]}.png`))).toString('base64')}`); } catch { /* the file is gone */ }
+        }
+        if (urls.length) history.push({ role: 'user', content: [{ type: 'text', text: '[The latest screenshots from the work so far:]' }, ...urls.map((url) => ({ type: 'image_url', image_url: { url } }))] });
+      }
       if (project?.instructions) {
         history.unshift({ role: 'system', content: `Project instructions for ${project.name}:\n${project.instructions}` });
       }
@@ -1661,7 +1673,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // next step, so the chat reads as a running account of the work, also after a reload.
       let sinceStep = '';
       const stepsTaken = [];
-      const logStep = (entry) => {
+      const logStep = async (entry) => {
         const scope = agentScope.getStore();
         if (!scope && entry.kind === 'tool_call') {
           const note = stripToolMarkup(sinceStep);
@@ -1669,7 +1681,60 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           if (note) entry = { ...entry, note: note.slice(0, 2000) };
           stepsTaken.push(`${entry.tool}${entry.status && entry.status !== 'done' ? ` (${entry.status})` : ''}`);
         }
+        if (entry.kind === 'tool_call') entry = await keepForModel(entry);
         return sessions.append(scope?.logTo ?? id, entry);
+      };
+      // W6-18: the chat shows a short result; the model gets the whole one back if it has to take over. Past a size it
+      // is saved in the workspace (.bunny/notes/step-N.txt) and only its path stays in the chat.
+      let stepSeq = 0;
+      // Notes older than a week are removed whenever a new one is saved.
+      const pruneNotes = async (dir) => {
+        const week = Date.now() - 7 * 24 * 3600 * 1000;
+        for (const name of await readdir(dir).catch(() => [])) {
+          if (!/^step-[\w-]+\.txt$/.test(name)) continue;
+          const info = await lstat(join(dir, name)).catch(() => null);
+          if (info?.isFile() && info.mtimeMs < week) await rm(join(dir, name), { force: true }).catch(() => {});
+        }
+      };
+      const keepForModel = async (entry) => {
+        const { fullResult, saveable, ...rest } = entry;
+        const out = { ...rest, ...(currentTasks.length ? { tasks: currentTasks } : {}) };
+        const full = String(fullResult ?? '');
+        if (full.length <= String(rest.result ?? '').length) return out;
+        // The longer copy that is replayed to a model taking over (maybe another provider) is kept only for the workspace's own
+        // file and command tools, and never when the result looks like it holds a secret.
+        const secretish = looksSecret(full, `${rest.tool ?? ''} ${rest.content ?? ''}`);
+        // An incognito chat leaves nothing behind: no longer copy, no note file.
+        if (!saveable || secretish || session.incognito) return out;
+        out.modelResult = clip(full, 6000);
+        // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
+        // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
+        // inside the workspace. A .bunny/.gitignore keeps the notes out of the person's repository.
+        if (full.length > 6000 && workspace && permissionMode !== 'plan') {
+          stepSeq += 1;
+          const rel = `.bunny/notes/step-${Date.now().toString(36)}-${stepSeq}.txt`;
+          try {
+            const root = await realpath(workspace.root);
+            const bunny = join(root, '.bunny');
+            const notes = join(bunny, 'notes');
+            // Look before creating: a link is never followed, not even to make a folder behind it.
+            for (const dir of [bunny, notes]) {
+              const found = await lstat(dir).catch(() => null);
+              if (found?.isSymbolicLink() || (found && !found.isDirectory())) throw new Error('linked folder');
+              if (!found) await mkdir(dir);
+            }
+            if (!(await realpath(notes)).startsWith(root + sep)) throw new Error('outside the workspace');
+            await writeFile(join(bunny, '.gitignore'), '*', { encoding: 'utf8', flag: 'wx' }).catch(() => {}); // only the first time
+            await pruneNotes(notes);
+            // 'wx': never into an existing file or link. Then check where it really landed.
+            // If this reply already changes files, the note is in its undo list too (Undo removes it with the rest).
+            if (checkpoint) await checkpoint.capture(join(root, rel));
+            await writeFile(join(root, rel), full, { encoding: 'utf8', flag: 'wx' });
+            if (!(await realpath(join(root, rel))).startsWith(root + sep)) { await rm(join(root, rel), { force: true }); throw new Error('outside the workspace'); }
+            out.resultFile = rel;
+          } catch { /* the clipped text still goes to the model */ }
+        }
+        return out;
       };
 
       // ---- the work mode decides what the model may do ----
@@ -1721,8 +1786,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it. '
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
           + 'and update it as you go; when you continue a job, read it first. '
-          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command, '
-          + 'and never say you cannot run commands. They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command. '
+          + 'Bunny runs commands, installs packages and starts servers itself, for you: never say you are not able to run commands. '
+          + 'They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + 'Finish the whole task you were given. Never stop to ask permission for work the person already asked for ("Please confirm that you would like me to..." is wrong): just do it. '
+          + 'Ask only a real decision, one that changes what you would build or that you cannot choose yourself, and ask it with ask_user (the card waits for the answer); then carry on. '
+          + 'For a job of about ten steps or more (build a site, port a project, fix many files), start by writing a task list with update_tasks and keep it current as you finish each step. '
+          + 'A reply with no question and no steps left is a finished job: end with what you did and how you checked it. '
           + `When you create a git branch, start its name with "${branchPrefix}/" (for example ${branchPrefix}/fix-login).`,
       };
       const modeText = modeTexts[workMode];
@@ -2372,7 +2442,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 12000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
         send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
       };
@@ -2428,7 +2498,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             result = `The browser action failed: ${err.message}`;
           }
           result = String(result).slice(0, 9000);
-          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), attachments });
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), fullResult: result, attachments });
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return result;
         }
@@ -2481,7 +2551,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result, saveable: isWorkspace });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
@@ -2533,6 +2603,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
       let assembled = '';
       let thinking = '';
+      const replyStartedAt = Date.now();
+      // How far one reply may go, clamped whatever Settings holds (see caps.js). A scheduled run has nobody watching: it gets less.
+      const replyCaps = capsFor(settings, Boolean(scheduledTask));
+      let permissionNudges = 0;
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
@@ -2554,6 +2628,44 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
+            // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
+            extendRounds: (round) => {
+              if (workMode !== 'code' && !workspace) return false;
+              if (!replyCaps.steps || !replyCaps.minutes || round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
+              maxToolRounds = round + Math.max(EFFORT.code, 12);
+              send('working', { step: round + 1 });
+              return true;
+            },
+            contextChars: workspace ? 240_000 : 0,
+            tokenBudget: replyCaps.tokens,
+            // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
+            onLimit: async ({ kind, inputTokens, step }) => {
+              if (scheduledTask) return false; // nobody is there to answer
+              const question = kind === 'tokens' ? `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`
+                : kind === 'repeat' ? `I have run the same step (${String(step).slice(0, 60)}) three times in a row. Keep trying, or stop here?`
+                  : 'I have made no new progress in 25 steps. Keep going, or stop here?';
+              const q = cleanQuestion({ question, choices: [{ label: 'Keep going', recommended: kind === 'tokens' }, { label: 'Stop here', recommended: kind !== 'tokens' }] });
+              const answer = await askQuestion(q);
+              const said = (Array.isArray(answer.choices) ? answer.choices : []).join('');
+              await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: said || 'No answer', question: { question: q.question, choices: q.choices, answer: said || null } });
+              return said === 'Keep going';
+            },
+            // W6-3: a Code reply that ends by asking permission for the job it was given carries on instead (up to 3 times).
+            onReplyEnd: ({ text }) => {
+              // Only while the plan still has open steps: an offer after a finished job ("want me to also...?") is not a permission question.
+              const open = currentTasks.filter((t) => !t.done).length;
+              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !asksPermissionToContinue(text)) return null;
+              // No plan at all: a model that stops mid-job without one is asked to say whether it is finished (W6-3b).
+              if (!currentTasks.length) {
+                permissionNudges += 1;
+                return 'If the task is not finished, make a task list with update_tasks and carry on; if it is finished, say so plainly.';
+              }
+              if (!open) return null;
+              permissionNudges += 1;
+              return 'Do not stop to ask permission: the person already asked for this. '
+                + `Your plan still has ${open} open step${open === 1 ? '' : 's'}. Carry on and finish the job. `
+                + 'If you truly need a decision only the person can make, ask it with ask_user (the card waits for the answer); otherwise do not ask.';
+            },
             extraBody,
             parallel: (name) => name === 'run_subagent',
             // The model's thinking, shown folded above the reply and kept with it.
