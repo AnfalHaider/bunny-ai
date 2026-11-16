@@ -133,28 +133,28 @@ test('Plan: a command the model asks for anyway is refused', { todo: 'Q2-1: src/
 
 // ---------------------------------------------------------------- grants: computer use, tools that build
 
+// Decision (Chief of Staff under the owner's rule, 2026-11-16): in Auto, build actions run without asking; in Manual and
+// Accept edits they ask; a granted computer-use click follows the mode (it asks in Manual and Accept edits).
+// The Auto computer-use case is NOT driven here: allowing it would click this computer's real screen.
 const COMPUTER = { aiComputerUse: true };
-test('Computer use granted, Manual: a click asks (the safe default)', { skip: process.platform !== 'win32' && 'computer tools are Windows only' }, async (t) => {
-  const base = await setup(t);
-  const r = await run(base, 'ask', 'computer_click', { answer: false, settings: COMPUTER });
-  assert.equal(r.asked.length, 1);
-});
-test('Q2-24: Computer use granted and the mode is Auto: a click does not ask again', { skip: process.platform !== 'win32' && 'computer tools are Windows only', todo: 'Q2-24: src/server/agentTools.js:20 gives computer_click, type, key and scroll the risk "build", and src/server/app.js:1510 always asks for "build", whatever the mode' }, async (t) => {
-  const base = await setup(t);
-  const r = await run(base, 'auto', 'computer_click', { answer: false, settings: COMPUTER });
-  assert.deepEqual(r.asked, [], 'asked: ' + r.asked.join(' | '));
-});
-test('Q2-24b: Computer use granted and the mode is Accept edits: typing a key does not ask again', { skip: process.platform !== 'win32' && 'computer tools are Windows only', todo: 'Q2-24: same cause' }, async (t) => {
-  const base = await setup(t);
-  const r = await run(base, 'accept', 'computer_key', { answer: false, settings: COMPUTER });
-  assert.deepEqual(r.asked, [], 'asked: ' + r.asked.join(' | '));
-});
-test('Building a tool always asks, in every mode (today: by design, so a program is never written unseen)', { skip: process.platform !== 'win32' && 'custom tools are Windows only' }, async (t) => {
-  const base = await setup(t);
-  for (const mode of ['ask', 'accept', 'auto']) {
+for (const mode of ['ask', 'accept']) {
+  test(`Computer use granted, ${mode === 'ask' ? 'Manual' : 'Accept edits'}: a click asks (and is denied here, so nothing is clicked)`, { skip: process.platform !== 'win32' && 'computer tools are Windows only' }, async (t) => {
+    const base = await setup(t);
+    const r = await run(base, mode, 'computer_click', { answer: false, settings: COMPUTER });
+    assert.equal(r.asked.length, 1);
+  });
+}
+for (const mode of ['ask', 'accept']) {
+  test(`${mode === 'ask' ? 'Manual' : 'Accept edits'}: building a tool asks`, { skip: process.platform !== 'win32' && 'custom tools are Windows only' }, async (t) => {
+    const base = await setup(t);
     const r = await run(base, mode, 'create_tool', { answer: false, settings: { customToolsEnabled: true } });
-    assert.equal(r.asked.length, 1, mode);
-  }
+    assert.equal(r.asked.length, 1);
+  });
+}
+test('Q2-26: Auto: building a tool runs without asking (the owner allowed Auto)', { skip: process.platform !== 'win32' && 'custom tools are Windows only', todo: 'Q2-26: src/server/app.js:1510 (needsOk) asks for risk "build" in every mode; Chief of Staff decision 2026-11-16: not in Auto' }, async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'auto', 'create_tool', { answer: false, settings: { customToolsEnabled: true } });
+  assert.deepEqual(r.asked, [], 'asked: ' + r.asked.join(' | '));
 });
 
 // ---------------------------------------------------------------- a command that fails is shown as failed (D-2)
