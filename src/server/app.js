@@ -9,9 +9,10 @@ import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { dirname, extname, join, normalize, sep } from 'node:path';
+import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
@@ -45,6 +46,7 @@ import { rankModels } from '../ui/model-abilities.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
+import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
@@ -160,6 +162,15 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
   // and is handed to the pages the server itself serves.
+  // W27-3 / W5-7: in the desktop app a few writes (permission rules and mode, and what W5-7 adds) need a second secret that only the
+  // Electron main process holds, so a program that merely read the page's token cannot make them. Plain-browser dev mode has no main process.
+  const adminSecret = randomBytes(32).toString('hex');
+  const adminOk = (req) => { const h = Buffer.from(String(req.headers['x-bunny-admin'] ?? '')); const s = Buffer.from(adminSecret); return h.length === s.length && timingSafeEqual(h, s); };
+  const windowOnly = (req, res) => {
+    if (!folderPickerOnly || adminOk(req)) return false;
+    sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+    return true;
+  };
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
 
   let fakeOffline = false; // test mode only: see /api/network
@@ -459,6 +470,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
+    // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
+    if (isWindowOnlyRoute(method, path) && windowOnly(req, res)) return;
 
     if (localGuard !== false) {
       const verdict = guard.check(req, path, method, url.searchParams);
@@ -610,9 +623,58 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
+      if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
       return sendJson(res, 200, settings);
+    }
+
+    // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
+    if (path === '/api/permission-rules' && method === 'GET') return sendJson(res, 200, normaliseRules(settings.permissionRules));
+    if (path === '/api/permission-rules' && method === 'PUT') {
+      if (windowOnly(req, res)) return;
+      const body = await readBody(req);
+      // answers 400 and says so with a marker: sendJson returns nothing, so "return bad(...)" would look like success to the caller
+      const bad = (message, scope, index) => { sendJson(res, 400, { code: 'rules.bad', message, scope, index }); return { failed: true }; };
+      const tidy = (list, scope) => {
+        if (!Array.isArray(list)) return bad('The rules must be a list.', scope, -1);
+        if (list.length > MAX_RULES) return bad(`At most ${MAX_RULES} rules per list.`, scope, -1);
+        const out = [];
+        for (let i = 0; i < list.length; i += 1) {
+          const checked = checkRule(list[i]);
+          if (checked.error) return bad(checked.error, scope, i);
+          out.push(checked.rule);
+        }
+        return { out };
+      };
+      const global = tidy(body.global ?? [], 'global');
+      if (global.failed) return;
+      const folders = {};
+      for (const [folder, list] of Object.entries(body.folders && typeof body.folders === 'object' ? body.folders : {})) {
+        if (!isAbsolute(folder)) { bad('A folder rule list needs the full path of the folder.', folder, -1); return; }
+        const t = tidy(list, folder);
+        if (t.failed) return;
+        if (t.out.length) folders[folder] = t.out;
+      }
+      settings = { ...settings, permissionRules: { global: global.out, folders } };
+      await writeJson(settingsFile, settings);
+      return sendJson(res, 200, normaliseRules(settings.permissionRules));
+    }
+    // "Try a command": the outcome and the rule behind it, without running anything.
+    if (path === '/api/permission-rules/try' && method === 'POST') {
+      const body = await readBody(req);
+      const rules = rulesFor(settings.permissionRules, typeof body.folder === 'string' ? body.folder : null);
+      const verdict = typeof body.command === 'string' ? checkCommand(rules, body.command)
+        : typeof body.path === 'string' ? checkPath(rules, body.path, body.op === 'reads' ? 'reads' : 'edits') : null;
+      return sendJson(res, 200, { outcome: verdict?.effect ?? 'none', rule: verdict ? { pattern: verdict.rule.pattern, scope: verdict.rule.scope, effect: verdict.effect } : null });
+    }
+    // Would a new Allow ever apply? (a Deny that already covers it wins)
+    if (path === '/api/permission-rules/check' && method === 'POST') {
+      const body = await readBody(req);
+      const checked = checkRule(body.rule);
+      if (checked.error) return sendJson(res, 200, { ok: false, message: checked.error });
+      const covering = coveredByDeny(rulesFor(settings.permissionRules, typeof body.folder === 'string' ? body.folder : null), checked.rule);
+      return sendJson(res, 200, { ok: true, coveredBy: covering ? { pattern: covering.pattern, scope: covering.scope } : null });
     }
 
     // ---- profile photo: kept as a file on this computer, shown in the sidebar ----
@@ -701,6 +763,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
+      if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
         const stored = await folderToStore(body.folder);
@@ -724,6 +787,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/projects' && method === 'POST') {
       try {
         const body = await readBody(req);
+        if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return;
         if (body.folder) {
           const stored = await folderToStore(body.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -738,6 +802,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (projectMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
+        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return;
         if (patch.folder) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -1299,6 +1364,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     // ---- session settings (folder, branch, permission mode, effort) ----
     const sessionSettingMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/setting\/([A-Za-z-]+)$/);
     if (sessionSettingMatch && method === 'PATCH') {
+      if (WINDOW_ONLY_SESSION_SETTINGS.includes(sessionSettingMatch[2]) && windowOnly(req, res)) return;
       try {
         if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
           const stored = await folderToStore((await readBody(req)).value);
@@ -1386,6 +1452,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (sessionMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
+        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -1615,7 +1682,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
@@ -1628,6 +1695,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
       // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
       // email speaks for the person, so it asks in every mode. A project file can grant none of this.
+      // W2-7: the person's permission rules for this folder (its own, then the global ones), read fresh at every call.
+      // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
+      // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
+      const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       const needsOk = (risk) => risk === 'send'
         || (risk === 'build' && permissionMode !== 'auto')
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
@@ -1819,7 +1890,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           const fresh = await sessions.get(id);
           const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
           if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal });
+          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.
@@ -2055,6 +2126,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // A schedule that may change things runs unwatched later: it asks in Manual and Accept edits, and runs in Auto.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
         if (planRefuses(risk, name)) return planRefusal(name);
+        const ruledProcess = name === 'start_process' ? checkToolCall(activeRules(), name, parsed) : null;
+        if (ruledProcess?.effect === 'deny') {
+          const why = `Blocked by your permission rule ${describeRule(ruledProcess)}.`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+          send('tool', { tool: summary, status: 'denied', result: why });
+          return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+        }
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -2071,8 +2149,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
-        if (needsOk(risk)) {
-          const allowed = await askPermission(summary, detail);
+        if (ruledProcess?.effect === 'ask' || (needsOk(risk) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -2360,13 +2438,22 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
+        // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
+        // ask always asks, in every mode; allow skips the question.
+        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed, await workspace.canon(parsed.path ?? '.').catch(() => false)) : null;
+        if (ruled?.effect === 'deny') {
+          const why = `Blocked by your permission rule ${describeRule(ruled)}.`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+          send('tool', { tool: summary, status: 'denied', result: why });
+          return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+        }
         const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
-        if (needsOk(risk)) {
-          const allowed = await askPermission(summary, detail);
+        if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -2679,6 +2766,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     chooseFolder,
     dataDir,
     apiToken: guard.token,
+    /** For the Electron main process only: a request that carries both the token and the window-only secret. */
+    adminFetch: (path, init = {}) => fetch(`http://127.0.0.1:${server.address().port}${path}`, { ...init, headers: { ...(init.headers ?? {}), 'x-bunny-token': guard.token, 'x-bunny-admin': adminSecret } }),
     runHooks,
     runDueSchedules,
   };

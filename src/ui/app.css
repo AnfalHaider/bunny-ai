@@ -1494,7 +1494,9 @@ html.embedded .cz-bar { margin-top: 0; }
 .devserver-card code { background: none; padding: 0; font-size: var(--fs-sm); color: var(--text); }
 /* tool steps shown live while a reply streams */
 .live-tool .tool-call { margin: var(--sp-1) 0; }
-.live-permission pre.code { max-height: 220px; overflow: auto; margin: var(--sp-4) 0 0; }
+.live-permission pre.code { max-height: 220px; overflow: auto; margin: var(--sp-4) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* pre.code code is white-space: pre with its own horizontal scroll: in a permission prompt the long rule line wraps instead (390 phone) */
+.live-permission pre.code code { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
 
 /* ==========================================================================
    PANEL LAYOUT: resize, dock left / right / bottom, fill, sidebar toggle
@@ -1921,6 +1923,8 @@ details.thinking.is-live summary { color: var(--accent); }
 .tool-group-summary { color: var(--text-dim); font-weight: var(--fw-medium); }
 .tool-group-meta { margin-left: auto; color: var(--text-faint, var(--text-dim)); font-size: var(--fs-xs); white-space: nowrap; }
 .tool-group-meta.is-failed, .tool-call-header .tag.is-failed { color: var(--bad); font-weight: var(--fw-medium); }
+/* a step stopped by a rule, the mode or the person: amber "Blocked", not red "Failed" (nothing broke) */
+.tool-group-meta.is-blocked, .tool-call-header .tag.is-blocked { color: var(--warn); font-weight: var(--fw-medium); }
 .step-chev { width: 0; height: 0; flex: none; border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .12s; opacity: .7; }
 .tool-group.is-open > .tool-group-line .step-chev, .tool-call.is-open > .tool-call-header .step-chev { transform: rotate(90deg); }
 .tool-group-rows { display: none; margin-left: var(--sp-6); border-left: 1px solid var(--line); padding-left: var(--sp-4); }
@@ -2004,3 +2008,40 @@ details.thinking.is-live summary { color: var(--accent); }
   /* Q2-32: the sidebar toggle and Export are 40 px targets too */
   .topbar #sidebar-toggle, .topbar #export { min-width: 40px; min-height: 40px; }
 }
+
+/* W2-7: permission rules in Settings, Code */
+.rules h3 { margin: var(--sp-4) 0 var(--sp-1); font-size: var(--fs-md); }
+.rules .lead { margin: 0 0 var(--sp-3); color: var(--text-dim); font-size: var(--fs-sm); }
+.rules .lead code, .rules .rr .pat, .rules .try code, .rules .addr input { font-family: var(--font-mono, ui-monospace, Consolas, monospace); }
+.rules .tabs2 { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; margin: 0 0 var(--sp-3); background: var(--bg-sidebar); font-size: var(--fs-sm); }
+.rules .tabs2 button { border: 0; background: none; padding: 3px 14px; border-radius: 999px; color: var(--text-dim); cursor: pointer; font: inherit; }
+.rules .tabs2 button[aria-selected="true"] { background: var(--surface, var(--bg)); color: var(--text); }
+.rules-folder { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-3); font-size: var(--fs-sm); color: var(--text-dim); }
+.rules .rl { border: 1px solid var(--line); border-radius: var(--r-md); margin-bottom: var(--sp-3); overflow: hidden; }
+.rules .rl .rh { display: flex; align-items: center; gap: var(--sp-2); padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.rules .rl .rh i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.rules .rl.deny .rh i { background: var(--bad); }
+.rules .rl.ask .rh i { background: var(--warn); }
+.rules .rl.allow .rh i { background: var(--ok); }
+.rules .rl .rh small { font-weight: 400; color: var(--text-dim); margin-left: auto; }
+.rules .rr { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.rules .rr:last-child { border-bottom: 0; }
+.rules .rr .kind { font-size: 11.5px; color: var(--text-dim); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 6px; line-height: 18px; flex: none; }
+.rules .rr .pat { flex: 1; min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.rules .rr .rm { background: none; border: 0; color: var(--text-dim); font: inherit; font-size: 12.5px; cursor: pointer; }
+.rules .rr .rm:hover { color: var(--bad); }
+.rules .rr.empty { color: var(--text-faint); }
+.rules .chip { border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; line-height: 22px; font-size: 12.5px; background: none; color: var(--text-dim); font-family: inherit; }
+.rules button.chip { cursor: pointer; }
+.rules .addr { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; padding: 10px 12px; border: 1px dashed var(--line-strong, var(--line)); border-radius: var(--r-md); margin: var(--sp-3) 0; }
+.rules .addr input { flex: 1; min-width: 150px; }
+.rules .rules-dim { font-size: var(--fs-sm); color: var(--text-dim); }
+.rules .rules-line { font-size: 12.5px; color: var(--warn); min-height: 1em; }
+.rules .rules-line.is-bad { color: var(--bad); }
+.rules .try { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar); padding: 10px 12px; font-size: var(--fs-sm); }
+.rules .try input { display: block; width: 100%; margin: 6px 0; font-size: 12.5px; }
+.rules .res { display: inline-flex; font-weight: var(--fw-medium); font-size: 12.5px; border-radius: 999px; padding: 0 10px; line-height: 22px; }
+.rules .res.deny { color: var(--bad); background: var(--bad-soft); }
+.rules .res.ask { color: var(--warn); background: var(--warn-soft); }
+.rules .res.allow { color: var(--ok); background: var(--ok-soft); }
+.rules .res.none { color: var(--text-dim); background: var(--bg); border: 1px solid var(--line); }

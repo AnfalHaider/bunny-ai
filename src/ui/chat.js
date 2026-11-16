@@ -1008,7 +1008,8 @@ function chevron() { return element('span', { className: 'step-chev', 'aria-hidd
 /** One collapsed line for a run of steps; opening it shows one sub-row per step, each opening to its detail. */
 function buildToolGroup(run) {
   const steps = run.map((r) => r.m);
-  const failedCount = steps.filter((s) => s.status === 'failed' || s.status === 'denied').length;
+  const failedCount = steps.filter((s) => s.status === 'failed').length;
+  const blockedCount = steps.filter((s) => s.status === 'denied').length; // a rule, the mode or the person said no: nothing broke
   const last = run.at(-1);
   // A failed group stays collapsed, except the last failed step of a reply that ended on it.
   const openLast = last.last && last.m.status === 'failed';
@@ -1017,7 +1018,9 @@ function buildToolGroup(run) {
   line.append(chevron(), element('span', { className: 'tool-group-summary', textContent: summariseSteps(steps) }));
   const meta = failedCount
     ? element('span', { className: 'tool-group-meta is-failed', textContent: steps.length === 1 ? 'Failed' : `${failedCount} failed` })
-    : element('span', { className: 'tool-group-meta', textContent: steps.length === 1 ? '' : `${steps.length} steps` });
+    : blockedCount
+      ? element('span', { className: 'tool-group-meta is-blocked', textContent: steps.length === 1 ? 'Blocked' : `${blockedCount} blocked` })
+      : element('span', { className: 'tool-group-meta', textContent: steps.length === 1 ? '' : `${steps.length} steps` });
   line.append(meta);
   line.addEventListener('click', () => {
     const open = !group.classList.contains('is-open');
@@ -1109,7 +1112,8 @@ function renderMessage(m) {
     const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
     header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
     const failedStep = m.status === 'failed' || m.status === 'denied';
-    if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
+    if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
+    else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
     // A read step opens that file in the Files pane.
     const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
