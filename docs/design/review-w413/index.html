@@ -63,7 +63,8 @@ button { font:inherit; color:inherit; }
 .ptag { font-size:11px; border-radius:4px; padding:0 5px; background:var(--bg-side); color:var(--dim); border:1px solid var(--line); }
 .ptag.first { color:var(--text); border-color:var(--line-strong); }
 .ptag.out { text-decoration:line-through; color:var(--faint); }
-.free { font-size:10.5px; color:var(--ok); background:var(--ok-soft); border-radius:4px; padding:0 4px; margin-left:3px; }
+.free { font-size:10.5px; color:var(--ok); background:var(--ok-soft); border-radius:4px; padding:0 4px; margin-left:3px; white-space:nowrap; }
+.free.daily { color:var(--warn); background:var(--warn-soft); }
 .meta { font-size:11.5px; color:var(--faint); text-align:right; white-space:nowrap; }
 .meta .more { color:var(--dim); margin-left:6px; }
 .auto { background:var(--accent-soft); }
@@ -115,7 +116,7 @@ ul.points b { color:var(--text); font-weight:600; }
           <div class="chips" id="provChips"><span class="lbl">Provider</span></div>
           <div class="chips" id="capChips"><span class="lbl">Can do</span></div>
           <div class="sortrow">
-            <label><input type="checkbox" id="freeOnly"> Free only</label>
+            <label title="Includes models free up to a daily limit"><input type="checkbox" id="freeOnly"> Free only</label>
             <label>Sort <select id="sort"><option value="rec">Recommended</option><option value="name">Name</option><option value="ctx">Context size</option></select></label>
             <button class="iconbtn" id="clear">Clear filters</button>
           </div>
@@ -164,6 +165,7 @@ ul.points b { color:var(--text); font-weight:600; }
       <li><b>Same model, one row.</b> Ids that clearly match are merged, ignoring the company prefix, "-free" and capital letters, plus a short list of known aliases. Two ids that only might be the same model stay as separate rows.</li>
       <li><b>Provider order per model.</b> Bunny uses the first provider; the others are the backup line, in your order.</li>
       <li><b>Automatic switch</b> (your decision: "Yes, with a note"). A limit, an error or no answer within your wait time (W4-9) moves the reply to the same model on the next provider, then to another model, inside the existing "Try another model when yours is busy" setting. One quiet line says who answered and why. A provider that ran out is crossed out until its limit resets.</li>
+      <li><b>Free means two things</b> (your note). <span class="free">Free</span> costs nothing. <span class="free daily">Free daily</span> is free up to a limit that resets every day, which most providers offer. <b>Free only</b> shows both. When a daily limit runs out, that provider shows "Back tomorrow" and Bunny moves to the same model on your next provider. Which providers give a daily allowance, and how much, is checked from each provider's own pages before it is built, not guessed.</li>
       <li><b>Sections.</b> Auto, Favourites, Recent, then all models. Filters stay as you left them.</li>
       <li><b>Keyboard.</b> Ctrl+' opens, typing searches, arrows move, Enter picks, Ctrl+F marks a favourite.</li>
       <li><b>Not covered here.</b> Colour contrast is not checked. Names and abilities come from each provider's model list, so a provider that sends poor data can still show a poor row. The models and providers shown are examples.</li>
@@ -175,21 +177,22 @@ ul.points b { color:var(--text); font-weight:600; }
 const PROV = ['Nvidia','OpenCode','Google','OpenRouter','ModelScope'];
 const CAPS = ['Code','Vision','Tools','Reasoning','Image','Speech'];
 const M = [
-  { id:'deepseek-v4.1-flash', name:'DeepSeek V4.1 Flash', ctx:1048576, caps:['Code','Tools','Speech'], rec:1, prov:[{p:'Nvidia'},{p:'OpenCode',free:1},{p:'OpenRouter'}] },
-  { id:'glm-5.3-flash', name:'GLM-5.3-Flash', ctx:1048576, caps:['Code','Vision','Tools','Reasoning'], rec:2, prov:[{p:'Nvidia'},{p:'OpenCode',free:1}] },
-  { id:'nemotron-3.5-super-vl', name:'Nemotron 3.5 Super VL', ctx:262144, caps:['Vision','Tools','Reasoning'], rec:3, prov:[{p:'Nvidia'},{p:'OpenCode',free:1}] },
-  { id:'mistral-large-4', name:'Mistral Large 4', ctx:262144, caps:['Code','Tools'], rec:4, prov:[{p:'Nvidia'},{p:'OpenRouter'}] },
-  { id:'gemini-flash-lite', name:'Gemini Flash-Lite', ctx:1048576, caps:['Vision','Tools','Speech'], rec:5, prov:[{p:'Google',free:1},{p:'OpenRouter'}] },
-  { id:'qwen-3.5-coder', name:'Qwen 3.5 Coder', ctx:262144, caps:['Code','Tools'], rec:6, prov:[{p:'ModelScope',free:1},{p:'OpenRouter'}] },
+  { id:'deepseek-v4.1-flash', name:'DeepSeek V4.1 Flash', ctx:1048576, caps:['Code','Tools','Speech'], rec:1, prov:[{p:'Nvidia',daily:1},{p:'OpenCode',free:1},{p:'OpenRouter'}] },
+  { id:'glm-5.3-flash', name:'GLM-5.3-Flash', ctx:1048576, caps:['Code','Vision','Tools','Reasoning'], rec:2, prov:[{p:'Nvidia',daily:1},{p:'OpenCode',free:1}] },
+  { id:'nemotron-3.5-super-vl', name:'Nemotron 3.5 Super VL', ctx:262144, caps:['Vision','Tools','Reasoning'], rec:3, prov:[{p:'Nvidia',daily:1},{p:'OpenCode',free:1}] },
+  { id:'mistral-large-4', name:'Mistral Large 4', ctx:262144, caps:['Code','Tools'], rec:4, prov:[{p:'Nvidia',daily:1},{p:'OpenRouter'}] },
+  { id:'gemini-flash-lite', name:'Gemini Flash-Lite', ctx:1048576, caps:['Vision','Tools','Speech'], rec:5, prov:[{p:'Google',daily:1},{p:'OpenRouter'}] },
+  { id:'qwen-3.5-coder', name:'Qwen 3.5 Coder', ctx:262144, caps:['Code','Tools'], rec:6, prov:[{p:'ModelScope',daily:1},{p:'OpenRouter'}] },
   { id:'beam', name:'Beam', ctx:131072, caps:['Code','Tools'], rec:7, prov:[{p:'OpenCode',free:1}] },
-  { id:'flux-2', name:'FLUX.2', ctx:0, caps:['Image'], rec:8, prov:[{p:'Nvidia'},{p:'OpenRouter'}] },
-  { id:'gemma-3-12b', name:'Gemma 3 12B', ctx:131072, caps:['Vision'], rec:9, prov:[{p:'Nvidia'},{p:'Google',free:1}] },
-  { id:'starcoder2-15b', name:'StarCoder2 15B', ctx:16384, caps:['Code'], rec:10, prov:[{p:'Nvidia'}] },
+  { id:'flux-2', name:'FLUX.2', ctx:0, caps:['Image'], rec:8, prov:[{p:'Nvidia',daily:1},{p:'OpenRouter'}] },
+  { id:'gemma-3-12b', name:'Gemma 3 12B', ctx:131072, caps:['Vision'], rec:9, prov:[{p:'Nvidia',daily:1},{p:'Google',daily:1}] },
+  { id:'starcoder2-15b', name:'StarCoder2 15B', ctx:16384, caps:['Code'], rec:10, prov:[{p:'Nvidia',daily:1}] },
 ];
 const st = { q:'', prov:new Set(), caps:new Set(), free:false, sort:'rec', chosen:'auto', open:'deepseek-v4.1-flash', fav:new Set(['glm-5.3-flash']), recent:['deepseek-v4.1-flash','nemotron-3.5-super-vl','gemini-flash-lite'], think:{}, out:new Set() };
 const $ = (id) => document.getElementById(id);
 const byId = (id) => M.find((m) => m.id === id);
 const fmtCtx = (n) => n ? (n >= 1048576 ? (n/1048576)+'M' : Math.round(n/1024)+'K') : 'n/a';
+const badge = (x) => x.free ? el('span', { class:'free', title:'No cost' }, 'Free') : x.daily ? el('span', { class:'free daily', title:'Free up to a daily limit; resets every day' }, 'Free daily') : null;
 const live = (m) => m.prov.filter((x) => !st.out.has(m.id+'|'+x.p));
 function el(t, a, ...kids) {
   const e = document.createElement(t);
@@ -215,14 +218,14 @@ function matches(m) {
   if (q && !(m.name.toLowerCase().includes(q) || m.id.includes(q) || m.prov.some((x) => x.p.toLowerCase().includes(q)))) return false;
   if (st.prov.size && !m.prov.some((x) => st.prov.has(x.p))) return false;
   for (const c of st.caps) if (!m.caps.includes(c)) return false;
-  if (st.free && !m.prov.some((x) => x.free)) return false;
+  if (st.free && !m.prov.some((x) => x.free || x.daily)) return false;
   return true;
 }
 function pick(id) { st.chosen = id; if (id !== 'auto') st.open = id; paint(); }
 function rowFor(m) {
   const tags = m.prov.map((x, i) => {
     const out = st.out.has(m.id+'|'+x.p);
-    return el('span', { class:'ptag'+(i===0 && !out ? ' first' : '')+(out ? ' out' : ''), title: out ? x.p+' ran out; back when its limit resets' : null }, x.p, x.free ? el('span', { class:'free' }, 'Free') : null);
+    return el('span', { class:'ptag'+(i===0 && !out ? ' first' : '')+(out ? ' out' : ''), title: out ? x.p+' ran out; back when its limit resets' : null }, x.p, badge(x));
   });
   return el('div', { class:'row'+(st.open===m.id ? ' open' : ''), role:'option', 'aria-selected':String(st.chosen===m.id), tabindex:'0',
       onclick:() => pick(m.id), onkeydown:(e) => { if (e.key==='Enter') pick(m.id); } },
@@ -263,8 +266,8 @@ function paintDetails() {
     ...['Default','None','Thinking'].map((t) => el('button', { 'aria-pressed':String(think===t), onclick:() => { st.think[m.id] = t; paint(); } }, t)));
   const order = el('ol', { class:'porder' }, ...m.prov.map((x, i) => {
     const out = st.out.has(m.id+'|'+x.p);
-    return el('li', {}, el('span', { class:'n' }, String(i+1)), el('span', { class:'p' }, x.p, x.free ? el('span', { class:'free' }, 'Free') : null),
-      el('span', { class:'st '+(out ? 'out' : 'ok') }, out ? 'Ran out' : 'Ready'),
+    return el('li', {}, el('span', { class:'n' }, String(i+1)), el('span', { class:'p' }, x.p, badge(x)),
+      el('span', { class:'st '+(out ? 'out' : 'ok') }, out ? (x.daily ? 'Back tomorrow' : 'Ran out') : 'Ready'),
       el('button', { class:'iconbtn', 'aria-label':'Move '+x.p+' up', disabled:i===0, onclick:() => { [m.prov[i-1], m.prov[i]] = [m.prov[i], m.prov[i-1]]; paint(); } }, '↑'),
       el('button', { class:'iconbtn', 'aria-label':'Move '+x.p+' down', disabled:i===m.prov.length-1, onclick:() => { [m.prov[i+1], m.prov[i]] = [m.prov[i], m.prov[i+1]]; paint(); } }, '↓'));
   }));
@@ -283,7 +286,7 @@ function simulate(m) {
   if (!now) { m.prov.forEach((x) => st.out.delete(m.id+'|'+x.p)); $('note').hidden = true; paint(); return; }
   st.out.add(m.id+'|'+now.p);
   const next = live(m)[0];
-  $('noteText').textContent = next ? 'Switched to '+m.name+' on '+next.p+': '+now.p+' hit its limit.' : 'Switched to another model: no provider has '+m.name+' left ('+now.p+' hit its limit).';
+  $('noteText').textContent = next ? 'Switched to '+m.name+' on '+next.p+': '+now.p+' used up today's free limit.' : 'Switched to another model: no provider has '+m.name+' left ('+now.p+' hit its limit).';
   $('note').hidden = false; paint();
 }
 $('q').addEventListener('input', (e) => { st.q = e.target.value.trim(); paint(); });
