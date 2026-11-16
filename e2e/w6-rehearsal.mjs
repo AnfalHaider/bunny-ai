@@ -14,6 +14,7 @@
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
+import net from 'node:net';
 import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
@@ -93,6 +94,7 @@ function plan(work) {
 const MANY = Array.from({ length: 35 }, (_, i) => ['write_file', { path: `many/f${String(i).padStart(2, '0')}.txt`, content: `file ${i}\n` }]);
 let FAIL = null; // { model, at, mode }  (model 'first' = whichever model asks first in the run)
 let FIRST = null;
+let SPECIAL = null; // 'ask' | 'written'
 const SEEN = []; // every model request: model, step, ms, what it could see
 let SCRIPT = [];
 let t0 = Date.now();
@@ -102,10 +104,12 @@ const fake = createServer((req, res) => {
     if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"scripted"}]}'); return; }
     if (req.method !== 'POST') { res.writeHead(200); res.end('ok'); return; }
     const tag = req.url.split('/')[1]; const body = JSON.parse(raw); body.model = `${tag}:${body.model}`; const lastUser = body.messages.map((m) => m.role).lastIndexOf('user');
-    const toolsSince = body.messages.slice(lastUser).filter((m) => m.role === 'tool').length;
-    // a model that takes over reads the server's note of the steps already done: carry on after them
-    const luc = String(typeof body.messages[lastUser]?.content === 'string' ? body.messages[lastUser].content : JSON.stringify(body.messages[lastUser]?.content ?? ''));
-    const done = toolsSince + (/Steps already done/.test(luc) ? (luc.match(/\((?:done|failed|denied)\)/g) ?? []).length : 0);
+    // a model that takes over reads the server's note of the steps already done (it may be followed by other notes: the plan, pictures): carry on after them
+    const flat = (m) => (typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? ''));
+    let noteAt = -1; for (let k = body.messages.length - 1; k >= 0; k--) { if (body.messages[k].role === 'user' && /Steps already done/.test(flat(body.messages[k]))) { noteAt = k; break; } }
+    const from = Math.max(lastUser, noteAt);
+    const toolsSince = body.messages.slice(from).filter((m) => m.role === 'tool').length;
+    const done = toolsSince + (noteAt >= 0 ? (flat(body.messages[noteAt]).match(/\((?:done|failed|denied)\)/g) ?? []).length : 0);
     const text = body.messages.map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))).join(' ');
     const firstOfModel = !SEEN.some((x) => x.model === body.model);
     SEEN.push({ lastTool: String([...body.messages].reverse().find((m) => m.role === 'tool')?.content ?? '').length, roles: firstOfModel ? body.messages.map((m) => m.role).join(',') : undefined, sys: firstOfModel ? body.messages.filter((m) => m.role === 'system').map((m) => String(m.content).slice(-420)).join(' ## ') : undefined, extraUser: firstOfModel ? body.messages.filter((m) => m.role === 'user').slice(1).map((m) => String(m.content)).join(' ## ') : undefined, prevSteps: /git clone|Cloning into|npm install/.test(text), t: Date.now() - t0, model: body.model, step: done, msgs: body.messages.length, toolMsgs: body.messages.filter((m) => m.role === 'tool').length, sawAnswer: /Recreate the site/.test(text) && done > 8, sawImage: JSON.stringify(body.messages).includes('image_url'), tools: (body.tools ?? []).length, chars: raw.length });
@@ -116,6 +120,9 @@ const fake = createServer((req, res) => {
       if (FAIL.mode === 'cut') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(frame({ content: 'Let me look at the ' })); setTimeout(() => res.destroy(), 200); return; }
       if (FAIL.mode === 'stall') { res.writeHead(200, { 'content-type': 'text/event-stream' }); return; } // never a byte, never an end
     }
+    if ((SPECIAL === 'ask' || SPECIAL === 'ask2') && done === 0 && !/Do not stop to ask permission/.test(JSON.stringify(body.messages))) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: SPECIAL === 'ask' ? 'The folders are ready. Please confirm that you would like me to make the files?' : 'I can set that up for you. I have the plan ready. Let me know if you want me to continue.' }) + 'data: [DONE]\n\n'); return; }
+    if (SPECIAL === 'written' && done === 0) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: 'Writing it now. <tool_call><function=write_file><parameter=path>written.txt</parameter><parameter=content>hello from a written call</parameter></function></tool_call>' }) + 'data: [DONE]\n\n'); return; }
+    if (SPECIAL === 'written' && done === 1) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: 'Now the second. <tool_call><function=write_file><parameter=path>written2.txt</parameter><parameter=content>unclosed call' }) + 'data: [DONE]\n\n'); return; }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     res.end((done < SCRIPT.length ? call(...SCRIPT[done]) : frame({ content: 'All done: the copy is running and I checked it.' })) + 'data: [DONE]\n\n');
   });
@@ -149,8 +156,9 @@ try {
     return { title: await winPage.title(), url: winPage.url(), text: (await winPage.evaluate(() => document.body.innerText)).slice(0, 6000), elements: el };
   };
 
-  async function run(name, { message, steps, fail = null, auto = false, model = TOP, answerDelayMs = 0, perm = 'auto' }) {
-    SCRIPT = steps; FAIL = fail; FIRST = null; SEEN.length = 0; t0 = Date.now();
+  async function run(name, { message, steps, fail = null, auto = false, model = TOP, answerDelayMs = 0, perm = 'auto', special = null }) {
+    if (process.env.SCEN && !process.env.SCEN.split(',').some((x) => name.startsWith(x))) return { name, work: '', events: [], answered: [], reqError: null, steps: [], final: '(skipped)', seen: [], ms: 0, session: '' };
+    SPECIAL = special; SCRIPT = steps; FAIL = fail; FIRST = null; SEEN.length = 0; t0 = Date.now();
     const work = mkdtempSync(join(tmpdir(), 'bunny-w6-work-'));
     const s = await (await api('/api/sessions', 'POST', { title: name, providerId: PID, model })).json();
     const set = (n, v) => api(`/api/sessions/${s.id}/setting/${n}`, 'PATCH', { value: v });
@@ -186,12 +194,13 @@ try {
     const saved = await (await api(`/api/sessions/${s.id}`)).json();
     const steps2 = saved.messages.filter((m) => m.kind === 'tool_call').map((m) => ({ tool: m.tool, status: m.status, result: String(m.result ?? '').replace(/\s+/g, ' ').slice(0, 230), att: (m.attachments ?? []).length }));
     const finalMsg = [...saved.messages].reverse().find((m) => m.role === 'assistant' && m.kind !== 'tool_call');
-    return { name, work, events, answered, reqError, steps: steps2, final: String(finalMsg?.content ?? '').slice(0, 200), seen: [...SEEN], ms: Date.now() - t0, session: s.id };
+    const markup = JSON.stringify(saved.messages).includes('<tool_call') || JSON.stringify(saved.messages).includes('<function=');
+    return { name, work, markup, events, answered, reqError, steps: steps2, final: String(finalMsg?.content ?? '').slice(0, 200), seen: [...SEEN], ms: Date.now() - t0, session: s.id };
   }
 
 
   async function runUI(name, { steps, fail }) {
-    SCRIPT = steps; FAIL = fail; FIRST = null; SEEN.length = 0; t0 = Date.now();
+    SPECIAL = null; SCRIPT = steps; FAIL = fail; FIRST = null; SEEN.length = 0; t0 = Date.now();
     const work = mkdtempSync(join(tmpdir(), 'bunny-w6-work-'));
     const s = await (await api('/api/sessions', 'POST', { title: name, providerId: PID, model: TOP })).json();
     const set = (n, v) => api(`/api/sessions/${s.id}/setting/${n}`, 'PATCH', { value: v });
@@ -231,11 +240,25 @@ try {
   results.push(await run('S7 big-read', { message: 'W6 read a big file', steps: [['write_file', { path: 'big.html', content: big(4000) }], ['read_file', { path: 'big.html' }], ['run_command', { command: 'Get-Content big.html -Raw' }], ['read_file', { path: 'big.html', start_line: 1, end_line: 1 }]], model: 'offline/bunny-large' }));
   results.push(await run('S8 slow-install', { message: 'W6 a slow install', steps: [['run_command', { command: 'Start-Sleep -Seconds 125; Write-Output finished' }], ['run_command', { command: 'Write-Output after' }]], model: 'offline/bunny-large' }));
   results.push(await run('S9 manual-mode', { message: MSG, steps: plan(), model: 'offline/bunny-large', perm: 'ask' }));
+  results.push(await run('S10 ask-permission', { message: 'W6 set it up', steps: [['write_file', { path: 'a.txt', content: 'a\n' }], ['write_file', { path: 'b.txt', content: 'b\n' }]], special: 'ask', model: 'offline/bunny-large' }));
+  results.push(await run('S10b ask-permission-letmeknow', { message: 'W6 set it up too', steps: [['write_file', { path: 'a.txt', content: 'a' + String.fromCharCode(10) }]], special: 'ask2', model: 'offline/bunny-large' }));
+  results.push(await run('S11 written-calls', { message: 'W6 write it out', steps: [], special: 'written', model: 'offline/bunny-large' }));
+  // S12 (last, it ends the app server): a program the server started must be gone after the server is killed hard (a crash, not a clean stop)
+  const KILL_PORT = 5880 + Math.floor(Math.random() * 90);
+  results.push(await run('S12 server-kill', { message: 'W6 start a server', steps: [['write_file', { path: 'srv.js', content: `require("http").createServer((q, r) => r.end("ok")).listen(${KILL_PORT}, "127.0.0.1");` }], ['start_process', { command: 'node srv.js' }]], model: 'offline/bunny-large' }));
+  const listening = (p) => new Promise((res) => { const c = net.connect(p, '127.0.0.1'); c.on('connect', () => { c.destroy(); res(true); }); c.on('error', () => res(false)); });
+  const upBefore = await listening(KILL_PORT);
+  process.kill(proc.pid, 'SIGKILL'); // the Bunny server only, not its tree
+  await new Promise((r) => setTimeout(r, 8000));
+  const upAfter = await listening(KILL_PORT);
+  if (upAfter) { const line = execFileSync('cmd', ['/c', `netstat -ano | findstr :${KILL_PORT} | findstr LISTENING`], { encoding: 'utf8' }).trim().split(/\s+/).pop(); try { execFileSync('taskkill', ['/PID', line, '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  log(NL + `S12 verdict: the started program listened on ${KILL_PORT} before the kill: ${upBefore}; still listening 8 s after the Bunny server was killed: ${upAfter}`);
   } else {
     // the real client (src/ui/chat.js) drives Auto's fallback: run it in a page, without the desktop browser panel
     const NOBR = plan().map((st) => ({ browser_open: ['read_url', { url: SITE }], browser_read: ['read_url', { url: `${SITE}/assets/style.css` }], browser_screenshot: ['list_processes', {}] }[st[0]] ?? st));
     for (const [name, mode] of [['F1 ui-auto-500', '500'], ['F2 ui-auto-stall', 'stall'], ['F3 ui-auto-cut', 'cut'], ['F4 ui-auto-429', '429']].filter(([n]) => !process.env.ONLY || n.startsWith(process.env.ONLY))) results.push(await runUI(name, { steps: NOBR, fail: { model: 'first', at: 11, mode } }));
-    if (!process.env.ONLY || 'F0'.startsWith(process.env.ONLY)) results.push(await runUI('F0 ui-auto-clean', { steps: NOBR, fail: null }));
+    if (!process.env.ONLY || 'F5'.startsWith(process.env.ONLY)) results.push(await runUI('F5 ui-handover-full', { steps: [['run_command', { command: '1..300 | ForEach-Object { "LINE $_ padding padding padding" }' }], ['write_file', { path: 'x.txt', content: 'x\n' }], ['write_file', { path: 'y.txt', content: 'y\n' }]], fail: { model: 'first', at: 2, mode: '500' } }));
+    results.push(await runUI('F0 ui-auto-clean', { steps: NOBR, fail: null }));
   }
 
   // what is left on disk for the copy (S1)
@@ -245,7 +268,7 @@ try {
   for (const r of results) {
     log(NL + '=== ' + r.name + ` (${Math.round(r.ms / 1000)} s)  request error: ${r.reqError ?? 'none'}  steps saved: ${r.steps.length}`);
     r.steps.forEach((s, i) => log(String(i).padStart(2), (s.status ?? '').padEnd(8), (s.tool ?? '').slice(0, 62).padEnd(62), '|', s.result.slice(0, 110), s.att ? `[+${s.att} image]` : ''));
-    for (const x of r.seen.filter((q) => q.roles)) { log('  first request of', x.model, 'at', Math.round(x.t / 1000) + 's:', 'roles=' + x.roles.slice(0, 120), 'sawEarlierSteps=' + x.prevSteps, 'tool msgs=' + x.toolMsgs, 'system tail:', String(x.sys).slice(0, 120)); if (x.extraUser) log('  EXTRA USER MESSAGE the fallback model was given (' + x.extraUser.length + ' chars):', x.extraUser.replace(/\s+/g, ' ').slice(0, 1800)); } if (r.posts) log('  client sends:', r.posts.join(' || ')); log('  tool result sizes the model received (chars):', r.seen.map((x) => x.lastTool).join(',')); log('  permission cards:', r.events.filter((e) => e.ev === 'permission').length); log('  final:', r.final.replace(/\s+/g, ' ')); log('  models by step:', r.seen.map((x) => `${x.step}:${x.model.replace('offline/bunny-', '')}`).join(' ').slice(0, 400));
+    for (const x of r.seen.filter((q) => q.roles)) { log('  first request of', x.model, 'at', Math.round(x.t / 1000) + 's:', 'roles=' + x.roles.slice(0, 120), 'sawEarlierSteps=' + x.prevSteps, 'tool msgs=' + x.toolMsgs, 'system tail:', String(x.sys).slice(0, 120)); if (x.extraUser) log('  EXTRA USER MESSAGE the fallback model was given (' + x.extraUser.length + ' chars):', x.extraUser.replace(/\s+/g, ' ').slice(0, 1800)); } if (r.posts) log('  client sends:', r.posts.join(' || ')); log('  written-out call markup left in the saved chat:', r.markup); log('  tool result sizes the model received (chars):', r.seen.map((x) => x.lastTool).join(',')); log('  permission cards:', r.events.filter((e) => e.ev === 'permission').length); log('  final:', r.final.replace(/\s+/g, ' ')); log('  models by step:', r.seen.map((x) => `${x.step}:${x.model.replace('offline/bunny-', '')}`).join(' ').slice(0, 400));
     const marks = r.events.filter((e) => e.ev === 'status' || e.ev === 'error' || e.ev === 'newChat' || e.ev === 'done'); log('  status/error events:', marks.map((e) => `${Math.round(e.t / 1000)}s ${e.ev} ${e.brief}`).join(' | ').slice(0, 900));
   }
   log(NL + 'disk (S1):', JSON.stringify(disk));
