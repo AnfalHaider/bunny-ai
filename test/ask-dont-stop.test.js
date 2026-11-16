@@ -23,7 +23,8 @@ test('a closing "please confirm" is recognised; a finished report and a real que
   ]) assert.equal(asksPermissionToContinue(t), false, t);
 });
 
-test('in Code mode a reply that stops to ask permission is told to carry on, once the model answers it finishes', async (t) => {
+/** One Code chat against a scripted provider: each entry is a tool call ({ name, args }) or a text reply. */
+async function run(t, script) {
   const folder = await mkdtemp(join(tmpdir(), 'bunny-ask-'));
   t.after(() => rm(folder, { recursive: true, force: true }));
   const seen = [];
@@ -33,9 +34,11 @@ test('in Code mode a reply that stops to ask permission is told to carry on, onc
     req.on('end', () => {
       if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
       seen.push(JSON.parse(raw));
+      const step = script[seen.length - 1] ?? 'All done.';
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const content = seen.length === 1 ? 'Folders are ready. Please confirm that you would like me to build the pages?' : 'All pages are built and checked.';
-      res.end(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`);
+      const delta = typeof step === 'string' ? { content: step }
+        : { tool_calls: [{ index: 0, id: `c${seen.length}`, function: { name: step.name, arguments: JSON.stringify(step.args) } }] };
+      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -50,8 +53,25 @@ test('in Code mode a reply that stops to ask permission is told to carry on, onc
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ content: 'build the site', providerId: 'openai', model: 'gpt-4o', workMode: 'code' }),
   }).then((r) => r.text());
-  assert.equal(seen.length, 2, 'the model was asked again instead of the reply ending on the question');
+  return seen;
+}
+const ASK = 'Folders are ready. Please confirm that you would like me to build the pages?';
+
+test('with open plan steps, a reply that stops to ask permission is told to carry on', async (t) => {
+  const seen = await run(t, [
+    { name: 'update_tasks', args: { tasks: [{ text: 'Folders', done: true }, { text: 'Pages' }] } },
+    ASK,
+    'All pages are built and checked.',
+  ]);
+  assert.equal(seen.length, 3, 'asked again instead of ending on the question');
   assert.match(seen[0].messages[0].content, /Never stop to ask permission for work the person already asked for/);
   assert.match(seen[0].messages[0].content, /Bunny runs commands, installs packages and starts servers itself/);
-  assert.match(seen[1].messages.at(-1).content, /Do not stop to ask permission/);
+  assert.match(seen[2].messages.at(-1).content, /Your plan still has 1 open step\. Carry on/);
+});
+
+test('with no open plan steps, a closing offer is left alone', async (t) => {
+  const done = await run(t, [{ name: 'update_tasks', args: { tasks: [{ text: 'Pages', done: true }] } }, ASK]);
+  assert.equal(done.length, 2, 'the finished job ended on its question');
+  const none = await run(t, [ASK]);
+  assert.equal(none.length, 1, 'and so did a reply with no plan at all');
 });

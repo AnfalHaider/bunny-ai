@@ -1646,12 +1646,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it. '
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
           + 'and update it as you go; when you continue a job, read it first. '
-          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command, '
-          + 'Bunny runs commands, installs packages and starts servers itself, for you: never say "I am not able to run commands". '
+          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command. '
+          + 'Bunny runs commands, installs packages and starts servers itself, for you: never say you are not able to run commands. '
+          + 'They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
           + 'Finish the whole task you were given. Never stop to ask permission for work the person already asked for ("Please confirm that you would like me to..." is wrong): just do it. '
-          + 'Ask only a real decision, one that changes what you would build or that you cannot choose yourself, and ask it with ask_user (the card waits for the answer); '
-          + 'then carry on. A reply with no question and no steps left is a finished job: end with what you did and how you checked it. '
-          + 'and never say you cannot run commands. They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + 'Ask only a real decision, one that changes what you would build or that you cannot choose yourself, and ask it with ask_user (the card waits for the answer); then carry on. '
+          + 'A reply with no question and no steps left is a finished job: end with what you did and how you checked it. '
           + `When you create a git branch, start its name with "${branchPrefix}/" (for example ${branchPrefix}/fix-login).`,
       };
       const modeText = modeTexts[workMode];
@@ -2470,11 +2470,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             maxToolRounds: () => maxToolRounds,
             // W6-3: a Code reply that ends by asking permission for the job it was given carries on instead (up to 3 times).
             onReplyEnd: ({ text }) => {
-              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !asksPermissionToContinue(text)) return null;
-              permissionNudges += 1;
+              // Only while the plan still has open steps: an offer after a finished job ("want me to also...?") is not a permission question.
               const open = currentTasks.filter((t) => !t.done).length;
+              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !open || !asksPermissionToContinue(text)) return null;
+              permissionNudges += 1;
               return 'Do not stop to ask permission: the person already asked for this. '
-                + `${open ? `Your plan still has ${open} open step${open === 1 ? '' : 's'}. ` : ''}Carry on and finish the job. `
+                + `Your plan still has ${open} open step${open === 1 ? '' : 's'}. Carry on and finish the job. `
                 + 'If you truly need a decision only the person can make, ask it with ask_user (the card waits for the answer); otherwise do not ask.';
             },
             extraBody,
