@@ -5,7 +5,7 @@
  * (including through "..", an absolute path, or a symlink that points outside).
  * Tools are split by risk so the permission mode can decide what runs freely:
  *   read  - list_files, read_file, search_files, find_files
- *   edit  - write_file, edit_file
+ *   edit  - write_file, edit_file, multi_edit
  *   run   - run_command
  */
 import { exec, execFile, spawn } from 'node:child_process';
@@ -116,7 +116,7 @@ export function endsInBackground(command) {
 
 export const TOOL_RISK = {
   list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read',
-  write_file: 'edit', edit_file: 'edit',
+  write_file: 'edit', edit_file: 'edit', multi_edit: 'edit',
   run_command: 'run',
 };
 
@@ -151,8 +151,13 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
         limit: { type: 'integer', description: 'Most files to return, up to 1000. Default 100' } }, ['pattern']),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
-    fn('edit_file', 'Replace one exact snippet in a file. old_text must appear exactly once.',
-      { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' } }, ['path', 'old_text', 'new_text']),
+    fn('edit_file', 'Replace an exact snippet in a file. old_text must appear exactly once, unless replace_all is true, which replaces every occurrence (renaming a variable, say).',
+      { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' },
+        replace_all: { type: 'boolean', description: 'Replace every occurrence of old_text. Default false' } }, ['path', 'old_text', 'new_text']),
+    fn('multi_edit', 'Apply several exact replacements to ONE file in order, all or nothing: if any one fails, the file is left untouched. One Undo covers all of them. Each edit sees the result of the ones before it.',
+      { path: { type: 'string' },
+        edits: { type: 'array', description: 'The replacements, applied in order (at most 50)',
+          items: { type: 'object', properties: { old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['old_text', 'new_text'] } } }, ['path', 'edits']),
     fn('run_command', 'Run a command yourself and get its output (2 minute limit). It runs in Windows PowerShell 5.1: '
       + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
@@ -172,7 +177,8 @@ export function describeToolCall(name, args = {}) {
     }
     case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
-    case 'edit_file': return `Edit ${args.path}`;
+    case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
+    case 'multi_edit': return `Edit ${args.path} (${Array.isArray(args.edits) ? args.edits.length : 0} changes)`;
     case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
     default: return name;
   }
@@ -404,17 +410,43 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     return `Wrote ${show(abs)} (${String(content).split('\n').length} lines)`;
   }
 
-  async function edit_file({ path, old_text, new_text } = {}) {
+  // One replacement on text already in memory. Plain split/join, so "$&" and friends in new_text stay literal.
+  function replaceIn(text, { old_text, new_text, replace_all = false }, path, label = 'old_text') {
+    const old = String(old_text ?? '');
+    if (!old) throw new Error(`${label === 'old_text' ? 'edit_file' : label} needs old_text`);
+    const count = text.split(old).length - 1;
+    if (count === 0) throw new Error(`${label} was not found in ${path}`);
+    if (count > 1 && !replace_all) throw new Error(`${label} appears ${count} times in ${path}; include more surrounding lines, or set replace_all`);
+    return { text: text.split(old).join(String(new_text ?? '')), count };
+  }
+
+  async function edit_file({ path, old_text, new_text, replace_all = false } = {}) {
     const abs = await inside(path);
     const text = await readFile(abs, 'utf8');
-    const old = String(old_text ?? '');
-    if (!old) throw new Error('edit_file needs old_text');
-    const count = text.split(old).length - 1;
-    if (count === 0) throw new Error(`old_text was not found in ${path}`);
-    if (count > 1) throw new Error(`old_text appears ${count} times in ${path}; include more surrounding lines`);
+    const done = replaceIn(text, { old_text, new_text, replace_all: replace_all === true }, path);
     await beforeWrite?.(abs);
-    await writeFile(abs, text.replace(old, String(new_text ?? '')), 'utf8');
-    return `Edited ${show(abs)}`;
+    await writeFile(abs, done.text, 'utf8');
+    return `Edited ${show(abs)}${done.count > 1 ? ` (${done.count} replacements)` : ''}`;
+  }
+
+  async function multi_edit({ path, edits } = {}) {
+    if (!Array.isArray(edits) || !edits.length) throw new Error('multi_edit needs a list of edits');
+    if (edits.length > 50) throw new Error('multi_edit takes at most 50 edits at a time; split it up');
+    const abs = await inside(path);
+    let text = await readFile(abs, 'utf8');
+    let total = 0;
+    for (let i = 0; i < edits.length; i += 1) {
+      try {
+        const done = replaceIn(text, { ...edits[i], replace_all: edits[i]?.replace_all === true }, path, `edit ${i + 1}'s old_text`);
+        text = done.text;
+        total += done.count;
+      } catch (err) {
+        throw new Error(`${err.message}. Nothing was changed: no edit was applied.`);
+      }
+    }
+    await beforeWrite?.(abs); // once, so one Undo restores the file
+    await writeFile(abs, text, 'utf8');
+    return `Edited ${show(abs)} (${edits.length} edits, ${total} replacements)`;
   }
 
   async function run_command({ command, cwd } = {}) {
@@ -480,7 +512,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     });
   }
 
-  const tools = { list_files, read_file, search_files, find_files, write_file, edit_file, run_command };
+  const tools = { list_files, read_file, search_files, find_files, write_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),

@@ -2360,7 +2360,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
-        const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command
+        const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';

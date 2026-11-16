@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,6 +15,7 @@ function script(body) {
   const tools = body.messages.filter((m) => m.role === 'tool').length;
   if (/write note/.test(asked)) return tools === 0 ? call('write_file', { path: 'note.txt', content: 'carrots\nand more\n' }) : frame({ content: 'Wrote note.txt.' });
   if (/edit greet/.test(asked)) return tools === 0 ? call('write_file', { path: 'src/greet.js', content: 'export const greet = (n) => `hi ${n}`;\nexport const bye = () => 1;\n' }) : frame({ content: 'Edited.' });
+  if (/multi edit/.test(asked)) return tools === 0 ? call('multi_edit', { path: 'src/greet.js', edits: [{ old_text: 'hi', new_text: 'hello' }, { old_text: 'greet', new_text: 'greeting' }, { old_text: 'export', new_text: 'export' }] }) : frame({ content: 'Edited.' });
   if (/stop me/.test(asked)) return tools === 0 ? call('write_file', { path: 'stop-note.txt', content: 'x\n' }) : 'SLOW';
   return frame({ content: 'ok' });
 }
@@ -98,6 +99,22 @@ test('Changes: a new file and an edited file show with +/- counts, the diff open
   await note.getByRole('button', { name: 'Undo to here' }).click(); // the dialog is accepted by the beforeEach handler
   await expect(note.locator('.checkpoint-done')).toHaveText('Undone');
   expect(existsSync(join(dir, 'note.txt'))).toBe(false);
+});
+
+test('W2-3: a multi_edit of three changes is one checkpoint with one file row, and one Undo restores the file', async ({ page }) => {
+  const dir = project();
+  await open(page); await useFolder(page, dir); await pickMode(page, 'Auto');
+  await send(page, 'multi edit please');
+  await page.locator('.toolbar [data-view="diff"]').click();
+  const pane = page.locator('#diff-content');
+  await expect(pane.locator('.changes-head .badge')).toHaveText('1 file');
+  await expect(pane.locator('.checkpoint-card')).toHaveCount(1);
+  await expect(pane.locator('.checkpoint-card .change-row')).toHaveCount(1);
+  await expect(pane.locator('.checkpoint-card .change-row .path')).toHaveText('src/greet.js');
+  expect(readFileSync(join(dir, 'src', 'greet.js'), 'utf8')).toContain('hello');
+  await pane.locator('.checkpoint-card').first().getByRole('button', { name: 'Undo to here' }).click();
+  await expect(pane.locator('.checkpoint-done')).toHaveText('Undone');
+  expect(readFileSync(join(dir, 'src', 'greet.js'), 'utf8')).toBe('export const greet = (n) => `hi ${n}`;\n');
 });
 
 test('Changes: empty chat says "No changes yet."', async ({ page }) => {
