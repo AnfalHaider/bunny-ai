@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - D-2 panes walked at 5f36e04
+
+Gate 7 of 7 (128 e2e). Changes (git and plain folders, checkpoint cards, counts, diff, Undo to here), Files (tree, read-only file view, changed lines marked), Session (folder, branch, model, mode, effort, tokens, running programs, Auto's pick) all pass in four widths and themes: Q2-4, Q2-5, Q2-6 fixed. Q2-7 partly: the Plan pane fills but has no tab to open it. Path-escape tests (17 attempts on each route, a junction pointing outside, UNC and drive paths, unchosen folders) all refused. Permission tests now follow the Chief of Staff's decision (Auto: build runs without asking; Manual and Accept edits ask; computer-use clicks follow the mode; the Auto click is not driven because it would click this screen). **Lesson:** a phone has one pane at a time, so a walk that sends a message must close the pane first; a script that does not looks like a bug in the app.
+
 ## 2026-11-16 - D1 signed FAIL at 2cfeec5; T-3 and D-2 walked at 6ef4ccf
 
 - **D1** at 2cfeec5: gate 7 of 7; my d1 sign-off is FAIL for Q2-28 (phone Settings pills one at a time). Re-sign on the release sha once fixed.

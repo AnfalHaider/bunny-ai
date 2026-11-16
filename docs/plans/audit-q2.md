@@ -140,6 +140,19 @@ Still true: for the 30 s of each attempt the screen says only "Streaming..." (no
 
 **D-2 transcript** (four widths and themes): a reply with several tool runs and narrations shows narration lines between collapsed groups ("Listed a folder", "Read a file, wrote a file", "Ran a command"), sub-rows on demand, no horizontal overflow, and the same groups, notes and summaries after a reload; a failing tool (a missing file) shows the red Failed label, the file and the error; 26 chats saved by an older build (46 tool groups or rows) all open and render. **Two defects: Q2-29, Q2-31.**
 
+### The panes at `5f36e04` (QA, 2026-11-16): Q2-4, Q2-5, Q2-6, Q2-7
+
+Gate on `5f36e04`: 7 of 7 (128 e2e). `e2e/q2-panes2-walk.mjs`, invented profile, a git folder and a plain folder, 1440 and 390, both themes (49 checks, all 16 failures traced to Q2-7 or my own phone navigation, rerun clean below).
+
+| Defect | Result | Evidence |
+|---|---|---|
+| Q2-4 Changes | **FIXED** in git and non-git folders, all four widths and themes | a new file and an edited file show as checkpoint cards ("Checkpoint 2 / Checkpoint 1") with `new` / `edited` badges and counts (`src/greet.js +1 −0`, `note.txt +3 −0`, header "2 files +4 −0"), the diff opens with added lines, "Undo to here" puts the folder back (note.txt gone from disk); empty chat says "No changes yet." |
+| Q2-5 Files | **FIXED** | tree lists the folder (before any message too), a file opens read-only with line numbers (no editable field), a file Bunny changed is tinted and its lines marked, `new` marker on a created file; on a phone a file replaces the tree and has a way back |
+| Q2-6 Session | **FIXED** | Where (environment, project, folder, branch `main` or "Not a git folder"), Model (model, permissions, effort), Context and cost (context %, "107 of 200,000" tokens, messages, "not reported" cost), running programs with a Stop button (the started `node` process shows), connectors, outputs; with Auto on, it names Auto's pick and why |
+| Q2-7 Plan | **PARTLY**: the Plan pane is now filled (same list as Tasks) but nothing can open it: only the active pane's tab is shown and no control selects Plan | `#plan-content` holds Look / Write / Check; `#tab-plan` is never visible; Tasks already shows the same plan |
+
+**Path escapes** (`/api/sessions/:id/files` and `/file`, 17 attempts each: `../`, `..`, `..%2F`, `%2e%2e%2f`, `src/../../secret.txt`, backslash forms, `C:\Windows\win.ini`, `C:/Windows/win.ini`, a UNC `\localhost\c$\...`, `/etc/passwd`, `README.md%00.txt`, and a Windows junction inside the folder that points outside): none returned anything outside the folder, none answered 200. `/api/folder/files` and `/file` refuse (403) every folder not chosen in this launch (`C:\Windows`, `C:\`, an outside folder, even the project before it is chosen), and after `folder/check` they still refuse `../`, the junction and a drive path. A chat that does not exist or has no folder answers without a server error. A 2 MB file comes back cut off (`truncated: true`); a binary file is flagged `binary: true`, not dumped. (The Tech Lead's `changesFor` finding was not exercised by a link that escapes: a write through the junction was not attempted.)
+
 ### Open question (UNKNOWN, not counted)
 
 - **Q2-U1.** Headless Chromium reported "Page crashed" / "Target crashed" three times in about ten long walks (at the Settings window, the palette, `page.goto`). It did not repeat when the same rows were run alone, so it may be the test setup (many iframes, parallel runs) and not the app. Needs a look in the real window for a repeat.
