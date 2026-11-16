@@ -199,6 +199,17 @@ export function normalisePart(part, depth = 0) {
 }
 
 /**
+ * W27d-1: arguments PowerShell works out before the command runs: git ("push"), git @("push"), git $("push"), git `-f. What they become
+ * cannot be read from the text, so the line is treated like a wrapper (it asks whenever a Deny or Ask rule exists). Words inside plain
+ * quotes are not computed ("fix (x)"), so those are left out first.
+ */
+export function computedArguments(part) {
+  const { rest } = firstWord(String(part ?? '').trim());
+  const bare = rest.replace(/'[^']*'/g, "''").replace(/"(?:[^"`$]|`.)*"/g, '""'); // a quoted string without $ or ` in it is only text
+  return /[(]|@\(|\$\(|`-/.test(bare) || /(?:^|\s)@\{|\$\{/.test(bare);
+}
+
+/**
  * Everything the rules need to know about a command line:
  *   readings  the three lists of parts (A, B, C) an Allow must cover completely
  *   texts     every spelling a Deny or Ask is matched against
@@ -235,6 +246,8 @@ export function analyseCommand(command, depth = 0) {
       }
     }
   }
+  // computed arguments (W27d-1): the parts above are cut at the brackets, so look at each statement of the line itself
+  if (String(command ?? '').split(/[;|&\r\n]+/).some(computedArguments)) wrapper = true;
   // a new drive or a provider named Alias, Function or Variable can redefine names too
   if (/\b(new-psdrive|ndr|mount)\b/i.test(String(command ?? '').replace(/`/g, '').replace(/["']/g, '')) || /-psprovider\s+(alias|function|variable)/i.test(String(command ?? ''))) wrapper = true;
   // the alias:, function: and variable: drives redefine what a name means (Set-Item alias:rm ...), spelled any way
