@@ -1632,7 +1632,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // The longer copy that is replayed to a model taking over (maybe another provider) is kept only for the workspace's own
         // file and command tools, and never when the result looks like it holds a secret.
         const secretish = looksSecret(full, `${rest.tool ?? ''} ${rest.content ?? ''}`);
-        if (!saveable || secretish) return out;
+        // An incognito chat leaves nothing behind: no longer copy, no note file.
+        if (!saveable || secretish || session.incognito) return out;
         out.modelResult = clip(full, 6000);
         // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
         // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
@@ -1714,6 +1715,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
           + 'Finish the whole task you were given. Never stop to ask permission for work the person already asked for ("Please confirm that you would like me to..." is wrong): just do it. '
           + 'Ask only a real decision, one that changes what you would build or that you cannot choose yourself, and ask it with ask_user (the card waits for the answer); then carry on. '
+          + 'For a job of about ten steps or more (build a site, port a project, fix many files), start by writing a task list with update_tasks and keep it current as you finish each step. '
           + 'A reply with no question and no steps left is a finished job: end with what you did and how you checked it. '
           + `When you create a git branch, start its name with "${branchPrefix}/" (for example ${branchPrefix}/fix-login).`,
       };
@@ -2511,7 +2513,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let thinking = '';
       const replyStartedAt = Date.now();
       // How far one reply may go, clamped whatever Settings holds. A scheduled run has nobody watching: it gets less.
-      const clamp = (v, lo, hi, fallback) => Math.min(hi, Math.max(lo, Math.round(Number(v ?? fallback)) || fallback));
+      // A stored 0 means "off" (the reply stops at its normal step limit); anything else is clamped into range.
+      const clamp = (v, lo, hi, fallback) => { const n = Number(v ?? fallback); return n === 0 ? 0 : Math.min(hi, Math.max(lo, Math.round(n) || fallback)); };
       const replyCaps = scheduledTask
         ? { steps: clamp(settings.scheduledContinueSteps, 1, 2000, 100), minutes: clamp(settings.scheduledContinueMinutes, 1, 600, 30), tokens: 2_000_000 }
         : { steps: clamp(settings.autoContinueSteps, 1, 2000, 500), minutes: clamp(settings.autoContinueMinutes, 1, 600, 120), tokens: clamp(settings.autoContinueTokens, 100_000, 100_000_000, 5_000_000) };
@@ -2540,7 +2543,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
             extendRounds: (round) => {
               if (workMode !== 'code' && !workspace) return false;
-              if (round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
+              if (!replyCaps.steps || !replyCaps.minutes || round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
               maxToolRounds = round + Math.max(EFFORT.code, 12);
               send('working', { step: round + 1 });
               return true;
@@ -2563,7 +2566,13 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             onReplyEnd: ({ text }) => {
               // Only while the plan still has open steps: an offer after a finished job ("want me to also...?") is not a permission question.
               const open = currentTasks.filter((t) => !t.done).length;
-              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !open || !asksPermissionToContinue(text)) return null;
+              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !asksPermissionToContinue(text)) return null;
+              // No plan at all: a model that stops mid-job without one is asked to say whether it is finished (W6-3b).
+              if (!currentTasks.length) {
+                permissionNudges += 1;
+                return 'If the task is not finished, make a task list with update_tasks and carry on; if it is finished, say so plainly.';
+              }
+              if (!open) return null;
               permissionNudges += 1;
               return 'Do not stop to ask permission: the person already asked for this. '
                 + `Your plan still has ${open} open step${open === 1 ? '' : 's'}. Carry on and finish the job. `

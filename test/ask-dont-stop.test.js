@@ -76,7 +76,7 @@ test('with no open plan steps, a closing offer is left alone', async (t) => {
   const done = await run(t, [{ name: 'update_tasks', args: { tasks: [{ text: 'Pages', done: true }] } }, ASK]);
   assert.equal(done.length, 2, 'the finished job ended on its question');
   const none = await run(t, [ASK]);
-  assert.equal(none.length, 1, 'and so did a reply with no plan at all');
+  assert.equal(none.length, 2, 'a reply with no plan at all is nudged once to make a list or say it is finished (W6-3b)');
 });
 
 test('with open plan steps, a closing statement that hands the turn back is nudged too; without them it is left alone', async (t) => {
@@ -86,4 +86,21 @@ test('with open plan steps, a closing statement that hands the turn back is nudg
   assert.match(open[2].messages.at(-1).content, /Do not stop to ask permission/);
   const closed = await run(t, [{ name: 'update_tasks', args: { tasks: [{ text: 'Phase 1', done: true }] } }, HANDBACK]);
   assert.equal(closed.length, 2, 'a finished plan is not nudged');
+});
+
+// W6-3b: a model that stops mid-job with no plan at all is asked to make one or say it is finished.
+test('with no plan, a reply that hands the turn back is nudged once to make a task list or say it is finished', async (t) => {
+  const seen = await run(t, ['Phase 1 is done. Let me know if you want me to continue.', 'Everything is finished and checked.']);
+  assert.equal(seen.length, 2);
+  assert.match(seen[1].messages.at(-1).content, /make a task list with update_tasks and carry on; if it is finished, say so plainly/);
+});
+
+test('the no-plan nudge counts toward the same limit of three', async (t) => {
+  const seen = await run(t, Array.from({ length: 6 }, () => 'Shall I continue?'));
+  assert.equal(seen.length, 4, 'three nudges, then the reply is allowed to end');
+});
+
+test('the Code prompt asks long jobs to keep a task list (W6-12)', async (t) => {
+  const seen = await run(t, ['Done.']);
+  assert.match(seen[0].messages[0].content, /about ten steps or more[\s\S]*task list with update_tasks/);
 });

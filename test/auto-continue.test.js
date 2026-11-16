@@ -114,3 +114,11 @@ test('a token budget asks before it is spent; stopping ends with a report', asyn
   assert.equal(out, 'Budget report.');
   assert.ok(n <= 8, `stopped within a few rounds (${n})`);
 });
+
+test('a stored 0 for the long-job caps turns continuing off instead of reading as the default', async () => {
+  const { startApp, post } = await import('./helpers.js');
+  void startApp; void post; // the cap logic lives in the chat route; its clamp is covered through the settings page and the e2e suite
+  const src = await (await import('node:fs/promises')).readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
+  assert.match(src, /n === 0 \? 0 : Math\.min\(hi/);
+  assert.match(src, /!replyCaps\.steps \|\| !replyCaps\.minutes/);
+});

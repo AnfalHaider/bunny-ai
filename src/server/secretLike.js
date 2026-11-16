@@ -13,6 +13,8 @@ const PATTERNS = [
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/, // a JWT
   /-----BEGIN [A-Z ]*PRIVATE KEY/,
   /(?:api[_-]?key|secret|token|passwd|password|pwd|credential)[\w.-]{0,200}\s{0,64}[=:]\s{0,64}["']?[^\s"']{8,}/i,
+  /\bauthorization\s{0,8}[:=]\s{0,8}(bearer|basic|token)\s{1,8}[A-Za-z0-9._~+/=-]{8,}/i,
+  /\b(sk|rk|pk)_(live|test)_[A-Za-z0-9]{8,}/,
   /:\/\/[^/\s:@]+:[^@\s/]{3,}@/,                                   // user:password@host
   /[?&](access_)?(token|key|api_key|apikey|sig|signature|secret)=[A-Za-z0-9._~%-]{8,}/i,
 ];

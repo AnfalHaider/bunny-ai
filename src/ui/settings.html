@@ -375,14 +375,14 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Keep going on long jobs</div>
-          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps or the time below, whichever comes first.</div>
+          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps or the time below, whichever comes first. 0 turns it off.</div>
         </div>
         <div class="right"><input id="auto-steps" type="number" min="0" step="50" aria-label="Most steps in one reply" /></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Longest long job</div>
-          <div class="desc">The most minutes one reply may keep working in Code mode. The default is 120 (2 hours).</div>
+          <div class="desc">The most minutes one reply may keep working in Code mode. The default is 120 (2 hours). 0 turns it off.</div>
         </div>
         <div class="right"><input id="auto-minutes" type="number" min="0" step="10" aria-label="Most minutes in one reply" /></div>
       </div>
@@ -878,12 +878,12 @@
   $('auto-steps').addEventListener('change', async (e) => {
     const n = Math.max(0, Math.round(Number(e.target.value) || 0));
     e.target.value = n;
-    await save({ autoContinueSteps: Math.min(2000, Math.max(1, n)) });
+    await save({ autoContinueSteps: n === 0 ? 0 : Math.min(2000, Math.max(1, n)) });
   });
   $('auto-minutes').addEventListener('change', async (e) => {
     const n = Math.max(0, Math.round(Number(e.target.value) || 0));
     e.target.value = n;
-    await save({ autoContinueMinutes: Math.min(600, Math.max(1, n)) });
+    await save({ autoContinueMinutes: n === 0 ? 0 : Math.min(600, Math.max(1, n)) });
   });
   $('auto-tokens').addEventListener('change', async (e) => {
     const n = Math.min(100000000, Math.max(100000, Math.round(Number(e.target.value) || 5000000)));

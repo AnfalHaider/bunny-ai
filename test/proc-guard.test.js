@@ -28,10 +28,10 @@ test('a started program is gone after the server that started it is killed', asy
 // Security review of W4-1d: the program must not inherit Electron's internal variables.
 test('a started program does not inherit ELECTRON_RUN_AS_NODE', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'bunny-guard-env-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
   const { createProcessStore } = await import('../src/server/processes.js');
   const store = createProcessStore();
-  t.after(() => store.stopAll());
+  // Stop the program first: it holds its folder, and removing the folder under it fails with EBUSY.
+  t.after(async () => { await store.stopAll(); await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); });
   process.env.ELECTRON_SOMETHING = 'leak';
   t.after(() => { delete process.env.ELECTRON_SOMETHING; });
   const p = store.start({ command: "node -e \"console.log('ERN=' + process.env.ELECTRON_RUN_AS_NODE + ' ES=' + process.env.ELECTRON_SOMETHING)\"", cwd: dir, owner: 'x' });

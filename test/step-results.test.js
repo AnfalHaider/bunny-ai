@@ -140,3 +140,43 @@ test('a saved note is in the undo list of a reply that also changed files', asyn
   await post(base, `/api/sessions/${session.id}/checkpoints/${reply.checkpoint.id}/restore`, {});
   assert.deepEqual((await readdir(join(folder, '.bunny', 'notes'))).filter((f) => note.endsWith(f)), [], 'undo removed the note');
 });
+
+test('looksSecret also catches Authorization headers and sk_live_ style keys', () => {
+  assert.equal(looksSecret('Authorization: Bearer abcdefghijklmnop1234'), true);
+  assert.equal(looksSecret('authorization = Basic dXNlcjpwYXNzd29yZA=='), true);
+  assert.equal(looksSecret(`sk_live_${'a1'.repeat(12)}`), true);
+  assert.equal(looksSecret(`sk_test_${'b2'.repeat(12)}`), true);
+  assert.equal(looksSecret('the authorization flow is described in section 3'), false);
+});
+
+test('an incognito chat keeps no note file and no long replay copy', async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-incog-'));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  await writeFile(join(folder, 'big.txt'), 'row of data\n'.repeat(900));
+  const server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const first = !JSON.parse(raw).messages.some((m) => m.role === 'tool');
+      const delta = first ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'read_file', arguments: JSON.stringify({ path: 'big.txt' }) } }] } : { content: 'ok' };
+      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => server.close(r)));
+  const { base } = await startApp(t, { fake: false });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
+  const { body: session } = await post(base, '/api/sessions', { title: 'Incognito', incognito: true });
+  const patch = (key, value) => fetch(`${base}/api/sessions/${session.id}/setting/${key}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) });
+  await patch('permissionMode', 'auto');
+  await patch('folder', folder);
+  await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'read it', providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) }).then((r) => r.text());
+  const got = (await json(base, `/api/sessions/${session.id}`)).body;
+  assert.equal(got.incognito, true, 'the chat is incognito');
+  const step = got.messages.find((m) => m.kind === 'tool_call');
+  assert.equal(step.resultFile, undefined);
+  assert.equal(step.modelResult, undefined);
+  assert.deepEqual((await readdir(folder)).filter((f) => f === '.bunny'), [], 'no .bunny folder was made');
+});
