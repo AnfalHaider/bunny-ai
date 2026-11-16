@@ -2,7 +2,8 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard } from 'electron';
+import { buildContextMenuTemplate } from './context-menu.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -64,7 +65,20 @@ const webPreferences = () => ({
   spellcheck: true,
 });
 
+function contextMenu(contents) {
+  contents.on('context-menu', (_event, params) => {
+    const template = buildContextMenuTemplate(params, {
+      replaceMisspelling: (word) => contents.replaceMisspelling(word),
+      addToDictionary: (word) => contents.session.addWordToSpellCheckerDictionary(word),
+      copyLink: (url) => clipboard.writeText(url),
+    });
+    if (template.length) Menu.buildFromTemplate(template).popup();
+  });
+}
+
 function guard(contents) {
+  contextMenu(contents);
+  try { contents.session.setSpellCheckerLanguages(['en-US']); } catch { /* dictionary unavailable: spell check stays off */ }
   // Bunny's own pages may open in new Bunny windows (pop-out chat); everything
   // else opens in the person's normal browser.
   contents.setWindowOpenHandler(({ url }) => {
