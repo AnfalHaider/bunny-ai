@@ -279,6 +279,24 @@
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" /><span>on</span></label></div>
       </div>
+      <div class="row" id="wait-row">
+        <div class="meta-col">
+          <div class="name">Wait for a first reply</div>
+          <div class="desc">How long Bunny waits for the model you picked to start answering before it tries another. Reasoning, image and video models get twice as long, and so does a reply that goes quiet part-way. <span id="wait-off-note" hidden>Used only when "Try another model" is on.</span></div>
+        </div>
+        <div class="right wait-right">
+          <select id="wait-select" aria-label="Wait for a first reply">
+            <option value="15">15 seconds</option>
+            <option value="30">30 seconds (default)</option>
+            <option value="60">60 seconds</option>
+            <option value="90">90 seconds</option>
+            <option value="120">120 seconds</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <label class="wait-custom" id="wait-custom" hidden><input type="text" inputmode="numeric" id="wait-custom-input" aria-label="Seconds to wait for a first reply" autocomplete="off" /> seconds</label>
+          <div class="wait-now" id="wait-now" aria-live="polite"></div>
+        </div>
+      </div>
     </div>
 
     <h2>Voice</h2>
@@ -905,6 +923,41 @@
   }
 
 
+  // ---- W4-9: wait for a first reply (seconds). Presets, or Custom: a whole number from 10 to 600, else a note and nothing saved ----
+  function bindWait(settings) {
+    const PRESETS = [15, 30, 60, 90, 120];
+    const sel = $('wait-select'), box = $('wait-custom-input'), customLabel = $('wait-custom'), now = $('wait-now');
+    const valid = (v) => Number.isInteger(v) && v >= 10 && v <= 600;
+    let saved = valid(settings.firstReplyWaitSeconds) ? settings.firstReplyWaitSeconds : 30;
+    const nowText = (s) => (s >= 600 ? 'Now: 600 seconds for every model' : `Now: ${s} seconds, or ${Math.min(s * 2, 600)} for reasoning, image and video models`);
+    const show = () => { customLabel.hidden = sel.value !== 'custom'; box.classList.remove('bad'); now.classList.remove('bad'); now.textContent = nowText(saved); };
+    sel.value = PRESETS.includes(saved) ? String(saved) : 'custom';
+    if (sel.value === 'custom') box.value = String(saved);
+    show();
+    const update = (final) => {
+      const text = box.value.trim();
+      const n = /^\d+$/.test(text) ? Number(text) : NaN;
+      if (valid(n)) {
+        box.classList.remove('bad'); now.classList.remove('bad');
+        if (n !== saved) { saved = n; save({ firstReplyWaitSeconds: n }); }
+        now.textContent = nowText(n);
+      } else {
+        box.classList.add('bad'); now.classList.add('bad');
+        now.textContent = `Use a whole number of seconds from 10 to 600. Not saved: still waiting ${saved} seconds.`;
+        if (final && text === '') box.focus();
+      }
+    };
+    sel.addEventListener('change', () => {
+      if (sel.value === 'custom') { customLabel.hidden = false; box.value = box.value || String(saved); box.focus(); update(false); return; }
+      const n = Number(sel.value); saved = n; customLabel.hidden = true; save({ firstReplyWaitSeconds: n }); show();
+    });
+    box.addEventListener('input', () => update(false));
+    box.addEventListener('blur', () => update(true));
+    const fb = document.querySelector('[data-cap="fallbackWhenBusy"]');
+    const dim = () => { $('wait-row').style.opacity = fb.checked ? '' : '0.55'; $('wait-off-note').hidden = fb.checked; };
+    fb.addEventListener('change', dim); dim();
+  }
+
   // ---- permission rules (W2-7): Deny, then Ask, then Allow, checked before the permission mode ----
   const rulesUi = (() => {
     const lists = $('rules-lists');
@@ -1169,6 +1222,7 @@
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);
+    bindWait(settings);
     renderCustomTools();
     bindSignInApps(settings);
     renderAccount();

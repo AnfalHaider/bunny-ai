@@ -59,10 +59,14 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    M1["Model A is working"] -->|"error, limit or no answer in ~30s"| H["I hand over the task list<br/>and everything I have read"]
+    M1["Model A is working"] -->|"error, limit or no answer in time<br/>(30s unless you change it in Settings)"| H["I hand over the task list<br/>and everything I have read"]
     H --> M2["Model B carries on<br/>from the same step"]
     M2 --> R["One quiet line tells you<br/>who answered and why"]
 ```
+
+How long I wait before trying another model is yours to set: **Settings → Capabilities → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
+
+<p align="center"><img src="docs/images/settings-wait.png" alt="Settings: Try another model when yours is busy, with Wait for a first reply under it" width="820" /></p>
 
 ### You can watch me think. On one tidy line.
 While I work, one little line at the bottom of my reply shows me hopping along ("Snuggling the code… thinking · 12s"). Open it and read my thoughts as they happen. Go on, I don't mind. When I move on, it settles into a quiet "Thought for 12s" you can open later. And if a model is being slow, I'll tell you exactly who's keeping us waiting. Hmph.
