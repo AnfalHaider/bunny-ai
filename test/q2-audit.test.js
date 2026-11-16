@@ -170,9 +170,10 @@ test('Q2-5: the Files pane has code that fills it', async () => {
   assert.ok(js.includes("'file-content'"), 'no UI code touches the Files pane');
 });
 
-test('Q2-7: the Plan pane has code that fills it and a way to reach it', async () => {
-  const { js } = await panes();
-  assert.ok(js.includes("'plan-content'"), 'no UI code touches the Plan pane');
+test('Q2-7: there is no Plan pane that nothing opens; the Tasks pane is the one place the plan shows', async () => {
+  const { html, js } = await panes();
+  assert.ok(!html.includes('id="pane-plan"') && !html.includes('id="tab-plan"') && !js.includes("'plan-content'"), 'a dead Plan pane is still there');
+  assert.ok(html.includes('id="pane-tasks"') && js.includes("'tasks-content'"), 'the Tasks pane is the plan view');
 });
 
 test('Q2-6: the Session pane shows more than "This computer", the project, the context meter, connectors and outputs', async () => {

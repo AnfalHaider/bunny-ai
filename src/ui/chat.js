@@ -122,7 +122,7 @@ function icon(name) {
  * a tool (terminal, diff, browser, file, tasks, plan) or the artifacts.
  * Asking for the view that is already open closes the pane.
  */
-const TOOL_VIEWS = ['terminal', 'diff', 'browser', 'file', 'tasks', 'plan'];
+const TOOL_VIEWS = ['terminal', 'diff', 'browser', 'file', 'tasks'];
 
 function currentView() {
   if (state.artifactOpen) return 'artifacts';
@@ -1820,9 +1820,6 @@ function showLiveTasks(bodyEl, tasks) {
 }
 /** The Tasks pane shows the latest plan in this chat. */
 function renderTasksPane(tasks) {
-  // The Plan pane shows the same plan the Tasks pane does (it had nothing filling it: Q2-7).
-  const plan = $('plan-content');
-  if (plan) plan.replaceChildren(tasks?.length ? taskList(tasks) : element('div', { className: 'pane-empty' }, element('span', { textContent: 'No plan yet.' })));
   const host = $('tasks-content');
   if (!host) return;
   if (!tasks?.length) {
