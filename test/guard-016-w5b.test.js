@@ -154,3 +154,49 @@ test('W5-1b review 2: checkout-index options are matched by their abbreviations;
   denied(t, 'git push origin heads/x:tags/v1');
   allowed(t, 'git push origin heads/claude/x');
 });
+
+// ---- W5-1c (Security's conditions on 611dee7, ab6e370)
+
+import { prepush } from './guard-016-helpers.js';
+
+test('W5B-1: the live branch label is judged case-insensitively', (t) => {
+  for (const c of ['git branch -f Main HEAD', 'git branch -f MAIN HEAD', 'git branch -M Main', 'git branch -D MAIN', 'git checkout -B Main origin/main', 'git switch -C MAIN', 'git branch -f refs/heads/Main HEAD']) denied(t, c);
+  allowed(t, 'git branch -f Mainline HEAD');
+  allowed(t, 'git branch -f claude/main HEAD');
+});
+
+test('W5B-2: git symbolic-ref with a target (or -d) is refused for a builder; reading it is not', (t) => {
+  for (const c of ['git symbolic-ref refs/heads/main refs/heads/claude/x', 'git symbolic-ref HEAD refs/heads/main', 'git symbolic-ref -d HEAD', 'git symbolic-ref --delete refs/heads/main', 'git symbolic-ref -m why HEAD refs/heads/x']) denied(t, c);
+  allowed(t, 'git symbolic-ref HEAD');
+  allowed(t, 'git symbolic-ref --short HEAD');
+  allowed(t, 'git symbolic-ref -q HEAD');
+  allowed(t, 'git symbolic-ref refs/heads/main refs/heads/claude/x', 'chief-of-staff');
+});
+
+test('W5B-3: git worktree add -B (or --force) with the live branch is refused', (t) => {
+  for (const c of ['git worktree add -B main ../w', 'git worktree add ../w -B main', 'git worktree add -B Main ../w origin/main', 'git worktree add --force ../w main']) denied(t, c);
+  allowed(t, 'git worktree add ../w claude/x');
+  allowed(t, 'git worktree add -b claude/new ../w');
+  allowed(t, 'git worktree list');
+  allowed(t, 'git worktree remove ../w');
+});
+
+test('W5B-4: gh download writes only inside the working folder and never into the toolkit or the records', (t) => {
+  for (const c of ['gh run download 5 -D .bootstrap', 'gh run download 5 -D .githooks/', 'gh release download v1 --dir=.git/hooks', 'gh release download v1 -D ..', 'gh release download v1 -D ../out', 'gh release download v1 -D C:\\Windows', 'gh run download 5 -D /etc', 'gh release download v1 -D ~/x',
+    'gh release download v1 -O AGENTS.md', 'gh release download v1 --output=docs/signoffs/x.md', 'gh run download 5 -D$X', 'gh release download v1 -D']) denied(t, c);
+  for (const c of ['gh run download 5', 'gh release download v1', 'gh run download 5 -D artifacts', 'gh release download v1 --dir out/dist', 'gh release download v1 -O out.zip', 'gh release download v1 -O -']) allowed(t, c);
+});
+
+test('W5B-5: the pre-push hook refuses tag pushes and deletions for a role that may not push live', (t) => {
+  const root = makeRepo(t, 'builder');
+  execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'seed'], { cwd: root });
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const policy = lib.loadPolicy(root);
+  const check = (role, remoteRef, localSha = sha) => prepush.checkPush({ root, policy, role, localSha, remoteRef, remoteSha: '0'.repeat(40) });
+  assert.ok(check('builder', 'refs/tags/v1').some((e) => /may not push or delete the tag "v1"/.test(e)));
+  assert.ok(check('builder', 'refs/tags/v1', '0'.repeat(40)).some((e) => /tag "v1"/.test(e)), 'deleting a tag too');
+  assert.ok(check('qa', 'refs/tags/v2').length > 0);
+  assert.deepEqual(check('release-ops', 'refs/tags/v1').filter((e) => /tag/.test(e)), []);
+  assert.deepEqual(check('chief-of-staff', 'refs/tags/v1').filter((e) => /tag/.test(e)), []);
+  assert.deepEqual(check('builder', 'refs/heads/claude/x').filter((e) => /tag/.test(e)), [], 'a branch is not a tag');
+});

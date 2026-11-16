@@ -7,7 +7,7 @@
 // (A2) and the record-folder rules (E) live in lib/shellwrites.mjs.
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
 import { resolve as pathResolve } from 'node:path';
-import { ghNotAllowed, isLong, pushShape, refuseLabelMove, refusePush, refuseRemote } from './shellextra.mjs';
+import { ghNotAllowed, isLong, pushShape, refuseLabelMove, refusePush, refuseRemote, refuseSymbolicRef } from './shellextra.mjs';
 import { ALIAS_DEPTH, GIT_BUILTINS, GIT_DIR_ENV, aliasValue, refuseGitConfigs } from './shellgit.mjs';
 
 const SHELLS = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd'];
@@ -231,7 +231,8 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if (sub === 'checkout-index' && call.args.some((a) => isLong(a, '--prefix', 3) || isLong(a, '--all', 3) || isLong(a, '--stdin', 4) || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
   if (sub === 'push') { const why3 = refusePush(call.args, where0(call, ctx)); if (why3) return why3; }
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
-  if (sub === 'branch' || sub === 'checkout' || sub === 'switch') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }
+  if (sub === 'symbolic-ref') { const why6 = refuseSymbolicRef(call.args); if (why6) return why6; }
+  if (sub === 'branch' || sub === 'checkout' || sub === 'switch' || sub === 'worktree') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }
   if (!sub || GIT_BUILTINS.has(sub)) return null;
   // the alias is looked up where git will run: every -C moves the folder, in order
   let where = ctx.cwd ?? process.cwd();

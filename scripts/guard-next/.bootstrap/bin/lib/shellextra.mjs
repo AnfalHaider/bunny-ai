@@ -58,17 +58,52 @@ export function refuseRemote(args) {
 /** Why this branch/checkout/switch call moves the live branch's label by force, or null. `live` is the policy's live branch name. */
 export function refuseLabelMove(sub, args, live) {
   if (!live) return null;
-  const names = args.filter((a) => !a.startsWith('-')).map((a) => a.replace(/^refs\/heads\//, ''));
-  const touchesLive = names.includes(live);
+  const names = args.filter((a) => !a.startsWith('-')).map((a) => a.replace(/^refs\/heads\//i, '').toLowerCase());
+  const touchesLive = names.includes(String(live).toLowerCase()); // Main, MAIN and main are one branch to a Windows checkout
   if (!touchesLive) return null;
   const flags = args.filter((a) => a.startsWith('-'));
   const short = (letters) => flags.some((f) => /^-[A-Za-z]+$/.test(f) && [...f.slice(1)].some((c) => letters.includes(c)));
   if (sub === 'branch' && (short('fMCmDd') || flags.some((f) => isLong(f, '--force', 4) || isLong(f, '--move', 4) || isLong(f, '--delete', 4)))) {
     return `moving, renaming or deleting the "${live}" branch label is not allowed for this role.`;
   }
+  if (sub === 'worktree' && args.includes('add') && (short('B') || flags.some((f) => isLong(f, '--force', 4)))) {
+    return `"git worktree add -B" resets the "${live}" branch label; not allowed for this role.`;
+  }
   if ((sub === 'checkout' && short('B')) || (sub === 'switch' && (short('C') || flags.some((f) => isLong(f, '--force-create', 4))))) {
     return `resetting the "${live}" branch label with checkout -B or switch -C is not allowed for this role.`;
   }
+  return null;
+}
+
+/** Why `git symbolic-ref` is refused (it can point the live branch at anything), or null. Reading HEAD is fine. */
+export function refuseSymbolicRef(args) {
+  const positional = args.filter((a) => !a.startsWith('-'));
+  const writes = positional.length >= 2 || args.some((a) => /^-[A-Za-z]*d/.test(a) || isLong(a, '--delete', 3) || a === '-m');
+  return writes ? '"git symbolic-ref" with a target, or -d, rewrites what a branch or HEAD points at; not allowed for this role. Reading it is fine.' : null;
+}
+
+/** Where a gh download writes (-D/--dir, -O/--output): a folder inside the working copy that is not the toolkit's, never outside it. */
+export function ghDownloadTarget(words) {
+  const targets = [];
+  for (let i = 1; i < words.length; i += 1) {
+    const t = words[i].text;
+    if (t === '-D' || t === '--dir' || t === '-O' || t === '--output') targets.push(words[i + 1]?.text ?? '');
+    else if (/^--(dir|output)=/.test(t)) targets.push(t.slice(t.indexOf('=') + 1));
+    else if (/^-[DO]./.test(t)) targets.push(t.slice(2).replace(/^=/, ''));
+  }
+  return targets;
+}
+
+const PROTECTED_START = /^(\.git|\.bootstrap|\.githooks|\.claude|agents\.md|claude\.md|docs[\\/]+(signoffs|releases))([\\/]|$)/i;
+
+/** Why a gh download target is refused, or null. */
+export function refuseDownloadTarget(target) {
+  const t = String(target).replace(/\\/g, '/');
+  if (t === '' ) return 'a gh download target must be spelled out.';
+  if (t === '-') return null; // to the terminal
+  if (/[$`%]/.test(t)) return `a gh download target with a variable in it cannot be checked ("${target}"): spell it out.`;
+  if (/^([A-Za-z]:|\/|~)/.test(t) || t.split('/').includes('..')) return `a gh download may only write inside the working folder ("${target}" leaves it).`;
+  if (PROTECTED_START.test(t.replace(/^\.\//, ''))) return `a gh download may not write into "${target}" (toolkit configuration or records).`;
   return null;
 }
 
@@ -103,6 +138,10 @@ export function ghNotAllowed(words, group, sub, ctx) {
   if (group === 'pr' && sub === 'comment') return null;
   if (group === 'pr' && sub === 'create') {
     return prCreateOnClaudeBranch(words, ctx.cwd) ? null : `"gh pr create" is allowed only for a claude/* branch (the head here is not one). ${offer}`;
+  }
+  if (sub === 'download') {
+    for (const target of ghDownloadTarget(words)) { const why = refuseDownloadTarget(target); if (why) return why; }
+    return null;
   }
   if (sub !== null && GH_READ_SUBS.has(sub)) return null;
   return `"gh ${group}${sub ? ` ${sub}` : ''}" is not on the list of gh commands this role may run (reads: view, list, status, diff, checks; pr comment; pr create on a claude/* branch). It could publish files or change the repository. ${offer}`;

@@ -81,6 +81,11 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   const branch = remoteRef.replace(/^refs\/heads\//, '');
   const guarded = branch === policy.branches.live || branch === policy.branches.dev;
 
+  // W5B-5: tags can mark a release; only the live pushers push or delete one (the shell rules say so first; this is the hook that catches the rest)
+  if (/^refs\/tags\//.test(remoteRef) && !policy.releases.live_pushers.includes(role)) {
+    errors.push(`role "${role}" may not push or delete the tag "${remoteRef.replace(/^refs\/tags\//, '')}" (only ${policy.releases.live_pushers.join(' / ')})`);
+  }
+
   if (ZERO.test(localSha)) {
     if (guarded) errors.push(`refusing to delete "${branch}"`);
     return errors;
