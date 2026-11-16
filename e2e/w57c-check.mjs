@@ -50,6 +50,17 @@ try {
     const keys = [...new Set(made.flatMap((s) => s.keys))]; return `${clicked} switches and ${changed} menus changed, ${made.length} saves, all accepted; keys: ${keys.join(', ')}`.slice(0, 600);
   });
   await row('S3', 'a made-up key is still refused (the rule itself is intact)', async () => { const r = await fetch(BASE + '/api/settings', { method: 'PUT', headers: H, body: JSON.stringify({ notARealSetting: 1 }) }); ok(r.status === 400, 'status ' + r.status); return 'still 400'; });
+  await row('S4', 'NEW (2c29444): autoUpdate and fallbackWhenBusy over HTTP with the page token are 403 (Change this in the window) and change nothing; through the window they save', async () => {
+    const before = await settings(); const out = [];
+    for (const [key, val] of [['autoUpdate', false], ['fallbackWhenBusy', false]]) {
+      const r = await fetch(BASE + '/api/settings', { method: 'PUT', headers: H, body: JSON.stringify({ [key]: val }) }); const t = await r.json().catch(() => ({}));
+      if (r.status !== 403 || t.message !== "Change this in Bunny's window.") out.push(key + ' over HTTP: ' + r.status + ' ' + String(t.message).slice(0, 50));
+      const after = (await settings())[key]; if (after === val && before[key] !== val) out.push(key + ' changed over HTTP');
+      const w = await relay('/api/settings', 'PUT', { [key]: val }); if (w.status !== 200) out.push(key + ' through the window: ' + w.status); else if ((await settings())[key] !== val) out.push(key + ' not saved through the window');
+    }
+    const mixed = await fetch(BASE + '/api/settings', { method: 'PUT', headers: H, body: JSON.stringify({ theme: 'dark', autoUpdate: true }) }); if (mixed.status !== 403) out.push('a mixed write with autoUpdate over HTTP: ' + mixed.status);
+    ok(!out.length, out.join(' ; ')); return 'both 403 over HTTP, both 200 through the window, a mixed write is 403 as a whole';
+  });
   console.log(NL + `${rows.filter((r) => r.v === 'PASS').length} PASS / ${rows.filter((r) => r.v === 'FAIL').length} FAIL of ${rows.length}`);
   await finish(0);
 } catch (e) { console.log('HARNESS ERROR', e.stack); await finish(1); }
