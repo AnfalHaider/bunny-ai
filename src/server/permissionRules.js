@@ -144,7 +144,12 @@ export function checkCommand(rules, command) {
 
 // ---- paths
 
-const norm = (p) => String(p ?? '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+const norm = (p) => {
+  let t = String(p ?? '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  // Windows reads "key.txt::$DATA" and "key.txt." as key.txt, and "secrets.\\x" as secrets\\x
+  if (process.platform === 'win32') t = t.split('/').map((seg) => seg.split(':')[0].replace(/[. ]+$/, '') || seg).join('/');
+  return t;
+};
 
 /** A rule's verdict on one path for an operation ('edits' or 'reads'): { effect, rule } or null. */
 export function checkPath(rules, rel, op) {
@@ -181,8 +186,17 @@ export function checkToolCall(rules, name, args = {}, canonPath = null) {
   if (name === 'run_command' || name === 'start_process') return checkCommand(rules, args.command);
   // "a/../secrets/x" is collapsed first, and the real file (after links) is judged too
   const spellings = (p) => [norm(p), posix.normalize(norm(p) || '.'), canonPath];
-  if (EDIT_TOOLS.has(name)) return checkPaths(rules, spellings(args.path), 'edits');
-  if (READ_TOOLS.has(name)) return checkPaths(rules, spellings(args.path ?? '.'), 'reads');
+  const judge = (p, op) => {
+    const verdict = checkPaths(rules, spellings(p), op);
+    // Where this path really leads cannot be worked out (a dangling link...): with a path rule in play, that is a question for the person
+    if (canonPath === false && verdict?.effect !== 'deny') {
+      const some = rules.find((r) => r.kind === 'path' && r.ops === op);
+      if (some) return { effect: 'ask', rule: { pattern: `where ${norm(p) || '.'} really leads cannot be worked out`, scope: some.scope ?? 'All folders' } };
+    }
+    return verdict;
+  };
+  if (EDIT_TOOLS.has(name)) return judge(args.path, 'edits');
+  if (READ_TOOLS.has(name)) return judge(args.path ?? '.', 'reads');
   return null;
 }
 

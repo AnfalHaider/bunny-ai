@@ -156,3 +156,21 @@ test('review: a path is judged as typed, collapsed, and as the real file; an All
   assert.equal(checkToolCall(rules, 'write_file', { path: 'docs/a.md' }, 'src/x.md'), null, 'the real file is not under docs/: the Allow does not apply');
   assert.equal(checkToolCall(rules, 'edit_file', { path: 'docs/./sub//a.md' })?.effect, 'allow');
 });
+
+test('W2-7b: a path that cannot be resolved (a dangling link) asks when a path rule is in play; a Deny still denies; with no path rule nothing changes', () => {
+  const rules = [path('deny', 'secrets/**', 'edits'), path('allow', 'docs/**', 'edits')];
+  const ask = checkToolCall(rules, 'write_file', { path: 'docs/link/x.txt' }, false);
+  assert.equal(ask?.effect, 'ask');
+  assert.match(ask.rule.pattern, /cannot be worked out/);
+  assert.equal(checkToolCall(rules, 'write_file', { path: 'secrets/x.txt' }, false)?.effect, 'deny');
+  assert.equal(checkToolCall([cmd('allow', 'npm test*')], 'write_file', { path: 'docs/x.txt' }, false), null, 'no path rule: no opinion');
+  assert.equal(checkToolCall([path('deny', 'secrets/**', 'reads')], 'write_file', { path: 'docs/x.txt' }, false), null, 'a reads rule says nothing about edits');
+  assert.equal(checkToolCall([path('deny', 'secrets/**', 'reads')], 'read_file', { path: 'docs/x.txt' }, false)?.effect, 'ask');
+});
+
+test('W2-7b: Windows spellings of a denied path (stream suffix, trailing dot or space) are judged as the plain name', { skip: process.platform !== 'win32' }, () => {
+  const rules = [path('deny', 'secrets/**', 'edits')];
+  for (const p of ['secrets/key.txt::$DATA', 'secrets/key.txt.', 'secrets/key.txt ', 'secrets./key.txt', 'secrets \\key.txt', 'docs/../secrets/key.txt:stream']) {
+    assert.equal(checkToolCall(rules, 'write_file', { path: p })?.effect, 'deny', p);
+  }
+});

@@ -230,3 +230,18 @@ test('review: a collapsed ".." and a junction cannot get around a path rule (the
   } catch { /* links cannot be made here */ }
   void rules;
 });
+
+test('W2-7b: canon() says false for a link that points nowhere, and null for a path outside the folder', async (t) => {
+  const { createWorkspace } = await import('../src/server/workspace.js');
+  const { mkdtempSync, mkdirSync, symlinkSync, rmSync } = await import('node:fs');
+  const root = mkdtempSync(join(tmpdir(), 'bunny-dangle-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'docs'));
+  const ws = createWorkspace(root);
+  assert.equal(await ws.canon('docs/new/x.txt'), 'docs/new/x.txt', 'not there yet is fine');
+  assert.equal(await ws.canon('../out.txt'), null);
+  let linked = true;
+  try { symlinkSync(join(root, 'nowhere'), join(root, 'docs', 'dangling'), 'junction'); } catch { linked = false; }
+  if (!linked) return t.skip('links cannot be made here');
+  assert.equal(await ws.canon('docs/dangling/x.txt'), false, 'a junction to a folder that does not exist');
+});

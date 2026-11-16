@@ -2418,7 +2418,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
         // ask always asks, in every mode; allow skips the question.
-        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed, await workspace.canon(parsed.path ?? '.').catch(() => null)) : null;
+        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed, await workspace.canon(parsed.path ?? '.').catch(() => false)) : null;
         if (ruled?.effect === 'deny') {
           const why = `Blocked by your permission rule ${describeRule(ruled)}.`;
           await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });

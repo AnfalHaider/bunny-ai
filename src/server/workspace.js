@@ -10,7 +10,7 @@
  */
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
@@ -243,7 +243,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
 
   const show = (abs) => relative(root, abs).split(sep).join('/') || '.';
 
-  /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder. For the person's rules. */
+  /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder; false when it cannot be worked out (a dangling link, no permission). For the person's rules. */
   async function canon(path = '.') {
     const rest = [];
     let cur = resolve(root, String(path || '.'));
@@ -252,14 +252,18 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
         const real = join(await realpath(cur), ...rest.reverse());
         const rel = relative(await realpath(root), real);
         return rel.startsWith('..') || isAbsolute(rel) ? null : (rel.split(sep).join('/') || '.');
-      } catch {
+      } catch (err) {
+        // A link that points nowhere is not "a file that does not exist yet": where a write through it would land is unknown. Say so (false).
+        if (err?.code !== 'ENOENT') return false;
+        const link = await lstat(cur).catch(() => null);
+        if (link?.isSymbolicLink()) return false;
         const up = dirname(cur);
         if (up === cur) return null;
         rest.push(basename(cur));
         cur = up;
       }
     }
-    return null;
+    return false;
   }
 
   async function list_files({ path = '.', depth = 2 } = {}) {
