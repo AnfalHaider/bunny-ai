@@ -16,14 +16,44 @@ const short = (s) => String(s || '').slice(0, 7);
 
 // W5-8: a release is only ever the commit that is exactly origin/main, built from a clean tree.
 // Pure check so tests need no git. target / originMain are shas (full or abbreviated, at least 7 chars).
-export function checkTarget({ target, originMain, dirty = false, fetchError = null } = {}) {
+export function checkTarget({ target, originMain, head, dirty = false, fetchError = null } = {}) {
   if (fetchError) return { ok: false, reason: `Refusing to release: could not fetch origin/main (${fetchError}). Check the network and run "git fetch origin main" first.` };
   if (!target || !/^[0-9a-f]{7,40}$/i.test(target)) return { ok: false, reason: `Refusing to release: the target "${target || ''}" is not a commit. Pass --target <sha|HEAD>.` };
   if (!originMain || !/^[0-9a-f]{7,40}$/i.test(originMain)) return { ok: false, reason: 'Refusing to release: origin/main does not exist here. Run "git fetch origin main", then release only what is on main.' };
   const a = target.toLowerCase(); const b = originMain.toLowerCase();
   if (!(a.startsWith(b) || b.startsWith(a))) return { ok: false, reason: `Refusing to release ${short(target)}: it is not origin/main (${short(originMain)}). Release only what is on main.` };
-  if (dirty) return { ok: false, reason: 'Refusing to release: the working tree has uncommitted changes to tracked files. Commit or discard them so the release can be rebuilt from the sha.' };
+  // Security W5-8 (1): the installer was built from the checked-out files, so HEAD must be the target, not only the target origin/main
+  if (!head || !/^[0-9a-f]{7,40}$/i.test(head)) return { ok: false, reason: 'Refusing to release: could not read the checked-out commit (HEAD).' };
+  const h = head.toLowerCase();
+  if (!(h.startsWith(a) || a.startsWith(h))) return { ok: false, reason: `Refusing to release ${short(target)}: this folder has ${short(head)} checked out, and dist/ was built from that. Check out the target, rebuild with "npm run dist", then release.` };
+  // (2) untracked files count: an untracked file under src/ would ship in the installer
+  if (dirty) return { ok: false, reason: 'Refusing to release: the working tree has uncommitted or untracked files. Commit, move or discard them so the release can be rebuilt from the sha.' };
   return { ok: true, reason: '' };
+}
+
+// (3) "npm run dist" writes dist/build-sha.txt (scripts/write-build-sha.mjs); an installer from another commit, or none, is refused.
+export function checkBuild({ target, builtSha } = {}) {
+  const built = String(builtSha ?? '').trim();
+  if (!built) return { ok: false, reason: 'Refusing to release: dist/build-sha.txt is missing. Run "npm run dist" on the commit you are releasing.' };
+  if (!/^[0-9a-f]{7,40}$/i.test(built)) return { ok: false, reason: `Refusing to release: dist/ was built from a tree with changes (${built.slice(0, 20)}). Run "npm run dist" again on a clean checkout.` };
+  const a = String(target ?? '').toLowerCase(); const b = built.toLowerCase();
+  if (!a || !(a.startsWith(b) || b.startsWith(a))) return { ok: false, reason: `Refusing to release ${short(target)}: dist/ was built from ${short(built)}. Run "npm run dist" again on the target.` };
+  return { ok: true, reason: '' };
+}
+
+// (4) only a notes file goes on to gh: no other repository, draft, pre-release or "not latest" can ride along
+export function checkGhArgs(extra = []) {
+  const out = [];
+  for (let i = 0; i < extra.length; i += 1) {
+    const a = extra[i];
+    if (a === '--notes-file') {
+      const v = extra[i + 1];
+      if (!v || v.startsWith('-')) return { ok: false, reason: 'Refusing to release: --notes-file needs a file name.' };
+      out.push(a, v); i += 1;
+    } else if (/^--notes-file=./.test(a)) out.push(a);
+    else return { ok: false, reason: `Refusing to release: "${String(a).slice(0, 40)}" is not allowed. Only --notes-file is passed on to gh (no --repo, --draft, --prerelease or --latest=false).` };
+  }
+  return { ok: true, reason: '', args: out };
 }
 
 // Pulls --target / --dry-run out of the arguments; everything else is passed on to gh.
@@ -42,11 +72,12 @@ export function parseArgs(argv) {
 export function gatherGitState({ git, target }) {
   let fetchError = null;
   try { git(['fetch', 'origin', 'main']); } catch (e) { fetchError = String(e.message || e).split(/\r?\n/)[0]; }
-  let resolved = ''; let originMain = ''; let dirty = false;
+  let resolved = ''; let originMain = ''; let head = ''; let dirty = false;
   try { resolved = git(['rev-parse', '--verify', `${target}^{commit}`]).trim(); } catch { resolved = ''; }
   try { originMain = git(['rev-parse', '--verify', 'origin/main^{commit}']).trim(); } catch { originMain = ''; }
-  try { dirty = git(['status', '--porcelain', '--untracked-files=no']).trim() !== ''; } catch { dirty = true; }
-  return { target: resolved, originMain, dirty, fetchError };
+  try { head = git(['rev-parse', '--verify', 'HEAD^{commit}']).trim(); } catch { head = ''; }
+  try { dirty = git(['status', '--porcelain', '--untracked-files=all']).trim() !== ''; } catch { dirty = true; }
+  return { target: resolved, originMain, head, dirty, fetchError };
 }
 
 function main() {
@@ -84,11 +115,23 @@ function main() {
   }
 
   const { target: targetArg, dryRun, rest: extra } = parseArgs(process.argv.slice(2));
+  const ghArgs = checkGhArgs(extra);
+  if (!ghArgs.ok) {
+    console.error(ghArgs.reason);
+    process.exit(1);
+  }
   const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const state = gatherGitState({ git, target: targetArg });
   const verdict = checkTarget(state);
   if (!verdict.ok) {
     console.error(verdict.reason);
+    process.exit(1);
+  }
+  let builtSha = '';
+  try { builtSha = readFileSync(join(root, 'dist', 'build-sha.txt'), 'utf8'); } catch { builtSha = ''; }
+  const built = checkBuild({ target: state.target, builtSha });
+  if (!built.ok) {
+    console.error(built.reason);
     process.exit(1);
   }
   console.log(`Release target: ${state.target} (origin/main ${state.originMain}), tag ${tag}, record ${record}`);
@@ -97,8 +140,8 @@ function main() {
     return;
   }
 
-  const notes = extra.includes('--notes-file') ? [] : ['--notes', `Bunny AI ${version}. Installed copies update to it automatically.`];
-  execFileSync('gh', ['release', 'create', tag, ...files, '--title', `Bunny AI ${version}`, '--latest', ...notes, '--target', state.target, ...extra], { cwd: root, stdio: 'inherit' });
+  const notes = ghArgs.args.length ? [] : ['--notes', `Bunny AI ${version}. Installed copies update to it automatically.`];
+  execFileSync('gh', ['release', 'create', tag, ...files, '--title', `Bunny AI ${version}`, '--latest', ...notes, '--target', state.target, ...ghArgs.args], { cwd: root, stdio: 'inherit' });
   console.log(`Published ${tag}. Installed copies will find it within a few hours, or at once from Settings, About, Check for updates.`);
 }
 
