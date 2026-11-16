@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createWorkspace, workspaceToolDefinitions, TOOL_RISK, describeToolCall } from '../src/server/workspace.js';
-import { isPrivateAddress, MAX_DOWNLOAD_BYTES } from '../src/server/download.js';
+import { fetchLimited, isPrivateAddress, MAX_DOWNLOAD_BYTES } from '../src/server/download.js';
 import { startApp, post } from './helpers.js';
 
 const j = { 'content-type': 'application/json' };
@@ -96,9 +96,42 @@ test('loopback and private hosts are refused by default', async (t) => {
   assert.equal(existsSync(join(ws.root, 'x.txt')), false);
 });
 
-test('the address check', () => {
-  for (const ip of ['127.0.0.1', '127.9.9.9', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '::1', 'fc00::1', 'fd12::1', 'fe80::1', '::ffff:127.0.0.1', '[::1]']) assert.equal(isPrivateAddress(ip), true, ip);
-  for (const ip of ['8.8.8.8', '172.15.0.1', '172.32.0.1', '192.169.0.1', '1.1.1.1', '2606:4700::1111']) assert.equal(isPrivateAddress(ip), false, ip);
+test('the address check blocks every reserved range and every IPv4-in-IPv6 spelling', () => {
+  for (const ip of ['127.0.0.1', '127.9.9.9', '0.1.2.3', '10.1.2.3', '100.64.0.1', '100.127.255.255', '172.16.0.1', '172.31.255.255', '192.0.0.8', '192.168.1.1',
+    '169.254.169.254', '198.18.0.1', '198.19.255.255', '224.0.0.1', '239.1.1.1', '240.0.0.1', '255.255.255.255', '0.0.0.0',
+    '::', '::1', '0:0:0:0:0:0:0:1', 'fc00::1', 'fd12::1', 'fe80::1', 'febf::1', 'ff02::1', '[::1]',
+    '::ffff:127.0.0.1', '::ffff:7f00:1', '0:0:0:0:0:ffff:7f00:1', '0000:0000:0000:0000:0000:ffff:7f00:0001', '::ffff:10.0.0.1', '::ffff:a00:1', '::127.0.0.1', '::7f00:1',
+    '64:ff9b::7f00:1', '64:ff9b::127.0.0.1', '64:ff9b::a9fe:a9fe', '2002:7f00:1::', '2002:a00:1::1', '2002:c0a8:101::1', 'not-an-ip']) assert.equal(isPrivateAddress(ip), true, ip);
+  for (const ip of ['8.8.8.8', '172.15.0.1', '172.32.0.1', '192.169.0.1', '100.63.255.255', '100.128.0.1', '198.17.255.255', '198.20.0.1', '223.255.255.255', '1.1.1.1',
+    '2606:4700::1111', '::ffff:8.8.8.8', '::ffff:808:808', '64:ff9b::808:808', '2002:808:808::1', '2001:db8::1']) assert.equal(isPrivateAddress(ip), false, ip);
+});
+
+test('numeric, hex and octal host spellings are normalised and refused (no DNS needed)', async () => {
+  for (const url of ['http://2130706433/', 'http://0x7f.1/', 'http://0177.0.0.1/', 'http://127.1/', 'http://[::ffff:7f00:1]/', 'http://[::ffff:127.0.0.1]/', 'http://[0:0:0:0:0:ffff:7f00:1]/', 'http://[::1]/', 'http://169.254.169.254/latest', 'http://[64:ff9b::7f00:1]/']) {
+    await assert.rejects(fetchLimited(url, { lookupImpl: async () => { throw new Error('no DNS expected'); } }), /private network/, url);
+  }
+});
+
+test('DNS rebinding: a host answering with any blocked address is refused', async () => {
+  let calls = 0;
+  const lookupImpl = async () => { calls += 1; return [{ address: '93.184.216.34', family: 4 }, { address: '127.0.0.1', family: 4 }]; };
+  await assert.rejects(fetchLimited('http://rebind.example/file', { lookupImpl }), /private network/);
+  assert.equal(calls, 1);
+});
+
+test('DNS rebinding: the lookup runs once and the socket goes to the validated address, never the second answer', async (t) => {
+  let hits = 0;
+  const probe = createServer((req, res) => { hits += 1; res.end('x'); });
+  await new Promise((r) => probe.listen(0, '127.0.0.1', r));
+  t.after(() => { probe.closeAllConnections?.(); probe.close(); });
+  const seen = [];
+  // First answer is a public (TEST-NET) address; a rebinding resolver would answer 127.0.0.1 next.
+  const lookupImpl = async () => { seen.push('lookup'); return seen.length === 1 ? [{ address: '192.0.2.1', family: 4 }] : [{ address: '127.0.0.1', family: 4 }]; };
+  const stop = new AbortController();
+  setTimeout(() => stop.abort(), 400);
+  await assert.rejects(fetchLimited(`http://rebind.example:${probe.address().port}/`, { lookupImpl, signal: stop.signal }), /Stopped|Could not download/);
+  assert.equal(seen.length, 1, 'resolved exactly once');
+  assert.equal(hits, 0, 'the loopback server was never reached');
 });
 
 /** A model that calls download_file once, then says done. */
