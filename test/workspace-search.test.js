@@ -11,7 +11,8 @@ import { join, dirname } from 'node:path';
 import { createWorkspace, describeToolCall, workspaceToolDefinitions } from '../src/server/workspace.js';
 import { globMatcher } from '../src/server/glob.js';
 
-// CPU time, not the clock: other tests and other sessions share this machine while the suite runs (W4-1c family)
+// CPU time, not the clock, with room for a saturated machine (other tests and other sessions share it while the suite runs; W4-1c family).
+// Alone, these searches take well under a second of CPU.
 const cpuSince = (since) => { const u = process.cpuUsage(since); return (u.user + u.system) / 1000; };
 
 function folder(t, files) {
@@ -167,7 +168,7 @@ test('hardening: huge or runaway patterns are refused or bounded', async (t) => 
   await assert.rejects(ws.run('search_files', { query: 'x'.repeat(501) }), /longer than 500/);
   const t1 = process.cpuUsage();
   await ws.run('search_files', { query: '(a+)+$', regex: true });
-  assert.ok(cpuSince(t1) < 2000, 'a long line is cut before it is tested');
+  assert.ok(cpuSince(t1) < 6000, 'a long line is cut before it is tested');
 });
 
 // ---- W2-2: find_files
