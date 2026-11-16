@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W5-1 guard round (`claude/builder-w5-1` @ d3ee1cf): PASS
+
+G1-1..G1-5 closed; 124 staged tests pass; my probes 1-8 re-run (about 300 command spellings). Three known gaps accepted for landing (variable command word, role file seatbelt, `gh` denylist). Follow-ups W5S-1..W5S-5: `git push --repo=origin main` slips the shell layer (pre-push catches it), `gh gist create` and `gh repo create --public` allowed, dynamic command word plus a publishing word, role binding, wildcard or `.` deletes of the hooks folder. Landing note: the hooks path on this machine is absolute to the main checkout, so landing hits every worktree at once. Review: `docs/security/2026-11-16-w5-1-guard-review.md`. Lesson: a denylist fails on the verb you did not list; ask for an allowlist when the action is outward-facing.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |
