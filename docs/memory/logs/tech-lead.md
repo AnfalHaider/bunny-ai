@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Re-check of the desktop wiring at 98ee19a (Builder): PASS
+
+`electron/main.js` now calls `createApp({ dataDir, folderPickerOnly: true })` and `dialog:pickFolder` records the pick through `bunnyApp.chooseFolder` and returns null when it is refused (drive root, Bunny's own data). Schedules and projects (POST and PATCH) take a folder only through the same gate; the agent's own schedule and new-chat paths reuse the chat's already-gated folder. Tests added: static wiring test, pick, check, setting sequence, schedules and projects refused until picked. Scratch checkout of 98ee19a, panes, plan-mode, permission-modes, exit-status, request-guard: 62 pass, 0 fail (e2e not run by me). Plan refuses `own` risk (move_to_new_chat) too, which is right. Note, not blocking: a refused pick returns null with no message, so the person sees nothing happen; a one-line "That folder cannot be used" would be kinder (English only). The required fix from bbdb6fc is closed.
+
 ## 2026-11-16 - Spec for the G-1 review follow-ups (0.1.6), at the Chief's request after G-1 landed (237f3e1)
 
 Wrote `docs/plans/guard-0.1.6-spec.md`: six items with tests (gh writes G1-1; git config/alias/include/push settings and alias-resolved subcommands; `toRepoPath` canonical and fail closed; record authentication at commit and push with `completeSignoffs` filename = role; per-simple-command legacy patterns; dynamic push target and role source), plus a section for the plugin repository and a pointer in `upstream-bootstrap-notes.md`. HIGH: Builder needs the owner's go first. Found while reading: the 237f3e1 "apply always" fix makes the whole-string patterns false-block again (a push chained to `worktree remove --force` was refused for me today); item 5 fixes that without losing the ANSI-C case. Spec only, no code written or tested.
