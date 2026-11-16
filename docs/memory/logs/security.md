@@ -2,6 +2,20 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
+
+| Piece | Verdict | Evidence |
+|---|---|---|
+| S-1 request guard, re-fix `09b35e4` | **PASS** (signed, `91b7de5`) | attacks refused on an invented profile; Google callback only with a live one-time state; 92 e2e pass |
+| G-1 guard rework (staged, `560e636`; later guard commits not re-read) | **PASS with conditions**, log only | `docs/security/2026-11-16-g1-guard-review.md`; open: G1-1 `gh release/pr merge/api` unguarded (HIGH), G1-2 records not checked at commit (MEDIUM), G1-3..G1-5. It is staged, not landed: today's live guard still has its false blocks and gaps |
+| T-3 network probe, `092cc6d` | **PASS** | three fixed hosts, nothing of the person sent, behind the S-1 guard, no way to name a URL |
+| D-2 pane endpoints, `9ca3f77` | **FAIL** (signed `e231f5b`) | D2-1..D2-4 fixed and verified; D2-5 not active in the desktop app (`electron/main.js` still `createApp({ dataDir })`, picker result not recorded); `/api/schedules` and `/api/projects` store any folder. Branch head is still `9ca3f77`, so both are open now |
+| Q2-1 Plan mode | **Partly**, log only | browser click/type now refused in Plan (`app.js:2300`, verified by reading); `move_to_new_chat` is still not refused in Plan (Q2-S2 open); connector `readOnly` self-declared (Q2-S3, accepted) |
+| Q2-23 token re-read | **PASS** | foreign page cannot get the token |
+| Auto-mode build actions (`fde15a5`) | **Matches the owner's rule exactly** | risk note and middle way in the entry below; owner's decision |
+
+**For the release:** the one blocker I hold is D-2 (two small fixes, then one re-run and sign). If the owner wants 0.1.5 out before that, the choice is: ship with the Files and Changes panes' folder routes disabled in the desktop app, or accept that any script flaw in Bunny's own pages could read the disk. I recommend the fix, not the exception. Nothing else I reviewed blocks 0.1.5; G-1 and Q2-S2 are board rows for after.
+
 ## 2026-11-16 - D-2 panes second re-review (9ca3f77): FAIL, two small things left
 
 D2-1 to D2-4 fixed and verified (junction leak gone, 1 MB read, caps, .git and node_modules refused). D2-5 works on the server when folderPickerOnly is on, but the desktop app never turns it on: electron/main.js still calls createApp with only dataDir and never records the picker's result. Also /api/schedules and /api/projects still store any folder. Signed FAIL at 9ca3f77 (d-2 security sign-off); details in the review's second addendum. Expect PASS after the Electron wiring and the two routes.
