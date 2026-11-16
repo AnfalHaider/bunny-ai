@@ -2,6 +2,21 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Auto mode runs build actions without asking (fde15a5, seen at 78f49fe)
+
+**(1) Does it match the owner's rule? Yes, exactly.** `needsOk` (`src/server/app.js`, the line after "Whatever the person allowed applies in full"): `send` asks in every mode; `build` asks unless the mode is Auto; Manual asks for edit and run; Accept edits asks for run; Plan refuses edit, run, build and send (`planRefuses`). Email send moved from build to its own `send` risk (`gmail_send`), so it asks in Auto and is refused in Plan. Capability switches (computer use, tool building, Code mode) still ask the person through their own question in every mode. A project file cannot set the mode (`test/permission-modes.test.js` checks the source line). Test coverage: the schedule action in all four modes, the risk table, and the source check. Not tested by behaviour: create tool, local connector, computer click and type in Auto (only the table).
+
+**(2) Risk note for the owner.**
+*What changed.* In an Auto chat, four things that used to ask now run on their own: building a new tool, a schedule that may change things, adding a local connector (a program on this computer), and clicking and typing on the computer.
+*Why it matters.* Text the chat reads (a web page, a file, an email, a GitHub issue) can carry hidden instructions. Until now an Auto chat that was tricked could still do harm only while it ran. The first three of the four outlive the chat: a new tool is code that stays; a schedule created in Auto runs later with Auto rights, unattended, every few minutes, across restarts, for as long as Bunny is open; a local connector is a program that starts again with Bunny. One poisoned page could plant any of them, with no question asked, and the person is usually away in Auto. Clicking and typing are not kept, but act in whatever is signed in on screen.
+*How big.* The three persistent ones are only reachable if the person has turned on tool building or the Automation feature; computer clicks only if computer control is on. Where those are off, the model must ask for the capability first and still does. In Code mode an Auto chat can already run commands in the folder, so the new exposure is persistence and reach outside the folder, not first access.
+*One middle way (recommended).* Keep the owner's rule for everything except the three that outlive the chat: in Auto, a new tool, a change-making schedule and a local connector ask once, showing the exact code, schedule text or command, and then keep working; clicks, typing and every other build action run as the owner decided. That is a one-line change to `needsOk` (build asks in Auto when the call is `create_tool`, `schedule_task` with may-change, or `add_connector` with a command), plus one test per case. Nothing else in Auto changes.
+*Also noted, not caused by this change:* in Auto, `calendar_create_event` (invites with attendees send mail from the person) and the GitHub write tools (`github_create_issue`, `github_comment`, `github_create_pull_request`) are `edit` risk and already ran unasked. They speak for the person like email does; the owner may want them in the `send` group.
+
+**Owed verdicts, already given:** T-3 network probe PASS (`95588d0`, `docs/security/2026-11-16-t3-network-probe-review.md`); D-2 pane endpoints FAIL at `5f36e04` (`42e076b`, five changes sent to Builder), waiting for the new sha.
+
+**Lesson:** when a rule moves an action from "asks" to "runs", list what the action leaves behind; the ones that persist past the chat are the ones to keep asking about.
+
 ## 2026-11-16 - D-2 panes final (5f36e04): FAIL
 
 **Verdict: FAIL, signed** (the d-2 security sign-off file). D2-1..D2-4 from 6ef4ccf are all still present (my requests had not reached Builder). New D2-5: the folder routes' "chosen this launch" set is filled by POST /api/folder/check, which accepts any folder, so any holder of the page token can list and read any text file on the computer (tested: C:/Windows/win.ini, the .ssh listing). The S-1 guard still refuses everything without the token. Report addendum in `docs/security/2026-11-16-d2-panes-review.md`.
