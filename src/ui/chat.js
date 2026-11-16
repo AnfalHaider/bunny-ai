@@ -1603,7 +1603,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     },
     onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, message: err.message }; showError(err.message ?? 'The request failed.'); },
+    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       flushNote();
       showLiveTool(bodyEl, info);
@@ -2451,7 +2451,7 @@ async function send() {
     if (!errored || result.aborted) break;
     // W6-5: what the server just learned is applied here at once, so Auto does not offer a dead model or a cooling provider again.
     if (result.errorInfo?.unavailable) { const dead = state.models.find((m) => m.providerId === pick.providerId && m.id === pick.id); if (dead) dead.unavailable = result.errorInfo.message ?? 'not available for this account'; }
-    if (result.errorInfo?.coolingUntil) for (const m of state.models) if (m.providerId === pick.providerId) m.coolingUntil = result.errorInfo.coolingUntil;
+    if (result.errorInfo?.coolingUntil) for (const m of state.models) if (m.providerId === pick.providerId && (result.errorInfo.coolingScope === 'provider' || m.id === pick.id)) m.coolingUntil = result.errorInfo.coolingUntil;
     const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
     failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
     if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);

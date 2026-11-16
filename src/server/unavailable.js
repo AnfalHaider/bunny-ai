@@ -64,19 +64,24 @@ export function createUnavailableStore({ file }) {
   }
 
   // W6-5: a provider that said "too many requests" or "free usage limit reached" is left alone for a while, across messages.
+  // A provider-wide refusal (usage limit spent) rests every model of it; a busy model rests alone (key "provider::model").
   const cooling = new Map();
-  /** Leave a provider alone for `ms`; returns the time it is free again (ms since 1970). */
-  function cool(providerId, ms) {
+  /** Leave a provider (or one model of it) alone for `ms`; returns the time it is free again (ms since 1970). */
+  function cool(providerId, ms, model = null) {
     if (!providerId || !(ms > 0)) return 0;
-    const until = Math.max(cooling.get(providerId) ?? 0, Date.now() + ms);
-    cooling.set(providerId, until);
+    const key = model ? `${providerId}::${model}` : providerId;
+    const until = Math.max(cooling.get(key) ?? 0, Date.now() + ms);
+    cooling.set(key, until);
     return until;
   }
-  /** When the provider is free again, or 0 when it is not cooling. */
-  function coolingUntil(providerId) {
-    const until = cooling.get(providerId) ?? 0;
-    if (until <= Date.now()) { cooling.delete(providerId); return 0; }
-    return until;
+  /** When the provider (or this model of it) is free again, or 0 when it is not cooling. */
+  function coolingUntil(providerId, model = null) {
+    let latest = 0;
+    for (const key of model ? [providerId, `${providerId}::${model}`] : [providerId]) {
+      const until = cooling.get(key) ?? 0;
+      if (until <= Date.now()) cooling.delete(key); else latest = Math.max(latest, until);
+    }
+    return latest;
   }
 
   return { mark, forProvider, clear, all, cool, coolingUntil };

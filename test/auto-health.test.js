@@ -60,3 +60,28 @@ test('after a 429 the provider is marked cooling across messages, and the error 
   const until = (await json(base, '/api/models')).body.find((m) => m.id === 'gpt-4o').coolingUntil;
   assert.ok(until > Date.now() + 50 * 60_000, 'about an hour, kept for the next message');
 });
+
+test('a busy answer rests only that model, not the provider\'s others', async (t) => {
+  const server = createServer((req, res) => {
+    req.on('data', () => {});
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"},{"id":"gpt-4.1"}]}'); return; }
+      res.writeHead(429, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Too many requests, the model is busy' } }));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => server.close(r)));
+  const { base } = await startApp(t, { fake: false, discover: null });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
+  const { body: session } = await post(base, '/api/sessions', { title: 'Busy' });
+  const text = await fetch(`${base}/api/sessions/${session.id}/messages`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content: 'hi', providerId: 'openai', model: 'gpt-4o' }),
+  }).then((r) => r.text());
+  assert.match(text, /"coolingScope":"model"/);
+  const list = (await json(base, '/api/models')).body;
+  const busy = list.find((m) => m.id === 'gpt-4o').coolingUntil;
+  assert.ok(busy > Date.now() + 60_000 && busy < Date.now() + 3 * 60_000, 'about two minutes');
+  assert.equal(list.find((m) => m.id === 'gpt-4.1').coolingUntil, null, 'the provider\'s other model is not rested');
+});

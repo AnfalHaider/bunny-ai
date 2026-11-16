@@ -455,7 +455,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             // person may fix the account and want them back.
             unavailable: known[m.id]?.reason ?? null,
             // A provider that just refused for rate or usage reasons is skipped by Auto until then (ms since 1970).
-            coolingUntil: unavailable.coolingUntil(provider.id) || null,
+            coolingUntil: unavailable.coolingUntil(provider.id, m.id) || null,
           });
         }
       } catch {
@@ -2684,12 +2684,15 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const { scope, reason } = failureKind(err, Boolean(shape));
           // W6-5: a rate or usage refusal puts the provider on a cool-down that lasts across messages.
           const coolMs = reason === 'rate-limit' ? cooldownFor(err.message) : 0;
-          const coolingUntil = coolMs ? unavailable.cool(providerId, coolMs) : 0;
+          // A spent usage allowance rests the whole provider; a busy answer rests only that model.
+          const wholeProvider = coolMs >= 60 * 60_000;
+          const coolingUntil = coolMs ? unavailable.cool(providerId, coolMs, wholeProvider ? null : model) : 0;
           send('error', {
             code: err.code ?? 'chat.failed',
             message: err.message,
             modelUnavailable: Boolean(shape),
             coolingUntil: coolingUntil || undefined,
+            coolingScope: coolingUntil ? (wholeProvider ? 'provider' : 'model') : undefined,
             scope,
             reason,
           });
