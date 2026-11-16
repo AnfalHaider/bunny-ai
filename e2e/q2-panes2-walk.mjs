@@ -38,7 +38,7 @@ const model = createServer((req, res) => {
     const body = JSON.parse(raw); const asked = String([...body.messages].reverse().find((m) => m.role === 'user')?.content ?? ''); const tools = body.messages.filter((m) => m.role === 'tool').length;
     res.writeHead(200, { 'content-type': 'text/event-stream' }); const end = (s) => res.end(s + 'data: [DONE]' + NL + NL);
     if (/write note/.test(asked)) return end(tools === 0 ? call('write_file', { path: 'note.txt', content: 'carrots' + NL + 'and more' + NL }) : frame({ content: 'Wrote note.txt.' }));
-    if (/edit greet/.test(asked)) return end(tools === 0 ? call('write_file', { path: 'src/greet.js', content: 'export const greet = (n) => `hi ${n}`;' + NL + 'export const bye = () => 1;' + NL }) : frame({ content: 'Edited greet.js.' }));
+    if (/edit greet/.test(asked)) return end(tools === 0 ? call('write_file', { path: 'src/greet.js', content: 'export const greet = (n) => `hello ${n}`;' + NL + 'export const bye = () => 1;' + NL }) : frame({ content: 'Edited greet.js.' }));
     if (/read it/.test(asked)) return end(tools === 0 ? call('read_file', { path: 'src/greet.js' }) : frame({ content: 'Read it.' }));
     if (/run server/.test(asked)) return end(tools === 0 ? call('start_process', { command: 'node -e "setInterval(function(){},1000)"' }) : frame({ content: 'Started.' }));
     if (/make plan/.test(asked)) {
@@ -123,7 +123,7 @@ for (const [kind, git] of [['git', true], ['plain', false]]) {
       await send(page, 'write note'); await send(page, 'edit greet'); await open(page, 'diff', phone); await page.screenshot({ path: `${OUT}/p2-${tag}-changes.png`, fullPage: true });
       const pane = page.locator('#diff-content'); const head = (await pane.locator('.changes-head').innerText()).replace(/\s+/g, ' '); ok(/2 files/.test(head), 'header: ' + head);
       const cards = await pane.locator('.checkpoint-card').count(); eq(cards, 2, 'checkpoint cards');
-      const counts = await pane.locator('.change-row').allInnerTexts(); const flat = counts.map((c) => c.replace(/\s+/g, ' ')); ok(flat.some((c) => /\+[1-9]/.test(c)), 'no +N count above zero: ' + JSON.stringify(flat));
+      const counts = await pane.locator('.change-row').allInnerTexts(); const flat = counts.map((c) => c.replace(/\s+/g, ' ')); ok(flat.some((c) => /\+[1-9]/.test(c)), 'no +N count above zero: ' + JSON.stringify(flat)); const editedRow = flat.find((c) => /greet\.js/.test(c)) ?? ''; ok(/\+[1-9]/.test(editedRow) && /−[1-9]|-[1-9]/.test(editedRow), 'the edited existing file must count added AND removed lines (greet.js line 1 was replaced): ' + editedRow);
       await pane.locator('.checkpoint-card').first().locator('.change-row').click(); ok((await pane.locator('.diff-line.add').count()) > 0, 'no added lines in the diff'); ok((await pane.locator('.diff-line.del, .diff-line.remove').count()) >= 0, '');
       const edited = await pane.locator('.checkpoint-card').first().locator('.change-row .path').innerText(); eq(edited.trim(), 'src/greet.js', 'newest card path');
       ok((await over(page)) <= 1, 'horizontal overflow ' + (await over(page)));
@@ -145,11 +145,11 @@ for (const [kind, git] of [['git', true], ['plain', false]]) {
       ok(!/Nothing running/.test(v.running) && v.running !== '(missing)', 'running programs not shown: ' + v.running); ok((await over(page)) <= 1, 'horizontal overflow');
       await page.request.post(`${BASE}/api/processes/p1/stop`, { headers: { 'x-bunny-token': TOKEN } }).catch(() => {}); return JSON.stringify(v).slice(0, 220);
     });
-    await row(`PL-${tag}`, `Plan (${tag}): the plan fills the Plan pane and the pane can be reached`, async () => {
+    await row(`PL-${tag}`, `Plan (${tag}): no dead pane remains and Tasks shows the plan`, async () => {
       await send(page, 'make plan'); await open(page, 'tasks');
-      const t = (await page.locator('#plan-content').evaluate((e) => e.textContent)).replace(/\s+/g, ' '); ok(/Look/.test(t) && /Write/.test(t) && /Check/.test(t), 'the Plan pane holds: ' + t.slice(0, 120));
-      const reachable = await page.locator('#tab-plan').isVisible(); const tasks = (await page.locator('#tasks-content').innerText()).replace(/\s+/g, ' ');
-      ok(/Look/.test(tasks) && /1 of 3|1\/3/.test(tasks), 'the Tasks pane: ' + tasks.slice(0, 100)); ok(reachable, 'the Plan pane is filled but there is no way to open it (no visible tab; it only repeats the Tasks pane)'); await page.screenshot({ path: `${OUT}/p2-${tag}-plan.png`, fullPage: true });
+      const dead = await page.evaluate(() => { const toolbar = new Set([...document.querySelectorAll('[data-view]')].map((b) => b.dataset.view)); return [...document.querySelectorAll('.side-pane-panel')].map((p) => p.id.replace('pane-', '')).filter((id) => id !== 'artifacts' && !toolbar.has(id)); });
+      ok(!dead.length, 'panes that nothing opens: ' + dead.join(', '));
+      const tasks = (await page.locator('#tasks-content').innerText()).replace(/\s+/g, ' '); ok(/Look/.test(tasks) && /Write/.test(tasks) && /Check/.test(tasks) && /1 of 3|1\/3/.test(tasks), 'the Tasks pane: ' + tasks.slice(0, 100)); await page.screenshot({ path: `${OUT}/p2-${tag}-plan.png`, fullPage: true });
     });
     rows.push({ id: `E-${tag}`, name: `no page errors (${tag})`, verdict: page.errs.length ? 'FAIL' : 'PASS', note: page.errs.join(' ; ') }); console.log((page.errs.length ? 'FAIL' : 'PASS').padEnd(5), `E-${tag}`.padEnd(9), 'no page errors', page.errs.join(' ; '));
     await ctx.close();

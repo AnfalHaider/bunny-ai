@@ -170,9 +170,21 @@ test('Q2-5: the Files pane has code that fills it', { todo: 'Q2-5: src/ui/index.
   assert.ok(js.includes("'file-content'"), 'no UI code touches the Files pane');
 });
 
-test('Q2-7: the Plan pane has code that fills it and a way to reach it', { todo: 'Q2-7: #pane-plan (src/ui/index.html:362-364) is never filled and #tab-plan is not visible; the toolbar has no Plan button' }, async () => {
-  const { js } = await panes();
-  assert.ok(js.includes("'plan-content'"), 'no UI code touches the Plan pane');
+test('Q2-7: no dead pane remains: every tool pane in the markup can be opened from the toolbar and has code that fills it', { todo: 'Q2-7: #pane-plan (src/ui/index.html) has no toolbar button or tab; Chief of Staff decision 2026-11-16: remove it (Tasks shows the plan)' }, async () => {
+  const { html, js } = await panes();
+  const panels = [...html.matchAll(/class="side-pane-panel[^"]*" id="pane-([a-z]+)"/g)].map((m) => m[1]);
+  const toolbar = new Set([...html.matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]));
+  const dead = panels.filter((p) => p !== 'artifacts' && !toolbar.has(p));
+  assert.deepEqual(dead, [], 'panes that nothing opens: ' + dead.join(', '));
+  assert.ok(!/id="tab-plan"/.test(html) || toolbar.has('plan'), 'a Plan tab exists that nothing selects');
+  assert.ok(js.length > 0);
+});
+
+test('Changes counts: an edited existing file counts the lines it removed as well as the ones it added', async (t) => {
+  let panes; try { panes = await import('../src/server/panes.js'); } catch { t.skip('src/server/panes.js is not in this tree'); return; }
+  const nl = String.fromCharCode(10);
+  const d = panes.lineDiff('export const greet = (n) => `hi ${n}`;' + nl + 'export const x = 1;' + nl, 'export const greet = (n) => `hello ${n}`;' + nl + 'export const x = 1;' + nl + 'export const bye = () => 1;' + nl);
+  assert.equal(d.removed, 1, 'removed'); assert.equal(d.added, 2, 'added');
 });
 
 test('Q2-6: the Session pane shows more than "This computer", the project, the context meter, connectors and outputs', { todo: 'Q2-6: src/ui/chat.js:1267-1320 renderRail and src/ui/index.html:261-285 show five things; the folder, branch, model, mode, effort, counts, changed files, tasks and programs are missing' }, async () => {
