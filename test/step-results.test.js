@@ -1,16 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startApp, post, json } from './helpers.js';
 
-// W6-18: a big tool result is kept whole for the model: saved in .bunny/notes, path and text kept with the step.
-test('a large tool result is saved in .bunny/notes and read back by the next turn', async (t) => {
+/** One chat that reads a 10,800-character file with read_file; returns what it needs to look at the result. */
+async function readBig(t, { mode = 'auto', prepare = async () => {} } = {}) {
   const folder = await mkdtemp(join(tmpdir(), 'bunny-notes-'));
   t.after(() => rm(folder, { recursive: true, force: true }));
-  await writeFile(join(folder, 'big.txt'), 'row of data\n'.repeat(900)); // ~10,800 characters
+  await writeFile(join(folder, 'big.txt'), 'row of data\n'.repeat(900));
+  await prepare(folder);
   const seen = [];
   const server = createServer((req, res) => {
     let raw = '';
@@ -31,7 +32,7 @@ test('a large tool result is saved in .bunny/notes and read back by the next tur
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
   const { body: session } = await post(base, '/api/sessions', { title: 'Notes' });
   const patch = (key, value) => fetch(`${base}/api/sessions/${session.id}/setting/${key}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) });
-  await patch('permissionMode', 'auto');
+  await patch('permissionMode', mode);
   await patch('folder', folder);
   const send = (content) => fetch(`${base}/api/sessions/${session.id}/messages`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -39,6 +40,12 @@ test('a large tool result is saved in .bunny/notes and read back by the next tur
   }).then((r) => r.text());
   await send('read the big file');
   const step = (await json(base, `/api/sessions/${session.id}`)).body.messages.find((m) => m.kind === 'tool_call');
+  return { folder, send, seen, step };
+}
+
+// W6-18: a big tool result is kept whole for the model: saved in .bunny/notes, path and text kept with the step.
+test('a large tool result is saved in .bunny/notes and read back by the next turn', async (t) => {
+  const { folder, send, seen, step } = await readBig(t);
   assert.match(step.resultFile ?? '', /^\.bunny\/notes\/step-[a-z0-9-]+\.txt$/);
   assert.ok((await readFile(join(folder, step.resultFile), 'utf8')).length > 6000, 'the whole result is on disk');
   assert.ok(step.result.length <= 1300, 'the chat still shows a short result');
@@ -47,4 +54,18 @@ test('a large tool result is saved in .bunny/notes and read back by the next tur
   const sent = JSON.stringify(seen.at(-1).messages);
   assert.match(sent, /full output saved in \.bunny\/notes\/step-/, 'the next turn is told where the whole result is');
   assert.ok((sent.match(/row of data/g) ?? []).length > 100, 'and reads far more than 300 characters of it');
+  assert.equal(await readFile(join(folder, '.bunny', '.gitignore'), 'utf8'), '*', 'notes stay out of the person\'s repository');
+});
+
+// Security review of W6-18: nothing is written in Plan mode or through a linked folder.
+test('the saved note is skipped in Plan mode and through a linked .bunny folder', async (t) => {
+  const plan = await readBig(t, { mode: 'plan' });
+  assert.equal(plan.step.resultFile, undefined, 'Plan mode is read-only: nothing is written');
+  assert.ok(plan.step.modelResult.length > 3000, 'the model still gets the long result');
+
+  const outside = await mkdtemp(join(tmpdir(), 'bunny-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const linked = await readBig(t, { prepare: (folder) => symlink(outside, join(folder, '.bunny'), 'junction') });
+  assert.equal(linked.step.resultFile, undefined, 'a linked .bunny is not written through');
+  assert.deepEqual(await readdir(outside), [], 'nothing landed outside the workspace');
 });

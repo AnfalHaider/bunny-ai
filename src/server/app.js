@@ -7,7 +7,7 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1615,17 +1615,30 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // is saved in the workspace (.bunny/notes/step-N.txt) and only its path stays in the chat.
       let stepSeq = 0;
       const keepForModel = async (entry) => {
-        const { fullResult, ...rest } = entry;
+        const { fullResult, saveable, ...rest } = entry;
         const out = { ...rest, ...(currentTasks.length ? { tasks: currentTasks } : {}) };
         const full = String(fullResult ?? '');
         if (full.length <= String(rest.result ?? '').length) return out;
         out.modelResult = clip(full, 6000);
-        if (full.length > 6000 && workspace) {
+        // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
+        // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
+        // inside the workspace. A .bunny/.gitignore keeps the notes out of the person's repository.
+        if (full.length > 6000 && saveable && workspace && permissionMode !== 'plan') {
           stepSeq += 1;
           const rel = `.bunny/notes/step-${Date.now().toString(36)}-${stepSeq}.txt`;
           try {
-            await mkdir(dirname(join(workspace.root, rel)), { recursive: true });
-            await writeFile(join(workspace.root, rel), full, 'utf8');
+            const root = await realpath(workspace.root);
+            const bunny = join(root, '.bunny');
+            const notes = join(bunny, 'notes');
+            // Look before creating: a link is never followed, not even to make a folder behind it.
+            for (const dir of [bunny, notes]) {
+              const found = await lstat(dir).catch(() => null);
+              if (found?.isSymbolicLink() || (found && !found.isDirectory())) throw new Error('linked folder');
+              if (!found) await mkdir(dir);
+            }
+            if (!(await realpath(notes)).startsWith(root + sep)) throw new Error('outside the workspace');
+            await writeFile(join(bunny, '.gitignore'), '*', { encoding: 'utf8', flag: 'wx' }).catch(() => {}); // only the first time
+            await writeFile(join(root, rel), full, 'utf8');
             out.resultFile = rel;
           } catch { /* the clipped text still goes to the model */ }
         }
@@ -2421,7 +2434,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result, saveable: true });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
