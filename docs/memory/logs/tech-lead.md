@@ -2,6 +2,22 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Review of Builder batch 2 (09b35e4 to 4405dc0): one fix needed before PASS
+
+**Verdict: NOT YET PASS. One required fix (Q2-1, HIGH). Everything else reads correct.** Sign-off not recorded; held for the fix.
+
+**Required: Plan mode still runs browser_click and browser_type.** The server check added in 98aec38 covers the agent-tool path (`runAgentTool`, `src/server/app.js:1949`) and the workspace, app and connector path (`:2243`). The browser branch (`:2209`, `if (browserControl && isBrowserTool(name))`) sits before both and has neither the plan check nor the "was this tool offered" check. `BROWSER_TOOL_RISK` marks click and type as `edit`, and `needsOk` is false in Plan mode, so they run unasked.
+Evidence (scratch checkout of 4405dc0, scripted model, `browserControl: true`): in plan mode the server sent `event: browser` for `browser_click` and for `browser_type` (both FORWARDED true; the auto-mode control also true). Probe deleted.
+Fix: in that branch, `if (planRefuses(BROWSER_TOOL_RISK[name])) { send('tool', {tool: summary, status: 'denied'}); return planRefusal(name); }`, and add a unit test next to Q2-1 for both tools. Better: one check for every path, that the name is in `toolDefinitions`, as `runAgentTool` already does at `:1945`.
+
+**Helper agents and scheduled runs: covered.** A helper's `runTool` is the parent's closure (same `permissionMode`, `:1771` passes it to the child), and helpers get no browser tools at all (`:1778`). A schedule creates a session with `plan` unless it was set up with `may_change`, then posts to the normal messages route (`:373`), so the same checks apply.
+
+**Service worker (`sw.js`): correct.** Returns early for any other origin, so a failed request to another site fails instead of coming back as the cached start page. Cost: other-origin files (fonts, CDN) are no longer served from the cache offline; acceptable. Not run in a browser.
+
+**Other items read, no findings:** Q2-23 token retry (`token.js`: request cloned before use, one retry, banner on failure, the meta format matches the server's); Q2-8 (`endsInBackground` quote-aware, `&&` excluded; run_command refuses, start_process unaffected); Q2-9; Q2-17 `askText`; Q2-2, Q2-3 and Q2-19 (pending mode and effort applied from the select values when the session is made).
+**Run:** guard-next, request-guard, q2-audit and background-amp unit tests all pass (70 of 70 for the guard-next set; q2-audit's todos still report as todo). e2e not run.
+**Also in the range:** two more G-1 commits after my sign-off at 560e636 (84741a0, 5a5dbc6: abbreviated `--al/--mir/--branches`, bare `:` refspec, `-c remote.*.push|mirror`, `push.default`, all refused for non-live roles). Same fix, reads correct, tests pass; my G-1 PASS at 560e636 should be re-stamped at 5a5dbc6.
+
 ## 2026-11-16 - First session: specs, reviews, and two sign-offs held
 
 **Asked (via the Chief of Staff):** the guard gaps; S-1 build notes; B-1 and D1 review; T-3 (model switching and offline); T-4 (project instruction files); upstream report for the plugin.
