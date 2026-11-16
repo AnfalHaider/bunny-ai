@@ -35,6 +35,10 @@ const fake = createServer((req, res) => {
     if (req.method !== 'POST') { res.writeHead(200); res.end('ok'); return; }
     const body = JSON.parse(raw); const lastUser = body.messages.map((m) => m.role).lastIndexOf('user'); const asked = String(body.messages[lastUser]?.content ?? '');
     const done = body.messages.slice(lastUser).some((m) => m.role === 'tool'); res.writeHead(200, { 'content-type': 'text/event-stream' });
+    const tools = body.messages.slice(lastUser).filter((m) => m.role === 'tool').length;
+    if (/gitpush/.test(asked)) { res.end((tools === 0 ? frame({ tool_calls: [{ index: 0, id: 'g1', function: { name: 'run_command', arguments: JSON.stringify({ command: 'git ("push") origin main' }) } }] }) : frame({ content: 'Finished with git.' })) + 'data: [DONE]\n\n'); return; }
+    if (/askq/.test(asked)) { res.end((tools === 0 ? frame({ tool_calls: [{ index: 0, id: 'q1', function: { name: 'ask_user', arguments: JSON.stringify({ question: 'Keep going?', choices: [{ label: 'Keep going', recommended: true }, { label: 'Stop here' }] }) } }] }) : frame({ content: 'You said to carry on.' })) + 'data: [DONE]\n\n'); return; }
+    if (/repeat/.test(asked)) { res.end((tools < 6 ? frame({ tool_calls: [{ index: 0, id: 'r' + tools, function: { name: 'run_command', arguments: JSON.stringify({ command: 'Write-Output same' }) } }] }) : frame({ content: 'Repeated enough.' })) + 'data: [DONE]\n\n'); return; }
     const out = /run it/.test(asked) && !done ? frame({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'run_command', arguments: JSON.stringify({ command: 'Write-Output ran-ok' }) } }] }) : frame({ content: 'Hello from the scripted model. ' + (done ? 'The command ran.' : '') });
     res.end(out + 'data: [DONE]' + NL + NL);
   });
@@ -75,7 +79,7 @@ try {
     const a = await relay('/api/providers/custom', 'POST', { name: 'Scripted', baseUrl: `http://127.0.0.1:${FPORT}/v1` }); ok(a.status === 200 || a.status === 201, 'provider via window ' + a.status + JSON.stringify(a.data).slice(0, 80));
     const n = await http('/api/memory', 'POST', { text: 'QA fixture memory' }); ok(n.status === 200 || n.status === 201, 'memory over HTTP ' + n.status);
     const s = await http('/api/sessions', 'POST', { title: 'ordinary' }); ok(s.status === 200 || s.status === 201, 'session over HTTP ' + s.status);
-    const f = await http('/api/settings', 'PUT', { theme: 'dark', modelFilter: 'all' }); ok(f.status === 200, 'ordinary settings over HTTP ' + f.status); return 'provider via window ok; memory, session, settings over HTTP ok';
+    const f = await http('/api/settings', 'PUT', { theme: 'dark' }); ok(f.status === 200, 'ordinary settings over HTTP ' + f.status); const mf = await http('/api/settings', 'PUT', { modelFilter: 'all' }); ok(mf.status === 403, 'modelFilter should now be window-only, got ' + mf.status); const mw = await relay('/api/settings', 'PUT', { modelFilter: 'all' }); ok(mw.status === 200, 'modelFilter through the window ' + mw.status); return 'provider via window ok; memory, session, settings over HTTP ok';
   });
   const PID = (await (await http('/api/providers')).json()).find((p) => p.custom)?.id; ok(PID, 'no custom provider');
 
@@ -141,6 +145,24 @@ try {
     await page.screenshot({ path: `${OUT}/w57-files.png` }); return `reply ok, ${list.length} sessions, Files lists README.md`;
   });
   await row('W8', 'no screen made a protected write over plain HTTP (every one went through the window bridge)', async () => { ok(!rawProtected.length, rawProtected.length + ' raw protected writes: ' + [...new Set(rawProtected)].join(' | ')); return `${bridge.length} bridged writes, 0 raw`; });
+  // ---- W5-7 final stamp spot-checks ----
+  const stream = async (sessionId, text, onEvent) => { const r = await fetch(BASE + '/api/sessions/' + sessionId + '/messages', { method: 'POST', headers: H, body: JSON.stringify({ content: text, providerId: PID, model: 'offline/bunny-code', workMode: 'code' }) }); let buf = ''; const dec = new TextDecoder(); const events = []; for await (const chunk of r.body) { buf += dec.decode(chunk, { stream: true }); let i; while ((i = buf.indexOf('\n\n')) !== -1) { const block = buf.slice(0, i); buf = buf.slice(i + 2); const ev = /^event: (\w+)/m.exec(block)?.[1]; const data = /^data: (.*)$/m.exec(block)?.[1]; if (!ev) continue; let p = null; try { p = JSON.parse(data); } catch { /* x */ } events.push(ev); await onEvent(ev, p); } } return events; };
+  const newSession = async (title) => { const x = await (await http('/api/sessions', 'POST', { title, providerId: PID, model: 'offline/bunny-code' })).json(); await http('/api/sessions/' + x.id + '/setting/folder', 'PATCH', { value: work }); await http('/api/sessions/' + x.id + '/setting/workMode', 'PATCH', { value: 'code' }); await relay('/api/sessions/' + x.id + '/setting/permissionMode', 'PATCH', { value: 'auto' }); return x.id; };
+  await row('K1', 'NEW: an unknown settings key is refused with 400 (and nothing is parked); known keys still save', async () => {
+    const bad = await http('/api/settings', 'PUT', { theme: 'dark', notARealSetting: 'x' }); const bt = await bad.json().catch(() => ({})); ok(bad.status === 400, 'status ' + bad.status + ' ' + JSON.stringify(bt).slice(0, 120));
+    const now = await (await http('/api/settings')).json(); ok(!('notARealSetting' in now), 'the unknown key was stored'); const good = await http('/api/settings', 'PUT', { theme: 'light' }); ok(good.status === 200, 'known key ' + good.status); return JSON.stringify(bt).slice(0, 140);
+  });
+  await row('K2', 'NEW: a question card (Keep going?) answered over HTTP with the page token is 403, answered from the window the reply continues', async () => {
+    const id = await newSession('askq'); let httpStatus = null; let viaWindow = null; let question = '';
+    const events = await stream(id, 'askq please', async (ev, p) => { if (ev === 'question') { question = p.question; const r = await http('/api/sessions/' + id + '/question/' + p.id, 'POST', { choices: ['Keep going'] }); httpStatus = r.status; const t = await r.json().catch(() => ({})); ok(t.message === "Change this in Bunny's window." || r.status === 403, 'http body ' + JSON.stringify(t)); const w = await relay('/api/sessions/' + id + '/question/' + p.id, 'POST', { choices: ['Keep going'] }); viaWindow = w.status; } });
+    const savedK2 = await (await http('/api/sessions/' + id)).json(); ok(question, 'no question was asked (events: ' + events.slice(-4).join(',') + '; steps ' + savedK2.messages.filter((m) => m.kind === 'tool_call').length + '; last: ' + String(savedK2.messages.at(-1)?.content ?? '').slice(0, 80) + ')'); ok(httpStatus === 403, 'over HTTP: ' + httpStatus); ok(viaWindow === 200, 'from the window: ' + viaWindow); const done = events.includes('done'); ok(done, 'the reply did not finish'); return question.slice(0, 70) + ' | HTTP ' + httpStatus + ', window ' + viaWindow;
+  });
+  await row('K3', 'NEW: git ("push") origin main under a Deny git push* (computed argument) is not run silently: it asks (a card), in Auto', async () => {
+    await relay('/api/permission-rules', 'PUT', { global: [{ kind: 'command', effect: 'deny', pattern: 'git push*' }], folders: {} }); const id = await newSession('gitpush'); const cards = [];
+    const events = await stream(id, 'gitpush now', async (ev, p) => { if (ev === 'permission') { cards.push(p); await relay('/api/sessions/' + id + '/permission/' + p.id, 'POST', { allowed: false }); } });
+    ok(cards.length === 1, 'cards ' + cards.length + ' events ' + events.slice(-5).join(',')); const saved = await (await http('/api/sessions/' + id)).json(); const step = saved.messages.filter((m) => m.kind === 'tool_call').at(-1); ok(step && step.status !== 'done', 'the command ran: ' + step?.status);
+    await relay('/api/permission-rules', 'PUT', { global: [], folders: {} }); return 'card: ' + JSON.stringify(cards[0]).slice(0, 180);
+  });
   await row('W9', 'the real Electron preload and main-process handler (secure:write) are not exercised here', async () => { throw new Error('UNKNOWN: needs the Electron shell; the bridge here is a stand-in that calls the same app.adminFetch'); });
   writeFileSync(join(OUT, 'w57.json'), JSON.stringify(rows, null, 1));
   console.log(NL + `${rows.filter((r) => r.verdict === 'PASS').length} PASS / ${rows.filter((r) => r.verdict === 'FAIL').length} FAIL of ${rows.length}`);
