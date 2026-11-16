@@ -2,6 +2,12 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Q2-1 Plan mode and Q2-23 token re-read (4405dc0)
+
+**Verdict (log only):** Q2-23 PASS. Q2-1 FAIL as a read-only guarantee, two bypasses: browser_click and browser_type run in Plan mode (the browser branch of runTool, app.js:2208, has no planRefuses), and move_to_new_chat opens and sends a new chat outside Plan mode. Helpers, scheduled tasks, custom tools and connector tools are covered. Report `docs/security/2026-11-16-q2-1-and-q2-23-review.md`; board row Q2-S1..S3. Read from the code, not exploited.
+
+**Lesson:** a refusal added at two dispatch points misses the third; list every way a tool call can enter the runner before saying "on the server".
+
 ## 2026-11-16 - G-1 guard rework review (560e636)
 
 **Asked:** look for any way a role escapes its write scope, pushes main, skips hooks or forges a record, and for false blocks.

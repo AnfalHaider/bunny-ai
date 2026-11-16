@@ -29,6 +29,7 @@
 | G1-1 | Guard does not cover `gh release/pr merge/api` writes (publishing path) | HIGH | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | docs/security/2026-11-16-g1-guard-review.md |
 | G1-2 | Sign-off, release and `_required` records not authenticated at commit | MEDIUM | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
 | G1-3..G1-5 | Hooks folder removable; git alias/--git-dir/plumbing skips; dynamic push refspec; role-by-variable | MEDIUM/LOW | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
+| Q2-S1..S3 | Plan mode: browser tools skip the check; move_to_new_chat leaves Plan; connector readOnly is self-declared | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed | docs/security/2026-11-16-q2-1-and-q2-23-review.md |
 
 ## SIGN-OFF GRID
 
