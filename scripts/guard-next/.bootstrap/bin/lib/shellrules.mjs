@@ -143,6 +143,75 @@ function refuseGit(call, ctx = {}) {
   return null;
 }
 
+// ---- G1-1: gh writes. A GitHub Release is what every installed copy auto-updates to, so publishing and merging with gh
+// are for the live pushers only, and deleting or editing a release is the owner's alone.
+const GH_OWNER_ONLY = [['release', 'delete'], ['release', 'edit']];
+const GH_READ_RELEASE = new Set(['view', 'list', 'download']);
+const GH_REFUSED_FOR_NON_LIVE = [
+  ['pr', 'merge'], ['pr', 'close'], ['pr', 'ready'],
+  ['secret', '*'], ['variable', '*'], ['ruleset', '*'],
+  ['workflow', 'run'], ['workflow', 'enable'], ['workflow', 'disable'],
+  ['label', 'delete'], ['alias', 'set'], ['extension', 'install'], ['extension', 'exec'],
+];
+const GH_REPO_WRITES = new Set(['edit', 'delete', 'rename', 'archive', 'sync', 'deploy-key']);
+const GH_BODY_FLAGS = /^(-f|-F|--field|--raw-field|--input)(=|$)|^-[fF]./;
+const GH_FLAGS_WITH_VALUE = new Set(['-R', '--repo', '-H', '--hostname']);
+
+/** gh's group and subcommand, skipping its global flags ("gh -R o/r release create"). */
+function ghCall(words) {
+  const rest = [];
+  for (let i = 1; i < words.length; i += 1) {
+    const w = words[i].text;
+    if (GH_FLAGS_WITH_VALUE.has(w)) { i += 1; continue; }
+    if (w.startsWith('-')) continue;
+    rest.push(i);
+    if (rest.length === 2) break;
+  }
+  return { group: words[rest[0]]?.text ?? null, sub: words[rest[1]]?.text ?? null, at: rest };
+}
+
+/** The HTTP method gh api will use: -X/--method, else POST when a body flag is present, else GET. null = cannot tell. */
+function ghApiMethod(words) {
+  let method = null;
+  let body = false;
+  for (let i = 1; i < words.length; i += 1) {
+    const w = words[i];
+    const t = w.text;
+    if (t === '-X' || t === '--method') {
+      const v = words[i + 1];
+      if (!v || v.dynamic) return null;
+      method = v.text.toUpperCase();
+      i += 1;
+    } else if (/^-X./.test(t)) method = t.slice(2).toUpperCase();
+    else if (t.startsWith('--method=')) method = t.slice('--method='.length).toUpperCase();
+    else if (GH_BODY_FLAGS.test(t)) body = true;
+    else if (w.dynamic && !w.quoted && /^[$`]/.test(t) && i > 1 && /^-/.test(words[i - 1].text)) return null;
+  }
+  return method ?? (body ? 'POST' : 'GET');
+}
+
+function refuseGh(words, ctx) {
+  const { group, sub } = ghCall(words);
+  const live = (ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role);
+  if (GH_OWNER_ONLY.some(([g, s]) => g === group && s === sub)) {
+    return `"gh ${group} ${sub}" changes or removes a published release that every installed copy updates from: only the owner runs it.`;
+  }
+  if (live) return null; // release-ops, hotfix and the Chief of Staff: their own limits are the pre-push scope check
+  const offer = 'Ask release-ops (npm run release) or the Chief of Staff.';
+  if (group === 'release' && !GH_READ_RELEASE.has(sub)) return `"gh release ${sub ?? ''}" publishes to every installed copy. ${offer}`;
+  if (group === 'repo' && GH_REPO_WRITES.has(sub)) return `"gh repo ${sub}" changes the repository itself. ${offer}`;
+  if (GH_REFUSED_FOR_NON_LIVE.some(([g, s]) => g === group && (s === '*' || s === sub))) return `"gh ${group} ${sub ?? ''}" changes the repository, its releases or how it is built. ${offer}`;
+  if (group === 'api') {
+    const method = ghApiMethod(words);
+    if (method === null) return 'gh api with a method the guard cannot read (a variable) is refused: spell the method out.';
+    if (method !== 'GET' && method !== 'HEAD') return `gh api ${method} writes to GitHub (a release, a ref, a branch). ${offer}`;
+    if (words.some((w) => /mutation/i.test(w.text))) return `a GraphQL mutation writes to GitHub. ${offer}`;
+  }
+  return null;
+}
+
+const NPX = new Set(['npx', 'pnpx', 'bunx', 'pnpm', 'yarn', 'npm']);
+
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 // A variable cannot be checked, so it is refused too: ids here are always spelled out.
 const okId = (w) => !w.dynamic && ID.test(w.text) && !w.text.includes('..');
@@ -205,6 +274,13 @@ export function checkShell(parsed, ctx, depth = 0) {
       if (isCmd(head, 'git')) {
         const why = refuseGit(gitCall(words), ctx);
         if (why) return why;
+      }
+      if (isCmd(head, 'gh')) {
+        const why = refuseGh(words, ctx);
+        if (why) return why;
+      } else if (NPX.has(baseName(head))) {
+        const at = words.findIndex((w, k) => k > 0 && isCmd(w.text, 'gh'));
+        if (at > 0) { const why = refuseGh(words.slice(at), ctx); if (why) return why; }
       }
       const bi = words.findIndex((w) => /(^|[\\/])bootstrap\.mjs$/.test(w.text));
       if (bi >= 0) {
