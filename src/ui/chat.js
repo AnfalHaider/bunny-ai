@@ -922,6 +922,7 @@ function paintMessages() {
     run.push({ m, el, last: index === state.messages.length - 1 });
   });
   flushRun();
+  paintQueued(host);
   if (state.messages.length) host.lastElementChild?.scrollIntoView({ block: 'end' });
 }
 
@@ -2072,6 +2073,7 @@ async function refreshSession({ expectAssistant = false } = {}) {
 }
 
 async function openSession(id) {
+  cancelQueued({ silent: true }); // a message waiting for the network belongs to the chat it was typed in
   state.sessionId = id;
   state.incognito = false;
   renderMode();
@@ -2098,6 +2100,7 @@ async function openSession(id) {
 // sending
 
 function startNewChat({ incognito = false } = {}) {
+  cancelQueued({ silent: true });
   state.sessionId = null;
   state.greeting = null; // a fresh chat gets a fresh greeting
   state.greetingSeed = 1 + Math.floor(Math.random() * 2147483645);
@@ -2124,11 +2127,100 @@ function renderMode() {
   host.hidden = !state.incognito;
 }
 
+// ---------------------------------------------------------------------------
+// T-3: a dead network is its own calm state. The window decides it once, from two signals that must agree:
+// the browser says it is offline AND a bare probe of a few neutral hosts (asked only now, after a failure or before
+// a send while the browser says offline) cannot reach any. Then no model is tried: the message waits, and goes
+// once when the network is back, unless the person cancelled it or typed something new.
+
+/** Both signals agree the network is down. */
+async function networkDown() {
+  if (navigator.onLine !== false) return false;
+  try {
+    const answer = await getJSON('/api/network'); // reaches this computer's own server even with the internet down
+    return answer?.online === false;
+  } catch {
+    return true; // this window cannot reach anything: that is offline too
+  }
+}
+
+/** A model served from this computer (a loopback address) still works offline. */
+function localModel() {
+  const local = new Set(state.providers.filter((p) => p.status === 'connected' && /^https?:[/][/](localhost|127[.]0[.]0[.]1|[[]::1[]])/i.test(p.baseUrl ?? '')).map((p) => p.id));
+  const m = state.models.find((x) => local.has(x.providerId));
+  return m ? { providerId: m.providerId, id: m.id, displayName: m.displayName ?? m.id } : null;
+}
+
+function setOfflineChip(on) { const chip = $('offline-chip'); if (chip) chip.hidden = !on; }
+
+function paintQueued(host) {
+  const q = state.queued;
+  if (!q) return;
+  if (q.mode !== 'retry') {
+    const bubble = element('div', { className: 'msg user is-waiting', id: 'queued-msg' });
+    bubble.append(element('div', { className: 'body', textContent: q.text }));
+    const row = element('div', { className: 'waiting-row' }, element('span', { textContent: say('offline.waiting') }),
+      button(say('offline.cancel'), { className: 'ghost small', onclick: () => cancelQueued() }));
+    bubble.append(row);
+    host.append(bubble);
+  }
+  host.append(element('div', { className: 'offline-line', role: 'status', textContent: q.note ?? say('offline.line') }));
+}
+
+function queueTurn(entry) {
+  state.queued = { ...entry, id: `q-${Date.now()}` };
+  setOfflineChip(true);
+  $('empty').hidden = true;
+  paintMessages();
+  watchNetwork();
+}
+
+function cancelQueued({ silent = false } = {}) {
+  if (!state.queued) return;
+  state.queued = null;
+  clearTimeout(state.networkTimer);
+  setOfflineChip(false);
+  paintMessages();
+  if (!silent) flashStatus(say('offline.cancelled'), 6000);
+}
+
+/** Listen for the browser's `online` event and re-check every 10 seconds, easing to 30. */
+function watchNetwork() {
+  clearTimeout(state.networkTimer);
+  let wait = 10_000;
+  const tick = async () => {
+    if (!state.queued) return;
+    if (navigator.onLine !== false && !(await networkDown())) { await resumeQueued(); return; }
+    wait = Math.min(30_000, wait + 5_000);
+    state.networkTimer = setTimeout(tick, wait);
+  };
+  state.networkTimer = setTimeout(tick, wait);
+}
+
+async function resumeQueued() {
+  const q = state.queued;
+  if (!q) return;
+  clearTimeout(state.networkTimer);
+  state.queued = null; // cleared BEFORE sending: one pending turn, sent once
+  setOfflineChip(false);
+  flashStatus(say('offline.back'), 6000);
+  paintMessages();
+  if (q.mode === 'retry') { await streamReply({ retry: true }); return; }
+  $('input').value = q.text;
+  state.pendingFiles = q.files ?? [];
+  renderPendingFiles();
+  await send();
+}
+
+window.addEventListener('online', () => { if (state.queued) { flashStatus(say('offline.checking'), 3000); resumeQueued(); } });
+
 async function send() {
   const input = $('input');
   const text = input.value.trim();
   $('error').textContent = '';
   if (!text && !state.pendingFiles.length) return;
+  // Typing something new while a message waits for the network: the waiting one is cancelled, not sent later.
+  if (state.queued) cancelQueued(); // the waiting message is cancelled, not sent later (and the person is told)
 
   if (text.startsWith('/')) {
     const handled = await runCommand(text);
@@ -2143,6 +2235,15 @@ async function send() {
   const files = state.pendingFiles;
   state.pendingFiles = [];
   renderPendingFiles();
+
+  // Offline (both signals agree): no model is tried. A model on this computer still answers; otherwise the message waits.
+  let offlineLocal = null;
+  if (navigator.onLine === false && await networkDown()) {
+    offlineLocal = localModel();
+    if (!offlineLocal) { queueTurn({ text, files }); return; }
+    flashStatus(say('offline.local', { m: offlineLocal.displayName }), 8000);
+    setOfflineChip(true);
+  } else setOfflineChip(false);
 
   if (state.incognito) {
     state.messages.push({ id: `local-u-${Date.now()}`, role: 'user', content: text, local: true, attachments: files });
@@ -2197,11 +2298,11 @@ async function send() {
 
   const job = jobFor(text, files);
   const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
-  const candidates = state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed;
+  const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
-  const fallbackOn = !state.modelAuto && state.settings?.fallbackWhenBusy !== false;
+  const fallbackOn = !state.modelAuto && !offlineLocal && state.settings?.fallbackWhenBusy !== false;
   if (fallbackOn) {
     const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
     candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
@@ -2260,6 +2361,14 @@ async function send() {
     flashStatus(say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id }), 30000);
   }
   const { meter, aborted } = result;
+  // The reply failed because the network is down (both signals agree): not a model fault. Say so calmly,
+  // keep the turn, and send it once when the network is back. No red line.
+  if (!aborted && result.errorCode && navigator.onLine === false && await networkDown()) {
+    await refreshSession().catch(() => {});
+    $('error').textContent = '';
+    queueTurn({ mode: 'retry' });
+    return;
+  }
   const finalFailure = Boolean(result.errorCode) && !aborted && failures.length > 0 && failures.length === attempt
     ? (failures.length > 1
       ? say('model.nothingAnswered', { detail: failures.map((f) => `${f.name} ${reasonPhrase(f.reason)}`).join('; ') })
@@ -3285,7 +3394,7 @@ async function runImport() {
 async function boot() {
   $('new-chat').addEventListener('click', () => startNewChat({ incognito: state.incognito }));
   $('send').addEventListener('click', send);
-  $('stop').addEventListener('click', () => state.streaming?.abort());
+  $('stop').addEventListener('click', () => { state.streaming?.abort(); cancelQueued(); });
 
   const input = $('input');
   input.addEventListener('keydown', (e) => {

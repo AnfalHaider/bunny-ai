@@ -1939,3 +1939,10 @@ details.thinking.is-live summary { color: var(--accent); }
 .stopped-done-label { font-weight: var(--fw-medium); color: var(--text) !important; }
 .stopped-done { margin: 0 0 var(--sp-4); padding-left: var(--sp-8); color: var(--text-dim); }
 .stopped-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+
+/* T-3: a calm offline state, nothing red */
+.msg.user.is-waiting .body { border: 1px dashed var(--line); background: none; color: var(--text-dim); }
+.waiting-row { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-4); margin-top: var(--sp-2); color: var(--text-dim); font-size: var(--fs-xs); }
+.offline-line { margin: var(--sp-4) 0; color: var(--text-dim); font-size: var(--fs-sm); }
+.offline-chip { display: inline-flex; align-items: center; padding: 0 var(--sp-4); border: 1px solid var(--line); border-radius: 999px; color: var(--text-dim); font-size: var(--fs-xs); }
+.offline-chip[hidden] { display: none; }

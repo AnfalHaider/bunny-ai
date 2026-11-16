@@ -69,6 +69,7 @@ import { createCheckpoints } from './checkpoints.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
+import { probeNetwork } from './network.js';
 
 // The project root, found from this file rather than the working directory, so the
 // server also finds its UI when it runs inside the packaged desktop app.
@@ -153,13 +154,14 @@ export function stoppedReport(steps) {
 /**
  * @param {{ dataDir: string, fake?: boolean, secretStore?: any, probe?: any, discover?: any }} options
  */
-export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true } = {}) {
+export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork } = {}) {
   await mkdir(dataDir, { recursive: true });
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
   // and is handed to the pages the server itself serves.
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
 
+  let fakeOffline = false; // test mode only: see /api/network
   const secrets = secretStore ?? dpapiSecretStore({ dir: join(dataDir, 'secrets') });
   const connectionsFile = join(dataDir, 'connections.json');
   const settingsFile = join(dataDir, 'settings.json');
@@ -569,6 +571,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         return sendJson(res, 400, { code: err.code ?? 'models.failed', message: err.message });
       }
     }
+
+    // Is this computer online? A bare request to neutral hosts, asked only after a failure (T-3); nothing of the person's is sent.
+    // In test mode (invented profile) the network can be declared down, because a browser that is really offline cannot reach this server.
+    if (path === '/api/network' && method === 'PUT' && fake) { fakeOffline = Boolean((await readBody(req)).offline); return sendJson(res, 200, { online: !fakeOffline }); }
+    if (path === '/api/network' && method === 'GET') return sendJson(res, 200, fake && fakeOffline ? { online: false } : await networkProbe());
 
     if (path === '/api/models' && method === 'GET') {
       const models = await allModels({ refresh: url.searchParams.get('refresh') === '1' });
