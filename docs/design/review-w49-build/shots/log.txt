@@ -1,0 +1,29 @@
+default lightd: Now: 30 seconds, or 60 for reasoning, image and video models | select=30 | custom hidden=true
+custom45 lightd: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+invalid5 lightd: Use a whole number of seconds from 10 to 600. Not saved: still waiting 45 seconds. | select=custom | custom hidden=false
+invalid-decimal lightd: Use a whole number of seconds from 10 to 600. Not saved: still waiting 45 seconds. | select=custom | custom hidden=false
+cap400 lightd: Now: 400 seconds, or 600 for reasoning, image and video models | select=custom | custom hidden=false
+cap600 lightd: Now: 600 seconds for every model | select=custom | custom hidden=false
+reload-saved45 lightd: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+switch-off lightd: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+default lightm: Now: 30 seconds, or 60 for reasoning, image and video models | select=30 | custom hidden=true
+custom45 lightm: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+invalid5 lightm: Use a whole number of seconds from 10 to 600. Not saved: still waiting 45 seconds. | select=custom | custom hidden=false
+cap400 lightm: Now: 400 seconds, or 600 for reasoning, image and video models | select=custom | custom hidden=false
+cap600 lightm: Now: 600 seconds for every model | select=custom | custom hidden=false
+reload-saved45 lightm: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+switch-off lightm: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+default darkd: Now: 30 seconds, or 60 for reasoning, image and video models | select=30 | custom hidden=true
+custom45 darkd: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+invalid5 darkd: Use a whole number of seconds from 10 to 600. Not saved: still waiting 45 seconds. | select=custom | custom hidden=false
+cap400 darkd: Now: 400 seconds, or 600 for reasoning, image and video models | select=custom | custom hidden=false
+cap600 darkd: Now: 600 seconds for every model | select=custom | custom hidden=false
+reload-saved45 darkd: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+switch-off darkd: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+default darkm: Now: 30 seconds, or 60 for reasoning, image and video models | select=30 | custom hidden=true
+custom45 darkm: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+invalid5 darkm: Use a whole number of seconds from 10 to 600. Not saved: still waiting 45 seconds. | select=custom | custom hidden=false
+cap400 darkm: Now: 400 seconds, or 600 for reasoning, image and video models | select=custom | custom hidden=false
+cap600 darkm: Now: 600 seconds for every model | select=custom | custom hidden=false
+reload-saved45 darkm: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
+switch-off darkm: Now: 45 seconds, or 90 for reasoning, image and video models | select=custom | custom hidden=false
