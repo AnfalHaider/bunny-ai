@@ -80,58 +80,45 @@ export function gatherGitState({ git, target }) {
   return { target: resolved, originMain, head, dirty, fetchError };
 }
 
+// Every failing check, git ones first (they need nothing built), then the installer, the role and the record. A dry run lists them all.
+export function releaseProblems({ gitChecks = [], later = [] } = {}) {
+  return [...gitChecks, ...later].filter((c) => c && c.ok === false).map((c) => c.reason);
+}
+
 function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const tag = `v${version}`;
   const files = [`Bunny-AI-Setup-${version}.exe`, `Bunny-AI-Setup-${version}.exe.blockmap`, 'latest.yml'].map((f) => join(root, 'dist', f));
+  const { target: targetArg, dryRun, rest: extra } = parseArgs(process.argv.slice(2));
 
-  for (const f of files) {
-    if (!existsSync(f)) {
-      console.error(`Missing ${f}. Run "npm run dist" first (the version in package.json is ${version}).`);
-      process.exit(1);
-    }
-  }
-  const yml = readFileSync(files[2], 'utf8');
-  if (!yml.includes(`version: ${version}`)) {
-    console.error(`dist/latest.yml is for another version. Run "npm run dist" again.`);
-    process.exit(1);
-  }
+  // 1. git and build checks first: anyone can run them, and a dry run reports them all at once
+  const ghArgs = checkGhArgs(extra);
+  const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const state = gatherGitState({ git, target: targetArg });
+  let builtSha = '';
+  try { builtSha = readFileSync(join(root, 'dist', 'build-sha.txt'), 'utf8'); } catch { builtSha = ''; }
+  const gitChecks = [checkTarget(state), checkBuild({ target: state.target, builtSha }), ghArgs];
 
+  // 2. the installer, the role and the written record
+  const later = [];
+  for (const f of files) if (!existsSync(f)) later.push({ ok: false, reason: `Missing ${f}. Run "npm run dist" first (the version in package.json is ${version}).` });
+  if (!later.length && !readFileSync(files[2], 'utf8').includes(`version: ${version}`)) later.push({ ok: false, reason: 'dist/latest.yml is for another version. Run "npm run dist" again.' });
   // One key to live (AGENTS.md O4, 7E): a release reaches every installed copy, so only Release Ops
   // or Hotfix publish one, and only with a written release record that names this version.
   const role = process.env.BOOTSTRAP_ROLE || (() => {
     try { return JSON.parse(readFileSync(join(root, '.bootstrap', 'session.json'), 'utf8')).role; } catch { return 'unassigned'; }
   })();
-  if (!['release-ops', 'hotfix'].includes(role)) {
-    console.error(`Only Release Ops or Hotfix publish a release (this session is "${role}"). The owner types "release <scope>" in Release Ops' chat.`);
-    process.exit(1);
-  }
+  const roleCheck = ['release-ops', 'hotfix'].includes(role) ? { ok: true } : { ok: false, reason: `Only Release Ops or Hotfix publish a release (this session is "${role}"). The owner types "release <scope>" in Release Ops' chat.` };
   const records = existsSync(join(root, 'docs', 'releases')) ? readdirSync(join(root, 'docs', 'releases')) : [];
   const record = records.find((f) => f.endsWith('.md') && readFileSync(join(root, 'docs', 'releases', f), 'utf8').includes(`scope: ${tag}`));
-  if (!record) {
-    console.error(`No release record for ${tag} in docs/releases. Write it first: node .bootstrap/bin/bootstrap.mjs release ${tag} --shas ... --words "..." --question "..." --said-at "..." --check <gate output file>`);
-    process.exit(1);
-  }
+  if (!record) later.push({ ok: false, reason: `No release record for ${tag} in docs/releases. Write it first: node .bootstrap/bin/bootstrap.mjs release ${tag} --shas ... --words "..." --question "..." --said-at "..." --check <gate output file>` });
+  // a dry run publishes nothing, so the role is only a note there
+  if (dryRun) { if (!roleCheck.ok) console.log(`Note: ${roleCheck.reason} (not needed for a dry run)`); } else later.push(roleCheck);
 
-  const { target: targetArg, dryRun, rest: extra } = parseArgs(process.argv.slice(2));
-  const ghArgs = checkGhArgs(extra);
-  if (!ghArgs.ok) {
-    console.error(ghArgs.reason);
-    process.exit(1);
-  }
-  const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const state = gatherGitState({ git, target: targetArg });
-  const verdict = checkTarget(state);
-  if (!verdict.ok) {
-    console.error(verdict.reason);
-    process.exit(1);
-  }
-  let builtSha = '';
-  try { builtSha = readFileSync(join(root, 'dist', 'build-sha.txt'), 'utf8'); } catch { builtSha = ''; }
-  const built = checkBuild({ target: state.target, builtSha });
-  if (!built.ok) {
-    console.error(built.reason);
+  const problems = releaseProblems({ gitChecks, later });
+  if (problems.length) {
+    for (const reason of problems) console.error(reason);
     process.exit(1);
   }
   console.log(`Release target: ${state.target} (origin/main ${state.originMain}), tag ${tag}, record ${record}`);

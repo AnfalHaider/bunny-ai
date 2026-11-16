@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkTarget as check, checkBuild, checkGhArgs, parseArgs, gatherGitState } from '../scripts/release.mjs';
+import { checkTarget as check, checkBuild, checkGhArgs, releaseProblems, parseArgs, gatherGitState } from '../scripts/release.mjs';
 // most cases are about the target; HEAD is the target unless a case says otherwise
 const checkTarget = (o) => check({ head: o.target, ...o });
 
@@ -163,4 +163,28 @@ test('Security W5-8 (4): only --notes-file goes on to gh', () => {
     assert.equal(r.ok, false, bad.join(' '));
     assert.match(r.reason, /Refusing to release/);
   }
+});
+
+test('QA 851aa18: the git checks come first and every failing check is reported at once', () => {
+  const gitChecks = [check({ target: MAIN, originMain: MAIN, head: OTHER, dirty: true }), checkBuild({ target: MAIN, builtSha: '' }), checkGhArgs(['--draft'])];
+  const later = [{ ok: false, reason: 'Missing installer' }, { ok: true }, { ok: false, reason: 'No release record' }];
+  const all = releaseProblems({ gitChecks, later });
+  assert.equal(all.length, 5);
+  assert.match(all[0], /checked out/);
+  assert.match(all[1], /build-sha.txt is missing/);
+  assert.match(all[2], /not allowed/);
+  assert.deepEqual(all.slice(3), ['Missing installer', 'No release record']);
+  assert.deepEqual(releaseProblems({ gitChecks: [{ ok: true }], later: [{ ok: true }] }), []);
+});
+
+test('QA 851aa18: --dry-run on a working copy reports the git problems without needing the role', async () => {
+  const { execFileSync, spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const script = fileURLToPath(new URL('../scripts/release.mjs', import.meta.url));
+  const r = spawnSync(process.execPath, [script, '--dry-run', '--target', 'HEAD'], { encoding: 'utf8', env: { ...process.env, BOOTSTRAP_ROLE: 'builder' } });
+  assert.equal(r.status, 1, 'a dry run in a tree without a build still fails, and says why');
+  assert.match(r.stderr + r.stdout, /Missing|build-sha|checked out|origin main/);
+  assert.match(r.stdout, /not needed for a dry run/, 'the role is only a note');
+  assert.doesNotMatch(r.stderr, /Only Release Ops or Hotfix publish/);
+  void execFileSync;
 });
