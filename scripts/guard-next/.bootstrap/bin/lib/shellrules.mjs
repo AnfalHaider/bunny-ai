@@ -227,7 +227,9 @@ function refuseGitMore(call, cmd, ctx, depth) {
   const why = refuseGitConfigs(call);
   if (why) return why;
   const { sub } = call;
-  if (sub === 'push') { const why3 = refusePush(call.args); if (why3) return why3; }
+  const where0 = (c, cx) => { let w = cx.cwd ?? process.cwd(); for (const d of c.dirs ?? []) w = pathResolve(w, d); return w; };
+  if (sub === 'checkout-index' && call.args.some((a) => /^--prefix(=|$)/.test(a) || a === '-a' || a === '--all' || a === '--stdin' || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
+  if (sub === 'push') { const why3 = refusePush(call.args, where0(call, ctx)); if (why3) return why3; }
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
   if (sub === 'branch' || sub === 'checkout' || sub === 'switch') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }
   if (!sub || GIT_BUILTINS.has(sub)) return null;

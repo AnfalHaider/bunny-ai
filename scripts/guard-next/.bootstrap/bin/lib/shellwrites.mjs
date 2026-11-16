@@ -81,7 +81,7 @@ export function targetsOf(words) {
     const rest = words.slice(words.length - call.args.length);
     if (call.sub === 'checkout') { const at = call.args.indexOf('--'); return at < 0 ? [] : rest.slice(at + 1); }
     if (call.sub === 'restore') return split(rest, new Set(['--source', '-s'])).pos;
-    if (call.sub === 'rm' || call.sub === 'mv') return split(rest).pos;
+    if (call.sub === 'rm' || call.sub === 'mv' || call.sub === 'checkout-index') return split(rest).pos;
     return [];
   }
   const ps = is(...PS_PATH_FIRST, ...PS_COPY, ...PS_MOVE);

@@ -48,7 +48,7 @@ test('W5-1b: moving the live branch label by force is refused; ordinary branch w
 });
 
 test('W5-1b: checkout-index is a git command the guard knows', (t) => {
-  allowed(t, 'git checkout-index -a');
+  allowed(t, 'git checkout-index -f src/a.js');
   denied(t, 'git frobnicate');
 });
 
@@ -115,4 +115,33 @@ test('W5-1 review: the gate compares the real hooks folder with this checkout\'s
   assert.match(src, /--git-common-dir/);
   assert.match(src, /realpathSync/);
   assert.doesNotMatch(src, /basename\(dir\) !== '\.githooks'/, 'the old name-only comparison is gone');
+});
+
+test('W5-1b review: checkout-index with --prefix, --all or --stdin is refused; named files are judged as write targets', (t) => {
+  for (const c of ['git checkout-index --prefix=.bootstrap/ -f a', 'git checkout-index --prefix .githooks/ a', 'git checkout-index -a', 'git checkout-index --all -f', 'git checkout-index --stdin', 'git checkout-index -f .bootstrap/policy.json', 'git checkout-index AGENTS.md']) denied(t, c);
+  allowed(t, 'git checkout-index -f src/a.js');
+  allowed(t, 'git checkout-index -a', 'chief-of-staff');
+});
+
+test('W5-1b review: --repo and a remote word are both judged; every refspec is checked for "tag"; a short tag name is a tag', (t) => {
+  denied(t, 'git push --repo=origin https://example.test/a.git main');
+  denied(t, 'git push origin claude/x tag v1');
+  const root = makeRepo(t, 'builder');
+  execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'seed'], { cwd: root });
+  execFileSync('git', ['tag', 'v1'], { cwd: root });
+  execFileSync('git', ['branch', 'claude/x'], { cwd: root });
+  assert.equal(decide(root, 'git push origin v1').allow, false, 'v1 is a tag');
+  assert.equal(decide(root, 'git push origin v1:v1').allow, false);
+  assert.equal(decide(root, 'git push origin claude/x').allow, true, 'a branch is not');
+  execFileSync('git', ['branch', 'v1'], { cwd: root });
+  assert.equal(decide(root, 'git push origin v1').allow, true, 'a name that is both: git pushes the branch');
+});
+
+test('W5-1b review: gh pr create head in every spelling; a variable head is refused', (t) => {
+  allowed(t, 'gh pr create --head claude/x --title t');
+  allowed(t, 'gh pr create -H claude/x --title t');
+  allowed(t, 'gh pr create -Hclaude/x --title t');
+  allowed(t, 'gh pr create -H=claude/x --title t');
+  allowed(t, 'gh pr create --head=claude/x --title t');
+  for (const c of ['gh pr create -Hmain --title t', 'gh pr create -H=main --title t', 'gh pr create --head=main', 'gh pr create --head $B', 'gh pr create -H $B', 'gh pr create --head=$B', 'gh pr create -H "$B"']) denied(t, c);
 });

@@ -27,12 +27,23 @@ export function pushShape(args) {
   return repo !== null ? { remote: repo, refspecs: positional, repoGiven: true } : { remote: positional[0] ?? null, refspecs: positional.slice(1), repoGiven: false };
 }
 
-/** Why this `git push` is refused (tags, a bare URL), or null. */
-export function refusePush(args) {
-  const { remote, refspecs } = pushShape(args);
+const refExists = (ref, cwd) => {
+  try { execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd: cwd ?? process.cwd(), timeout: 2000, stdio: 'ignore' }); return true; } catch { return false; }
+};
+
+/** Why this `git push` is refused (tags, a bare URL), or null. `cwd` is where git will run, to look short names up. */
+export function refusePush(args, cwd = null) {
+  const { remote, refspecs, repoGiven } = pushShape(args);
+  // git takes a remote word on the command line over --repo, so BOTH readings are judged: --repo's value and the first word
+  const firstWord = args.filter((a) => !a.startsWith('-'))[0] ?? null;
   if (args.some((a) => isLong(a, '--tags') || isLong(a, '--follow-tags', 4))) return 'pushing tags (--tags, --follow-tags) publishes releases and versions outside the live-branch rules; name a branch.';
-  if (refspecs[0] === 'tag' || refspecs.some((r) => /(^|:|\+)refs\/tags\//.test(r))) return 'pushing a tag is refused for this role: a tag can mark a release.';
-  if (remote && URLISH.test(remote)) return 'pushing to a web address or a folder (not a named remote) skips the remote\'s rules; push to origin by name.';
+  if (refspecs.includes('tag') || refspecs.some((r) => /(^|:|\+)refs\/tags\//.test(r))) return 'pushing a tag is refused for this role: a tag can mark a release.';
+  // a short name that is a tag and not a branch (git push origin v1)
+  for (const r of refspecs) {
+    const src = r.replace(/^\+/, '').split(':')[0];
+    if (src && src !== 'HEAD' && !src.includes('*') && refExists(`refs/tags/${src}`, cwd) && !refExists(`refs/heads/${src}`, cwd)) return `"${src}" is a tag here; pushing a tag is refused for this role.`;
+  }
+  if ((remote && URLISH.test(remote)) || (repoGiven && firstWord && URLISH.test(firstWord))) return 'pushing to a web address or a folder (not a named remote) skips the remote\'s rules; push to origin by name.';
   return null;
 }
 
@@ -73,8 +84,11 @@ function prCreateOnClaudeBranch(words, cwd) {
   let head = null;
   for (let i = 1; i < words.length; i += 1) {
     const t = words[i].text;
-    if (t === '--head' || t === '-H') head = words[i + 1]?.text ?? '';
-    else if (t.startsWith('--head=')) head = t.slice('--head='.length);
+    let w = null;
+    if (t === '--head' || t === '-H') w = words[i + 1] ?? { text: '' };
+    else if (t.startsWith('--head=')) w = { text: t.slice('--head='.length), dynamic: words[i].dynamic };
+    else if (t.startsWith('-H') && t.length > 2) w = { text: t.slice(2).replace(/^=/, ''), dynamic: words[i].dynamic };
+    if (w) head = w.dynamic ? '' : w.text; // a variable as the head cannot be read: refused
   }
   const branch = (head ?? currentBranch(cwd)).replace(/^[^:]*:/, '');
   return GH_CLAUDE_BRANCH.test(branch);
