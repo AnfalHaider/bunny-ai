@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Last v0.1.7 stamps: W5-7 `2c29444` PASS, W5-1 guard `74fe7ba` PASS (notes)
+
+W5-7: with only the page token, `PUT /api/settings` of `autoUpdate` and of `fallbackWhenBusy` answers 403 (and `updateUrl`; `theme` still 200); 16 of 16 window tests pass. W5-1: `gh auth status` with `--show-token` or `-t` is refused for builder, release-ops and chief-of-staff in 20 spellings (`=true`, `=false`, clustered `-ht`/`-vt`, quoted, `gh.exe`, `& gh`, env-prefixed, after `;`, after `--`, with `-R` or `--hostname`); `| cat -t` is rightly allowed. Open, LOW (the rule is a speed bump, not a barrier): a variable argument (`gh auth status $f` with `-t` in `$f`) is allowed for every role; `gh auth token` and `gh config get oauth_token` are allowed for the live roles; `git credential fill` is allowed for all. Probe `docs/security/w5-7-probe/ghs.mjs`. Lesson: a refusal that matches the text of a flag cannot see a flag in a variable; for a secret, refuse the whole subcommand path, not the switch.
+
 ## 2026-11-16 - W5-7 `c1b4c18` PASS (six more ordinary keys); w6 trio `1d8f6ec` PASS (help text)
 
 Of the six keys added to the known list, five are display or convenience (`chartsEnabled`, `statusLabels`, `transcriptView`, `promptSuggestions`, `fallbackWhenBusy`; the last defaults on and only the window reads it). `autoUpdate` is read by the updater in `electron/main.js` (`!== false`): with only the page token it can be set to false, which silently stops updates (the feed address stays window-only). LOW: put `autoUpdate` on the window-only list; no other change. The w6-2, w6-18 and w4-1d re-stamp at `1d8f6ec` is one help-text line in `settings.html` (the token budget "cannot be turned off, the smallest allowed is 100,000"), which matches `caps.js`. Lesson: a setting that stops the app updating is a security setting even if the screen calls it a preference.
