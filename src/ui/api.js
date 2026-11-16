@@ -7,14 +7,44 @@ export async function getJSON(path) {
   return body;
 }
 
-// Writes that only Bunny's own window may make (a copy of src/server/windowOnly.js; test/window-only.test.js keeps them equal).
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode'];
+// Writes that only Bunny's own window may make: a copy of src/server/windowOnly.js (the browser cannot import it; test/window-only.test.js keeps them equal).
+/** Settings keys that decide what Bunny may do or where it may go. */
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'connectorsEnabled', 'plugins'];
+
+/** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode'];
+
+const WRITES = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const UUID = '[a-f0-9-]{36}';
+/** Routes that are window-only whatever their body says: [methods, path pattern]. */
+export const WINDOW_ONLY_ROUTES = [
+  [WRITES, `^/api/mcp(/${UUID}(/call)?)?$`],                // connectors: add, enable, change, remove, call
+  [WRITES, `^/api/connectors(/.*)?$`],                      // connector sign-in (W3-6)
+  [WRITES, `^/api/schedules(/${UUID})?$`],                  // schedules
+  [WRITES, `^/api/hooks(/${UUID})?$`],                      // hooks run commands
+  [WRITES, `^/api/skills(/${UUID})?$`],                     // skills are instructions the model follows
+  [['POST'], '^/api/plugins/install$'],
+  [['DELETE'], '^/api/tools/[a-z][a-z0-9_]{1,39}$'],        // custom tools
+  [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
+  [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)
+  [['POST'], '^/api/computer/.*$'],                         // driving the computer
+  [['POST'], '^/api/terminal/(create|write|resize|kill)$'], // a terminal runs commands
+  [['POST'], '^/api/providers/custom$'],                    // where model traffic goes
+  [['DELETE'], '^/api/providers/custom-[a-z0-9-]+$'],
+  [['POST'], '^/api/providers/[a-z0-9-]+/(connect|disconnect)$'],
+  [['POST'], '^/api/account/(github|google)/.*$'],          // sign-ins
+];
+
+/** Is this request one only the window may make? `body` is the parsed JSON body (some writes are judged by what they change). */
 export function isWindowOnlyRoute(method, path, body = null) {
   const m = String(method).toUpperCase();
+  if (WINDOW_ONLY_ROUTES.some(([methods, re]) => methods.includes(m) && new RegExp(re).test(path))) return true;
+  const has = (...keys) => Boolean(body) && typeof body === 'object' && keys.some((k) => Object.hasOwn(body, k));
   if (path === '/api/permission-rules' && m === 'PUT') return true;
-  if (path === '/api/settings' && m === 'PUT') return Boolean(body) && typeof body === 'object' && WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(body, k));
-  const session = /^\/api\/sessions\/[a-f0-9-]{36}\/setting\/([A-Za-z-]+)$/.exec(path);
+  if (path === '/api/settings' && m === 'PUT') return has(...WINDOW_ONLY_SETTING_KEYS);
+  if (path === '/api/sessions' && m === 'POST') return has('permissionMode');
+  if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode');
+  const session = new RegExp(`^/api/sessions/${UUID}/setting/([A-Za-z-]+)$`).exec(path);
   if (session && m === 'PATCH') return WINDOW_ONLY_SESSION_SETTINGS.includes(session[1]);
   return false;
 }

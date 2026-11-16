@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { startApp, post, json } from './helpers.js';
-import { WINDOW_ONLY_SETTING_KEYS, WINDOW_ONLY_SESSION_SETTINGS, isWindowOnlyRoute } from '../src/server/windowOnly.js';
+import { WINDOW_ONLY_ROUTES, WINDOW_ONLY_SETTING_KEYS, WINDOW_ONLY_SESSION_SETTINGS, isWindowOnlyRoute } from '../src/server/windowOnly.js';
 // the page module touches window when it loads: give it an empty one
 globalThis.window = {};
 const ui = await import('../src/ui/api.js');
@@ -109,4 +109,97 @@ test('the desktop shell wires the bridge: preload exposes secureWrite and main c
   assert.match(main, /isWindowOnlyRoute\(method, path, body\)/);
   assert.match(main, /bunnyApp\.adminFetch/);
   assert.match(main, /createApp\(\{ dataDir, folderPickerOnly: true \}\)/);
+});
+
+// ---- W5-7 / W27c-1: every security-relevant write, in the desktop app, only from the window
+
+test('the page and the server share one route table and one matcher (same answers on a wide table)', () => {
+  assert.deepEqual(ui.WINDOW_ONLY_ROUTES, WINDOW_ONLY_ROUTES);
+  const id = '11111111-1111-1111-1111-111111111111';
+  const pid = '22222222-2222-2222-2222-222222222222';
+  const bodies = [null, {}, { permissionMode: 'auto' }, { defaultPermissionMode: 'auto' }, { theme: 'dark' }, { aiComputerUse: true }, { allowlist: ['x'] }, { name: 'x' }];
+  const paths = ['/api/mcp', `/api/mcp/${id}`, `/api/mcp/${id}/call`, `/api/mcp/${id}/tools`, '/api/schedules', `/api/schedules/${id}`, '/api/hooks', `/api/hooks/${id}`, '/api/skills', `/api/skills/${id}`,
+    '/api/plugins/install', '/api/tools/my_tool', `/api/sessions/${id}/permission/${pid}`, `/api/sessions/${id}/capability/${pid}`, `/api/sessions/${id}/question/${pid}`, '/api/computer/click', '/api/computer/screenshot',
+    '/api/terminal/create', '/api/terminal/write', '/api/terminal/read', '/api/providers/custom', '/api/providers/custom-abc', '/api/providers/openai/connect', '/api/providers/openai/disconnect', '/api/account/github/token', '/api/account/google/start',
+    '/api/settings', '/api/sessions', `/api/sessions/${id}`, `/api/sessions/${id}/setting/permissionMode`, '/api/connectors/x/oauth/start', '/api/connectors/oauth/callback', '/api/memory', '/api/import', '/api/profile/photo'];
+  for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) for (const p of paths) for (const b of bodies) assert.equal(ui.isWindowOnlyRoute(m, p, b), isWindowOnlyRoute(m, p, b), `${m} ${p} ${JSON.stringify(b)}`);
+});
+
+test('what is window-only and what is not', () => {
+  const id = '11111111-1111-1111-1111-111111111111';
+  const pid = '22222222-2222-2222-2222-222222222222';
+  const yes = [
+    ['POST', '/api/mcp'], ['PATCH', `/api/mcp/${id}`], ['DELETE', `/api/mcp/${id}`], ['POST', `/api/mcp/${id}/call`], ['POST', '/api/schedules'], ['PATCH', `/api/schedules/${id}`], ['DELETE', `/api/schedules/${id}`],
+    ['POST', '/api/hooks'], ['DELETE', `/api/hooks/${id}`], ['POST', '/api/skills'], ['PATCH', `/api/skills/${id}`], ['POST', '/api/plugins/install'], ['DELETE', '/api/tools/my_tool'],
+    ['POST', `/api/sessions/${id}/permission/${pid}`], ['POST', `/api/sessions/${id}/capability/${pid}`], ['POST', '/api/computer/click'], ['POST', '/api/computer/type'], ['POST', '/api/terminal/write'], ['POST', '/api/terminal/create'],
+    ['POST', '/api/providers/custom'], ['DELETE', '/api/providers/custom-abc'], ['POST', '/api/providers/openai/connect'], ['POST', '/api/account/github/token'], ['POST', '/api/connectors/x/oauth/start'], ['DELETE', '/api/connectors/x'],
+    ['PUT', '/api/permission-rules'],
+  ];
+  for (const [m, p] of yes) assert.equal(isWindowOnlyRoute(m, p), true, `${m} ${p}`);
+  const no = [['GET', '/api/mcp'], ['GET', `/api/mcp/${id}/tools`], ['GET', '/api/schedules'], ['POST', `/api/sessions/${id}/question/${pid}`], ['GET', '/api/terminal/read'], ['POST', '/api/memory'], ['POST', '/api/import'], ['POST', '/api/profile/photo'], ['PUT', '/api/settings'], ['POST', '/api/sessions'], ['PATCH', `/api/sessions/${id}`], ['POST', `/api/sessions/${id}/messages`], ['POST', '/api/permission-rules/try']];
+  for (const [m, p] of no) assert.equal(isWindowOnlyRoute(m, p), false, `${m} ${p}`);
+  // judged by what the body changes
+  assert.equal(isWindowOnlyRoute('POST', '/api/sessions', { permissionMode: 'auto' }), true);
+  assert.equal(isWindowOnlyRoute('POST', '/api/sessions', { title: 'x' }), false);
+  assert.equal(isWindowOnlyRoute('PATCH', `/api/sessions/${id}`, { permissionMode: 'auto' }), true);
+  assert.equal(isWindowOnlyRoute('PATCH', `/api/sessions/${id}`, { title: 'x' }), false);
+  for (const key of WINDOW_ONLY_SETTING_KEYS) assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: 1, theme: 'dark' }), true, key);
+});
+
+test('desktop app, W27c-1: with only the token, none of these works over HTTP (and each works through the main process)', async (t) => {
+  const { app, base } = await startApp(t, { folderPickerOnly: true });
+  const { body: s } = await post(base, '/api/sessions', { title: 'x' });
+  const forbidden = async (method, path, body, label) => {
+    const r = await json(base, path, { method, headers: j, body: JSON.stringify(body ?? {}) });
+    assert.equal(r.status, 403, `${label}: ${method} ${path} -> ${r.status}`);
+    assert.equal(r.body.code, 'request.windowOnly', label);
+  };
+  await forbidden('POST', '/api/sessions', { permissionMode: 'auto' }, 'a chat that starts in Auto');
+  await forbidden('PATCH', `/api/sessions/${s.id}`, { permissionMode: 'auto' }, 'a chat switched to Auto');
+  await forbidden('POST', '/api/schedules', { name: 'x', prompt: 'x', everyMinutes: 5, permissionMode: 'auto' }, 'a schedule that may change things');
+  await forbidden('PATCH', `/api/schedules/${s.id}`, { permissionMode: 'auto' }, 'a schedule changed');
+  await forbidden('DELETE', `/api/schedules/${s.id}`, {}, 'a schedule removed');
+  await forbidden('POST', `/api/sessions/${s.id}/permission/33333333-3333-3333-3333-333333333333`, { allowed: true }, 'answering a permission prompt');
+  await forbidden('POST', `/api/sessions/${s.id}/capability/33333333-3333-3333-3333-333333333333`, { allowed: true }, 'answering a capability prompt');
+  await forbidden('POST', '/api/mcp', { name: 'evil', url: 'http://127.0.0.1:9/mcp', enabled: true }, 'adding a connector');
+  await forbidden('POST', '/api/hooks', { name: 'h', event: 'chat.created', command: 'calc' }, 'adding a hook');
+  await forbidden('POST', '/api/skills', { name: 's', description: 'd', body: 'do bad things' }, 'adding a skill');
+  await forbidden('POST', '/api/plugins/install', {}, 'installing a plugin');
+  await forbidden('POST', '/api/terminal/write', { id: 'x', text: 'calc\r' }, 'typing into a terminal');
+  await forbidden('POST', '/api/computer/click', { x: 1, y: 1 }, 'clicking the screen');
+  await forbidden('POST', '/api/providers/custom', { name: 'x', baseUrl: 'http://127.0.0.1:9/v1' }, 'a new model address');
+  await forbidden('POST', '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000' }, 'connecting a provider');
+  await forbidden('PUT', '/api/settings', { aiComputerUse: true }, 'allowing computer use');
+  await forbidden('PUT', '/api/settings', { customToolsEnabled: true }, 'allowing tool building');
+  await forbidden('PUT', '/api/settings', { allowlist: ['*'] }, 'the model allowlist');
+  assert.equal((await json(base, '/api/mcp')).body.length, 0, 'nothing was added');
+  assert.equal((await json(base, '/api/schedules')).body.length, 0);
+  // ...and everything ordinary still works over HTTP
+  assert.equal((await post(base, '/api/sessions', { title: 'ordinary' })).status, 200);
+  assert.equal((await put(base, '/api/settings', { displayName: 'Someone' })).status, 200);
+  assert.equal((await json(base, '/api/mcp')).status, 200);
+  // through the main process (token + window-only secret)
+  const add = await app.adminFetch('/api/mcp', { method: 'POST', headers: j, body: JSON.stringify({ name: 'ok', url: 'http://127.0.0.1:9/mcp', enabled: false }) });
+  assert.equal(add.status, 200);
+  assert.equal((await json(base, '/api/mcp')).body.length, 1);
+  const sched = await app.adminFetch('/api/schedules', { method: 'POST', headers: j, body: JSON.stringify({ name: 'x', prompt: 'x', everyMinutes: 60 }) });
+  assert.equal(sched.status, 200);
+  const auto = await app.adminFetch('/api/sessions', { method: 'POST', headers: j, body: JSON.stringify({ title: 'auto', permissionMode: 'auto' }) });
+  assert.equal(auto.status, 200);
+});
+
+test('plain-browser dev mode keeps HTTP for all of it', async (t) => {
+  const { base } = await startApp(t, {});
+  assert.equal((await post(base, '/api/sessions', { title: 'x', permissionMode: 'auto' })).status, 200);
+  assert.equal((await post(base, '/api/mcp', { name: 'ok', url: 'http://127.0.0.1:9/mcp', enabled: false })).status, 200);
+  assert.equal((await put(base, '/api/settings', { aiComputerUse: false })).status, 200);
+});
+
+test('every page that writes uses the shared channel: no raw fetch of a write in the pages', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = new URL('../src/ui/', import.meta.url);
+  for (const f of readdirSync(dir).filter((n) => /\.(js|html)$/.test(n) && n !== 'api.js' && n !== 'sw.js')) {
+    const text = readFileSync(new URL(f, dir), 'utf8');
+    assert.doesNotMatch(text, /fetch\([^)]*\{[^}]*method:\s*'(POST|PUT|PATCH|DELETE)'/, `${f} makes a write with a raw fetch: use sendJSON so the desktop app can route it through the window`);
+  }
 });

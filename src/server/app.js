@@ -12,7 +12,7 @@ import { userInfo } from 'node:os';
 import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { WINDOW_ONLY_SETTING_KEYS, WINDOW_ONLY_SESSION_SETTINGS } from './windowOnly.js';
+import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
@@ -470,6 +470,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
+    // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
+    if (isWindowOnlyRoute(method, path) && windowOnly(req, res)) return;
 
     if (localGuard !== false) {
       const verdict = guard.check(req, path, method, url.searchParams);
@@ -761,6 +763,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
+      if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
         const stored = await folderToStore(body.folder);
@@ -1447,6 +1450,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (sessionMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
+        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
