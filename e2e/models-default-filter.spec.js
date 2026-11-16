@@ -20,8 +20,10 @@ test('default filter: connected Anthropic models are hidden but never "No models
   // The empty state offers "Show all models", and "Add a provider" is not shown: a provider is connected.
   await expect(page.getByRole('button', { name: 'Show all models' })).toBeVisible();
   await expect(page.getByText('Add a provider')).toHaveCount(0);
+  await expect(page.locator('#greeting')).toBeHidden(); // the note replaces the greeting line above it
   await page.getByRole('button', { name: 'Show all models' }).click();
   await expect(page.locator('#picker-button')).not.toContainText(/hidden|No models/);
+  await expect(page.locator('#greeting')).toBeVisible();
   await page.locator('#picker-button').click();
   await expect(page.locator('.picker-panel [role="option"][data-model]:not([data-section])')).toHaveCount(3);
   // The setting stuck.
