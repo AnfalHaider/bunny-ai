@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Re-stamp at `0bdb7f3`: w6-2, w6-18, w4-1d PASS, notes closed
+
+The token budget is now clamped to at least 100,000 and never 0 (`caps.js`: 0, "0", negatives, NaN, Infinity and text all give the minimum or the default; steps and minutes keep "0 means off"); scheduled runs stay at 2M tokens. The Cookie and Set-Cookie lines are caught by the secret check (and plain prose with "cookie:" is not); both fast on long input. 27 of 27 related tests pass. Lesson: when one key must never be 0, give it its own clamp instead of a shared one with a flag.
+
 ## 2026-11-16 - Re-stamp at `643c7da` (Builder B's v0.1.7 integration branch): w6-18, w6-2, w4-1d PASS
 
 W6-18's incognito condition is closed (no note file and no long replay copy in an incognito chat; test passes); the Bearer, Basic, `token` and `sk_live_`/`sk_test_` patterns catch what I listed and stay fast on long input (3 ms on 100 KB); a `Cookie: session=…` line is still not matched (LOW). W6-2: a stored 0 for steps and minutes now means off; but a stored 0 for the token budget also reads 0, which switches the cost brake off (`tokenBudget &&` in `chat.js`): keep it at its minimum instead (LOW-MEDIUM while `autoContinueTokens` is writable with the page token). W4-1d: the only change is a 15 s timeout on `taskkill`. 26 of 26 related tests pass on the integration branch. Lesson: "0 means off" is a good rule for a step cap and a bad one for a cost cap; check each key on its own.

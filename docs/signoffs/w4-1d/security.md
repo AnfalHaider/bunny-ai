@@ -1,9 +1,9 @@
 ---
 piece: w4-1d
 role: security
-sha: 643c7da
+sha: 0bdb7f3
 verdict: PASS
 date: 2026-11-16
 ---
 
-Only change since fdafaa5 is a 15 s timeout on taskkill; env fix and held pipe stand; both W4-1d tests pass.
+Re-stamp: token budget clamped to at least 100000 and never 0 (caps.js, tested on 11 inputs); Cookie/Set-Cookie secret pattern catches and stays fast; 27/27 related tests pass at 0bdb7f3. Earlier notes closed.

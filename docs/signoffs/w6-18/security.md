@@ -1,9 +1,9 @@
 ---
 piece: w6-18
 role: security
-sha: 643c7da
+sha: 0bdb7f3
 verdict: PASS
 date: 2026-11-16
 ---
 
-Incognito condition closed (no note, no long copy; tested). Bearer/Basic/token and sk_live_/sk_test_ patterns catch my cases, fast on 100 KB. Low: Cookie session= lines not matched. Tests 26/26 on 643c7da.
+Re-stamp: token budget clamped to at least 100000 and never 0 (caps.js, tested on 11 inputs); Cookie/Set-Cookie secret pattern catches and stays fast; 27/27 related tests pass at 0bdb7f3. Earlier notes closed.
