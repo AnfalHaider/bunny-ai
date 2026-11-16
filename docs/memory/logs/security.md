@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W5-1b guard delta (`claude/builder-w5-1`, d3ee1cf..611dee7): PASS with conditions
+
+W5S-1 (`--repo=origin main`) and W5S-2 (`gh` allowlist) closed and verified on about 230 commands; G1-6 closed for tags, bare-URL and folder pushes, remote add and set-url, checkout-index, and the usual live-label moves. Probe 4 went from 49 to 44 mismatches, none new; Builder's 13 new tests pass. Open: W5B-1 `git branch -f Main HEAD` moves `main` on Windows (case), W5B-2 `git symbolic-ref refs/heads/main ...` moves it even when checked out, W5B-3 `worktree add -B main`, W5B-4 `gh run|release download -D` writes anywhere, W5B-5 the pre-push hook still lets non-live roles push tags (my earlier "backstop" claim was wrong). Review: `docs/security/2026-11-16-w5-1b-delta-review.md`; probes `g1-probe/probe9.mjs`. Slip: I deleted the local `v0.1.5` tag in my own cleanup and restored it at `73d3bef` (matches origin); nothing pushed. Lesson: a cleanup command in a shared repo (tags and branches are shared by all worktrees) needs the same care as one on the real data; and a safety claim ("the hook is the backstop") needs the probe that shows it, not memory.
+
 ## 2026-11-16 - W5-1 guard round (`claude/builder-w5-1` @ d3ee1cf): PASS
 
 G1-1..G1-5 closed; 124 staged tests pass; my probes 1-8 re-run (about 300 command spellings). Three known gaps accepted for landing (variable command word, role file seatbelt, `gh` denylist). Follow-ups W5S-1..W5S-5: `git push --repo=origin main` slips the shell layer (pre-push catches it), `gh gist create` and `gh repo create --public` allowed, dynamic command word plus a publishing word, role binding, wildcard or `.` deletes of the hooks folder. Landing note: the hooks path on this machine is absolute to the main checkout, so landing hits every worktree at once. Review: `docs/security/2026-11-16-w5-1-guard-review.md`. Lesson: a denylist fails on the verb you did not list; ask for an allowlist when the action is outward-facing.
