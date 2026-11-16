@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>W3-6 connector sign-in</title>
+<link rel="stylesheet" href="../bunny-design-system.css">
+<style>
+
+/* page chrome (not part of the proposal) */
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif)}
+.page{max-width:1320px;margin:0 auto;padding:24px 16px 90px}
+.page h1{font-size:24px;margin:0 0 4px}.page h2{font-size:20px;margin:0}.page h3{font-size:16px;margin:22px 0 4px}
+.pg-dim{color:var(--text-dim)}
+.bar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--text);padding:6px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--on-ink)}
+.screen{margin-top:44px;border-top:1px solid var(--line);padding-top:20px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:13px;color:var(--text-dim)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;align-items:start}
+.pair.stack{grid-template-columns:1fr}
+figure.f{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;min-width:0}
+figure.f figcaption{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:14px}
+figure.f figcaption.p{color:var(--accent)}
+.imgbox{padding:10px;text-align:center}.imgbox img{max-width:100%;height:auto;border:1px solid var(--line)}
+.fitbox{padding:10px;overflow:hidden}
+ul.notes{margin:12px 0 0;padding-left:20px}ul.notes li{margin:4px 0}
+.page code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.q{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 14px;margin:8px 0}
+@media (max-width:1000px){.pair{grid-template-columns:1fr}}
+
+/* ---------- proposal drawing: everything below is the proposed UI, tokens only ---------- */
+.d2{font:15px/1.55 var(--font-sans,system-ui,"Segoe UI",sans-serif);color:var(--text);background:var(--bg);text-align:left}
+.d2 *{box-sizing:border-box}
+.d2 .frame{position:relative;background:var(--bg);display:flex;overflow:hidden;border:1px solid var(--line)}
+.d2 .frame.d{width:1440px;height:900px}
+.d2 .frame.m{width:390px;height:844px;flex-direction:column}
+.d2 .sbar{width:248px;flex:none;background:var(--bg-sidebar);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.d2 .sbar .brand{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px}
+.d2 .sbar .row{padding:6px 8px;border-radius:8px;color:var(--text-dim)}
+.d2 .sbar .row.on{background:var(--surface);color:var(--text)}
+.d2 .main{flex:1;min-width:0;display:flex;flex-direction:column}
+.d2 .top{height:48px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:14px;border-bottom:1px solid var(--line)}
+.d2 .top b{font-weight:600}
+.d2 .top .sp{flex:1}
+.d2 .top .ib{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--text-dim)}
+.d2 .top .ib.on{background:var(--hover);color:var(--text)}
+.d2 .thread{flex:1;overflow:hidden;padding:20px 16px 0}
+.d2 .col{max-width:720px;margin:0 auto}
+.d2 .user{margin-left:auto;width:max-content;max-width:90%;background:var(--bg-sidebar);border-radius:16px;padding:10px 16px;margin-bottom:22px}
+.d2 .note,.d2 .reply{margin:10px 0}
+.d2 .reply p{margin:0 0 10px}
+.d2 .reply code,.d2 .note code{background:var(--bg-sidebar);border-radius:4px;padding:0 5px;font:13px var(--font-mono,ui-monospace,Consolas,monospace)}
+/* tool group */
+.d2 .grp{margin:8px 0}
+.d2 .gh{display:flex;align-items:center;gap:8px;color:var(--text-dim);font-size:14px;padding:3px 0;cursor:pointer}
+.d2 .gh .chev{width:14px;height:14px;transition:transform .15s;flex:none}
+.d2 .gh.open .chev{transform:rotate(90deg)}
+.d2 .gh .sum{flex:1;min-width:0}
+.d2 .gh .meta2{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.d2 .lab-fail{font-size:12px;font-weight:600;color:var(--bad);background:var(--bad-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .lab-stop{font-size:12px;font-weight:600;color:var(--warn);background:var(--warn-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .subs{margin:2px 0 4px 6px;padding-left:14px;border-left:1px solid var(--line)}
+.d2 .sub{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-dim);padding:3px 0}
+.d2 .sub .chev{width:12px;height:12px;flex:none;color:var(--text-faint)}
+.d2 .sub.open .chev{transform:rotate(90deg)}
+.d2 .sub .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d2 .detail{margin:4px 0 8px 20px;border:1px solid var(--line);border-radius:10px;background:var(--bg-sidebar);overflow:hidden;font-size:13px}
+.d2 .detail .dh{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);color:var(--text-dim);font-size:12px}
+.d2 .detail .dh .sp{flex:1}
+.d2 .detail pre{margin:0;padding:10px;font:12.5px/1.5 var(--font-mono,ui-monospace,Consolas,monospace);white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.d2 .detail pre.err{color:var(--bad)}
+.d2 .detail pre.cmd::before{content:"$ ";color:var(--text-faint)}
+.d2 .cp{border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text-dim);font-size:12px;padding:0 8px;line-height:22px}
+/* running */
+.d2 .running{display:flex;align-items:center;gap:10px;color:var(--text-dim);margin:8px 0}
+.d2 .bunny{width:22px;height:22px;flex:none;animation:d2hop 1.1s ease-out infinite;transform-origin:50% 100%}
+.d2 .bunny .ear{fill:var(--accent);fill-opacity:.55}.d2 .bunny .face{fill:var(--accent)}.d2 .bunny .eye,.d2 .bunny .nose{fill:var(--on-accent)}
+@keyframes d2hop{0%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){.d2 .bunny{animation:none}}
+.d2 .running .w{color:var(--text)}.d2 .running .t{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.d2 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run);border-top-color:transparent;flex:none}
+/* stopped + fallback */
+.d2 .stopped{border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--surface);padding:12px 14px;margin:12px 0}
+.d2 .stopped b{display:block;margin-bottom:4px}
+.d2 .stopped ul{margin:4px 0 8px;padding-left:18px;list-style:disc;color:var(--text-dim);font-size:14px}
+.d2 .btns{display:flex;gap:8px;flex-wrap:wrap}
+.d2 .btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 12px;font-size:13px}
+.d2 .btn.pri{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.d2 .btn.bad{color:var(--bad);border-color:var(--bad)}
+.d2 .fb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);margin:8px 0}
+.d2 .fb i{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+/* composer */
+.d2 .comp{flex:none;padding:0 16px 14px}
+.d2 .comp .box{max-width:720px;margin:0 auto;border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:12px 16px;color:var(--text-faint);box-shadow:var(--shadow-sm)}
+.d2 .comp .meta3{max-width:720px;margin:6px auto 0;font-size:12px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap}
+/* right pane */
+.d2 .pane{width:420px;flex:none;border-left:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-height:0}
+.d2 .frame.m .pane{width:100%;flex:1;border-left:0}
+.d2 .ph{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.d2 .ph .sp{flex:1}.d2 .ph .x{color:var(--text-dim);font-weight:400}
+.d2 .tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.d2 .tabs span{padding:3px 10px;border-radius:999px;color:var(--text-dim)}
+.d2 .tabs span.on{background:var(--hover);color:var(--text)}
+.d2 .pbody{flex:1;overflow:hidden;padding:12px 14px;font-size:13.5px}
+.d2 .sec{margin-bottom:16px}.d2 .sec h5{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:none;letter-spacing:0}
+.d2 .kv{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+.d2 .kv:last-child{border-bottom:0}
+.d2 .kv .k{color:var(--text-dim);width:92px;flex:none}.d2 .kv .v{flex:1;min-width:0;overflow-wrap:anywhere}
+.d2 .kv .v small{display:block;color:var(--text-dim);font-size:12px}
+.d2 .meter{height:6px;border-radius:999px;background:var(--hover);overflow:hidden;margin-top:4px}
+.d2 .meter span{display:block;height:100%;background:var(--accent)}
+.d2 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--ok)}
+.d2 .dot.off{background:var(--text-faint)}.d2 .dot.run{background:var(--run)}
+.d2 .banner{border:1px solid var(--line);border-radius:10px;background:var(--bg-sidebar);padding:8px 12px;font-size:12.5px;color:var(--text-dim);margin-bottom:12px}
+.d2 .cpt{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.d2 .cpt .ch{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+.d2 .cpt .ch b{color:var(--text);font-weight:600}.d2 .cpt .ch .sp{flex:1}
+.d2 .fr{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px}
+.d2 .fr .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono,ui-monospace,Consolas,monospace);font-size:12.5px}
+.d2 .add{color:var(--ok);font-variant-numeric:tabular-nums}.d2 .del{color:var(--bad);font-variant-numeric:tabular-nums}
+.d2 .badge{font-size:11px;border-radius:999px;padding:0 7px;line-height:18px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.d2 .diff{font:12.5px/1.55 var(--font-mono,ui-monospace,Consolas,monospace);border-top:1px solid var(--line)}
+.d2 .diff div{display:flex;padding:0 10px;white-space:pre-wrap;word-break:break-all}
+.d2 .diff .ln{width:28px;flex:none;color:var(--text-faint);text-align:right;margin-right:10px;user-select:none}
+.d2 .diff .a{background:var(--ok-soft)}.d2 .diff .r{background:var(--bad-soft)}.d2 .diff .h{color:var(--text-dim);background:var(--bg-sidebar)}
+.d2 .tree .t{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:6px;font-size:13px}
+.d2 .tree .t .chev{width:12px;height:12px;color:var(--text-faint)}.d2 .tree .t .chev.o{transform:rotate(90deg)}
+.d2 .tree .t.fresh{background:var(--accent-soft)}.d2 .tree .t.cur{background:var(--hover);font-weight:600}
+.d2 .tree .t .ago{margin-left:auto;font-size:11.5px;color:var(--accent)}
+.d2 .tree .ind1{margin-left:18px}.d2 .tree .ind2{margin-left:36px}
+.d2 .file{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:12px;overflow:hidden}
+.d2 .file .fh{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+.d2 .file .fh b{color:var(--text)}.d2 .file .fh .sp{flex:1}
+.d2 .file .code{font:12.5px/1.55 var(--font-mono,ui-monospace,Consolas,monospace)}
+.d2 .file .code div{display:flex;padding:0 10px}.d2 .file .code .ln{width:24px;text-align:right;margin-right:10px;color:var(--text-faint)}
+.d2 .file .code .hl{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.d2 .specimen{max-width:760px}
+.d2 .specimen.m{max-width:390px}
+.d2 .spec{border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:6px 14px 10px;margin-bottom:12px}
+.d2 .spec .lbl{font-size:11.5px;font-weight:600;color:var(--accent);padding:6px 0 0}
+
+.d2 .gmark{text-align:center;padding:36px 0 18px}
+.d2 .gmark h1{font-size:28px;margin:0;font-weight:600;letter-spacing:-.01em}
+.d2 .gmark p{margin:6px 0 0;color:var(--text-dim)}
+.d2 .c2{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:14px 16px;box-shadow:var(--shadow-sm);margin:10px 0}
+.d2 .c2 h4{margin:0 0 2px;font-size:15px;font-weight:600}
+.d2 .c2 .sub2{margin:0 0 10px;color:var(--text-dim);font-size:13.5px}
+.d2 .c2 .foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.d2 .c2 .foot .sp{flex:1}
+.d2 .c2 .lnk{color:var(--accent);font-size:13px}
+.d2 .c2 .fine{font-size:12.5px;color:var(--text-dim);margin-top:8px}
+.d2 .files2{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.d2 .fpill{font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);border:1px solid var(--line);background:var(--bg-sidebar);border-radius:6px;padding:0 8px;line-height:22px}
+.d2 .quote{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:var(--bg);padding:8px 12px;font-size:13px;color:var(--text);max-height:150px;overflow:hidden;position:relative}
+.d2 .quote .qh{font-size:11.5px;font-weight:600;color:var(--accent);margin-bottom:4px}
+.d2 .quote p{margin:0 0 4px}
+.d2 .quote.cut::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(transparent,var(--bg))}
+.d2 .offer{border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden;background:var(--bg)}
+.d2 .offer .oh{display:flex;align-items:center;gap:10px;padding:8px 10px}
+.d2 .offer .oh .nm{font:13px var(--font-mono,ui-monospace,Consolas,monospace);flex:1;min-width:0;overflow-wrap:anywhere}
+.d2 .offer .oh .ds{color:var(--text-dim);font-size:12.5px}
+.d2 .cb{width:16px;height:16px;border:1.5px solid var(--line-strong);border-radius:4px;flex:none;background:var(--surface);display:grid;place-items:center}
+.d2 .cb.on{background:var(--accent);border-color:var(--accent)}
+.d2 .cb.on::after{content:"";width:8px;height:4px;border-left:2px solid var(--on-accent);border-bottom:2px solid var(--on-accent);transform:rotate(-45deg) translate(1px,-1px)}
+.d2 .offer .diff{border-top:1px solid var(--line);font:12px/1.55 var(--font-mono,ui-monospace,Consolas,monospace);max-height:190px;overflow:hidden}
+.d2 .offer .diff div{padding:0 10px;white-space:pre-wrap;word-break:break-word}
+.d2 .offer .diff .a{background:var(--ok-soft)}.d2 .offer .diff .r{background:var(--bad-soft)}.d2 .offer .diff .h{background:var(--bg-sidebar);color:var(--text-dim)}
+.d2 .offer.off{opacity:.8}
+.d2 .okline{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text);margin:8px 0}
+.d2 .okline i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.d2 .okline .lnk{color:var(--accent);margin-left:auto}
+.d2 .chipU{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:0 9px;line-height:22px;background:var(--surface);color:var(--text-dim)}
+.d2 .chipU i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.d2 .pop{border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-pop);padding:10px 12px;font-size:13px;width:290px;margin-top:8px}
+.d2 .pop .r{display:flex;align-items:center;gap:8px;padding:2px 0}
+.d2 .sw{width:30px;height:18px;border-radius:999px;background:var(--accent);position:relative;flex:none}
+.d2 .sw::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--on-accent)}
+
+/* ---- 0.1.6 additions (proposal drawing, tokens only) ---- */
+.d2 .acts{display:flex;gap:2px;justify-content:flex-end;margin:-16px 0 16px;position:relative}
+.d2 .acts>span{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--text-dim);position:relative}
+.d2 .acts>span.hot{background:var(--hover);color:var(--text)}
+.d2 .acts>span.dis{opacity:.4}
+.d2 .tip{position:absolute;top:32px;right:0;white-space:nowrap;font-style:normal;font-size:12px;background:var(--ink);color:var(--on-ink);border-radius:6px;padding:2px 8px;z-index:3}
+.d2 .scrim{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:5}
+.d2 .sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px;max-height:80%;overflow:hidden}
+.d2 .sheet .c2{border:0;box-shadow:none;padding:0}
+.d2 .ov{z-index:6}
+.d2 .chg{margin:6px 0 2px;padding:0;list-style:none;font-size:13.5px}
+.d2 .chg li{display:flex;gap:10px;padding:3px 0;align-items:baseline}
+.d2 .chg li>b{font-weight:600;min-width:64px;flex:none}
+.d2 .mono{font:12.5px var(--font-mono,ui-monospace,Consolas,monospace)}
+.d2 .undo2{display:flex;gap:10px;align-items:baseline;font-size:12.5px;color:var(--text-dim);margin:4px 0 14px}
+.d2 .undo2 .lnk{color:var(--text);text-decoration:underline;text-underline-offset:2px}
+.d2 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:12.5px;color:var(--text-dim);background:var(--surface)}
+.d2 .chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.d2 .row2{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.d2 .row2.first{border-top:0}
+.d2 .row2 .tx{flex:1;min-width:0}.d2 .row2 .tx b{display:block;font-size:14px;font-weight:600}
+.d2 .row2 .tx span{font-size:13px;color:var(--text-dim)}
+.d2 .sw.off{background:var(--hover);border:1px solid var(--line-strong)}
+.d2 .sw.off::after{right:auto;left:2px;background:var(--text-faint)}
+.d2 .sw.dis{opacity:.45}
+.d2 .radio{width:16px;height:16px;border:1.5px solid var(--line-strong);border-radius:50%;flex:none;margin-top:3px;background:var(--bg)}
+.d2 .radio.on{border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--bg);background:var(--accent)}
+.d2 .opt{display:flex;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:var(--bg)}
+.d2 .opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.d2 .opt.bad.sel{border-color:var(--bad);background:var(--bad-soft)}
+.d2 .opt .tx b{display:block;font-size:14px;font-weight:600}.d2 .opt .tx span{font-size:12.5px;color:var(--text-dim)}
+.d2 .notice{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--surface);padding:8px 12px;font-size:13.5px;max-width:720px;margin:0 auto 8px}
+.d2 .notice .nt{flex:1;min-width:0}.d2 .notice .nt b{display:block;font-size:13.5px}.d2 .notice .nt span{color:var(--text-dim);font-size:13px}
+.d2 .notice .lnk{color:var(--accent);font-size:13px;white-space:nowrap}
+.d2 .dim{position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:4}
+.d2 .modalx{position:absolute;left:200px;top:70px;width:1040px;height:760px;background:var(--bg);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-pop);z-index:6;display:flex;flex-direction:column;overflow:hidden}
+.d2 .modalx .mh{height:57px;flex:none;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--line);font-weight:600;font-size:17px}
+.d2 .modalx .mh .sp{flex:1}.d2 .modalx .mh .x{color:var(--text-dim);font-weight:400}
+.d2 .modalx .mb{flex:1;display:flex;min-height:0}
+.d2 .snav{width:240px;flex:none;border-right:1px solid var(--line);padding:12px 10px;font-size:14px;overflow:hidden}
+.d2 .snav .s{padding:8px 11px;border-radius:8px;color:var(--text)}
+.d2 .snav .s.on{background:var(--hover);font-weight:500}
+.d2 .snav hr{border:0;border-top:1px solid var(--line);margin:10px}
+.d2 .snav .srch{border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--text-faint);margin-bottom:8px;background:var(--bg-sidebar)}
+.d2 .spane{flex:1;min-width:0;padding:24px 24px 0;overflow:hidden}
+.d2 .spane h2{margin:0 0 12px;font-size:19px}
+.d2 .frame.m .pills{display:flex;gap:6px;overflow:hidden;padding:8px 12px;border-bottom:1px solid var(--line);font-size:14px;flex:none}
+.d2 .frame.m .pills span{white-space:nowrap;padding:6px 14px;border-radius:999px;color:var(--text-dim)}
+.d2 .frame.m .pills span.on{background:var(--hover);color:var(--text)}
+.d2 .frame.m .spane{padding:14px 14px 0}
+.d2 .srow{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.d2 .srow:last-child{border-bottom:0}
+.d2 .srow .tx{flex:1;min-width:0}.d2 .srow .tx b{display:block;font-size:14px;font-weight:600}.d2 .srow .tx span{font-size:13px;color:var(--text-dim)}
+.d2 .scard{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden;margin-bottom:14px}
+.d2 .sel2{border:1px solid var(--line-strong);border-radius:8px;padding:3px 12px;font-size:13.5px;background:var(--bg)}
+.d2 .rules h3{margin:16px 0 4px;font-size:15px}
+.d2 .rules .lead{margin:0 0 10px;color:var(--text-dim);font-size:13.5px}
+.d2 .tabs2{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;margin:0 0 12px;background:var(--bg-sidebar);font-size:13px}
+.d2 .tabs2 span{padding:3px 14px;border-radius:999px;color:var(--text-dim)}.d2 .tabs2 span.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
+.d2 .rl{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.d2 .rl .rh{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px;font-weight:600}
+.d2 .rl .rh i{width:8px;height:8px;border-radius:50%;flex:none}
+.d2 .rl.deny .rh i{background:var(--bad)}.d2 .rl.ask .rh i{background:var(--warn)}.d2 .rl.allow .rh i{background:var(--ok)}
+.d2 .rl .rh small{font-weight:400;color:var(--text-dim);margin-left:auto}
+.d2 .rr{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.d2 .rr:last-child{border-bottom:0}
+.d2 .rr .kind{font-size:11.5px;color:var(--text-dim);border:1px solid var(--line);border-radius:6px;padding:0 6px;line-height:18px;flex:none}
+.d2 .rr .pat{flex:1;min-width:0;font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);overflow-wrap:anywhere}
+.d2 .rr .rm{color:var(--text-dim);font-size:12.5px}
+.d2 .rr.empty{color:var(--text-faint)}
+.d2 .addr{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;border:1px dashed var(--line-strong);border-radius:12px;margin:10px 0}
+.d2 .addr .in{flex:1;min-width:150px;border:1px solid var(--line-strong);border-radius:8px;padding:4px 10px;font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);color:var(--text-faint);background:var(--bg)}
+.d2 .try{border:1px solid var(--line);border-radius:12px;background:var(--bg-sidebar);padding:10px 12px;font-size:13px}
+.d2 .try .in{border:1px solid var(--line-strong);border-radius:8px;padding:4px 10px;font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);background:var(--bg);margin:6px 0}
+.d2 .res{display:inline-flex;gap:6px;align-items:center;font-weight:600;font-size:12.5px;border-radius:999px;padding:0 10px;line-height:22px}
+.d2 .res.deny{color:var(--bad);background:var(--bad-soft)}.d2 .res.ask{color:var(--warn);background:var(--warn-soft)}.d2 .res.allow{color:var(--ok);background:var(--ok-soft)}
+.d2 .warnline{font-size:12.5px;color:var(--warn);margin-top:6px}
+.d2 .errline{font-size:12.5px;color:var(--bad);margin-top:6px}
+.d2 .diff .mk{width:14px;flex:none;color:var(--text-faint)}
+.d2 .crop{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.d2 .crop{position:relative}
+.d2 .crop img{display:block;max-width:none;width:auto;height:auto;position:absolute}
+.pr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin:10px 0 26px}
+.pr h4{margin:0 0 6px;font-size:14px;font-weight:600}
+@media (max-width:1000px){.pr{grid-template-columns:1fr}}
+
+
+/* W3-6 additions (tokens only) */
+.d2 .spec .czp.d{width:760px;padding:20px 0}.d2 .spec .czp.d .czc{width:712px}.d2 .spec .czp.m{width:100%;max-width:100%}.d2 .steps{list-style:decimal}.d2 .spec .czp.d.sc{overflow-x:auto}
+.d2 .czp{position:relative;background:var(--bg);border:1px solid var(--line);overflow:hidden;font-size:14px}
+.d2 .czp.d{width:1440px;padding:40px 0 60px}
+.d2 .czp.m{width:390px;padding:16px 16px 40px}
+.d2 .czc{width:712px;margin:0 auto}
+.d2 .czp.m .czc{width:auto}
+.d2 .czc h1{font-size:22px;margin:0 0 2px;font-weight:600}
+.d2 .czc .subh{color:var(--text-dim);font-size:13px;margin:0 0 14px}
+.d2 .czc .tabs{display:flex;gap:6px;margin-bottom:12px}
+.d2 .czc .tabs span{padding:6px 12px;border-radius:8px;color:var(--text-dim)}
+.d2 .czc .tabs span.on{background:var(--bg-sidebar);color:var(--text)}
+.d2 .cz-r{display:grid;grid-template-columns:28px 190px 80px 210px 1fr;gap:10px;align-items:center;padding:12px 4px;border-top:1px solid var(--line)}
+.d2 .cz-r.head{color:var(--text-dim);font-size:13px;font-weight:600}
+.d2 .cz-r .nm b{display:block;font-weight:600}
+.d2 .cz-r .nm small{display:block;color:var(--text-dim);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d2 .cz-r .ty{color:var(--text-dim);font-size:13px}
+.d2 .cz-r .acts2{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.d2 .cz-r .cb{width:16px;height:16px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface)}
+.d2 .tg{width:34px;height:20px;border-radius:999px;background:var(--accent);position:relative;flex:none;display:inline-block}
+.d2 .tg::after{content:"";position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--on-ink)}
+.d2 .st{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
+.d2 .st .l1{display:flex;align-items:center;gap:6px;font-weight:600}
+.d2 .st .l2{color:var(--text-dim);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d2 .st .ok{color:var(--ok)}.d2 .st .warn{color:var(--warn)}.d2 .st .bad{color:var(--bad)}
+.d2 .st .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.d2 .cz-c{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px;margin:10px 0;display:flex;flex-direction:column;gap:10px}
+.d2 .cz-c .top{display:flex;gap:10px;align-items:center}
+.d2 .cz-c .nm b{display:block;font-weight:600}.d2 .cz-c .nm small{color:var(--text-dim);font-size:12.5px}
+.d2 .cz-c .acts2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.d2 .cz-c .btn,.d2 .czp.m .btn{min-height:40px;display:inline-flex;align-items:center}
+.d2 .cz-c .sp{flex:1}
+.d2 .ltr{width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:600;flex:none}
+.d2 .btn.ghost{border-color:transparent;background:transparent;color:var(--text-dim)}
+.d2 .btn.link{border-color:transparent;background:transparent;color:var(--bad)}
+.d2 .pill{font-size:12px;font-weight:600;border-radius:999px;padding:0 8px;line-height:20px;display:inline-block}
+.d2 .pill.warn{color:var(--warn);background:var(--warn-soft)}
+.d2 .pill.bad{color:var(--bad);background:var(--bad-soft)}
+.d2 .pill.ok{color:var(--ok);background:var(--ok-soft)}
+.d2 .czp .ovs{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:5}
+.d2 .czp .ovc{position:absolute;z-index:6;left:50%;top:150px;transform:translateX(-50%);width:460px}
+.d2 .czp.m .ovc{left:0;right:0;bottom:0;top:auto;transform:none;width:auto;background:var(--surface);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px}
+.d2 .czp.m .ovc .c2{border:0;box-shadow:none;padding:0;margin:0}
+.d2 .steps{margin:6px 0 0;padding-left:20px;font-size:13.5px}.d2 .steps li{margin:3px 0}
+.d2 .host{font:13px var(--font-mono,ui-monospace,Consolas,monospace);background:var(--bg-sidebar);border-radius:6px;padding:1px 6px}
+.d2 .lab-warn{font-size:12px;font-weight:600;color:var(--warn);background:var(--warn-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .msgtbl{width:100%;border-collapse:collapse;font-size:13px}
+.d2 .msgtbl td{padding:6px 8px;border-top:1px solid var(--line);vertical-align:top}
+.d2 .msgtbl td:first-child{color:var(--text-dim);width:34%}
+</style></head><body>
+<div class="bar">
+  <strong>W3-6 connector sign-in</strong>
+  <span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></span>
+  <span class="seg" id="size"><button data-v="d" aria-pressed="true">Desktop 1440</button><button data-v="m" aria-pressed="false">Phone 390</button></span>
+</div>
+<div class="page">
+<h1>W3-6: MCP connectors that need a sign-in, today beside proposed</h1>
+<p class="pg-dim">Design session, 2026-11-16. Four screens drawn before Builder wires the UI: <strong>1</strong> the connector card with Sign in, Signed in and Sign out; <strong>2</strong> the browser hand-off; <strong>3</strong> a chat that calls a signed-out or expired connector; <strong>4</strong> sign-in failed or cancelled. The engine (PKCE, loopback redirect on 127.0.0.1, DPAPI store, refresh, revoke on sign-out) is HIGH and waits for the owner's go (board Q3); this page draws only what a person sees.</p>
+<p class="pg-dim"><strong>Not covered, stated plainly:</strong> no contrast ratios measured (UNKNOWN); the connectors, host names and account are invented (<code>example.test</code>); the only "today" picture is the Customize page on an invented profile, because the other three screens do not exist yet; the real browser page the provider shows is theirs, not drawn.</p>
+<div id="out"></div>
+<div class="screen" id="decisions"><h2>Decisions, each with a recommendation</h2><div id="dec"></div></div>
+</div>
+<script>const CH='<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"/></svg>';
+const BUNNY='<svg class="bunny" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="ear" cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)"/><ellipse class="ear" cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)"/><circle class="face" cx="12" cy="15" r="7"/><circle class="eye" cx="9.5" cy="14" r="1"/><circle class="eye" cx="14.5" cy="14" r="1"/><circle class="nose" cx="12" cy="16.6" r=".9"/></svg>';
+const IC='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>';
+
+/* ---- transcript pieces ---- */
+const grp=(open,sum,meta,subs)=>'<div class="grp"><div class="gh '+(open?'open':'')+'">'+CH+'<span class="sum">'+sum+'</span>'+(meta||'')+'</div>'+(open?'<div class="subs">'+subs+'</div>':'')+'</div>';
+const sub=(open,nm,label,detail)=>'<div class="sub '+(open?'open':'')+'">'+CH+'<span class="nm">'+nm+'</span>'+(label||'')+'</div>'+(open?detail:'');
+const FAIL='<span class="lab-fail">Failed</span>';
+const detailRead='<div class="detail"><div class="dh">Read src/app.test.js<span class="sp"></span></div><pre class="err">Error: ENOENT: no such file or directory, open src/app.test.js</pre></div>';
+const detailRun='<div class="detail"><div class="dh">Command · exit code 1 · 2.1s<span class="sp"></span><span class="cp">Copy</span></div><pre class="cmd">npm test</pre><pre class="err">not ok 1 - greet\n  AssertionError: expected "Hello, Ada!" got undefined\n  at src/app.test.js:1:1\n# tests 1   # pass 0   # fail 1</pre></div>';
+function _unused_transcript(){return ''
+ +'<div class="user">Add a bye() next to greet() and a test for both, then run the tests.</div>'
+ +'<div class="note">I will look at the greeter first and see whether a test file already exists.</div>'
+ +grp(true,'Read a file, tried to read another','<span class="lab-fail">1 failed</span>',
+    sub(false,'Read src/app.js')+sub(true,'Read src/app.test.js',FAIL,detailRead))
+ +'<div class="note">There is no test yet. I will write one, then add <code>bye()</code> to the greeter.</div>'
+ +grp(false,'Wrote a file, edited a file','<span class="meta2">+4 −1</span>')
+ +grp(true,'Ran a command','<span class="lab-fail">Failed</span>',sub(true,'Run npm test',FAIL,detailRun))
+ +'<div class="reply"><p>I added <code>bye()</code> and a test, but the test run failed: the test file only has a title and no assertion yet. Want me to write the assertions?</p></div>';}
+function frameD(inner,paneHtml,active){return '<div class="d2"><div class="frame d"><div class="sbar"><div class="brand">'+BUNNY.replace('class="bunny"','class="bunny" style="animation:none"')+'Bunny AI</div><div class="row">New chat</div><div class="row">Incognito</div><div class="row">Artifacts</div><div class="row">Search chats</div><div class="row on">Add a goodbye to the greeter</div></div><div class="main"><div class="top"><b>Add a goodbye to the greeter</b><span class="sp"></span><span class="ib '+(active==='session'?'on':'')+'">☰</span><span class="ib">›_</span><span class="ib '+(active==='changes'?'on':'')+'">±</span><span class="ib">◎</span><span class="ib '+(active==='files'?'on':'')+'">▢</span></div><div class="thread"><div class="col">'+inner+'</div></div><div class="comp"><div class="box">Ask about or change the code in your folder…</div><div class="meta3"><span>bunny-design-project</span><span>main</span><span>Manual</span><span>Medium</span><span>Auto · Chat</span></div></div></div>'+(paneHtml?'<div class="pane">'+paneHtml+'</div>':'')+'</div></div>';}
+function frameM(inner,paneHtml,active){const t='<div class="top"><span class="ib">☰</span><b>Add a goodbye…</b><span class="sp"></span><span class="ib '+(active==='session'?'on':'')+'">☰</span><span class="ib '+(active==='changes'?'on':'')+'">±</span><span class="ib '+(active==='files'?'on':'')+'">▢</span></div>';
+ if(paneHtml)return '<div class="d2"><div class="frame m">'+t+'<div class="pane">'+paneHtml+'</div></div></div>';
+ return '<div class="d2"><div class="frame m">'+t+'<div class="thread"><div class="col">'+inner+'</div></div><div class="comp"><div class="box">Ask about or change the code…</div></div></div></div>';}
+
+
+document.head.insertAdjacentHTML('beforeend','<style>.d2 .ctx{max-width:720px;margin:0 auto 6px;display:flex;gap:8px;flex-wrap:wrap}.d2 .specimen .stopped{margin:0}.d2 .crop.top img{object-position:top;height:280px}</style>');
+const svg=(d)=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I={copy:svg('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>'),edit:svg('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),rewind:svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/>'),branch:svg('<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 8v8M18 10c0 4-6 3-12 6"/>'),folder:svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),git:svg('<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 8v8M18 11c0 4-8 2-12 5"/>')};
+const U=(t)=>`<div class="user">${t}</div>`;
+const acts=(hot,tip,dis)=>`<div class="acts">${['copy','edit','rewind','branch'].map(k=>`<span class="${hot===k?'hot':''} ${dis===k?'dis':''}">${I[k]}${hot===k&&tip?`<em class="tip">${tip}</em>`:''}</span>`).join('')}</div>`;
+const card=(h,sub,body,foot,fine)=>`<div class="c2"><h4>${h}</h4>${sub?`<p class="sub2">${sub}</p>`:''}${body||''}${fine?`<div class="fine">${fine}</div>`:''}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
+const btn=(t,k)=>`<span class="btn ${k||''}">${t}</span>`;
+const li=(k,v)=>`<li><b>${k}</b><span>${v}</span></li>`;
+const m=(t)=>`<span class="mono">${t}</span>`;
+const S=(l,h)=>`<div class="spec"><div class="lbl">${l}</div>${h}</div>`;
+const SP=(inner)=>`<div class="d2"><div class="specimen ${size==='m'?'m':''}">${inner}</div></div>`;
+const overlay=(frame,html,dpos)=>{const o=size==='d'?`<div class="ov" style="position:absolute;${dpos};width:430px">${html}</div>`:`<div class="scrim"></div><div class="sheet">${html}</div>`;const i=frame.lastIndexOf('</div></div>');return frame.slice(0,i)+o+frame.slice(i);};
+const SPIN='<span class="spin"></span>';
+const reply=(t)=>`<div class="reply"><p>${t}</p></div>`;
+
+/* ---------- W3-6: connectors that need a sign-in ---------- */
+const NH='Notes Hub', NHOST='notes.example.test';
+const stt=(k)=>({
+ none:['ok','✓ 2 tools','Nothing to sign in to'],
+ need:['warn','Needs sign-in','Opens '+NHOST+' in your browser'],
+ in:['ok','Signed in','as ada@example.test'],
+ wait:['','Waiting for your browser…','Finish there, then come back'],
+ exp:['warn','Sign-in expired','Sign in again to keep using it'],
+ fail:['bad','Sign-in failed','The page said access was denied'],
+ canc:['','Sign-in cancelled','Nothing was changed']
+}[k]);
+const actionsFor=(k)=>({
+ none:[btn('Test'),'TG',btn('Remove','link')],
+ need:[btn('Sign in','pri'),'TG',btn('Remove','link')],
+ in:[btn('Sign out'),btn('Test','ghost'),'TG'],
+ wait:[btn('Cancel'),'TG'],
+ exp:[btn('Sign in again','pri'),'TG',btn('Remove','link')],
+ fail:[btn('Try again','pri'),'TG',btn('Remove','link')],
+ canc:[btn('Sign in','pri'),'TG',btn('Remove','link')]
+}[k]).map(x=>x==='TG'?'<span class="tg"></span>':x).join('');
+const stHtml=(k)=>{const [c,a,b]=stt(k);const sp=k==='wait'?SPIN:(c?'<span class="dot"></span>':'');return `<div class="st"><span class="l1 ${c}">${sp}${a}</span><span class="l2">${b}</span></div>`;};
+const czRow=(name,host,k,ltr)=>size==='d'
+ ?`<div class="cz-r"><span class="cb"></span><div class="nm"><b>${name}</b><small>${host}</small></div><span class="ty">Remote</span>${stHtml(k)}<div class="acts2">${actionsFor(k)}</div></div>`
+ :`<div class="cz-c"><div class="top"><span class="ltr">${ltr}</span><div class="nm"><b>${name}</b><small>${host}</small></div></div>${stHtml(k)}<div class="acts2">${actionsFor(k)}</div></div>`;
+const czPage=(rows,ov,ovHtml)=>`<div class="d2"><div class="czp ${size}" ${ov?`style="min-height:${size==='d'?460:620}px"`:''}><div class="czc"><h1>Customize</h1><p class="subh">Connectors, skills and plugins the model can use in your chats</p><div class="tabs"><span class="on">Connectors</span><span>Skills</span><span>Plugins</span></div>${size==='d'?'<div class="cz-r head"><span class="cb"></span><span>Connector</span><span>Type</span><span>Status</span><span></span></div>':''}${rows}${ov?`<div class="ovs"></div><div class="ovc">${ovHtml}</div>`:''}</div></div></div>`;
+const rowsMain=()=>czRow('Acme Docs','docs.acme.example','none','A')+czRow(NH,NHOST,'need','N')+czRow('Team Tracker','tracker.example.test','in','T');
+const rowsStates=()=>['wait','exp','fail','canc'].map((k,i)=>czRow(['Notes Hub','Acme Docs','Team Tracker','Notes Hub'][i],['notes.example.test','docs.acme.example','tracker.example.test','notes.example.test'][i],k,['N','A','T','N'][i])).join('');
+
+const handoff=()=>card('Finish signing in in your browser',`We opened <span class="host">${NHOST}</span> in your browser.`,`<ol class="steps"><li>Sign in there and choose Allow.</li><li>Come back here. This closes by itself.</li></ol>`,`${btn('Open the page again')}<span class="sp"></span>${btn('Cancel')}`,`Bunny never sees your password. It waits on this computer only, for up to 5 minutes, and keeps the access it is given in Windows' protected store.`);
+const outConfirm=()=>card(`Sign out of ${NH}?`,'Bunny forgets its access and asks '+NHOST+' to cancel it.',`<ul class="chg">${li('Stays','The connector, its name and address')}${li('Stops','Chats that use it will ask you to sign in again')}</ul>`,`${btn('Sign out','pri')}${btn('Keep signed in')}`,'If '+NHOST+' cannot be reached, Bunny still forgets it here and says so.');
+const failCard=(why,fix)=>card('Sign-in failed',why,'',`${btn('Try again','pri')}${btn('Close')}`,fix);
+
+const detailNeed=(who,verb)=>`<div class="detail"><div class="dh">${who} · needs sign-in<span class="sp"></span></div><pre>${who} needs you to sign in before Bunny can ${verb}.\nNothing was sent.</pre><div style="padding:0 10px 10px"><div class="btns">${btn('Sign in to '+who,'pri')}${btn('Skip it')}</div></div></div>`;
+const chatNeed=(expired)=>U('Find my notes about the Q4 plan.')
+ +grp(true,'Tried to search '+NH,'<span class="lab-warn">Needs sign-in</span>',sub(true,'Search '+NH+' for "Q4 plan"','<span class="lab-warn">Needs sign-in</span>',detailNeed(NH,'search')))
+ +reply(expired?`I could not search ${NH}: your sign-in has expired. Sign in again and I will pick up from there.`:`I could not search ${NH} because you are signed out of it. Sign in and I will search again.`)
+ +'<div class="btns" style="margin-top:6px">'+btn('Sign in to '+NH,'pri')+btn('Try again after signing in')+'</div>';
+const chatAfter=()=>U('Find my notes about the Q4 plan.')+grp(false,'Tried to search '+NH,'<span class="lab-warn">Needs sign-in</span>')+'<div class="note" style="color:var(--text-dim);font-size:13px">You signed in to '+NH+' as ada@example.test. Searching again…</div>'+grp(false,'Searched '+NH,'<span class="meta2">1.2s</span>')+reply('Your Q4 plan note says the launch moves to the second week of December.');
+
+const CHATPROP=()=>frameFor(chatNeed(false));
+const frameFor=(inner)=>{let f=size==='d'?frameD(inner,null,''):frameM(inner,null,'');return f.split('Add a goodbye to the greeter').join('Q4 plan notes').split('Add a goodbye…').join('Q4 plan notes…');};
+const spec=(...a)=>SP(a.map(([l,h])=>S(l,h)).join(''));
+
+const SEC=[
+ {t:'1. The connector card with Sign in',today:'connectors',risk:'MEDIUM (a new column of states in a shared list; the engine is HIGH, owner\'s go is Q3)',files:'src/ui/customize.html:170-190 (row, status, actions), src/ui/automation.html:239 (same list, older page)',
+  prop:()=>czPage(rowsMain()),
+  spec:()=>spec(['Cards that are mid-way or went wrong: waiting, expired, failed, cancelled',czPage(rowsStates())],['Signed out of Notes Hub: a confirm that says what is kept and what stops',czPage(czRow(NH,NHOST,'in','N'),true,outConfirm())]),
+  notes:['<b>Today:</b> the Status column says only "✓ 2 tools", "Error" or "Not checked". "Error" hides the reason (the 401 text is saved but never shown), and on the phone the Type and Status columns are not drawn at all, so a person cannot see a connector\'s state there. Proposed: each connector is a card on the phone with its status line and buttons.',
+   '<b>States:</b> No sign-in needed (as today); Needs sign-in; Signed in as an email or name from the provider; Waiting for your browser; Sign-in expired; Sign-in failed; Sign-in cancelled. One status word in the status colour, one dim line under it with the reason or the account. No new colour: <code>--ok</code>, <code>--warn</code>, <code>--bad</code>.',
+   '<b>Buttons:</b> the one primary button on a card is the next step ("Sign in", "Sign in again", "Try again"). A signed-in card shows "Sign out" as a plain button. Test stays. Remove stays. Turning a signed-out connector On is allowed: it just asks in chat.',
+   '<b>When "Needs sign-in" appears:</b> after Add or Test, when the connector answers 401 with a sign-in address. Until then it looks as today.',
+   '<b>Discover tab:</b> the tag that says "No sign-in" today on each suggestion becomes "Sign-in" on those that need one.',
+   '<b>Phone:</b> 40px buttons; the status line never truncates; only the address does.']},
+ {t:'2. The browser hand-off',today:null,risk:'HIGH (security control: where the sign-in happens and what Bunny keeps)',files:'new dialog in src/ui/customize.html; closes itself when the loopback redirect (127.0.0.1) returns',
+  prop:()=>czPage(czRow(NH,NHOST,'wait','N'),true,handoff()),
+  spec:()=>spec(['It took too long: the dialog turns into the failed card after 5 minutes',failCard('Nothing came back from your browser within 5 minutes.','Nothing was saved. You can try again whenever you like.')],['Cancelled by you: the card shows "Sign-in cancelled" and nothing else changes',czPage(czRow(NH,NHOST,'canc','N'))]),
+  notes:['<b>Today:</b> there is no such screen; a connector that needs a sign-in just shows "Error". Shown only as proposed.',
+   '<b>Words:</b> the title is the plain sentence the plan gave ("Finish signing in in your browser"); the host is named in mono so the person can check it is the right page. No jargon: no "OAuth", "PKCE" or "token".',
+   '<b>Trust line:</b> "Bunny never sees your password." and where the access is kept ("Windows\' protected store" = the DPAPI store) are said once, as fine print.',
+   '<b>Closing:</b> the dialog closes by itself when the browser page finishes; the card shows "Signed in" with the account. A small browser page "You can close this tab and go back to Bunny" is part of the build (Builder).',
+   '<b>Phone:</b> a bottom sheet over the list; the browser opens on the same phone only if Bunny runs there. Desktop is the case that matters (Bunny is a desktop app).']},
+ {t:'3. A chat uses a connector that is signed out or expired',today:null,risk:'MEDIUM (transcript renderer, e2e ids unchanged: .tool-call-result stays on the result text)',files:'src/ui/chat.js:978-1005 renderMessage tool block (the D-2 group line), src/server/app.js tool-call path (new error code, Builder)',
+  prop:()=>CHATPROP(),
+  spec:()=>spec(['Expired instead of signed out: only the reply wording changes',reply(`I could not search ${NH}: your sign-in has expired. Sign in again and I will pick up from there.`)],['After signing in from the chat: Bunny says so and tries again by itself',chatAfter()]),
+  notes:['<b>Today:</b> a connector answering 401 comes back as a raw tool error in the group line; the model sees the text and usually says "I could not reach it". There is no way to sign in from the chat. Not shot: today\'s failure depends on the provider\'s own words.',
+   '<b>Group line:</b> "Tried to search Notes Hub" with an amber "Needs sign-in" label (the same amber as "Blocked" and "Not undoable"), not red: nothing is broken, a person has to act. Opens to a detail that says what happened and "Nothing was sent."',
+   '<b>Buttons:</b> "Sign in to Notes Hub" (primary) starts the same hand-off as the card; "Skip it" tells Bunny to carry on without it. After signing in the chat continues by itself, with one dim line saying who signed in.',
+   '<b>The model is told</b> the connector needs sign-in, not the raw error, so the reply is honest and short. It never sees a token.',
+   '<b>On the card</b> (section 1) the same connector shows "Needs sign-in" or "Sign-in expired", so a person can fix it before the next chat.',
+   '<b>Phone:</b> same structure; the two buttons wrap.']},
+ {t:'4. Sign-in failed or cancelled',today:null,risk:'MEDIUM',files:'status line on the card (section 1) plus this dialog',
+  prop:()=>czPage(czRow(NH,NHOST,'fail','N'),true,failCard('The page said access was denied.','You may have chosen "Deny", or your account may not be allowed to use Bunny with '+NHOST+'.')),
+  spec:()=>spec(['Reasons, in plain words (the first line of the dialog and the card\'s second line)',`<table class="msgtbl"><tr><td>You chose Deny</td><td>The page said access was denied.</td></tr><tr><td>Closed the tab or Cancel</td><td>Sign-in cancelled. (A card state, not a dialog.)</td></tr><tr><td>Nothing back in 5 minutes</td><td>Nothing came back from your browser within 5 minutes.</td></tr><tr><td>Answer did not match</td><td>The answer did not match this sign-in, so it was ignored. Try again.</td></tr><tr><td>Port busy on this computer</td><td>Bunny could not listen for the answer on this computer. Close other programs that use the network and try again.</td></tr><tr><td>Address unreachable</td><td>Bunny could not reach ${NHOST}. Check the address and your connection.</td></tr><tr><td>Refresh failed later</td><td>Sign-in expired. (Card state: Sign in again.)</td></tr></table>`]),
+  notes:['<b>Today:</b> no sign-in, so no failure; shown only as proposed.',
+   '<b>Failed</b> is red (<code>--bad</code>) with the reason; <b>cancelled</b> is plain dim text, not an error, because the person chose it.',
+   '<b>Never shown:</b> codes, URLs with secrets, or the token. The dialog has no Copy button: nothing in it is worth copying.',
+   '<b>Try again</b> restarts the hand-off from the beginning; nothing from the failed attempt is reused.']}
+];
+const DEC=[
+ ['Show "Sign in" only after Test or Add finds out a sign-in is needed?','Yes: the connector answers 401 with a sign-in address, then the card switches to "Needs sign-in". Recommendation: as drawn; no manual "this one needs a sign-in" switch.'],
+ ['Does Sign out also revoke at the provider?','Yes when the provider supports it, and the dialog says so; if it cannot be reached Bunny still forgets it here and says so. HIGH: Security to confirm. Recommendation: as drawn.'],
+ ['What name goes after "Signed in as"?','The account email or name the provider gives; if it gives none, "Signed in". Recommendation: as drawn.'],
+ ['A connector that is signed out but turned On?','Allowed. The chat asks to sign in (section 3). Recommendation: allowed; turning it off is the person\'s choice.'],
+ ['Automation page (older) shows the same list?','Same card states; Builder reuses one renderer if the two lists share code, otherwise sign-in lives on Customize first. Recommendation: Customize first.'],
+ ['Time limit on the browser step?','5 minutes, then the failed dialog. Recommendation: 5 minutes.']
+];
+const imgToday2=()=>'';
+let theme='light',size='d';
+const q=(s)=>document.querySelector(s);
+const fit=()=>document.querySelectorAll('.fitbox').forEach(b=>{const fr=b.querySelector('.czp,.frame');if(!fr)return;const w=fr.offsetWidth;const sc=Math.min(1,(b.clientWidth-20)/w);fr.parentElement.style.transform='scale('+sc+')';fr.parentElement.style.transformOrigin='0 0';b.style.height=(fr.offsetHeight*sc+20)+'px';});
+function render(){
+ const out=q('#out');out.innerHTML='';
+ for(const s of SEC){
+  const sec=document.createElement('section');sec.className='screen';sec.id='s'+SEC.indexOf(s);
+  let h='<h2>'+s.t+'</h2><div class="meta"><span class="tag">Risk: '+s.risk+'</span><span class="tag">'+s.files+'</span></div>';
+  h+='<div class="pair stack">'+(s.today?'<figure class="f"><figcaption>Today, as built ('+theme+', '+(size==='d'?'1440':'390')+')</figcaption><div class="imgbox"><img src="shots/today-'+s.today+'-'+theme+'-'+size+'.png" alt="'+s.t+': today"></div></figure>':'<figure class="f"><figcaption>Today</figcaption><div style="padding:12px" class="pg-dim">No such screen today (see the notes).</div></figure>')
+   +'<figure class="f"><figcaption class="p">Proposed</figcaption><div class="fitbox"><div style="width:max-content">'+s.prop()+'</div></div></figure></div>'
+   +'<h3>Proposed: the other states</h3><figure class="f"><figcaption class="p">States (proposed)</figcaption><div style="padding:14px;overflow-x:auto"><div style="width:max-content">'+s.spec()+'</div></div></figure>';
+  h+='<ul class="notes">'+s.notes.map(n=>'<li>'+n+'</li>').join('')+'</ul>';
+  sec.innerHTML=h;out.append(sec);
+ }
+ q('#dec').innerHTML=DEC.map(d=>'<div class="q"><b>'+d[0]+'</b><br><span class="pg-dim">'+d[1]+'</span></div>').join('');
+ fit();
+}
+for(const [id,set] of [['theme',v=>{theme=v;document.documentElement.dataset.theme=v}],['size',v=>{size=v}]])
+ q('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;q('#'+id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));set(b.dataset.v);render();});
+if(matchMedia('(prefers-color-scheme:dark)').matches){theme='dark';document.documentElement.dataset.theme='dark';q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='dark'))}
+addEventListener('resize',fit);
+render();
+</script></body></html>
