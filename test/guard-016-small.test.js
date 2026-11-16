@@ -75,3 +75,23 @@ test('item 6: bootstrap role writes that file, and a role set only in the enviro
   try { assert.equal(lib.currentRole(bare), 'tech-lead'); } finally { if (saved === undefined) delete process.env.BOOTSTRAP_ROLE; else process.env.BOOTSTRAP_ROLE = saved; }
   void execFileSync;
 });
+
+test('item 6 review: the role file is not writable by a role, by a file tool or a shell write', (t) => {
+  const repo = makeRepo(t, 'builder');
+  const file = lib.roleFile(repo);
+  const v = guard.decide({ tool: 'Write', filePath: file, cwd: repo });
+  assert.equal(v.allow, false);
+  assert.match(v.reason, /role file/);
+  assert.equal(guard.decide({ tool: 'Bash', command: `echo chief-of-staff > "${file}"`, cwd: repo }).allow, false);
+  assert.equal(guard.decide({ tool: 'Bash', command: 'echo qa > .git/bootstrap-role', cwd: repo }).allow, false);
+  assert.equal(guard.decide({ tool: 'Bash', command: 'echo qa > $GITDIR/bootstrap-role', cwd: repo }).allow, false, 'a variable in front of the file name');
+  const chief = makeRepo(t, 'chief-of-staff');
+  assert.equal(guard.decide({ tool: 'Write', filePath: lib.roleFile(chief), cwd: chief }).allow, true, 'the Chief of Staff assigns roles');
+});
+
+test('item 6 review: an assignment whose NAME is a variable or a substitution is refused wherever it stands', (t) => {
+  for (const c of ['export $R=chief-of-staff', 'declare $N=x', 'set $N=x', 'env "$N=x" git status', 'X=1 ${N}=y git status', '$env:$N = "x"']) denied(t, c);
+  allowed(t, 'git commit -m "a=$HOME"');
+  allowed(t, 'echo --flag=$HOME');
+  allowed(t, 'FOO=$HOME git status');
+});

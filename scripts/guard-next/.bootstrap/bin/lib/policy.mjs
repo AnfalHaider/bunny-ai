@@ -58,6 +58,13 @@ export function roleFile(root) {
   return dir ? join(dir, 'bootstrap-role') : null;
 }
 
+/** Is this path the role file of some worktree (<git dir>/bootstrap-role)? It sits outside the working files, so toRepoPath calls it "outside"; it is still not a file a role writes. */
+export function isRoleFile(text, cwd, p = path) {
+  if (typeof text !== 'string' || !text) return false;
+  const abs = p.isAbsolute(text) ? text : p.join(cwd || process.cwd(), text);
+  return /(^|\/)\.git\/(worktrees\/[^/]+\/)?bootstrap-role$/i.test(abs.replace(/\\/g, '/'));
+}
+
 export function currentRole(root) {
   // The private role file wins; the environment is the fallback, and a mismatch is said out loud (item 6, G1-4/G1-5).
   const file = roleFile(root);

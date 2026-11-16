@@ -72,3 +72,13 @@ test('item 5 review: text handed to an interpreter keeps the raw check (it is co
 test('item 2 review: more variables that run programs', (t) => {
   for (const c of ['GIT_PAGER=evil git log', 'PAGER=evil git log', 'GIT_EXTERNAL_DIFF=evil git diff', 'GIT_PROXY_COMMAND=evil git fetch', 'GIT_TEMPLATE_DIR=x git init']) denied(t, c);
 });
+
+test('item 5 review: interpreters are found by their words, including versioned names, quoted command words and git program runners', (t) => {
+  denied(t, `python3 -c "import os; os.system('git push --force origin x')"`);
+  denied(t, `node22 -e "require('child_process').execSync('git reset --hard')"`);
+  denied(t, `"node" -e "require('child_process').execSync('git push --force origin x')"`);
+  denied(t, `git rebase -x "git push --force origin x" HEAD~1`);
+  denied(t, `git submodule foreach "git push --force origin x"`);
+  denied(t, `git bisect run sh -c "git push --force origin x"`);
+  allowed(t, `git commit -m "mentions git push --force and python3"`);
+});

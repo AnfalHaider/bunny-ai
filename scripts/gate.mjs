@@ -6,7 +6,7 @@
 //   node scripts/gate.mjs --quick    skip the end-to-end suite (local iteration only, never for a push)
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -55,9 +55,11 @@ function hooksWired() {
   const t0 = Date.now();
   const problems = [];
   if (existsSync(join(root, '.bootstrap', 'policy.json'))) {
+    // ".githooks" here, or an absolute path to a ".githooks" folder (worktrees share the main checkout's setting)
     const hp = spawnSync('git', ['config', '--get', 'core.hooksPath'], { cwd: root, encoding: 'utf8' }).stdout.trim();
-    if (hp !== '.githooks') problems.push(`core.hooksPath is "${hp || 'unset'}", not ".githooks"`);
-    for (const h of ['pre-commit', 'pre-push']) if (!existsSync(join(root, '.githooks', h))) problems.push(`.githooks/${h} is missing`);
+    const dir = hp ? resolve(root, hp) : null;
+    if (!dir || basename(dir) !== '.githooks') problems.push(`core.hooksPath is "${hp || 'unset'}", not a .githooks folder`);
+    else for (const h of ['pre-commit', 'pre-push']) if (!existsSync(join(dir, h))) problems.push(`${join(dir, h)} is missing`);
   }
   const pass = problems.length === 0;
   results.push({ name: 'git hooks wired', pass, secs: Math.round((Date.now() - t0) / 1000) });

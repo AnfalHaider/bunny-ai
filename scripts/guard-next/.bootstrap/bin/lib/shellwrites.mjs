@@ -11,11 +11,11 @@
 // path or a record folder outright. Behind policy.shell_write_check (default on).
 import path from 'node:path';
 import { baseName, commandStarts, isCmd } from './shellparse.mjs';
-import { isRefusedPath, recordViolation, scopeViolation, toRepoPath } from './policy.mjs';
+import { isRefusedPath, isRoleFile, recordViolation, scopeViolation, toRepoPath } from './policy.mjs';
 import { gitCall, innerParsed } from './shellrules.mjs';
 
 const NULLISH = new Set(['/dev/null', 'nul', 'con', '/dev/stdout', '/dev/stderr', '/dev/stdin', '-']);
-const PROTECTED_MARKERS = ['.bootstrap', '.githooks', '.git/hooks', '.git/config', 'agents.md', 'claude.md', '.claude/settings.json'];
+const PROTECTED_MARKERS = ['bootstrap-role', '.bootstrap', '.githooks', '.git/hooks', '.git/config', 'agents.md', 'claude.md', '.claude/settings.json'];
 const RECORD_MARKERS = ['docs/signoffs', 'docs/releases'];
 
 const PS_PATH = new Set(['path', 'literalpath', 'filepath', 'destination', 'pspath']);
@@ -125,6 +125,7 @@ function judge(word, ctx, cwd) {
     if (kind === 'record' && !(ctx.policy.records?.writers || []).includes(ctx.role)) return `${text} names a sign-off or release record folder. Write there with the bootstrap command, not a shell write.`;
     return null;
   }
+  if (ctx.role !== 'chief-of-staff' && isRoleFile(text, cwd ?? ctx.cwd)) return `${text} is the worktree's role file; the role is assigned by the Chief of Staff (bootstrap role).`;
   const rel = toRepoPath(ctx.root, text, cwd ?? ctx.cwd);
   if (isRefusedPath(rel)) return `${text}: that path could not be read safely (${rel.refused}).`;
   if (rel === null) return null;

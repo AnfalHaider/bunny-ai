@@ -306,7 +306,7 @@ export function innerParsed(words) {
 export function checkShell(parsed, ctx, depth = 0) {
   for (const cmd of parsed.commands) {
     // G1-5: the name of an environment variable is never a variable ($R=BOOTSTRAP_ROLE, env $N=x): the role cannot be hidden that way.
-    if (ctx.role !== 'chief-of-staff' && cmd.words.some((w, k) => /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?=/.test(w.text) || (k > 0 && isCmd(cmd.words[k - 1].text, 'env') && w.dynamic && /^[$`][^=]*=/.test(w.text)))) {
+    if (ctx.role !== 'chief-of-staff' && cmd.words.some((w) => (/^[^=]*[$`][^=]*=/.test(w.text) && !w.text.startsWith('-')) || /^\$\{?env:[^=]*[$`]/i.test(w.text))) {
       return 'the name of an environment variable cannot be a variable: the guard cannot see what it sets.';
     }
     // A5: the role is not set from a command line.

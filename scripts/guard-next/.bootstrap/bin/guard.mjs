@@ -11,7 +11,7 @@
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { currentRole, git, loadPolicy, loadRole, isRefusedPath, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { baseName, commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 import { simpleCommandTexts } from './lib/shellblank.mjs';
@@ -84,7 +84,12 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
     const denyAll = policy.deny_all.map((e) => (typeof e === 'string' ? { pattern: e } : e));
     // A command that hands text to an interpreter or another shell (node -e "...", python -c, bash -c, eval, xargs) keeps the raw-text check:
     // what is inside its quotes is code, not a message.
-    const interpreter = !strict && texts.some((t) => t.split(/\s+/).some((w) => INTERPRETERS.has(baseName(w))));
+    // Read from the tokenizer's words (quotes resolved), not from the blanked text: python3, node22, a quoted command word, and git's own
+    // program runners (rebase --exec, submodule foreach, bisect run) all count.
+    const isInterp = (w) => INTERPRETERS.has(baseName(w.text)) || /^(python|pythonw|node|nodejs|ruby|perl|php)[\d.]*$/i.test(baseName(w.text));
+    const gitRunner = (cmd) => cmd.words.some((w) => isCmd(w.text, 'git')) && cmd.words.some((w) => ['--exec', '-x', 'foreach', 'run'].includes(w.text) || /^--exec=/.test(w.text));
+    const quotedHead = (cmd) => commandStarts(cmd.words).some((k) => cmd.words[k]?.quoted); // a command word in quotes is not a plain program name
+    const interpreter = !strict && parsed.commands.some((cmd) => cmd.words.some(isInterp) || quotedHead(cmd) || gitRunner(cmd));
     const hits = (e) => {
       const re = new RegExp(e.pattern);
       if (strict || e.whole || interpreter) return re.test(command);
@@ -122,6 +127,7 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
   }
 
   if (WRITE_TOOLS.has(tool) && filePath) {
+    if (role !== 'chief-of-staff' && isRoleFile(filePath, cwd)) return { allow: false, reason: 'Blocked: that is the worktree\'s role file; the role is assigned by the Chief of Staff (bootstrap role).' };
     const rel = toRepoPath(root, filePath, cwd);
     if (isRefusedPath(rel)) return { allow: false, reason: `Blocked: that path could not be read safely (${rel.refused}).` };
     if (rel === null) return { allow: true }; // outside the project: not ours to police
