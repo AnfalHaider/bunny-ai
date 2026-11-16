@@ -116,7 +116,7 @@ const ALIASES = new Map(Object.entries({
   sl: 'Set-Location', cd: 'Set-Location', chdir: 'Set-Location', iwr: 'Invoke-WebRequest', curl: 'Invoke-WebRequest', wget: 'Invoke-WebRequest', irm: 'Invoke-RestMethod',
 }));
 // things that run other text, or rename a command so a name no longer means what it says
-const WRAPPER_WORDS = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'wsl', 'zsh', 'invoke-expression', 'invoke-command', 'start-process', 'set-alias', 'new-alias', 'start-job', 'start-threadjob', 'invoke-item', 'import-alias', 'export-alias', 'register-scheduledjob', 'schtasks']);
+const WRAPPER_WORDS = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'wsl', 'zsh', 'invoke-expression', 'invoke-command', 'start-process', 'set-alias', 'new-alias', 'start-job', 'start-threadjob', 'new-psdrive', 'ndr', 'mount', 'invoke-item', 'import-alias', 'export-alias', 'register-scheduledjob', 'schtasks']);
 const INNER_FLAG = /^(\/c|\/k|-c|-command|-commandwithargs|-encodedcommand|-ec|-e)$/i;
 const GIT_GLOBAL_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
 
@@ -138,12 +138,17 @@ export function commandName(raw) {
 function stripGitGlobals(rest) {
   const words = rest.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
   let i = 0;
-  while (i < words.length && words[i].startsWith('-')) {
-    const w = words[i];
-    if (GIT_GLOBAL_WITH_VALUE.has(w)) i += 2;
-    else if (/^-c.+=/.test(w) || /^-C./.test(w) || /^--(git-dir|work-tree|namespace|exec-path)=/.test(w) || w === '-P' || w === '-p' || w === '--no-pager' || w === '--paginate' || w === '--no-optional-locks' || w === '--bare' || w === '--no-replace-objects') i += 1;
-    else break;
-  }
+  // every leading option is a global option (--literal-pathspecs, --no-pager, -P ...); the few that take a separate value take it too
+  while (i < words.length && words[i].startsWith('-')) i += GIT_GLOBAL_WITH_VALUE.has(words[i]) ? 2 : 1;
+  return words.slice(i).join(' ');
+}
+
+const GH_GLOBAL_WITH_VALUE = new Set(['-R', '--repo', '--hostname', '-H']);
+/** gh without its global options: "gh -R x/y release create" -> "gh release create". */
+function stripGhGlobals(rest) {
+  const words = rest.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+  let i = 0;
+  while (i < words.length && words[i].startsWith('-')) i += GH_GLOBAL_WITH_VALUE.has(words[i]) ? 2 : 1;
   return words.slice(i).join(' ');
 }
 
@@ -168,8 +173,17 @@ export function normalisePart(part, depth = 0) {
   const lowName = name.toLowerCase();
   let body = rest;
   if (lowName === 'git') body = stripGitGlobals(rest);
+  else if (lowName === 'gh') body = stripGhGlobals(rest);
   const canonical = `${name}${body ? ` ${body}` : ''}`.trim();
   variants.add(canonical);
+  // quotes inside a word do not change what the shell runs (git "push", git p"ush"): the same line with every quote taken out
+  const plain = text.replace(/["']/g, '');
+  if (plain !== text && depth < 3) {
+    const n2 = normalisePart(plain, depth + 1);
+    for (const v of n2.variants) variants.add(v);
+    inner.push(...n2.inner);
+    if (n2.wrapper) wrapper = true;
+  }
   if (WRAPPER_WORDS.has(lowName)) {
     wrapper = true;
     const words = rest.split(/\s+/).filter(Boolean);
@@ -221,6 +235,8 @@ export function analyseCommand(command, depth = 0) {
       }
     }
   }
+  // a new drive or a provider named Alias, Function or Variable can redefine names too
+  if (/\b(new-psdrive|ndr|mount)\b/i.test(String(command ?? '').replace(/`/g, '').replace(/["']/g, '')) || /-psprovider\s+(alias|function|variable)/i.test(String(command ?? ''))) wrapper = true;
   // the alias:, function: and variable: drives redefine what a name means (Set-Item alias:rm ...), spelled any way
   if (/(alias|function|variable):/i.test(String(command ?? '').replace(/`/g, '').replace(/["']/g, ''))) wrapper = true;
   // a call operator followed by a variable, a group or a script block (& $x, & (Get-Command ...), . $profile): the name is computed

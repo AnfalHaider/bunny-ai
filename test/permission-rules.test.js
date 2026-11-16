@@ -250,3 +250,21 @@ test('review 3: en and em dashes are dashes to PowerShell; the alias: and functi
     assert.ok(v?.effect === 'ask' || v?.effect === 'deny', `${c} -> ${v?.effect}`);
   }
 });
+
+test('W2-7d (Security 6ca4aff): quotes inside a word do not hide a command; global options of git and gh are skipped; new drives are wrappers', () => {
+  const deny = [cmd('deny', 'git push*'), cmd('deny', 'gh release create*'), cmd('deny', 'Remove-Item*')];
+  for (const c of [
+    'git "push"', 'git p"ush"', "git 'push' origin", 'git pu"s"h', '"git" "push"', 'g"it" push', 'git "push" origin main',
+    'git --literal-pathspecs push', 'git --no-literal-pathspecs push', 'git --glob-pathspecs push', 'git --icase-pathspecs push', 'git --bare push', 'git --super-prefix=x/ push', 'git --attr-source=HEAD push',
+    'git --config-env=a=B push', 'git --no-optional-locks -C . --no-pager push', 'git -c core.pager=cat -P push',
+    'gh -R x/y release create v9', 'gh --repo x/y release create v9', 'gh --hostname h release create v9', 'gh "release" create v9', 'gh -R x/y "release" "create" v9',
+    'Remove"-Item" x', 'Re"move-Item" x', "'Remove-Item' x",
+  ]) assert.equal(checkCommand(deny, c)?.effect, 'deny', c);
+  assert.equal(checkCommand(deny, 'git status'), null);
+  assert.equal(checkCommand(deny, 'git --no-pager status'), null);
+  assert.equal(checkCommand(deny, 'gh -R x/y release view v9'), null);
+  for (const c of ['New-PSDrive -Name zz -PSProvider Alias -Root .', 'ndr zz Alias .', 'mount zz', 'New-PSDrive -Name f -PSProvider Function -Root x', 'New-PSDrive -PSProvider Variable -Name v']) {
+    const v = checkCommand([cmd('deny', 'Remove-Item*')], c);
+    assert.ok(v?.effect === 'ask', `${c} -> ${v?.effect}`);
+  }
+});

@@ -183,7 +183,8 @@ test('W2-7b (QA): the permission prompt wraps a long rule line instead of cuttin
     card.innerHTML = '<h4>Allow: Run git push?</h4><pre class="code"><code>git push origin main --set-upstream --follow-tags --verbose --some-very-long-flag-with-no-break-points-at-all-so-it-must-wrap\n\nAsked because of your rule "git push*" (All folders).</code></pre>';
     document.body.append(card);
     const pre = card.querySelector('pre');
-    const out = { white: getComputedStyle(pre).whiteSpace, wrap: getComputedStyle(pre).overflowWrap, fits: pre.scrollWidth <= pre.clientWidth + 1 };
+    const code = pre.querySelector('code');
+    const out = { white: getComputedStyle(code).whiteSpace, wrap: getComputedStyle(code).overflowWrap, fits: code.scrollWidth <= code.clientWidth + 1 && pre.scrollWidth <= pre.clientWidth + 1 };
     card.remove();
     return out;
   });
