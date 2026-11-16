@@ -21,7 +21,7 @@ Docs and tests only. Nothing in `src/` was changed. Nothing here touched `%LOCAL
 | Controls inventoried (live DOM, 5 pages) | 316 (`docs/plans/audit-q2-inventory.md`, one row each) |
 | Verdicts in the inventory | 245 PASS, 23 FAIL, 48 UNKNOWN |
 | Checks driven in this audit | 79 (`controls` 43, `panes` 17, `pages` 19) plus the six fallback and Code-mode reproductions |
-| Defects | 30 raised (5 High, 15 Medium, 10 Low), 1 decision for the owner and 1 open question; 8 are fixed and re-walked on `4405dc0` (see below) |
+| Defects | 31 raised (5 High, 15 Medium, 11 Low), 1 decision for the owner and 1 open question; 8 are fixed and re-walked on `4405dc0` (see below) |
 | New tests | 23 unit (6 pass, 17 todo = defects), 17 browser (7 pass, 10 expected-fail = defects); the gate passes 6/6 with them |
 
 The owner's reports are all real. Four of the six panes the owner mentioned are partly or wholly empty shells, and the model fallback is slower and messier than the screen suggests.
@@ -85,6 +85,7 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 | Q2-29 | Medium | **A command that ends with an error code is shown as done, not Failed** (D-2). `exit 3` is a green "Ran a command" with no red marker; only a tool that itself errors (a file that is not there) gets the red Failed label and the error. | `src/server/workspace.js` `run_command` returns `[exit code N]` as text; `src/server/app.js` logs the step with status `done` (found on the Builder branch at `6ef4ccf`). | `e2e/q2-t3d2-walk.mjs` D2 in all four widths and themes: "no red Failed marker visible"; screenshot `d2-desktop-light-failed.png` shows `Ran a command` and the reply "That command failed." | unit Q2-29 (todo) |
 | Q2-30 | Medium | **Offline with a local provider that is connected but not running (an Ollama that is closed): the message is sent anyway and fails in red.** Bunny prefers a local model when offline; when that one is down it does not fall back to the calm waiting state. | the T-3 offline path in `src/ui/chat.js` (local model preferred offline, `092cc6d`) | `e2e/q2-t3d2-walk.mjs` T4b: queued bubble 0, red failure lines 1, one request sent while offline. | (script; needs the offline switch) |
 | Q2-31 | Medium | **After Stop in a Code chat that ran steps, the Stopped report and the partial reply do not appear until the page is reloaded** (they are saved). Same family as Q2-19, one case left: the steps are saved before the partial, and the wait ends at the first step. | `src/ui/chat.js:2056-2073` `refreshSession`: `assistants()` counts every assistant-role message, tool steps included (found on the Builder branch at `6ef4ccf`). | `e2e/q2-t3d2-walk.mjs` D3, four combinations: "no stopped report on screen within 6 s after Stop (saved kinds: text,tool_call,partial); after a reload it is there". | unit Q2-31 (todo) |
+| Q2-32 | Low | **Two phone top-bar buttons are smaller than the 40 px target** the Builder set: the sidebar toggle is 28 x 32 and Export is 49 x 30 (the icon buttons are fine). | `src/ui/app.css` phone rule for `.topbar` (found at `1e4f1ea`) | `e2e/q2-d2-security-walk.mjs` P1 at 390 px: `sidebar-toggle 28x32`, `export 49x30` | (script) |
 
 ### Permission modes and grants (owner's rule: "when allowed by me, everything should be allowed")
 
@@ -185,6 +186,22 @@ Gate on `9ca3f77`: 7 of 7 (134 e2e). Scripts re-run on fresh invented profiles w
 | D1 walk, S-1 walk | 24 of 24, 33 of 33 | |
 | Permission tests (mine and `permission-modes`, `exit-status`) | 27 tests, 23 pass, 4 `todo` all passing | |
 | Junction write and read escape | still no escape | `test/q2-escape.test.js` passes |
+
+### Builder at `1e4f1ea` (QA, 2026-11-16)
+
+Gate on `1e4f1ea` in a normal worktree: 7 of 7 (134 e2e). (A first gate run in a worktree under the temp folder, with `node_modules` as a junction, failed 7 to 9 different feature specs on a missing form: slowness of that location, not the code; the same code passes in a normal worktree.)
+
+| Item | Result | Evidence |
+|---|---|---|
+| Q2-7 Plan pane removed | **FIXED** | `q2-panes2-walk.mjs` 49 of 49: no pane without a toolbar button, Tasks shows the plan, in four widths and themes, git and plain folders; edited-file counts `+2 −1` |
+| D-2 security: hidden folders | **PASS** | `.git`, `.GIT`, `.git\config`, `src/../.git/config`, `node_modules` are neither listed nor readable. (Dot files such as `.env` ARE shown: "hidden" means `.git` and `node_modules` only, by design) |
+| D-2 security: links | **PASS** | a junction is shown as a link and is not followed, listed, read or through |
+| D-2 security: read cap | **PASS** | 3 MB file cut off at 1 MB and marked truncated; a 1500-file folder lists 500 and says truncated |
+| D-2 security: never-browse | **PASS** | a drive root, Bunny's data folder and its parent are refused (403) on both routes, even after being chosen |
+| Desktop-only folder choosing | UNKNOWN | needs the Electron app; in the plain browser a typed path is chosen, by design |
+| Phone status text above the composer | **PASS** | the calm offline line and the status line ("Cancelled: the waiting message was not sent.") sit above the composer and are visible |
+| Phone top bar 40 px targets | **FAIL (new Q2-32)** | `sidebar-toggle` 28 x 32 and `export` 49 x 30 |
+| D1 walk, S-1 walk | 24 of 24, 33 of 33 | |
 
 ### Open question (UNKNOWN, not counted)
 

@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Builder 1e4f1ea checked; resolved audit files on a branch off release/0.1.5
+
+Gate 7 of 7 (134 e2e) at 1e4f1ea. Q2-7 fixed (49 of 49 pane checks), D-2 security fixes pass (hidden folders, links, read cap, never-browse), phone status text sits above the composer; new Q2-32: two phone top-bar buttons under 40 px (sidebar toggle 28 x 32, Export 49 x 30). Resolved my three conflicting audit files by committing only QA-scope paths on `claude/qa-5e27b2-release` (a merge was refused by the new pre-commit hook: Builder's src files are out of QA scope). **Lessons:** (1) run the gate in a normal worktree, not in a junctioned temp one: slowness there makes e2e fail at random; (2) a hook that judges a merge commit by its diff will refuse any merge of another role's work: cut the QA files onto the other branch instead.
+
 ## 2026-11-16 - Builder fixes re-checked at 9ca3f77
 
 Gate 7 of 7 (134 e2e). Fixed and confirmed: Q2-29 (D2 passes in four combinations), Q2-30 (T4b), Q2-31 (D3), edited-file counts (+2 −1), the live "Trying..." line (stays 32 s to 62 s), junction escape test still clean. D1 24 of 24, S-1 33 of 33. Only Q2-7 remains: `#pane-plan` is still in `index.html` (the "no dead pane remains" check fails 8 of 8); waiting for the removal and for the release sha. **No new lesson.**
