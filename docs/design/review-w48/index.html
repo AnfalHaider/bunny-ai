@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>W4-8 quick-ask bar</title>
+<link rel="stylesheet" href="../bunny-design-system.css">
+<style>
+
+/* page chrome (not part of the proposal) */
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif)}
+.page{max-width:1320px;margin:0 auto;padding:24px 16px 90px}
+.page h1{font-size:24px;margin:0 0 4px}.page h2{font-size:20px;margin:0}.page h3{font-size:16px;margin:22px 0 4px}
+.pg-dim{color:var(--text-dim)}
+.bar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--text);padding:6px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--on-ink)}
+.screen{margin-top:44px;border-top:1px solid var(--line);padding-top:20px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:13px;color:var(--text-dim)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;align-items:start}
+.pair.stack{grid-template-columns:1fr}
+figure.f{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;min-width:0}
+figure.f figcaption{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:14px}
+figure.f figcaption.p{color:var(--accent)}
+.imgbox{padding:10px;text-align:center}.imgbox img{max-width:100%;height:auto;border:1px solid var(--line)}
+.fitbox{padding:10px;overflow:hidden}
+ul.notes{margin:12px 0 0;padding-left:20px}ul.notes li{margin:4px 0}
+.page code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.q{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 14px;margin:8px 0}
+@media (max-width:1000px){.pair{grid-template-columns:1fr}}
+
+
+/* W4-8 drawing: Bunny's quick-ask bar over an invented desktop. Tokens for every Bunny surface; the desktop is invented scenery. */
+.qa{font:15px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif);color:var(--text);text-align:left}
+.qa *{box-sizing:border-box}
+.desk{position:relative;width:1440px;height:810px;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:linear-gradient(135deg,#6a5acd 0%,#e07a8f 38%,#f2b66d 70%,#4aa3a0 100%)}
+:root[data-theme="dark"] .desk{background:linear-gradient(135deg,#1d1a3b 0%,#4b2147 40%,#6b3a2a 72%,#15393a 100%)}
+.desk .win{position:absolute;border-radius:10px;background:#fbfbfa;box-shadow:0 12px 36px rgba(0,0,0,.28);overflow:hidden;font-size:11px;color:#3b3d44}
+:root[data-theme="dark"] .desk .win{background:#222328;color:#b9bcc6}
+.desk .win .tb{height:26px;background:#e8e8e6;display:flex;align-items:center;gap:6px;padding:0 10px;font-weight:600}
+:root[data-theme="dark"] .desk .win .tb{background:#2d2e34}
+.desk .win .tb i{width:9px;height:9px;border-radius:50%;background:#c9c9c6;display:inline-block}
+.desk .ln{height:7px;border-radius:4px;background:#d4d6da;margin:9px 12px}
+:root[data-theme="dark"] .desk .ln{background:#3a3c44}
+.desk .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#d9dadd;margin:10px;border-radius:4px;overflow:hidden}
+.desk .grid span{background:#fff;height:22px}
+:root[data-theme="dark"] .desk .grid{background:#3a3c44}:root[data-theme="dark"] .desk .grid span{background:#26272c}
+.desk .code{font:11px/1.7 ui-monospace,Consolas,monospace;padding:10px 14px;color:#4b5563}
+:root[data-theme="dark"] .desk .code{color:#9aa0ad}
+.desk .ico{position:absolute;left:22px;width:56px;text-align:center;font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.desk .ico b{display:block;width:40px;height:40px;border-radius:10px;margin:0 auto 4px;background:rgba(255,255,255,.85)}
+.desk .task{position:absolute;left:0;right:0;bottom:0;height:44px;background:rgba(245,245,243,.82);backdrop-filter:blur(8px);display:flex;align-items:center;gap:10px;padding:0 14px;border-top:1px solid rgba(0,0,0,.12)}
+:root[data-theme="dark"] .desk .task{background:rgba(24,24,28,.82);border-top-color:rgba(255,255,255,.1)}
+.desk .task .app{width:26px;height:26px;border-radius:7px;background:#b7b9c0}
+.desk .task .sp{flex:1}
+.desk .tray{display:flex;align-items:center;gap:10px;font-size:12px;color:#2b2d33}
+:root[data-theme="dark"] .desk .tray{color:#d3d5dc}
+.desk .tray .b{width:18px;height:18px;color:var(--accent);display:inline-block;position:relative}
+.desk .tip{position:absolute;right:46px;bottom:52px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-pop);padding:6px 10px;font-size:12.5px;white-space:nowrap}
+.desk .tip kbd,.qa kbd{font:11.5px ui-monospace,Consolas,monospace;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--bg-sidebar);color:var(--text)}
+.bar8{position:absolute;left:50%;top:210px;transform:translateX(-50%);width:680px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-pop);padding:10px 12px 8px}
+.bar8 .rowi{display:flex;align-items:center;gap:12px;min-height:44px}
+.bar8 .mk{width:30px;height:30px;color:var(--accent);flex:none}
+.bar8 .inp{flex:1;font-size:18px;color:var(--text);min-width:0;display:flex;align-items:center;gap:8px}
+.bar8 .inp.ph{color:var(--text-faint)}
+.bar8 .caret{width:2px;height:22px;background:var(--accent);display:inline-block;animation:none}
+.bar8 .plus{width:32px;height:32px;border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex:none;font-size:20px;line-height:1}
+.bar8 .go{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;background:var(--line);color:var(--text-faint)}
+.bar8 .go.on{background:var(--ink);color:var(--on-ink)}
+.bar8 .hint{display:flex;gap:14px;font-size:12px;color:var(--text-dim);padding:6px 4px 2px 46px;border-top:1px solid var(--line);margin-top:8px}
+.bar8 .chips{display:flex;gap:8px;padding:8px 4px 0 46px;flex-wrap:wrap}
+.bar8 .chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-strong);border-radius:999px;padding:3px 6px 3px 4px;font-size:13px;background:var(--bg-sidebar)}
+.bar8 .chip .th{width:34px;height:22px;border-radius:5px;background:linear-gradient(135deg,#6a5acd,#e07a8f,#f2b66d)}
+.bar8 .chip .x{color:var(--text-dim);padding:0 4px}
+.bar8 .menu{position:absolute;left:52px;top:68px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);padding:6px;font-size:14px;min-width:230px;z-index:2}
+.bar8 .menu div{padding:7px 10px;border-radius:8px}.bar8 .menu div.on{background:var(--hover)}
+.bar8 .menu small{display:block;color:var(--text-dim);font-size:12px}
+.bar8 .spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--accent);border-top-color:transparent;display:inline-block}
+.bar8.send .inp{color:var(--text-dim)}
+.sline{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:14px 16px}
+.set{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden;width:760px}
+.set.m{width:342px}
+.set h2{font-size:16px;margin:0;padding:0 0 10px;font-weight:600}
+.set .r{display:flex;gap:14px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)}
+.set .r:first-child{border-top:0}
+.set .r .t{flex:1;min-width:0}.set .r .t b{display:block;font-weight:600;font-size:14px}.set .r .t span{display:block;color:var(--text-dim);font-size:13px}
+.set .r .sw{display:flex;align-items:center;gap:8px;font-size:13px}
+.set .tgl{width:34px;height:20px;border-radius:999px;background:var(--line-strong);position:relative;display:inline-block;flex:none}
+.set .tgl::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--surface)}
+.set .tgl.on{background:var(--accent)}.set .tgl.on::after{left:auto;right:2px}
+.set .keys{display:flex;gap:4px;align-items:center}
+.set .keys kbd{font:12.5px ui-monospace,Consolas,monospace;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:6px;padding:1px 7px;background:var(--bg-sidebar)}
+.set .keys.rec kbd{border-color:var(--accent);color:var(--accent)}
+.set .btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:4px 12px;font-size:13px;display:inline-block}
+.set .warn{color:var(--warn);font-size:12.5px;margin-top:4px}
+.set.m .r{flex-wrap:wrap}.set.m .r .t{flex-basis:100%}
+.sblock{margin:10px 0 18px}.sblock .lbl{font-size:12px;font-weight:600;color:var(--accent);margin:0 0 6px}
+</style></head><body>
+<div class="bar">
+  <strong>W4-8 quick-ask bar</strong>
+  <span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></span>
+  <span class="pg-dim">Desktop shortcut: no phone drawing</span>
+</div>
+<div class="page">
+<h1>W4-8: the quick-ask bar, today beside proposed</h1>
+<p class="pg-dim">Design session, 2026-11-16. A global shortcut (default <code>Ctrl+Alt+Space</code>) opens a small floating bar over any app: the bunny mark, a prompt box, Enter to send, Esc to close. Sending opens Bunny's window on a new chat. Drawn: closed hint, empty, typing, the + menu, a screenshot chip, sending, and the Settings row (on, changing, shortcut taken, off). Light and dark over one busy invented desktop.</p>
+<p class="pg-dim"><strong>Not covered, stated plainly:</strong> no contrast ratios measured (UNKNOWN); the desktop, windows and files in the pictures are invented scenery; the only "today" picture is the Desktop app section of Settings (shot at 800 px wide on an invented profile with the section unhidden, since it is shown only inside the desktop app); the real Windows tray and the real shortcut registration are not drawn or tested; the look is Bunny's own tokens and does not copy any other product's bar.</p>
+<div id="out"></div>
+<div class="screen" id="decisions"><h2>Decisions, each with a recommendation</h2><div id="dec"></div></div>
+</div>
+<script>
+const MK="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" role=\"img\" aria-label=\"Bunny AI\">\n  <defs>\n    <mask id=\"bunny-cut\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"48\" height=\"48\">\n      <rect width=\"48\" height=\"48\" fill=\"#fff\"/>\n      <g fill=\"#000\" stroke=\"#000\" stroke-width=\"5\" stroke-linejoin=\"round\">\n        <path d=\"M20 8h8l1.5 16h-11Z\" stroke=\"none\"/>\n        <rect x=\"16.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(-9 19.5 25)\"/>\n        <rect x=\"25.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(9 28.5 25)\"/>\n      </g>\n    </mask>\n  </defs>\n  <path fill=\"currentColor\" mask=\"url(#bunny-cut)\" d=\"M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z\"/>\n  <g fill=\"currentColor\">\n    <rect x=\"16.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(-9 19.5 25)\"/>\n    <rect x=\"25.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(9 28.5 25)\"/>\n  </g>\n</svg>\n";
+const win=(l,t,w,h,body)=>`<div class="win" style="left:${l}px;top:${t}px;width:${w}px;height:${h}px"><div class="tb"><i></i><i></i><i></i>&nbsp;${body[0]}</div>${body[1]}</div>`;
+const lines=(n)=>Array.from({length:n},(_,i)=>`<div class="ln" style="width:${40+((i*37)%50)}%"></div>`).join('');
+const grid=()=>`<div class="grid">${Array.from({length:60},()=>'<span></span>').join('')}</div>`;
+const code=`<div class="code">function total(items) {<br>&nbsp;&nbsp;return items.reduce(add, 0);<br>}<br>const rate = 0.2;<br>export { total, rate };<br>// TODO tidy the invoice<br>console.log(total(cart));</div>`;
+const desk=(inner,tip)=>`<div class="qa"><div class="desk" style="height:700px">
+ ${win(70,60,560,330,['notes.txt - Notepad',lines(14)])}
+ ${win(700,90,640,300,['Budget 2027 - Sheet',grid()])}
+ ${win(180,330,600,300,['cart.js - Editor',code+lines(6)])}
+ ${win(860,360,460,250,['Photos',`<div style="height:210px;background:linear-gradient(120deg,#8bc34a,#26a69a,#5c6bc0)"></div>`])}
+ <div class="ico" style="top:14px"><b></b>Reports</div><div class="ico" style="top:96px"><b></b>Invoices</div><div class="ico" style="top:178px"><b></b>Notes</div>
+ <div class="task"><span class="app"></span><span class="app" style="background:#8f9bd6"></span><span class="app" style="background:#d6a98f"></span><span class="sp"></span><span class="tray"><span class="b">${MK}</span><span>9:41 AM</span></span></div>
+ ${tip?`<div class="tip"><b>Bunny AI</b> &middot; press <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Space</kbd> to ask</div>`:''}
+ ${inner||''}</div></div>`;
+const go='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>';
+const hints=`<div class="hint"><span><kbd>Enter</kbd> to send</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span><span><kbd>Esc</kbd> to close</span></div>`;
+const bar=(o)=>`<div class="bar8 ${o.cls||''}"><div class="rowi"><span class="mk">${MK}</span><span class="plus">+</span><div class="inp ${o.text?'':'ph'}">${o.html||o.text||'What do you need?'}${o.caret?'<i class="caret"></i>':''}</div><span class="go ${o.on?'on':''}">${o.spin?'<i class="spin"></i>':go}</span></div>${o.chips||''}${o.hint===false?'':hints}${o.menu||''}</div>`;
+const STATES={
+ hint:()=>desk('',true),
+ empty:()=>desk(bar({})),
+ typing:()=>desk(bar({text:'Summarise the report on my desktop and list what changed',caret:true,on:true})),
+ menu:()=>desk(bar({text:'What is wrong with this error?',on:true,menu:`<div class="menu"><div class="on">Add a screenshot<small>Takes a picture of this screen when you choose it</small></div><div>Add a file…<small>From your computer</small></div></div>`})),
+ shot:()=>desk(bar({text:'What is wrong with this error?',caret:true,on:true,chips:`<div class="chips"><span class="chip"><span class="th"></span>Screenshot &middot; Screen 1<span class="x">&times;</span></span></div>`})),
+ send:()=>desk(bar({cls:'send',html:'Opening Bunny…',text:'x',on:true,spin:true,hint:false}))
+};
+const SEC=[
+ {t:'1. The quick-ask bar over any app',risk:'MEDIUM to HIGH (a new always-available window, a global shortcut, and screen capture on a click: see the decisions)',files:'electron/main.js (global shortcut, a small frameless always-on-top window, tray), a new src/ui/quickask.html, send via the existing /api chat route',
+  today:`<figure class="f"><figcaption>Today</figcaption><div style="padding:12px" class="pg-dim">There is no quick ask. The only ways in are the Bunny window, the tray icon, and "Start when I sign in" (Settings, Desktop app).</div></figure>`,
+  body:()=>[['Closed (the hint): nothing is on screen; the tray bunny shows the shortcut in its tooltip',STATES.hint()],['Open, empty: Ctrl+Alt+Space puts the bar over whatever app is in front',STATES.empty()],['Typing: the send button turns dark (the same ink as the composer) once there is text',STATES.typing()],['The + button: one choice that takes a picture, only when chosen. Nothing is captured until then',STATES.menu()],['With a screenshot attached: a chip with a thumbnail and a way to remove it',STATES.shot()],['Sending: the bar says "Opening Bunny…" for the moment Bunny\'s window comes forward on a new chat that already holds your message',STATES.send()]],
+  notes:['<b>Look:</b> the same surface, border and shadow tokens as the composer, the purple bunny mark at left, ink send button, plain sentence placeholder "What do you need?". Nothing else: no logo wall, no suggestion cards. The desktop behind is invented.',
+   '<b>Where:</b> centred, a little above the middle of the screen the pointer is on, 680 px wide (shrinks to 90% of a narrow screen), grows downward as text wraps up to about five lines, then scrolls.',
+   '<b>Keys:</b> Enter sends; Shift+Enter makes a new line; Esc closes and forgets the text; clicking another window closes it and keeps the text for 5 minutes, so reopening brings it back.',
+   '<b>Sending:</b> the message goes to a NEW chat in your usual mode and model, Bunny\'s window comes forward on it, and the bar closes. If Bunny\'s window cannot open, the bar stays and says so.',
+   '<b>Screenshot:</b> a click on + then "Add a screenshot": the bar hides for a blink, takes one picture of the screen it was on, and shows it as a chip. It is stored only as that chat\'s attachment, never anywhere else, and nothing is taken without the click.',
+   '<b>Phone:</b> not applicable. This is a desktop shortcut; no phone drawing is made.',
+   '<b>Light and dark:</b> follow the app theme (toggle at the top), over the same busy picture.']},
+ {t:'2. The Settings row for the shortcut',risk:'MEDIUM',files:'src/ui/settings.html:476-497 (the "Desktop app" section, shown only in the desktop app), electron/main.js (register, change, turn off)',
+  today:`<figure class="f"><figcaption>Today, as built (${'THEME'}, DESKTOP_W)</figcaption><div class="imgbox"><img src="shots/today-desktop-THEME-d.png" alt="Today: Desktop app section"></div></figure>`,
+  body:()=>[['On (default): the keys as chips, a Change button, a switch',setBlock('on')],['Changing: "Press the new keys…" and a way to cancel',setBlock('rec')],['The shortcut is taken by another app: Bunny says so and offers to pick another',setBlock('taken')],['Turned off: the keys are dimmed and nothing is registered',setBlock('off')]],
+  notes:['<b>Today:</b> the "Desktop app" section has two rows: "Start when I sign in" and "Keep running in the tray", both off. Proposed adds a third row at the top, "Quick ask".',
+   '<b>The row:</b> name "Quick ask", description "Press Ctrl+Alt+Space anywhere to ask Bunny in a small bar. Needs Bunny to keep running in the tray." Right: the keys, <b>Change</b>, and a switch. Default ON.',
+   '<b>Changing:</b> Change turns the chips accent-coloured and reads "Press the new keys…"; Esc cancels. A combination must include Ctrl, Alt or Win (a bare letter is refused with "Use Ctrl, Alt or Win with another key").',
+   '<b>Taken:</b> if Windows will not give Bunny the keys, the switch stays on, the row shows an amber line "Another app is using Ctrl+Alt+Space. Choose other keys." and Change is the next step. Nothing fails silently.',
+   '<b>Tray dependency:</b> Quick ask only works while Bunny is running. Turning it on also turns on "Keep running in the tray" and says so under the row (see decisions).',
+   '<b>Phone/narrow:</b> the row wraps: text on top, keys and the switch below. The Settings modal is a full-screen sheet on phone, but the desktop app has no phone use; drawn for the narrow window.']}
+];
+function setBlock(k){const keys=k==='rec'?'<span class="keys rec"><kbd>Press the new keys…</kbd></span>':'<span class="keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Space</kbd></span>';
+ const off=k==='off';
+ const row=(m)=>`<div class="set ${m}"><h2 style="padding:12px 16px 0">Desktop app</h2><div class="r" style="border-top:0"><div class="t"><b>Quick ask</b><span>Press Ctrl+Alt+Space anywhere to ask Bunny in a small bar. Needs Bunny to keep running in the tray.</span>${k==='taken'?'<div class="warn">Another app is using Ctrl+Alt+Space. Choose other keys.</div>':''}</div><span class="sw" style="${off?'opacity:.5':''}">${keys}${k==='rec'?'<span class="btn">Cancel</span>':'<span class="btn">Change</span>'}</span><span class="sw"><i class="tgl ${off?'':'on'}"></i>${off?'off':'on'}</span></div><div class="r"><div class="t"><b>Start when I sign in</b><span>Open Bunny AI when you sign in to Windows.</span></div><span class="sw"><i class="tgl"></i>off</span></div><div class="r"><div class="t"><b>Keep running in the tray</b><span>Closing the window keeps Bunny AI in the system tray, so schedules keep running.</span></div><span class="sw"><i class="tgl ${off?'':'on'}"></i>${off?'off':'on'}</span></div></div>`;
+ return `<div class="qa"><div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">${row('')}${row('m')}</div></div>`;}
+const DEC=[
+ ['Default shortcut?','Ctrl+Alt+Space. It is rarely used by other apps; Change handles the rest. Recommendation: as drawn.'],
+ ['Does Quick ask force "Keep running in the tray" on?','Yes, and the row says so, because a shortcut needs a running Bunny. If the person turns the tray off later, Quick ask turns off with a line explaining why. HIGH: it changes what stays running in the background; owner\'s go needed.'],
+ ['Screenshot: how is the owner protected?','Only on a click on + then Add a screenshot; one picture of one screen; shown as a removable chip before sending; never stored outside that chat; no automatic capture. HIGH (screen capture): Security reviews. Recommendation: as drawn.'],
+ ['Does the bar answer inside itself?','No: it only starts a chat and opens Bunny\'s window, which keeps the bar simple and the permission rules in one place. Recommendation: as drawn.'],
+ ['What mode and model does a quick chat use?','The ones you picked last, in Chat mode with no folder, so a quick ask can never edit files. Recommendation: Chat mode always.'],
+ ['Wording of the placeholder','"What do you need?" (Bunny\'s own, not a copy of any other bar). Recommendation: as drawn.']
+];
+let theme='light';
+const q=(s)=>document.querySelector(s);
+const fit=()=>document.querySelectorAll('.fitbox').forEach(b=>{const fr=b.firstElementChild&&b.firstElementChild.querySelector('.desk');if(!fr)return;const w=fr.offsetWidth;const sc=Math.min(1,(b.clientWidth-4)/w);b.firstElementChild.style.transform='scale('+sc+')';b.firstElementChild.style.transformOrigin='0 0';b.style.height=(fr.offsetHeight*sc+4)+'px';});
+function render(){
+ const out=q('#out');out.innerHTML='';
+ SEC.forEach((s,i)=>{
+  const sec=document.createElement('section');sec.className='screen';sec.id='s'+i;
+  const items=s.body();
+  let h='<h2>'+s.t+'</h2><div class="meta"><span class="tag">Risk: '+s.risk+'</span><span class="tag">'+s.files+'</span></div>';
+  h+=s.today.split('THEME').join(theme).split('DESKTOP_W').join('800');
+  h+=items.map(([l,x])=>`<figure class="f"><figcaption class="p">${l}</figcaption>${i===0?`<div class="fitbox"><div style="width:max-content">${x}</div></div>`:`<div style="padding:14px;overflow-x:auto"><div style="width:max-content">${x}</div></div>`}</figure>`).join('');
+  h+='<ul class="notes">'+s.notes.map(n=>'<li>'+n+'</li>').join('')+'</ul>';
+  sec.innerHTML=h;out.append(sec);
+ });
+ q('#dec').innerHTML=DEC.map(d=>'<div class="q"><b>'+d[0]+'</b><br><span class="pg-dim">'+d[1]+'</span></div>').join('');
+ fit();
+}
+q('#theme').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));theme=b.dataset.v;document.documentElement.dataset.theme=theme;render();});
+if(matchMedia('(prefers-color-scheme:dark)').matches){theme='dark';document.documentElement.dataset.theme='dark';q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='dark'))}
+addEventListener('resize',fit);
+render();
+</script></body></html>
