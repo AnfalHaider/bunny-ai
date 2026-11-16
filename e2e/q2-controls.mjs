@@ -110,7 +110,7 @@ await row('N7', 'Session row menu (⋯)', 'rename / archive / delete / pin etc. 
 await row('N8', 'Rename a chat', 'new title shows in sidebar and top bar', async () => {
   const rename = page.locator('button:visible', { hasText: /^Rename/ }).first();
   if (!(await rename.count())) unknown('no Rename item found in the row menu');
-  dialogReply = 'Garden plan renamed'; await rename.click(); await page.waitForTimeout(800);
+  await rename.click(); await page.getByRole('dialog', { name: 'Rename chat' }).waitFor({ timeout: 3000 }); ok(!dialogs.some((d) => d.startsWith('prompt')), 'a native prompt() was used'); await page.getByLabel('Chat name').fill('Garden plan renamed'); await page.getByRole('dialog', { name: 'Rename chat' }).getByRole('button', { name: 'Rename' }).click(); await page.waitForTimeout(800);
   ok((await page.locator('.session-row').allInnerTexts()).some((t) => /renamed/.test(t)), 'title not updated'); eq((await page.locator('#chat-title').innerText()).trim(), 'Garden plan renamed', 'top bar title');
 });
 await row('N9', 'Archive then Archived list then restore', 'archived chat leaves the list, appears under Archived, can be restored', async () => {
@@ -239,7 +239,7 @@ await row('T4', 'Pane layout menu', 'dock left/right/bottom, fill, side by side,
   await page.locator('.toolbar [data-view="tasks"]').click(); await page.waitForTimeout(300);
   const lay = page.locator('#side-pane button[aria-label="Panel layout"]:visible').first(); await lay.click(); await page.waitForTimeout(200);
   const out = [];
-  for (const [label, cls] of [['Dock left', 'pane-left'], ['Dock bottom', 'pane-bottom'], ['Dock right', null], ['Fill the chat area', 'pane-fill']]) {
+  for (const [label, cls] of [['Dock left', 'pane-left'], ['Fill the chat area', 'pane-fill'], ['Dock bottom', 'pane-bottom'], ['Dock right', null]]) {
     await page.locator(`#pane-layout-menu [aria-label="${label}"]`).click(); await page.waitForTimeout(250);
     const has = await page.evaluate((c) => c ? document.querySelector('.app, #app')?.classList.contains(c) : !document.querySelector('.app, #app')?.classList.contains('pane-left') && !document.querySelector('.app, #app')?.classList.contains('pane-bottom'), cls); out.push(`${label}:${has}`);
     if (cls && !has) throw new Error(`${label} did not apply (${cls})`);
@@ -287,7 +287,7 @@ await row('C7', 'Stop while streaming', 'Stop ends the reply, keeps what arrived
 });
 await row('C8', 'Message actions: Copy / Edit / Retry / Save as artifact / Read aloud', 'each acts on its message', async () => {
   await say('hello actions'); const out = [];
-  const last = page.locator('.msg.assistant').last(); await last.hover();
+  const last = page.locator('.msg.assistant').last(); await last.hover({ timeout: 4000 }).catch(async (e) => { throw new Error('hover blocked: ' + String(e).split(String.fromCharCode(10)).filter((l) => /intercepts|not visible|outside|detached/.test(l)).slice(0, 2).join(' | ') + ' | app classes: ' + (await page.evaluate(() => document.querySelector('.app').className)) + ' | messages: ' + (await page.locator('.msg').count())); });
   await last.locator('button', { hasText: 'Copy' }).first().click().catch(() => {}); await page.waitForTimeout(300);
   const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => 'ERR')); out.push('copy→' + clip.slice(0, 25));
   await last.locator('button', { hasText: 'Retry' }).click(); await page.locator('#stop').waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {}); await page.waitForTimeout(500); out.push('retry→' + (await page.locator('.msg.assistant .body').last().innerText()).slice(0, 25));

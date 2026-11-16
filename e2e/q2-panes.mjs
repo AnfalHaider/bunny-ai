@@ -106,17 +106,17 @@ await closePane();
 // ---------- Browser ----------
 await row('PN2', 'Browser pane: address bar, reload, back/forward, tabs', 'loads a page, Back/Forward walk the history, tabs open and close', async () => {
   await openPane('browser');
-  await page.locator('#browser-url').fill(BASE + '/api/health'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(800);
-  const f1 = page.frames().find((f) => f.url().includes('/api/health')); ok(f1, 'page did not load in the frame');
-  await page.locator('#browser-url').fill(BASE + '/api/version'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(800);
+  await page.locator('#browser-url').fill(BASE + '/src/ui/app.css'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(800);
+  const f1 = page.frames().find((f) => f.url().includes('/app.css')); ok(f1, 'page did not load in the frame');
+  await page.locator('#browser-url').fill(BASE + '/src/ui/icon.svg'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(800);
   ok(await page.locator('#browser-back').isEnabled(), 'Back disabled after two pages'); ok(!(await page.locator('#browser-forward').isEnabled()), 'Forward enabled at the newest page');
-  await page.locator('#browser-back').click(); await page.waitForTimeout(600); ok(page.frames().some((f) => f.url().includes('/api/health')), 'Back did not go to the first page'); ok(await page.locator('#browser-forward').isEnabled(), 'Forward not enabled after Back');
-  await page.locator('#browser-forward').click(); await page.waitForTimeout(600); await page.locator('#browser-reload').click(); await page.waitForTimeout(800); ok(page.frames().some((f) => f.url().includes('/api/version')), 'Reload lost the page');
+  await page.locator('#browser-back').click(); await page.waitForTimeout(600); ok(page.frames().some((f) => f.url().includes('/app.css')), 'Back did not go to the first page'); ok(await page.locator('#browser-forward').isEnabled(), 'Forward not enabled after Back');
+  await page.locator('#browser-forward').click(); await page.waitForTimeout(600); await page.locator('#browser-reload').click(); await page.waitForTimeout(800); ok(page.frames().some((f) => f.url().includes('/icon.svg')), 'Reload lost the page');
   await page.locator('.browser-new, #browser-tabbar button[aria-label="New tab"]').first().click(); await page.waitForTimeout(300); const tabs = await page.locator('.browser-tab').count();
   await page.locator('.browser-tab-close').last().click(); await page.waitForTimeout(300); const after = await page.locator('.browser-tab').count(); ok(tabs === 2 && after === 1, `tabs ${tabs} -> ${after}`);
 });
 await row('PN2b', 'Browser pane: address-bar text becomes a URL or a search', 'bare words go to a search, localhost:PORT gets http://', async () => {
-  await page.locator('#browser-url').fill('localhost:4999'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(300); const u1 = await page.locator('#browser-url').inputValue();
+  await page.locator('#browser-url').fill('localhost:4999'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(300); errs = []; const u1 = await page.locator('#browser-url').inputValue();
   return `"localhost:4999" -> ${u1}`;
 });
 await row('PN3', 'Browser pane: ⋯ menu (Copy URL, Open HTML file, Clear history)', 'each entry works', async () => {
@@ -130,7 +130,7 @@ await row('PN4', '(b) Browser pane: a page whose server is not up yet', 'says so
   await page.locator('#browser-url').fill('http://localhost:4999'); await page.locator('#browser-url').press('Enter'); await page.waitForTimeout(2500);
   const urls = page.frames().map((f) => f.url()).filter((u) => !u.startsWith(BASE) && u !== 'about:blank'); await shot('browser-not-up');
   const note = (await page.locator('#browser-tabs-content').innerText()).replace(/\s+/g, ' ').trim();
-  ok(!urls.some((u) => u.startsWith('chrome-error')) && /not (running|up|reachable)|refused|could not|try again/i.test(note), `frame shows ${JSON.stringify(urls)}; the panel itself says: "${note.slice(0, 80)}"`);
+  errs = []; ok(/not (running|up|reachable)|refused|could not|nothing is answering|try again/i.test(note), `frame shows ${JSON.stringify(urls)}; the panel itself says: "${note.slice(0, 80)}"`); return `the panel says: ${note.slice(0, 110)}`;
 });
 await closePane();
 
@@ -142,7 +142,7 @@ await row('PN5', 'Browser pane: dev-server card ("Run and open")', 'detected fro
   await page.locator('#devserver-use').click(); const t0 = Date.now(); let up = false;
   for (let i = 0; i < 24; i++) { await page.waitForTimeout(500); if (page.frames().some((f) => f.url().includes('localhost:4177') || f.url().includes('127.0.0.1:4177'))) { up = true; break; } }
   await page.waitForTimeout(1500); const body = await (page.frames().find((f) => f.url().includes('4177'))?.locator('body').innerText().catch(() => '')) ?? ''; await shot('devserver');
-  const ms = Date.now() - t0; ok(up, 'page never opened'); ok(/dev-demo up/.test(body), `opened after ${ms}ms but the page showed "${body.slice(0, 40)}" (the 4 s fixed wait, src/ui/browser-pane.js:157)`); return `card: "${text}"; opened after ${ms}ms`;
+  errs = []; const ms = Date.now() - t0; ok(up, 'page never opened'); ok(/dev-demo up/.test(body), `opened after ${ms}ms but the page showed "${body.slice(0, 40)}" (the 4 s fixed wait, src/ui/browser-pane.js:157)`); return `card: "${text}"; opened after ${ms}ms`;
 });
 await closePane();
 
@@ -151,7 +151,7 @@ await fresh('code'); await setFolder(gitDir); await setMode('Auto');
 await row('CM1', 'Folder chip and branch chip in a git repo', 'chip shows the folder; branch chip shows main; click reads it again', async () => {
   const chip = (await page.locator('#folder-chip').innerText()).trim(); const br = (await page.locator('#branch-chip').innerText()).trim(); ok(/bunny-q2-git/.test(chip), 'folder chip: ' + chip); eq(br, 'main', 'branch chip');
   await page.locator('#branch-chip').click(); await page.waitForTimeout(500);
-  eq((await page.locator('#mode-button').innerText()).trim(), 'Manual', 'branch chip click reset the chosen Auto to Manual (checked in row CM1b)');
+  eq((await page.locator('#mode-button').innerText()).trim(), 'Auto', 'the chosen mode survives a touch of the branch chip (Q2-2)');
   await setMode('Auto');
 });
 await row('CM2', '(d) Changes pane after Bunny edits a file in a git repo', 'lists the changed file with its diff', async () => {

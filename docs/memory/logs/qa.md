@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Builder fixes re-walked at 4405dc0; D1 walked
+
+Gate 7 of 7 (111 e2e). Verified fixed: Q2-1, 2, 3, 8, 9, 17, 19, 23 (table in `docs/plans/audit-q2.md`). New: Q2-27 (a false "restarted" banner when the in-app browser opens Bunny's own API) and Q2-28 (D1: on a phone each Settings pill is as wide as the strip, so one section is visible at a time; `.nav-row { width: 100% }` at `src/ui/app.css:259`). D1 walk `e2e/q2-d1-walk.mjs`: 22 of 24 (the two failures are Q2-28). Add-a-provider button, custom form before Popular providers, full-width phone Automation buttons and the purple bunny (accent token `#6a4fd8` / `#b3a1ff`, grumpy the same) all pass. D1 not signed: waiting for its sha. **Lesson:** a check I wrote to match what I had seen (one pill in view) passed a layout that was wrong; assert what a person needs to see (several pills at once), not what the screen shows.
+
 ## 2026-11-16 - S-1 signed (PASS at 09b35e4) and G-1 checked at 560e636
 
 - **S-1:** `e2e/q2-s1-walk.mjs` 33 of 33 on an invented profile with the guard ON: 17 guard checks, 16 real-page checks, 4 key-based providers, a custom gateway, built-in Ollama, OAuth sign-in starts, speech audio (wav, 7.2 s), sandboxed artifact, in-app browser, popout, export, terminal. Sign-off `docs/signoffs/s-1/qa.md`. Finding Q2-23: a tab left open across a restart fails silently. Not run: Electron, a live Google return with a known state.

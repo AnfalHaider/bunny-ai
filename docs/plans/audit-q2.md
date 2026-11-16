@@ -21,7 +21,7 @@ Docs and tests only. Nothing in `src/` was changed. Nothing here touched `%LOCAL
 | Controls inventoried (live DOM, 5 pages) | 316 (`docs/plans/audit-q2-inventory.md`, one row each) |
 | Verdicts in the inventory | 245 PASS, 23 FAIL, 48 UNKNOWN |
 | Checks driven in this audit | 79 (`controls` 43, `panes` 17, `pages` 19) plus the six fallback and Code-mode reproductions |
-| Defects | 25 (5 High, 11 Medium, 9 Low), 1 decision for the owner and 1 open question |
+| Defects | 27 raised (5 High, 12 Medium, 10 Low), 1 decision for the owner and 1 open question; 8 are fixed and re-walked on `4405dc0` (see below) |
 | New tests | 23 unit (6 pass, 17 todo = defects), 17 browser (7 pass, 10 expected-fail = defects); the gate passes 6/6 with them |
 
 The owner's reports are all real. Four of the six panes the owner mentioned are partly or wholly empty shells, and the model fallback is slower and messier than the screen suggests.
@@ -80,6 +80,8 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 | Q2-23 | Medium | **S-1 (Builder branch, `09b35e4`): a browser tab left open across a restart of Bunny fails silently.** The tab holds the old launch token; the next send clears the box and shows nothing: no message, no error, no "out of date" notice, until the page is reloaded. The server's words ("This window is out of date. Close it and open Bunny AI again (or reload the page).") never reach the screen. Does not affect the desktop app (the window is recreated with each launch); affects `npm start` and the plain-browser preview. | the UI has no handler for the 403 `request.noToken` answer (`src/ui/token.js`, `src/ui/api.js` `sendJSON`/`getJSON`); found on the Builder branch, not in this branch's tree | `e2e/q2-s1-walk.mjs` restart probe: after the restart `#error`, `#status` and the transcript are all empty; screenshot `%TEMP%\qa-q2\s1\stale-window.png`. | unit Q2-23 (todo) |
 | Q2-24 | Medium | **Computer use stays a question after it is allowed.** With the "Control this computer" grant on and the mode set to Auto (or Accept edits), every click, key press, typing and scroll still raises a permission card. The owner's rule ("when allowed by me, everything should be allowed") says it should not. | `src/server/agentTools.js:20` gives `computer_click`, `computer_type`, `computer_key` and `computer_scroll` the risk `build`; `src/server/app.js:1510` (`needsOk`) asks for `build` in every mode. | `test/q2-permissions.test.js`: Auto, grant on, click: one card. (Only ever answered Deny: nothing drove this machine.) | unit Q2-24, Q2-24b (todo) |
 | Q2-25 | Low | In Manual mode every Allow covers one call only; there is no "allow for this chat" or "allow this kind of step" on the card, so a ten-file job is ten cards. (Switching to Accept edits or Auto is the way out, but the card does not say so.) | `src/ui/chat.js:1017-1030` (the card has only Allow and Deny); `src/server/app.js:1636-1644`. | `test/q2-permissions.test.js` Manual rows: one card per call. | (design; no test) |
+| Q2-27 | Low | **A false "Bunny AI restarted, so this window is out of date" banner** appears when the in-app browser is pointed at one of Bunny's own `/api/...` addresses. The new reachability probe sends the page's request with `mode: 'no-cors'`, the browser drops the token header, the server answers 403 `request.noToken`, the token refresh finds the same token, and the banner is shown anyway. Rare (only Bunny's own API in its own browser pane), but the banner has no dismiss and tells the person to reload for nothing. | `src/ui/browser-pane.js` `reachable()` (found on the Builder branch at `4405dc0`) with `src/ui/token.js` `window.fetch` (`say()` after a refresh that changed nothing) | probe: browser pane to `http://127.0.0.1:PORT/api/settings`: two 403s without a token, then `#bunny-restarted` is present and covers the toolbar (`e2e/q2-s1-walk.mjs` B8). | (found on the Builder branch; no test here yet) |
+| Q2-28 | Medium | **D1 fix 2 (phone Settings pill row) shows one pill at a time.** On a 390 px phone each section pill is as wide as the whole strip (364 px), so only the selected section ("Appearance") is visible and the other 14 sections can only be found by swiping sideways blind. Design's own built screenshot (`docs/design/review-0.1.4/built/settings-light-m.png`) shows the same. | `.nav-row { width: 100% }` at `src/ui/app.css:259` is not overridden by the phone rule `.settings-nav-list .nav-row { flex: none; … }` (D1, `2cfeec5`). Needs `width: auto`. | `e2e/q2-d1-walk.mjs` S-phone-light and S-phone-dark: 15 pills at `Profile -723..-359, Usage -355..9, Appearance 13..377, My Dear Bunny 381..745 …`; 1 fully visible. | `e2e/q2-d1-walk.mjs` (script, not in the gate) |
 
 ### Permission modes and grants (owner's rule: "when allowed by me, everything should be allowed")
 
@@ -96,6 +98,24 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 Grants: Code mode (the card, or the Chat/Code toggle with a folder) is remembered on the chat; Computer use and Custom tools are saved in Settings, so they are asked once. Saying no is remembered for the reply ("do not ask again"). The Capabilities switches in Settings do the same without a card.
 
 - **Q2-26 (decision for the owner, not counted as a defect):** the code deliberately asks for "build" actions in **every** mode, Auto included: building a tool, a schedule that may change things, and adding a local connector (a program run on this computer). Under the owner's rule these would stop asking once the person has allowed it. The risk is that a script or a program is then created and run without being read. Needs the owner's word before the Builder touches it (HIGH under AGENTS.md: permissions).
+
+### Re-walk of the Builder's fixes at `4405dc0` (QA, 2026-11-16, invented profile, guard on)
+
+Gate on `4405dc0`: 7 of 7 (111 e2e). Scripts re-run against it with the launch token (`e2e/q2-token-preload.mjs`): `q2-controls` (43 checks), `q2-panes` (17), `q2-pages` (19), `q2-s1-walk` (33), `q2-code-mode`, `test/q2-permissions.test.js`.
+
+| Defect | Result at `4405dc0` | Evidence |
+|---|---|---|
+| Q2-1 Plan mode writes | **FIXED** | Plan: write and command refused, no file, no card (CM7 PASS; both Plan rows of `q2-permissions` now pass) |
+| Q2-2 mode reverts | **FIXED** | Auto stays Auto after the branch chip (CM1 PASS with the corrected expectation) |
+| Q2-3 `PATCH /sessions/null` | **FIXED** | CM6 to CM8 and the Code-mode run: no 404, no page error |
+| Q2-8 trailing `&` | **FIXED** | the step fails with "run_command waits for the command to finish ... Use start_process ..." |
+| Q2-9 unreachable page | **FIXED** (the panel says so; the browser's own page is still in the frame behind the note) | PN4: "Could not reach http://localhost:4999. Nothing is answering there ..."; Run and open opens after 2 to 3.5 s |
+| Q2-17 `window.prompt` | **FIXED** | Rename opens an in-app dialog (N8, no native prompt) |
+| Q2-19 Stop in a chat with replies | **FIXED** | C7: the partial stays on screen and is saved |
+| Q2-23 stale token | **FIXED** | restart probe: the send after a restart goes through, no banner |
+| Q2-4, 5, 6, 7, 10 to 16, 18, 20 to 22, 24, 25 | still open (Builder: next) | controls, panes and permission scripts |
+
+New on the Builder branch: **Q2-27** (false restart banner) and **Q2-28** (D1 phone pills). The service-worker change (other sites left alone) was exercised by PN2, PN4, PN5 and B7; no regression found.
 
 ### Open question (UNKNOWN, not counted)
 

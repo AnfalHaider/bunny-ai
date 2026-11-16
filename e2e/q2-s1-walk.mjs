@@ -191,7 +191,7 @@ await row('B7', 'in-app browser: another local server loads; Bunny\'s own API in
   const g = page.frames().find((x) => x.url().includes('/api/settings')); const txt = g ? await g.locator('body').innerText().catch(() => '') : ''; ok(/403|out of date|did not come/i.test(txt), 'the API answered inside the browser frame: ' + txt.slice(0, 80)); return 'frame shows: ' + txt.slice(0, 70);
 });
 await row('B8', 'terminal pane works through the guard', async () => {
-  clean(); await page.locator('.toolbar [data-view="terminal"]').click(); await page.waitForTimeout(800); await page.locator('#terminal-input').fill('echo guard-ok'); await page.locator('#terminal-input').press('Enter');
+  clean(); await page.locator('.toolbar [data-view="terminal"]').click({ timeout: 4000 }).catch(async (e) => { throw new Error('toolbar click blocked: ' + String(e).split(String.fromCharCode(10)).filter((l) => /intercept|visible|enabled|stable/.test(l)).slice(0, 3).join(' | ')); }); await page.waitForTimeout(800); await page.locator('#terminal-input').fill('echo guard-ok'); await page.locator('#terminal-input').press('Enter');
   let out = ''; for (let i = 0; i < 12; i++) { await page.waitForTimeout(500); out = await page.locator('#terminal-output').innerText(); if (out.includes('guard-ok')) break; } ok(out.includes('guard-ok'), 'no output'); ok(!bad.length, bad.join(' ; '));
 });
 await row('B9', 'connectors: add a remote server (bad address refused in words), schedules, skills, memory work from the page', async () => {
