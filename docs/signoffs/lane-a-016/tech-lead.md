@@ -1,9 +1,9 @@
 ---
 piece: lane-a-016
 role: tech-lead
-sha: 9fb372f
+sha: 19e1455
 verdict: PASS
 date: 2026-11-16
 ---
 
-Re-review of my two required fixes. glob.js no longer builds regexes: two-pointer match per segment and a segment DP for the double star; my 11-star pattern over a 100-character path returns in 4 ms (was over 25 s). Regex search runs in a vm context with a 1 s limit per file; my (a+)+ probe now stops after 1.2 s with That pattern is too slow, and a literal search is untouched. Edits that would grow a file past 20 MB are refused before the text is built. Full unit suite on a scratch checkout of 9fb372f: 551 pass, 0 fail, 8 todo (QA markers) in two runs; one earlier run showed 2 failures I could not identify and did not reproduce in three later runs. e2e not run by me. Not blocking: the 1 s limit is per file, so a pattern that takes just under a second on every file could still hold the server for a long time; add one total deadline of about 5 s per search.
+Delta review of 9fb372f..19e1455. LA-4: regex time is summed per search with a clock around each file's scan; the next file throws 'Search stopped after 5 s; narrow the folder or the pattern.' once 5 s is spent, and each file's limit is the smaller of 1 s and what is left (floor 50 ms), so the total overshoots by under 50 ms. The error travels the same way as the existing too-slow error, and the literal path is unchanged. setImmediate between files only for regex searches lets the loop tick, though one file's scan can still hold it for up to 1 s. Time spent reading files is not counted (not a regex risk). Tests: the injected-clock budget test and the loop-ticks test pass. Unit suite at 19e1455: 553 pass, 0 fail. The W4-1b fake-upstream pacing change is the same as 611dee7's: only inside fakeStream, reachable with fake=true, so real providers are untouched. Minor: clock defaults to Date.now, a monotonic clock would be cleaner; the per-file yield adds some wall time on huge folders (the many-files test took 2.7 s here). e2e not run by me.
