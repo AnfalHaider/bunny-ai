@@ -9,7 +9,7 @@ export async function getJSON(path) {
 
 // Writes that only Bunny's own window may make: a copy of src/server/windowOnly.js (the browser cannot import it; test/window-only.test.js keeps them equal).
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut'];
 
 /** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode'];
@@ -24,6 +24,8 @@ export const WINDOW_ONLY_ROUTES = [
   [WRITES, `^/api/hooks(/${UUID})?$`],                      // hooks run commands
   [WRITES, `^/api/skills(/${UUID})?$`],                     // skills are instructions the model follows
   [['POST'], '^/api/plugins/install$'],
+  [['POST'], '^/api/plugins$'],                            // a plugin from the catalog or a file (W4-10)
+  [['DELETE'], `^/api/plugins/${UUID}$`],                  // uninstall a plugin (W4-10)
   [['DELETE'], '^/api/tools/[a-z][a-z0-9_]{1,39}$'],        // custom tools
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
   [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)

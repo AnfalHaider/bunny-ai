@@ -114,3 +114,10 @@ test('the Customize page shows an uninstall failure and uses the server routes',
   assert.match(page, /'\/api\/plugins', 'POST'/);
   assert.doesNotMatch(page, /plugins: \[\.\.\.data\.plugins/, 'the page no longer rewrites the plugin list from its own copy');
 });
+
+test('installing and uninstalling a plugin are window-only, like connectors and skills', async () => {
+  const { isWindowOnlyRoute } = await import('../src/server/windowOnly.js');
+  const id = '11111111-2222-4333-8444-555555555555';
+  assert.equal(isWindowOnlyRoute('POST', '/api/plugins', { name: 'x' }), true);
+  assert.equal(isWindowOnlyRoute('DELETE', `/api/plugins/${id}`), true);
+});
