@@ -1,9 +1,9 @@
 ---
 piece: w4-1c
 role: librarian
-sha: 643c7da
+sha: 0bdb7f3
 verdict: PASS
 date: 2026-11-16
 ---
 
-Librarian re-stamp of w4-1c at the integration tip 643c7da, after the PASS at 160ca5b. No UI or help text is in this piece. The Settings rows that changed on the tip belong to W6-2, checked under w6-2. Commit message has no Claude credit; the only match is a branch name in a merge message. Lessons L001 to L008 checked; none is newly due.
+Librarian re-stamp of w4-1c at 0bdb7f3. No change to src/ui, docs, README or settings.html since 643c7da, so the help text is unchanged. No UI text in this piece. No Claude credit in the message. Lessons L001 to L008 checked; none is newly due.
