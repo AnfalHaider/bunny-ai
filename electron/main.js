@@ -2,13 +2,15 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, globalShortcut, screen, desktopCapturer } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { controlFrame } from './browserAgent.js';
 import { createUpdater } from './updater.js';
+import { createQuickAsk } from './quick-ask.js';
+import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -26,7 +28,7 @@ const dataDir = process.env.BUNNY_DATA_DIR
 
 // ---- desktop preferences (only the shell reads these) ----
 const prefsFile = join(app.getPath('userData'), 'desktop-prefs.json');
-let prefs = { launchAtLogin: false, closeToTray: false };
+let prefs = { launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: DEFAULT_SHORTCUT };
 try { prefs = { ...prefs, ...JSON.parse(readFileSync(prefsFile, 'utf8')) }; } catch { /* first run */ }
 function savePrefs(patch) {
   prefs = { ...prefs, ...patch };
@@ -128,8 +130,47 @@ ipcMain.handle('prefs:set', (_event, patch) => {
   const clean = {};
   if (typeof patch?.launchAtLogin === 'boolean') clean.launchAtLogin = patch.launchAtLogin;
   if (typeof patch?.closeToTray === 'boolean') clean.closeToTray = patch.closeToTray;
-  return savePrefs(clean);
+  if (typeof patch?.quickAskEnabled === 'boolean') clean.quickAskEnabled = patch.quickAskEnabled;
+  if (typeof patch?.quickAskShortcut === 'string') clean.quickAskShortcut = patch.quickAskShortcut;
+  // Quick ask (W4-8) keeps Bunny running in the tray; the two preferences move together.
+  const ruled = applyTrayRule(prefs, clean);
+  const saved = savePrefs(ruled.prefs);
+  const quick = applyQuickAsk(patch);
+  return { ...saved, quickAskNote: ruled.note, quickAskError: quick.error ?? null };
 });
+
+// ---- Quick ask (W4-8): see quick-ask.js ----
+let quickAsk = null;
+let pendingQuick = null;
+// Make the global shortcut match the saved preferences. A shortcut that cannot be used is refused with a plain message.
+function applyQuickAsk(patch = {}) {
+  if (!quickAsk) return {};
+  if (!prefs.quickAskEnabled) { quickAsk.disable(); return {}; }
+  const checked = validateAccelerator(prefs.quickAskShortcut);
+  const result = quickAsk.enable(checked.ok ? checked.accelerator : '');
+  if (result.ok) {
+    if (prefs.quickAskShortcut !== result.accelerator) savePrefs({ quickAskShortcut: result.accelerator });
+    return {};
+  }
+  // Refused (invalid or taken): keep the last good shortcut if there is one; otherwise Quick ask stays off.
+  if (!quickAsk.isEnabled()) savePrefs({ quickAskEnabled: false });
+  else if (typeof patch?.quickAskShortcut === 'string') savePrefs({ quickAskShortcut: quickAsk.accelerator() });
+  return { error: result.message };
+}
+// The bar sends a new chat: Bunny's window comes forward and starts it (Chat mode, no folder). Only plain data crosses.
+ipcMain.handle('quickask:take', (event) => {
+  if (!isOwn(event.senderFrame?.url ?? '')) return null;
+  const request = pendingQuick;
+  pendingQuick = null;
+  return request;
+});
+function startQuickChat(request) {
+  pendingQuick = request;
+  const existing = win && !win.isDestroyed() && !win.webContents.isLoading();
+  showWindow();
+  if (existing) win.webContents.send('quickask:new-chat'); // a window that is still loading takes the request when its page starts
+  return true;
+}
 ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
 // The native "choose a folder" dialog, for the folder a chat works in.
 ipcMain.handle('dialog:pickFolder', async (event) => {
@@ -181,6 +222,7 @@ app.on('before-quit', (event) => {
     app.quit();
   });
 });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); });
 app.on('window-all-closed', () => {
   if (!prefs.closeToTray) app.quit();
 });
@@ -211,7 +253,9 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
+  quickAsk = createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit: startQuickChat });
   createWindow();
+  applyQuickAsk();
   // Only the installed app updates itself (or a test pointing at its own feed).
   if (app.isPackaged || process.env.BUNNY_UPDATE_FEED) {
     updater = createUpdater({

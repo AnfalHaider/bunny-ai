@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
     get: () => webFrame.getZoomFactor(),
     set: (factor) => webFrame.setZoomFactor(Math.min(3, Math.max(0.5, Number(factor) || 1))),
   },
+  // Quick ask (W4-8): the bar asks Bunny's window to start a new chat; the window then takes the message.
+  quickAsk: {
+    take: () => ipcRenderer.invoke('quickask:take'),
+    onNewChat: (fn) => { const h = () => fn(); ipcRenderer.on('quickask:new-chat', h); return () => ipcRenderer.removeListener('quickask:new-chat', h); },
+  },
   // Updates from GitHub Releases: the status, a check now, and Restart to update.
   updates: {
     get: () => ipcRenderer.invoke('update:get'),

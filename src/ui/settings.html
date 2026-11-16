@@ -499,6 +499,17 @@
     <div class="group">
       <div class="row">
         <div class="meta-col">
+          <div class="name">Quick ask</div>
+          <div class="desc">Press <span id="quick-keys">Ctrl+Alt+Space</span> anywhere to ask Bunny in a small bar. Needs Bunny to keep running in the tray.</div>
+          <div class="desc" id="quick-note" role="status" style="color:var(--warn,#b45309)" hidden></div>
+        </div>
+        <div class="right">
+          <button type="button" id="quick-change" class="btn">Change</button>
+          <label class="switch"><input type="checkbox" id="quick-ask" aria-label="Quick ask" /><span id="quick-state">off</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
           <div class="name">Start when I sign in</div>
           <div class="desc">Open Bunny AI when you sign in to Windows.</div>
         </div>
@@ -955,6 +966,50 @@
     };
     bind('launch-at-login', 'launch-state', 'launchAtLogin');
     bind('close-to-tray', 'tray-state', 'closeToTray');
+
+    // Quick ask (W4-8): the shell checks the shortcut and keeps it in step with the tray setting; this page shows what it says.
+    const quickBox = $('quick-ask');
+    const quickNote = (text) => { $('quick-note').textContent = text || ''; $('quick-note').hidden = !text; };
+    const showQuick = (p) => {
+      quickBox.checked = Boolean(p.quickAskEnabled);
+      $('quick-state').textContent = quickBox.checked ? 'on' : 'off';
+      $('quick-keys').textContent = p.quickAskShortcut || 'Ctrl+Alt+Space';
+      $('quick-keys').style.opacity = quickBox.checked ? '' : '.5';
+      const tray = $('close-to-tray');
+      tray.checked = Boolean(p.closeToTray);
+      $('tray-state').textContent = tray.checked ? 'on' : 'off';
+    };
+    const saveQuick = async (patch) => {
+      const p = await desk.setPrefs(patch);
+      showQuick(p);
+      quickNote(p.quickAskError || p.quickAskNote || '');
+    };
+    showQuick(prefs);
+    quickBox.addEventListener('change', () => saveQuick({ quickAskEnabled: quickBox.checked }));
+    $('close-to-tray').addEventListener('change', async () => {
+      if ($('close-to-tray').checked) return;
+      const was = quickBox.checked;
+      showQuick(await desk.getPrefs()); // turning the tray off may have turned Quick ask off
+      if (was && !quickBox.checked) quickNote('Quick ask is off because it needs Bunny to keep running in the tray.');
+    });
+    const changeButton = $('quick-change');
+    const stopRecording = () => { document.removeEventListener('keydown', onKeys, true); changeButton.textContent = 'Change'; };
+    function onKeys(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') { stopRecording(); quickNote(''); return; }
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
+      const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key.replace('Arrow', '');
+      const combo = [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Win', key].filter(Boolean).join('+');
+      stopRecording();
+      saveQuick({ quickAskShortcut: combo, quickAskEnabled: true });
+    }
+    changeButton.addEventListener('click', () => {
+      if (changeButton.textContent === 'Cancel') { stopRecording(); quickNote(''); return; }
+      changeButton.textContent = 'Cancel';
+      quickNote('Press the new keys. Esc cancels.');
+      document.addEventListener('keydown', onKeys, true);
+    });
   }
 
   function kvRow(k, v) {
