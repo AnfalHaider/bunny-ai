@@ -9,7 +9,7 @@ export async function getJSON(path) {
 
 // Writes that only Bunny's own window may make: a copy of src/server/windowOnly.js (the browser cannot import it; test/window-only.test.js keeps them equal).
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'connectorsEnabled', 'plugins'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl'];
 
 /** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode'];
@@ -32,7 +32,8 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], '^/api/providers/custom$'],                    // where model traffic goes
   [['DELETE'], '^/api/providers/custom-[a-z0-9-]+$'],
   [['POST'], '^/api/providers/[a-z0-9-]+/(connect|disconnect)$'],
-  [['POST'], '^/api/account/(github|google)/.*$'],          // sign-ins
+  [WRITES, '^/api/account/(github|google)(/.*)?$'],         // sign-ins and sign-outs
+  [['POST'], '^/api/oauth/[a-z0-9-]+/(start|finish)$'],     // provider sign-in
 ];
 
 /** Is this request one only the window may make? `body` is the parsed JSON body (some writes are judged by what they change). */
@@ -44,6 +45,9 @@ export function isWindowOnlyRoute(method, path, body = null) {
   if (path === '/api/settings' && m === 'PUT') return has(...WINDOW_ONLY_SETTING_KEYS);
   if (path === '/api/sessions' && m === 'POST') return has('permissionMode');
   if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode');
+  // a project's instructions steer the model in every chat that uses it
+  if (path === '/api/projects' && m === 'POST') return has('instructions');
+  if (new RegExp(`^/api/projects/${UUID}$`).test(path) && m === 'PATCH') return has('instructions');
   const session = new RegExp(`^/api/sessions/${UUID}/setting/([A-Za-z-]+)$`).exec(path);
   if (session && m === 'PATCH') return WINDOW_ONLY_SESSION_SETTINGS.includes(session[1]);
   return false;

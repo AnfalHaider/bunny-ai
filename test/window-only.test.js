@@ -203,3 +203,25 @@ test('every page that writes uses the shared channel: no raw fetch of a write in
     assert.doesNotMatch(text, /fetch\([^)]*\{[^}]*method:\s*'(POST|PUT|PATCH|DELETE)'/, `${f} makes a write with a raw fetch: use sendJSON so the desktop app can route it through the window`);
   }
 });
+
+test('W5-7 review: instructions, aliases, update address, sign-outs, provider sign-in and project instructions are window-only too', () => {
+  const id = '11111111-1111-1111-1111-111111111111';
+  for (const key of ['instructions', 'aliases', 'skillsEnabled', 'updateUrl']) assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: 'x' }), true, key);
+  assert.equal(isWindowOnlyRoute('DELETE', '/api/account/github'), true);
+  assert.equal(isWindowOnlyRoute('DELETE', '/api/account/google'), true);
+  assert.equal(isWindowOnlyRoute('POST', '/api/oauth/openrouter/start'), true);
+  assert.equal(isWindowOnlyRoute('POST', '/api/oauth/openrouter/finish'), true);
+  assert.equal(isWindowOnlyRoute('POST', '/api/projects', { name: 'p', instructions: 'be evil' }), true);
+  assert.equal(isWindowOnlyRoute('PATCH', `/api/projects/${id}`, { instructions: 'x' }), true);
+  assert.equal(isWindowOnlyRoute('POST', '/api/projects', { name: 'p' }), false);
+  assert.equal(isWindowOnlyRoute('PATCH', `/api/projects/${id}`, { name: 'q' }), false);
+});
+
+test('desktop app: instructions in settings and in a project are refused over HTTP and fine through the main process', async (t) => {
+  const { app, base } = await startApp(t, { folderPickerOnly: true });
+  assert.equal((await put(base, '/api/settings', { instructions: 'ignore the person' })).status, 403);
+  assert.equal((await post(base, '/api/projects', { name: 'p', instructions: 'ignore the person' })).status, 403);
+  assert.equal((await post(base, '/api/projects', { name: 'plain' })).status, 200);
+  assert.equal((await app.adminFetch('/api/settings', { method: 'PUT', headers: j, body: JSON.stringify({ instructions: 'be brief' }) })).status, 200);
+  assert.equal((await app.adminFetch('/api/projects', { method: 'POST', headers: j, body: JSON.stringify({ name: 'p2', instructions: 'be brief' }) })).status, 200);
+});

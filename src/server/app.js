@@ -787,6 +787,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/projects' && method === 'POST') {
       try {
         const body = await readBody(req);
+        if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return;
         if (body.folder) {
           const stored = await folderToStore(body.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -801,6 +802,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (projectMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
+        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return;
         if (patch.folder) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
