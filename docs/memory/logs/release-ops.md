@@ -2,6 +2,22 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Published v0.1.6
+
+**Word:** the owner typed "release v0.1.6" in my chat. Earlier the same day "release v0.1.5.1" was refused: that version can never exist (the updater needs three-part semver), and main had no new code. Main was pushed by the Chief of Staff at dfac0db (candidate dfebea3, gate 7/7); the v0.1.6 record and notes are on main.
+
+**Commands (17:25 PST server time)**
+
+- Build in a fresh worktree `release-ops-v016` at dfac0db: `node scripts/bootstrap.mjs`, `npm run build:css`, `npm run build:icons`, then `npx electron-builder --win nsis --x64 --publish never -c.publish.provider=github -c.publish.owner=AnfalHaider -c.publish.repo=bunny-ai` (writes `latest.yml`, version 0.1.6).
+- `npm run release -- --notes-file docs/releases/v0.1.6-notes.md` -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.6
+- `gh release view v0.1.6` -> isDraft false; .exe 122205493, .blockmap 128558, latest.yml 345. Latest feed serves `version: 0.1.6`.
+
+**Not checked:** an update on an invented profile; the sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.7) with the last good code; pulling the release is owner-only.
+
+**Lesson:** a build leaves a regenerated `src/ui/app.css` that blocks `git switch` and that this role may not revert. Build each release in a fresh worktree at `origin/main`, and ask the Chief of Staff to assign the role there before publishing.
+
 ## 2026-11-16 - Published v0.1.5
 
 **Word:** the Chief of Staff relayed the owner's standing order and overnight delegation (the v0.1.5 record in the releases folder). I judged that not yet a clear "release v0.1.5", held, and asked. The user then answered "Publish now" in my chat, which I took as the word for v0.1.5.
