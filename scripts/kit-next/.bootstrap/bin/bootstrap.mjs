@@ -94,7 +94,9 @@ function init(root, args, { upgrading = false } = {}) {
   const size = arg(args, 'size', 'live');
   const preset = { prototype: 'solo', small: 'small', live: 'full' }[size];
   if (!preset) { console.error('--size prototype|small|live'); process.exit(1); }
-  writeOnce(join(root, '.bootstrap', 'flow.json'), JSON.stringify({ version: 1, preset, size }, null, 2) + '\n');
+  // K-1 (Tech Lead #7): an upgrade never switches a project onto the lane model. Our pieces are signed against default_required;
+  // with a flow.json every piece without a lane (set by the Chief of Staff) is refused at push. A new project still gets its flow.json.
+  if (!upgrading) writeOnce(join(root, '.bootstrap', 'flow.json'), JSON.stringify({ version: 1, preset, size }, null, 2) + '\n');
   writeOnce(join(root, '.bootstrap', 'policy.json'),
     JSON.stringify({ version: 1, branches: { live, dev }, destructive_commands: [], deny_all: DEFAULT_POLICY.deny_all }, null, 2) + '\n');
   copyTree(join(KIT, 'templates', 'project'), root);
