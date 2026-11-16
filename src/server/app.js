@@ -26,7 +26,7 @@ import { createArtifactStore } from './artifacts.js';
 import { normaliseAttachments, prepareAttachments, toModelMessage } from './attachments.js';
 import { parseImport } from './import.js';
 import { createUsageStore } from './usage.js';
-import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned, failureKind } from './unavailable.js';
+import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned, failureKind, cooldownFor } from './unavailable.js';
 import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
@@ -454,6 +454,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             // Models this account cannot reach are marked, not hidden: the
             // person may fix the account and want them back.
             unavailable: known[m.id]?.reason ?? null,
+            // A provider that just refused for rate or usage reasons is skipped by Auto until then (ms since 1970).
+            coolingUntil: unavailable.coolingUntil(provider.id) || null,
           });
         }
       } catch {
@@ -2680,10 +2682,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const shape = modelSpecificFailure(err.message);
           if (shape) await unavailable.mark(providerId, model, err.message);
           const { scope, reason } = failureKind(err, Boolean(shape));
+          // W6-5: a rate or usage refusal puts the provider on a cool-down that lasts across messages.
+          const coolMs = reason === 'rate-limit' ? cooldownFor(err.message) : 0;
+          const coolingUntil = coolMs ? unavailable.cool(providerId, coolMs) : 0;
           send('error', {
             code: err.code ?? 'chat.failed',
             message: err.message,
             modelUnavailable: Boolean(shape),
+            coolingUntil: coolingUntil || undefined,
             scope,
             reason,
           });

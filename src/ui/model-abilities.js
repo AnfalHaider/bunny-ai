@@ -58,6 +58,9 @@ export function modelAbilities(m) {
   return { abilities, utility: false, runs };
 }
 
+const STRONG_TOOLS = /gpt-5|gpt-4|claude|gemini-?[23].*pro|gemini-?3|deepseek-v[34]|kimi-k2|qwen-?3-?coder|qwen-?3-(235|480)|glm-?[45]|minimax|mistral-large|llama-?3\.[13]-(70|405)b|llama-?4|gpt-oss-120b|grok-?[34]|devstral/;
+const WEAK_TOOLS = /(^|[^a-z])(nano|mini|flash|lite|small|tiny)([^a-z]|$)|\b([1-9]|[1-3][0-9])b\b|-([1-9]|[1-3][0-9])b\b/;
+
 /** How good a model is likely to be for a job (bigger is better). Heuristic, explainable. */
 export function scoreModel(m, job) {
   const id = String(m.id).toLowerCase();
@@ -72,6 +75,9 @@ export function scoreModel(m, job) {
   ];
   for (const [re, bonus] of families) if (re.test(id)) { score += bonus; break; }
   if (job === 'code' && /cod(e|er|estral)|devstral|qwen.*coder/.test(id)) score += 15;
+  // Code work is a long run of tool calls: a model must be strong at them. Small, "nano", flash and sub-40B models lose the thread.
+  if (job === 'code' && STRONG_TOOLS.test(id)) score += 14;
+  if (job === 'code' && WEAK_TOOLS.test(id)) score -= 30;
   if (job === 'research' && /reason|think|r1|pro|ultra|super/.test(id)) score += 8;
   if (job === 'image' && /pro|gpt-5/.test(id)) score += 6;
   if (/mini|nano|lite|small|tiny|flash-lite|\b[1-8]b\b/.test(id)) score -= 8;
@@ -96,6 +102,8 @@ export function detectJob(text, { hasImage = false, workMode = 'chat' } = {}) {
 export function rankModels(models, job) {
   return models
     .filter((m) => !m.unavailable)
+    // W6-5: a provider that just refused for rate or usage reasons is left alone until its cool-down ends.
+    .filter((m) => !(m.coolingUntil && m.coolingUntil > Date.now()))
     .filter((m) => modelAbilities(m).runs.has(job))
     .map((m) => ({ m, s: scoreModel(m, job) }))
     .sort((a, b) => b.s - a.s)
@@ -111,4 +119,10 @@ export function jobAvailability(models) {
     out[job] = { capable: capable.length, runnable: runnable.length };
   }
   return out;
+}
+
+/** One plain line on why Auto picked a model for a job. */
+export function whyPicked(m, job) {
+  if (job === 'code') return STRONG_TOOLS.test(String(m?.id ?? '').toLowerCase()) ? 'strong at coding and tool use' : 'the best coding model available here';
+  return null;
 }

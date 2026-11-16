@@ -22,7 +22,7 @@ import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
-import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './model-abilities.js';
+import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1485,7 +1485,7 @@ function renderRailDetails() {
   put('rail-model', picked ? picked.model : 'No model chosen');
   const autoPick = state.modelAuto && state.autoPick;
   const why = $('rail-why-row');
-  if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}`); }
+  if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}${whyPicked(autoPick, state.lastJob) ? `: ${whyPicked(autoPick, state.lastJob)}` : ''}`); }
   const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
   const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   put('rail-mode', modes[mode] ?? mode);
@@ -1603,7 +1603,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     },
     onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
+    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       flushNote();
       showLiveTool(bodyEl, info);
@@ -2449,6 +2449,9 @@ async function send() {
     // goes to the next model. What was already done is saved, so the next one carries on from there.
     const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode) && result.errorInfo?.scope !== 'other';
     if (!errored || result.aborted) break;
+    // W6-5: what the server just learned is applied here at once, so Auto does not offer a dead model or a cooling provider again.
+    if (result.errorInfo?.unavailable) { const dead = state.models.find((m) => m.providerId === pick.providerId && m.id === pick.id); if (dead) dead.unavailable = result.errorInfo.message ?? 'not available for this account'; }
+    if (result.errorInfo?.coolingUntil) for (const m of state.models) if (m.providerId === pick.providerId) m.coolingUntil = result.errorInfo.coolingUntil;
     const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
     failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
     if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);
