@@ -220,7 +220,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       at: new Date().toISOString(),
     };
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
-    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom']) {
+    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
     // A question the model asked, its choices and the person's answer (null: not answered).
@@ -294,6 +294,20 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     session.messages = session.messages.slice(0, index);
     await save(session);
     return session;
+  }
+
+  /**
+   * Take the "could not finish" notes off the end of the transcript. A failed attempt leaves one so a reload
+   * still says why the reply stopped; once a fallback model has answered, they are noise and go (T-3).
+   */
+  async function dropTrailingErrors(id) {
+    const session = await get(requireId(id));
+    if (!session) throw new Error('Session not found');
+    let keep = session.messages.length;
+    while (keep > 0 && session.messages[keep - 1].kind === 'error') keep -= 1;
+    const dropped = session.messages.length - keep;
+    if (dropped) { session.messages = session.messages.slice(0, keep); await save(session); }
+    return dropped;
   }
 
   /** Replace a message's text and cut everything after it. */
@@ -447,7 +461,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
 
   return {
     list, get, create, remove, fork, children, exportSession, context, summary,
-    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom),
+    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
     markCheckpointRestored: locked(markCheckpointRestored),
   };

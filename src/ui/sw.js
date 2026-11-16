@@ -38,6 +38,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   // The API always goes to the server: a cached answer would be a wrong one.
+  // Only this app's own files are the worker's business: a failed request to another site must fail, not
+  // quietly come back as the cached start page (that hid "nothing is answering there" from the browser panel).
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(

@@ -173,6 +173,8 @@
     <!-- chat bar -->
     <div class="dock">
       <div class="prompt-suggestions" id="prompt-suggestions" hidden aria-label="Suggested next messages"></div>
+      <!-- phone width: the top bar's status text shows here, one dim line above the composer (the top bar hides it) -->
+      <div class="status-line" id="status-line" aria-hidden="true"></div>
       <div class="composer" id="composer">
         <div class="slash menu up" id="slash" hidden role="listbox" aria-label="Commands"></div>
         <div class="pending-files" id="pending-files" hidden></div>
@@ -223,7 +225,7 @@
         </select>
         <div class="menu up" id="mode-menu" role="menu" hidden>
           <div class="menu-title">Mode</div>
-          <button class="menu-item" role="menuitemradio" data-mode="auto"><span class="label">Auto<small>Bunny decides what needs your OK</small></span><span class="check">✓</span><span class="key">1</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="auto"><span class="label">Auto<small>Runs what you allowed without asking; sending an email still asks</small></span><span class="check">✓</span><span class="key">1</span></button>
           <button class="menu-item" role="menuitemradio" data-mode="ask"><span class="label">Manual<small>Always ask before making changes</small></span><span class="check">✓</span><span class="key">2</span></button>
           <button class="menu-item" role="menuitemradio" data-mode="accept"><span class="label">Accept edits<small>File edits go through, commands still ask</small></span><span class="check">✓</span><span class="key">3</span></button>
           <button class="menu-item" role="menuitemradio" data-mode="plan"><span class="label">Plan<small>Agree a plan before any change</small></span><span class="check">✓</span><span class="key">4</span></button>
@@ -246,6 +248,7 @@
         </div>
         <span class="under-sep">|</span>
         <div class="picker" id="picker"></div>
+        <span class="offline-chip" id="offline-chip" hidden>Offline</span>
         <span class="composer-model-indicator" id="composer-model-indicator"></span>
 
         <span class="composer-hint" id="composer-hint">Enter sends · Shift+Enter new line · <code>/compact</code> <span data-i18n="chat.compact">frees context</span></span>
@@ -261,18 +264,29 @@
     <section class="pane-view rail" id="rail" hidden aria-label="Session overview">
       <div class="pane-head"><b>Session</b><span class="end"><button class="icon-btn" data-close aria-label="Close panel">✕</button></span></div>
       <div class="pane-section">
-        <h5 data-i18n="rail.environment">Environment</h5>
-        <div class="pane-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M2 19h20"/></svg>
-          <span data-i18n="rail.thisComputer">This computer</span>
-        </div>
-        <div class="pane-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
-          <span id="rail-project"></span>
-        </div>
+        <h5>Where</h5>
+        <div class="kv"><span class="k">Environment</span><span class="v" data-i18n="rail.thisComputer">This computer</span></div>
+        <div class="kv"><span class="k">Project</span><span class="v" id="rail-project"></span></div>
+        <div class="kv"><span class="k">Folder</span><span class="v" id="rail-folder"></span></div>
+        <div class="kv"><span class="k">Branch</span><span class="v" id="rail-branch"></span></div>
       </div>
       <div class="pane-section">
+        <h5>Model</h5>
+        <div class="kv"><span class="k">Model</span><span class="v" id="rail-model"></span></div>
+        <div class="kv" id="rail-why-row" hidden><span class="k">Why</span><span class="v" id="rail-why"></span></div>
+        <div class="kv"><span class="k">Permissions</span><span class="v" id="rail-mode"></span></div>
+        <div class="kv"><span class="k">Effort</span><span class="v" id="rail-effort"></span></div>
+      </div>
+      <div class="pane-section">
+        <h5>Context and cost</h5>
         <div class="pane-row"><span data-i18n="chat.context">Context</span><span class="end"><span id="rail-context-text">0%</span> <span class="meter"><span id="rail-context-fill"></span></span></span></div>
+        <div class="kv"><span class="k">Tokens</span><span class="v" id="rail-tokens"></span></div>
+        <div class="kv"><span class="k">Messages</span><span class="v" id="rail-messages"></span></div>
+        <div class="kv"><span class="k">Cost</span><span class="v" id="rail-cost">not reported</span></div>
+      </div>
+      <div class="pane-section">
+        <h5>Running programs</h5>
+        <div id="rail-running"><div class="rail-empty">Nothing running.</div></div>
       </div>
       <div class="pane-section">
         <h5 data-i18n="rail.connectors">Connectors</h5>

@@ -150,7 +150,7 @@ test('Gmail, Calendar and Drive are asked for only when switched on, and an old 
 
 test('the Google tools search mail, draft without sending, read the calendar and export a Doc', async () => {
   const { runGoogleTool, googleToolDefinitions, GOOGLE_TOOL_RISK } = await import('../src/server/google.js');
-  assert.equal(GOOGLE_TOOL_RISK.gmail_send, 'build', 'sending always asks');
+  assert.equal(GOOGLE_TOOL_RISK.gmail_send, 'send', 'sending asks in every mode (its own risk, not the build one Auto lets through)');
   assert.equal(GOOGLE_TOOL_RISK.gmail_draft, 'edit');
   assert.ok(!googleToolDefinitions(['read']).some((d) => d.function.name === 'gmail_draft'));
   const calls = [];

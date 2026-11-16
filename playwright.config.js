@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { PORT, dataDir } from './e2e/setup.js';
+import { PORT, dataDir, E2E_TOKEN } from './e2e/setup.js';
 
 // The e2e run is self-contained: Playwright starts its own Bunny AI instance in
 // fake-upstream mode on a fixed port with a throwaway profile, so a run never
@@ -15,6 +15,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
+    extraHTTPHeaders: { 'x-bunny-token': E2E_TOKEN },
     trace: 'off',
     video: 'off',
   },
@@ -28,6 +29,7 @@ export default defineConfig({
       BUNNY_FAKE_UPSTREAM: '1',
       BUNNY_RESET_PROFILE: '1',
       BUNNY_DATA_DIR: dataDir,
+      BUNNY_API_TOKEN: E2E_TOKEN,
     },
   },
 });

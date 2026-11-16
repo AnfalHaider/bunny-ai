@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
-import { currentRole, git, loadPolicy, matchesAny, repoRoot } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, scopeViolations } from './lib/policy.mjs';
 
 const ZERO = /^0+$/;
 
@@ -93,6 +93,18 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   const base = ZERO.test(remoteSha) ? null : remoteSha;
   const diff = base ? git(['diff', `${base}..${localSha}`], root, { maxBuffer: 64 << 20 }) : null;
   if (diff && /^\+(<{7}|>{7})( |$)/m.test(diff)) errors.push('conflict markers in the pushed changes (O11)');
+
+  // A1 backstop: the pusher's own (non-merge, first-parent) commits stay inside the pusher's scope.
+  // Merges are skipped, and so are the roles whose job is to move other roles' commits.
+  const sc = policy.scope_check || {};
+  if (sc.push !== false && !(sc.push_exempt_roles || []).includes(role)) {
+    const brief = loadRole(root, role) || {};
+    const own = (git(['rev-list', '--first-parent', '--no-merges', ...range], root) || '').split('\n').filter(Boolean);
+    for (const c of own) {
+      const files = (git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', '--no-renames', '--root', c], root) || '').split('\0').filter(Boolean);
+      for (const why of scopeViolations(files, policy, brief, role)) errors.push(`commit ${c.slice(0, 9)}: ${why}`);
+    }
+  }
 
   if (!guarded) return errors;
 

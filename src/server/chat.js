@@ -14,10 +14,16 @@ import { clip } from './clip.js';
 
 const MAX_TOOL_ROUNDS = 4;
 
-// How long a provider may stay silent before the chat gives up on it. Slow
-// "thinking" models still stream keep-alives or their first token well within
-// this; the providers that accept a request and never answer do not.
-const DEFAULT_STALL_MS = 120_000;
+// How long a provider may stay silent before the chat gives up on it (T-3). Two limits, because they mean
+// different things: waiting for the FIRST byte (30 s; 60 s for reasoning models and image or video jobs), and
+// silence between chunks once the reply is streaming (60 s). Thinking tokens count as activity. These numbers
+// are a starting point and the one place to tune them; tests inject small values with `stallMs`.
+export const DEFAULT_STALL_MS = 30_000;
+export const SLOW_FIRST_BYTE_MS = 60_000;
+export const DEFAULT_GAP_MS = 60_000;
+// Reasoning models (o-series, gpt-5, r1, anything named reason or think) and image or video jobs wait longer for a first byte.
+const SLOW_MODEL = /reason|think|r1\b|image|video|dall-e|imagen|veo|sora|gpt-5|(^|[/:-])o[1-9](-|$)/i;
+export const firstByteLimit = (model) => (SLOW_MODEL.test(String(model ?? '')) ? SLOW_FIRST_BYTE_MS : DEFAULT_STALL_MS);
 
 /**
  * @param {{
@@ -66,7 +72,7 @@ export async function* streamChat({
     if (extraBody) Object.assign(body, extraBody);
 
     let { text, toolCalls, finish, aborted } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs, onThinking,
+      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking,
     });
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
@@ -74,7 +80,7 @@ export async function* streamChat({
     // nothing to show. Once, ask again with more room before giving up.
     if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length' && !signal?.aborted) {
       const roomier = { ...body, max_tokens: Math.min(32_000, (body.max_tokens || 4096) * 4) };
-      ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, onThinking }));
+      ({ text, toolCalls, finish } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking }));
       if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
         throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
       }
@@ -95,6 +101,7 @@ export async function* streamChat({
       // Some models use their tools and then stop without a word. Ask once for the answer.
       if (round > 0 && !String(text ?? '').trim()) yield* finalAnswer();
       else if (round === 0 && !String(text ?? '').trim() && !signal?.aborted) {
+        if (finish === 'content_filter') throw new ConnectError('chat.refused', 'The model declined to answer.');
         throw new ConnectError('chat.empty', 'The model sent back an empty reply. Try again, or pick another model.');
       }
       return;
@@ -150,7 +157,7 @@ export async function* streamChat({
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
-    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, onThinking });
+    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking });
   }
 }
 
@@ -184,7 +191,7 @@ async function errorDetail(res) {
  * One round of streaming.
  * @returns {AsyncGenerator<string, {text: string, toolCalls: object[]}>}
  */
-async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs = DEFAULT_STALL_MS, onThinking = null }) {
+async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, firstByteMs = DEFAULT_STALL_MS, gapMs = DEFAULT_GAP_MS, onThinking = null }) {
   // The provider can accept the request and then never send a byte. Without a
   // watchdog the chat spins forever, so silence longer than stallMs is an
   // error, not a wait. The person's own stop signal still cuts in first.
@@ -197,7 +204,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
   let res;
   // The same watchdog covers the wait for the first answer: without it a provider
   // that takes the request and never replies holds the chat for five minutes.
-  const firstTimer = setTimeout(() => { stalled = true; stallController.abort(); }, stallMs);
+  const firstTimer = setTimeout(() => { stalled = true; stallController.abort(); }, firstByteMs);
   try {
     res = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -235,7 +242,7 @@ async function* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs
       const timer = setTimeout(() => {
         stalled = true;
         stallController.abort();
-      }, stallMs);
+      }, gapMs);
       let done;
       let value;
       try {

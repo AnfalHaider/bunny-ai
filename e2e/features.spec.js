@@ -109,10 +109,12 @@ test('branching a message opens a nested chat', async ({ page }) => {
 
 test('a chat can be renamed from its row menu', async ({ page }) => {
   await connectAndChat(page, 'a chat to rename');
-  page.once('dialog', (d) => d.accept('A better name'));
-
   await page.locator('#sessions .row-menu').first().click();
   await page.getByRole('menuitem', { name: 'Rename' }).click();
+  // an in-app field, not window.prompt (the desktop app has none)
+  const ask = page.getByRole('dialog', { name: 'Rename chat' }).locator('input');
+  await ask.fill('A better name');
+  await ask.press('Enter');
 
   await expect(page.locator('#sessions')).toContainText('A better name');
 });
