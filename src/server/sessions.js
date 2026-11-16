@@ -220,7 +220,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       at: new Date().toISOString(),
     };
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
-    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries']) {
+    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries', 'needsSignIn', 'serverId']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
     // A question the model asked, its choices and the person's answer (null: not answered).
