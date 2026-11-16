@@ -156,6 +156,12 @@ export function stoppedReport(steps) {
 /**
  * @param {{ dataDir: string, fake?: boolean, secretStore?: any, probe?: any, discover?: any }} options
  */
+/** read_url on a file:// address: only inside the workspace folder; Chat mode (no folder) refuses. */
+export function readFileUrlIn(workspace, url) {
+  if (!workspace) throw new Error('read_url cannot read files on this computer in Chat mode. Open a folder in Code mode first.');
+  return workspace.readFileUrl(String(url).trim());
+}
+
 export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
   await mkdir(dataDir, { recursive: true });
 
@@ -2452,7 +2458,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         let result;
         let status = 'done';
         try {
-          result = isApp ? await appTools.run(name, parsed)
+          result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
+            : isApp ? await appTools.run(name, parsed)
             : isWorkspace
             ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) })
             : JSON.stringify(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed }) ?? null);
