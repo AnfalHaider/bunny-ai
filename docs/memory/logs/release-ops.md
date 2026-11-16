@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Published v0.1.5
+
+**Word:** the Chief of Staff relayed the owner's standing order and overnight delegation (the v0.1.5 record in the releases folder). I judged that not yet a clear "release v0.1.5", held, and asked. The user then answered "Publish now" in my chat, which I took as the word for v0.1.5.
+
+**Commands (reported before running, 14:35 PST server time)**
+
+- `git switch --detach origin/main` -> 73d3bef (candidate 2892fa4)
+- `node scripts/bootstrap.mjs` -> ok
+- `npm run dist` -> installer and blockmap, but **no `latest.yml`** in a worktree. Fix: `npx electron-builder --win nsis --x64 --publish never -c.publish.provider=github -c.publish.owner=AnfalHaider -c.publish.repo=bunny-ai` wrote it (version 0.1.5).
+- `npm run release -- --notes-file docs/releases/v0.1.5-notes.md` -> published https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.5
+- `gh release view v0.1.5` -> isDraft false; assets .exe 122204719, .blockmap 128613, latest.yml 345. The latest download URL serves `version: 0.1.5`.
+
+**Not checked:** the sign-off files (a hook bars every role but the Chief of Staff from that folder); an update on an invented profile.
+
+**Rollback:** forward fix, a higher version (0.1.6) with the last good code; pulling the release is owner-only.
+
+**Lesson:** `npm run dist` writes `latest.yml` only in the main checkout; in a worktree pass the publish flags above, or `release.mjs` stops on a missing file.
+
 ## 2026-11-16 - Start-up: queue check and the release recipe
 
 **What I did**
