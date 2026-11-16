@@ -130,6 +130,8 @@ The installed app checks GitHub Releases a few seconds after it starts and every
 2. `npm run dist`
 3. `npm run release` (uses the GitHub CLI; add `-- --notes-file notes.md` for your own notes)
 
+`npm run release -- --dry-run` runs every check and prints all the ones that fail, publishing nothing. `--target <sha>` names the commit to release (default `HEAD`). A release is refused unless the checked-out commit (HEAD) is the target and is exactly `origin/main`, the working tree has no uncommitted or untracked files, and `dist/build-sha.txt` (written by `npm run dist`) names the same commit, so the installer is always built from what is released. Only `--notes-file` is passed on to `gh`.
+
 **Run it in your browser instead**
 
 ```bash
