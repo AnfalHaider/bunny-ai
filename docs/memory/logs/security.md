@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W5-7 (`32a3a8c`) PASS; W5-8 (`70bd964`) PASS with conditions
+
+W5-7: with only the page token in the desktop-app configuration, 66 write routes and 43 settings keys tried; the whole W27c-1 list, connectors, schedules, hooks, skills, plugins, custom tools, permission and capability answers, computer, terminal, providers, sign-ins and 16 settings keys answer 403. Open (low): five continue keys and `maxTokens`, `helpersEnabled`, `unrelatedTask`, `modelFilter`, unknown keys; the question route. W5-8: the release target check holds for which commit is tagged, not which commit was built: `--target origin/main` from another branch, an untracked file under `src/`, and a stale `dist/` all pass. Review `docs/security/2026-11-16-w5-7-w5-8-review.md`. Lesson: a check on the tag is not a check on the artifact; tie the two with a build stamp.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |

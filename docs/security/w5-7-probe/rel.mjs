@@ -1,0 +1,25 @@
+// W5-8 probe (Security): what the target check can and cannot see. Usage: node rel.mjs <checkout of 70bd964>
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const { checkTarget, gatherGitState, parseArgs } = await import('file:///' + process.argv[2].split(String.fromCharCode(92)).join('/') + '/scripts/release.mjs');
+const top = mkdtempSync(join(tmpdir(), 'bunny-rel-'));
+const sh = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' });
+const remote = join(top, 'remote.git'); mkdirSync(remote); sh(remote, 'init', '-q', '--bare', '-b', 'main');
+const work = join(top, 'work'); mkdirSync(work); sh(work, 'init', '-q', '-b', 'main'); sh(work, 'config', 'user.email', 'a@b.c'); sh(work, 'config', 'user.name', 'x');
+sh(work, 'remote', 'add', 'origin', remote);
+mkdirSync(join(work, 'src')); writeFileSync(join(work, 'src', 'a.js'), '1'); writeFileSync(join(work, '.gitignore'), 'dist\n');
+sh(work, 'add', '-A'); sh(work, 'commit', '-qm', 'one'); sh(work, 'push', '-q', 'origin', 'main');
+const git = (args) => execFileSync('git', args, { cwd: work, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const verdict = (label, target = 'HEAD') => { const st = gatherGitState({ git, target }); const v = checkTarget(st); console.log((v.ok ? 'ALLOWED ' : 'REFUSED ') + label + (v.ok ? '' : '  -> ' + v.reason.slice(0, 90))); };
+verdict('clean, HEAD = origin/main');
+writeFileSync(join(work, 'src', 'untracked.js'), 'evil'); verdict('an UNTRACKED file under src/ (it would be packaged)');
+writeFileSync(join(work, 'src', 'a.js'), '2'); verdict('a tracked file edited');
+sh(work, 'checkout', '-q', 'src/a.js'); sh(work, 'clean', '-fdq');
+mkdirSync(join(work, 'dist')); writeFileSync(join(work, 'dist', 'Bunny-AI-Setup-9.exe'), 'stale installer from another build'); verdict('a stale dist/ installer (ignored by git, never compared to the sha)');
+sh(work, 'commit', '-q', '--allow-empty', '-m', 'two'); verdict('a local commit not pushed');
+sh(work, 'push', '-q', 'origin', 'main'); verdict('after push');
+sh(work, 'checkout', '-q', '-b', 'claude/x'); sh(work, 'commit', '-q', '--allow-empty', '-m', 'three'); verdict('branch ahead of main, target HEAD'); verdict('target origin/main from that branch', 'origin/main');
+for (const t of ['--help', '-x', 'HEAD~1', 'main', 'refs/heads/claude/x', '']) verdict(`target ${JSON.stringify(t)}`, t);
+console.log(JSON.stringify(parseArgs(['--target', 'a', '--draft', '--repo', 'other/repo', '--notes-file', 'n.md', '--target=b'])));
