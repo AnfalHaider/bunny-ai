@@ -7,7 +7,7 @@
 // (A2) and the record-folder rules (E) live in lib/shellwrites.mjs.
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
 import { resolve as pathResolve } from 'node:path';
-import { ghNotAllowed, pushShape, refuseLabelMove, refusePush, refuseRemote } from './shellextra.mjs';
+import { ghNotAllowed, isLong, pushShape, refuseLabelMove, refusePush, refuseRemote } from './shellextra.mjs';
 import { ALIAS_DEPTH, GIT_BUILTINS, GIT_DIR_ENV, aliasValue, refuseGitConfigs } from './shellgit.mjs';
 
 const SHELLS = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd'];
@@ -228,7 +228,7 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if (why) return why;
   const { sub } = call;
   const where0 = (c, cx) => { let w = cx.cwd ?? process.cwd(); for (const d of c.dirs ?? []) w = pathResolve(w, d); return w; };
-  if (sub === 'checkout-index' && call.args.some((a) => /^--prefix(=|$)/.test(a) || a === '-a' || a === '--all' || a === '--stdin' || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
+  if (sub === 'checkout-index' && call.args.some((a) => isLong(a, '--prefix', 3) || isLong(a, '--all', 3) || isLong(a, '--stdin', 4) || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
   if (sub === 'push') { const why3 = refusePush(call.args, where0(call, ctx)); if (why3) return why3; }
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
   if (sub === 'branch' || sub === 'checkout' || sub === 'switch') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }

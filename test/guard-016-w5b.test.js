@@ -145,3 +145,12 @@ test('W5-1b review: gh pr create head in every spelling; a variable head is refu
   allowed(t, 'gh pr create --head=claude/x --title t');
   for (const c of ['gh pr create -Hmain --title t', 'gh pr create -H=main --title t', 'gh pr create --head=main', 'gh pr create --head $B', 'gh pr create -H $B', 'gh pr create --head=$B', 'gh pr create -H "$B"']) denied(t, c);
 });
+
+test('W5-1b review 2: checkout-index options are matched by their abbreviations; --repo plus a URL word; a source that names a tag', (t) => {
+  for (const c of ['git checkout-index --pre=.bootstrap/ a', 'git checkout-index --pref=x a', 'git checkout-index --al', 'git checkout-index --std', 'git checkout-index -fa']) denied(t, c);
+  denied(t, 'git push --repo=origin https://example.test/a.git claude/x');
+  denied(t, 'git push -o opt --repo=origin https://example.test/a.git claude/x');
+  denied(t, 'git push origin tags/v1');
+  denied(t, 'git push origin heads/x:tags/v1');
+  allowed(t, 'git push origin heads/claude/x');
+});

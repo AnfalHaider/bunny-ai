@@ -97,9 +97,12 @@ test('item 3: a path that canonicalises fine to outside the repo is still "not o
 
 test('item 3: 2,000 resolutions finish quickly (0.6 s alone; the bound allows for the whole suite running beside it)', (t) => {
   const { root } = link(t);
-  const t0 = Date.now();
+  // CPU time, not the clock: other test files (and other sessions) share this machine while the suite runs
+  const c0 = process.cpuUsage();
   for (let i = 0; i < 2000; i += 1) lib.toRepoPath(root, `docs/deep/f${i}.md`, root);
-  assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+  const cpu = process.cpuUsage(c0);
+  const ms = (cpu.user + cpu.system) / 1000;
+  assert.ok(ms < 6000, `took ${ms} ms of CPU`);
 });
 
 test('item 3: a refused path blocks a shell write too (shellwrites)', (t) => {

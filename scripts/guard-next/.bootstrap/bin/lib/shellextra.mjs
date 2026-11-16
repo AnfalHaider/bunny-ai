@@ -24,7 +24,7 @@ export function pushShape(args) {
     if (a.startsWith('-')) continue;
     positional.push(a);
   }
-  return repo !== null ? { remote: repo, refspecs: positional, repoGiven: true } : { remote: positional[0] ?? null, refspecs: positional.slice(1), repoGiven: false };
+  return repo !== null ? { remote: repo, refspecs: positional, repoGiven: true, positional } : { remote: positional[0] ?? null, refspecs: positional.slice(1), repoGiven: false, positional };
 }
 
 const refExists = (ref, cwd) => {
@@ -33,14 +33,15 @@ const refExists = (ref, cwd) => {
 
 /** Why this `git push` is refused (tags, a bare URL), or null. `cwd` is where git will run, to look short names up. */
 export function refusePush(args, cwd = null) {
-  const { remote, refspecs, repoGiven } = pushShape(args);
+  const { remote, refspecs, repoGiven, positional } = pushShape(args);
   // git takes a remote word on the command line over --repo, so BOTH readings are judged: --repo's value and the first word
-  const firstWord = args.filter((a) => !a.startsWith('-'))[0] ?? null;
+  const firstWord = positional[0] ?? null;
   if (args.some((a) => isLong(a, '--tags') || isLong(a, '--follow-tags', 4))) return 'pushing tags (--tags, --follow-tags) publishes releases and versions outside the live-branch rules; name a branch.';
   if (refspecs.includes('tag') || refspecs.some((r) => /(^|:|\+)refs\/tags\//.test(r))) return 'pushing a tag is refused for this role: a tag can mark a release.';
   // a short name that is a tag and not a branch (git push origin v1)
   for (const r of refspecs) {
     const src = r.replace(/^\+/, '').split(':')[0];
+    if (/(^|[:+])(refs\/)?tags\//.test(r)) return `"${r}" names a tag; pushing a tag is refused for this role.`;
     if (src && src !== 'HEAD' && !src.includes('*') && refExists(`refs/tags/${src}`, cwd) && !refExists(`refs/heads/${src}`, cwd)) return `"${src}" is a tag here; pushing a tag is refused for this role.`;
   }
   if ((remote && URLISH.test(remote)) || (repoGiven && firstWord && URLISH.test(firstWord))) return 'pushing to a web address or a folder (not a named remote) skips the remote\'s rules; push to origin by name.';
