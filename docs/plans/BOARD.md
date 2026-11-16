@@ -30,6 +30,7 @@
 | G1-2 | Sign-off, release and `_required` records not authenticated at commit | MEDIUM | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
 | G1-3..G1-5 | Hooks folder removable; git alias/--git-dir/plumbing skips; dynamic push refspec; role-by-variable | MEDIUM/LOW | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
 | Q2-S1..S3 | Plan mode: browser tools skip the check; move_to_new_chat leaves Plan; connector readOnly is self-declared | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed | docs/security/2026-11-16-q2-1-and-q2-23-review.md |
+| D2-1..D2-4 | D-2 panes server: changesFor realpath containment; read only 1 MB of a file; cap diff work; .git and node_modules consistent | MEDIUM | Builder | Security, 2026-11-16 | Filed; sign-off after D2-1 and D2-2 | docs/security/2026-11-16-d2-panes-review.md |
 
 ## SIGN-OFF GRID
 

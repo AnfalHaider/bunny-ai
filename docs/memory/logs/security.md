@@ -2,6 +2,12 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - D-2 Changes and Files panes, server (6ef4ccf)
+
+**Verdict (log only): changes first, not signed yet.** `inside()` held against every escape I tried (dotdot, absolute, drive, UNC, device, junction, NUL, reserved names). Found: the Changes route leaks through a link (changesFor checks the path by text only; probe read OUTSIDE-SECRET), a 300 MB file is read whole then cut (+301 MB memory), diffs can freeze the server, listing and reading disagree about .git. Report `docs/security/2026-11-16-d2-panes-review.md`; board D2-1..D2-4; probe in `docs/security/d2-probe/`. File symlinks not tested (no privilege to make one).
+
+**Lesson:** a containment gate only protects the routes that use it; check every function that takes a path, not just the one named in the brief.
+
 ## 2026-11-16 - T-3 offline network probe (092cc6d)
 
 **Verdict (log only): PASS.** Three fixed https hosts (Google, Cloudflare, Apple), bare GET, no cookies or custom headers, redirects not followed, nothing of the person sent; asked only when the browser already says offline. Behind the S-1 guard (403 without token, cross-site or foreign origin, checked live on an invented profile). No request input reaches the host list, so no arbitrary fetch. Notes: cancel the unread response body; name the hosts in the help text. Report `docs/security/2026-11-16-t3-network-probe-review.md`. The probe was not called live.
