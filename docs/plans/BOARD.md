@@ -16,6 +16,9 @@
 |---|---|---|---|---|
 | 1 | 2026-11-12 | The feature parity tally is 72 of 74. The two open rows are **computer use** (needs OS-level control and an entitlement) and **plugins/marketplaces** (would mean running third-party code this app does not run). Keep them open, or take one on? | Keep them open. Both are the only rows that would make Bunny AI run code or drive the machine it runs on; everything else the reference app is known for is built and tested. | _Not the owner's answer._ Answered by research, awaiting owner's acknowledgement: the premise is out of date. Both rows (6.7 Computer use, 6.10 Plugins and marketplaces) are marked done in `docs/features.js:111,114`. Not closed here; the owner closes it. (Recorded by Librarian, 2026-11-16, relayed from the Chief of Staff.) |
 
+| 2 | 2026-11-16 | Auto mode middle way: in Auto, still ask before Bunny creates a tool, a schedule that changes things, or a local connector? | Yes: these outlive the chat, and text read from a web page or file could otherwise create one unasked | |
+| 3 | 2026-11-16 | Go for the 0.1.6 HIGH items: guard round G1-1..5, permission rules by command (W2-7), MCP sign-in connectors (W3-6)? | Yes to all three, built in that order after lane A | |
+
 ## OPEN
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
@@ -36,7 +39,14 @@
 | G1-3..G1-5 | Hooks folder removable; git alias/--git-dir/plumbing skips; dynamic push refspec; role-by-variable | MEDIUM/LOW | Builder (needs owner's go, guard) | Security, 2026-11-16 | Filed | same |
 | Q2-S1..S3 | Plan mode: browser tools skip the check; move_to_new_chat leaves Plan; connector readOnly is self-declared | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed | docs/security/2026-11-16-q2-1-and-q2-23-review.md |
 | D2-1..D2-4 | D-2 panes server: changesFor realpath containment; read only 1 MB of a file; cap diff work; .git and node_modules consistent | MEDIUM | Builder | Security, 2026-11-16 | Filed; sign-off after D2-1 and D2-2 | docs/security/2026-11-16-d2-panes-review.md |
-| D2-5 | folder/check lets any token holder choose any folder, then folder/files and folder/file read the whole disk; tie 'chosen' to the native folder picker | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed; D-2 FAIL at 5f36e04 | docs/security/2026-11-16-d2-panes-review.md |
+| D2-5 | folder/check lets any token holder choose any folder, then folder/files and folder/file read the whole disk; tie 'chosen' to the native folder picker | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed; D-2 FAIL at 5f36e04. Installed 0.1.5 walk: an unpicked `C:\Windows` gets 403 from folder/files (Chief of Staff, 2026-11-16); Security to confirm and close (W4-7) | docs/security/2026-11-16-d2-panes-review.md |
+| 0.1.6 | Every remaining gap, by wave, owner and test | — | chief-of-staff | chief-of-staff, 2026-11-16 | Plan written; installed 0.1.5 walk done (all PASS but W0-4) | `docs/plans/2026-11-16-0.1.6-plan.md` (89f473b) |
+| W0-4 | First-run: default model filter hides paid-provider models; picker says "No models available" | LOW | builder | chief-of-staff → builder, 2026-11-16 | Briefed, first in lane A; may ship as 0.1.5.1 | plan W0-4 |
+| Lane A | W4-1 per-worktree e2e port, W2-1 regex search, W2-2 find_files, W2-3 replace_all and multi_edit, W2-4 tool lines | LOW-MEDIUM | builder | chief-of-staff → builder, 2026-11-16 | Briefed | plan Wave 2 lane A |
+| Lane B | T-4 read and offer to write project instruction files (W2-5, W2-6) | MEDIUM | builder (after lane A) | — | Queued | `docs/plans/T-4-project-files-spec.md` |
+| 0.1.6-design | Draw W2-8 Rewind, W2-9 worktree per chat, W2-7 permission rules, W4-5 polish | LOW | design | chief-of-staff → design, 2026-11-16 | Briefed | plan |
+| W3-7 | Command sandbox on Windows: compare options, recommend one | research | researcher | chief-of-staff → researcher, 2026-11-16 | Briefed | `docs/research/2026-11-16-command-sandbox.md` (to come) |
+| W2-7 · W3-6 · W5-1 | Permission rules by command; MCP sign-in connectors; guard round G1-1..5 | HIGH | builder | — | GO NEEDED from the owner | plan |
 
 ## SIGN-OFF GRID
 
