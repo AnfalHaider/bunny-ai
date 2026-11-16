@@ -31,23 +31,26 @@ test('Test shows Sign in, signing in shows "Signed in as", and Sign out says whe
   await addFake(request);
   await page.goto('/src/ui/customize.html');
   const row = page.locator('.cz-row', { hasText: 'Fake docs' });
-  await expect(row.locator('.cz-status')).toHaveText('Not checked');
+  await expect(row.locator('.cz-status-word')).toHaveText('Not checked');
 
   await row.getByRole('button', { name: 'Test' }).click();
-  await expect(row.locator('.cz-status')).toHaveText('Needs sign-in');
+  await expect(row.locator('.cz-status-word')).toHaveText('Needs sign-in');
+  await expect(row.locator('.cz-status-detail')).toHaveText(/^Opens 127\.0\.0\.1:\d+ in your browser$/);
   await expect(row.getByRole('button', { name: 'Sign in' })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
 
   const popup = page.waitForEvent('popup');
   await row.getByRole('button', { name: 'Sign in' }).click();
   const opened = await popup;
-  await expect(row.locator('.cz-status')).toHaveText('Waiting for you to finish in your browser… (5 minutes)');
+  await expect(row.locator('.cz-status-word')).toHaveText('Waiting for your browser');
+  await expect(row.locator('.cz-status-detail')).toContainText('5 minutes to finish');
   const back = await comeBack(baseURL, opened.url());
   expect(back.status).toBe(200);
   expect(await back.text()).toContain('Signed in. You can close this tab and go back to Bunny AI.');
   await opened.close();
 
-  await expect(row.locator('.cz-status')).toHaveText('Signed in as pat@example.test', { timeout: 10_000 });
+  await expect(row.locator('.cz-status-word')).toHaveText('Signed in', { timeout: 10_000 });
+  await expect(row.locator('.cz-status-detail')).toHaveText('pat@example.test');
   await expect(row.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
   mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: `${SHOTS}/connectors-signed-in-desktop.png` });
@@ -70,7 +73,7 @@ test('a provider that cannot revoke says so when the person signs out', async ({
   const opened = await popup;
   await comeBack(baseURL, opened.url());
   await opened.close();
-  await expect(row.locator('.cz-status')).toContainText('Signed in as', { timeout: 10_000 });
+  await expect(row.locator('.cz-status-word')).toHaveText('Signed in', { timeout: 10_000 });
   await row.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#cz-note')).toContainText('has no way to revoke the access');
 });
@@ -85,9 +88,9 @@ test('a sign-in the person cancels says so and can be tried again', async ({ pag
   const opened = await popup;
   await comeBack(baseURL, opened.url(), { deny: true });
   await opened.close();
-  await expect(row.locator('.cz-status')).toHaveText('Sign-in failed', { timeout: 10_000 });
+  await expect(row.locator('.cz-status-word')).toHaveText('Sign-in cancelled', { timeout: 10_000 });
   await expect(row).toContainText('cancelled');
-  await expect(row.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Try again' })).toBeVisible();
 });
 
 test('a service that does not let apps register asks for a client ID, only then', async ({ page, request, baseURL }) => {
@@ -114,7 +117,7 @@ test('on a phone the connectors are cards, with their status, and nothing scroll
   const row = page.locator('.cz-row', { hasText: 'Fake docs' });
   await row.getByRole('button', { name: 'Test' }).click();
   await expect(row.locator('.cz-status')).toBeVisible();
-  await expect(row.locator('.cz-status')).toHaveText('Needs sign-in');
+  await expect(row.locator('.cz-status-word')).toHaveText('Needs sign-in');
   await expect(row.locator('.cz-type')).toBeHidden();
   await expect(row.getByRole('button', { name: 'Sign in' })).toBeVisible();
   expect(await row.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('1px'); // a card
@@ -128,6 +131,25 @@ test('on a phone the connectors are cards, with their status, and nothing scroll
   const opened = await popup;
   await comeBack(baseURL, opened.url());
   await opened.close();
-  await expect(row.locator('.cz-status')).toHaveText('Signed in as pat@example.test', { timeout: 10_000 });
+  await expect(row.locator('.cz-status-word')).toHaveText('Signed in', { timeout: 10_000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+});
+
+test('the Automation page shows the same status words and can start the sign-in', async ({ page, request, baseURL }) => {
+  await addFake(request);
+  await page.goto('/src/ui/automation.html');
+  const row = page.locator('#mcp-list .kv', { hasText: 'Fake docs' });
+  await expect(row.locator('.cz-status-word')).toHaveText('Not checked');
+  await row.getByRole('button', { name: 'Check tools' }).click();
+  await expect(row.locator('.cz-status-word')).toHaveText('Needs sign-in');
+  const popup = page.waitForEvent('popup');
+  await row.getByRole('button', { name: 'Sign in' }).click();
+  const opened = await popup;
+  await expect(row.locator('.cz-status-word')).toHaveText('Waiting for your browser');
+  await comeBack(baseURL, opened.url());
+  await opened.close();
+  await expect(row.locator('.cz-status-word')).toHaveText('Signed in', { timeout: 10_000 });
+  await expect(row.locator('.cz-status-detail')).toHaveText('pat@example.test');
+  await row.getByRole('button', { name: 'Sign out' }).click();
+  await expect(row.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
 });

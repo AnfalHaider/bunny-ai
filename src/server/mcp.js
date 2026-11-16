@@ -16,6 +16,7 @@ export class McpError extends Error {
     super(message);
     this.code = code;
     if (extra.signInUrl !== undefined) this.signInUrl = extra.signInUrl;
+    if (extra.expired) this.expired = true; // it was signed in, and the saved sign-in could not be renewed
   }
 }
 

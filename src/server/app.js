@@ -33,7 +33,7 @@ import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
-import { createConnectorSignIn, NEEDS_SIGN_IN } from './connectorSignIn.js';
+import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSignIn.js';
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
@@ -971,7 +971,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await mcp.setStatus(server.id, { status: 'connected', tools, error: null });
         return sendJson(res, 200, { status: 'connected', tools });
       } catch (err) {
-        if (err.code === 'mcp.needsSignIn') return sendJson(res, 502, { status: 'needsSignIn', ...(await connectorSignIn.needsSignIn(server, err)) });
+        if (err.code === 'mcp.needsSignIn') {
+          const said = await connectorSignIn.needsSignIn(server, err);
+          return sendJson(res, 502, { status: said.code === 'mcp.keyRefused' ? 'error' : 'needsSignIn', ...said });
+        }
         await mcp.setStatus(server.id, { status: 'error', error: err.message });
         return sendJson(res, 502, { code: err.code ?? 'mcp.failed', message: err.message });
       }
@@ -1833,8 +1836,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
           } catch (err) {
             if (err.code === 'mcp.needsSignIn') { // no tools until the person signs in; the chat shows a step with Sign in and Skip it
-              await connectorSignIn.needsSignIn(server, err);
-              send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id });
+              const said = await connectorSignIn.needsSignIn(server, err);
+              if (said.code === 'mcp.keyRefused') send('tool', { tool: `${server.name}`, status: 'failed', result: KEY_REFUSED });
+              else send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id });
               continue;
             }
             await mcp.setStatus(server.id, { status: 'error', error: err.message }).catch(() => {});
@@ -2497,9 +2501,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         } catch (err) {
           status = 'failed';
           if (err?.code === 'mcp.needsSignIn' && entry) {
-            await connectorSignIn.needsSignIn(entry.server, err);
-            result = NEEDS_SIGN_IN;
-            signIn = { needsSignIn: true, serverId: entry.server.id };
+            const said = await connectorSignIn.needsSignIn(entry.server, err);
+            if (said.code === 'mcp.keyRefused') result = KEY_REFUSED;
+            else {
+              result = NEEDS_SIGN_IN;
+              signIn = { needsSignIn: true, serverId: entry.server.id };
+            }
           } else result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 8000);
