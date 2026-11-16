@@ -112,7 +112,9 @@ function token(f, p, send) {
   if (p.get('grant_type') === 'refresh_token') {
     if (f.opts.refreshFails || !f.refresh.has(p.get('refresh_token'))) return send(400, { error: 'invalid_grant' });
     f.refresh.delete(p.get('refresh_token')); // rotate
-    return send(200, issue());
+    const answer = issue();
+    if (f.opts.refreshDelayMs) return void setTimeout(() => send(200, answer), f.opts.refreshDelayMs); // a slow provider
+    return send(200, answer);
   }
   return send(400, { error: 'unsupported_grant_type' });
 }

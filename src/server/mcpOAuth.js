@@ -27,16 +27,16 @@ const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 /** An address on this computer or this network (not the internet): loopback in any spelling, 0.0.0.0, private and link-local ranges. */
 function isLocalHost(hostname) {
   const h = String(hostname).toLowerCase().replace(/\.$/, '');
-  if (h === 'localhost' || h.endsWith('.localhost') || h === '[::1]' || h === '[::]' || h === '0.0.0.0') return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '[::1]' || h === '[::]' || h === '0.0.0.0') return true;
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
   if (!m) return /^\[(::1|::ffff:|fe80:|fc|fd)/i.test(h);
   const [a, b] = [Number(m[1]), Number(m[2])];
-  return a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  return a === 127 || a === 10 || a === 0 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 const notRemoteSafe = (url) => { const u = new URL(url); return u.protocol !== 'https:' || isLocalHost(u.hostname); };
 
 const tokenKey = (serverId) => `mcp:${serverId}:oauth`;
-const clientKey = (issuer, redirectUri) => `mcp-oauth-client:${issuer}|${redirectUri}`;
+const clientKey = (issuer) => `mcp-oauth-client:${issuer}|${CALLBACK_PATH}`; // the port is left out: a new client is not registered at every launch
 
 function fail(message, code = 'mcp.oauth') {
   return new McpError(message, code);
@@ -203,7 +203,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
 
   async function clientFor(meta, pastedClientId) {
     const given = String(pastedClientId ?? '').trim();
-    const key = clientKey(meta.issuer, redirectUri);
+    const key = clientKey(meta.issuer);
     if (given) {
       if (given.length > 300 || /[\s"]/.test(given)) throw fail('That client ID does not look right.', 'mcp.oauth.badClient');
       await secrets.set(key, JSON.stringify({ client_id: given }));
@@ -294,7 +294,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     const account = await accountName(meta, tokens);
     await secrets.set(tokenKey(flow.serverId), JSON.stringify({
       access_token: tokens.access_token, refresh_token: tokens.refresh_token ?? null, expires_at: tokens.expires_at,
-      scope: tokens.scope ?? null, account, issuer: flow.issuer, client_id: flow.client,
+      scope: tokens.scope ?? null, account, issuer: flow.issuer, client_id: flow.client, origin: new URL(flow.serverUrl).origin,
     }));
     return { serverId: flow.serverId, account };
   }
@@ -349,12 +349,20 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     return raw ? parseJson(raw) : null;
   }
 
+  /** W36-1: a token is only ever sent to the origin it was given for, and only over https (or this PC). A changed address gets nothing. */
+  function belongsTo(saved, server) {
+    try {
+      const u = new URL(server?.url);
+      return typeof saved?.origin === 'string' && saved.origin === u.origin && (u.protocol === 'https:' || (u.protocol === 'http:' && LOOPBACK.has(u.hostname)));
+    } catch { return false; }
+  }
+
   /** Headers for a request to the connector. Refreshes first when the token is about to run out. */
   async function authHeader(server, { refresh = false } = {}) {
     const id = server?.id;
     if (!id) return {};
     let saved = await readTokens(id);
-    if (!saved?.access_token) return {};
+    if (!saved?.access_token || !belongsTo(saved, server)) return {};
     if (refresh || saved.expires_at - now() < REFRESH_SKEW_MS) saved = await refreshOnce(id, saved, server);
     return { authorization: `Bearer ${saved.access_token}` };
   }
@@ -390,6 +398,9 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
       }
       throw fail('Bunny AI could not renew the sign-in just now. Try again in a moment.', 'mcp.oauth.refreshFailed');
     }
+    // re-read: the person may have signed out (or in again) while the provider was answering; then this answer is dropped
+    const now_ = await readTokens(id);
+    if (!now_?.access_token || now_.refresh_token !== saved.refresh_token || now_.client_id !== saved.client_id) throw needsSignIn();
     const next = {
       ...saved,
       access_token: tokens.access_token,
@@ -404,13 +415,14 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
   /** What the window may know. Never a token. */
   async function status(server) {
     const saved = server?.id ? await readTokens(server.id) : null;
-    if (!saved?.access_token) return { signedIn: false, account: null, expiresAt: null };
+    if (!saved?.access_token || !belongsTo(saved, server)) return { signedIn: false, account: null, expiresAt: null };
     return { signedIn: true, account: saved.account ?? null, expiresAt: saved.expires_at ?? null };
   }
 
   // ---- sign out ----
 
   async function signOut(server) {
+    if (server?.id && refreshing.has(server.id)) await refreshing.get(server.id).catch(() => {}); // a renewal in flight finishes first, then the token is removed
     const saved = server?.id ? await readTokens(server.id) : null;
     if (!server?.id) return { revoked: false, message: 'Nothing to sign out of.' };
     let revoked = false;

@@ -946,7 +946,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (mcpMatch && method === 'PATCH') {
       try {
         await localMcp.stop(mcpMatch[1]);
-        return sendJson(res, 200, await mcp.update(mcpMatch[1], await readBody(req)));
+        const before = await mcp.get(mcpMatch[1]);
+        const was = before ? { ...before } : null; // update may change the stored object itself
+        const updated = await mcp.update(mcpMatch[1], await readBody(req));
+        // W36-1: a connector pointed somewhere else is signed out of the old place, so its token is not sent to the new one
+        if (was && was.type !== 'local' && was.url !== updated.url) await connectorSignIn.signOutQuietly(was);
+        return sendJson(res, 200, updated);
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'mcp.failed', message: err.message });
       }

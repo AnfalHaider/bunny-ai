@@ -274,3 +274,16 @@ test('in a chat, a tool on a connector that needs a sign-in fails with the exact
   assert.equal(step.needsSignIn, true);
   assert.equal(step.serverId, s.id);
 });
+
+test('W36-1: changing the address of a connector signs it out first, so its token is not sent to the new place', async (t) => {
+  const s = await setup(t);
+  await signIn(s);
+  assert.ok(await s.secrets.get(`mcp:${s.id}:oauth`));
+  const same = await s.withToken(`/api/mcp/${s.id}`, { method: 'PATCH', body: JSON.stringify({ name: 'Renamed' }) });
+  assert.equal(same.status, 200);
+  assert.ok(await s.secrets.get(`mcp:${s.id}:oauth`), 'a rename keeps the sign-in');
+  const moved = await s.withToken(`/api/mcp/${s.id}`, { method: 'PATCH', body: JSON.stringify({ url: 'https://elsewhere.example.test/mcp' }) });
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.equal(await s.secrets.get(`mcp:${s.id}:oauth`), null);
+  assert.ok(s.f.revoked.length >= 1, 'the provider was told');
+});

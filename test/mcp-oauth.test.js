@@ -448,3 +448,74 @@ test('a remote connector may not name this computer or this network, over https 
   const ok = async (url) => (String(url).includes('oauth-protected-resource') ? json({ authorization_servers: ['https://auth.example.test'] }) : json({ issuer: 'https://auth.example.test', authorization_endpoint: 'https://auth.example.test/a', token_endpoint: 'https://auth.example.test/t' }));
   assert.equal((await createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl: ok }).discover(server)).issuer, 'https://auth.example.test');
 });
+
+test('W36-1: a token goes only to the origin it was given for', async () => {
+  const t = await setup();
+  try {
+    await signIn(t);
+    const own = await t.oauth.authHeader(t.f.server);
+    assert.match(own.authorization, /^Bearer /);
+    // the same origin, another path: still the same connector
+    assert.match((await t.oauth.authHeader({ ...t.f.server, url: `${t.f.base}/other/mcp` })).authorization, /^Bearer /);
+    // the connector's address was changed to another host, port or scheme: nothing is sent, and it reads as signed out
+    for (const url of ['https://elsewhere.example.test/mcp', `http://localhost:${new URL(t.f.base).port}/mcp`, 'http://127.0.0.1:9/mcp']) {
+      const moved = { ...t.f.server, url };
+      assert.deepEqual(await t.oauth.authHeader(moved), {}, url);
+      assert.equal((await t.oauth.status(moved)).signedIn, false, url);
+    }
+    assert.equal((await t.oauth.status(t.f.server)).signedIn, true);
+    // a record without an origin (written by nothing here) is not trusted either
+    const saved = JSON.parse(t.secrets.get('mcp:srv-1:oauth'));
+    delete saved.origin;
+    await t.secrets.set('mcp:srv-1:oauth', JSON.stringify(saved));
+    assert.deepEqual(await t.oauth.authHeader(t.f.server), {});
+  } finally { await t.f.close(); }
+});
+
+test('W36-2: a renewal in flight cannot leave a token behind after sign-out', async () => {
+  const t = await setup({ refreshDelayMs: 150 });
+  try {
+    await signIn(t);
+    t.clock.t += 3600_000; // the token has run out: the next call renews
+    const renewing = t.oauth.authHeader(t.f.server);
+    await new Promise((r) => setTimeout(r, 40)); // the provider has the request and is thinking
+    const out = await t.oauth.signOut(t.f.server);
+    assert.match(out.message, /Signed out/);
+    await renewing.catch(() => {}); // sign-out waited for the renewal, so it finished first
+    assert.equal(await t.secrets.get('mcp:srv-1:oauth'), null, 'nothing is left behind');
+    assert.ok(t.f.revoked.length >= 1, 'and the newest token was the one revoked');
+    assert.equal((await t.oauth.status(t.f.server)).signedIn, false);
+  } finally { await t.f.close(); }
+});
+
+test('W36-2: a renewal answer is dropped when the saved sign-in changed while it was out', async () => {
+  const t = await setup({ refreshDelayMs: 150 });
+  try {
+    await signIn(t);
+    t.clock.t += 3600_000;
+    const renewing = t.oauth.authHeader(t.f.server);
+    await new Promise((r) => setTimeout(r, 40));
+    const saved = JSON.parse(t.secrets.get('mcp:srv-1:oauth'));
+    await t.secrets.set('mcp:srv-1:oauth', JSON.stringify({ ...saved, access_token: 'newer', refresh_token: 'newer-refresh' })); // signed in again meanwhile
+    await renewing.then(() => assert.fail('dropped'), (err) => assert.equal(err.code, 'mcp.needsSignIn'));
+    assert.equal(JSON.parse(t.secrets.get('mcp:srv-1:oauth')).access_token, 'newer');
+  } finally { await t.f.close(); }
+});
+
+test('review lows: 100.64/10 and .local are private; one client is kept whatever port the app gets', async () => {
+  const secrets = memorySecretStore();
+  const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
+  const server = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', url: 'https://connector.example.test/mcp' };
+  for (const bad of ['https://100.64.1.2', 'https://100.127.255.1', 'https://printer.local', 'https://nas.local.']) {
+    const fetchImpl = async (url) => (String(url).includes('oauth-protected-resource') ? json({ authorization_servers: [bad] }) : json({ issuer: bad, authorization_endpoint: `${bad}/a`, token_endpoint: `${bad}/t` }));
+    await rejectsWith(createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl }).discover(server), 'mcp.oauth.badUrl', /address on this computer/);
+  }
+  const t = await setup();
+  try {
+    await signIn(t);
+    assert.equal(t.f.registrations.length, 1);
+    const other = createMcpOAuth({ secrets: t.secrets, redirectBase: 'http://127.0.0.1:46001', now: () => t.clock.t });
+    await other.startSignIn(t.f.server);
+    assert.equal(t.f.registrations.length, 1, 'the next launch (another port) does not register again');
+  } finally { await t.f.close(); }
+});
