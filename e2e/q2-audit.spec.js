@@ -247,7 +247,6 @@ test('Q2-9: opening a page whose server is not running says so in the pane', asy
 });
 
 test('Q2-14: in the command palette, Enter runs the highlighted command', async ({ page }) => {
-  test.fail(true, 'Q2-14: src/ui/chat.js:3198 the palette input has no keydown handler');
   await open(page);
   await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('toggle artifacts');
   await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
@@ -255,7 +254,6 @@ test('Q2-14: in the command palette, Enter runs the highlighted command', async 
 });
 
 test('Q2-15: the palette\'s Settings command opens the Settings window in place', async ({ page }) => {
-  test.fail(true, 'Q2-15: src/ui/chat.js:2959 navigates to settings.html');
   await open(page);
   await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('settings'); await page.locator('.palette-item').first().click();
   await expect(page.locator('#settings-frame')).toBeVisible({ timeout: 2000 });
@@ -274,4 +272,19 @@ test('Q2-19: after Stop in a chat that already has replies, the stopped reply st
   await expect(page.locator('#stop')).toBeHidden({ timeout: 5000 });
   await page.waitForTimeout(1500);
   expect(((await page.locator('#messages').innerText()).match(/Starting/g) ?? []).length).toBeGreaterThan(0);
+});
+
+test('Q2-20: every switch in Settings has an accessible name', async ({ page }) => {
+  await page.goto('/src/ui/settings.html');
+  const bad = await page.evaluate(() => [...document.querySelectorAll('input[type=checkbox]')].filter((i) => {
+    const label = i.getAttribute('aria-label') || [...(i.labels ?? [])].map((l) => l.textContent).join(' ');
+    const name = (label ?? '').trim().toLowerCase();
+    return !name || name === 'on' || name === 'off';
+  }).map((i) => i.id || i.dataset.cap || i.dataset.key));
+  expect(bad).toEqual([]);
+});
+
+test('Q2-22: opening /?s=<id> keeps the chat id in the address', async ({ page }) => {
+  await page.goto('/?s=abc123');
+  expect(new URL(page.url()).searchParams.get('s')).toBe('abc123');
 });

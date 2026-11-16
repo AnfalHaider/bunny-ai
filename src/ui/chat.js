@@ -166,8 +166,9 @@ function toggleSidePane() {
   openView(state.sidePaneOpen ? null : state.activePane);
 }
 
-async function terminalStart() {
-  if (state.terminalId) return;
+async function terminalStart({ fresh = false } = {}) {
+  if (state.terminalId && !fresh) return;
+  if (state.terminalId) terminalStop();
   try {
     // No folder set: the server starts the shell in its own working folder.
     const cwd = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? undefined;
@@ -3423,8 +3424,8 @@ const PALETTE_COMMANDS = [
   { name: 'Export this chat', hint: 'Download the transcript as Markdown', run: () => exportChat() },
   { name: 'Toggle artifacts', hint: 'Show or hide the artifact panel', run: () => toggleArtifacts() },
   { name: 'Import a chat', hint: 'Bring in a transcript from another tool', run: () => openImport() },
-  { name: 'Settings', hint: 'Open settings', run: () => { location.href = './settings.html'; } },
-  { name: 'Providers', hint: 'Open the providers screen', run: () => { location.href = './providers.html'; } },
+  { name: 'Settings', hint: 'Open settings', run: () => openSettings('profile') },
+  { name: 'Providers', hint: 'Open the providers screen', run: () => openSettings('providers') },
 ];
 
 function openPalette() {
@@ -3436,6 +3437,18 @@ function openPalette() {
 
 function closePalette() {
   $('palette-backdrop').hidden = true;
+}
+
+/** Keyboard use of the palette: Arrow keys move the highlight, Enter runs it (Q2-14). */
+function paletteKey(e) {
+  const items = [...$('palette-list').querySelectorAll('.palette-item')];
+  if (!items.length || !['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) return;
+  e.preventDefault();
+  let at = items.findIndex((i) => i.classList.contains('is-active'));
+  if (e.key === 'Enter') { items[Math.max(at, 0)].click(); return; }
+  at = e.key === 'ArrowDown' ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
+  items.forEach((i, n) => { i.classList.toggle('is-active', n === at); i.setAttribute('aria-selected', String(n === at)); });
+  items[at].scrollIntoView?.({ block: 'nearest' });
 }
 
 function renderPalette(query) {
@@ -3467,6 +3480,7 @@ function renderPalette(query) {
   if (!host.children.length) {
     host.append(element('div', { className: 'picker-empty', textContent: 'Nothing matches.' }));
   }
+  host.querySelector('.palette-item')?.classList.add('is-active');
 }
 
 // ---------------------------------------------------------------------------
@@ -3676,6 +3690,7 @@ async function boot() {
     if (e.key === 'Escape' && !$('import-backdrop').hidden) closeImport();
   });
   $('palette-input').addEventListener('input', (e) => renderPalette(e.target.value));
+  $('palette-input').addEventListener('keydown', paletteKey);
   $('palette-backdrop').addEventListener('click', (e) => {
     if (e.target === $('palette-backdrop')) closePalette();
   });
@@ -3746,7 +3761,7 @@ async function boot() {
   });
 
   // ---- terminal new ----
-  $('terminal-new')?.addEventListener('click', () => terminalStart());
+  $('terminal-new')?.addEventListener('click', () => terminalStart({ fresh: true }));
 
   // ---- terminal input ----
   const termInput = $('terminal-input');

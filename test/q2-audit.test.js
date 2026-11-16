@@ -146,7 +146,7 @@ test('importing a transcript with "## You" / "## Assistant" headings makes two m
   assert.deepEqual(p.messages.map((m) => m.role), ['user', 'assistant']);
 });
 
-test('Q2-16: a transcript written as "User: ..." / "Assistant: ..." on one line is understood', { todo: 'Q2-16: src/server/import.js:98 only matches a label that stands alone on its line; the app answers "No messages were found in that file."' }, () => {
+test('Q2-16: a transcript written as "User: ..." / "Assistant: ..." on one line is understood', () => {
   const p = parseImport('User: hi there\nAssistant: hello back');
   assert.equal(p.messages.length, 2);
 });
@@ -200,12 +200,12 @@ test('Q2-2: the chosen permission mode survives a redraw of the composer in a ne
   assert.ok(!/^\s*if \(permMode\) permMode\.value = state\.session\?\.permissionMode \?\?/m.test(js), 'renderComposerHeader resets the mode select unconditionally');
 });
 
-test('Q2-14: the command palette can be driven from the keyboard (Arrow keys and Enter)', { todo: 'Q2-14: src/ui/chat.js:3198 only listens for "input" on #palette-input' }, async () => {
+test('Q2-14: the command palette can be driven from the keyboard (Arrow keys and Enter)', async () => {
   const js = await read('src/ui/chat.js');
   assert.ok(/palette-input'\)\.addEventListener\('keydown'/.test(js), 'no keydown handler on the palette input');
 });
 
-test('Q2-15: the palette\'s Settings and Providers commands open the Settings window instead of leaving the chat', { todo: 'Q2-15: src/ui/chat.js:2959-2960 set location.href to settings.html / providers.html' }, async () => {
+test('Q2-15: the palette\'s Settings and Providers commands open the Settings window instead of leaving the chat', async () => {
   const js = await read('src/ui/chat.js');
   const cmds = /const PALETTE_COMMANDS = \[([\s\S]*?)\n\];/.exec(js)?.[1] ?? '';
   assert.ok(!/location\.href/.test(cmds), 'a palette command navigates the whole page');
@@ -216,7 +216,7 @@ test('Q2-17: no screen uses window.prompt, which the desktop (Electron) app does
   for (const f of files) assert.ok(!/window\.prompt\(|[^.\w]prompt\(/.test((await read(`src/ui/${f}`)).replace(/\/\/.*$/gm, '')), `${f} calls prompt()`);
 });
 
-test('Q2-18: "New terminal" (＋) opens another shell when one is already running', { todo: 'Q2-18: src/ui/chat.js:168 terminalStart returns at once when state.terminalId is set, so ＋ does nothing' }, async () => {
+test('Q2-18: "New terminal" (＋) opens another shell when one is already running', async () => {
   const js = await read('src/ui/chat.js');
   assert.ok(!/async function terminalStart\(\) \{\s*if \(state\.terminalId\) return;/.test(js), '＋ is a no-op while a shell exists');
 });
@@ -244,4 +244,20 @@ test('Q2-31: after Stop, the page waits for the stopped reply itself, not for a 
   const js = await read('src/ui/chat.js');
   const body = (js.split('async function refreshSession')[1] ?? '').split('async function openSession')[0];
   assert.ok(/tool_call/.test(body), 'refreshSession does not tell a tool step from a reply');
+});
+
+test('Q2-21: a different project\'s site on the dev port does not show as "running"', async () => {
+  const { createServer } = await import('node:http');
+  const srv = createServer((_req, res) => res.end('<title>Some other shop</title>'));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+  try {
+    const dir = await mkdtemp(join(tmpdir(), 'bunny-q2-dev-'));
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'my-invented-app', scripts: { dev: `node server.js --port ${port}` } }));
+    const other = await detectDevServer(dir);
+    assert.equal(other.running, false); assert.equal(other.otherSite, true);
+    srv.removeAllListeners('request');
+    srv.on('request', (_req, res) => res.end('<title>my-invented-app</title>'));
+    assert.equal((await detectDevServer(dir)).running, true);
+  } finally { srv.close(); }
 });
