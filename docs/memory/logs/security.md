@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - W3-6 fixes `3155e20`: PASS; W2-9 and W3-3 not built
+
+W36-1 (token bound to the origin it was issued for, https or this PC only, address edit signs out, tokens saved before the fix count as signed out) and W36-2 (a renewal in flight cannot restore a signed-out token, sign-out waits for it) verified with a stub-provider probe and 48 of 48 tests; `100.64/10` and `.local` are private, one registered client per provider. The fix branch is not on the v0.1.8 line yet, and `appTools.uninstall` must sign connectors out when it is merged. W2-9 and W3-3 have no commit anywhere (only a plan line), so there is nothing to review. Review `docs/security/2026-11-17-w3-6-fixes-and-queue.md`. Lesson: test a binding with the look-alikes (subdomain, port, scheme, userinfo), not only the obvious other host.
+
 ## 2026-11-17 - v0.1.8 W4-8 quick-ask bar and W4-10 plugin install and uninstall (`e061ce6`): both PASS
 
 W4-8: `desktopCapturer` is called in one place, reachable only from the bar's own IPC (sender and frame URL checked) after two clicks ("+", "Add a screenshot"); one PNG, chip with ×, kept in memory until sent, then only in the new Chat-mode chat (no tools, no folder, a leading `/` neutralised); the bar is sandboxed with a closed CSP and a two-function bridge; `quickAskEnabled` and `quickAskShortcut` answer 403 to a token holder; the shortcut is off by default. W4-10: `POST /api/plugins`, `DELETE /api/plugins/:id`, `/api/plugins/install` and the `plugins` key answer 403 to a token holder; uninstall removes only the ids written down at install (add always makes fresh ids, so a person's own connectors and skills are never touched); a bundle can add only remote connectors. Note for W3-6: uninstall must sign the connector out. 38 of 38 tests; no Electron run. Review `docs/security/2026-11-17-w4-8-w4-10-review.md`. Lesson: when a route is added in a branch, the first probe is the token-only request; this one was caught by the builder, which is the habit working.
