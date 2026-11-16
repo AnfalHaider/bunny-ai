@@ -68,7 +68,7 @@ const sw=(on)=>`<span class="sw"><i class="tgl ${on?'on':''}"></i>${on?'on':'off
 const OLD='When the model you picked hits a rate limit, is not available, sends an empty reply or does not answer in about 30 seconds, the reply goes to the best other model for the job (at most three tries), and the reply says which answered and why. If your computer is offline no model is tried: the message waits and is sent when the network is back. To tell, Bunny sends a bare request to a few neutral hosts (www.gstatic.com, cp.cloudflare.com, captive.apple.com) only after a failure; nothing of yours is sent.';
 const NEW='When the model you picked hits a rate limit, is not available, sends an empty reply or does not answer in time (see <span class="chg">Wait for a first reply</span>, below), the reply goes to the best other model for the job (at most three tries), and the reply says which answered and why. If your computer is offline no model is tried: the message waits and is sent when the network is back. To tell, Bunny sends a bare request to a few neutral hosts (www.gstatic.com, cp.cloudflare.com, captive.apple.com) only after a failure; nothing of yours is sent.';
 const WAITD='How long Bunny waits for the model you picked to start answering before it tries another. Reasoning, image and video models get twice as long, and so does a reply that goes quiet part-way.';
-const nowTxt=(s)=>`Now: ${s} seconds, or ${s*2} for reasoning, image and video models`;
+const nowTxt=(s)=>s>=600?'Now: 600 seconds for every model':`Now: ${s} seconds, or ${Math.min(s*2,600)} for reasoning, image and video models`;
 const waitRow=(sec,fb,open,cu)=>{const isC=!!cu;const val=isC?cu.val:sec;const eff=isC&&cu.bad?null:Number(val);
  const sel=`<span class="sel ${fb?'':'dis'}">${isC?'Custom…':sec+' seconds'+(sec===30?' (default)':'')}</span>`;
  const list=`<div class="menu9">${[15,30,60,90,120].map(v=>`<div class="${!isC&&v===sec?'on':''}">${v} seconds${v===30?' (default)':''}</div>`).join('')}<div class="${isC?'on':''}" style="border-top:1px solid var(--line);margin-top:2px">Custom…</div></div>`;
@@ -84,6 +84,7 @@ const SEC=[{t:'Wait for a first reply (Settings, Capabilities)',risk:'LOW-MEDIUM
   ['Another choice: 90 seconds, and the line under it says what that means for slower models',both(true,90,false)],
   ['The list open: the five presets and Custom…, the current one in bold',both(true,60,true)],
   ['Custom: pick "Custom…" and type your own number of seconds, a whole number from 10 to 600',both(true,30,false,{val:'45'})],
+  ['Custom at the top: 600 seconds is also the cap for slower models, so the line says every model waits the same',both(true,30,false,{val:'600'})],
   ['Custom, not allowed: anything else is refused with a short note, and the last good value stays saved',both(true,30,false,{val:'5',bad:true,msg:'Use a whole number of seconds from 10 to 600. Not saved: still waiting 30 seconds.'})],
   ['"Try another model" turned off: the row stays but is dimmed, and says why',both(false,30,false)]],
  notes:['<b>Today:</b> the card has one switch and a long description that says "does not answer in about 30 seconds". The 30 s is fixed in the code (and 60 s for reasoning, image and video models).',
@@ -92,14 +93,14 @@ const SEC=[{t:'Wait for a first reply (Settings, Capabilities)',risk:'LOW-MEDIUM
   '<b>Card text change (the highlighted words):</b> "does not answer in about 30 seconds" becomes "does not answer in time (see Wait for a first reply, below)". The rest of the card is unchanged, including the offline paragraph.',
   '<b>Custom (owner, 2026-11-17):</b> choosing Custom… shows a small number box and the word "seconds" under the select, focused (accent ring). It takes a whole number from 10 to 600. The line under it updates with what you type ("Now: 45 seconds, or 90 for reasoning, image and video models"). Reopening Settings with a saved custom value shows Custom… and the number.',
   '<b>Not allowed:</b> an empty box, a decimal, text, a number under 10 or over 600 turns the box red (<code>--bad</code>) and shows "Use a whole number of seconds from 10 to 600. Not saved: still waiting N seconds." The last good value stays saved and in use; nothing is written until the number is valid (checked as you type and again when you leave the box).',
-  '<b>The doubling stays</b> and is shown in the line under the box. At the top of the range, 600 seconds, reasoning, image and video models wait 20 minutes: that is the cost of allowing 600 (see the decision below).',
+  '<b>The doubling stays</b> and is shown in the line under the box. The doubled time is capped at 600 seconds (Chief of Staff, 2026-11-17): 400 shows "or 600 for reasoning, image and video models", and 600 shows "Now: 600 seconds for every model".',
   '<b>When the switch is off:</b> the new row is dimmed (opacity 50%, the select stays readable) and ends "Used only when Try another model is on." The select still works, so a person can set it first; nothing is hidden.',
   '<b>The default behaves as today:</b> 30 selected means 30 s, 60 s for reasoning, image and video models, and 60 s of silence once a reply is streaming. An unknown or missing saved value shows as 30 seconds.',
   '<b>Phone:</b> the select and the line under it drop under the text, full width up to 342 px; the switch row of the card is unchanged.',
   '<b>Elsewhere (same commit, O7):</b> the README "~30s" diagram label and card wording, and the Settings help picture.']}];
 const DEC=[
  ['Which choices?','The presets 15, 30 (default), 60, 90, 120 seconds plus Custom… (owner, 2026-11-17), a whole number from 10 to 600. Recommendation: as drawn; the range stops anyone setting 0 or 5000.'],
- ['Is 600 too high a ceiling?','At 600 seconds, slow models double to 20 minutes before Bunny tries another. That is the owner&rsquo;s range, so it is drawn; the line under the box states the doubled number so it is never hidden. Recommendation: keep 10 to 600 and let Builder confirm the doubled limit has its own cap if the chat path has one.'],
+ ['Is 600 too high a ceiling?','The doubled limit is capped at 600 seconds, so nothing waits longer than 10 minutes; at 300 or more every slow model waits 600, and at 600 every model does, and the line says so. Recommendation: as drawn.'],
  ['Where does the row go?','Directly under "Try another model when yours is busy" in Capabilities, inside the same card group. Recommendation: as drawn.'],
  ['Dim the row when the switch is off?','Yes, dimmed with an explanation, not hidden, so the setting is findable. Recommendation: as drawn.'],
  ['Show the doubling as numbers?','Yes, one line under the select ("or 60 for reasoning, image and video models"). Recommendation: as drawn.']
