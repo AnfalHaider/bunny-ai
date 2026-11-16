@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W2-7 permission rules (`claude/builder-w2-7` @ 791dc98): FAIL
+
+Path rules hold (25 spellings, real reads and writes, links, 8.3, streams). Command rules do not: W27-1 HIGH, the splitter treats a backslash as an escape but run_command is PowerShell, so `npm test \; Remove-Item x` is one part to the rules and two commands to PowerShell: an Allow covers any command and a Deny is skipped (checked against PowerShell's own parser). W27-2 aliases (`rm`, `ri`, `del`, `rd`) and git options (`-C x`, `--no-pager`) slip past a text Deny. W27-3 any local program gets the page token from a plain GET and can erase the rules over the local API, in Auto with no question. Review: `docs/security/2026-11-16-w2-7-rules-review.md`, probes in `docs/security/w2-7-probe/`. Lesson: test a parser against the real shell's parser, not against what the shell is assumed to be.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |

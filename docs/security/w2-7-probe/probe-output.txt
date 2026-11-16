@@ -1,0 +1,161 @@
+--- Part 1a: an Allow must not cover a second command PowerShell will run
+**BYPASS** allow applied, PowerShell runs: npm|Remove-Item   <- "npm test \\; Remove-Item x"
+**BYPASS** allow applied, PowerShell runs: npm|Remove-Item   <- "npm test \\| Remove-Item x"
+  ok  allow PS:[npm]  "npm test \\& Remove-Item x"
+**BYPASS** allow applied, PowerShell runs: npm|Remove-Item   <- "npm test \\\nRemove-Item x"
+**BYPASS** allow applied, PowerShell runs: echo|Remove-Item|echo   <- "echo \"x\\\" ; Remove-Item y ; echo \""
+**BYPASS** allow applied, PowerShell runs: echo|Remove-Item|echo   <- "echo \"x\\\" | Remove-Item y ; echo \""
+  ok  none  PS:[echo|Remove-Item]  "echo 'a' ; Remove-Item y"
+  ok  none  PS:[npm]  "npm test\u000bRemove-Item y"
+  ok  none  PS:[npm]  "npm test\fRemove-Item y"
+  ok  none  PS:[npm|Remove-Item]  "npm test ; Remove-Item y"
+  ok  allow PS:[npm]  "npm test； Remove-Item y"
+  ok  none  PS:[npm|Remove-Item]  "npm test # ; ok\nRemove-Item y"
+  ok  none  PS:[npm|Remove-Item]  "npm test <# c #> ; Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo @'\nx\n'@; Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo @\"\nx\n\"@; Remove-Item y"
+  ok  none  PS:[npm]  "npm test `\nRemove-Item y"
+  ok  none  PS:[npm]  "npm test -- --a=\"b`\" ; Remove-Item y ; \""
+  ok  none  PS:[git|Remove-Item]  "git status --porcelain=v1 ; Remove-Item y"
+  ok  none  PS:[echo]  "echo ok & Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo ok&&Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo ok||Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo ok;Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo ok -and (Remove-Item y)"
+  ok  none  PS:[echo|Remove-Item]  "echo $(Remove-Item y)"
+  ok  none  PS:[echo|Remove-Item]  "echo ok | Remove-Item y"
+  ok  none  PS:[echo]  "echo ok > f.txt"
+  ok  none  PS:[echo]  "echo ok >> f.txt"
+  ok  none  PS:[echo]  "echo ok 2> f.txt"
+  ok  none  PS:[echo]  "echo ok *> f.txt"
+  ok  none  PS:[echo]  "echo ok 1> f.txt"
+  ok  none  PS:[echo]  "echo ok>f.txt"
+  ok  none  PS:[echo|Out-File]  "echo ok | Out-File f.txt"
+  ok  none  PS:[echo|tee]  "echo ok | tee f.txt"
+  ok  none  PS:[echo|Set-Content]  "echo ok | Set-Content f.txt"
+  ok  none  PS:[npm|Remove-Item]  "npm test; ; Remove-Item y"
+  ok  none  PS:[echo]  "echo ok &Remove-Item y"
+  ok  none  PS:[echo|Remove-Item]  "echo ok -- ; Remove-Item y"
+  ok  none  PS:[echo]  "echo ${env:x}"
+  ok  allow PS:[echo]  "echo $env:x"
+--- Part 1b: a Deny must fire when PowerShell would run the denied command
+  ok  deny  PS:[Remove-Item]  "Remove-Item x"
+**BYPASS** deny silent, PowerShell runs: echo|Remove-Item   <- "echo a \\; Remove-Item x"
+**BYPASS** deny silent, PowerShell runs: echo|Remove-Item|echo   <- "echo \"a\\\" ; Remove-Item x ; echo \""
+**BYPASS** deny silent, PowerShell runs: rm   <- "rm -r x"
+**BYPASS** deny silent, PowerShell runs: ri   <- "ri -r x"
+**BYPASS** deny silent, PowerShell runs: del   <- "del x"
+**BYPASS** deny silent, PowerShell runs: erase   <- "erase x"
+**BYPASS** deny silent, PowerShell runs: rd   <- "rd x"
+**BYPASS** deny silent, PowerShell runs: rmdir   <- "rmdir x"
+  ok  deny  PS:[Remove-Item]  "Remove-Item -Recurse x"
+  ok  deny  PS:[remove-item]  "remove-item x"
+  ok  deny  PS:[REMOVE-ITEM]  "REMOVE-ITEM x"
+  ok  none  PS:[Microsoft.PowerShell.Management\Remove-Item]  "Microsoft.PowerShell.Management\\Remove-Item x"
+  ok  deny  PS:[Remove-Item]  "& Remove-Item x"
+**BYPASS** deny silent, PowerShell runs: Remove-Item   <- "& \"Remove-Item\" x"
+  ok  none  PS:[|Get-Command]  "& (Get-Command Remove-Item) x"
+**BYPASS** deny silent, PowerShell runs: Remove-Item   <- ". Remove-Item x"
+  ok  deny  PS:[Remove-Item]  "Remove-Item`  x"
+**BYPASS** deny silent, PowerShell runs: Remove-Item   <- "Re`move-Item x"
+  ok  none  PS:[x]  "\"Remove-Item\" x"
+  ok  none  PS:[x]  "'Remove-Item' x"
+  ok  none  PS:[]  "$c=\"Remove-Item\"; & $c x"
+  ok  none  PS:[iex]  "iex \"Remove-Item x\""
+  ok  none  PS:[Invoke-Expression]  "Invoke-Expression \"Remove-Item x\""
+  ok  none  PS:[powershell]  "powershell -c \"Remove-Item x\""
+  ok  none  PS:[pwsh]  "pwsh -Command \"Remove-Item x\""
+  ok  none  PS:[cmd]  "cmd /c del x"
+  ok  none  PS:[cmd]  "cmd /c \"rd /s x\""
+  ok  none  PS:[start]  "start Remove-Item"
+  ok  deny  PS:[Get-ChildItem|Remove-Item]  "Get-ChildItem | Remove-Item"
+**BYPASS** deny silent, PowerShell runs: gci|ri   <- "gci | ri"
+**BYPASS** deny silent, PowerShell runs: ls|rm   <- "ls x | rm"
+  ok  none  PS:[]  "[IO.File]::Delete(\"x\")"
+  ok  deny  PS:[git]  "git push"
+  ok  deny  PS:[git]  "git  push"
+**BYPASS** deny silent, PowerShell runs: git   <- "git -C . push"
+**BYPASS** deny silent, PowerShell runs: git   <- "git -c a=b push"
+  ok  deny  PS:[git]  "git push origin main"
+  ok  deny  PS:[git]  "& git push"
+**BYPASS** deny silent, PowerShell runs: git.exe   <- "git.exe push"
+  ok  none  PS:[push]  "\"git\" push"
+**BYPASS** deny silent, PowerShell runs: git   <- "git `push"
+**BYPASS** deny silent, PowerShell runs: git   <- "g`it push"
+  ok  none  PS:[]  "$g=\"git\"; & $g push"
+  ok  none  PS:[cmd]  "cmd /c git push"
+  ok  none  PS:[powershell]  "powershell -c \"git push\""
+**BYPASS** deny silent, PowerShell runs: git   <- "git --no-pager push"
+**BYPASS** deny silent, PowerShell runs: git   <- "git -P push"
+**BYPASS** deny silent, PowerShell runs: GIT_X=1   <- "GIT_X=1 git push"
+  ok  deny  PS:[git]  "$env:X=1; git push"
+  ok  none  PS:[gh]  "gh api -X PUT x"
+  ok  deny  PS:[Remove-Item]  "if ($true) { Remove-Item x }"
+  ok  deny  PS:[Remove-Item]  "$(Remove-Item x)"
+  ok  deny  PS:[echo|Remove-Item]  "echo $(Remove-Item x)"
+  ok  deny  PS:[echo|Remove-Item]  "echo `$(Remove-Item x)"
+  ok  deny  PS:[Remove-Item]  "@(Remove-Item x)"
+  ok  deny  PS:[Remove-Item]  "{ Remove-Item x }.Invoke()"
+  ok  deny  PS:[Remove-Item]  "foreach ($i in 1) { Remove-Item x }"
+  ok  deny  PS:[echo|%|Remove-Item]  "echo 1 | % { Remove-Item x }"
+  ok  deny  PS:[Remove-Item]  "Remove-Item -Path x"
+  ok  deny  PS:[echo|Remove-Item]  "echo x ; Remove-Item x"
+  ok  deny  PS:[echo|Remove-Item]  "echo x\nRemove-Item y"
+  ok  deny  PS:[echo|Remove-Item]  "echo x\r\nRemove-Item y"
+  ok  deny  PS:[echo|Remove-Item]  "echo x\rRemove-Item y"
+--- Part 2: path rules
+8.3 name of secrets: secrets
+  ok  read_file  deny  touches=true  "secrets/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "Secrets/Key.PEM" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "Secrets/Key.PEM" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "SECRETS\\key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "SECRETS\\key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "secrets/../secrets/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets/../secrets/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "docs/../secrets/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "docs/../secrets/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "./secrets/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "./secrets/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "secrets//key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets//key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "secrets/./key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets/./key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "link/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "link/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "docs/jl/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "docs/jl/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "secrets/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "secrets/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=false  "secrets./key.pem" canon=secrets./key.pem
+**BYPASS** write_file "secrets./key.pem" reaches the protected file (canon=secrets./key.pem) but the rule says none
+  ok  read_file  deny  touches=false  "secrets /key.pem" canon=secrets /key.pem
+**BYPASS** write_file "secrets /key.pem" reaches the protected file (canon=secrets /key.pem) but the rule says none
+  ok  read_file  deny  touches=false  "secrets/key.pem." canon=secrets/key.pem.
+  ok  write_file deny  touches=true  "secrets/key.pem." canon=secrets/key.pem.
+  ok  read_file  deny  touches=false  "secrets/key.pem " canon=secrets/key.pem 
+  ok  write_file deny  touches=true  "secrets/key.pem " canon=secrets/key.pem 
+  ok  read_file  deny  touches=true  "secrets/key.pem::$DATA" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets/key.pem::$DATA" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "secrets::$INDEX_ALLOCATION/key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "secrets::$INDEX_ALLOCATION/key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=false  "secrets/key.pem:stream" canon=secrets/key.pem:stream
+  ok  write_file deny  touches=true  "secrets/key.pem:stream" canon=secrets/key.pem:stream
+  ok  read_file  none  touches=false  ".env." canon=.env.
+  ok  read_file  none  touches=false  ".env " canon=.env 
+  ok  read_file  deny  touches=false  ".env::$DATA" canon=.env
+  ok  read_file  deny  touches=false  ".ENV" canon=.env
+  ok  write_file none  touches=false  ".ENV" canon=.env
+  ok  read_file  deny  touches=false  "secrets/KEY~1.PEM" canon=secrets/KEY~1.PEM
+  ok  write_file deny  touches=true  "secrets/KEY~1.PEM" canon=secrets/KEY~1.PEM
+  ok  read_file  deny  touches=false  "\\\\?\\C:\\Users\\anfal\\AppData\\Local\\Temp\\bunny-w27-6btG5c\\ws\\secrets\\key.pem" canon=secrets/key.pem
+  ok  read_file  deny  touches=true  "C:\\Users\\anfal\\AppData\\Local\\Temp\\bunny-w27-6btG5c\\ws\\secrets\\key.pem" canon=secrets/key.pem
+  ok  write_file deny  touches=true  "C:\\Users\\anfal\\AppData\\Local\\Temp\\bunny-w27-6btG5c\\ws\\secrets\\key.pem" canon=secrets/key.pem
+  allow-edit allow "docs/a.md" canon=docs/a.md
+  allow-edit deny  "docs/../secrets/key.pem" canon=secrets/key.pem
+  allow-edit deny  "docs/jl/key.pem" canon=secrets/key.pem
+  allow-edit deny  "docs/./../secrets/x" canon=secrets/x
+  allow-edit allow "DOCS/a.md" canon=docs/a.md
+BYPASSES: 28
