@@ -206,7 +206,7 @@ test('Q2-15: the palette\'s Settings and Providers commands open the Settings wi
   assert.ok(!/location\.href/.test(cmds), 'a palette command navigates the whole page');
 });
 
-test('Q2-17: no screen uses window.prompt, which the desktop (Electron) app does not support', { todo: 'Q2-17: src/ui/chat.js:766 Rename chat uses window.prompt (not run in Electron here: the electron binary is not installed in this worktree)' }, async () => {
+test('Q2-17: no screen uses window.prompt, which the desktop (Electron) app does not support', async () => {
   const files = ['chat.js', 'browser-pane.js', 'api.js', 'embed.js', 'pane-layout.js'];
   for (const f of files) assert.ok(!/window\.prompt\(|[^.\w]prompt\(/.test((await read(`src/ui/${f}`)).replace(/\/\/.*$/gm, '')), `${f} calls prompt()`);
 });

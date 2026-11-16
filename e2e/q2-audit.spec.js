@@ -103,6 +103,9 @@ test('chat row menu: rename, archive and restore, and an incognito chat is not s
   await page.locator('.session-row').first().hover();
   await page.locator('.session-row .row-menu').first().click();
   await page.getByRole('menuitem', { name: 'Rename' }).click();
+  const ask = page.getByRole('dialog', { name: 'Rename chat' }).locator('input');
+  await ask.fill('Renamed by QA');
+  await ask.press('Enter');
   await expect(page.locator('#chat-title')).toHaveText('Renamed by QA');
   await page.locator('.session-row').first().hover();
   await page.locator('.session-row .row-menu').first().click();

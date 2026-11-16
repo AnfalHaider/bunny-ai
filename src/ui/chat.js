@@ -764,7 +764,7 @@ function renderSessionMenu(s) {
   };
 
   menu.append(item('Rename', async () => {
-    const next = window.prompt('Rename chat', s.title);
+    const next = await askText({ title: 'Rename chat', value: s.title, label: 'Chat name', action: 'Rename' });
     if (next === null) return;
     await sendJSON(`/api/sessions/${s.id}`, 'PATCH', { title: next });
     await loadSessions();
@@ -1853,6 +1853,33 @@ async function streamReply({ retry = true } = {}) {
   await refreshSession();
   await loadSessions();
   return assembled;
+}
+
+/**
+ * A one-line question in an in-app dialog. The desktop app (Electron) has no window.prompt, so nothing here uses it.
+ * Resolves with the text, or null when the person cancels (Esc, Cancel, or a click outside).
+ */
+function askText({ title, value = '', label = title, action = 'OK' }) {
+  return new Promise((resolve) => {
+    const input = element('input', { className: 'input', type: 'text', value, 'aria-label': label, maxLength: 200 });
+    const cancel = element('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancel' });
+    const ok = element('button', { className: 'btn btn-primary', type: 'button', textContent: action });
+    const card = element('div', { className: 'palette modal ask-text', role: 'dialog', 'aria-label': title },
+      element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: title })),
+      element('div', { className: 'modal-body' }, input),
+      element('div', { className: 'modal-foot actions' }, element('span', { className: 'spacer' }), cancel, ok));
+    const backdrop = element('div', { className: 'palette-backdrop modal-backdrop', id: 'ask-text-backdrop' }, card);
+    const done = (result) => { backdrop.remove(); resolve(result); };
+    cancel.addEventListener('click', () => done(null));
+    ok.addEventListener('click', () => done(input.value.trim() ? input.value : null));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); ok.click(); } else if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    });
+    document.body.append(backdrop);
+    input.focus();
+    input.select();
+  });
 }
 
 async function refreshSession({ expectAssistant = false } = {}) {
