@@ -205,9 +205,30 @@ export function normalisePart(part, depth = 0) {
  * and a quote that is left unpaired counts as computed.
  */
 export function computedArguments(line) {
-  const bare = String(line ?? '').replace(/'[^']*'/g, "''").replace(/"(?:[^"`$]|`.)*"/g, '""'); // text that cannot compute anything
-  if (/["']/.test(bare.replace(/''|""/g, ''))) return true; // an unpaired quote: do not guess
-  return /[(]|`-|\$[A-Za-z_{(?]|(?:^|\s)@[({A-Za-z_$]/.test(bare);
+  // one left-to-right pass: a quote inside the other kind of quote is only a character; a double-quoted string with $ or a backtick in it computes
+  const text = String(line ?? '');
+  let outside = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "'") {
+      const end = text.indexOf("'", i + 1);
+      if (end < 0) return true; // unpaired
+      i = end;
+    } else if (c === '"') {
+      let j = i + 1;
+      let computes = false;
+      for (; j < text.length && text[j] !== '"'; j += 1) {
+        if (text[j] === '`') { computes = true; j += 1; } else if (text[j] === '$') computes = true;
+      }
+      if (j >= text.length || computes) return true; // unpaired, or it works something out
+      i = j;
+    } else if (c === '`') {
+      if (text[i + 1] === '-') return true;
+      outside += text[i + 1] ?? ''; // a backtick makes the next character ordinary
+      i += 1;
+    } else outside += c;
+  }
+  return /[(]|\$[A-Za-z_{(?]|(?:^|\s)@[({A-Za-z_$]/.test(outside);
 }
 
 /**
