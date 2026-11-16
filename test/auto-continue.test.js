@@ -115,10 +115,16 @@ test('a token budget asks before it is spent; stopping ends with a report', asyn
   assert.ok(n <= 8, `stopped within a few rounds (${n})`);
 });
 
-test('a stored 0 for the long-job caps turns continuing off instead of reading as the default', async () => {
-  const { startApp, post } = await import('./helpers.js');
-  void startApp; void post; // the cap logic lives in the chat route; its clamp is covered through the settings page and the e2e suite
-  const src = await (await import('node:fs/promises')).readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
-  assert.match(src, /n === 0 \? 0 : Math\.min\(hi/);
-  assert.match(src, /!replyCaps\.steps \|\| !replyCaps\.minutes/);
+test('reply caps: tokens are never 0 (the cost brake); steps and minutes keep 0 = off', async () => {
+  const { replyCaps } = await import('../src/server/caps.js');
+  const zero = replyCaps({ autoContinueTokens: 0, autoContinueSteps: 0, autoContinueMinutes: 0 }, false);
+  assert.equal(zero.tokens, 100_000, 'a stored 0 becomes the smallest budget, not "no limit"');
+  assert.equal(zero.steps, 0);
+  assert.equal(zero.minutes, 0);
+  assert.equal(replyCaps({ autoContinueTokens: -5 }, false).tokens, 100_000);
+  assert.equal(replyCaps({ autoContinueTokens: 'lots' }, false).tokens, 5_000_000, 'nonsense is the default');
+  assert.equal(replyCaps({ autoContinueTokens: 999_999_999_999 }, false).tokens, 100_000_000);
+  assert.deepEqual(replyCaps({}, false), { steps: 500, minutes: 120, tokens: 5_000_000 });
+  assert.deepEqual(replyCaps({}, true), { steps: 100, minutes: 30, tokens: 2_000_000 });
+  assert.equal(replyCaps({ autoContinueSteps: 99999 }, false).steps, 2000);
 });

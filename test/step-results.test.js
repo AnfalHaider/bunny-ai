@@ -180,3 +180,9 @@ test('an incognito chat keeps no note file and no long replay copy', async (t) =
   assert.equal(step.modelResult, undefined);
   assert.deepEqual((await readdir(folder)).filter((f) => f === '.bunny'), [], 'no .bunny folder was made');
 });
+
+test('looksSecret catches Cookie and Set-Cookie lines', () => {
+  assert.equal(looksSecret('Cookie: session=abcdef123456; theme=dark'), true);
+  assert.equal(looksSecret('Set-Cookie: sid=9f8e7d6c5b4a; Path=/; HttpOnly'), true);
+  assert.equal(looksSecret('I like a cookie: with milk'), false);
+});
