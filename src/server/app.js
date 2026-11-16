@@ -2443,6 +2443,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let assembled = '';
       let thinking = '';
       const replyStartedAt = Date.now();
+      // How far one reply may go, clamped whatever Settings holds. A scheduled run has nobody watching: it gets less.
+      const clamp = (v, lo, hi, fallback) => Math.min(hi, Math.max(lo, Math.round(Number(v ?? fallback)) || fallback));
+      const replyCaps = scheduledTask
+        ? { steps: clamp(settings.scheduledContinueSteps, 1, 2000, 100), minutes: clamp(settings.scheduledContinueMinutes, 1, 600, 30), tokens: 2_000_000 }
+        : { steps: clamp(settings.autoContinueSteps, 1, 2000, 500), minutes: clamp(settings.autoContinueMinutes, 1, 600, 120), tokens: clamp(settings.autoContinueTokens, 100_000, 100_000_000, 5_000_000) };
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
@@ -2467,14 +2472,25 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
             extendRounds: (round) => {
               if (workMode !== 'code' && !workspace) return false;
-              const capSteps = Math.max(0, Number(settings.autoContinueSteps ?? 500) || 0);
-              const capMs = Math.max(0, Number(settings.autoContinueMinutes ?? 120) || 0) * 60_000;
-              if (round >= capSteps || Date.now() - replyStartedAt >= capMs) return false;
+              if (round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
               maxToolRounds = round + Math.max(EFFORT.code, 12);
               send('working', { step: round + 1 });
               return true;
             },
             contextChars: workspace ? 240_000 : 0,
+            tokenBudget: replyCaps.tokens,
+            // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
+            onLimit: async ({ kind, inputTokens, step }) => {
+              if (scheduledTask) return false; // nobody is there to answer
+              const question = kind === 'tokens' ? `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`
+                : kind === 'repeat' ? `I have run the same step (${String(step).slice(0, 60)}) three times in a row. Keep trying, or stop here?`
+                  : 'I have made no new progress in 25 steps. Keep going, or stop here?';
+              const q = cleanQuestion({ question, choices: [{ label: 'Keep going', recommended: kind === 'tokens' }, { label: 'Stop here', recommended: kind !== 'tokens' }] });
+              const answer = await askQuestion(q);
+              const said = (Array.isArray(answer.choices) ? answer.choices : []).join('');
+              await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: said || 'No answer', question: { question: q.question, choices: q.choices, answer: said || null } });
+              return said === 'Keep going';
+            },
             extraBody,
             parallel: (name) => name === 'run_subagent',
             // The model's thinking, shown folded above the reply and kept with it.

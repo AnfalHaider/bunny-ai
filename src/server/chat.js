@@ -43,7 +43,7 @@ export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
-  extendRounds = null, contextChars = 0,
+  extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
 }) {
   if (fake) {
     yield* fakeStream(model, messages, signal);
@@ -64,6 +64,8 @@ export async function* streamChat({
 
   // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
   const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
+  let inputTokens = 0; let repeats = 0; let sinceNew = 0; let lastSig = '';
+  const seenCalls = new Set();
   for (let round = 0; ; round += 1) {
     // W6-2: out of steps is not the end of the job. The caller may grant more (up to its own cap) and the work goes on.
     if (round >= roundLimit()) {
@@ -73,6 +75,19 @@ export async function* streamChat({
     }
     // A long job must not outgrow the model's window: older results and big arguments are shortened, the newest kept whole.
     if (contextChars) shrinkConversation(conversation, contextChars);
+    // Limits that need a person: a token budget for the reply, the same step three times in a row, no new step in 25 rounds.
+    // The caller asks them (ask_user); "keep going" resets the counters, anything else ends the work with a report.
+    if (typeof onLimit === 'function' && round > 0) {
+      const kind = tokenBudget && inputTokens >= tokenBudget ? 'tokens' : repeats >= 3 ? 'repeat' : sinceNew >= 25 ? 'stalled' : null;
+      if (kind) {
+        let go = false;
+        try { go = !signal?.aborted && Boolean(await onLimit({ kind, round, inputTokens, repeats, sinceNew, step: lastSig.split('|')[0] })); } catch { go = false; }
+        if (!go) break;
+        if (kind === 'tokens') inputTokens = 0;
+        repeats = 0; sinceNew = 0; lastSig = '';
+      }
+    }
+    inputTokens += Math.ceil(conversation.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0), 0) / 4);
     const body = { model, messages: conversation, stream: true };
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
@@ -119,6 +134,14 @@ export async function* streamChat({
     // Run what the model asked for and put the answers back into the
     // conversation, so the model can finish its answer.
     conversation.push({ role: 'assistant', content: text || null, tool_calls: toolCalls });
+    let fresh = false;
+    for (const c of toolCalls) {
+      const sig = `${c.function.name}|${c.function.arguments}`;
+      repeats = sig === lastSig ? repeats + 1 : 1;
+      lastSig = sig;
+      if (!seenCalls.has(sig)) { seenCalls.add(sig); fresh = true; }
+    }
+    sinceNew = fresh ? 0 : sinceNew + 1;
     // A tool may answer with pictures too (a screenshot): tool messages carry text
     // only, so the pictures follow the answers as one message the model can see.
     const pictures = [];

@@ -66,3 +66,51 @@ test('shrinkConversation keeps the newest whole and shortens older results and b
   assert.equal(conv.at(-1).content.length, 20_000, 'the newest result is whole');
   assert.equal(shrinkConversation([{ role: 'user', content: 'hi' }], 100_000), false, 'a short conversation is left alone');
 });
+
+// Security review of W6-2: limits that ask a person instead of stopping silently, or running on.
+test('the same call three times in a row asks; "stop" ends with a report, "keep going" resets', async () => {
+  let n = 0;
+  const asked = [];
+  const fetchImpl = async (_u, init) => { n += 1; const b = JSON.parse(init.body); return sse([b.tools ? toolFrame(n, '{"q":"same"}') : textFrame('Reporting.')]); };
+  const out = await collect(streamChat({
+    baseUrl: 'http://x/v1', model: 'm', messages: [{ role: 'user', content: 'go' }], fetchImpl, tools, runTool: async () => 'ok',
+    maxToolRounds: 50, onLimit: async (info) => { asked.push(info.kind); return asked.length < 2; },
+  }));
+  assert.deepEqual(asked, ['repeat', 'repeat'], 'asked at the third repeat, kept going once, asked again, then stopped');
+  assert.equal(out, 'Reporting.');
+  assert.equal(n, 3 + 3 + 1, 'three steps, three more after "keep going", then the report');
+});
+
+test('25 rounds with no new call asks; a job that keeps trying new things never does', async () => {
+  let n = 0;
+  const kinds = [];
+  // Alternating between two calls never repeats three times in a row, but makes no progress either.
+  const fetchImpl = async (_u, init) => { n += 1; const b = JSON.parse(init.body); return sse([b.tools ? toolFrame(n, n % 2 ? '{"a":1}' : '{"a":2}') : textFrame('Stopped.')]); };
+  await collect(streamChat({
+    baseUrl: 'http://x/v1', model: 'm', messages: [{ role: 'user', content: 'go' }], fetchImpl, tools, runTool: async () => 'ok',
+    maxToolRounds: 100, onLimit: async (info) => { kinds.push(info.kind); return false; },
+  }));
+  assert.deepEqual(kinds, ['stalled']);
+  let m = 0;
+  const kinds2 = [];
+  const fresh = async (_u, init) => { m += 1; const b = JSON.parse(init.body); return sse([b.tools && m <= 40 ? toolFrame(m, `{"i":${m}}`) : textFrame('Done.')]); };
+  await collect(streamChat({
+    baseUrl: 'http://x/v1', model: 'm', messages: [{ role: 'user', content: 'go' }], fetchImpl: fresh, tools, runTool: async () => 'ok',
+    maxToolRounds: 100, onLimit: async (info) => { kinds2.push(info.kind); return false; },
+  }));
+  assert.deepEqual(kinds2, []);
+});
+
+test('a token budget asks before it is spent; stopping ends with a report', async () => {
+  let n = 0;
+  const kinds = [];
+  const big = 'x'.repeat(40_000);
+  const fetchImpl = async (_u, init) => { n += 1; const b = JSON.parse(init.body); return sse([b.tools ? toolFrame(n, `{"i":${n}}`) : textFrame('Budget report.')]); };
+  const out = await collect(streamChat({
+    baseUrl: 'http://x/v1', model: 'm', messages: [{ role: 'user', content: 'go' }], fetchImpl, tools, runTool: async () => big,
+    maxToolRounds: 100, tokenBudget: 50_000, onLimit: async (info) => { kinds.push(info.kind); return false; },
+  }));
+  assert.deepEqual(kinds, ['tokens']);
+  assert.equal(out, 'Budget report.');
+  assert.ok(n <= 8, `stopped within a few rounds (${n})`);
+});
