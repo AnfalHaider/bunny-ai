@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W5-1c guard delta (`claude/builder-w5-1`, 611dee7..900a470): PASS
+
+W5B-1..5 closed and verified: case-insensitive live-branch compare (22 spellings), `symbolic-ref` with a target, `worktree add -B`, `gh` download targets judged as write targets (toolkit, record folders, root, `docs`, outside, 8.3, every spelling tried), and the pre-push hook refuses tag pushes and deletes from non-live roles. 19 of 19 new tests pass; no regression in probe 4. Open (LOW): hook still allows `refs/notes|for|releases`, `fetch +main:main` when `main` is not checked out, `gh` target uses the process folder. Review `docs/security/2026-11-16-w5-1c-delta-review.md`. Lesson: the second review of a rule family finds the case and spelling variants of the first; ask for those in the first round.
+
 ## 2026-11-16 - W5-1b guard delta (`claude/builder-w5-1`, d3ee1cf..611dee7): PASS with conditions
 
 W5S-1 (`--repo=origin main`) and W5S-2 (`gh` allowlist) closed and verified on about 230 commands; G1-6 closed for tags, bare-URL and folder pushes, remote add and set-url, checkout-index, and the usual live-label moves. Probe 4 went from 49 to 44 mismatches, none new; Builder's 13 new tests pass. Open: W5B-1 `git branch -f Main HEAD` moves `main` on Windows (case), W5B-2 `git symbolic-ref refs/heads/main ...` moves it even when checked out, W5B-3 `worktree add -B main`, W5B-4 `gh run|release download -D` writes anywhere, W5B-5 the pre-push hook still lets non-live roles push tags (my earlier "backstop" claim was wrong). Review: `docs/security/2026-11-16-w5-1b-delta-review.md`; probes `g1-probe/probe9.mjs`. Slip: I deleted the local `v0.1.5` tag in my own cleanup and restored it at `73d3bef` (matches origin); nothing pushed. Lesson: a cleanup command in a shared repo (tags and branches are shared by all worktrees) needs the same care as one on the real data; and a safety claim ("the hook is the backstop") needs the probe that shows it, not memory.

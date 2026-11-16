@@ -1,0 +1,22 @@
+# W5-1c guard delta — Security review
+
+Date: 2026-11-16 · Session: Security · Reviewed: `claude/builder-w5-1` `611dee7..900a470` (lane A merged at `390666b` in between). Follows `2026-11-16-w5-1b-delta-review.md` (W5B-1..5).
+Method: scratch checkout of `900a470`, `GUARD_STAGED=1`, `decide()` and `checkPush()` on throwaway repos (nothing run live, no `gh` call). Probes: `docs/security/g1-probe/probe9.mjs` with `cases11.json`, `probe10.mjs` (gh download spellings), `probe6b.mjs` (pre-push refs), and my earlier probes 4, `cases9.json` again.
+
+## Verdict: **PASS.** All five W5B follow-ups are closed and verified; no regression.
+
+## Closed (verified)
+- **W5B-1, case of the live branch.** Refused: `branch -f Main`, `-f MAIN`, `-fM main`, `-M Main`, `-D Main`, `checkout -B Main`, `-Bmain`, `-B=main`, `switch -C MAIN`, `--force-create=main`, `--force-create Main`, `branch --force Main`, `-f refs/heads/Main`, `-f REFS/HEADS/main`, `branch -m Main x`, `branch -C x Main`, a quoted `ma"in"`, and `update-ref`. (22 spellings.)
+- **W5B-2, `symbolic-ref`.** Refused with a target, `-d`/`--delete`, `-m`, `--no-recurse`, after `-C .`, with `--` in either place, and for `Main`. Reads stay allowed (`symbolic-ref HEAD`, `-q HEAD`, `--short HEAD`). Probe 4's `git symbolic-ref HEAD refs/heads/main` (open since W5-1) is now refused.
+- **W5B-3, `worktree add`.** `-B main`, `-B Main`, `--force`, `-fB main` refused.
+- **W5B-4, `gh` downloads.** `-D`, `--dir`, `-O`, `--output` (and the attached `-OAGENTS.md`, `--output=.git/config`) are judged as write targets. Refused: the toolkit folders (`.bootstrap`, `.githooks`, `.claude`, `.git`, `AGENTS.md`, `CLAUDE.md`), the sign-off and release record folders, the repository root, `docs` itself, a target outside the working copy (`../x`, `C:/x`, `~/x`), a variable, an empty value, an 8.3 name, and every spelling I tried of the same place: other case, `docs.`, `docs /`, `docs::$DATA`, `./`, `.\`, `docs//`, `docs/./`, `docs/DOCS/../`, `downloads/../.bootstrap`, `--clobber -D .`. Allowed: `-D downloads`, `-D downloads/x`, `-O downloads/x.zip`, `-D src`. Without `-D` the target is the working folder, so a bare `gh run download 5` from the repository root is now refused (the person needs `-D downloads`; that is the intended effect).
+- **W5B-5, tags in the hook.** `checkPush` for builder, security and qa: `refs/tags/v9` refused ("may not push or delete the tag"); `refs/heads/main` refused; `refs/heads/dev` and `refs/heads/claude/x` allowed. This is what catches a push made by a program that is not a Bash tool call, and `git push origin --delete v1` for a tag that exists only on the remote (the hook sees `refs/tags/v1`).
+- Regression: probe 4 mismatches 44 → 45, but only because `gh release download v1` (no folder) is now refused as above, and `symbolic-ref HEAD refs/heads/main` left the list; the rest is the same set as at `611dee7`. `cases9.json` shows the same still-open lines as before (see below). Builder's `test/guard-016-w5b.test.js`: 19 of 19 pass on my checkout.
+
+## Still open (LOW; not worse than before, none stops landing)
+- Other ref namespaces are not refused by the hook for a non-live role: `refs/notes/*`, `refs/for/*`, `refs/releases/*`, `refs/heads/Main` (a branch of that exact name, different from `main` on GitHub), and `refs/Tags/…`. None of them can publish a release or change what the update feed reads; if the owner wants a tight rule, allow only `refs/heads/claude/*` and `refs/heads/dev` for roles that are not live pushers.
+- `git fetch origin +main:main` and `git fetch . HEAD:main` can still move the local `main` label when `main` is not checked out (git refuses it while it is). `git tag -f`, `git remote rename|remove|prune` and `git checkout-index -f ../x` are allowed (they do not publish).
+- `gh` download: the target is judged against the process folder, not a tracked `cd` (Builder's known gap), and a `downloads` folder that is itself a junction is not followed. `gh pr create -R other/repo` and `--head fork:claude/x` pass the allowlist (a pull request in the wrong place).
+
+## Not done
+No gate or e2e run; no real `git commit`/`git push` through the landed hooks (the hook test calls `checkPush` directly); no `gh` call. The landing notes in `2026-11-16-w5-1-guard-review.md` still apply: the hooks path on this machine is absolute to the main checkout, so landing takes effect for every worktree at once.

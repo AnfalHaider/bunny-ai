@@ -1,9 +1,9 @@
 ---
 piece: w5-1-guard
 role: security
-sha: 611dee7
+sha: 900a470
 verdict: PASS
 date: 2026-11-16
 ---
 
-W5-1b delta PASS with conditions: W5S-1, W5S-2 closed, G1-6 closed for tags, URL/folder pushes, remote add/set-url, checkout-index, usual label moves; no regression (probe 4: 49 to 44). Open: W5B-1 case variant Main, W5B-2 symbolic-ref, W5B-5 pre-push allows tags. See docs/security/2026-11-16-w5-1b-delta-review.md
+W5-1c delta PASS: W5B-1..5 closed and verified (case of live branch, symbolic-ref, worktree add -B, gh download targets, pre-push refuses tag pushes/deletes). 19/19 tests, no regression. Open LOW: other ref namespaces, fetch +main:main, gh target vs tracked cd. See docs/security/2026-11-16-w5-1c-delta-review.md

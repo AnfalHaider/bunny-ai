@@ -1,0 +1,10 @@
+const h = await import('file:///' + process.argv[2] + '/test/guard-helpers.js');
+const t = { after() {} };
+for (const role of ['builder']) {
+  const root = h.makeRepo(t, role, { roles: { ...h.ROLES, security: 'write_globs: [docs/**, *.md]' } });
+  h.stage(root, { 'docs/a.md': 'a' }); h.commitAll(root, 'seed');
+  for (const ref of ['refs/tags/v9', 'refs/Tags/v9', 'refs/notes/x', 'refs/for/main', 'refs/releases/x', 'refs/heads/MAIN', 'refs/heads/Main', 'refs/heads/main2', 'refs/remotes/origin/main', 'refs/stash']) {
+    const e = h.prepush.checkPush({ root, policy: h.lib.loadPolicy(root), role, localSha: h.git(root, 'rev-parse', 'HEAD'), remoteRef: ref, remoteSha: '0'.repeat(40) });
+    console.log(role.padEnd(9), ref.padEnd(22), e.length ? 'REFUSED ' + e[0].slice(0, 70) : 'allowed');
+  }
+}
