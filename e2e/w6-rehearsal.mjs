@@ -62,6 +62,7 @@ const COPY_PORT = 5780 + Math.floor(Math.random() * 100);
 
 // ---------------------------------------------------------------- the scripted model
 const frame = (d) => `data: ${JSON.stringify({ choices: [{ delta: d }] })}\n\n`;
+const toolcall = (name, args) => frame({ tool_calls: [{ index: 0, id: 'c_' + Math.random().toString(36).slice(2), function: { name, arguments: JSON.stringify(args) } }] });
 const call = (name, args) => frame({ tool_calls: [{ index: 0, id: `c_${Math.random().toString(36).slice(2)}`, function: { name, arguments: JSON.stringify(args) } }] });
 const big = (n) => '<!doctype html><html><body>' + '<p>filler paragraph for a long page</p>'.repeat(n) + '</body></html>';
 function plan(work) {
@@ -120,13 +121,21 @@ const fake = createServer((req, res) => {
       if (FAIL.mode === 'cut') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(frame({ content: 'Let me look at the ' })); setTimeout(() => res.destroy(), 200); return; }
       if (FAIL.mode === 'stall') { res.writeHead(200, { 'content-type': 'text/event-stream' }); return; } // never a byte, never an end
     }
-    if ((SPECIAL === 'ask' || SPECIAL === 'ask2') && done === 0 && !/Do not stop to ask permission/.test(JSON.stringify(body.messages))) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: SPECIAL === 'ask' ? 'The folders are ready. Please confirm that you would like me to make the files?' : 'I can set that up for you. I have the plan ready. Let me know if you want me to continue.' }) + 'data: [DONE]\n\n'); return; }
+    if ((SPECIAL === 'ask' || SPECIAL === 'ask2') && done === 0 && !/Do not stop to ask permission|make a task list with update_tasks/.test(JSON.stringify(body.messages))) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: SPECIAL === 'ask' ? 'The folders are ready. Please confirm that you would like me to make the files?' : 'I can set that up for you. I have the plan ready. Let me know if you want me to continue.' }) + 'data: [DONE]\n\n'); return; }
     if (SPECIAL === 'ask3' || SPECIAL === 'ask4') {
-      const nudged = /Do not stop to ask permission/.test(JSON.stringify(body.messages));
+      const nudged = /Do not stop to ask permission|make a task list with update_tasks/.test(JSON.stringify(body.messages));
       const reply = (d) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(d + 'data: [DONE]\n\n'); };
       if (nudged) { reply(done === 0 ? call('write_file', { path: 'nudged.txt', content: 'carried on' + '\n' }) : frame({ content: 'All done after the nudge.' })); return; }
       if (done === 0) { reply(call('update_tasks', { tasks: SPECIAL === 'ask3' ? [{ text: 'Make the page' }, { text: 'Check it' }] : [{ text: 'Make the page', done: true }, { text: 'Check it', done: true }] })); return; }
       reply(frame({ content: SPECIAL === 'ask3' ? 'The plan is set. Let me know if you want me to continue.' : 'Everything is finished and checked. Let me know if you want me to also add tests.' })); return;
+    }
+    if (SPECIAL === 'nolist-obey' || SPECIAL === 'nolist-stubborn') {
+      const reply = (d) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(d + 'data: [DONE]\n\n'); };
+      const nudged = /make a task list with update_tasks/.test(JSON.stringify(body.messages));
+      if (SPECIAL === 'nolist-stubborn' || !nudged) { reply(frame({ content: 'The first part is in place. Let me know if you want me to continue.' })); return; }
+      if (done === 0) { reply(toolcall('update_tasks', { tasks: [{ text: 'Make the page' }, { text: 'Check it' }] })); return; }
+      if (done === 1) { reply(toolcall('write_file', { path: 'after-list.txt', content: 'carried on' + '\n' })); return; }
+      reply(frame({ content: 'All done after making the list.' })); return;
     }
     if (SPECIAL === 'cutwrite') {
       const reply = (d) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(d + 'data: [DONE]\n\n'); };
@@ -256,6 +265,8 @@ try {
   results.push(await run('S10b ask-permission-letmeknow', { message: 'W6 set it up too', steps: [['write_file', { path: 'a.txt', content: 'a' + String.fromCharCode(10) }]], special: 'ask2', model: 'offline/bunny-large' }));
   results.push(await run('S10c nudge-open-plan', { message: 'W6 plan then stop', steps: [], special: 'ask3', model: 'offline/bunny-large' }));
   results.push(await run('S10d no-nudge-finished', { message: 'W6 finished job', steps: [], special: 'ask4', model: 'offline/bunny-large' }));
+  results.push(await run('S10e nolist-obey', { message: 'W6 stop without a plan', steps: [], special: 'nolist-obey', model: 'offline/bunny-large' }));
+  results.push(await run('S10f nolist-stubborn', { message: 'W6 stop without a plan again', steps: [], special: 'nolist-stubborn', model: 'offline/bunny-large' }));
   results.push(await run('S13a loop-keep-going', { message: 'W6 repeat the same step', steps: Array.from({ length: 6 }, () => ['run_command', { command: 'Write-Output same' }]), model: 'offline/bunny-large', pick: 'Keep going' }));
   results.push(await run('S13b loop-stop', { message: 'W6 repeat the same step again', steps: Array.from({ length: 8 }, () => ['run_command', { command: 'Write-Output same2' }]), model: 'offline/bunny-large', pick: 'Stop here' }));
   results.push(await run('S14 cut-write', { message: 'W6 write a big file', steps: [], special: 'cutwrite', model: 'offline/bunny-large' }));
@@ -285,7 +296,7 @@ try {
   for (const r of results) {
     log(NL + '=== ' + r.name + ` (${Math.round(r.ms / 1000)} s)  request error: ${r.reqError ?? 'none'}  steps saved: ${r.steps.length}`);
     r.steps.forEach((s, i) => log(String(i).padStart(2), (s.status ?? '').padEnd(8), (s.tool ?? '').slice(0, 62).padEnd(62), '|', s.result.slice(0, 110), s.att ? `[+${s.att} image]` : ''));
-    for (const x of r.seen.filter((q) => q.roles)) { log('  first request of', x.model, 'at', Math.round(x.t / 1000) + 's:', 'roles=' + x.roles.slice(0, 120), 'sawEarlierSteps=' + x.prevSteps, 'tool msgs=' + x.toolMsgs, 'system tail:', String(x.sys).slice(0, 120)); if (x.extraUser) log('  EXTRA USER MESSAGE the fallback model was given (' + x.extraUser.length + ' chars):', x.extraUser.replace(/\s+/g, ' ').slice(0, 1800)); } if (r.posts) log('  client sends:', r.posts.join(' || ')); log('  written-out call markup left in the saved chat:', r.markup); log('  tool result sizes the model received (chars):', r.seen.map((x) => x.lastTool).join(',')); log('  questions asked:', JSON.stringify(r.answered).slice(0, 300)); log('  permission cards:', r.events.filter((e) => e.ev === 'permission').length); log('  final:', r.final.replace(/\s+/g, ' ')); log('  models by step:', r.seen.map((x) => `${x.step}:${x.model.replace('offline/bunny-', '')}`).join(' ').slice(0, 400));
+    for (const x of r.seen.filter((q) => q.roles)) { log('  first request of', x.model, 'at', Math.round(x.t / 1000) + 's:', 'roles=' + x.roles.slice(0, 120), 'sawEarlierSteps=' + x.prevSteps, 'tool msgs=' + x.toolMsgs, 'system tail:', String(x.sys).slice(0, 120)); if (x.extraUser) log('  EXTRA USER MESSAGE the fallback model was given (' + x.extraUser.length + ' chars):', x.extraUser.replace(/\s+/g, ' ').slice(0, 1800)); } if (r.posts) log('  client sends:', r.posts.join(' || ')); log('  model requests in this reply: ' + r.seen.length); log('  written-out call markup left in the saved chat:', r.markup); log('  tool result sizes the model received (chars):', r.seen.map((x) => x.lastTool).join(',')); log('  questions asked:', JSON.stringify(r.answered).slice(0, 300)); log('  permission cards:', r.events.filter((e) => e.ev === 'permission').length); log('  final:', r.final.replace(/\s+/g, ' ')); log('  models by step:', r.seen.map((x) => `${x.step}:${x.model.replace('offline/bunny-', '')}`).join(' ').slice(0, 400));
     const marks = r.events.filter((e) => e.ev === 'status' || e.ev === 'error' || e.ev === 'newChat' || e.ev === 'done'); log('  status/error events:', marks.map((e) => `${Math.round(e.t / 1000)}s ${e.ev} ${e.brief}`).join(' | ').slice(0, 900));
   }
   log(NL + 'disk (S1):', JSON.stringify(disk));
