@@ -1,9 +1,9 @@
 ---
 piece: w6-4
 role: tech-lead
-sha: 71b8fff
+sha: 643c7da
 verdict: PASS
 date: 2026-11-16
 ---
 
-Re-review of 442d61c..71b8fff. A reply that ends on the length limit with a written-out call, or a native call whose JSON arguments do not parse, is not run: the model is told the call was NOT run and to resend in smaller pieces, up to 3 times, then a clear error. The tests cover both shapes and check that the half file is not sent back, and that a complete call still runs without its closing tags. Residual, not blocking: an unclosed written call that ends without a length finish (a clean connection close with no stop reason) would still run; treating a missing finish reason as cut off would close it. e2e not run by me.
+Integration branch 643c7da reviewed as merged. Read the whole streamChat loop after the conflict resolutions: the loop is one for(;;) with the step extension, the onLimit check (round over 0), cut-off calls (cutOffCalls, at most 3) and the permission nudge (at most 3), onLimit's closing brace is in place, a refused extension or a no from onLimit breaks to finalAnswer, an abort returns, and every continue still advances the round counter, so the step, time and token caps bind. Syntax check clean; unit suite at 643c7da: 595 tests, 587 pass, 0 fail (8 skipped). A trial merge of the W5-7 line (32a3a8c) into it has no conflicts, including app.js and api.js. e2e not run by me. W6-4: written calls run in every round, are held back from the screen, an unoffered tool gets an error, and a call cut off by the length limit never runs (the model is told to resend). Residual as before: an unclosed written call whose stream ends with no stop reason would still run.

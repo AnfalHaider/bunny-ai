@@ -1,9 +1,9 @@
 ---
 piece: w4-1d
 role: tech-lead
-sha: fdafaa5
+sha: 643c7da
 verdict: PASS
 date: 2026-11-16
 ---
 
-Re-review of 2525aed..fdafaa5. The environment leak is fixed: the supervisor now starts the program with every ELECTRON_* variable removed and stdin closed, and a test starts a program with an ELECTRON_ variable set and checks it sees neither that nor ELECTRON_RUN_AS_NODE. The supervisor also now dies when the pipe the server holds on its stdin ends (the pid poll stays as the fallback), which is stronger than a pid check alone. Lane A is merged. Probed in the earlier review: the kill-the-server test passes. Note: the supervisor itself, if killed hard, leaves the program running. e2e not run by me.
+Integration branch 643c7da reviewed as merged. Read the whole streamChat loop after the conflict resolutions: the loop is one for(;;) with the step extension, the onLimit check (round over 0), cut-off calls (cutOffCalls, at most 3) and the permission nudge (at most 3), onLimit's closing brace is in place, a refused extension or a no from onLimit breaks to finalAnswer, an abort returns, and every continue still advances the round counter, so the step, time and token caps bind. Syntax check clean; unit suite at 643c7da: 595 tests, 587 pass, 0 fail (8 skipped). A trial merge of the W5-7 line (32a3a8c) into it has no conflicts, including app.js and api.js. e2e not run by me. W4-1d: supervisor with ELECTRON_* removed from the program, pipe plus pid watch, the test cleanup order fixed.
