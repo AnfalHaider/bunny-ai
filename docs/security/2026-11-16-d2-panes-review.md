@@ -71,3 +71,16 @@ Probes run on a scratch checkout of `9ca3f77` (throwaway folders, invented profi
 2. **Two other routes store a folder unchecked, even with the flag on.** `POST /api/schedules` with `folder` = the profile folder returned 200, and `POST /api/projects` with a folder returned 200. A scheduled run opens a chat in that folder and the pane routes then list and read it (the never-browse list only stops drive roots and Bunny's data). Same gate (`folderToStore`) on both.
 
 Everything else holds; once these two are in I expect to sign PASS after one re-run.
+
+
+---
+
+## Third re-review: `98ee19a` — verdict **PASS**
+
+Builder's note was right this time, and I read the files at the sha: `electron/main.js` line 46 is `createApp({ dataDir, folderPickerOnly: true })`, and the `dialog:pickFolder` handler calls `bunnyApp.chooseFolder(picked)` and returns `null` when it is refused (lines 138-141). Tested in-process on an invented profile with the picker-only mode on:
+- Typed folders are refused on `POST /api/sessions`, `PATCH` chat, `PATCH .../setting/folder`, `POST` and `PATCH /api/projects` and `/api/schedules`: 403 `folder.notChosen`. With no folder, those routes work as before.
+- A typed `POST /api/folder/check` of `C:/` no longer opens it (`files` → 403); only `chooseFolder` does, and it refuses a drive root and Bunny's data folder; a picked folder lists and reads.
+- D2-1 to D2-4 still hold (re-run of `probe.mjs` against this commit's `panes.js` was done at `9ca3f77`; `panes.js` is unchanged since).
+- Across an app restart the "chosen" set is empty again, and old chats keep working (their saved folder is used as before); a new chat needs a fresh pick, which the page already asks for.
+
+**One thing to tell Builder, not a security blocker:** `planRefuses` now includes risk `own` (the Q2-S2 fix for `move_to_new_chat`). That also refuses `ask_user` and `create_artifact` in Plan mode: in an in-process run the model's call to `ask_user` produced no question (the reply simply finished), where it should ask the person. Plan mode is where clarifying questions matter most. Suggest refusing `own` only for `move_to_new_chat`, or keeping `ask_user` and `create_artifact` allowed.

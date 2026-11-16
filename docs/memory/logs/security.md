@@ -2,6 +2,12 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - D-2 panes third re-review (98ee19a): PASS
+
+Signed PASS. `electron/main.js` passes `folderPickerOnly: true` and records the picker answer (read at the sha); typed folders are refused on chats, projects and schedules; picker, drive-root and data-folder behaviour tested in-process. Note for Builder (not a blocker): Plan mode now also refuses `ask_user` and `create_artifact` because `own` risk is refused; Plan mode should still be able to ask questions. Q2-S2 (`move_to_new_chat` in Plan) is fixed by the same change.
+
+**Lesson:** open the file at the sha you sign; and a blanket rule ("refuse every `own` tool") needs the list of what else carries that label.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |
