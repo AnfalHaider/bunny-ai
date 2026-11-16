@@ -2,6 +2,23 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - Published v0.1.7
+
+**Word:** the owner typed "release v0.1.7" in my chat (2026-11-16, after the Chief of Staff's relay of "push to main" and "PUSH THE UPDATED INSTALLER ALSO", which I did not take as the release word). First attempt at 41d7ac1 was refused by `release.mjs`: `npm run dist` dirtied `src/ui/app.css` (CRLF) and wrote no `latest.yml`. The owner said "Fix it now"; Builder's fix 6b06ed9 landed in main 9be14d7.
+
+**Commands (server time 2026-11-17)**
+
+- Fresh worktree `release-ops-v017b` detached at 9be14d7; `node scripts/bootstrap.mjs`; `npm run dist` -> clean tree, `dist/build-sha.txt` = 9be14d7 (no "-dirty"), `latest.yml` version 0.1.7.
+- `npm run release -- --dry-run --target 9be14d7 --notes-file docs/releases/v0.1.7-notes.md` -> clean.
+- `npm run release -- --target 9be14d7 --notes-file docs/releases/v0.1.7-notes.md` (started 00:26 PST) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.7. The 122 MB upload took over 19 minutes (the release sat as a draft meanwhile); I did not kill it.
+- Checks: not a draft, not a prerelease; assets .exe 122232036, .blockmap 128484, latest.yml 345; `git ls-remote --tags origin v0.1.7` -> 9be14d7a (the built commit); latest feed serves `version: 0.1.7`.
+
+**Not checked:** an update on an invented profile; the sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.8) with the last good code; pulling the release is owner-only.
+
+**Lesson:** a long upload leaves a draft that looks stuck. Check `gh.exe` is still alive and wait; killing it leaves a draft only the owner can delete.
+
 ## 2026-11-16 - Finding: release tags point at the wrong commit
 
 Raised by the Chief of Staff (plan row W5-8, ff747ec). Tags v0.1.5 and v0.1.6 both point at 5c46fd4, the tip of `initial-import` (GitHub's default branch), not at what was built (73d3bef and dfac0db). I saw v0.1.5 -> 5c46fd4 in `git ls-remote --tags origin` myself. Cause: `scripts/release.mjs` runs `gh release create` without `--target`. The installers and `latest.yml` are correct; the tags and source zips are not. Builder will make the script pass `--target <HEAD>` and refuse unless HEAD equals origin/main. Moving the two existing tags is the owner's call (asked by the Chief of Staff); I do not touch them. **For my next release:** after publishing, check `git ls-remote --tags origin vX.Y.Z` against the built sha, and say so in the report.
