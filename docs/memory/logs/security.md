@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Builder B fixes re-checked: W4-1d `fdafaa5` PASS, W6-2 `ea067ae` PASS, W6-18 `a09ca84` PASS with one condition
+
+W4-1d: no `ELECTRON_*` in started programs (probe: `ERN=undefined`), a held pipe replaces the pid poll. W6-2: token budget with a waiting card, loop check, clamps, schedules 100 steps / 30 min; open until W5-7: the three cap keys are still writable with the page token; a stored 0 reads as 500. W6-18: replay only for workspace steps and never secret-looking output, pruning, exclusive writes, undo list; secret check tested (fast, real step names match; misses Bearer headers and `sk_live_`); open: no notes in incognito chats. Review `docs/security/2026-11-16-w4-1d-w6-18-w6-2-recheck.md`. Lesson: check the test as well as the fix; a fix with a test that fails on cleanup tells the next reader nothing.
+
 ## 2026-11-16 - Builder B batch: W4-1d, W6-18, W6-2 (all PASS, with conditions on the last two)
 
 W4-1d (`2525aed`) PASS: the supervisor kills only its own child's tree and exits with it; follow-up: it leaks `ELECTRON_RUN_AS_NODE=1` into started programs (verified). W6-18 (`ca3e309`) PASS with conditions: note-file paths hold, but the stored `modelResult` also keeps mail, Drive, connector and browser results (up to 8,000 characters) and replays them to a taking-over model; notes with secrets are never pruned and are also written in incognito chats. W6-2 (`5195551`) PASS with conditions: Stop, asks, sends and Plan hold at any step; no cost cap (500 steps), caps unclamped and writable with the page token, Auto and scheduled runs get the full cap. Review `docs/security/2026-11-16-w4-1d-w6-18-w6-2-review.md`. Lesson: "only workspace tools" has to be checked where the data is stored, not only where the file is written; and a step limit is a time limit, not a spend limit.

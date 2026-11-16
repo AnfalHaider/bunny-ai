@@ -1,0 +1,23 @@
+// W6-18 re-check probe (Security): secretLike.looksSecret coverage and timing. Usage: node secretlike.mjs <checkout of a09ca84>
+const { looksSecret } = await import('file:///' + process.argv[2] + '/src/server/secretLike.js');
+const t = (label, text, step = '') => { const s = Date.now(); const r = looksSecret(text, step); console.log(String(r).padEnd(5), String(Date.now() - s).padStart(5) + 'ms', label); };
+const pad = 'x'.repeat(200);
+t('password repeated, no value', 'password'.repeat(16000));
+t('password + 200 word chars + spaces, repeated', ('password' + pad + ' '.repeat(64)).repeat(480));
+t('token with long space runs', ('token' + ' '.repeat(64)).repeat(1500));
+t('api_key= 200 dots', ('api_key' + '.'.repeat(200) + ' '.repeat(64) + 'x').repeat(480));
+t('secret:secret:... ', 'secret:'.repeat(18000));
+t('plain source text', 'function a() { return 1 }\n'.repeat(4000));
+t('github token', 'x ghp_' + 'A'.repeat(36));
+t('Authorization header', 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789');
+t('Bearer only', 'curl -H "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789" x');
+t('DB url', 'postgres://user:hunter2@host/db');
+t('AWS secret key 40 chars no label', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+t('env style', 'DB_HOST=x\nSECRET_KEY=abcdefghi\n');
+t('read .env step', 'A=1', 'read_file {"path":".env"}');
+t('read .ENV.local step', 'A=1', 'read_file {"path":".ENV.local"}');
+t('step "type .env" via powershell', 'A=1', 'run_command Get-Content .env');
+t('Authorization: Basic', 'Authorization: Basic dXNlcjpwYXNzd29yZA==');
+t('npm auth line', '//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz0123456789');
+t('stripe', 'sk_live_' + 'a'.repeat(24));
+t('PEM public', '-----BEGIN CERTIFICATE-----');
