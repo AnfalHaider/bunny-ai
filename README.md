@@ -1,6 +1,7 @@
-<p align="center">
-  <img src="docs/design/logo/bunny-mark.svg" width="88" alt="Bunny AI logo" />
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png" />
+  <img src="docs/images/hero.png" alt="Hi, I'm Bunny. An AI that lives on your computer, works with any model, and does the work." width="100%" />
+</picture>
 
 <h1 align="center">Hi, I'm Bunny.</h1>
 
@@ -8,6 +9,13 @@
   <b>I'm an AI that lives on your computer, works with any model you like, and actually does the work.</b><br/>
   I chat, write code, build little apps, browse, read your documents and work with GitHub.<br/>
   Your chats and keys stay with me, on your machine. The only thing I send out is your request, to the model you chose.
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><b>Download for Windows</b></a> ·
+  <a href="#what-i-can-do-for-you">What I can do</a> ·
+  <a href="#you-decide-what-i-may-do">Permissions</a> ·
+  <a href="#privacy">Privacy</a>
 </p>
 
 <p align="center">
@@ -32,8 +40,34 @@ Most AI apps come with one company's models and one company's cloud. I'd rather 
 ### I keep going until the job is done
 Give me a big task and I'll work through it without stopping to ask you to say "continue". I keep a task list, tell you "Still working · step 140" so you know where I am, and if one model stumbles I hand the job to the next one without losing what I've read so far. I only stop when it's finished, when you press **Stop**, or when I genuinely need you to decide something, and then I ask with a card instead of quietly waiting. I also watch the budget: I check with you before a single job uses more than 5 million tokens, and I notice if I'm going round in circles.
 
+<p align="center"><img src="docs/images/keep-going.png" alt="A long job: task list ticking, a failed test fixed, &quot;Still working · step 13&quot; in the top bar" width="900" /></p>
+
+```mermaid
+flowchart LR
+    A["You ask for a job"] --> B["I make a task list"]
+    B --> C["I work a step:<br/>read, search, edit, run"]
+    C --> D{"Done?"}
+    D -- "not yet" --> E{"Need you<br/>to decide?"}
+    E -- "no" --> C
+    E -- "yes" --> F["I ask with a card<br/>and wait"]
+    F --> C
+    D -- "yes" --> G["I tell you what I did<br/>and what is left"]
+    C -. "same step 3 times,<br/>or the token budget runs out" .-> F
+```
+
+**If a model fails mid-job,** I don't start over:
+
+```mermaid
+flowchart LR
+    M1["Model A is working"] -->|"error, limit or no answer in ~30s"| H["I hand over the task list<br/>and what I have read"]
+    H --> M2["Model B carries on<br/>from the same step"]
+    M2 --> R["One quiet line tells you<br/>who answered and why"]
+```
+
 ### You can see what I'm thinking, on one tidy line
 While I work, one little line at the bottom of my reply shows me hopping along with what I'm up to ("Snuggling the code… thinking · 12s"). Open it to read my thinking as it happens. When I move on, it settles into a quiet "Thought for 12s" you can open any time, and if a model is being slow I'll tell you exactly which one I'm waiting for.
+
+<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Whisker-wiggling… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
 
 ### I build apps and pages you can use straight away
 Ask for a to-do app, a game or a landing page and I build it as an **artifact**: a live page that opens beside our chat, in its own sandbox. You get a short summary instead of a wall of code, and I can open the page in my browser and click through it to check it works. Every change is kept as a new version.
@@ -103,6 +137,26 @@ Link your GitHub or Google account. There's still no cloud account: your chats a
 | **Plan** | I only look, and propose a plan |
 
 **Permission rules** go further: in **Settings → Code** you can say "always allow `npm test*`", "always ask before `git push*`" or "never touch `secrets/**`", for every folder or just one. Deny always wins, Plan mode still means look-only, and **Try a command** shows what I'd do without running anything. Rules are a guard rail against my mistakes, not a sandbox.
+
+<p align="center">
+  <img src="docs/images/permission-rules.png" alt="Settings, Code: permission rules with Deny, Ask and Allow lists" width="440" />
+  <img src="docs/images/blocked-asked.png" alt="A step Blocked by a rule in amber, then a card Asked because of your rule git push" width="440" />
+</p>
+
+This is how I decide, every time I'm about to edit, read or run something:
+
+```mermaid
+flowchart TD
+    S["I want to edit, read or run something"] --> P{"Plan mode?"}
+    P -- "yes, and it changes things" --> NO["I don't. I propose instead"]
+    P -- "no" --> D{"Does a Deny rule match?"}
+    D -- "yes" --> BL["Blocked: I tell you which rule,<br/>and I don't look for a way around it"]
+    D -- "no" --> A{"Does an Ask rule match,<br/>or is it email, a new tool,<br/>a schedule or a local connector?"}
+    A -- "yes" --> ASK["I ask you first"]
+    A -- "no" --> AL{"Does an Allow rule cover<br/>every part of it?"}
+    AL -- "yes" --> GO["I go ahead"]
+    AL -- "no" --> MODE["Your permission mode decides:<br/>Manual asks, Accept edits allows edits,<br/>Auto goes ahead"]
+```
 
 **Only you can change the important settings.** In the desktop app, my permission mode, rules, connectors, schedules, sign-ins, providers, update settings and similar switches change only from my own window, so another program on your PC can't quietly change what I'm allowed to do.
 
