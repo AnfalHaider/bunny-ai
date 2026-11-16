@@ -44,6 +44,7 @@ export async function* streamChat({
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
+  onReplyEnd = null,
 }) {
   if (fake) {
     yield* fakeStream(model, messages, signal);
@@ -127,6 +128,14 @@ export async function* streamChat({
       else if (round === 0 && !String(text ?? '').trim() && !signal?.aborted) {
         if (finish === 'content_filter') throw new ConnectError('chat.refused', 'The model declined to answer.');
         throw new ConnectError('chat.empty', 'The model sent back an empty reply. Try again, or pick another model.');
+      }
+      // W6-3: a reply that stops to ask permission for work already asked for is turned into "carry on".
+      if (offerTools && String(text ?? '').trim() && !signal?.aborted && typeof onReplyEnd === 'function') {
+        const nudge = onReplyEnd({ text, round });
+        if (nudge) {
+          conversation.push({ role: 'assistant', content: text }, { role: 'user', content: nudge });
+          continue;
+        }
       }
       return;
     }
@@ -464,4 +473,14 @@ export async function* fakeStream(model, messages, signal) {
     await new Promise((r) => setTimeout(r, gap));
     yield word;
   }
+}
+
+/**
+ * W6-3: does this reply stop to ask permission for the work it was given ("Please confirm that you would like me to...")?
+ * A real decision is asked with ask_user, which waits; a closing question like this one is a stop that should not happen.
+ */
+export function asksPermissionToContinue(text) {
+  const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
+  // Handing the turn back, as a question or as a statement.
+  return /\b(please confirm|would you like( me)? to|do you want me to|shall i|should i\b|want me to|ready for me to|can i (proceed|go ahead|continue)|may i (proceed|go ahead|continue)|let me know (if|when|whether|how|once)|tell me (if|when|whether|to)|say the word|just say|awaiting your|once you (confirm|say|approve)|when you('re| are) ready|whenever you('re| are) ready|if you('d| would) like|if you want me to)\b/i.test(tail);
 }
