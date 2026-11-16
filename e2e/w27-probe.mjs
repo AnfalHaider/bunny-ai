@@ -1,0 +1,18 @@
+import { spawn } from 'node:child_process'; import { mkdtempSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join } from 'node:path'; import { chromium } from 'playwright';
+const T = 'a1b2c3d4e5f60718293a4b5c6d7e8f96', P = 5553;
+const proc = spawn('node', ['src/server/main.js'], { cwd: process.env.SRC, env: { ...process.env, BUNNY_DATA_DIR: mkdtempSync(join(tmpdir(), 'bunny-w27p-')), BUNNY_FAKE_UPSTREAM: '1', BUNNY_API_TOKEN: T, PORT: String(P) }, stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 2500));
+const H = { 'x-bunny-token': T, 'content-type': 'application/json' };
+const b = await chromium.launch(); const page = await (await b.newContext({ viewport: { width: 1280, height: 900 }, baseURL: `http://127.0.0.1:${P}` })).newPage();
+await page.goto('/src/ui/settings.html'); await page.locator('#perm-rules').waitFor();
+const add = async (kind, pattern, effect) => { await page.locator('#rules-kind').selectOption(kind); await page.locator('#rules-pattern').fill(pattern); await page.locator('#rules-effect').selectOption(effect); await page.locator('#rules-add-btn').click(); await page.waitForTimeout(600); };
+await add('command', 'git push*', 'ask'); await add('command', 'npm test*', 'allow');
+const get = async () => JSON.stringify((await (await fetch(`http://127.0.0.1:${P}/api/permission-rules`, { headers: H })).json()).global.map((r) => r.pattern));
+console.log('before bad:', await get());
+await add('path:edits', 'a/' + '*'.repeat(13), 'deny');
+console.log('line:', (await page.locator('#rules-line').innerText()).trim());
+console.log('server after bad (UI):', await get());
+console.log('list on screen:', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#rules-lists .pat')].map((e) => e.textContent))));
+await page.reload(); await page.locator('#perm-rules').waitFor(); await page.waitForTimeout(800);
+console.log('after reload:', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#rules-lists .pat')].map((e) => e.textContent))));
+await b.close(); proc.kill(); process.exit(0);

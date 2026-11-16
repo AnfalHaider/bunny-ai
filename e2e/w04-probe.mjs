@@ -1,0 +1,11 @@
+import { spawn } from 'node:child_process'; import { mkdtempSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join } from 'node:path'; import { chromium } from 'playwright';
+const T = 'a1b2c3d4e5f60718293a4b5c6d7e8f92', P = 5499;
+const proc = spawn('node', ['src/server/main.js'], { cwd: process.env.SRC, env: { ...process.env, BUNNY_DATA_DIR: mkdtempSync(join(tmpdir(), 'bunny-w04p-')), BUNNY_FAKE_UPSTREAM: '1', BUNNY_API_TOKEN: T, PORT: String(P) }, stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 2500));
+const b = await chromium.launch(); const page = await (await b.newContext({ viewport: { width: 1280, height: 800 }, baseURL: `http://127.0.0.1:${P}` })).newPage();
+await page.goto('/'); await page.waitForTimeout(1200);
+console.log('EMPTY', JSON.stringify(await page.evaluate(() => ({ g: document.querySelector('#greeting')?.hidden, e: document.querySelector('#empty-text')?.innerHTML, btn: document.querySelector('#picker-button')?.innerText }))));
+await page.screenshot({ path: process.env.OUT + '/probe-none.png' });
+await page.goto('/settings.html'); await page.waitForTimeout(800);
+console.log('SET', JSON.stringify(await page.evaluate(() => { const els = [...document.querySelectorAll('.desc')].filter((d) => /Show all models/.test(d.textContent)); return els.map((d) => ({ text: d.textContent, visible: !!d.offsetParent })); })));
+console.log('NAV', page.url()); await b.close(); proc.kill(); process.exit(0);
