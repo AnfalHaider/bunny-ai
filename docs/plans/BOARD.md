@@ -20,14 +20,12 @@
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
-<<<<<<< HEAD
 | B-1 | bootstrap.mjs: quote-safe spawn (shell only for .cmd), drop unused imports | LOW | builder | builder, 2026-11-16 | claimed | `claude/builder-efa9a9` |
 | S-1 | Lock the local API to Bunny's own pages (Host, Origin, per-launch token) per Tech Lead notes 40e4230 | HIGH | builder | builder, 2026-11-16 | built at ca01243, gate 7/7; awaiting QA + Security + Tech Lead review | `claude/builder-efa9a9`, `docs/plans/S-1-build-notes.md` on claude/tech-lead-86cf31 |
 | D1 | Design review 0.1.4: greeting + Add a provider button, phone Settings pill row, custom provider form first, phone Automation buttons full width, purple bunny (notes 2a744a9) | LOW | builder | builder, 2026-11-16 | built, gate 7/7; shots in docs/design/review-0.1.4/built; awaiting Design + QA | `claude/builder-efa9a9` |
 | G-1 | Guard gaps B, A1-A5, C, D, E per Tech Lead a012c6f, built in staging `scripts/guard-next/` (Chief of Staff copies into `.bootstrap/` + `.githooks/` after review) | HIGH | builder | builder, 2026-11-16 | claimed; owner go in AGENTS.md (Guard-gap go) | `claude/builder-efa9a9`, `scripts/guard-next/`, `test/guard-next.test.js` |
 | D1-design | 0.1.4 screens design review (8 screens, today beside proposed) | LOW | design | design, 2026-11-16 | Approved by the Chief of Staff under the delegation; built as D1 (2cfeec5); was: Artifact ready, nothing built | `docs/design/review-0.1.4/index.html`, `docs/memory/logs/design.md` |
-=======
-| S-1 | Local API: Host/Origin/token check, real confirm for local connectors | HIGH | Builder (owner's go: "Yes, S-1 first", typed in the Security session, 2026-11-16; question: "Approve S-1 (local API caller checks) as the Builder's first job?") | Security, 2026-11-16 | Filed | docs/security/2026-11-16-baseline-0.1.4.md |
+| S-1 (filed) | Local API: Host/Origin/token check, real confirm for local connectors | HIGH | Builder (owner's go: "Yes, S-1 first", typed in the Security session, 2026-11-16; question: "Approve S-1 (local API caller checks) as the Builder's first job?") | Security, 2026-11-16 | Filed | docs/security/2026-11-16-baseline-0.1.4.md |
 | S-2 | Updater fails closed without checksum; signing decision | MEDIUM | Builder + owner | Security, 2026-11-16 | Filed | same |
 | S-3 | Secret store: entropy; agent tools refuse secrets folder (check first) | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
 | S-4 | Import: lower cap or stream; reject before reading | MEDIUM | Builder | Security, 2026-11-16 | Filed | same |
@@ -39,7 +37,6 @@
 | Q2-S1..S3 | Plan mode: browser tools skip the check; move_to_new_chat leaves Plan; connector readOnly is self-declared | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed | docs/security/2026-11-16-q2-1-and-q2-23-review.md |
 | D2-1..D2-4 | D-2 panes server: changesFor realpath containment; read only 1 MB of a file; cap diff work; .git and node_modules consistent | MEDIUM | Builder | Security, 2026-11-16 | Filed; sign-off after D2-1 and D2-2 | docs/security/2026-11-16-d2-panes-review.md |
 | D2-5 | folder/check lets any token holder choose any folder, then folder/files and folder/file read the whole disk; tie 'chosen' to the native folder picker | MEDIUM-HIGH | Builder | Security, 2026-11-16 | Filed; D-2 FAIL at 5f36e04 | docs/security/2026-11-16-d2-panes-review.md |
->>>>>>> origin/claude/security-3c782b
 
 ## SIGN-OFF GRID
 
