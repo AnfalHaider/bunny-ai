@@ -42,46 +42,94 @@ export function moodOf(tool) {
   return { kind, about: rest.length > 42 ? `${rest.slice(0, 41)}…` : rest };
 }
 
-export function createWorking(start = 'waiting') {
+/** "53s", "1m 15s". */
+export const fmtDuration = (ms) => {
+  const secs = Math.max(0, Math.round(ms / 1000));
+  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
+};
+
+/**
+ * The one live line at the end of a reply: the hopping bunny, a word for what is happening, and a timer.
+ * While the model thinks it also says so ("Whisker-wiggling… thinking · 53s ›"), and it is a real button that opens to the
+ * thinking text, streamed under it. When the model moves on, `endThinking()` hands the text back so the caller can settle it
+ * into a quiet "Thought for 21s" row, and the line carries on without a chevron. A slow model gets ears back, a readable
+ * "Hmph…" and what it waits on. The timer is hidden from screen readers; the word is announced when it changes.
+ */
+export function createWorking(start = 'waiting', { model = '', openThinking = false } = {}) {
   const el = document.createElement('div');
   el.className = 'bunny-working';
-  el.setAttribute('role', 'status');
-  el.innerHTML = '<svg class="bunny-mark" viewBox="0 0 24 24" aria-hidden="true">'
+  el.innerHTML = '<button type="button" class="bunny-line" aria-expanded="false" disabled>'
+    + '<svg class="bunny-mark" viewBox="0 0 24 24" aria-hidden="true">'
     + '<ellipse class="ear" cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)"/>'
     + '<ellipse class="ear" cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)"/>'
     + '<circle class="face" cx="12" cy="15" r="7"/>'
     + '<circle class="eye" cx="9.5" cy="14" r="1"/><circle class="eye" cx="14.5" cy="14" r="1"/>'
     + '<circle class="nose" cx="12" cy="16.6" r=".9"/></svg>'
-    + '<span class="bunny-word"></span><span class="bunny-time">0s</span>';
+    + '<span class="bunny-word" role="status" aria-live="polite"></span><span class="bunny-tail"></span>'
+    + '<span class="bunny-time" aria-hidden="true">0s</span><span class="bunny-chev" aria-hidden="true" hidden></span></button>'
+    + '<div class="thinking-text bunny-thinking" hidden></div>';
+  const line = el.querySelector('.bunny-line');
   const word = el.querySelector('.bunny-word');
+  const tail = el.querySelector('.bunny-tail');
   const time = el.querySelector('.bunny-time');
+  const chev = el.querySelector('.bunny-chev');
+  const box = el.querySelector('.bunny-thinking');
   const began = Date.now();
   let kind = start;
   let about = '';
   let lastEvent = Date.now();
   let lastChange = 0;
   let grumpyUntil = 0;
+  let modelName = model;
+  let thinkingText = '';
+  let thinkingStart = 0;
+  let open = openThinking;
 
+  const thinkingNow = () => thinkingText !== '' && kind === 'thinking';
+  const paintOpen = () => {
+    const can = thinkingText !== '';
+    line.disabled = !can;
+    chev.hidden = !can;
+    line.setAttribute('aria-expanded', String(can && open));
+    el.classList.toggle('is-open', can && open);
+    box.hidden = !(can && open);
+  };
+  const paintTail = () => {
+    tail.textContent = kind === 'slow' ? `waiting for ${modelName || 'the model'}` : thinkingNow() ? 'thinking' : '';
+  };
+  const paintTime = () => {
+    time.textContent = fmtDuration(Date.now() - (thinkingNow() && thinkingStart ? thinkingStart : began));
+  };
   const show = (text) => {
     if (word.textContent === text) return;
     word.classList.add('is-swapping');
     setTimeout(() => { word.textContent = text; word.classList.remove('is-swapping'); }, 180);
   };
   const say = () => {
-    const base = pick(WORDS[kind] ?? WORDS.waiting, word.textContent.replace(/ .*|…$/g, ''));
+    el.classList.toggle('is-slow', kind === 'slow');
+    // a slow model: the word stays readable ("Hmph…") and the tail says what it waits on
+    const base = kind === 'slow' ? 'Hmph' : pick(WORDS[kind] ?? WORDS.waiting, word.textContent.replace(/ .*|…$/g, ''));
     show(base.includes('…') ? base : `${base}${about ? ` ${about}` : ''}…`);
     lastChange = Date.now();
+    paintTail();
+    paintTime();
   };
 
+  line.addEventListener('click', () => {
+    if (thinkingText === '') return;
+    open = !open;
+    paintOpen();
+    if (open) box.scrollTop = box.scrollHeight;
+  });
+
   const timer = setInterval(() => {
-    const secs = Math.round((Date.now() - began) / 1000);
-    time.textContent = secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
+    paintTime();
     if (Date.now() < grumpyUntil) return;
     if (el.classList.contains('is-grumpy')) { el.classList.remove('is-grumpy'); kind = 'waiting'; about = ''; say(); return; }
     // Nothing has happened for a while: the model is slow, and the bunny lets you know.
     if (Date.now() - lastEvent > 25_000 && kind !== 'slow' && kind !== 'asking') { kind = 'slow'; about = ''; say(); return; }
-    // A long step keeps its kind; only the playful word changes now and then.
-    if (Date.now() - lastChange > 4000 && kind !== 'asking') {
+    // A long step keeps its kind; only the playful word changes now and then (the slow state keeps "Hmph…").
+    if (Date.now() - lastChange > 4000 && kind !== 'asking' && kind !== 'slow') {
       if (kind === 'fallback' || kind === 'retry') { kind = 'waiting'; about = ''; }
       say();
     }
@@ -111,6 +159,32 @@ export function createWorking(start = 'waiting') {
     },
     /** Words arrived: the model is alive again. */
     alive() { lastEvent = Date.now(); if (kind === 'slow') { kind = 'waiting'; say(); } },
+    /** The model named, for "waiting for <model>" when it is slow. */
+    setModel(name) { modelName = name; paintTail(); },
+    /** A piece of the model's thinking: it streams under the line, which opens to show it. */
+    addThinking(piece) {
+      const text = String(piece ?? '');
+      if (!text) return;
+      if (!thinkingStart) thinkingStart = Date.now();
+      thinkingText += text;
+      box.textContent = thinkingText;
+      paintOpen();
+      if (kind !== 'thinking') { kind = 'thinking'; say(); } else { paintTail(); paintTime(); } // the word comes from the thinking set
+      if (open) box.scrollTop = box.scrollHeight;
+    },
+    /** Thinking is over (a step or the answer began): { text, ms } to settle into a "Thought for …" row, and the line drops its chevron. */
+    endThinking() {
+      const done = { text: thinkingText, ms: thinkingStart ? Date.now() - thinkingStart : 0 };
+      thinkingText = '';
+      thinkingStart = 0;
+      box.textContent = '';
+      open = openThinking;
+      paintOpen();
+      paintTail();
+      paintTime();
+      return done;
+    },
+    isThinking: () => thinkingText !== '',
     stop() { clearInterval(timer); el.remove(); },
   };
 }

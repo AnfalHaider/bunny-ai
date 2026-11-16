@@ -13,7 +13,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
-import { createWorking } from './bunny-working.js';
+import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
@@ -1195,7 +1195,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
         ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} ${reasonPhrase(m.fellBackReason)}${alsoFailed(m.fellBackTries)})` : ''}`
         : `${say('model.answeredInstead', { model: m.model, from: m.fellBackFrom, reason: reasonPhrase(m.fellBackReason) })}${alsoFailed(m.fellBackTries)}` }));
   }
-  if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking));
+  if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking, { ms: m.thinkingMs }));
   const body = element('div', { className: 'body' });
   if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
   else body.textContent = m.content;
@@ -1584,12 +1584,20 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
   };
   bodyEl.textContent = '';
   // The hopping bunny under the reply, with a word that matches what is happening.
-  const working = createWorking(mood);
+  const working = createWorking(mood, { model: state.selected?.model ?? '', openThinking: ['thinking', 'verbose'].includes(state.settings?.transcriptView) });
   bodyEl.closest('.msg')?.after(working.el);
+  // The thinking the line was showing settles into a quiet "Thought for 21s" row above the reply, where it can be opened any time.
+  const settleThinking = () => {
+    if (!working.isThinking()) return;
+    const done = working.endThinking();
+    const msg = bodyEl.closest('.msg');
+    if (done.text && msg) msg.insertBefore(thinkingBlock(done.text, { ms: done.ms }), bodyEl);
+  };
 
   const handlers = {
     signal: controller.signal,
     onDelta: (delta) => {
+      settleThinking();
       assembled += delta;
       segment += delta;
       working.alive();
@@ -1603,6 +1611,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
     onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
+      settleThinking();
       flushNote();
       showLiveTool(bodyEl, info);
       if (info.status === 'failed' || info.status === 'denied') working.thump();
@@ -1610,12 +1619,12 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
       else working.set('thinking');
       working.el.parentNode?.append(working.el);
     },
-    onPermission: (info) => { working.set('asking'); showLivePermission(bodyEl, info); },
+    onPermission: (info) => { settleThinking(); working.set('asking'); showLivePermission(bodyEl, info); },
     onBrowser: (info) => runBrowserAction(info),
-    onCapability: (info) => { working.set('asking'); showLiveCapability(bodyEl, info); },
+    onCapability: (info) => { settleThinking(); working.set('asking'); showLiveCapability(bodyEl, info); },
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
-    onThinking: (info) => { working.alive(); if (!segment) working.set('thinking'); showLiveThinking(bodyEl, info.text ?? ''); },
-    onQuestion: (info) => { flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
+    onThinking: (info) => { working.alive(); working.addThinking(info.text ?? ''); },
+    onQuestion: (info) => { settleThinking(); flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
     onNewChat: (info) => { state.pendingNewChat = info; },
   };
   function flushNote() {
@@ -1644,6 +1653,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
       errorCode = 'chat.noReply';
       showError('The reply stopped without finishing. Send "continue" to pick up where it stopped.');
     }
+    settleThinking(); // thinking that was still open when the reply ended is kept as its row
     working.stop();
     state.streaming = null;
     setStreaming(false);
@@ -1795,29 +1805,16 @@ function answeredQuestionCard(q) {
 /** How much of a step's result shows: all of it in the Verbose transcript view. */
 const resultLimit = () => (state.settings?.transcriptView === 'verbose' ? 100_000 : 500);
 
-function thinkingBlock(text, { live = false } = {}) {
-  const box = element('details', { className: `thinking${live ? ' is-live' : ''}` });
+/** A finished stretch of thinking as a quiet row: "Thought for 21s" (just "Thought" when the time was not kept, as in old chats). */
+function thinkingBlock(text, { ms = 0 } = {}) {
+  const box = element('details', { className: 'thinking' });
   if (['thinking', 'verbose'].includes(state.settings?.transcriptView)) box.open = true;
-  const words = String(text).trim().split(/\s+/).filter(Boolean).length;
   box.append(
-    element('summary', { textContent: live ? say('thinking.live') : say('thinking.done', { words }) }),
+    element('summary', { textContent: Number(ms) >= 1000 ? `Thought for ${fmtDuration(Number(ms))}` : 'Thought' }),
     element('div', { className: 'thinking-text', textContent: text }),
   );
   return box;
 }
-function showLiveThinking(bodyEl, piece) {
-  const msg = bodyEl.closest('.msg');
-  if (!msg) return;
-  let box = msg.querySelector(':scope > details.thinking');
-  if (!box) {
-    box = thinkingBlock('', { live: true });
-    msg.insertBefore(box, bodyEl);
-  }
-  const textEl = box.querySelector('.thinking-text');
-  textEl.textContent += piece;
-  if (box.open) textEl.scrollTop = textEl.scrollHeight;
-}
-
 /** The model's checklist: drawn as one list that updates in place, and in the Tasks pane. */
 function taskList(tasks) {
   const tl = element('div', { className: 'task-list', role: 'list', 'aria-label': 'Plan' });
