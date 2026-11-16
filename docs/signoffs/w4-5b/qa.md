@@ -1,0 +1,9 @@
+---
+piece: w4-5b
+role: qa
+sha: f8ee7e8
+verdict: PASS
+date: 2026-11-16
+---
+
+Walk of the one working line at f8ee7e8 on an invented profile with a scripted model that streams thinking, takes a step, thinks again and answers, plus one silent for 28 s; 14 of 14 checks PASS (e2e/w45b-walk.mjs, pictures kept locally). During a reply there is exactly ONE live line, always at the bottom, and no separate Thinking row, over every sample (plain reply and a reply with a step). While thinking it reads Bunnysplaining... thinking · 3s with a chevron, folded by default, opens to the streaming thinking text and closes; Show thinking opens it by default. When a step starts the thinking settles into a Thought for Ns row that opens to the text. Slow state: after about 25 s of silence the line reads Hmph... and waiting for offline/bunny-code with the time, and clears when the answer arrives. When done there is no live line or bunny; reopening the chat shows the same Thought for Ns row (also with a step: Thought for 6s before and after); an old chat saved without the time shows just Thought. At 390 px, light and dark, the line is one line (22 px) folded, opened and after done, with no sideways scroll. TWO LOW FINDINGS, not blockers: (1) while a reply with a step is live, the Thought row is shown BELOW the step it came before (the step line is inserted above the live area), so it reads List then Thought for 3s; the final chat keeps one merged Thought for 6s row under the steps. (2) In the slow state at 390 px a model id of about 47 characters or more pushes the time past the edge and causes sideways scroll (50-character fireworks style id and a 52-character name overflow; ids up to 43 characters fit): add an ellipsis to the model name in the tail. Also seen once: the word of the line was blank for about 180 ms at the moment a second thinking started (the word swap). Full gate not run by QA on this piece; Electron not run.
