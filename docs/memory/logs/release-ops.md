@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Finding: release tags point at the wrong commit
+
+Raised by the Chief of Staff (plan row W5-8, ff747ec). Tags v0.1.5 and v0.1.6 both point at 5c46fd4, the tip of `initial-import` (GitHub's default branch), not at what was built (73d3bef and dfac0db). I saw v0.1.5 -> 5c46fd4 in `git ls-remote --tags origin` myself. Cause: `scripts/release.mjs` runs `gh release create` without `--target`. The installers and `latest.yml` are correct; the tags and source zips are not. Builder will make the script pass `--target <HEAD>` and refuse unless HEAD equals origin/main. Moving the two existing tags is the owner's call (asked by the Chief of Staff); I do not touch them. **For my next release:** after publishing, check `git ls-remote --tags origin vX.Y.Z` against the built sha, and say so in the report.
+
 ## 2026-11-16 - Published v0.1.6
 
 **Word:** the owner typed "release v0.1.6" in my chat. Earlier the same day "release v0.1.5.1" was refused: that version can never exist (the updater needs three-part semver), and main had no new code. Main was pushed by the Chief of Staff at dfac0db (candidate dfebea3, gate 7/7); the v0.1.6 record and notes are on main.
