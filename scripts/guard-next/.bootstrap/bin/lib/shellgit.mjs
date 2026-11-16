@@ -21,7 +21,7 @@ const CONFIG_SCOPE_FLAGS = /^(--global|--system|--file|-f|--includes|--blob)(=|$
 const CONFIG_VALUE_FLAGS = new Set(['--file', '-f', '--blob', '--type', '--default', '--comment', '--value']);
 // git 2.46 subcommand forms: "git config set key value"
 const CONFIG_FORMS = new Set(['set', 'unset', 'get', 'list', 'edit', 'rename-section', 'remove-section']);
-export const GIT_DIR_ENV = /^(\$env:|env:)?(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_COMMON_DIR|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS|GIT_CONFIG_KEY_\d+|GIT_CONFIG_VALUE_\d+|GIT_CONFIG|GIT_EXEC_PATH|GIT_EDITOR|GIT_SEQUENCE_EDITOR|GIT_SSH_COMMAND|GIT_SSH|GIT_ASKPASS)(\s*=|$)/i;
+export const GIT_DIR_ENV = /^(\$env:|env:)?(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_COMMON_DIR|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS|GIT_CONFIG_KEY_\d+|GIT_CONFIG_VALUE_\d+|GIT_CONFIG|GIT_EXEC_PATH|GIT_EDITOR|GIT_SEQUENCE_EDITOR|GIT_SSH_COMMAND|GIT_SSH|GIT_ASKPASS|GIT_PAGER|PAGER|GIT_EXTERNAL_DIFF|GIT_PROXY_COMMAND|GIT_TEMPLATE_DIR)(\s*=|$)/i;
 
 /** Is this key/value one a role may not set (from "git config" or "git -c")? Returns a reason or null. */
 export function configRefusal(key, value = '') {

@@ -52,7 +52,24 @@ export function loadPolicy(root) {
   };
 }
 
+/** The role file the bootstrap command writes into this worktree's private git directory (outside the files a role edits). */
+export function roleFile(root) {
+  const dir = git(['rev-parse', '--absolute-git-dir'], root);
+  return dir ? join(dir, 'bootstrap-role') : null;
+}
+
 export function currentRole(root) {
+  // The private role file wins; the environment is the fallback, and a mismatch is said out loud (item 6, G1-4/G1-5).
+  const file = roleFile(root);
+  if (file && existsSync(file)) {
+    const fromFile = readFileSync(file, 'utf8').trim();
+    if (fromFile) {
+      if (process.env.BOOTSTRAP_ROLE && process.env.BOOTSTRAP_ROLE !== fromFile) {
+        process.stderr.write(`guard: BOOTSTRAP_ROLE says "${process.env.BOOTSTRAP_ROLE}" but this worktree's role file says "${fromFile}"; using the file.\n`);
+      }
+      return fromFile;
+    }
+  }
   if (process.env.BOOTSTRAP_ROLE) return process.env.BOOTSTRAP_ROLE;
   const p = join(root, '.bootstrap', 'session.json');
   if (existsSync(p)) {
@@ -187,7 +204,26 @@ export function toRepoPath(root, filePath, cwd, p = path, opts = {}) {
  * Returns a reason string when `role` may not write `rel`, else null.
  * Protected paths are compared case-insensitively: Windows file systems are.
  */
+/** The literal folder or file each protected glob starts at (".bootstrap/**" -> ".bootstrap"; ".git/config" -> ".git/config"). */
+function protectedRoots(globs) {
+  return (globs || []).map((g) => String(g).replace(/\\/g, '/').split(/[*?[]/)[0].replace(/\/+$/, '')).filter(Boolean);
+}
+
+/** Is rel a protected folder itself, or a folder above one ("." , ".git", ".bootstrap")? Removing or moving it takes the protected files with it. */
+export function holdsProtected(rel, policy) {
+  const r = String(rel).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase();
+  if (r === '' || r === '.') return false; // the repository root itself: too common a target (git restore .) to refuse here
+  return protectedRoots(policy.protected_globs).some((root) => {
+    const lower = root.toLowerCase();
+    return lower === r || lower.startsWith(`${r}/`);
+  });
+}
+
 export function scopeViolation(rel, policy, brief, role) {
+  if (role === 'chief-of-staff' && holdsProtected(rel, policy)) return null; // protected folders are the Chief of Staff's, whatever its write_globs
+  if (role !== 'chief-of-staff' && holdsProtected(rel, policy)) {
+    return `${rel || '.'} is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.`;
+  }
   if (matchesAny(rel, policy.protected_globs || [], { ci: true })) {
     // Protected paths are the Chief of Staff's by definition, so the role's own write_globs do not apply to them.
     return role === 'chief-of-staff' ? null

@@ -5,7 +5,7 @@
 //   node scripts/gate.mjs            everything
 //   node scripts/gate.mjs --quick    skip the end-to-end suite (local iteration only, never for a push)
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,6 +50,21 @@ function secretScan() {
   if (!pass) console.log(hits.map((h) => `   ${h}`).join('\n'));
 }
 
+// G1-6: the family's limits are enforced by git hooks; a checkout where they are missing or pointed elsewhere is not guarded.
+function hooksWired() {
+  const t0 = Date.now();
+  const problems = [];
+  if (existsSync(join(root, '.bootstrap', 'policy.json'))) {
+    const hp = spawnSync('git', ['config', '--get', 'core.hooksPath'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+    if (hp !== '.githooks') problems.push(`core.hooksPath is "${hp || 'unset'}", not ".githooks"`);
+    for (const h of ['pre-commit', 'pre-push']) if (!existsSync(join(root, '.githooks', h))) problems.push(`.githooks/${h} is missing`);
+  }
+  const pass = problems.length === 0;
+  results.push({ name: 'git hooks wired', pass, secs: Math.round((Date.now() - t0) / 1000) });
+  console.log(`\n== ${pass ? 'PASS' : 'FAIL'}  git hooks wired`);
+  if (!pass) console.log(problems.map((p) => `   ${p}`).join('\n'));
+}
+
 console.log(`gate @ ${spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim()}${quick ? ' (quick: no end-to-end, not valid for a push)' : ''}`);
 step('conflict markers', 'git', ['grep', '-nE', '^(<<<<<<<|>>>>>>>)( |$)', '--', '.', ':!node_modules'], { ok: (r) => r.status === 1, tail: 10 });
 // S-1: the request guard has one off switch, for tests. It must never be set in code that ships.
@@ -59,6 +74,7 @@ if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=lin
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });
 step('dependency audit (high+)', npm, ['audit', '--audit-level=high'], { tail: 6 });
 secretScan();
+hooksWired();
 
 const failed = results.filter((r) => !r.pass);
 console.log(`\nGATE ${failed.length ? 'FAILED' : 'PASSED'}: ${results.length - failed.length}/${results.length} checks passed${failed.length ? ` — failed: ${failed.map((f) => f.name).join(', ')}` : ''}`);

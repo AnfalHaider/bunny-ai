@@ -136,6 +136,10 @@ function refuseGit(call, ctx = {}) {
     if ((end < 0 ? args : args.slice(0, end)).some(isHookSkipLong)) return NO_HOOKS;
   }
   if (sub === 'push' && pushForces(args)) return 'force pushes are not allowed.';
+  if (sub === 'push' && !(ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role)
+    && argWords.some((w, k) => k > 0 && w.dynamic && !w.text.startsWith('-') && /[$`]/.test(w.text))) {
+    return 'a git push whose target is a variable or a command substitution cannot be checked against the live branch; name the branch you mean.';
+  }
   const mayPushLive = (ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role);
   if (sub === 'push' && !mayPushLive && configs.some((c) => /^(remote\..*\.(push|mirror)|push\.default)(=|$)/i.test(String(c)))) {
     return 'overriding where a push goes (remote.*.push, remote.*.mirror, push.default) from the command line could move the live branch; name the branch you mean.';
@@ -301,6 +305,10 @@ export function innerParsed(words) {
  */
 export function checkShell(parsed, ctx, depth = 0) {
   for (const cmd of parsed.commands) {
+    // G1-5: the name of an environment variable is never a variable ($R=BOOTSTRAP_ROLE, env $N=x): the role cannot be hidden that way.
+    if (ctx.role !== 'chief-of-staff' && cmd.words.some((w, k) => /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?=/.test(w.text) || (k > 0 && isCmd(cmd.words[k - 1].text, 'env') && w.dynamic && /^[$`][^=]*=/.test(w.text)))) {
+      return 'the name of an environment variable cannot be a variable: the guard cannot see what it sets.';
+    }
     // A5: the role is not set from a command line.
     if (cmd.words.some((w) => ROLE_WORD.test(w.text))) return 'the session role cannot be set from a command. The Chief of Staff assigns roles.';
     if (!(ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role) && cmd.words.some((w) => GIT_DIR_ENV.test(w.text))) {

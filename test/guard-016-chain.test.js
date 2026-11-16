@@ -59,3 +59,16 @@ test('item 5: the text cutter blanks quotes and heredocs and splits on separator
   assert.deepEqual(simpleCommandTexts(''), []);
   assert.deepEqual(simpleCommandTexts('echo "unclosed'), ['echo "unclosed']);
 });
+
+test('item 5 review: text handed to an interpreter keeps the raw check (it is code, not a message)', (t) => {
+  denied(t, `node -e "require('child_process').execSync('git push --force origin x')"`);
+  denied(t, `python -c "import os; os.system('git reset --hard')"`);
+  denied(t, `perl -e 'system("git push -f origin x")'`);
+  denied(t, `bash -ec "git push --force origin x"`);
+  denied(t, `echo go | xargs -I{} git push --force origin x`);
+  allowed(t, `echo "not an interpreter: git push --force"`);
+});
+
+test('item 2 review: more variables that run programs', (t) => {
+  for (const c of ['GIT_PAGER=evil git log', 'PAGER=evil git log', 'GIT_EXTERNAL_DIFF=evil git diff', 'GIT_PROXY_COMMAND=evil git fetch', 'GIT_TEMPLATE_DIR=x git init']) denied(t, c);
+});

@@ -12,12 +12,13 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { currentRole, git, loadPolicy, loadRole, isRefusedPath, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
-import { commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
+import { baseName, commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 import { simpleCommandTexts } from './lib/shellblank.mjs';
 import { checkWrites } from './lib/shellwrites.mjs';
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace', 'edit_file']);
+const INTERPRETERS = new Set(['node', 'nodejs', 'deno', 'bun', 'python', 'python2', 'python3', 'py', 'perl', 'ruby', 'php', 'lua', 'tclsh', 'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'pwsh', 'powershell', 'cmd', 'eval', 'xargs', 'busybox', 'wscript', 'cscript', 'mshta', 'osascript', 'awk', 'gawk', 'invoke-expression', 'iex', 'start-process', 'invoke-command', 'source']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command', 'run_terminal_cmd']);
 
 export function pushTargets(command, cwd) {
@@ -81,9 +82,12 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd() 
     const ansi = command.includes("$'") || command.includes('$"');
     const texts = strict ? null : simpleCommandTexts(command);
     const denyAll = policy.deny_all.map((e) => (typeof e === 'string' ? { pattern: e } : e));
+    // A command that hands text to an interpreter or another shell (node -e "...", python -c, bash -c, eval, xargs) keeps the raw-text check:
+    // what is inside its quotes is code, not a message.
+    const interpreter = !strict && texts.some((t) => t.split(/\s+/).some((w) => INTERPRETERS.has(baseName(w))));
     const hits = (e) => {
       const re = new RegExp(e.pattern);
-      if (strict || e.whole) return re.test(command);
+      if (strict || e.whole || interpreter) return re.test(command);
       return texts.some((t) => re.test(t)) || (ansi && re.test(command));
     };
     const patterns = [
