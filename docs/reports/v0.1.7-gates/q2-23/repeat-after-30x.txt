@@ -1,0 +1,214 @@
+
+Running 210 tests using 1 worker
+
+[1/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[2/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[3/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[4/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[5/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[6/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[7/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[8/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[9/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[10/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[11/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[12/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[13/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[14/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[15/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[16/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[17/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[18/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[19/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[20/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[21/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[22/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[23/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[24/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[25/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[26/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[27/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[28/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[29/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[30/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[31/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[32/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[33/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[34/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[35/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[36/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[37/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[38/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[39/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[40/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[41/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[42/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[43/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[44/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[45/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[46/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[47/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[48/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[49/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[50/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[51/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[52/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[53/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[54/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[55/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[56/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[57/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[58/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[59/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[60/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[61/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[62/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[63/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[64/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[65/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[66/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[67/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[68/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[69/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[70/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[71/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[72/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[73/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[74/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[75/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[76/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[77/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[78/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[79/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[80/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[81/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[82/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[83/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[84/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[85/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[86/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[87/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[88/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[89/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[90/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[91/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[92/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[93/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[94/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[95/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[96/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[97/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[98/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[99/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[100/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[101/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[102/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[103/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[104/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[105/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[106/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[107/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[108/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[109/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[110/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[111/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[112/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[113/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[114/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[115/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[116/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[117/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[118/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[119/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[120/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[121/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[122/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[123/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[124/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[125/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[126/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[127/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[128/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[129/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[130/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[131/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[132/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[133/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[134/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[135/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[136/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[137/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[138/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[139/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[140/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[141/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[142/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[143/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[144/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[145/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[146/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[147/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[148/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[149/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[150/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[151/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[152/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[153/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[154/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[155/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[156/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[157/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[158/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[159/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[160/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[161/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[162/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[163/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[164/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[165/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[166/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[167/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[168/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[169/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[170/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[171/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[172/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[173/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[174/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[175/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[176/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[177/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[178/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[179/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[180/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[181/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[182/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[183/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[184/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[185/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[186/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[187/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[188/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[189/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[190/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[191/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[192/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[193/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[194/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[195/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[196/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[197/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[198/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[199/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[200/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[201/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[202/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[203/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+[204/210] e2e\request-guard.spec.js:16:1 › T-14 a page loaded from the server can use the API, with the service worker too
+[205/210] e2e\request-guard.spec.js:24:1 › a page with no token is told what to do, in words
+[206/210] e2e\request-guard.spec.js:30:1 › T-15 a page on another port cannot add a local program
+[207/210] e2e\request-guard.spec.js:50:1 › T-16 an artifact frame cannot reach the API, and still renders
+[208/210] e2e\request-guard.spec.js:68:1 › Q2-23: a stale token (the server restarted) is refreshed and the call retried, not failed silently
+[209/210] e2e\request-guard.spec.js:78:1 › Q2-23: when the token cannot be refreshed the window says Bunny restarted, with a Reload link
+[210/210] e2e\request-guard.spec.js:89:1 › Q2-23: a call whose stale-token 403 arrives after another call already fetched the new token is sent again, not failed
+  210 passed (2.3m)
