@@ -1,9 +1,9 @@
 ---
 piece: w5-7
 role: security
-sha: 400946b
+sha: c1b4c18
 verdict: PASS
 date: 2026-11-16
 ---
 
-Leftovers closed: continue keys, maxTokens, helpersEnabled, modelFilter, question route window-only; unknown keys 400; W27d-1 closed (computed arguments ask). Token-only probe: 68 blocked. See docs/security/2026-11-16-w5-7-w5-8-recheck.md
+Six ordinary keys added; five are display/convenience. autoUpdate (read by the updater) can be set false with only the page token, which stops updates: LOW, add to the window-only list. Nothing else changed since 400946b.

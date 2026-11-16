@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W5-7 `c1b4c18` PASS (six more ordinary keys); w6 trio `1d8f6ec` PASS (help text)
+
+Of the six keys added to the known list, five are display or convenience (`chartsEnabled`, `statusLabels`, `transcriptView`, `promptSuggestions`, `fallbackWhenBusy`; the last defaults on and only the window reads it). `autoUpdate` is read by the updater in `electron/main.js` (`!== false`): with only the page token it can be set to false, which silently stops updates (the feed address stays window-only). LOW: put `autoUpdate` on the window-only list; no other change. The w6-2, w6-18 and w4-1d re-stamp at `1d8f6ec` is one help-text line in `settings.html` (the token budget "cannot be turned off, the smallest allowed is 100,000"), which matches `caps.js`. Lesson: a setting that stops the app updating is a security setting even if the screen calls it a preference.
+
 ## 2026-11-16 - Final v0.1.7 re-stamps: W5-7 `400946b` PASS, W5-8 `349061d` PASS
 
 W5-7: 68 of the 109 token-only attempts now answer 403; the continue keys, `maxTokens`, `helpersEnabled`, `modelFilter` and the question route are window-only; unknown settings keys answer 400; W27d-1 (computed arguments ask) closed, all W2-7 probes clean. W5-8: HEAD must be the target, untracked files count, `dist/build-sha.txt` must equal the target, only `--notes-file` goes to gh; all three of my conditions closed and verified on a throwaway repo; 18 of 18 tests. Review `docs/security/2026-11-16-w5-7-w5-8-recheck.md`. Lesson: when a fix adds a stamp, test the stamp that is missing, stale, dirty and junk, not only the one that matches.
