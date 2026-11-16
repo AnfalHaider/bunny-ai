@@ -206,3 +206,24 @@ test('G1-2: a sign-off whose file name and role disagree is not counted', (t) =>
 test('Tech Lead #9 (written down, not code): the plugin copy of the guard runs beside ours', () => {
   assert.ok(true, 'see scripts/kit-next/README.md, "What a plain upgrade leaves running"');
 });
+
+test('review round: a planted policy in a nested repository does not switch the guard off; registry and DWIM refspec spellings; guard paths in any case', (t) => {
+  // a nested repository that carries a permissive policy of its own is still judged by the project
+  const root = makeRepo(t, 'builder');
+  const sub = join(root, 'sub');
+  mkdirSync(join(sub, '.bootstrap'), { recursive: true });
+  sh(['init', '-q'], sub);
+  writeFileSync(join(sub, '.bootstrap', 'policy.json'), JSON.stringify({ version: 1, branches: { live: 'zzz' }, deny_all: [] }));
+  const here = process.cwd();
+  process.chdir(root);
+  try { assert.equal(guard.decide({ tool: 'Bash', command: 'git push origin main', cwd: sub }).allow, false); } finally { process.chdir(here); }
+  // the Windows registry and persistent environment
+  for (const c of ['reg add HKCU\\Environment /v BOOTSTRAP_ROLE /d chief-of-staff', 'reg.exe add "HKCU\\Environment" /v X /d y', 'Set-ItemProperty -Path HKCU:\\Environment -Name BOOTSTRAP_ROLE -Value chief-of-staff']) blocked(t, c);
+  // the destination as git reads it, and the other ways to write a branch label from a fetch
+  for (const c of ['git fetch origin +main:heads/main', 'git fetch origin main:refs/heads/Main', 'git fetch origin +refs/heads/*:refs/heads/*', 'git fetch --stdin', 'git -c remote.origin.fetch=+x:main fetch origin']) blocked(t, c);
+});
+
+test('review round: guard paths in another case still need Security', (t) => {
+  const r = pushCase(t, (root) => put(root, '.BOOTSTRAP/BIN/guard.mjs', '// changed\n'));
+  assert.ok(r.errors.length > 0, r.errors.join(' | '));
+});

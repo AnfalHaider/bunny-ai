@@ -88,16 +88,14 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   let root = repoRoot(cwd);
   if (!root && cwd !== process.cwd()) { root = repoRoot(process.cwd()); if (root) cwd = process.cwd(); }
   if (!root) return { allow: true };
-  let policy = loadPolicy(root);
-  if (!policy) {
-    // K-1 (Security B7): a repository inside the project (git init sub; cd sub) has no policy of its own: the project that the hook runs in judges it.
-    const outer = repoRoot(process.cwd());
-    const inside = outer && outer !== root && resolvePath(root).toLowerCase().startsWith(resolvePath(outer).toLowerCase() + sep);
-    const outerPolicy = inside ? loadPolicy(outer) : null;
-    if (!outerPolicy) return { allow: true };
-    root = outer;
-    policy = outerPolicy;
-  }
+  // K-1 (Security B7): a repository inside the project (git init sub; cd sub) is judged by the project the hook runs in, whatever policy.json
+  // it carries itself (an agent could plant a permissive one there).
+  const outer = repoRoot(process.cwd());
+  const inside = outer && outer !== root && resolvePath(root).toLowerCase().startsWith(resolvePath(outer).toLowerCase() + sep);
+  const outerPolicy = inside ? loadPolicy(outer) : null;
+  if (outerPolicy) root = outer;
+  const policy = outerPolicy || loadPolicy(root);
+  if (!policy) return { allow: true };
   const role = currentRole(root);
   // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
   let brief = loadRole(root, role) || {};
@@ -116,8 +114,12 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
     // When the command cannot be read with confidence (unclosed quote, bash/PowerShell ambiguity) or the
     // switch is off, the old regexes over the raw text apply as well: stricter, with their false blocks.
     // K-1 (Security B4): the session role cannot be set through the Windows environment either ([Environment]::SetEnvironmentVariable, setx, Set-Item env:)
-    if (/BOOTSTRAP_ROLE/i.test(command) && /SetEnvironmentVariable|\bsetx(\.exe)?\b|\bSet-Item\b|\bNew-ItemProperty\b/i.test(command)) {
+    if ((/BOOTSTRAP_ROLE/i.test(command) && /SetEnvironmentVariable|\bsetx(\.exe)?\b|\bSet-Item\b|\bNew-ItemProperty\b|\bSet-ItemProperty\b|\bsp\b/i.test(command)) || /\breg(\.exe)?\s+add\b[^\n]*Environment/i.test(command)) {
       return { allow: false, reason: `Blocked for role "${role}": the session role cannot be set from a command. The Chief of Staff assigns roles.` };
+    }
+    // K-1 (review): a remote's fetch refspec set from the command line or the configuration can write the live branch label
+    if (!policy.releases.live_pushers.includes(role) && /\bgit\b[^\n]*\bremote\.[^\s=]+\.(fetch|push|mirror)\b/i.test(command)) {
+      return { allow: false, reason: `Blocked for role "${role}": a remote's fetch or push refspec cannot be set from a command (it can write the live branch label).` };
     }
     const parsed = policy.shell_parse === false ? null : parseShell(command);
     const strict = !parsed || parsed.uncertain;

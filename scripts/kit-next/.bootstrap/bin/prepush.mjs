@@ -62,7 +62,7 @@ function isDocFile(f, policy) {
 
 // K-1 (Security B12): a kit or flow record is the owner's yes to a kit upgrade; it does not replace Security's sign-off on the guard itself.
 export const GUARD_GLOBS = ['.bootstrap/bin/**', '.githooks/**', '.bootstrap/roles/**', '.bootstrap/policy.json', '.claude/settings.json'];
-const needsSecurity = (files, required) => (files.some((f) => matchesAny(f, GUARD_GLOBS)) && !required.includes('security') ? [...required, 'security'] : required);
+const needsSecurity = (files, required) => (files.some((f) => matchesAny(f, GUARD_GLOBS, { ci: true })) && !required.includes('security') ? [...required, 'security'] : required);
 
 export const KIT_UPGRADE_GLOBS = ['.bootstrap/bin/**', '.bootstrap/flow/**', '.bootstrap/ui/**', '.bootstrap/roles/**',
   '.bootstrap/kit.json', '.githooks/**', '.gitignore'];
@@ -152,7 +152,7 @@ export function completeSignoffs(root, sha, policy, { flow = null, codeCommits =
         required = needsSecurity(files, required);
         shas = required.map((r) => p.signed[r]);
         if (shas.every(Boolean) && shas.every((s) => sameSha(s, shas[0]))) done.push({ piece: p.piece, sha: shas[0] });
-        else notes.push(`${p.piece}: changes the guard (${files.filter((f) => matchesAny(f, GUARD_GLOBS)).slice(0, 3).join(', ')}), so it also needs Security's sign-off on the same commit`);
+        else notes.push(`${p.piece}: changes the guard (${files.filter((f) => matchesAny(f, GUARD_GLOBS, { ci: true })).slice(0, 3).join(', ')}), so it also needs Security's sign-off on the same commit`);
       }
       continue;
     }
@@ -287,7 +287,7 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   // Commits that change only the flow and/or the kit are covered by the owner's recorded yes instead of a piece.
   const isFlow = (f) => FLOW_FILES.includes(f), isKit = (f) => matchesAny(f, KIT_UPGRADE_GLOBS);
   // B12: a commit that touches the guard (.bootstrap/bin/**, .githooks/**) is code, whatever record covers it: it needs the sign-offs, Security's too.
-  const configOnly = codeCommits.filter((c) => filesOf(c).every((f) => isDocFile(f, policy) || isFlow(f) || isKit(f)) && !filesOf(c).some((f) => matchesAny(f, GUARD_GLOBS)));
+  const configOnly = codeCommits.filter((c) => filesOf(c).every((f) => isDocFile(f, policy) || isFlow(f) || isKit(f)) && !filesOf(c).some((f) => matchesAny(f, GUARD_GLOBS, { ci: true })));
   if (configOnly.length) {
     const changed = [...new Set(configOnly.flatMap(filesOf))];
     const short = configOnly.map((c) => c.slice(0, 9)).join(', ');

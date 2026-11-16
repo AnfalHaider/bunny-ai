@@ -28,11 +28,13 @@ Owner's go for K-1, typed in the Chief of Staff's chat on 2026-11-17: "go on K-1
 | Run | Result | File |
 |---|---|---|
 | 0.6.0's own suite (`tests/*.test.mjs`) on a pristine copy of 0.6.0 (baseline) | **74 of 74** | `evidence/0.6.0-suite-on-pristine-0.6.0-74of74.txt` |
-| Our guard suites (`test/guard-next*.test.js`, `test/guard-providers.test.js`) on the staged kit (`KIT_NEXT=1`) | **75 of 75** | `evidence/our-guard-suites-on-staged-75of75.txt` |
+| Our guard suites (`test/guard-next*.test.js`, `test/guard-providers.test.js`) on the staged kit (`KIT_NEXT=1`) | **75 of 75** | `evidence/our-guard-suites-on-staged.txt` |
 | Our guard suites on the live kit (unchanged; the test change is mode-dependent) | **75 of 75** | (run in the same session, not saved) |
-| The K-1 checklist, `test/kit-next-k1.test.js` (one test per Security and Tech Lead row) | **19 of 19** | `evidence/kit-next-k1-checklist-19of19.txt` |
+| The K-1 checklist, `test/kit-next-k1.test.js` (one test per Security and Tech Lead row) | **21 of 21** | `evidence/kit-next-k1-checklist.txt` |
 | 0.6.0's own suite on the staged files, as is | **53 of 74** | `evidence/0.6.0-suite-on-staged-53of74.txt` |
 | the same, in a scratch copy with only our two **push-time** checks switched off (`scope_check.push`, `records_check`) | **71 of 74** | `evidence/0.6.0-suite-on-staged-push-checks-off-71of74.txt` |
+
+Note: the two runs of 0.6.0's own suite were made before the last review round (nested-repo, registry, refspec and case fixes); those fixes do not touch the checks the 0.6.0 tests exercise. They are re-run for the final sha only if a reviewer asks.
 
 ### Why 0.6.0's own suite does not pass 74 of 74 (all deliberate; nothing is hidden)
 
@@ -78,6 +80,7 @@ Every row is covered by a test in `test/kit-next-k1.test.js` unless it says othe
 * QA's "29 real-world cases" list is not in the repository; the guard suites in `test/guard-next*.test.js` stand in for it. If QA has the list, run it against `scripts/kit-next/` with `KIT_NEXT=1`.
 * Security's section D is covered by `test/kit-next-k1.test.js` only where the test names the spelling. `::$INDEX_ALLOCATION`, junctions, `\\?\` and reserved device names (`con`) are not tested here.
 * Automatic review notes (not part of K-1, they are in code carried over from `scripts/guard-next`): quoted flags are blanked before the deny patterns are tested (`simpleCommandTexts`); the role file is not tamper-evident against hard links.
+* Open, for v0.1.8 (automatic review of this staging, denylist limits): git configuration injected through the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_* environment or `include.path`; registry or persistent-environment writes under any variable name (only BOOTSTRAP_ROLE, `reg add ...Environment`, `setx`, `SetEnvironmentVariable` and the Item/ItemProperty cmdlets are refused). The robust fixes are a post-fetch check that the live ref did not move, and a `currentRole` that ignores an environment-provided role unless a Chief-written record backs it.
 * Nothing was run against the real repository's `.bootstrap/`; no `bootstrap upgrade` was run anywhere.
 
 ## Run

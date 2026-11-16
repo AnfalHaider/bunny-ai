@@ -238,9 +238,10 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if ((sub === 'fetch' || sub === 'pull') && ctx.liveBranch) {
     const live = String(ctx.liveBranch).toLowerCase();
     if (call.args.some((x) => /^--refmap(=|$)/.test(x))) return '"git fetch --refmap" can write the live branch label; not allowed for this role.';
+    if (call.args.some((x) => /^--stdin$/.test(x) || /^remote\..*\.fetch=/i.test(x))) return 'a fetch with --stdin or a remote.*.fetch from the command line can write the live branch label; not allowed for this role.';
     for (const a of call.args.filter((x) => !x.startsWith('-'))) {
       const dest = a.replace(/^\+/, '').split(':')[1];
-      if (dest !== undefined && (dest.includes('*') || dest.replace(/^refs\/heads\//i, '').toLowerCase() === live)) return `fetching into "${ctx.liveBranch}" moves the live branch label; not allowed for this role.`;
+      if (dest !== undefined && (dest.includes('*') || dest.replace(/^(refs\/)?heads\//i, '').toLowerCase() === live)) return `fetching into "${ctx.liveBranch}" moves the live branch label; not allowed for this role.`;
     }
   }
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
