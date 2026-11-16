@@ -12,6 +12,7 @@ import { userInfo } from 'node:os';
 import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -626,6 +627,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
+      const unknown = Object.keys(patch).filter((k) => !WINDOW_ONLY_SETTING_KEYS.includes(k) && !ORDINARY_SETTING_KEYS.includes(k));
+      if (unknown.length) return sendJson(res, 400, { code: 'settings.unknownKey', message: `Bunny AI has no setting called ${unknown.slice(0, 3).map((k) => JSON.stringify(k.slice(0, 40))).join(', ')}.` });
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
@@ -1284,6 +1287,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     // ---- a question card: the person's answer ----
     const questionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/question\/([a-f0-9-]{36})$/);
     if (questionMatch && method === 'POST') {
+      if (windowOnly(req, res)) return;
       const pending = pendingQuestions.get(questionMatch[2]);
       if (!pending || pending.sessionId !== questionMatch[1]) {
         return sendJson(res, 404, { code: 'question.gone', message: 'That question is no longer waiting' });

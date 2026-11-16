@@ -34,7 +34,7 @@ test('an allow rule never covers a chained or substituted command; deny and ask 
   assert.equal(checkCommand(rules, 'npm test; rm -rf x'), null, 'the second command is not allowed');
   assert.equal(checkCommand(rules, 'npm test && npm test')?.effect, 'allow', 'both parts are allowed');
   assert.equal(checkCommand(rules, 'npm test | cat'), null);
-  assert.equal(checkCommand(rules, 'npm test $(rm x)'), null, 'a command substitution is never allowed');
+  assert.notEqual(checkCommand(rules, 'npm test $(rm x)')?.effect, 'allow', 'a command substitution is never allowed');
   assert.equal(checkCommand(rules, 'npm test `rm x`'), null);
   assert.equal(checkCommand(rules, 'npm test > out.txt'), null, 'a redirect to a file is a write');
   assert.equal(checkCommand(rules, 'npm test 2>&1')?.effect, 'allow', '2>&1 is plumbing');
@@ -267,4 +267,16 @@ test('W2-7d (Security 6ca4aff): quotes inside a word do not hide a command; glob
     const v = checkCommand([cmd('deny', 'Remove-Item*')], c);
     assert.ok(v?.effect === 'ask', `${c} -> ${v?.effect}`);
   }
+});
+
+test('W27d-1: computed arguments cannot dodge a Deny: git ("push"), git @("push"), git $("push") and a backtick before a hyphen ask', () => {
+  const rules = [cmd('deny', 'git push*')];
+  for (const line of ['git ("push")', 'git @("push")', 'git $("push")', 'git `-C . push', 'git ("pu"+"sh") origin main', 'git @{a=1}', 'git $x', 'git @args', 'git ${x}', 'git $env:A', 'git "x;" ("push")', 'git "unpaired (push', "git @'\npush\n'@", 'git @"\npush\n"@', 'git {push}', 'git -c ‘a’ ("push")', "git -c \"a.b='\" (\"push\") origin main; echo \"'\""]) {
+    assert.equal(checkCommand(rules, line)?.effect, 'ask', line);
+  }
+  assert.equal(checkCommand(rules, 'git push')?.effect, 'deny', 'plain spellings still deny');
+  // without any Deny or Ask rule nothing changes, and quoted text with brackets is only text
+  assert.equal(checkCommand([cmd('allow', 'git *')], 'git ("status")'), null);
+  assert.equal(checkCommand(rules, 'git commit -m "fix (x)"'), null, 'brackets inside quotes are only text');
+  assert.equal(checkCommand(rules, 'git status'), null);
 });

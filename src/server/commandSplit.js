@@ -199,6 +199,40 @@ export function normalisePart(part, depth = 0) {
 }
 
 /**
+ * W27d-1: arguments PowerShell works out before the command runs: git ("push"), git @("push"), git $("push"), git $x, git @args, git `-f.
+ * What they become cannot be read from the text, so the line is treated like a wrapper (it asks whenever a Deny or Ask rule exists).
+ * Fails closed: the whole line is read (not cut into statements first), only a plain string with no $ or backtick in it counts as text,
+ * and a quote that is left unpaired counts as computed.
+ */
+export function computedArguments(line) {
+  // one left-to-right pass: a quote inside the other kind of quote is only a character; a double-quoted string with $ or a backtick in it computes
+  const text = String(line ?? '');
+  let outside = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "'") {
+      const end = text.indexOf("'", i + 1);
+      if (end < 0) return true; // unpaired
+      i = end;
+    } else if (c === '"') {
+      let j = i + 1;
+      let computes = false;
+      for (; j < text.length && text[j] !== '"'; j += 1) {
+        if (text[j] === '`') { computes = true; j += 1; } else if (text[j] === '$') computes = true;
+      }
+      if (j >= text.length || computes) return true; // unpaired, or it works something out
+      i = j;
+    } else if (c === '`') {
+      if (text[i + 1] === '-') return true;
+      outside += text[i + 1] ?? ''; // a backtick makes the next character ordinary
+      i += 1;
+    } else if (c === '@' && (text[i + 1] === "'" || text[i + 1] === '"')) return true; // a here-string: its lines are the argument
+    else outside += c;
+  }
+  return /[({]|\$[A-Za-z_{(?]|(?:^|\s)@[({A-Za-z_$]/.test(outside);
+}
+
+/**
  * Everything the rules need to know about a command line:
  *   readings  the three lists of parts (A, B, C) an Allow must cover completely
  *   texts     every spelling a Deny or Ask is matched against
@@ -235,6 +269,8 @@ export function analyseCommand(command, depth = 0) {
       }
     }
   }
+  // computed arguments (W27d-1): the parts above are cut at the brackets, so look at the line itself
+  if (computedArguments(command)) wrapper = true;
   // a new drive or a provider named Alias, Function or Variable can redefine names too
   if (/\b(new-psdrive|ndr|mount)\b/i.test(String(command ?? '').replace(/`/g, '').replace(/["']/g, '')) || /-psprovider\s+(alias|function|variable)/i.test(String(command ?? ''))) wrapper = true;
   // the alias:, function: and variable: drives redefine what a name means (Set-Item alias:rm ...), spelled any way

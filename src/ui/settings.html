@@ -416,6 +416,7 @@
       <div class="rules" id="perm-rules">
         <h3>Permission rules</h3>
         <p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say. A command pattern like <code>npm test*</code> matches what Bunny is about to run; a path pattern like <code>secrets/**</code> matches the files Bunny's own tools read or edit (not what a command does). Simple wildcards only: <code>*</code> and <code>**</code>.</p>
+        <p class="lead"><b>Only from Bunny's window.</b> In the desktop app, the rules, the permission mode, connectors, schedules, hooks, skills, sign-ins, providers and the other settings that decide what Bunny may do change only from this window. Anything else on this computer that tries gets "Change this in Bunny's window.", which means the request was refused and nothing was changed.</p>
         <p class="lead"><b>A guard rail, not a sandbox.</b> Command rules read the command Bunny is about to run; they do not cover custom tools, MCP or local connectors, computer-use typing, the browser tools or schedules, and a wrapper such as <code>cmd /c</code> or <code>powershell -Command</code> can hide what it runs (Bunny asks about those when you have a Deny or Ask rule).</p>
         <div class="tabs2" role="tablist" aria-label="Where the rules apply">
           <button type="button" class="tab" role="tab" id="rules-tab-all" aria-selected="true">All folders</button>
