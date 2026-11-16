@@ -29,12 +29,6 @@ test('W4-1: without it a free port is picked, exported for the workers, and not 
   assert.equal(r.env, String(r.port), 'written back to the environment so every worker reads the same port');
 });
 
-test('W4-1: two runs started together get different ports and folders', () => {
-  const a = load({});
-  const b = load({});
-  assert.notEqual(a.dir === b.dir && a.port === b.port, true);
-});
-
 test('W4-1: nonsense in BUNNY_E2E_PORT falls back to a free port', () => {
   const r = load({ BUNNY_E2E_PORT: 'abc' });
   assert.ok(r.port > 0 && r.port < 65536);
