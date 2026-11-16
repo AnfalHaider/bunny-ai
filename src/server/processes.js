@@ -7,8 +7,10 @@
  * chat's folder. They all stop when Bunny AI closes.
  */
 import { spawn, execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { POWERSHELL_PRELUDE, NON_INTERACTIVE, translateChains } from './workspace.js';
 
+const GUARD = fileURLToPath(new URL('./procGuard.js', import.meta.url));
 const MAX_KEPT = 40_000;       // characters of output kept per process
 const MAX_RUNNING = 6;         // per chat
 
@@ -23,10 +25,15 @@ export function createProcessStore() {
     }
     counter += 1;
     const id = `p${counter}`;
-    const child = process.platform === 'win32'
-      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${translateChains(command)}`],
-        { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...NON_INTERACTIVE } })
-      : spawn('sh', ['-c', command], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    // W4-1d: run it under procGuard, which stops the program's whole tree if this server ever disappears. It is detached so Windows does not end it together with the server (a job object would, before it could clean up).
+    const win = process.platform === 'win32';
+    const inner = win
+      ? ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}
+${translateChains(command)}`]
+      : ['sh', '-c', command];
+    const child = spawn(process.execPath, [GUARD, String(process.pid), JSON.stringify(inner)],
+      { cwd, windowsHide: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(win ? NON_INTERACTIVE : {}), ELECTRON_RUN_AS_NODE: '1' } });
+    child.stdin?.on('error', () => {}); // held open on purpose: its end tells the guard this server is gone
     const p = { id, command, cwd, owner, child, out: '', read: 0, exitCode: null, started: Date.now() };
     const add = (chunk) => {
       p.out += chunk.toString();
