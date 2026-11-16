@@ -21,7 +21,7 @@ Docs and tests only. Nothing in `src/` was changed. Nothing here touched `%LOCAL
 | Controls inventoried (live DOM, 5 pages) | 316 (`docs/plans/audit-q2-inventory.md`, one row each) |
 | Verdicts in the inventory | 245 PASS, 23 FAIL, 48 UNKNOWN |
 | Checks driven in this audit | 79 (`controls` 43, `panes` 17, `pages` 19) plus the six fallback and Code-mode reproductions |
-| Defects | 22 (5 High, 9 Medium, 8 Low) and 1 open question |
+| Defects | 31 raised (5 High, 15 Medium, 11 Low), 1 decision for the owner and 1 open question; 8 are fixed and re-walked on `4405dc0` (see below) |
 | New tests | 23 unit (6 pass, 17 todo = defects), 17 browser (7 pass, 10 expected-fail = defects); the gate passes 6/6 with them |
 
 The owner's reports are all real. Four of the six panes the owner mentioned are partly or wholly empty shells, and the model fallback is slower and messier than the screen suggests.
@@ -77,6 +77,131 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 | Q2-20 | Low | Seven switches have no accessible name (a screen reader says "on, checkbox"): the eight Capabilities switches, Notifications, "Also let Bunny use Gmail…", the About row. | `src/ui/settings.html:187`, `:252-320` (no `aria-label`). | `q2-inventory.mjs` rows with an empty name. | (accessibility; no test yet) |
 | Q2-21 | Low | The dev-server card says "running" if **anything** answers on the guessed port, even another project's site (on this machine port 3001 serves an unrelated site). | `src/server/workspace.js:373-377` (`running = res.status > 0`). | `q2-code-mode.mjs` screenshot: pane on `localhost:3001` showed a different site. | (needs a port in use; see note) |
 | Q2-22 | Low | `/?s=<id>` loses the chat id (the root redirects to `/src/ui/index.html` without the query); `GET /api/sessions` reads every chat: 5 ms empty, 97 ms at 155 chats, 182 ms at 317. | the root redirect at `src/server/app.js:2474-2475`; `sessions.list`. | `q2-perf.mjs`. | (observation) |
+| Q2-23 | Medium | **S-1 (Builder branch, `09b35e4`): a browser tab left open across a restart of Bunny fails silently.** The tab holds the old launch token; the next send clears the box and shows nothing: no message, no error, no "out of date" notice, until the page is reloaded. The server's words ("This window is out of date. Close it and open Bunny AI again (or reload the page).") never reach the screen. Does not affect the desktop app (the window is recreated with each launch); affects `npm start` and the plain-browser preview. | the UI has no handler for the 403 `request.noToken` answer (`src/ui/token.js`, `src/ui/api.js` `sendJSON`/`getJSON`); found on the Builder branch, not in this branch's tree | `e2e/q2-s1-walk.mjs` restart probe: after the restart `#error`, `#status` and the transcript are all empty; screenshot `%TEMP%\qa-q2\s1\stale-window.png`. | unit Q2-23 (todo) |
+| Q2-24 | Medium | **Computer use stays a question after it is allowed.** With the "Control this computer" grant on and the mode set to Auto (or Accept edits), every click, key press, typing and scroll still raises a permission card. The owner's rule ("when allowed by me, everything should be allowed") says it should not. | `src/server/agentTools.js:20` gives `computer_click`, `computer_type`, `computer_key` and `computer_scroll` the risk `build`; `src/server/app.js:1510` (`needsOk`) asks for `build` in every mode. | `test/q2-permissions.test.js`: Auto, grant on, click: one card. (Only ever answered Deny: nothing drove this machine.) | unit Q2-24, Q2-24b (todo) |
+| Q2-25 | Low | In Manual mode every Allow covers one call only; there is no "allow for this chat" or "allow this kind of step" on the card, so a ten-file job is ten cards. (Switching to Accept edits or Auto is the way out, but the card does not say so.) | `src/ui/chat.js:1017-1030` (the card has only Allow and Deny); `src/server/app.js:1636-1644`. | `test/q2-permissions.test.js` Manual rows: one card per call. | (design; no test) |
+| Q2-27 | Low | **A false "Bunny AI restarted, so this window is out of date" banner** appears when the in-app browser is pointed at one of Bunny's own `/api/...` addresses. The new reachability probe sends the page's request with `mode: 'no-cors'`, the browser drops the token header, the server answers 403 `request.noToken`, the token refresh finds the same token, and the banner is shown anyway. Rare (only Bunny's own API in its own browser pane), but the banner has no dismiss and tells the person to reload for nothing. | `src/ui/browser-pane.js` `reachable()` (found on the Builder branch at `4405dc0`) with `src/ui/token.js` `window.fetch` (`say()` after a refresh that changed nothing) | probe: browser pane to `http://127.0.0.1:PORT/api/settings`: two 403s without a token, then `#bunny-restarted` is present and covers the toolbar (`e2e/q2-s1-walk.mjs` B8). | (found on the Builder branch; no test here yet) |
+| Q2-28 | Medium | **D1 fix 2 (phone Settings pill row) shows one pill at a time.** On a 390 px phone each section pill is as wide as the whole strip (364 px), so only the selected section ("Appearance") is visible and the other 14 sections can only be found by swiping sideways blind. Design's own built screenshot (`docs/design/review-0.1.4/built/settings-light-m.png`) shows the same. | `.nav-row { width: 100% }` at `src/ui/app.css:259` is not overridden by the phone rule `.settings-nav-list .nav-row { flex: none; … }` (D1, `2cfeec5`). Needs `width: auto`. | `e2e/q2-d1-walk.mjs` S-phone-light and S-phone-dark: 15 pills at `Profile -723..-359, Usage -355..9, Appearance 13..377, My Dear Bunny 381..745 …`; 1 fully visible. | `e2e/q2-d1-walk.mjs` (script, not in the gate) |
+| Q2-29 | Medium | **A command that ends with an error code is shown as done, not Failed** (D-2). `exit 3` is a green "Ran a command" with no red marker; only a tool that itself errors (a file that is not there) gets the red Failed label and the error. | `src/server/workspace.js` `run_command` returns `[exit code N]` as text; `src/server/app.js` logs the step with status `done` (found on the Builder branch at `6ef4ccf`). | `e2e/q2-t3d2-walk.mjs` D2 in all four widths and themes: "no red Failed marker visible"; screenshot `d2-desktop-light-failed.png` shows `Ran a command` and the reply "That command failed." | unit Q2-29 (todo) |
+| Q2-30 | Medium | **Offline with a local provider that is connected but not running (an Ollama that is closed): the message is sent anyway and fails in red.** Bunny prefers a local model when offline; when that one is down it does not fall back to the calm waiting state. | the T-3 offline path in `src/ui/chat.js` (local model preferred offline, `092cc6d`) | `e2e/q2-t3d2-walk.mjs` T4b: queued bubble 0, red failure lines 1, one request sent while offline. | (script; needs the offline switch) |
+| Q2-31 | Medium | **After Stop in a Code chat that ran steps, the Stopped report and the partial reply do not appear until the page is reloaded** (they are saved). Same family as Q2-19, one case left: the steps are saved before the partial, and the wait ends at the first step. | `src/ui/chat.js:2056-2073` `refreshSession`: `assistants()` counts every assistant-role message, tool steps included (found on the Builder branch at `6ef4ccf`). | `e2e/q2-t3d2-walk.mjs` D3, four combinations: "no stopped report on screen within 6 s after Stop (saved kinds: text,tool_call,partial); after a reload it is there". | unit Q2-31 (todo) |
+| Q2-32 | Low | **Two phone top-bar buttons are smaller than the 40 px target** the Builder set: the sidebar toggle is 28 x 32 and Export is 49 x 30 (the icon buttons are fine). | `src/ui/app.css` phone rule for `.topbar` (found at `1e4f1ea`) | `e2e/q2-d2-security-walk.mjs` P1 at 390 px: `sidebar-toggle 28x32`, `export 49x30` | (script) |
+
+### Permission modes and grants (owner's rule: "when allowed by me, everything should be allowed")
+
+`test/q2-permissions.test.js` drives a reply in each mode that calls one tool, answers every card, and records whether a card was raised and whether the tool ran. Nothing that drives this computer or builds a program was ever allowed to run (those were only answered Deny).
+
+| Tool kind | Manual | Accept edits | Plan | Auto | Verdict |
+|---|---|---|---|---|---|
+| Read (`list_files`) | no card | no card | no card | no card | PASS |
+| Edit (`write_file`) | card; Allow writes, Deny keeps it out and tells the model | no card, writes | **writes with no card (Q2-1)** | no card, writes | Plan FAIL, rest PASS |
+| Command (`run_command`) | card | card | **runs with no card (Q2-1)** | no card, runs | Plan FAIL, rest PASS |
+| Computer (`computer_click`, `_type`, `_key`, `_scroll`) | card | **card again (Q2-24)** | not offered | **card again (Q2-24)** | FAIL |
+| Build (`create_tool`, a schedule that may change things, a local connector command) | card | card | not offered | card (by design) | see Q2-26 |
+
+Grants: Code mode (the card, or the Chat/Code toggle with a folder) is remembered on the chat; Computer use and Custom tools are saved in Settings, so they are asked once. Saying no is remembered for the reply ("do not ask again"). The Capabilities switches in Settings do the same without a card.
+
+- **Q2-26 (decision for the owner, not counted as a defect):** the code deliberately asks for "build" actions in **every** mode, Auto included: building a tool, a schedule that may change things, and adding a local connector (a program run on this computer). Under the owner's rule these would stop asking once the person has allowed it. The risk is that a script or a program is then created and run without being read. Needs the owner's word before the Builder touches it (HIGH under AGENTS.md: permissions).
+
+### Re-walk of the Builder's fixes at `4405dc0` (QA, 2026-11-16, invented profile, guard on)
+
+Gate on `4405dc0`: 7 of 7 (111 e2e). Scripts re-run against it with the launch token (`e2e/q2-token-preload.mjs`): `q2-controls` (43 checks), `q2-panes` (17), `q2-pages` (19), `q2-s1-walk` (33), `q2-code-mode`, `test/q2-permissions.test.js`.
+
+| Defect | Result at `4405dc0` | Evidence |
+|---|---|---|
+| Q2-1 Plan mode writes | **FIXED** | Plan: write and command refused, no file, no card (CM7 PASS; both Plan rows of `q2-permissions` now pass) |
+| Q2-2 mode reverts | **FIXED** | Auto stays Auto after the branch chip (CM1 PASS with the corrected expectation) |
+| Q2-3 `PATCH /sessions/null` | **FIXED** | CM6 to CM8 and the Code-mode run: no 404, no page error |
+| Q2-8 trailing `&` | **FIXED** | the step fails with "run_command waits for the command to finish ... Use start_process ..." |
+| Q2-9 unreachable page | **FIXED** (the panel says so; the browser's own page is still in the frame behind the note) | PN4: "Could not reach http://localhost:4999. Nothing is answering there ..."; Run and open opens after 2 to 3.5 s |
+| Q2-17 `window.prompt` | **FIXED** | Rename opens an in-app dialog (N8, no native prompt) |
+| Q2-19 Stop in a chat with replies | **FIXED** | C7: the partial stays on screen and is saved |
+| Q2-23 stale token | **FIXED** | restart probe: the send after a restart goes through, no banner |
+| Q2-4, 5, 6, 7, 10 to 16, 18, 20 to 22, 24, 25 | still open (Builder: next) | controls, panes and permission scripts |
+
+New on the Builder branch: **Q2-27** (false restart banner) and **Q2-28** (D1 phone pills). The service-worker change (other sites left alone) was exercised by PN2, PN4, PN5 and B7; no regression found.
+
+### T-3 and D-2 on the Builder branch at `6ef4ccf` (QA, 2026-11-16)
+
+Gate on `6ef4ccf`: 7 of 7 (123 e2e). Invented profile, guard on.
+
+**Q2-10 to Q2-13, a model that never answers** (`e2e/q2-fallback.mjs`, same scenarios as the first audit):
+
+| Run | Before (`19163fa`) | Now (`6ef4ccf`) | What the person sees now |
+|---|---|---|---|
+| Picked model stalls | 122 s, one red line left, "...was busy" | **33 s** | one line: "Answered by offline/bunny-large because offline/bunny-code did not answer in time"; no red line; the saved chat has only the answer |
+| Auto, two models stall | 242 s, two red lines, note named the last | **63 s** | "Auto · Chat → offline/bunny-small (Bunny Code (offline) did not answer)": no red line; the note names only the first model that failed, not the second |
+| Every model stalls | 363 s, three identical red lines | **93 s**, three attempts then stop | one collapsed line "The reply failed / Failed"; the saved chat holds one error note with the reason (it opens to it) |
+| Picked model answers 429 | switched at 3 s, one red line left | 3 s | "...because offline/bunny-code was busy (rate limit or overloaded)"; no red line |
+| All providers unreachable | three red lines | 1 to 5 s | one note "The reply failed", opens to the reason, with Try again and Choose another model; **one note after a reload** |
+
+Still true: for the 30 s of each attempt the screen says only "Streaming..." (no "trying the next model" line was seen on the status line), and Auto names only the first failed model.
+
+**T-3 offline** (`q2-t3d2-walk.mjs`: the server test switch plus the browser's offline event, and once the browser's real offline emulation): the message waits with a calm line ("You are offline. I will send this when the network is back."), a waiting bubble and an Offline chip, with no red line and no request; Cancel removes it; typing a new message replaces the waiting one; on reconnect exactly one request is sent and answered, with one user bubble; a local model (127.0.0.1) answers while offline; real offline emulation behaves the same and recovers. **One defect: Q2-30.**
+
+**D-2 transcript** (four widths and themes): a reply with several tool runs and narrations shows narration lines between collapsed groups ("Listed a folder", "Read a file, wrote a file", "Ran a command"), sub-rows on demand, no horizontal overflow, and the same groups, notes and summaries after a reload; a failing tool (a missing file) shows the red Failed label, the file and the error; 26 chats saved by an older build (46 tool groups or rows) all open and render. **Two defects: Q2-29, Q2-31.**
+
+### The panes at `5f36e04` (QA, 2026-11-16): Q2-4, Q2-5, Q2-6, Q2-7
+
+Gate on `5f36e04`: 7 of 7 (128 e2e). `e2e/q2-panes2-walk.mjs`, invented profile, a git folder and a plain folder, 1440 and 390, both themes (49 checks, all 16 failures traced to Q2-7 or my own phone navigation, rerun clean below).
+
+| Defect | Result | Evidence |
+|---|---|---|
+| Q2-4 Changes | **FIXED** in git and non-git folders, all four widths and themes | a new file and an edited file show as checkpoint cards ("Checkpoint 2 / Checkpoint 1") with `new` / `edited` badges and counts (`src/greet.js +1 −0`, `note.txt +3 −0`, header "2 files +4 −0"), the diff opens with added lines, "Undo to here" puts the folder back (note.txt gone from disk); empty chat says "No changes yet." |
+| Q2-5 Files | **FIXED** | tree lists the folder (before any message too), a file opens read-only with line numbers (no editable field), a file Bunny changed is tinted and its lines marked, `new` marker on a created file; on a phone a file replaces the tree and has a way back |
+| Q2-6 Session | **FIXED** | Where (environment, project, folder, branch `main` or "Not a git folder"), Model (model, permissions, effort), Context and cost (context %, "107 of 200,000" tokens, messages, "not reported" cost), running programs with a Stop button (the started `node` process shows), connectors, outputs; with Auto on, it names Auto's pick and why |
+| Q2-7 Plan | **PARTLY**: the Plan pane is now filled (same list as Tasks) but nothing can open it: only the active pane's tab is shown and no control selects Plan | `#plan-content` holds Look / Write / Check; `#tab-plan` is never visible; Tasks already shows the same plan |
+
+**Path escapes** (`/api/sessions/:id/files` and `/file`, 17 attempts each: `../`, `..`, `..%2F`, `%2e%2e%2f`, `src/../../secret.txt`, backslash forms, `C:\Windows\win.ini`, `C:/Windows/win.ini`, a UNC `\localhost\c$\...`, `/etc/passwd`, `README.md%00.txt`, and a Windows junction inside the folder that points outside): none returned anything outside the folder, none answered 200. `/api/folder/files` and `/file` refuse (403) every folder not chosen in this launch (`C:\Windows`, `C:\`, an outside folder, even the project before it is chosen), and after `folder/check` they still refuse `../`, the junction and a drive path. A chat that does not exist or has no folder answers without a server error. A 2 MB file comes back cut off (`truncated: true`); a binary file is flagged `binary: true`, not dumped. (The Tech Lead's `changesFor` finding was not exercised by a link that escapes: a write through the junction was not attempted.)
+
+### Builder batch at `d2dbf82` (includes `fde15a5` and `78f49fe`) (QA, 2026-11-16)
+
+Gate on `d2dbf82`: 7 of 7 (130 e2e). Invented profile, guard on, scripts re-run:
+
+| Item | Result | Evidence |
+|---|---|---|
+| Q2-28 D1 phone Settings pills | **FIXED** | `q2-d1-walk.mjs` 24 of 24 (pills size to their text, the strip scrolls, several fully visible) |
+| Q2-27 false "restarted" banner | **FIXED** | `q2-s1-walk.mjs` 33 of 33, including the terminal after the browser pane opened Bunny's own API address (the banner no longer covers the toolbar) |
+| Q2-24, Q2-26 permissions | **FIXED** as decided | Auto: creating a tool runs with no card; Manual and Accept edits ask for it; computer-use clicks ask in Manual and Accept edits (answered Deny; the Auto click is not driven, it would click this screen); Builder's `test/permission-modes.test.js` and mine both pass (24 tests, 4 `todo` of which Q2-26 now passes) |
+| T-3 gap 1: nothing on screen for 30 s | **FIXED** | at 32 s the status line says "offline/bunny-code is slow. Trying Bunny Large (offline)..." |
+| T-3 gap 2: Auto names only the first failure | **FIXED** | "Auto · Chat → offline/bunny-small (Bunny Code (offline) did not answer in time (1 other model also failed))" |
+| Waiting text kept as a draft | **FIXED** | offline, send, leave to New chat: the bubble is gone, the text is back in the box, nothing sent |
+| "Checking your connection..." on reconnect | **FIXED** | the status shows it, then "Streaming...", and exactly one request ("queued again") |
+| Link (junction) escape through Changes, Files, file and a model write | **no escape** | new `test/q2-escape.test.js`: the model's `write_file link/secret.txt` does not touch the outside file; none of `changes`, `files`, `file`, `files?path=link` shows outside text |
+| Q2-7 Plan pane | still open | filled, but no tab opens it (8 of 8 combinations) |
+| Q2-29 exit code not Failed, Q2-30 closed local provider offline, Q2-31 Stop report after steps | still open | `q2-t3d2-walk.mjs` D2, T4b, D3 unchanged; D2b (a failing tool) and the 26 older chats pass |
+
+### Builder fixes at `9ca3f77` (QA, 2026-11-16)
+
+Gate on `9ca3f77`: 7 of 7 (134 e2e). Scripts re-run on fresh invented profiles with the guard on:
+
+| Item | Result | Evidence |
+|---|---|---|
+| Q2-29 a failing command is Failed | **FIXED** | `q2-t3d2-walk.mjs` D2 passes in all four widths and themes (red Failed marker, the command `exit 3`, the error, Copy); `q2-permissions` Q2-29 test now passes |
+| Q2-31 Stop report after steps | **FIXED** | D3 passes in all four combinations: the Stopped report with what was done and Continue is on screen at once, and still there after a reload |
+| Q2-30 closed local provider offline | **FIXED** | T4b: the message waits (bubble 1, red failure lines 0, no request) |
+| Edited existing file counts | **FIXED** | Changes shows `src/greet.js edited +2 −1` for a replaced line plus one added, and `note.txt new +3 −0`, in git and plain folders, four combinations |
+| "Trying..." line | **FIXED** | the status "Bunny Code (offline) is slow. Trying Bunny Large (offline)..." appears at 32 s and stays through the next attempt (no "Streaming..." in between) |
+| Q2-7 Plan pane | **still there** | `#pane-plan` is still in `index.html`; the "no dead pane remains" check fails in 8 of 8 combinations until it is removed |
+| D1 walk, S-1 walk | 24 of 24, 33 of 33 | |
+| Permission tests (mine and `permission-modes`, `exit-status`) | 27 tests, 23 pass, 4 `todo` all passing | |
+| Junction write and read escape | still no escape | `test/q2-escape.test.js` passes |
+
+### Builder at `1e4f1ea` (QA, 2026-11-16)
+
+Gate on `1e4f1ea` in a normal worktree: 7 of 7 (134 e2e). (A first gate run in a worktree under the temp folder, with `node_modules` as a junction, failed 7 to 9 different feature specs on a missing form: slowness of that location, not the code; the same code passes in a normal worktree.)
+
+| Item | Result | Evidence |
+|---|---|---|
+| Q2-7 Plan pane removed | **FIXED** | `q2-panes2-walk.mjs` 49 of 49: no pane without a toolbar button, Tasks shows the plan, in four widths and themes, git and plain folders; edited-file counts `+2 −1` |
+| D-2 security: hidden folders | **PASS** | `.git`, `.GIT`, `.git\config`, `src/../.git/config`, `node_modules` are neither listed nor readable. (Dot files such as `.env` ARE shown: "hidden" means `.git` and `node_modules` only, by design) |
+| D-2 security: links | **PASS** | a junction is shown as a link and is not followed, listed, read or through |
+| D-2 security: read cap | **PASS** | 3 MB file cut off at 1 MB and marked truncated; a 1500-file folder lists 500 and says truncated |
+| D-2 security: never-browse | **PASS** | a drive root, Bunny's data folder and its parent are refused (403) on both routes, even after being chosen |
+| Desktop-only folder choosing | UNKNOWN | needs the Electron app; in the plain browser a typed path is chosen, by design |
+| Phone status text above the composer | **PASS** | the calm offline line and the status line ("Cancelled: the waiting message was not sent.") sit above the composer and are visible |
+| Phone top bar 40 px targets | **FAIL (new Q2-32)** | `sidebar-toggle` 28 x 32 and `export` 49 x 30 |
+| D1 walk, S-1 walk | 24 of 24, 33 of 33 | |
 
 ### Open question (UNKNOWN, not counted)
 
