@@ -193,12 +193,32 @@ function ghApiMethod(words) {
   return method ?? (body ? 'POST' : 'GET');
 }
 
+/**
+ * Tech Lead 51562ee, every role: `gh auth status --show-token` (or -t) prints the sign-in token. `gh auth` is allow-only: status, with
+ * only -h/--hostname <host> and -a/--active; a flag cluster, a --flag=value of anything else or a word the guard cannot read is refused.
+ */
+function refuseGhAuth(words, at) {
+  const sub = words[at[1]]?.text;
+  const token = 'prints the sign-in token, so it is refused for every role.';
+  if (sub !== 'status') return sub === undefined ? null : `"gh auth ${sub}" changes or prints the sign-in: it is refused for every role.`;
+  const after = words.slice(at[1] + 1);
+  for (let i = 0; i < after.length; i += 1) {
+    const w = after[i];
+    if (w.dynamic) return `"gh auth status" with an argument the guard cannot read (a variable or substitution) might ask it to print the token: spell it out. (It ${token})`;
+    if (/^(--hostname|-h)$/.test(w.text)) { i += 1; if (after[i]?.dynamic) return '"gh auth status" with a host the guard cannot read is refused: spell it out.'; continue; }
+    if (/^--hostname=./.test(w.text) || /^(--active|-a)$/.test(w.text)) continue;
+    if (w.text.startsWith('-')) return `"gh auth status ${w.text.slice(0, 30)}" is not allowed: --show-token (-t) ${token}`;
+    return `"gh auth status" takes no words after it: ${w.text.slice(0, 30)} is refused.`;
+  }
+  return null;
+}
+
 function refuseGh(words, ctx) {
   const { group, sub, at } = ghCall(words);
   const live = (ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role);
   const ownerOnly = 'changes or removes a published release that every installed copy updates from: only the owner runs it.';
   // Tech Lead 51562ee: gh auth status prints the sign-in token with --show-token (-t): refused for every role, live pushers too
-  if (group === 'auth' && words.some((w) => /^--show-token(=|$)/.test(w.text) || /^-[A-Za-z]*t[A-Za-z]*$/.test(w.text))) return '"gh auth" with --show-token (-t) prints the sign-in token: it is refused for every role.';
+  if (group === 'auth') { const why = refuseGhAuth(words, at); if (why) return why; }
   if (GH_OWNER_ONLY.some(([g, s]) => g === group && s === sub)) return `"gh ${group} ${sub}" ${ownerOnly}`;
   if (group === 'release' && sub === 'upload' && words.some((w) => /^--clobber(=|$)/.test(w.text))) return `"gh release upload --clobber" replaces a published file: it ${ownerOnly}`;
   if (group === 'api') {

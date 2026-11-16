@@ -106,12 +106,14 @@ test('G1-1 review: a variable where the group or method should be, other launche
 
 test('Tech Lead 51562ee: gh auth status never prints the token, for any role', (t) => {
   for (const role of ['builder', 'qa', 'security', 'chief-of-staff', 'release-ops', 'hotfix']) {
-    for (const c of ['gh auth status --show-token', 'gh auth status -t', 'gh auth status --show-token=true', 'gh auth status -ht github.com', 'gh -R o/r auth status -t', 'gh auth status -h github.com --show-token', 'gh auth status \'-t\'', 'gh auth status "--show-token"']) {
-      assert.match(denied(t, c, role), /sign-in token/, `${role}: ${c}`);
+    for (const c of ['gh auth status --show-token', 'gh auth status -t', 'gh auth status --show-token=true', 'gh auth status -ht github.com', 'gh -R o/r auth status -t', 'gh auth status -h github.com --show-token', 'gh auth status \'-t\'', 'gh auth status "--show-token"', 'gh auth status -t=true', 'gh auth status --show-token=false', 'gh auth status -at', 'gh auth status $flag', 'gh auth status $(echo -t)', 'gh auth status --hostname $h', 'gh auth token', 'gh auth login', 'gh auth status extra']) {
+      assert.match(denied(t, c, role), /sign-in|guard cannot read|takes no words/, `${role}: ${c}`);
     }
   }
   // the plain status, and its hostname flag, stay available to the roles that could run it before
   allowed(t, 'gh auth status', 'builder');
   allowed(t, 'gh auth status --hostname github.com', 'builder');
+  allowed(t, 'gh auth status -h github.com --active', 'qa');
+  allowed(t, 'gh auth status --hostname=github.com', 'builder');
   allowed(t, 'gh auth status', 'release-ops');
 });
