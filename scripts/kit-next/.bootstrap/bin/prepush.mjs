@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
 import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, scopeViolations } from './lib/policy.mjs';
+import { recordChecks } from './lib/records.mjs';
 import { laneOf, loadFlow, requiredFor, wordRecordProblems, wordsFor } from './lib/flow.mjs';
 import { hasEvidence } from './lib/ops.mjs';
 
@@ -53,8 +54,18 @@ export function flowChangeRecord(root, sha) {
 // change when a newer kit is installed. Commits that change only these (plus docs and the flow) are covered
 // by the owner's recorded yes to the upgrade: `bootstrap kit apply` lists every kit file with its sha256,
 // and each changed file must match the record at the pushed commit. A later edit needs a new yes.
+// K-1 (Tech Lead #6): `**/*.md` is docs, except where an .md file steers the agents: role briefs under .bootstrap, AGENTS.md, CLAUDE.md.
+const NOT_DOCS = ['.bootstrap/**', '.githooks/**', '.claude/**', 'AGENTS.md', 'CLAUDE.md'];
+function isDocFile(f, policy) {
+  return matchesAny(f, policy.docs_globs) && !matchesAny(f, NOT_DOCS, { ci: true });
+}
+
+// K-1 (Security B12): a kit or flow record is the owner's yes to a kit upgrade; it does not replace Security's sign-off on the guard itself.
+export const GUARD_GLOBS = ['.bootstrap/bin/**', '.githooks/**', '.bootstrap/roles/**', '.bootstrap/policy.json', '.claude/settings.json'];
+const needsSecurity = (files, required) => (files.some((f) => matchesAny(f, GUARD_GLOBS)) && !required.includes('security') ? [...required, 'security'] : required);
+
 export const KIT_UPGRADE_GLOBS = ['.bootstrap/bin/**', '.bootstrap/flow/**', '.bootstrap/ui/**', '.bootstrap/roles/**',
-  '.bootstrap/kit.json', '.githooks/**', '.claude/settings.json', '.gitignore'];
+  '.bootstrap/kit.json', '.githooks/**', '.gitignore'];
 export const KIT_CHANGES_DIR = 'docs/kit-changes';
 export function kitRecordFiles(root, sha) {
   const ok = new Map(); const bad = [];
@@ -93,7 +104,7 @@ function sameSha(a, b) {
   return n >= 7 && a.slice(0, n) === b.slice(0, n);
 }
 
-export function piecesAt(root, sha, policy) {
+export function piecesAt(root, sha, policy, forged = null) {
   // [{piece, lane, extra, required (legacy _required roles or null), signed: {role: sha}}]
   const byPiece = new Map();
   for (const f of lsTree(root, sha, policy.signoffs.dir)) {
@@ -110,6 +121,8 @@ export function piecesAt(root, sha, policy) {
       if (name === '_piece') { p.lane = data.lane || null; continue; }
       if (name === '_approve' || name === '_go') { p.words[name.slice(1)] = data; continue; }
       if (name.startsWith('_')) continue;
+      // the file name and its front matter must name the same role: a hand-copied sign-off is not counted (G1-2)
+      if (data.role && data.role !== name) { (forged ?? []).push(f); continue; }
       // A PASS counts only with evidence in the body (a command and its output, or file:line).
       if (String(data.verdict || '').toUpperCase() === 'PASS' && data.sha) {
         if (hasEvidence(body, policy)) p.signed[data.role || name] = data.sha; else (p.weak ||= []).push(data.role || name);
@@ -120,7 +133,7 @@ export function piecesAt(root, sha, policy) {
   return out;
 }
 
-export function completeSignoffs(root, sha, policy, { flow = null, codeCommits = [], role = '', notes = [] } = {}) {
+export function completeSignoffs(root, sha, policy, { flow = null, codeCommits = [], role = '', notes = [], forged = null } = {}) {
   // Returns [{piece, sha}] for every piece whose required roles all signed PASS on one sha.
   // Without a flow: the required roles are _required.md or the policy default (legacy).
   // With a flow: the piece must have a lane set by the Chief of Staff (_piece.md); then lane gate +
@@ -128,7 +141,7 @@ export function completeSignoffs(root, sha, policy, { flow = null, codeCommits =
   //   the owner's words the lane/conditions need (_approve.md, _go.md). Only Hotfix may use an exempt lane.
   //   `notes` collects why each piece did not count, for the error message.
   const done = [];
-  for (const p of piecesAt(root, sha, policy)) {
+  for (const p of piecesAt(root, sha, policy, forged)) {
     if (!flow) {
       const required = p.required || policy.signoffs.default_required;
       const shas = required.map((r) => p.signed[r]);
@@ -143,13 +156,13 @@ export function completeSignoffs(root, sha, policy, { flow = null, codeCommits =
     if (!Object.keys(p.signed).length) {
       const files = codeCommits.flatMap((c) => (git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', c], root) || '').split('\n').filter(Boolean));
       const weak = (p.weak || []).length ? ` (PASS without evidence from ${p.weak.join(', ')})` : '';
-      notes.push(`${p.piece} (lane ${lane.id}): no sign-offs yet${weak}; needs ${requiredFor(flow, lane.id, files, p.extra).join(', ')}`);
+      notes.push(`${p.piece} (lane ${lane.id}): no sign-offs yet${weak}; needs ${needsSecurity(files, requiredFor(flow, lane.id, files, p.extra)).join(', ')}`);
       continue;
     }
     for (const S of [...new Set(Object.values(p.signed))]) {
       const covered = codeCommits.filter((c) => git(['merge-base', '--is-ancestor', c, S], root) !== null);
       const files = covered.flatMap((c) => (git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', c], root) || '').split('\n').filter(Boolean));
-      const required = requiredFor(flow, lane.id, files, p.extra);
+      const required = needsSecurity(files, requiredFor(flow, lane.id, files, p.extra));
       const missing = required.filter((r) => !sameSha(p.signed[r], S)).map((r) => ((p.weak || []).includes(r) ? `${r} (PASS without evidence)` : r));
       const wordIssues = wordsFor(flow, lane.id, files).flatMap((w) => wordRecordProblems(p.words[w], w, flow).map((x) => `${w}: ${x}`));
       if (!missing.length && !wordIssues.length) { done.push({ piece: p.piece, sha: S, required }); why = ''; break; }
@@ -191,6 +204,11 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   const branch = remoteRef.replace(/^refs\/heads\//, '');
   const guarded = branch === policy.branches.live || (!!policy.branches.dev && branch === policy.branches.dev);
 
+  // W5B-5: tags can mark a release; only the live pushers push or delete one (the shell rules say so first; this is the hook that catches the rest)
+  if (/^refs\/tags\//.test(remoteRef) && !policy.releases.live_pushers.includes(role)) {
+    errors.push(`role "${role}" may not push or delete the tag "${remoteRef.replace(/^refs\/tags\//, '')}" (only ${policy.releases.live_pushers.join(' / ')})`);
+  }
+
   if (ZERO.test(localSha)) {
     if (guarded) errors.push(`refusing to delete "${branch}"`);
     return errors;
@@ -219,16 +237,39 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
     }
   }
 
+  // G1-2: records are authenticated at push too, so a commit made with the hooks off is caught. Roles whose job is to move
+  // other roles' commits (release-ops, hotfix) are not asked; the Chief of Staff is, for the removal line and flipped verdicts.
+  if (policy.records_check !== false && (role === 'chief-of-staff' || !(sc.push_exempt_roles || []).includes(role))) {
+    // First-parent commits, merges included: a merge brings in other roles' records legitimately (not asked), but a record the
+    // merge itself changes (a conflict resolved by hand) differs from every parent, and that is the pusher's doing (git --cc).
+    const own = (git(['rev-list', '--first-parent', ...range], root) || '').split('\n').filter(Boolean);
+    for (const c of own) {
+      const isMerge = (git(['rev-list', '--parents', '-n', '1', c], root) || '').split(' ').length > 2;
+      const out = (isMerge
+        ? git(['diff-tree', '--no-commit-id', '--name-only', '-r', '--cc', '-z', '--root', c], root)
+        : git(['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--no-renames', '--root', c], root)) || '';
+      const parts = out.split('\0').filter(Boolean);
+      const changes = [];
+      if (isMerge) for (const f of parts) changes.push({ status: 'M', path: f });
+      else for (let i = 0; i + 1 < parts.length; i += 2) changes.push({ status: parts[i][0], path: parts[i + 1] });
+      if (!changes.some((x) => /^docs\/(signoffs|releases)\//.test(x.path.replace(/\\/g, '/')))) continue;
+      const message = git(['log', '-1', '--format=%B', c], root) ?? '';
+      const readNew = (p) => git(['show', `${c}:${p}`], root) ?? '';
+      const readOld = (p) => git(['show', `${c}^1:${p}`], root) ?? '';
+      for (const why of recordChecks({ changes, role, policy, readNew, readOld, message })) errors.push(`commit ${c.slice(0, 9)}: ${why}`);
+    }
+  }
+
   if (!guarded) return errors;
 
   const filesOf = (c) => (git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', c], root) || '')
     .split('\n').filter(Boolean);
-  let codeCommits = commits.filter((c) => filesOf(c).some((f) => !matchesAny(f, policy.docs_globs)));
+  let codeCommits = commits.filter((c) => filesOf(c).some((f) => !isDocFile(f, policy)));
 
   // Adoption: the first push of the kit itself, before the remote side has any rules.
   if (codeCommits.length && !adoptedAt(root, remoteSha)) {
     const outside = [...new Set(codeCommits.flatMap(filesOf)
-      .filter((f) => !matchesAny(f, policy.docs_globs) && !matchesAny(f, KIT_GLOBS)))];
+      .filter((f) => !isDocFile(f, policy) && !matchesAny(f, KIT_GLOBS)))];
     if (!outside.length) return errors;
     errors.push(`the kit is not on "${branch}" yet, so this push adopts it: push the kit on its own first, then the rest goes through the flow. ` +
       `Outside the kit: ${outside.slice(0, 5).join(', ')}${outside.length > 5 ? ` and ${outside.length - 5} more` : ''}`);
@@ -237,7 +278,8 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
 
   // Commits that change only the flow and/or the kit are covered by the owner's recorded yes instead of a piece.
   const isFlow = (f) => FLOW_FILES.includes(f), isKit = (f) => matchesAny(f, KIT_UPGRADE_GLOBS);
-  const configOnly = codeCommits.filter((c) => filesOf(c).every((f) => matchesAny(f, policy.docs_globs) || isFlow(f) || isKit(f)));
+  // B12: a commit that touches the guard (.bootstrap/bin/**, .githooks/**) is code, whatever record covers it: it needs the sign-offs, Security's too.
+  const configOnly = codeCommits.filter((c) => filesOf(c).every((f) => isDocFile(f, policy) || isFlow(f) || isKit(f)) && !filesOf(c).some((f) => matchesAny(f, GUARD_GLOBS)));
   if (configOnly.length) {
     const changed = [...new Set(configOnly.flatMap(filesOf))];
     const short = configOnly.map((c) => c.slice(0, 9)).join(', ');
@@ -251,7 +293,7 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
         if (bad.length) errors.push(`the new flow has errors: ${bad.map((f) => f.msg).join(' | ')}`);
       }
     }
-    const kitFiles = changed.filter((f) => isKit(f) && !matchesAny(f, policy.docs_globs));
+    const kitFiles = changed.filter((f) => isKit(f) && !isDocFile(f, policy));
     if (kitFiles.length) {
       const { ok, bad } = kitRecordFiles(root, localSha);
       errors.push(...bad);
@@ -279,7 +321,9 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   if (codeCommits.length && !exempt) {
     const flow = flowFor(root, ZERO.test(remoteSha) ? null : remoteSha, localSha);
     const notes = [];
-    const signed = completeSignoffs(root, localSha, policy, { flow, codeCommits, role, notes });
+    const forgedFiles = [];
+    const signed = completeSignoffs(root, localSha, policy, { flow, codeCommits, role, notes, forged: forgedFiles });
+    if (forgedFiles.length) errors.push(`forged or misnamed sign-off(s), not counted: ${forgedFiles.join(', ')} (the file name and its "role:" must match)`);
     const unsigned = codeCommits.filter((c) =>
       !signed.some((s) => git(['merge-base', '--is-ancestor', c, s.sha], root) !== null));
     if (unsigned.length) {

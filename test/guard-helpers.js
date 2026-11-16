@@ -12,6 +12,7 @@ const ROOT = join(HERE, '..');
 // KIT_NEXT=1 (K-1) runs the same suites against the 0.6.0 kit with our G-1 hardening put back (scripts/kit-next/).
 export const NEXT = process.env.KIT_NEXT ? join(ROOT, 'scripts', 'kit-next') : !process.env.GUARD_STAGED && existsSync(join(ROOT, '.bootstrap', 'bin', 'precommit.mjs')) ? ROOT : join(ROOT, 'scripts', 'guard-next'); // GUARD_STAGED=1 runs this suite against the staged copy (what the Chief of Staff will land)
 export const BIN = join(NEXT, '.bootstrap', 'bin');
+process.env.CLAUDE_CONFIG_DIR ||= mkdtempSync(join(tmpdir(), 'bunny-claude-config-')); // never the person's own user settings
 export const fileUrl = (p) => new URL(`file:///${p.replace(/\\/g, '/')}`);
 
 export const lib = await import(fileUrl(join(BIN, 'lib', 'policy.mjs')));

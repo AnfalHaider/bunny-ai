@@ -28,7 +28,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
-import { DEFAULT_POLICY, currentRole, detectBranches, git, globToRegex, loadPolicy, repoRoot } from './lib/policy.mjs';
+import { DEFAULT_POLICY, currentRole, detectBranches, git, globToRegex, loadPolicy, repoRoot, roleFile } from './lib/policy.mjs';
 import { loadFlow, renderMarkdown } from './lib/flow.mjs';
 import { boardArchive, boardMine, brief, cost, family, helpersOf, newestCode, next, suggest } from './lib/ops.mjs';
 import { FLOW_CHANGES_DIR, KIT_CHANGES_DIR, completeSignoffs, hashText } from './prepush.mjs';
@@ -114,21 +114,8 @@ function init(root, args, { upgrading = false } = {}) {
   const add = ['.bootstrap/session.json', '.bootstrap/helpers/', '.claude/settings.local.json', '*.bak-*'].filter((l) => !have.split(/\r?\n/).includes(l));
   if (add.length) { writeFileSync(gi, have + (have && !have.endsWith('\n') ? '\n' : '') + add.join('\n') + '\n'); log('APPEND', `.gitignore: ${add.join(', ')}`); }
 
-  // Sessions push and run the kit without a permission click: the pre-push hook and the guard are the real gates.
-  {
-    const p = join(root, '.claude', 'settings.json');
-    const s = existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {};
-    const want = ['Bash(git push:*)', 'Bash(node .bootstrap/bin/bootstrap.mjs:*)', 'Bash(node .bootstrap/bin/mem.mjs:*)'];
-    s.permissions ||= {}; s.permissions.allow ||= [];
-    const missing = want.filter((w) => !s.permissions.allow.includes(w));
-    if (missing.length) {
-      backup(p);
-      s.permissions.allow.push(...missing);
-      mkdirSync(dirname(p), { recursive: true });
-      writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
-      log('UPDATE', `${p}: allow ${missing.join(', ')} (the pre-push hook still checks every push)`);
-    }
-  }
+  // K-1 (Security B8): 0.6.0 added `Bash(git push:*)` here so sessions push without a permission click. We keep our own allow rules
+  // in .claude/settings.json and do not touch that file: a push stays a click, so the guard and the hook are not the only layers.
 
   if (args.includes('--project-hooks')) {
     const p = join(root, '.claude', 'settings.json');
@@ -165,6 +152,9 @@ function role(root, id) {
   const data = parseFrontmatter(readFileSync(brief, 'utf8')).data || {};
   writeFileSync(join(root, '.bootstrap', 'session.json'), JSON.stringify({ role: id, since: new Date().toISOString() }, null, 2) + '\n');
   log('WRITE', `.bootstrap/session.json role=${id}`);
+  // The role also goes into the git directory, which a session cannot write with the file tools: the guard reads it first (B4, B10).
+  const rf = roleFile(root);
+  if (rf) { writeFileSync(rf, `${id}\n`); log('WRITE', `${rf} role=${id}`); }
 
   // Claude Code layer: per-worktree permission denials and plugin narrowing (7C).
   const p = join(root, '.claude', 'settings.local.json');
@@ -178,12 +168,16 @@ function role(root, id) {
   // Every plugin that would load in this folder: enabled for the user (all projects) or for this project.
   // Both must be narrowed, or user-level plugins ride along in every permanent session.
   const installed = enabledPluginIds(root);
-  if (installed.length && kit.length) {
+  // K-1 (G-1 rule D): narrowing only. What the project's own settings switch off stays off, whatever the kit says (and is written as false).
+  let projectEnabled = {};
+  try { projectEnabled = JSON.parse(readFileSync(join(root, '.claude', 'settings.json'), 'utf8')).enabledPlugins || {}; } catch { /* none */ }
+  const targets = [...new Set([...installed, ...Object.keys(projectEnabled)])];
+  if (targets.length && kit.length) {
     s.enabledPlugins ||= {};
     // kit entries are plugin names, optionally with * wildcards ("*-lsp" = every language server).
-    for (const id2 of installed) {
+    for (const id2 of targets) {
       const name = id2.split('@')[0];
-      s.enabledPlugins[id2] = name === 'bootstrap-environment' || kit.some((k) => globToRegex(k).test(name));
+      s.enabledPlugins[id2] = projectEnabled[id2] !== false && (name === 'bootstrap-environment' || kit.some((k) => globToRegex(k).test(name)));
     }
   }
   mkdirSync(dirname(p), { recursive: true });
@@ -215,7 +209,7 @@ function upgrade(root, args) {
     : 'Nothing to apply: the project already has this kit.');
 }
 
-const KIT_UPGRADE_DIRS = ['.bootstrap/bin', '.bootstrap/flow', '.bootstrap/ui', '.bootstrap/roles', '.bootstrap/kit.json', '.githooks', '.claude/settings.json', '.gitignore'];
+const KIT_UPGRADE_DIRS = ['.bootstrap/bin', '.bootstrap/flow', '.bootstrap/ui', '.bootstrap/roles', '.bootstrap/kit.json', '.githooks', '.gitignore'];
 
 // The owner said yes to a kit upgrade: record every kit file's sha256 (and files the upgrade removed).
 function kitApply(root, args) {
@@ -238,7 +232,8 @@ function kitApply(root, args) {
 
 function mustBe(root, allowed, what) {
   const me = currentRole(root);
-  if (me !== 'unassigned' && !allowed.includes(me)) { console.error(`${what} is for ${allowed.join(' / ')} only; this session is "${me}".`); process.exit(1); }
+  // K-1 (Tech Lead #4): a session with no role is NOT the owner at a terminal: 0.6.0 let `unassigned` run upgrade, kit apply, piece and approve.
+  if (!allowed.includes(me)) { console.error(`${what} is for ${allowed.join(' / ')} only; this session is "${me}".`); process.exit(1); }
   return me;
 }
 
@@ -247,7 +242,8 @@ function signoff(root, piece, args) {
   const r = arg(args, 'role', me);
   plainId(piece, 'piece');
   plainId(r, 'role');
-  if (me !== 'unassigned' && r !== me) { console.error(`This session is "${me}"; it cannot sign as "${r}". A session signs only as itself.`); process.exit(1); }
+  if (r !== me) { // K-1 (Tech Lead #4): `unassigned` signs for nobody either
+    console.error(`This session is "${me}"; it cannot sign as "${r}". A session signs only as itself.`); process.exit(1); }
   // Sign the code, not the tip: other sessions' sign-off commits (docs only) sit on top of it.
   const policy = loadPolicy(root);
   const sha = arg(args, 'sha', (policy && newestCode(root, policy)) || git(['rev-parse', 'HEAD'], root));

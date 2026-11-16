@@ -207,8 +207,10 @@ test('E: the sign-off command itself rejects a bad id and another role (defence 
   assert.notEqual(runNode(cli, ['signoff', '..', '--verdict', 'PASS'], root).code, 0);
   assert.notEqual(runNode(cli, ['signoff', 'b-1', '--verdict', 'PASS', '--role', 'qa'], root).code, 0);
   assert.notEqual(runNode(cli, ['signoff', 'b-1', '--verdict', 'PASS', '--role', '../x'], root).code, 0);
-  assert.equal(runNode(cli, ['signoff', 'b-1', '--verdict', 'PASS', '--sha', 'abc1234'], root).code, 0);
-  assert.equal(runNode(cli, ['signoff', 'b-2', '--verdict', 'PASS', '--role', 'qa', '--sha', 'abc1234'], makeRepo(t, 'chief-of-staff')).code, 0);
+  assert.equal(runNode(cli, ['signoff', 'b-1', '--verdict', 'PASS', '--note', 'npm test: 12 passed; checked src/app.js:1', '--sha', 'abc1234'], root).code, 0);
+  // kit 0.6.0 (K-1): nobody signs for another role, the Chief of Staff included; our G-1 kit let the Chief of Staff sign for anyone
+  const chiefForQa = runNode(cli, ['signoff', 'b-2', '--verdict', 'PASS', '--role', 'qa', '--note', 'npm test: 12 passed; checked src/app.js:1', '--sha', 'abc1234'], makeRepo(t, 'chief-of-staff')).code;
+  if (process.env.KIT_NEXT) assert.notEqual(chiefForQa, 0); else assert.equal(chiefForQa, 0);
 });
 
 test('E: the Write tool follows the same record-folder rule', (t) => {
