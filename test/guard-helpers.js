@@ -1,12 +1,15 @@
 /** Shared pieces for the staged-guard suites (test/guard-next*.test.js). */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const HERE = dirname(fileURLToPath(import.meta.url));
-export const NEXT = join(HERE, '..', 'scripts', 'guard-next');
+const ROOT = join(HERE, '..');
+// Once G-1 has landed (the new pre-commit checker exists in the live .bootstrap/), these tests exercise the LIVE guard;
+// before that they exercise the staged copy in scripts/guard-next/.
+export const NEXT = existsSync(join(ROOT, '.bootstrap', 'bin', 'precommit.mjs')) ? ROOT : join(ROOT, 'scripts', 'guard-next');
 export const BIN = join(NEXT, '.bootstrap', 'bin');
 export const fileUrl = (p) => new URL(`file:///${p.replace(/\\/g, '/')}`);
 

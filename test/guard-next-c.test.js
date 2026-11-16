@@ -5,7 +5,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { guard, makeRepo } from './guard-helpers.js';
+import { join } from 'node:path';
+
+import { guard, makeRepo, NEXT, HERE } from './guard-helpers.js';
+
+// The live guard (landed 237f3e1) also applies the strict hook-skip patterns to commands it CAN parse, because ANSI-C quoting
+// ($'...') can hide a flag from a tokenizer: prose that mentions a flag is refused there. The staged copy read words only.
+const LIVE_STRICT = NEXT === join(HERE, '..');
 
 // Flag texts are assembled so this file never contains them as one literal.
 const SKIP = `--no-${'verify'}`;
@@ -17,25 +23,26 @@ function verdict(t, command, role = 'builder') {
 }
 const allowed = (t, c, role) => assert.equal(verdict(t, c, role).allow, true, `should allow: ${c}\n${verdict(t, c, role).reason ?? ''}`);
 const denied = (t, c, role) => assert.equal(verdict(t, c, role).allow, false, `should deny: ${c}`);
+const prose = (t, c, role) => (LIVE_STRICT ? denied(t, c, role) : allowed(t, c, role));
 
 test('C allow: a flag inside a quoted message is data', (t) => {
-  allowed(t, 'git commit -m "fix -n handling"');
-  allowed(t, `git commit -m "explain ${SKIP} in the docs"`);
+  prose(t, 'git commit -m "fix -n handling"');
+  prose(t, `git commit -m "explain ${SKIP} in the docs"`);
   allowed(t, 'git commit -am x');
   allowed(t, 'git -C "a b" commit -m x');
-  allowed(t, 'git commit -mn', 'builder'); // the message is "n"
+  prose(t, 'git commit -mn', 'builder'); // the message is "n": the word reader allows it, the strict pattern does not
   allowed(t, 'git commit -m x -m y');
   allowed(t, 'git push -n origin claude/x'); // a dry run, not a hook skip
   allowed(t, 'git merge -n topic');
-  allowed(t, `echo "git commit -n ${SKIP} ${HOOKS}"`);
+  prose(t, `echo "git commit -n ${SKIP} ${HOOKS}"`);
   allowed(t, 'git commit --amend --no-edit');
   allowed(t, 'git commit -F msg.txt');
   allowed(t, 'git log --oneline -n 5');
 });
 
 test('C allow: prose about the flags written into a file through a heredoc', (t) => {
-  allowed(t, `cat <<'EOF' > docs/note.md\nthe flag ${SKIP} and the key ${HOOKS} and git commit -n\nEOF\nls docs`);
-  allowed(t, `printf '%s\\n' "see ${SKIP}" > docs/n.md`);
+  prose(t, `cat <<'EOF' > docs/note.md\nthe flag ${SKIP} and the key ${HOOKS} and git commit -n\nEOF\nls docs`);
+  prose(t, `printf '%s\\n' "see ${SKIP}" > docs/n.md`);
 });
 
 test('C deny: skipping the commit hooks, however it is spelled', (t) => {
@@ -80,8 +87,8 @@ test('A3 deny: pointing git at another hooks folder, for any subcommand', (t) =>
 });
 
 test('A3 allow: the key name as plain prose', (t) => {
-  allowed(t, `echo "${HOOKS} is how git finds hooks"`);
-  allowed(t, `git commit -m "document ${HOOKS}"`);
+  prose(t, `echo "${HOOKS} is how git finds hooks"`);
+  prose(t, `git commit -m "document ${HOOKS}"`);
   allowed(t, `git config user.name`);
 });
 

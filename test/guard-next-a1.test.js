@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { BIN, NEXT, lib, prepush, makeRepo, git, stage, commitAll, runNode } from './guard-helpers.js';
+import { execFileSync } from 'node:child_process';
+
+import { BIN, NEXT, HERE, lib, prepush, makeRepo, git, stage, commitAll, runNode } from './guard-helpers.js';
 
 const PRECOMMIT = join(BIN, 'precommit.mjs');
 const runPrecommit = (root, env) => runNode(PRECOMMIT, [], root, env);
@@ -107,7 +109,9 @@ test('A1 fails open, loudly, on an internal error (a policy file that is not JSO
 });
 
 test('A1: the hook file runs the checker, with LF endings', () => {
-  const hook = readFileSync(join(NEXT, '.githooks', 'pre-commit'), 'utf8');
+  // the committed file (the working copy may carry CRLF from a checkout made before .gitattributes said LF)
+  const live = NEXT === join(HERE, '..');
+  const hook = live ? execFileSync('git', ['show', 'HEAD:.githooks/pre-commit'], { cwd: NEXT, encoding: 'utf8' }) : readFileSync(join(NEXT, '.githooks', 'pre-commit'), 'utf8');
   assert.match(hook, /^#!\/bin\/sh/);
   assert.match(hook, /precommit\.mjs/);
   assert.ok(!hook.includes('\r'), 'LF only, so sh can run it');

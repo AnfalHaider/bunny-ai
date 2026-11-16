@@ -1,3 +1,4 @@
 # Shell hooks must keep LF line endings even where core.autocrlf is true (sh cannot run "#!/bin/sh\r").
 # The staged copy of the guard hooks (board row G-1); the live line lands with them.
 scripts/guard-next/.githooks/* text eol=lf
+.githooks/* text eol=lf

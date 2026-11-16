@@ -2,6 +2,28 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - Release 0.1.5 work: S-1, D1, guard staging, T-3, D-2, QA defects
+
+**Task from the Chief of Staff:** S-1 (lock the local API), D1 (design fixes), the guard gaps (staged in
+`scripts/guard-next/`), then T-3 (model switching and offline), D-2 (transcript and panes), and QA's audit defects.
+
+**What I did** (all on `claude/builder-efa9a9`, gate 7/7 at each push)
+- **S-1** request guard (Host, Origin, per-launch token), re-fixed for the Google sign-in return and speech audio; the
+  stale-token refresh; provider tests with the guard on.
+- **D1** five screen fixes; **G-1** guard changes B, A1-A5, C, D, E built in staging with 90+ tests, since landed by the
+  Chief of Staff.
+- **QA defects:** Q2-1/2/3/7/8/9/17/19/23/24/26/27/28/29/30/31 fixed with tests.
+- **T-3:** 30/60 s limits, scope and reason per failure, one note, offline state with a queued message.
+- **D-2:** transcript groups, Changes, Files and Session panes (read-only, contained to the chat's folder), then three
+  rounds of Security fixes (links, caps, hidden folders, desktop-only folder choosing).
+- **Release blocker, mine:** the desktop wiring for the folder gate was edited but never committed (see L007); fixed with
+  a static wiring test, plus the same gate on schedules and projects, and Plan mode refusing `move_to_new_chat`.
+
+**Not done (moved to 0.1.6 by the Chief of Staff):** T-4 project files, Q2-14/15/16/18/20/21/22, T-3 part-way save and
+cool-down, the transcript's live spinner, the staged "Since checkpoint" tabs.
+
+**Lesson:** [L007](../lessons/L007-a-fix-is-not-done-until-the-sha-contains-it.md)
+
 ## 2026-11-15 - Chat shell redesigned to feature parity
 
 **Question asked:** the UI/UX was not like the reference app at all, and the reference app has

@@ -271,6 +271,46 @@ test('In the desktop app the folder of a chat must be one the person picked: a s
   assert.equal(stored.toLowerCase().replace(/[\\/]+/g, '/'), (await (await import('node:fs/promises')).realpath(dir)).toLowerCase().replace(/[\\/]+/g, '/'), 'the normalised real path is what is stored');
 });
 
+test('the desktop app is wired: the main process passes folderPickerOnly and records what the native picker returned (release blocker)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const main = await readFile(new URL('../electron/main.js', import.meta.url), 'utf8');
+  assert.match(main, /createApp\(\{[^}]*folderPickerOnly: true[^}]*\}\)/, 'createApp is called with folderPickerOnly: true');
+  const handler = /ipcMain\.handle\('dialog:pickFolder'[\s\S]*?\n\}\);/.exec(main)?.[0] ?? '';
+  assert.match(handler, /bunnyApp\??\.chooseFolder\(picked\)/, 'the picked folder is recorded before it is returned');
+  assert.match(handler, /return null/, 'a refused folder is not returned');
+});
+
+test('picking a folder still sets the chat folder in the desktop app: pick, check, then the setting', async (t) => {
+  const { app, base } = await startApp(t, { localGuard: true, apiToken: 'panes-token', folderPickerOnly: true });
+  const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
+  const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  const dir = await folder(t);
+  const made = await (await call('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 'x' }) })).json();
+  assert.equal(await app.chooseFolder(dir), true); // what dialog:pickFolder does with the native answer
+  const checked = await (await call('/api/folder/check', { method: 'POST', body: JSON.stringify({ folder: dir }) })).json();
+  assert.ok(checked.folder);
+  const set = await call(`/api/sessions/${made.id}/setting/folder`, { method: 'PATCH', body: JSON.stringify({ value: checked.folder }) });
+  assert.equal(set.status, 200);
+  assert.equal((await set.json()).folder, checked.folder);
+});
+
+test('in the desktop app a schedule or a project cannot be given a folder the person did not pick', async (t) => {
+  const { app, base } = await startApp(t, { localGuard: true, apiToken: 'panes-token', folderPickerOnly: true });
+  const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
+  const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  const dir = await folder(t);
+  const sched = { name: 'nightly', prompt: 'tidy', everyMinutes: 60, folder: dir };
+  assert.equal((await call('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 403);
+  assert.equal((await call('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'p', folder: dir }) })).status, 403);
+  const project = await (await call('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'plain' }) })).json();
+  assert.equal((await call(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 403);
+  await app.chooseFolder(dir);
+  assert.equal((await call('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 200);
+  assert.equal((await call(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 200);
+  const created = await call('/api/schedules', { method: 'POST', body: JSON.stringify({ name: 'no folder', prompt: 'x', everyMinutes: 60 }) });
+  assert.equal(created.status, 200, 'no folder at all is fine');
+});
+
 test('a chat saved before D-2 (old message shapes) still loads through every pane route', async (t) => {
   const { base } = await startApp(t);
   const dir = await folder(t);

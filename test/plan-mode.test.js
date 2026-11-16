@@ -22,13 +22,13 @@ async function callerServer(t) {
     let raw = '';
     req.on('data', (c) => { raw += c; });
     req.on('end', () => {
-      if (req.url.endsWith('/models')) { res.writeHead(200, j); res.end(JSON.stringify({ data: [{ id: 'call:browser_click' }, { id: 'call:browser_type' }, { id: 'call:write_file' }, { id: 'call:no_such_tool' }] })); return; }
+      if (req.url.endsWith('/models')) { res.writeHead(200, j); res.end(JSON.stringify({ data: [{ id: 'call:browser_click' }, { id: 'call:browser_type' }, { id: 'call:write_file' }, { id: 'call:no_such_tool' }, { id: 'call:move_to_new_chat' }] })); return; }
       const body = JSON.parse(raw);
       const afterTool = body.messages.some((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       if (afterTool) { res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n'); return; }
       const name = body.model.replace('call:', '');
-      const args = name === 'write_file' ? { path: 'x.txt', content: 'x' } : name === 'browser_type' ? { text: 'hi' } : name === 'browser_click' ? { selector: 'a' } : {};
+      const args = name === 'move_to_new_chat' ? { title: 'Other', message: 'something else' } : name === 'write_file' ? { path: 'x.txt', content: 'x' } : name === 'browser_type' ? { text: 'hi' } : name === 'browser_click' ? { selector: 'a' } : {};
       res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name, arguments: JSON.stringify(args) } }] }) + 'data: [DONE]\n\n');
     });
   });
@@ -63,6 +63,13 @@ test('Plan mode: write_file is refused and nothing is written', async (t) => {
   const { stream, folder } = await run(t, 'call:write_file');
   assert.ok(!ran(stream), stream);
   assert.equal(existsSync(join(folder, 'x.txt')), false);
+});
+
+test('Plan mode: move_to_new_chat is not offered and a call to it is refused (Q2-S2)', async (t) => {
+  const { stream } = await run(t, 'call:move_to_new_chat', { mode: 'plan', workMode: 'chat', browserControl: false });
+  assert.ok(!ran(stream), stream);
+  assert.ok(!/event: new_chat|event: newchat/i.test(stream), 'no new chat was started');
+  assert.match(stream, /"status":"denied"/);
 });
 
 test('a tool that was never offered does not run in any mode', async (t) => {

@@ -43,7 +43,7 @@ let quitting = false;
 let bunnyApp = null;
 
 async function startServer() {
-  const bunny = await createApp({ dataDir });
+  const bunny = await createApp({ dataDir, folderPickerOnly: true });
   bunnyApp = bunny;
   await new Promise((resolve, reject) => {
     bunny.server.once('error', reject);
@@ -135,7 +135,10 @@ ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
 ipcMain.handle('dialog:pickFolder', async (event) => {
   const owner = BrowserWindow.fromWebContents(event.sender) ?? win;
   const result = await dialog.showOpenDialog(owner, { title: 'Choose a folder to work in', properties: ['openDirectory'] });
-  return result.canceled ? null : result.filePaths[0] ?? null;
+  const picked = result.canceled ? null : result.filePaths[0] ?? null;
+  // Only a folder the person picked here may be browsed by the Files pane before a chat exists.
+  if (picked && !(await bunnyApp?.chooseFolder(picked).catch(() => false))) return null; // refused (a drive root, Bunny's own data): not chosen
+  return picked;
 });
 
 // The model working a page in the browser panel (see browserAgent.js). Only Bunny's

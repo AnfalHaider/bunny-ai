@@ -723,7 +723,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/projects' && method === 'GET') return sendJson(res, 200, await projects.list());
     if (path === '/api/projects' && method === 'POST') {
       try {
-        return sendJson(res, 200, await projects.create(await readBody(req)));
+        const body = await readBody(req);
+        if (body.folder) {
+          const stored = await folderToStore(body.folder);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          body.folder = stored;
+        }
+        return sendJson(res, 200, await projects.create(body));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'project.failed', message: err.message });
       }
@@ -731,7 +737,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const projectMatch = path.match(/^\/api\/projects\/([a-f0-9-]{36})$/);
     if (projectMatch && method === 'PATCH') {
       try {
-        return sendJson(res, 200, await projects.update(projectMatch[1], await readBody(req)));
+        const patch = await readBody(req);
+        if (patch.folder) {
+          const stored = await folderToStore(patch.folder);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          patch.folder = stored;
+        }
+        return sendJson(res, 200, await projects.update(projectMatch[1], patch));
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'project.failed', message: err.message });
       }
@@ -899,7 +911,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/schedules' && method === 'GET') return sendJson(res, 200, await schedules.list());
     if (path === '/api/schedules' && method === 'POST') {
       try {
-        return sendJson(res, 200, await schedules.add(await readBody(req)));
+        const body = await readBody(req);
+        if (body.folder) {
+          const stored = await folderToStore(body.folder);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          body.folder = stored;
+        }
+        return sendJson(res, 200, await schedules.add(body));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'schedule.failed', message: err.message });
       }
@@ -907,7 +925,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const scheduleMatch = path.match(/^\/api\/schedules\/([a-f0-9-]{36})$/);
     if (scheduleMatch && method === 'PATCH') {
       try {
-        return sendJson(res, 200, await schedules.update(scheduleMatch[1], await readBody(req)));
+        const patch = await readBody(req);
+        if (patch.folder) {
+          const stored = await folderToStore(patch.folder);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          patch.folder = stored;
+        }
+        return sendJson(res, 200, await schedules.update(scheduleMatch[1], patch));
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'schedule.failed', message: err.message });
       }
@@ -1598,7 +1622,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
       // Plan mode is read-only on the SERVER, not only in the list of tools the model is offered: a call for a
       // tool it was never offered (a hallucination, or text in a file it read) is refused here, whatever it is.
-      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build', 'send'].includes(risk);
+      const planRefuses = (risk) => permissionMode === 'plan' && ['edit', 'run', 'build', 'send', 'own'].includes(risk);
       const planRefusal = (name) => `Plan mode is read-only, so ${name} was not run. Propose what you would do and let the person switch mode.`;
       // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
       // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
@@ -1681,7 +1705,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
         ...teamToolDefinitions({ canDelegate: helpersOn }),
         ...(settings.searchChats === false ? [] : [chatSearchToolDefinition()]),
-        ...(scheduledTask || unrelatedTask === 'here' ? [] : [newChatToolDefinition()]),
+        ...(scheduledTask || unrelatedTask === 'here' || permissionMode === 'plan' ? [] : [newChatToolDefinition()]),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
         ...(googleOn ? googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'send']) : []),

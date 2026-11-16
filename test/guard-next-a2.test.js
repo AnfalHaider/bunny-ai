@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 
-import { guard, makeRepo, runNode, fileUrl, BIN } from './guard-helpers.js';
+import { guard, makeRepo, runNode, fileUrl, BIN, HERE } from './guard-helpers.js';
 
 // One throwaway repo per role/policy, shared by the cases below and removed when the file is done.
 const repos = new Map();
@@ -197,10 +197,8 @@ test('E: the require sub-command is for chief-of-staff and security only', (t) =
 
 test('A1/A2: the staged set carries .gitattributes so hooks stay LF on a CRLF machine', async () => {
   const { readFileSync } = await import('node:fs');
-  const staged = readFileSync(join(BIN, '..', '..', '.gitattributes'), 'utf8');
-  assert.match(staged, /^\.githooks\/\*\s+text\s+eol=lf/m);
-  const root = readFileSync(join(BIN, '..', '..', '..', '..', '.gitattributes'), 'utf8');
-  assert.match(root, /scripts\/guard-next\/\.githooks\/\*\s+text\s+eol=lf/);
+  const root = readFileSync(join(HERE, '..', '.gitattributes'), 'utf8');
+  assert.match(root, /^\.githooks\/\*\s+text\s+eol=lf/m, 'the root .gitattributes keeps the live hooks LF');
 });
 
 test('E: the sign-off command itself rejects a bad id and another role (defence in depth)', (t) => {
