@@ -70,6 +70,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
 import { probeNetwork } from './network.js';
+import { listFolder, readTextFile, changesFor } from './panes.js';
 
 // The project root, found from this file rather than the working directory, so the
 // server also finds its UI when it runs inside the packaged desktop app.
@@ -1125,6 +1126,22 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         }
       } catch (err) {
         return sendJson(res, 404, { code: 'process.notFound', message: err.message });
+      }
+    }
+
+    // ---- the Changes and Files panes: read-only, inside the chat's own folder ----
+    const paneMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/(changes|files|file)$/);
+    if (paneMatch && method === 'GET') {
+      const session = await sessions.get(paneMatch[1]);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
+      const folder = session.folder ? await checkFolder(session.folder) : null;
+      if (!folder?.ok) return sendJson(res, 200, paneMatch[2] === 'changes' ? { checkpoints: [], totals: { files: 0, added: 0, removed: 0 }, folder: null } : { folder: null, entries: [] });
+      try {
+        if (paneMatch[2] === 'changes') return sendJson(res, 200, { ...(await changesFor(folder.folder, await checkpoints.list(session.id))), folder: folder.folder, git: Boolean(session.branch) });
+        if (paneMatch[2] === 'files') return sendJson(res, 200, await listFolder(folder.folder, url.searchParams.get('path') ?? ''));
+        return sendJson(res, 200, await readTextFile(folder.folder, url.searchParams.get('path') ?? ''));
+      } catch (err) {
+        return sendJson(res, err.code === 'path.notFound' ? 404 : 400, { code: err.code ?? 'pane.failed', message: err.message });
       }
     }
 
