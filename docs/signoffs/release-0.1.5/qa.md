@@ -1,0 +1,9 @@
+---
+piece: release-0.1.5
+role: qa
+sha: 2892fa4
+verdict: PASS
+date: 2026-11-16
+---
+
+Final candidate 2892fa4 (version 0.1.5, only the Plan-mode fix since e94f224). Gate run alone with port 5199 free: 7 of 7 (unit tests pass, 135 e2e pass, mem check, dependency audit, secret scan). Plan mode checked with a new route-level suite of 9 tests, all passing: the model can ask a question and the question card reaches the person (ask_user), can make an artifact (create_artifact) and can read the folder; write_file, edit_file, run_command, start_process, create_tool and move_to_new_chat are each refused with no permission card, no file written, no new chat and no step run. Everything else was checked on e94f224 and the diff to this sha is only the Plan-mode fix plus its tests: chat transcript walk 27 of 27 (failing command shows the red Failed label with command and error, Stopped report at once and after reload, 26 older chats render, offline wait with calm line and Offline chip, one send on reconnect, closed local model does not turn the wait red, one saved failure note that survives a reload), model fallback for a model that never answers (picked 33 s, Auto 64 s, X is slow trying Y on the status line, no red lines), panes 49 of 49 (Changes in git and plain folders with real counts and Undo to here, Files read-only, Session facts, no dead pane), path escapes refused, D1 24 of 24 with phone Settings pills, S-1 33 of 33 (foreign Origin, wrong Host and missing token refused, every provider type connects and answers), phone top bar 40 px targets, permission tests per mode. Known lows outside 0.1.5: palette keyboard, palette Settings command, one-line User and Assistant import. Not checked: the installed Electron app (desktop folder gate, native picker, tray) and the real update download.
