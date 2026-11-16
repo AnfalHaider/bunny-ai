@@ -14,7 +14,7 @@
     "test:all": "npm test && npm run test:e2e",
     "build:icons": "node scripts/build-icons.mjs",
     "desktop": "electron .",
-    "dist": "node scripts/write-build-sha.mjs clear && npm run build:css && npm run build:icons && electron-builder --win nsis --x64 && node scripts/write-build-sha.mjs",
+    "dist": "node scripts/write-build-sha.mjs clear && npm run build:css && npm run build:icons && electron-builder --win nsis --x64 --publish never && node scripts/write-build-sha.mjs",
     "release": "node scripts/release.mjs"
   },
   "devDependencies": {
@@ -38,6 +38,11 @@
       "build/icons/icon-256.png",
       "build/icons/icon-32.png"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "AnfalHaider",
+      "repo": "bunny-ai"
+    },
     "asar": true,
     "win": {
       "target": [
