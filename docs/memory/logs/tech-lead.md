@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - release-0.1.5 sign-off: PASS at 2892fa4 (my PASS at e94f224 withdrawn)
+
+At 98ee19a I read `planRefuses` gaining the `own` risk and wrote "which is right". It was wrong: `own` also covers `ask_user` and `create_artifact`, so Plan mode lost its questions and artifacts. Security caught it at e94f224; I signed that sha first and withdrew it. 2892fa4 refuses `move_to_new_chat` by name at all three call sites, with tests that `ask_user` and `create_artifact` run in Plan and `move_to_new_chat` is not offered and is refused. Unit tests at 2892fa4: 518 run, 510 pass, 0 fail, 8 todo (e2e not run by me). Lesson: when a diff widens a risk set, list every tool in the widened class before approving; I checked the one tool the commit message named.
+
 ## 2026-11-16 - Re-check of the desktop wiring at 98ee19a (Builder): PASS
 
 `electron/main.js` now calls `createApp({ dataDir, folderPickerOnly: true })` and `dialog:pickFolder` records the pick through `bunnyApp.chooseFolder` and returns null when it is refused (drive root, Bunny's own data). Schedules and projects (POST and PATCH) take a folder only through the same gate; the agent's own schedule and new-chat paths reuse the chat's already-gated folder. Tests added: static wiring test, pick, check, setting sequence, schedules and projects refused until picked. Scratch checkout of 98ee19a, panes, plan-mode, permission-modes, exit-status, request-guard: 62 pass, 0 fail (e2e not run by me). Plan refuses `own` risk (move_to_new_chat) too, which is right. Note, not blocking: a refused pick returns null with no message, so the person sees nothing happen; a one-line "That folder cannot be used" would be kinder (English only). The required fix from bbdb6fc is closed.
