@@ -1,9 +1,9 @@
 ---
 piece: w6-2
 role: security
-sha: ea067ae
+sha: 643c7da
 verdict: PASS
 date: 2026-11-16
 ---
 
-W62-1 token budget + loop check, W62-3 schedules 100/30 closed; W62-2 clamps closed, keys still not window-only until W5-7; stored 0 reads as 500. See docs/security/2026-11-16-w4-1d-w6-18-w6-2-recheck.md
+Stored 0 for steps/minutes now means off (tested). Condition: a stored 0 for autoContinueTokens also reads 0, which disables the token budget (tokenBudget && in chat.js); keep tokens at its minimum, not 0. Reachable only by writing that setting (window-only once W5-7 adds the key).

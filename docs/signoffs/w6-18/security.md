@@ -1,9 +1,9 @@
 ---
 piece: w6-18
 role: security
-sha: a09ca84
+sha: 643c7da
 verdict: PASS
 date: 2026-11-16
 ---
 
-W618-1 and W618-3 closed, W618-2 closed except: no notes in incognito chats not in this sha (condition; update at the next sha). Secret check misses Bearer headers and sk_live_. See docs/security/2026-11-16-w4-1d-w6-18-w6-2-recheck.md
+Incognito condition closed (no note, no long copy; tested). Bearer/Basic/token and sk_live_/sk_test_ patterns catch my cases, fast on 100 KB. Low: Cookie session= lines not matched. Tests 26/26 on 643c7da.

@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Re-stamp at `643c7da` (Builder B's v0.1.7 integration branch): w6-18, w6-2, w4-1d PASS
+
+W6-18's incognito condition is closed (no note file and no long replay copy in an incognito chat; test passes); the Bearer, Basic, `token` and `sk_live_`/`sk_test_` patterns catch what I listed and stay fast on long input (3 ms on 100 KB); a `Cookie: session=…` line is still not matched (LOW). W6-2: a stored 0 for steps and minutes now means off; but a stored 0 for the token budget also reads 0, which switches the cost brake off (`tokenBudget &&` in `chat.js`): keep it at its minimum instead (LOW-MEDIUM while `autoContinueTokens` is writable with the page token). W4-1d: the only change is a 15 s timeout on `taskkill`. 26 of 26 related tests pass on the integration branch. Lesson: "0 means off" is a good rule for a step cap and a bad one for a cost cap; check each key on its own.
+
 ## 2026-11-16 - Builder B fixes re-checked: W4-1d `fdafaa5` PASS, W6-2 `ea067ae` PASS, W6-18 `a09ca84` PASS with one condition
 
 W4-1d: no `ELECTRON_*` in started programs (probe: `ERN=undefined`), a held pipe replaces the pid poll. W6-2: token budget with a waiting card, loop check, clamps, schedules 100 steps / 30 min; open until W5-7: the three cap keys are still writable with the page token; a stored 0 reads as 500. W6-18: replay only for workspace steps and never secret-looking output, pruning, exclusive writes, undo list; secret check tested (fast, real step names match; misses Bearer headers and `sk_live_`); open: no notes in incognito chats. Review `docs/security/2026-11-16-w4-1d-w6-18-w6-2-recheck.md`. Lesson: check the test as well as the fix; a fix with a test that fails on cleanup tells the next reader nothing.
