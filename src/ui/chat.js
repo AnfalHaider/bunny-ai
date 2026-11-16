@@ -1600,6 +1600,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
       flashStatus('Compacted automatically');
       renderContext(info.after);
     },
+    onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
     onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
