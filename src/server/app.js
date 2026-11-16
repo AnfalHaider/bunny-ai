@@ -1549,7 +1549,17 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const project = session.projectId ? await projects.get(session.projectId) : null;
       // What the model reads: the chat since the latest summary, with the steps it took,
       // so it remembers what it already did (vision: whether this model can see pictures).
-      const { history, interrupted } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
+      const { history, interrupted, pictures } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
+      // W6-18: the latest pictures of work that was cut off (screenshots the model took) go back in, if this model can see.
+      if (pictures.length && body.vision !== false) {
+        const urls = [];
+        for (const pic of pictures) {
+          const m = /^\/api\/screens\/([a-f0-9-]{36})\.png$/.exec(String(pic.data ?? ''));
+          if (!m) continue;
+          try { urls.push(`data:image/png;base64,${(await readFile(join(screensDir, `${m[1]}.png`))).toString('base64')}`); } catch { /* the file is gone */ }
+        }
+        if (urls.length) history.push({ role: 'user', content: [{ type: 'text', text: '[The latest screenshots from the work so far:]' }, ...urls.map((url) => ({ type: 'image_url', image_url: { url } }))] });
+      }
       if (project?.instructions) {
         history.unshift({ role: 'system', content: `Project instructions for ${project.name}:\n${project.instructions}` });
       }
@@ -1590,7 +1600,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // next step, so the chat reads as a running account of the work, also after a reload.
       let sinceStep = '';
       const stepsTaken = [];
-      const logStep = (entry) => {
+      const logStep = async (entry) => {
         const scope = agentScope.getStore();
         if (!scope && entry.kind === 'tool_call') {
           const note = stripToolMarkup(sinceStep);
@@ -1598,7 +1608,28 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           if (note) entry = { ...entry, note: note.slice(0, 2000) };
           stepsTaken.push(`${entry.tool}${entry.status && entry.status !== 'done' ? ` (${entry.status})` : ''}`);
         }
+        if (entry.kind === 'tool_call') entry = await keepForModel(entry);
         return sessions.append(scope?.logTo ?? id, entry);
+      };
+      // W6-18: the chat shows a short result; the model gets the whole one back if it has to take over. Past a size it
+      // is saved in the workspace (.bunny/notes/step-N.txt) and only its path stays in the chat.
+      let stepSeq = 0;
+      const keepForModel = async (entry) => {
+        const { fullResult, ...rest } = entry;
+        const out = { ...rest, ...(currentTasks.length ? { tasks: currentTasks } : {}) };
+        const full = String(fullResult ?? '');
+        if (full.length <= String(rest.result ?? '').length) return out;
+        out.modelResult = clip(full, 6000);
+        if (full.length > 6000 && workspace) {
+          stepSeq += 1;
+          const rel = `.bunny/notes/step-${Date.now().toString(36)}-${stepSeq}.txt`;
+          try {
+            await mkdir(dirname(join(workspace.root, rel)), { recursive: true });
+            await writeFile(join(workspace.root, rel), full, 'utf8');
+            out.resultFile = rel;
+          } catch { /* the clipped text still goes to the model */ }
+        }
+        return out;
       };
 
       // ---- the work mode decides what the model may do ----
@@ -2290,7 +2321,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 12000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
         send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
       };
@@ -2346,7 +2377,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             result = `The browser action failed: ${err.message}`;
           }
           result = String(result).slice(0, 9000);
-          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), attachments });
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), fullResult: result, attachments });
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return result;
         }
@@ -2390,7 +2421,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
