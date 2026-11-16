@@ -1,9 +1,9 @@
 ---
 piece: lane-a-016
 role: tech-lead
-sha: 3af63d7
-verdict: FAIL
+sha: 9fb372f
+verdict: PASS
 date: 2026-11-16
 ---
 
-Two required fixes, both hangs of the whole app. (1) search_files with regex true runs the model's pattern on the server thread: (a+)+ at end of line on a 40-character line did not finish in 25 s, and the 2000-character line cap does not bound it. Run the scan in vm with a timeout (probe: vm timeout stops it in 0.5 s) or a worker, and report the pattern as too slow. (2) The glob matcher builds backtracking regexes: find_files with the pattern *a*a*a*a*a*a*a*a*a*a*a*b (11 stars, under the cap of 12) against a 100-character path did not finish in 25 s. Replace with a linear matcher per path segment, or cap tighter and time-limit. The rest (multi_edit all or nothing with one checkpoint, replace_all literal, find_files, W4-1 port, grouped lines) reads correct. Unit tests and e2e not run by me. Re-review after the fix.
+Re-review of my two required fixes. glob.js no longer builds regexes: two-pointer match per segment and a segment DP for the double star; my 11-star pattern over a 100-character path returns in 4 ms (was over 25 s). Regex search runs in a vm context with a 1 s limit per file; my (a+)+ probe now stops after 1.2 s with That pattern is too slow, and a literal search is untouched. Edits that would grow a file past 20 MB are refused before the text is built. Full unit suite on a scratch checkout of 9fb372f: 551 pass, 0 fail, 8 todo (QA markers) in two runs; one earlier run showed 2 failures I could not identify and did not reproduce in three later runs. e2e not run by me. Not blocking: the 1 s limit is per file, so a pattern that takes just under a second on every file could still hold the server for a long time; add one total deadline of about 5 s per search.
