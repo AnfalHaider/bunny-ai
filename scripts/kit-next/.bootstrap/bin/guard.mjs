@@ -23,6 +23,7 @@ const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'writ
 const INTERPRETERS = new Set(['node', 'nodejs', 'deno', 'bun', 'python', 'python2', 'python3', 'py', 'perl', 'ruby', 'php', 'lua', 'tclsh', 'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'pwsh', 'powershell', 'cmd', 'eval', 'xargs', 'busybox', 'wscript', 'cscript', 'mshta', 'osascript', 'awk', 'gawk', 'invoke-expression', 'iex', 'start-process', 'invoke-command', 'source']);
 const AGENT_TOOLS = new Set(['Agent', 'Task']);
 const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3, fable: 3 };
+const MAX_COMMAND = 256 * 1024;
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command', 'run_terminal_cmd']);
 
 export function pushTargets(command, cwd) {
@@ -115,6 +116,10 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   }
 
   if (SHELL_TOOLS.has(tool)) {
+    // K-1 (QA): the host cuts a hook off at 10 s, and a cut-off hook must not become a pass. Reading a 1 MB command takes 2-13 s, so nothing that long is read at all.
+    if (command.length > MAX_COMMAND) {
+      return { allow: false, reason: `Blocked for role "${role}": the command is ${Math.round(command.length / 1024)} KB, over the ${MAX_COMMAND / 1024} KB the guard reads within its time limit. Put the text in a file with the Write tool and run a short command.` };
+    }
     // The hook-skip, hooks-folder and role rules read WORDS through the tokenizer (policy.shell_parse).
     // When the command cannot be read with confidence (unclosed quote, bash/PowerShell ambiguity) or the
     // switch is off, the old regexes over the raw text apply as well: stricter, with their false blocks.

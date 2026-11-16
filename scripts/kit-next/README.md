@@ -23,6 +23,13 @@ Owner's go for K-1, typed in the Chief of Staff's chat on 2026-11-17: "go on K-1
 | `.bootstrap/policy.json` | ours + `docs/flow-changes/**`, `docs/kit-changes/**` in `records.globs` | |
 | `.gitattributes` | ours | hooks stay LF on a CRLF machine |
 
+## Landing (K-1 landing commit)
+
+* `scripts/kit-next/.bootstrap/` now also holds what `bootstrap.mjs upgrade` copies from its own kit folder: `flow/`, `ui/`, `roles/`, `templates/project`, `githooks/`, `skills/` and `package.json`, byte-identical to the plugin's 0.6.0 (`roles` only needs to exist: upgrade never overwrites our briefs). `bin/` is as in 9538bcb except the one change below.
+* **The one change to `bin/` in this commit (QA):** `guard.mjs` refuses any shell command longer than 256 KB before it parses anything, with a reason that says to put the text in a file. The host cuts a hook off at 10 s; reading a 1 MB command took 2 to 13 s, and a cut-off hook must not become a pass. Two older tests that expected a 1 MB command to be read now expect the refusal when run with `KIT_NEXT=1`.
+* `test/kit-next-landing.test.js` runs `node scripts/kit-next/.bootstrap/bin/bootstrap.mjs upgrade` in a throw-away clone of origin/main (as the Chief of Staff) and proves: `.bootstrap/bin` comes out equal to the staged `bin`; no `flow.json` is created; `.claude/settings.json`, our three hooks, `policy.json` and `AGENTS.md` are unchanged; our role briefs are kept (none added); the upgrade leaves no stale file in `.bootstrap/bin` (the live files are a subset of the staged ones; the new ones are `flow-ui.mjs`, `lib/flow.mjs`, `lib/ops.mjs`, `lib/records.mjs`, `lib/shellblank.mjs`, `lib/shellextra.mjs`, `lib/shellgit.mjs`). The upgrade changes or adds 23 files in the clone (the list is in `evidence/kit-next-landing.txt`): the 19 `bin` files, `flow/defaults.json`, `flow/rules.json`, `ui/flow-editor.html` and `kit.json`.
+* **`policy.json` must change at landing too.** The live `.bootstrap/policy.json` lists its own `records.globs` (`docs/signoffs/**`, `docs/releases/**`); a policy's own list replaces the default, so the flow and kit record folders (`docs/flow-changes/**`, `docs/kit-changes/**`) would stay unprotected for Write and pre-commit. `upgrade` keeps `policy.json`, so the landing commit must take the staged `scripts/kit-next/.bootstrap/policy.json` (or drop `records.globs` from the live one). `test/kit-next-landing.test.js` asserts exactly this.
+
 ## Tests (outputs in `evidence/`)
 
 | Run | Result | File |

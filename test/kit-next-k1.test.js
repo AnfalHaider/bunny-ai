@@ -284,3 +284,16 @@ test('Security 714a0a8: git\'s default fetch refspec is fine; a glob that can wr
   allowed(t, 'git fetch origin main:refs/remotes/origin/main');
   for (const c of ['git fetch origin +refs/heads/*:refs/heads/*', 'git fetch origin "refs/heads/*:refs/tags/*"', 'git fetch origin x:refs/tags/v1', 'git fetch origin main:main', 'git fetch origin +main:heads/main', 'git fetch origin refs/heads/*:refs/remotes/origin/../../heads/*']) blocked(t, c);
 });
+
+test('QA: a command over 256 KB is refused before anything is parsed, quickly, and says why; a long one under the limit is still read', (t) => {
+  const root = makeRepo(t, 'builder');
+  const t0 = Date.now();
+  const big = guard.decide({ tool: 'Bash', command: `echo ${'x'.repeat(300 * 1024)}`, cwd: root });
+  assert.equal(big.allow, false);
+  assert.match(big.reason, /KB.*256 KB.*Write tool/);
+  assert.ok(Date.now() - t0 < 2000, 'refused at once');
+  const huge = guard.decide({ tool: 'Bash', command: `git push origin main ${'x '.repeat(500_000)}`, cwd: root });
+  assert.equal(huge.allow, false);
+  const ok = guard.decide({ tool: 'Bash', command: `echo ${'x'.repeat(100 * 1024)} > docs/a.md`, cwd: makeRepo(t, 'chief-of-staff') });
+  assert.equal(ok.allow, true, ok.reason);
+});

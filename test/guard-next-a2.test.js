@@ -129,8 +129,14 @@ test('A2 malformed: unbalanced quotes, empty, huge, trailing operators finish an
   allowed(t, 'echo hi;');
   allowed(t, 'echo hi >');
   const t0 = Date.now();
-  allowed(t, `echo ${'x '.repeat(500_000)} > docs/a.md`);
-  denied(t, `echo ${'x '.repeat(500_000)} > src/a.js`);
+  // kit-next (K-1): nothing over 256 KB is read; it is refused before parsing, whatever it writes
+  if (process.env.KIT_NEXT) {
+    denied(t, `echo ${'x '.repeat(500_000)} > docs/a.md`);
+    denied(t, `echo ${'x '.repeat(500_000)} > src/a.js`);
+  } else {
+    allowed(t, `echo ${'x '.repeat(500_000)} > docs/a.md`);
+    denied(t, `echo ${'x '.repeat(500_000)} > src/a.js`);
+  }
   assert.ok(Date.now() - t0 < 6000, 'a 1 MB command finishes well inside the 10 s hook limit');
 });
 

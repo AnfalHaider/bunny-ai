@@ -166,7 +166,7 @@ test('C malformed: unbalanced quotes fall back to the strict patterns; empty and
   assert.equal(verdict(t, 'git commit -m "unclosed').allow, true, 'an unclosed quote with no flag');
   assert.equal(verdict(t, 'git commit -n -m "unclosed').allow, false, 'an unclosed quote does not hide a skip: strict fallback');
   const t0 = Date.now();
-  assert.equal(verdict(t, `git commit -m "${'x '.repeat(500_000)}"`).allow, true);
+  assert.equal(verdict(t, `git commit -m "${'x '.repeat(500_000)}"`).allow, !process.env.KIT_NEXT); // kit-next (K-1): over 256 KB is refused unread
   assert.ok(Date.now() - t0 < 4000, 'a 1 MB command finishes inside the 10 s hook limit');
 });
 
