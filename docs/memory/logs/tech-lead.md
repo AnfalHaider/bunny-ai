@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Spec for the G-1 review follow-ups (0.1.6), at the Chief's request after G-1 landed (237f3e1)
+
+Wrote `docs/plans/guard-0.1.6-spec.md`: six items with tests (gh writes G1-1; git config/alias/include/push settings and alias-resolved subcommands; `toRepoPath` canonical and fail closed; record authentication at commit and push with `completeSignoffs` filename = role; per-simple-command legacy patterns; dynamic push target and role source), plus a section for the plugin repository and a pointer in `upstream-bootstrap-notes.md`. HIGH: Builder needs the owner's go first. Found while reading: the 237f3e1 "apply always" fix makes the whole-string patterns false-block again (a push chained to `worktree remove --force` was refused for me today); item 5 fixes that without losing the ANSI-C case. Spec only, no code written or tested.
+
 ## 2026-11-16 - Builder batch at 9ca3f77 (D-2 fixes d2dbf82 range, Q2-24/26/27/28/29/30/31, T-3 Trying line, phone bar): D-2 code PASS, ONE required fix (desktop wiring), one HIGH to record
 
 Scratch checkout of 9ca3f77. Unit tests (panes, permission-modes, exit-status, plan-mode): 31 pass, 0 fail. e2e not run by me (QA runs it).
