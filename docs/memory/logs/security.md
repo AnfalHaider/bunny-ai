@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - release-0.1.7 candidate `909a439`: PASS (read-only; probes after the quiet window)
+
+The window-only table, `secure:write`, the token-cap clamp, the secret check, incognito notes, `procGuard` (no `ELECTRON_*`), `release.mjs` with its build-stamp checks and the whole guard are byte-identical to the tips I signed; `app.js` keeps all 9 window-only checks and every marker, and what the merges removed from it was replaced by variants. W4-5c (a "Thought for Ns" row) has no security effect. Review `docs/security/2026-11-16-release-0.1.7-merge-check.md`. Not run: any test or probe (quiet window). Lesson: after a merge of several signed branches, diff the fix-bearing files against each signed tip first; an empty diff is the quickest proof nothing was dropped.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |
