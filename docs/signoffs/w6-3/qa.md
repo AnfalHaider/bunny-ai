@@ -1,0 +1,9 @@
+---
+piece: w6-3
+role: qa
+sha: 643c7da
+verdict: PASS
+date: 2026-11-16
+---
+
+Re-stamp at 643c7da (claude/builder-b-w6-loop-017, the integration of w4-1c, w4-1d, w6-2, w6-3, w6-4, w6-18 and the W6-3b no-plan nudge, cut from main e3c3157 lineage, already merged so no scratch merge was needed). Rehearsal e2e/w6-rehearsal.mjs (branch claude/qa-w6-rehearsal-2) run in both modes on an invented profile, scripted model, local fixture repo and site; every process it started was stopped. GATE at 643c7da, one run on a loaded machine (16 other Playwright runs): 6 of 7; unit tests PASS (46 s); the one failure is e2e/workspace.spec.js:14 the command palette opens with Ctrl+K and runs a command (138 passed otherwise); it passes 8 of 9 runs alone, and it is a test race: it presses Control+k right after goto without waiting for the page to be ready, so the key press can land before the handler exists (also failed in my 47e2312 gate); not caused by this branch. Electron not run. With open plan steps a closing statement (Let me know if you want me to continue.) is nudged (S10c, wrote its file and finished); after a finished plan a closing offer is NOT nudged (S10d). W6-3b: with NO plan a closing statement or question is nudged with If the task is not finished, make a task list with update_tasks and carry on; if it is finished, say so plainly.: a model that obeys makes the list, writes its file and finishes (S10e, 4 requests; also S10 question form and S10b statement form with the model carrying on). DETAIL: the no-plan nudge is not once only: a model that keeps ending the same way is nudged 3 times in all (S10f, 4 requests: the first plus three nudges) because it shares the cap of 3 with the open-steps nudge; harmless, but not literally once.
