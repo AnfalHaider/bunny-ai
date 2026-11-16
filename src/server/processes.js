@@ -112,7 +112,7 @@ function killTree(p) {
     const pid = p.child.pid;
     if (!pid) { resolve(); return; }
     if (process.platform === 'win32') {
-      execFile('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true }, () => { if (p.exitCode === null) p.exitCode = -1; resolve(); });
+      execFile('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, timeout: 15_000 }, () => { if (p.exitCode === null) p.exitCode = -1; resolve(); });
     } else {
       try { process.kill(-pid, 'SIGTERM'); } catch { try { p.child.kill('SIGTERM'); } catch { /* gone */ } }
       if (p.exitCode === null) p.exitCode = -1;
