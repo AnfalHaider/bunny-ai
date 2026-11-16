@@ -1,9 +1,9 @@
 ---
 piece: w5-8
 role: tech-lead
-sha: 70bd964
+sha: 349061d
 verdict: PASS
 date: 2026-11-16
 ---
 
-Reviewed release.mjs and test/release-target.test.js. The release is refused unless the resolved target is exactly origin/main (fetched first; a fetch failure, a missing origin/main, an unresolvable target or a tracked change in the tree each refuse), the tag is created with --target <that full sha>, and --dry-run prints the plan and publishes nothing. The role and release-record checks are kept as they were. Before this the tag followed GitHub's default branch (initial-import), which is the real fault it fixes. Tests (11, the logic with a fake git) pass. Not blocking: the built files in dist are not tied to the sha (only the version in latest.yml is checked), so an installer built earlier from another tree with the same version number would be uploaded under the right tag; have the build write the sha into dist and have release.mjs compare it. Untracked files are ignored by the clean check. e2e not run by me.
+Delta 70bd964..349061d. The release now needs: origin/main fetched and equal to the target, HEAD equal to the target (the installer is built from the checked-out files), a clean tree counting untracked files, dist/build-sha.txt equal to the target (npm run dist clears it first and stamps the sha afterwards; a tree with changes is stamped -dirty and never matches), and only --notes-file passed on to gh (no --repo, --draft, --prerelease). A dry run reports every failing check at once and treats the role as a note. Probed: a dry run from a scratch checkout lists the not-origin/main, missing build-sha and missing installer files together; unit tests 18 pass, 0 fail. This closes the dist-not-tied-to-the-sha gap I noted. Note: npm run build:css rewrites src/ui/app.css, so a stale committed app.css makes the build dirty and the release refuses until it is committed, which is the intended effect. e2e not run by me.
