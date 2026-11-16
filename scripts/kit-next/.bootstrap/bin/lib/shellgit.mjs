@@ -14,7 +14,7 @@ export const GIT_BUILTINS = new Set(`add am annotate apply archive bisect blame 
 
 export const ALIAS_DEPTH = 3;
 const ALIAS_BAD_VALUE = /(^!)|\b(commit|push|merge|rebase|am|cherry-pick)\b/i;
-const CONFIG_HARD_KEYS = /^(include\.path|includeif\..*\.path|core\.(hookspath|fsmonitor|sshcommand|editor|pager|askpass|attributesfile)|credential\..*helper|credential\.helper|url\..*\.(insteadof|pushinsteadof)|remote\..*\.(push|mirror|url|pushurl)|push\.(default|followtags)|branch\..*\.(pushremote|remote))$/;
+const CONFIG_HARD_KEYS = /^(include\.path|includeif\..*\.path|core\.(hookspath|fsmonitor|sshcommand|editor|pager|askpass|attributesfile)|credential\..*helper|credential\.helper|url\..*\.(insteadof|pushinsteadof)|remote\..*\.(push|mirror|url|pushurl|fetch)|push\.(default|followtags)|branch\..*\.(pushremote|remote))$/;
 const CONFIG_READ_FLAGS = /^(--get|--get-all|--get-regexp|--get-urlmatch|-l|--list|--show-origin|--show-scope|--name-only|--get-color|--get-colorbool)$/;
 const CONFIG_WRITE_FLAGS = /^(--add|--replace-all|--unset|--unset-all|--rename-section|--remove-section|-e|--edit)$/;
 const CONFIG_SCOPE_FLAGS = /^(--global|--system|--file|-f|--includes|--blob)(=|$)/;

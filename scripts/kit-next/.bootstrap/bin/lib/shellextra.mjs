@@ -60,7 +60,7 @@ export function refuseRemote(args) {
 export function refuseLabelMove(sub, args, live) {
   if (!live) return null;
   const attached = args.flatMap((a) => (/^-[A-Za-z]*?[BCbc].+$/.test(a) && !a.startsWith('--') ? [a.replace(/^-[A-Za-z]*?[BCbc]/, '').replace(/^=/, '')] : /^--[a-z-]+=/.test(a) ? [a.slice(a.indexOf('=') + 1)] : []));
-  const names = [...args.filter((a) => !a.startsWith('-')), ...attached].map((a) => a.replace(/^refs\/heads\//i, '').toLowerCase());
+  const names = [...args.filter((a) => !a.startsWith('-')), ...attached].map((a) => a.replace(/^(refs\/)?heads\//i, '').toLowerCase());
   const touchesLive = names.includes(String(live).toLowerCase()); // Main, MAIN and main are one branch to a Windows checkout
   if (!touchesLive) return null;
   const flags = args.filter((a) => a.startsWith('-'));

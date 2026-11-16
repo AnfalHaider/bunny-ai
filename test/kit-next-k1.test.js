@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -62,7 +62,7 @@ test('no conflict markers anywhere in the staged files', () => {
 });
 
 test('A1: pushes are read through the tokenizer (git -C, quotes, global options, --repo=)', (t) => {
-  for (const c of ['git -C . push origin main', 'git "push" origin main', 'git --no-pager push origin HEAD:main', 'git push --repo=origin main', 'git -c a=b push origin main', 'git.exe push origin main', '& git push origin main', 'cmd /c git push origin main', 'git push origin +HEAD:main', 'git push origin :main', 'git push --delete origin main']) blocked(t, c);
+  for (const c of ['git -C . push origin main', 'git "push" origin main', 'git --no-pager push origin HEAD:main', 'git push --repo=origin main', 'git -c a=b push origin main', 'git.exe push origin main', '& git push origin main', 'cmd /c git push origin main', 'git push origin +HEAD:main', 'git push origin :main', 'git push --delete origin main', 'git push origin HEAD:heads/main', 'git push origin HEAD:refs/heads/main', 'git push origin +HEAD:heads/main', 'git push origin main:heads/main']) blocked(t, c);
   allowed(t, 'git push origin claude/builder-a-k1');
 });
 
@@ -226,4 +226,61 @@ test('review round: a planted policy in a nested repository does not switch the 
 test('review round: guard paths in another case still need Security', (t) => {
   const r = pushCase(t, (root) => put(root, '.BOOTSTRAP/BIN/guard.mjs', '// changed\n'));
   assert.ok(r.errors.length > 0, r.errors.join(' | '));
+});
+
+test('Security K1-1: role ids and every other id are plain names; reserved Windows names and a trailing dot are refused', (t) => {
+  const bad = ['../../AGENTS', '../../docs/a', 'x.', 'x ', 'con', 'nul', 'prn', 'aux', 'com1', 'lpt9', 'CON.txt', 'a/b', 'a\\b'];
+  for (const id of bad) {
+    const root = makeRepo(t, 'chief-of-staff');
+    assert.notEqual(run('bootstrap.mjs', ['role', id], root).status, 0, `role ${id}`);
+    assert.notEqual(run('bootstrap.mjs', ['signoff', id, '--verdict', 'PASS', '--note', 'npm test: 12 passed; checked src/app.js:1'], root).status, 0, `signoff ${id}`);
+    assert.notEqual(run('bootstrap.mjs', ['require', id, 'qa'], root).status, 0, `require ${id}`);
+    assert.notEqual(run('bootstrap.mjs', ['require', 'b-1', id], root).status, 0, `require role ${id}`);
+    assert.notEqual(run('bootstrap.mjs', ['piece', id, '--lane', 'normal'], root).status, 0, `piece ${id}`);
+    assert.equal(existsSync(join(root, 'docs', 'a.md')) || existsSync(join(root, 'AGENTS.md')), false, 'nothing was written outside the record folders');
+  }
+  // the guard reads the same words and refuses them before the command runs
+  for (const c of ['node .bootstrap/bin/bootstrap.mjs role ../../AGENTS', 'node .bootstrap/bin/bootstrap.mjs role con']) blocked(t, c, 'unassigned');
+  // a plain id of a role that has a brief is still fine; one without a brief is not
+  const ok = makeRepo(t, null);
+  assert.equal(run('bootstrap.mjs', ['role', 'qa'], ok).status, 0);
+  assert.notEqual(run('bootstrap.mjs', ['role', 'nobody'], makeRepo(t, null)).status, 0, 'no brief, no role');
+});
+
+test('Security K1-2: the nested-repository check holds wherever the hook runs (CLAUDE_PROJECT_DIR, a cwd inside the nested repo, no project cwd)', (t) => {
+  const root = makeRepo(t, 'builder');
+  const sub = join(root, 'sub');
+  mkdirSync(join(sub, '.bootstrap'), { recursive: true });
+  sh(['init', '-q'], sub);
+  const attacks = ['git push origin main', 'git -C . push origin main', 'git commit --no-verify -m x', 'echo x > ../.bootstrap/policy.json', 'gh release create v9', 'git push origin HEAD:heads/main'];
+  const here = process.cwd();
+  const savedEnv = process.env.CLAUDE_PROJECT_DIR;
+  try {
+    for (const where of [root, sub, tmpdir()]) {
+      process.chdir(where);
+      for (const planted of [false, true]) {
+        if (planted) writeFileSync(join(sub, '.bootstrap', 'policy.json'), JSON.stringify({ version: 1, branches: { live: 'zzz' }, deny_all: [] }));
+        else rmSync(join(sub, '.bootstrap', 'policy.json'), { force: true }); // not left over from the planted round
+        for (const withEnv of [true, false]) {
+          if (withEnv) process.env.CLAUDE_PROJECT_DIR = root; else delete process.env.CLAUDE_PROJECT_DIR;
+          // without the variable, a planted policy in the nested repo is the nearest one: only the variable defends that case (written in the README)
+          if (planted && !withEnv) continue;
+          for (const c of attacks) {
+            const v = guard.decide({ tool: 'Bash', command: c, cwd: sub });
+            assert.equal(v.allow, false, `cwd=${where === root ? 'project' : where === sub ? 'nested' : 'elsewhere'} planted=${planted} env=${withEnv}: ${c}`);
+          }
+        }
+      }
+    }
+  } finally {
+    process.chdir(here);
+    if (savedEnv === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = savedEnv;
+  }
+});
+
+test('Security 714a0a8: git\'s default fetch refspec is fine; a glob that can write a branch label or a tag is not', (t) => {
+  allowed(t, "git fetch origin 'refs/heads/*:refs/remotes/origin/*'");
+  allowed(t, 'git fetch origin +refs/heads/*:refs/remotes/origin/*');
+  allowed(t, 'git fetch origin main:refs/remotes/origin/main');
+  for (const c of ['git fetch origin +refs/heads/*:refs/heads/*', 'git fetch origin "refs/heads/*:refs/tags/*"', 'git fetch origin x:refs/tags/v1', 'git fetch origin main:main', 'git fetch origin +main:heads/main', 'git fetch origin refs/heads/*:refs/remotes/origin/../../heads/*']) blocked(t, c);
 });

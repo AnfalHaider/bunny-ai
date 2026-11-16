@@ -134,6 +134,15 @@ export function globToRegex(glob, flags = '') {
   return new RegExp(`^${re}$`, flags);
 }
 
+/**
+ * K-1 (Security K1-1): an id that becomes a folder or file name. Plain letters, digits, dot, dash and underscore; no "..", no trailing dot or space,
+ * no Windows reserved device name (con, prn, aux, nul, com1-9, lpt1-9, also with an extension).
+ */
+export function isPlainId(id) {
+  const s = String(id ?? '');
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s) && !s.includes('..') && !/[. ]$/.test(s) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(s);
+}
+
 export function matchesAny(file, globs, { ci = false } = {}) {
   const p = String(file).replace(/\\/g, '/').replace(/^\.\//, '');
   return globs.some((g) => globToRegex(g, ci ? 'i' : '').test(p));

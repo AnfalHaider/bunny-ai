@@ -6,6 +6,7 @@
 // role from a command), the live-branch push target parse, and force pushes. The write-target rules
 // (A2) and the record-folder rules (E) live in lib/shellwrites.mjs.
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
+import { isPlainId } from './policy.mjs';
 import { resolve as pathResolve } from 'node:path';
 import { ghNotAllowed, isLong, pushShape, refuseLabelMove, refusePush, refuseRemote, refuseSymbolicRef } from './shellextra.mjs';
 import { ALIAS_DEPTH, GIT_BUILTINS, GIT_DIR_ENV, aliasValue, refuseGitConfigs } from './shellgit.mjs';
@@ -99,7 +100,7 @@ export function pushDestinations(args, currentBranch) {
     const r = r0.replace(/^\+/, '');
     let dst = r.includes(':') ? r.split(':')[1] : r;
     if (dst === 'HEAD') dst = currentBranch() || dst;
-    return dst.replace(/^refs\/heads\//, '');
+    return dst.replace(/^(refs\/)?heads\//, '');
   });
 }
 
@@ -237,11 +238,13 @@ function refuseGitMore(call, cmd, ctx, depth) {
   // K-1 (Security B3): a fetch or pull whose refspec writes the live branch label (git fetch origin +main:main)
   if ((sub === 'fetch' || sub === 'pull') && ctx.liveBranch) {
     const live = String(ctx.liveBranch).toLowerCase();
-    if (call.args.some((x) => /^--refmap(=|$)/.test(x))) return '"git fetch --refmap" can write the live branch label; not allowed for this role.';
-    if (call.args.some((x) => /^--stdin$/.test(x) || /^remote\..*\.fetch=/i.test(x))) return 'a fetch with --stdin or a remote.*.fetch from the command line can write the live branch label; not allowed for this role.';
+    if (call.args.some((x) => isLong(x, '--refmap', 5))) return '"git fetch --refmap" can write the live branch label; not allowed for this role.';
+    if (call.args.some((x) => isLong(x, '--stdin', 5) || /^remote\..*\.fetch=/i.test(x))) return 'a fetch with --stdin or a remote.*.fetch from the command line can write the live branch label; not allowed for this role.';
     for (const a of call.args.filter((x) => !x.startsWith('-'))) {
       const dest = a.replace(/^\+/, '').split(':')[1];
-      if (dest !== undefined && (dest.includes('*') || dest.replace(/^(refs\/)?heads\//i, '').toLowerCase() === live)) return `fetching into "${ctx.liveBranch}" moves the live branch label; not allowed for this role.`;
+      // git's own default (+refs/heads/*:refs/remotes/origin/*) writes only remote-tracking refs: fine. Anything that can write a branch label or a tag is not.
+      const tracking = dest !== undefined && /^(refs\/)?remotes\//i.test(dest) && !dest.includes('..');
+      if (dest !== undefined && !tracking && (dest.includes('*') || /^(refs\/)?tags\//i.test(dest) || dest.replace(/^(refs\/)?heads\//i, '').toLowerCase() === live)) return `fetching into "${ctx.liveBranch}" moves the live branch label; not allowed for this role.`;
     }
   }
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
@@ -265,7 +268,7 @@ const NPX = new Set(['npx', 'pnpx', 'bunx', 'pnpm', 'yarn', 'npm', 'xargs', 'tim
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 // A variable cannot be checked, so it is refused too: ids here are always spelled out.
-const okId = (w) => !w.dynamic && ID.test(w.text) && !w.text.includes('..');
+const okId = (w) => !w.dynamic && isPlainId(w.text);
 
 /**
  * E: the bootstrap command's own words (its argv), never "the rest of the line".
@@ -275,6 +278,7 @@ const okId = (w) => !w.dynamic && ID.test(w.text) && !w.text.includes('..');
  */
 function checkBootstrapCli(args, ctx) {
   const sub = args[0]?.text;
+  if (sub === 'role' && args[1] && !args[1].text.startsWith('-') && !okId(args[1])) return 'a role id must be a plain name (letters, digits, dot, dash), never a path.';
   if (sub === 'role' && ctx.role !== 'unassigned' && ctx.role !== 'chief-of-staff') {
     return `a session that already has a role ("${ctx.role}") does not change it. The Chief of Staff assigns roles.`;
   }

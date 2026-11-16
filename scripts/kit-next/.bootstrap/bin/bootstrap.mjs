@@ -28,7 +28,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
-import { DEFAULT_POLICY, currentRole, detectBranches, git, globToRegex, loadPolicy, repoRoot, roleFile } from './lib/policy.mjs';
+import { DEFAULT_POLICY, currentRole, detectBranches, git, globToRegex, isPlainId, loadPolicy, repoRoot, roleFile } from './lib/policy.mjs';
 import { loadFlow, renderMarkdown } from './lib/flow.mjs';
 import { boardArchive, boardMine, brief, cost, family, helpersOf, newestCode, next, suggest } from './lib/ops.mjs';
 import { FLOW_CHANGES_DIR, KIT_CHANGES_DIR, completeSignoffs, hashText } from './prepush.mjs';
@@ -37,7 +37,7 @@ import { runFlowUi } from './flow-ui.mjs';
 // G-1 (K-1): ids become folder and file names, so only plain names pass: letters, digits, dot, dash.
 const PLAIN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 function plainId(id, what) {
-  if (!PLAIN_ID.test(String(id ?? '')) || String(id).includes('..')) { console.error(`"${id}" is not a plain ${what} id (letters, digits, dot, dash).`); process.exit(1); }
+  if (!isPlainId(id)) { console.error(`"${id}" is not a plain ${what} id (letters, digits, dot, dash).`); process.exit(1); }
 }
 const KIT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const today = () => new Date().toISOString().slice(0, 10);
@@ -149,6 +149,7 @@ export function enabledPluginIds(root) {
 }
 
 function role(root, id) {
+  plainId(id, 'role'); // K-1 (Security K1-1): never a path, so the brief is always .bootstrap/roles/<id>.md
   const brief = join(root, '.bootstrap', 'roles', `${id}.md`);
   if (!existsSync(brief)) { console.error(`no role brief ${brief}; run init first or pick one of: ${readdirSync(join(root, '.bootstrap', 'roles')).map((f) => f.replace(/\.md$/, '')).join(', ')}`); process.exit(1); }
   const data = parseFrontmatter(readFileSync(brief, 'utf8')).data || {};

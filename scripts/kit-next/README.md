@@ -28,9 +28,9 @@ Owner's go for K-1, typed in the Chief of Staff's chat on 2026-11-17: "go on K-1
 | Run | Result | File |
 |---|---|---|
 | 0.6.0's own suite (`tests/*.test.mjs`) on a pristine copy of 0.6.0 (baseline) | **74 of 74** | `evidence/0.6.0-suite-on-pristine-0.6.0-74of74.txt` |
-| Our guard suites (`test/guard-next*.test.js`, `test/guard-providers.test.js`) on the staged kit (`KIT_NEXT=1`) | **75 of 75** | `evidence/our-guard-suites-on-staged.txt` |
+| Our guard suites (`test/guard-next*.test.js`, `test/guard-providers.test.js`) and the W5-1 suites (`test/guard-016*.test.js`, QA's edits) on the staged kit (`KIT_NEXT=1`) | **149 of 149** | `evidence/our-guard-suites-on-staged.txt` |
 | Our guard suites on the live kit (unchanged; the test change is mode-dependent) | **75 of 75** | (run in the same session, not saved) |
-| The K-1 checklist, `test/kit-next-k1.test.js` (one test per Security and Tech Lead row) | **21 of 21** | `evidence/kit-next-k1-checklist.txt` |
+| The K-1 checklist, `test/kit-next-k1.test.js` (one test per Security and Tech Lead row) | **24 of 24** | `evidence/kit-next-k1-checklist.txt` |
 | 0.6.0's own suite on the staged files, as is | **53 of 74** | `evidence/0.6.0-suite-on-staged-53of74.txt` |
 | the same, in a scratch copy with only our two **push-time** checks switched off (`scope_check.push`, `records_check`) | **71 of 74** | `evidence/0.6.0-suite-on-staged-push-checks-off-71of74.txt` |
 
@@ -75,9 +75,11 @@ Every row is covered by a test in `test/kit-next-k1.test.js` unless it says othe
 | #9 the plugin's own hook | **Not changed, written down:** `hooks/hooks.json` of the plugin runs `${CLAUDE_PLUGIN_ROOT}/bin/guard.mjs` (the plugin's copy of 0.6.0, the regex guard) on every Bash, Write, Edit, Agent and Task call, in addition to our project hook. Landing this kit into `.bootstrap/` does not stop that hook. Consequences: the daily false blocks (for example a command that merely mentions `bootstrap piece` or a `.bootstrap/roles` path in text) keep coming from the plugin's copy; and the new checks here are an addition, not a replacement, for what that copy does. Fixing it means changing or disabling the plugin's hook, which this task does not do. |
 | `legacy_deny_all` | closed: the tokenizer path reads it when the command cannot be read with confidence (our guard suites cover it) | |
 
+QA's 29 real-world cases (`e2e/q2-g1-realworld.mjs`, `KIT_NEXT=1`): **29 of 29** (`evidence/qa-29-realworld-on-staged.txt`).
+
 ## Things I could not do or am unsure about (UNKNOWN is better than a guess)
 
-* QA's "29 real-world cases" list is not in the repository; the guard suites in `test/guard-next*.test.js` stand in for it. If QA has the list, run it against `scripts/kit-next/` with `KIT_NEXT=1`.
+* Without CLAUDE_PROJECT_DIR (Claude Code sets it for hooks), a nested repository that carries its own planted policy.json is judged by the nearest policy to the hook's cwd; with the variable set, or with the hook running in the project folder, the project always judges.
 * Security's section D is covered by `test/kit-next-k1.test.js` only where the test names the spelling. `::$INDEX_ALLOCATION`, junctions, `\\?\` and reserved device names (`con`) are not tested here.
 * Automatic review notes (not part of K-1, they are in code carried over from `scripts/guard-next`): quoted flags are blanked before the deny patterns are tested (`simpleCommandTexts`); the role file is not tamper-evident against hard links.
 * Open, for v0.1.8 (automatic review of this staging, denylist limits): git configuration injected through the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_* environment or `include.path`; registry or persistent-environment writes under any variable name (only BOOTSTRAP_ROLE, `reg add ...Environment`, `setx`, `SetEnvironmentVariable` and the Item/ItemProperty cmdlets are refused). The robust fixes are a post-fetch check that the live ref did not move, and a `currentRole` that ignores an environment-provided role unless a Chief-written record backs it.

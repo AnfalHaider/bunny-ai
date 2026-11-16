@@ -10,7 +10,7 @@
 // Copilot-style hooks all treat exit 2 as "deny and tell the agent why").
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve as resolvePath, sep } from 'node:path';
+import { dirname, join, resolve as resolvePath, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadFlow } from './lib/flow.mjs';
 import { currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
@@ -43,7 +43,7 @@ export function pushTargets(command, cwd) {
       r = r.replace(/^\+/, '');
       let dst = r.includes(':') ? r.split(':')[1] : r;
       if (dst === 'HEAD') dst = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd) || dst;
-      out.push(dst.replace(/^refs\/heads\//, ''));
+      out.push(dst.replace(/^(refs\/)?heads\//, ''));
     }
   }
   return out;
@@ -88,13 +88,18 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   let root = repoRoot(cwd);
   if (!root && cwd !== process.cwd()) { root = repoRoot(process.cwd()); if (root) cwd = process.cwd(); }
   if (!root) return { allow: true };
-  // K-1 (Security B7): a repository inside the project (git init sub; cd sub) is judged by the project the hook runs in, whatever policy.json
-  // it carries itself (an agent could plant a permissive one there).
-  const outer = repoRoot(process.cwd());
-  const inside = outer && outer !== root && resolvePath(root).toLowerCase().startsWith(resolvePath(outer).toLowerCase() + sep);
-  const outerPolicy = inside ? loadPolicy(outer) : null;
-  if (outerPolicy) root = outer;
-  const policy = outerPolicy || loadPolicy(root);
+  // K-1 (Security B7, K1-2): a repository inside the project (git init sub; cd sub) is judged by the project, whatever policy.json it carries itself
+  // (an agent could plant a permissive one there) and wherever the hook's cwd is. The project is CLAUDE_PROJECT_DIR when set, else the nearest
+  // folder above the cwd (or above where the hook runs) that has a .bootstrap/policy.json.
+  const withinDir = (child, dir) => { const c = resolvePath(child).toLowerCase(); const d = resolvePath(dir).toLowerCase(); return c === d || c.startsWith(d + sep); };
+  const walkUp = (start) => { let d = resolvePath(start); for (;;) { if (existsSync(join(d, '.bootstrap', 'policy.json'))) return d; const up = dirname(d); if (up === d) return null; d = up; } };
+  const envDir = process.env.CLAUDE_PROJECT_DIR;
+  // Order of trust: the variable, then where the hook itself runs, and only last the cwd the agent named (a planted nested policy sits nearest to it).
+  const fromHook = walkUp(process.cwd());
+  const project = (envDir && existsSync(join(envDir, '.bootstrap', 'policy.json')) && withinDir(root, envDir) ? resolvePath(envDir) : null)
+    || (fromHook && withinDir(root, fromHook) ? fromHook : null) || walkUp(cwd);
+  if (project && project !== resolvePath(root) && withinDir(root, project)) root = project;
+  const policy = loadPolicy(root);
   if (!policy) return { allow: true };
   const role = currentRole(root);
   // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
