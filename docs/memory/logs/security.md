@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - Lane A LA-4 re-check (`19e1455`): PASS
+
+200 files that each cost about 0.3 s (under the 1 s per-file limit): before, 15.7 s with the loop frozen; now it stops at 5.07 s and the loop ticks (55 ticks). Sign-off updated to 19e1455. Probe `lane-a-probe/r4.mjs`. Minor: a cut mid-file reports "too slow; simplify it", not the new 5 s text. Lesson: a per-item limit needs a total limit, and the probe for it is many items just under the limit.
+
 ## 2026-11-16 - Lane A (`claude/builder-lane-a-016` @ 3af63d7): FAIL
 
 Paths, data folder, multi_edit permissions (asks in Manual, refused in Plan, pairs shown) and e2e temp paths hold. Fails on availability: LA-1 glob with 12 wildcards freezes the app on a 40-character file name (2.6 s at 30); LA-2 regex `(a+)+$` freezes it (9.7 s at 26 characters; the 2,000-character cap does not help); LA-3 multi_edit `replace_all` doubling aborts the process. Both reachable with no prompt (read risk). Fix: vm timeout or worker plus a linear glob matcher; size cap in multi_edit. Review: `docs/security/2026-11-16-lane-a-016-review.md`, probes in `docs/security/lane-a-probe/`. Lesson: a cap on input length is not a cap on regex time; ask for a time limit.
