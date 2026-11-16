@@ -1,4 +1,4 @@
-# AGENTS.md — standing rules
+ 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Haiku |# AGENTS.md — standing rules
 
 <!-- Written by bootstrap-environment. Edited only by the Chief of Staff, on the owner's typed word.
      Every rule keeps its reason: a rule without its reason gets argued away. Fill every <…>. -->
@@ -12,6 +12,11 @@
 | REAL databases, folders, services | The GitHub Releases feed of AnfalHaider/bunny-ai (owner's answer). Everything else must be provably a copy: tests, screenshots and previews use an invented profile (`BUNNY_DATA_DIR`), never `%LOCALAPPDATA%\BunnyAI` | 2026-11-16 |
 | Must never leave this machine | Provider keys and sign-in tokens (DPAPI store); the owner's real chats, memory, attachments and profile photo (`%LOCALAPPDATA%\BunnyAI`); screenshots of the real profile — only invented-profile pictures go in the repo, release notes or help (owner's answer) | 2026-11-16 |
 | Agent tooling in the repo | Tracked: `.bootstrap/`, `CLAUDE.md`, `.claude/settings.json`, so every session worktree (and a cloud Hotfix) gets the guard, policy and rules. Per-worktree files stay out: `.bootstrap/session.json`, `.claude/settings.local.json`. Supersedes the 2026-11-15 machine-only exclude for these three (owner's answer) | 2026-11-16 |
+| Session commits | Sessions may `git add`, `git commit` and push to their own `claude/*` branch without a prompt (allow rules in `.claude/settings.json`); pushing `main` stays with release-ops/hotfix (guard + pre-push hook). Owner's answer to "How should sessions be allowed to commit?": "Allow commits to own branches (Recommended)" | 2026-11-16 |
+| S-1 go (HIGH) | Owner's answer to "Security's S-1 (HIGH): Bunny's local API accepts requests from any web page on this PC, which could add and run a local program. Fixing it changes a security control, so it needs your go. Build the fix now?": "Go: fix S-1 first (Recommended)". Typed in the Chief of Staff's chat; relayed to Tech Lead and Builder under 7E | 2026-11-16 |
+| Guard-gap go (HIGH) | Owner, typed in the Chief of Staff's chat: "yes fix the guards, but also ensure all these issues are sorted. and fixed properly." Covers Tech Lead's guard-gap spec (713f953 and its items C, D, and E: record-folder parsing). Same message ordered: a full tool inventory vs Claude and Cursor, a no-assumptions audit of every navigation item, tab and setting, the chat interface to behave like Claude's, model switching and Auto fixed (degrade gracefully only when the local network is down), and the Changes, Files and Session tabs wired | 2026-11-16 |
+| Standing order: "push to main" | Owner, typed in the Chief of Staff's chat: "then push to main and dev, i will always tell you to push to main and dev. update the rules accordingly.", then "dont create a dev branh.", then "just push to main." So: no dev branch; "push to main" from the owner, typed in the Chief of Staff's chat, means the Chief of Staff pushes `main` (only main). The Chief of Staff is a live pusher (`.bootstrap/policy.json`); before each push it writes the release record in `docs/releases/` with the owner's words, and the pre-push hook still needs complete sign-offs on every code commit. A relayed word still never counts | 2026-11-16 |
+| Tonight's delegation | Owner: "get all sessions to work through all the issues, fix every known issue. test everything. then push to main and dev ... after the new application is live. i need you to give me detailed list of all the missing features, bugs and gaps remaining in the morning. till then handle everything yourself." The go for every known issue (HIGH ones keep an independent review and Security's sign-off), and the word for tonight's batch: push to main and publish the release once the gate passes and sign-offs are complete | 2026-11-16 |
 | Language server | TypeScript 5 installed user-level for `typescript-language-server` (global TypeScript 7 ships no tsserver); rollback `npm i -g typescript@7.0.2` (owner's answer) | 2026-11-16 |
 | Upstream / sibling projects never written to | None found (one remote, `origin`). The `BUNNY-AI - Copy` folder is never written to (owner's standing rule) | 2026-11-16 |
 | Routine-looking destructive commands | `BUNNY_RESET_PROFILE=1` (deletes the data folder) · running `dist/Bunny-AI-Setup-*.exe //S` over the owner's install — blocked for every role in `.bootstrap/policy.json`. `npm run release` publishes to every installed copy: `scripts/release.mjs` refuses unless the role is release-ops or hotfix and `docs/releases/` holds the record for that version · `gh release delete/edit`: owner only | 2026-11-16 |
@@ -47,15 +52,15 @@ CRITICAL: production data, credentials, irreversible migration, live users — n
 | Role id | Display name (owner's choice) | Started? |
 |---|---|---|
 | chief-of-staff | Chief of Staff | 2026-11-16 — the owner's main session, main checkout |
-| librarian | Librarian | |
-| researcher | Researcher | |
-| design | Design | |
-| builder | Builder | |
-| qa | QA | |
-| tech-lead | Tech Lead | |
-| security | Security | |
-| release-ops | Release Ops | |
-| hotfix (cloud) | Hotfix | |
+| librarian | Librarian | 2026-11-16 — own worktree, cheapest model (Haiku) |
+| researcher | Researcher | 2026-11-16 — own worktree, mid model (Sonnet) |
+| design | Design | 2026-11-16 — own worktree, mid model (Sonnet) |
+| builder | Builder | 2026-11-16 — own worktree, mid model (Sonnet) |
+| qa | QA | 2026-11-16 — own worktree, mid model (Sonnet) |
+| tech-lead | Tech Lead | 2026-11-16 — own worktree, mid model (Sonnet) |
+| security | Security | 2026-11-16 — own worktree, mid model (Sonnet) |
+| release-ops | Release Ops | 2026-11-16 — own worktree, mid model (Sonnet) |
+| hotfix (cloud) | Hotfix | 2026-11-16 — requested as a cloud session (from `initial-import`) |
 | platform (on demand) | Platform | not started: no work yet |
 | support (on demand) | Support | not started: no work yet |
 | project lanes | none named yet | |
