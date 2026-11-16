@@ -911,8 +911,97 @@ function paintMessages() {
   $('main')?.classList.toggle('is-empty', empty);
   if (empty) paintGreeting();
   renderTitle();
-  for (const m of state.messages) host.append(renderMessage(m));
+  // D-2: consecutive tool steps between two pieces of narration are ONE group line, collapsed once finished.
+  let run = [];
+  const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
+  const groupable = (m) => m.kind === 'tool_call' && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  state.messages.forEach((m, index) => {
+    const el = renderMessage(m);
+    if (!groupable(m)) { flushRun(); host.append(el); return; }
+    if (m.note) flushRun(); // narration starts a new group
+    run.push({ m, el, last: index === state.messages.length - 1 });
+  });
+  flushRun();
   if (state.messages.length) host.lastElementChild?.scrollIntoView({ block: 'end' });
+}
+
+// ---------------------------------------------------------------------------
+// D-2: tool steps as one line per run of steps
+
+const STEP_KINDS = {
+  read: { ok: ['Read a file', 'Read {n} files'], tried: ['tried to read a file', 'tried to read {n} files'], other: 'tried to read another' },
+  write: { ok: ['Wrote a file', 'Wrote {n} files'], tried: ['tried to write a file', 'tried to write {n} files'], other: 'tried to write another' },
+  edit: { ok: ['Edited a file', 'Edited {n} files'], tried: ['tried to edit a file', 'tried to edit {n} files'], other: 'tried to edit another' },
+  run: { ok: ['Ran a command', 'Ran {n} commands'], tried: ['tried to run a command', 'tried to run {n} commands'], other: 'tried to run another' },
+  search: { ok: ['Searched for a word', 'Searched {n} times'], tried: ['tried to search', 'tried to search {n} times'], other: 'tried to search again' },
+  list: { ok: ['Listed a folder', 'Listed {n} folders'], tried: ['tried to list a folder', 'tried to list {n} folders'], other: 'tried to list another' },
+  other: { ok: ['Used a tool', 'Used {n} tools'], tried: ['tried to use a tool', 'tried to use {n} tools'], other: 'tried to use another' },
+};
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+
+/** What kind of step is "Read src/app.js" or "Run npm test": by its first word, never the raw tool id. */
+function stepKind(tool) {
+  const verb = String(tool ?? '').replace(/^.* › /, '').trim().split(/\s+/)[0].toLowerCase();
+  if (/^(read|open|show|get|inspect|view)$/.test(verb)) return 'read';
+  if (/^(write|create|make|save)$/.test(verb)) return 'write';
+  if (/^(edit|update|replace|rename|delete)$/.test(verb)) return 'edit';
+  if (/^(run|start|stop|install|build|test|execute)$/.test(verb)) return 'run';
+  if (/^(search|find|grep|look)$/.test(verb)) return 'search';
+  if (/^list$/.test(verb)) return 'list';
+  return 'other';
+}
+
+/** "Read 3 files, tried to read another", in the order the steps ran, numbers under ten in words. */
+function summariseSteps(steps) {
+  const parts = [];
+  for (const s of steps) {
+    const failed = s.status === 'failed' || s.status === 'denied';
+    const kind = stepKind(s.tool);
+    const part = parts.find((p) => p.kind === kind && p.failed === failed);
+    if (part) part.n += 1; else parts.push({ kind, failed, n: 1 });
+  }
+  const text = parts.map((p, i) => {
+    const t = STEP_KINDS[p.kind];
+    if (p.failed && p.n === 1 && parts.some((q) => q.kind === p.kind && !q.failed)) return t.other;
+    const [one, many] = p.failed ? t.tried : t.ok;
+    const n = p.n < 10 ? NUMBER_WORDS[p.n] : String(p.n);
+    const phrase = p.n === 1 ? one : many.replace('{n}', n);
+    return i === 0 ? phrase : phrase.charAt(0).toLowerCase() + phrase.slice(1); // only the first part starts a sentence
+  }).join(', ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function chevron() { return element('span', { className: 'step-chev', 'aria-hidden': 'true' }); }
+
+/** One collapsed line for a run of steps; opening it shows one sub-row per step, each opening to its detail. */
+function buildToolGroup(run) {
+  const steps = run.map((r) => r.m);
+  const failedCount = steps.filter((s) => s.status === 'failed' || s.status === 'denied').length;
+  const last = run.at(-1);
+  // A failed group stays collapsed, except the last failed step of a reply that ended on it.
+  const openLast = last.last && last.m.status === 'failed';
+  const group = element('div', { className: `tool-group${openLast ? ' is-open' : ''}` });
+  const line = element('button', { className: 'tool-group-line', type: 'button', 'aria-expanded': String(Boolean(openLast)) });
+  line.append(chevron(), element('span', { className: 'tool-group-summary', textContent: summariseSteps(steps) }));
+  const meta = failedCount
+    ? element('span', { className: 'tool-group-meta is-failed', textContent: steps.length === 1 ? 'Failed' : `${failedCount} failed` })
+    : element('span', { className: 'tool-group-meta', textContent: steps.length === 1 ? '' : `${steps.length} steps` });
+  line.append(meta);
+  line.addEventListener('click', () => {
+    const open = !group.classList.contains('is-open');
+    group.classList.toggle('is-open', open);
+    line.setAttribute('aria-expanded', String(open));
+  });
+  const rows = element('div', { className: 'tool-group-rows' });
+  for (const r of run) rows.append(r.el);
+  group.append(line, rows);
+  // The narration that led into the first step stays visible above the line, whether or not the group is open.
+  const out = [];
+  const note = run[0].el.querySelector(':scope > .step-note');
+  if (note) out.push(note);
+  out.push(group);
+  if (openLast) last.el.querySelector('.tool-call')?.classList.add('is-open');
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -985,9 +1074,13 @@ function renderMessage(m) {
     if (m.note) wrap.append(stepNote(m.note, true));
     if (m.question) { wrap.append(answeredQuestionCard(m.question)); return wrap; }
     const tc = element('div', { className: 'tool-call' });
-    const header = element('div', { className: 'tool-call-header' });
-    header.append(element('span', { textContent: m.tool ?? 'tool' }));
-    if (m.status) header.append(element('span', { className: 'tag', textContent: m.status }));
+    const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
+    header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
+    const failedStep = m.status === 'failed' || m.status === 'denied';
+    if (m.status) header.append(element('span', { className: `tag${failedStep ? ' is-failed' : ''}`, textContent: failedStep ? 'Failed' : m.status }));
+    const toggle = () => { const open = tc.classList.toggle('is-open'); header.setAttribute('aria-expanded', String(open)); };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     tc.append(header);
     const body = element('div', { className: 'tool-call-body' });
     body.textContent = m.content ?? '';
@@ -996,6 +1089,13 @@ function renderMessage(m) {
       const res = element('div', { className: 'tool-call-result' });
       res.textContent = `→ ${String(m.result).slice(0, resultLimit())}`;
       tc.append(res);
+    }
+    if (failedStep) {
+      // The exact command and the error, in one click.
+      const copy = button('Copy', { className: 'ghost small tool-call-copy' });
+      copy.addEventListener('click', async () => { flash(copy, (await copyText(`${m.content ?? ''}
+${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
+      tc.append(copy);
     }
     wrap.append(tc);
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
@@ -1008,7 +1108,22 @@ function renderMessage(m) {
   // A reply that failed: why, kept in the chat.
   if (m.kind === 'error') {
     wrap.classList.add('error-note');
-    wrap.append(element('p', { className: 'error-note-text', textContent: m.content ?? 'The reply failed.' }));
+    // One line that opens to the provider's own words, with a way on: Try again, or choose another model.
+    const group = element('div', { className: 'tool-group' });
+    const line = element('button', { className: 'tool-group-line', type: 'button', 'aria-expanded': 'false' });
+    line.append(chevron(), element('span', { className: 'tool-group-summary', textContent: 'The reply failed' }), element('span', { className: 'tool-group-meta is-failed', textContent: 'Failed' }));
+    line.addEventListener('click', () => { const open = !group.classList.contains('is-open'); group.classList.toggle('is-open', open); line.setAttribute('aria-expanded', String(open)); });
+    const rows = element('div', { className: 'tool-group-rows error-note-detail' });
+    rows.append(element('p', { className: 'error-note-text', textContent: m.content ?? 'The reply failed.' }));
+    const copyErr = button('Copy', { className: 'ghost small' });
+    copyErr.addEventListener('click', async () => { flash(copyErr, (await copyText(m.content ?? '')) ? 'Copied' : 'Copy failed'); });
+    const again = button('Try again', { className: 'primary small' });
+    again.addEventListener('click', () => retry(m)); // drops this note, then asks again with the same history
+    const another = button('Choose another model', { className: 'ghost small' });
+    another.addEventListener('click', () => $('picker-button')?.click());
+    rows.append(element('div', { className: 'error-note-actions' }, copyErr, again, another));
+    group.append(line, rows);
+    wrap.append(group);
     return wrap;
   }
 
@@ -1055,6 +1170,10 @@ function renderMessage(m) {
     if (m.kind === 'summary') meta.append(element('span', { className: 'hint', textContent: ' The messages above stay here; to save room, Bunny now reads this summary instead of them.' }));
     if (m.kind === 'partial') meta.append(element('span', { className: 'hint', textContent: ' Send "continue" and Bunny picks up where it stopped.' }));
     wrap.append(meta);
+    if (m.kind === 'partial') {
+      const report = stoppedReport(m);
+      if (report) wrap.append(report);
+    }
   }
 
   // The files this reply changed can be put back.
@@ -1655,6 +1774,42 @@ function renderTasksPane(tasks) {
   }
   const done = tasks.filter((t) => t.done).length;
   host.replaceChildren(element('p', { className: 'hint tasks-progress', textContent: say('tasks.progress', { done, total: tasks.length }) }), taskList(tasks));
+}
+
+/**
+ * A stop is a report, not silence: how many steps ran, what was done, and a way on.
+ * Shown only when steps ran before the stop (a stopped plain answer needs no report).
+ */
+function stoppedReport(m) {
+  const at = state.messages.indexOf(m);
+  const steps = [];
+  for (let i = at - 1; i >= 0 && state.messages[i].role !== 'user'; i -= 1) {
+    if (state.messages[i].kind === 'tool_call' && !state.messages[i].question) steps.unshift(state.messages[i]);
+  }
+  if (!steps.length) return null;
+  const count = steps.length < 10 ? NUMBER_WORDS[steps.length] : String(steps.length);
+  const box = element('div', { className: 'stopped-report', role: 'status' });
+  box.append(
+    element('h4', { textContent: 'Stopped' }),
+    element('p', { textContent: `You stopped Bunny after ${count} ${steps.length === 1 ? 'step' : 'steps'}.` }),
+    element('p', { className: 'stopped-done-label', textContent: 'Done:' }),
+  );
+  const done = element('ul', { className: 'stopped-done' });
+  for (const part of summariseSteps(steps).split(', ')) done.append(element('li', { textContent: part.charAt(0).toUpperCase() + part.slice(1) }));
+  box.append(done);
+  const actions = element('div', { className: 'stopped-actions' });
+  actions.append(button('Continue', {
+    className: 'primary small',
+    onclick: () => { $('input').value = 'continue'; send(); },
+  }));
+  if (m.checkpoint?.files && !m.checkpoint.restored) {
+    actions.append(button('Undo these changes', {
+      className: 'ghost small',
+      onclick: () => box.closest('.msg')?.querySelector('.undo-bar button')?.click(),
+    }));
+  }
+  box.append(actions);
+  return box;
 }
 
 /** "Undo file changes": put back every file this reply wrote or edited. */
