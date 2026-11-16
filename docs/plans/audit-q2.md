@@ -21,7 +21,7 @@ Docs and tests only. Nothing in `src/` was changed. Nothing here touched `%LOCAL
 | Controls inventoried (live DOM, 5 pages) | 316 (`docs/plans/audit-q2-inventory.md`, one row each) |
 | Verdicts in the inventory | 245 PASS, 23 FAIL, 48 UNKNOWN |
 | Checks driven in this audit | 79 (`controls` 43, `panes` 17, `pages` 19) plus the six fallback and Code-mode reproductions |
-| Defects | 23 (5 High, 10 Medium, 8 Low) and 1 open question |
+| Defects | 25 (5 High, 11 Medium, 9 Low), 1 decision for the owner and 1 open question |
 | New tests | 23 unit (6 pass, 17 todo = defects), 17 browser (7 pass, 10 expected-fail = defects); the gate passes 6/6 with them |
 
 The owner's reports are all real. Four of the six panes the owner mentioned are partly or wholly empty shells, and the model fallback is slower and messier than the screen suggests.
@@ -78,6 +78,24 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 | Q2-21 | Low | The dev-server card says "running" if **anything** answers on the guessed port, even another project's site (on this machine port 3001 serves an unrelated site). | `src/server/workspace.js:373-377` (`running = res.status > 0`). | `q2-code-mode.mjs` screenshot: pane on `localhost:3001` showed a different site. | (needs a port in use; see note) |
 | Q2-22 | Low | `/?s=<id>` loses the chat id (the root redirects to `/src/ui/index.html` without the query); `GET /api/sessions` reads every chat: 5 ms empty, 97 ms at 155 chats, 182 ms at 317. | the root redirect at `src/server/app.js:2474-2475`; `sessions.list`. | `q2-perf.mjs`. | (observation) |
 | Q2-23 | Medium | **S-1 (Builder branch, `09b35e4`): a browser tab left open across a restart of Bunny fails silently.** The tab holds the old launch token; the next send clears the box and shows nothing: no message, no error, no "out of date" notice, until the page is reloaded. The server's words ("This window is out of date. Close it and open Bunny AI again (or reload the page).") never reach the screen. Does not affect the desktop app (the window is recreated with each launch); affects `npm start` and the plain-browser preview. | the UI has no handler for the 403 `request.noToken` answer (`src/ui/token.js`, `src/ui/api.js` `sendJSON`/`getJSON`); found on the Builder branch, not in this branch's tree | `e2e/q2-s1-walk.mjs` restart probe: after the restart `#error`, `#status` and the transcript are all empty; screenshot `%TEMP%\qa-q2\s1\stale-window.png`. | unit Q2-23 (todo) |
+| Q2-24 | Medium | **Computer use stays a question after it is allowed.** With the "Control this computer" grant on and the mode set to Auto (or Accept edits), every click, key press, typing and scroll still raises a permission card. The owner's rule ("when allowed by me, everything should be allowed") says it should not. | `src/server/agentTools.js:20` gives `computer_click`, `computer_type`, `computer_key` and `computer_scroll` the risk `build`; `src/server/app.js:1510` (`needsOk`) asks for `build` in every mode. | `test/q2-permissions.test.js`: Auto, grant on, click: one card. (Only ever answered Deny: nothing drove this machine.) | unit Q2-24, Q2-24b (todo) |
+| Q2-25 | Low | In Manual mode every Allow covers one call only; there is no "allow for this chat" or "allow this kind of step" on the card, so a ten-file job is ten cards. (Switching to Accept edits or Auto is the way out, but the card does not say so.) | `src/ui/chat.js:1017-1030` (the card has only Allow and Deny); `src/server/app.js:1636-1644`. | `test/q2-permissions.test.js` Manual rows: one card per call. | (design; no test) |
+
+### Permission modes and grants (owner's rule: "when allowed by me, everything should be allowed")
+
+`test/q2-permissions.test.js` drives a reply in each mode that calls one tool, answers every card, and records whether a card was raised and whether the tool ran. Nothing that drives this computer or builds a program was ever allowed to run (those were only answered Deny).
+
+| Tool kind | Manual | Accept edits | Plan | Auto | Verdict |
+|---|---|---|---|---|---|
+| Read (`list_files`) | no card | no card | no card | no card | PASS |
+| Edit (`write_file`) | card; Allow writes, Deny keeps it out and tells the model | no card, writes | **writes with no card (Q2-1)** | no card, writes | Plan FAIL, rest PASS |
+| Command (`run_command`) | card | card | **runs with no card (Q2-1)** | no card, runs | Plan FAIL, rest PASS |
+| Computer (`computer_click`, `_type`, `_key`, `_scroll`) | card | **card again (Q2-24)** | not offered | **card again (Q2-24)** | FAIL |
+| Build (`create_tool`, a schedule that may change things, a local connector command) | card | card | not offered | card (by design) | see Q2-26 |
+
+Grants: Code mode (the card, or the Chat/Code toggle with a folder) is remembered on the chat; Computer use and Custom tools are saved in Settings, so they are asked once. Saying no is remembered for the reply ("do not ask again"). The Capabilities switches in Settings do the same without a card.
+
+- **Q2-26 (decision for the owner, not counted as a defect):** the code deliberately asks for "build" actions in **every** mode, Auto included: building a tool, a schedule that may change things, and adding a local connector (a program run on this computer). Under the owner's rule these would stop asking once the person has allowed it. The risk is that a script or a program is then created and run without being read. Needs the owner's word before the Builder touches it (HIGH under AGENTS.md: permissions).
 
 ### Open question (UNKNOWN, not counted)
 
