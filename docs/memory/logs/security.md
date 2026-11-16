@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - W3-6 sign-in connectors (`1a1c364`): PASS with conditions
+
+PKCE S256, one-time state, `iss` check, https only, no redirects, private-network refusal, tokens only in the secret store, a callback exception that needs a pending state: all hold (43 of 43 tests). Two verified follow-ups: W36-1 the token is stored per connector id and sent to whatever address the connector has now (an edited address gets the old token, even over http); W36-2 a refresh already in flight writes its token back after sign-out, so a signed-out connector holds a live token again. Revoke-on-sign-out confirmed as designed (provider told, local token always deleted). Review `docs/security/2026-11-16-w3-6-signin-review.md`, probe `w3-6-probe/oa.mjs`. Lesson: a credential has to be bound to what it was issued for (the address) and to the person's last word (sign-out); both are checks at the moment of use or of writing back.
+
 ## 2026-11-16 - Verdicts for the 0.1.5 scope (Builder branch at 9ca3f77)
 
 | Piece | Verdict | Evidence |
