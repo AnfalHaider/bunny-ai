@@ -9,7 +9,7 @@ export const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 // Once G-1 has landed (the new pre-commit checker exists in the live .bootstrap/), these tests exercise the LIVE guard;
 // before that they exercise the staged copy in scripts/guard-next/.
-export const NEXT = join(ROOT, "scripts", "guard-next");
+export const NEXT = process.env.KIT_NEXT ? join(ROOT, "scripts", "kit-next") : join(ROOT, "scripts", "guard-next");
 export const BIN = join(NEXT, '.bootstrap', 'bin');
 export const fileUrl = (p) => new URL(`file:///${p.replace(/\\/g, '/')}`);
 
