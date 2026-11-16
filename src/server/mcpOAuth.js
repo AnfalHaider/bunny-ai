@@ -121,10 +121,19 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
 
   // ---- discovery ----
 
-  async function authServerMetadata(issuerUrl) {
+  /** A connector out on the internet may not point sign-in at an address on this computer: everything discovered must then be https. */
+  function assertScope(meta, serverUrl) {
+    if (!serverUrl || LOOPBACK.has(new URL(serverUrl).hostname)) return meta;
+    for (const field of ['issuer', 'authorization_endpoint', 'token_endpoint', 'registration_endpoint', 'revocation_endpoint', 'userinfo_endpoint']) {
+      if (meta[field] && new URL(meta[field]).protocol !== 'https:') throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
+    }
+    return meta;
+  }
+
+  async function authServerMetadata(issuerUrl, serverUrl = null) {
     const issuer = checkUrl(issuerUrl, 'sign-in server');
     const key = issuer.origin + (issuer.pathname === '/' ? '' : issuer.pathname.replace(/\/$/, ''));
-    if (metaCache.has(key)) return metaCache.get(key);
+    if (metaCache.has(key)) return assertScope(metaCache.get(key), serverUrl);
     const path = issuer.pathname === '/' ? '' : issuer.pathname.replace(/\/$/, '');
     const candidates = [
       `${issuer.origin}/.well-known/oauth-authorization-server${path}`,
@@ -153,12 +162,14 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     }
     if (Array.isArray(meta.scopes_supported)) clean.scopes_supported = meta.scopes_supported.filter((s) => typeof s === 'string' && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)).slice(0, 50);
     metaCache.set(key, clean);
-    return clean;
+    return assertScope(clean, serverUrl);
   }
 
   /** Find how to sign in to a server. Returns { issuer, meta, scope }. */
   async function discover(server, { resourceMetadataUrl = null } = {}) {
     const target = checkUrl(server?.url, 'connector address');
+    const remote = !LOOPBACK.has(target.hostname);
+    if (remote && resourceMetadataUrl && new URL(resourceMetadataUrl).protocol !== 'https:') throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
     const prmUrl = resourceMetadataUrl ? checkUrl(resourceMetadataUrl, 'protected-resource information').href : `${target.origin}/.well-known/oauth-protected-resource`;
     const prm = await getJson(prmUrl, 'protected-resource information');
     let issuerUrl;
@@ -171,7 +182,8 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     } else {
       issuerUrl = target.origin; // fall back to the connector's own origin
     }
-    const meta = await authServerMetadata(issuerUrl);
+    if (remote && new URL(issuerUrl).protocol !== 'https:') throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
+    const meta = await authServerMetadata(issuerUrl, target.href);
     const list = (scopes ?? meta.scopes_supported ?? []).filter((s) => typeof s === 'string');
     return { issuer: meta.issuer, meta, scope: list.length ? list.join(' ') : null };
   }
@@ -249,17 +261,21 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
   }
 
   /** The person came back from the provider. One use only. */
-  async function completeSignIn({ state, code, error } = {}) {
+  async function completeSignIn({ state, code, error, iss } = {}) {
     const key = String(state ?? '');
     const flow = pending.get(key);
     pending.delete(key); // used up, whatever happens next
     if (!flow || now() > flow.expiresAt) throw fail('This sign-in link has expired or was already used. Start again from Bunny AI.', 'mcp.oauth.badState');
+    // RFC 9207: a provider that names itself in the answer must name the one this sign-in started with (mix-up protection)
+    if (iss !== undefined && iss !== null && String(iss).replace(/\/$/, '') !== String(flow.issuer).replace(/\/$/, '')) {
+      throw fail('The answer came from a different sign-in server than the one Bunny AI started with, so it was ignored.', 'mcp.oauth.issuerMismatch');
+    }
     if (error) {
       const why = plainCode(error);
       throw fail(why === 'access_denied' ? 'The sign-in was cancelled, so nothing was connected.' : `The provider did not finish the sign-in${why ? ` (${why})` : ''}.`, 'mcp.oauth.denied');
     }
     if (typeof code !== 'string' || !code || code.length > 2000) throw fail('The provider did not send a sign-in code.', 'mcp.oauth.noCode');
-    const meta = await authServerMetadata(flow.issuer);
+    const meta = await authServerMetadata(flow.issuer, flow.serverUrl);
     const tokens = await tokenRequest(meta, {
       grant_type: 'authorization_code', code, redirect_uri: redirectUri,
       client_id: flow.client, code_verifier: flow.verifier, resource: flow.serverUrl,
@@ -351,7 +367,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     }
     let tokens;
     try {
-      const meta = await authServerMetadata(saved.issuer);
+      const meta = await authServerMetadata(saved.issuer, server?.url);
       tokens = await tokenRequest(meta, {
         grant_type: 'refresh_token', refresh_token: saved.refresh_token, client_id: saved.client_id,
         ...(server?.url ? { resource: new URL(server.url).href } : {}),
@@ -392,7 +408,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     try {
       if (saved) {
         host = new URL(saved.issuer).host;
-        const meta = await authServerMetadata(saved.issuer).catch(() => null);
+        const meta = await authServerMetadata(saved.issuer, server?.url).catch(() => null);
         if (meta?.revocation_endpoint) {
           hadEndpoint = true;
           const attempts = [];

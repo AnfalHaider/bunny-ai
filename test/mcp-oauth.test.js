@@ -503,3 +503,46 @@ test('a missing or silly expires_in becomes one hour', async () => {
 test('the return address must be on this PC', () => {
   assert.throws(() => createMcpOAuth({ secrets: memorySecretStore(), redirectBase: 'https://example.com' }), /on this PC/);
 });
+
+// ---- review of the engine (automated security review): mix-up protection and loopback discovery
+
+test('RFC 9207: an answer that names a different issuer than the one the sign-in started with is refused, and uses up the state', async () => {
+  const t = await setup();
+  try {
+    const started = await t.oauth.startSignIn(t.f.server);
+    const { code, state } = t.f.browse(started.authUrl);
+    await rejectsWith(t.oauth.completeSignIn({ state, code, iss: 'https://evil.example' }), 'mcp.oauth.issuerMismatch');
+    await rejectsWith(t.oauth.completeSignIn({ state, code }), 'mcp.oauth.badState'); // the state is gone
+    // the right issuer (with or without a trailing slash) and no issuer at all are both fine
+    const again = await t.oauth.startSignIn(t.f.server);
+    const b = t.f.browse(again.authUrl);
+    assert.equal((await t.oauth.completeSignIn({ state: b.state, code: b.code, iss: `${again.authUrl.startsWith('http://127.0.0.1') ? new URL(again.authUrl).origin : ''}/` })).serverId, t.f.server.id);
+  } finally { await t.f.close(); }
+});
+
+test('a connector out on the internet cannot send sign-in to an address on this computer', async () => {
+  const seen = [];
+  const secrets = memorySecretStore();
+  const evil = 'http://127.0.0.1:9';
+  const fetchImpl = async (url) => {
+    seen.push(String(url));
+    const u = String(url);
+    const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('oauth-protected-resource')) return json({ resource: 'https://connector.example.test/mcp', authorization_servers: [evil] });
+    return json({ issuer: evil, authorization_endpoint: `${evil}/a`, token_endpoint: `${evil}/t` });
+  };
+  const oauth = createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl });
+  const server = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', url: 'https://connector.example.test/mcp' };
+  await rejectsWith(oauth.discover(server), 'mcp.oauth.badUrl', /address on this computer/);
+  assert.ok(!seen.some((u) => u.startsWith(evil)), 'nothing was fetched from this computer');
+  // resource_metadata given by a remote connector's 401 header, pointing at this computer
+  await rejectsWith(oauth.discover(server, { resourceMetadataUrl: `${evil}/prm` }), 'mcp.oauth.badUrl', /address on this computer/);
+  // a remote connector whose sign-in server is on https is fine at this step (and the metadata may not mix in loopback endpoints)
+  const mixed = async (url) => {
+    const u = String(url);
+    const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('oauth-protected-resource')) return json({ resource: 'https://connector.example.test/mcp', authorization_servers: ['https://auth.example.test'] });
+    return json({ issuer: 'https://auth.example.test', authorization_endpoint: 'https://auth.example.test/a', token_endpoint: `${evil}/t` });
+  };
+  await rejectsWith(createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl: mixed }).discover(server), 'mcp.oauth.badUrl', /address on this computer/);
+});
