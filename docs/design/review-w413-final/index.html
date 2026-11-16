@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>W4-13 model picker</title>
+<link rel="stylesheet" href="../bunny-design-system.css">
+<style>
+
+/* page chrome (not part of the proposal) */
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif)}
+.page{max-width:1320px;margin:0 auto;padding:24px 16px 90px}
+.page h1{font-size:24px;margin:0 0 4px}.page h2{font-size:20px;margin:0}.page h3{font-size:16px;margin:22px 0 4px}
+.pg-dim{color:var(--text-dim)}
+.bar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--text);padding:6px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--on-ink)}
+.screen{margin-top:44px;border-top:1px solid var(--line);padding-top:20px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:13px;color:var(--text-dim)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;align-items:start}
+.pair.stack{grid-template-columns:1fr}
+figure.f{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;min-width:0}
+figure.f figcaption{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:14px}
+figure.f figcaption.p{color:var(--accent)}
+.imgbox{padding:10px;text-align:center}.imgbox img{max-width:100%;height:auto;border:1px solid var(--line)}
+.fitbox{padding:10px;overflow:hidden}
+ul.notes{margin:12px 0 0;padding-left:20px}ul.notes li{margin:4px 0}
+.page code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.q{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 14px;margin:8px 0}
+@media (max-width:1000px){.pair{grid-template-columns:1fr}}
+
+
+/* W4-13 model picker drawing: Bunny tokens only; names and providers are invented. */
+.mp{font:14px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif);color:var(--text);text-align:left}
+.mp *{box-sizing:border-box}
+.mp .back{background:var(--bg-sidebar);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;gap:16px;align-items:flex-start;width:max-content}
+.mp .back.m{width:390px;padding:0;border-radius:0;flex-direction:column;gap:0;position:relative;min-height:640px;background:var(--bg)}
+.mp .col{display:flex;flex-direction:column;gap:12px}
+.mp .msg{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;width:460px}
+.mp .back.m .msg{width:auto;margin:14px}
+.mp .note8{font-size:12.5px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:6px 10px;display:flex;gap:8px;align-items:center;width:460px}
+.mp .back.m .note8{width:auto;margin:0 14px}
+.mp .comp{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:grid;gap:10px;width:460px}
+.mp .back.m .comp{width:auto;margin:14px;position:absolute;left:0;right:0;bottom:0}
+.mp .comp .ph{color:var(--text-faint)}
+.mp .trig{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 10px;font-size:12.5px;max-width:100%}
+.mp .trig b{font-weight:600;color:var(--accent);white-space:nowrap}.mp .trig .via{color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp .pick{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-pop);width:460px;overflow:hidden;display:flex;flex-direction:column}
+.mp .back.m .pick{width:auto;border-radius:16px 16px 0 0;border-width:1px 0 0;position:absolute;left:0;right:0;bottom:0;z-index:3;max-height:600px}
+.mp .scrim{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:2}
+.mp .srch{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.mp .srch .in{flex:1;color:var(--text-faint);min-width:0}.mp .srch .in.v{color:var(--text)}
+.mp .fbtn{border:1px solid var(--line);border-radius:8px;padding:2px 9px;font-size:12px;color:var(--text-dim);white-space:nowrap}
+.mp .fbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.mp .filt{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
+.mp .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mp .chips .l{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;width:64px}
+.mp .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:1px 9px;font-size:12px;color:var(--text-dim)}
+.mp .chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.mp .srow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-dim)}
+.mp .selx{border:1px solid var(--line);border-radius:6px;padding:0 6px;background:var(--surface);color:var(--text)}
+.mp .tgl{width:30px;height:18px;border-radius:999px;background:var(--line-strong);position:relative;display:inline-block;vertical-align:middle}
+.mp .tgl::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--surface)}
+.mp .tgl.on{background:var(--accent)}.mp .tgl.on::after{left:auto;right:2px}
+.mp .lst{padding:6px;overflow:hidden}
+.mp .sec{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;padding:10px 8px 4px}
+.mp .rw{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 8px;border-radius:8px}
+.mp .rw.on{background:var(--hover)}
+.mp .rw .tk{color:var(--accent);font-size:12px}
+.mp .rw .nm{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp .rw .sb{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.mp .pt{font-size:11px;border-radius:4px;padding:0 5px;background:var(--bg-sidebar);color:var(--text-dim);border:1px solid var(--line)}
+.mp .pt.first{color:var(--text);border-color:var(--line-strong)}
+.mp .pt.out{text-decoration:line-through;color:var(--text-faint)}
+.mp .fr{font-size:10.5px;color:var(--ok);background:var(--ok-soft);border-radius:4px;padding:0 4px;margin-left:3px;white-space:nowrap;text-decoration:none;display:inline-block}
+.mp .fr.d{color:var(--warn);background:var(--warn-soft)}
+.mp .mt{font-size:11.5px;color:var(--text-faint);text-align:right;white-space:nowrap}
+.mp .mt .mo{color:var(--text-dim);margin-left:6px}
+.mp .auto{background:var(--accent-soft)}.mp .auto .nm{color:var(--accent)}
+.mp .inf{font-size:12.5px;color:var(--text-dim)}
+.mp .empty{padding:26px 10px;color:var(--text-faint);text-align:center;font-size:13px}
+.mp .det{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px;display:grid;gap:14px;width:300px;box-shadow:var(--shadow-sm)}
+.mp .back.m .det{width:auto;border-radius:16px 16px 0 0;border-width:1px 0 0;position:absolute;left:0;right:0;bottom:0;z-index:4}
+.mp .det h3{margin:0;font-size:15px;font-weight:600}
+.mp .det .k{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.mp .sg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.mp .sg span{padding:3px 10px;font-size:12.5px;color:var(--text-dim)}.mp .sg span.on{background:var(--accent-soft);color:var(--accent)}
+.mp .po{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.mp .po li{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px}
+.mp .po li .n{font:11px var(--font-mono,ui-monospace,Consolas,monospace);color:var(--text-faint);width:12px}
+.mp .po li .p{flex:1;min-width:0}
+.mp .po li .s{font-size:11px;color:var(--ok)}.mp .po li .s.o{color:var(--warn)}
+.mp .po li .mv{color:var(--text-faint);font-size:12px;letter-spacing:2px}
+.mp .btn8{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:4px 10px;font-size:12.5px;display:inline-block}
+.mp .legend{display:grid;gap:8px;width:560px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px}
+.mp .legend div{display:flex;gap:10px;align-items:baseline}
+.mp .tags{display:flex;gap:6px;flex-wrap:wrap}
+</style></head><body>
+<div class="bar"><strong>W4-13 model picker</strong>
+  <span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></span>
+  <span class="seg" id="size"><button data-v="d" aria-pressed="true">Desktop 1440</button><button data-v="m" aria-pressed="false">Phone 390</button></span></div>
+<div class="page">
+<h1>W4-13: the model picker, today beside proposed</h1>
+<p class="pg-dim">Design session, 2026-11-17, from the Chief of Staff's suggested drawing (53db7c6, which the owner liked). One row per model with every provider as a tag; filters for provider and what a model can do; "Free" and "Free daily" with a Free only switch that shows both; a details panel; and an automatic switch to the same model on the next provider, with one quiet note. States: default, filters on, no match, details, a provider out ("Back tomorrow"), and the switch note.</p>
+<p class="pg-dim"><strong>Not covered, stated plainly:</strong> no contrast ratios measured (UNKNOWN); the models and providers (Falcon Flash, Harbor and so on) are invented; the "today" picture is the real picker with its model names replaced in the page, because the offline test models all look the same; the real model catalogue and where the Free tags would come from are not checked (UNKNOWN); the prototype's interactivity is not reproduced, only its states.</p>
+<div id="out"></div>
+<div class="screen" id="decisions"><h2>Decisions, each with a recommendation</h2><div id="dec"></div></div>
+</div>
+<script>
+const M=[
+ {id:'falcon',name:'Falcon Flash',ctx:'1M',caps:['Code','Tools','Speech'],prov:[['Harbor','d'],['Meadow','f'],['Quill','']]},
+ {id:'otter',name:'Otter 3 Coder',ctx:'256K',caps:['Code','Tools'],prov:[['Harbor','d'],['Meadow','d']]},
+ {id:'willow',name:'Willow 7B',ctx:'128K',caps:['Vision'],prov:[['Harbor','f'],['Quill','']]},
+ {id:'pine',name:'Pine VL',ctx:'256K',caps:['Vision','Tools','Reasoning'],prov:[['Harbor','d']]},
+ {id:'birch',name:'Birch Large',ctx:'256K',caps:['Code','Tools'],prov:[['Harbor',''],['Meadow','']]},
+ {id:'reef',name:'Reef Image',ctx:'n/a',caps:['Image'],prov:[['Meadow','d']]}];
+const by=(id)=>M.find(m=>m.id===id);
+const badge=(k)=>k==='f'?'<i class="fr">Free</i>':k==='d'?'<i class="fr d">Free daily</i>':'';
+const tag=(p,i,out)=>`<span class="pt ${i===0&&!out?'first':''} ${out?'out':''}">${p[0]}${badge(p[1])}</span>`;
+const rowH=(m,o={})=>{const out=o.out||{};return `<div class="rw ${o.on?'on':''}"><span class="tk">${o.tick?'✓':''}</span><div style="min-width:0"><div class="nm">${m.name}${o.fav?' ★':''}</div><div class="sb">${m.prov.map((p,i)=>tag(p,i,out[m.id+'|'+p[0]])).join('')}</div></div><div class="mt">${m.ctx}<span class="mo">Default ›</span></div></div>`;};
+const autoRow=`<div class="rw auto"><span class="tk">✓</span><div><div class="nm">Auto</div><div class="inf">Picks the best model for each message, then the next if one is busy</div></div><span></span></div>`;
+const chip=(t,on)=>`<span class="chip ${on?'on':''}">${t}</span>`;
+const filtH=(o)=>`<div class="filt"><div class="chips"><span class="l">Provider</span>${['Harbor','Meadow','Quill'].map(x=>chip(x,o.prov&&o.prov.includes(x))).join('')}</div><div class="chips"><span class="l">Can do</span>${['Code','Vision','Tools','Reasoning','Image','Speech'].map(x=>chip(x,o.caps&&o.caps.includes(x))).join('')}</div><div class="srow"><span><i class="tgl ${o.free?'on':''}"></i> Free only <span class="inf">(Free and Free daily)</span></span><span>Sort <span class="selx">Recommended ▾</span></span><span style="color:var(--accent)">Clear filters</span></div></div>`;
+const pickH=(o={})=>`<div class="pick"><div class="srch"><span>⌕</span><span class="in ${o.q?'v':''}">${o.q||'Search models'}</span><span class="fbtn ${o.filters?'on':''}">Filters${o.nf?' · '+o.nf:''}</span></div>${o.filters?filtH(o):''}<div class="lst">${o.body}</div></div>`;
+const defBody=(out)=>autoRow+`<div class="sec">Favourites</div>${rowH(by('willow'),{fav:1,out})}<div class="sec">Recent</div>${rowH(by('falcon'),{on:1,out})}${rowH(by('otter'),{out})}<div class="sec">All models · 6</div>${rowH(by('pine'),{out})}${rowH(by('birch'),{out})}${rowH(by('reef'),{out})}`;
+const detH=(m,out={})=>{out=out||{};return `<div class="det"><div><h3>${m.name}</h3><div class="inf">${m.ctx} context · ${m.caps.join(', ')}</div></div><div><div class="k">Thinking</div><div class="sg"><span class="on">Default</span><span>None</span><span>Thinking</span></div></div><div><div class="k">Providers, in the order Bunny tries them</div><ol class="po">${m.prov.map((p,i)=>{const o=out[m.id+'|'+p[0]];return `<li><span class="n">${i+1}</span><span class="p">${p[0]}${badge(p[1])}</span><span class="s ${o?'o':''}">${o?(p[1]==='d'?'Back tomorrow':'Ran out'):'Ready'}</span><span class="mv">↑↓</span></li>`;}).join('')}</ol><div class="inf" style="margin-top:6px">${m.prov.length>1?'If the first runs out, Bunny moves to the next and tells you in one line.':'Only one provider has this model, so a limit moves the reply to another model.'}</div></div><div><span class="btn8">☆ Add to favourites</span></div></div>`;};
+const trigH=(t)=>`<span class="trig"><b>${t.a}</b><span class="via">${t.v}</span> ⌄</span>`;
+const compH=(t)=>`<div class="comp"><div class="ph">Reply to Bunny…</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="inf">Auto ▾</span>${trigH(t)}</div></div>`;
+const MSG='<div class="msg">Refactor the settings loader so it reads the file once.</div>';
+const frame=(o)=>{
+ const t=o.trig||{a:'Auto',v:'· Falcon Flash on Harbor'};
+ if(size==='d')return `<div class="mp"><div class="back"><div class="col">${MSG}${o.note?`<div class="note8">${o.note}</div>`:''}${o.pick||''}${compH(t)}</div>${o.det||''}</div></div>`;
+ const sheet=o.det&&o.detOnly?o.det:o.pick||'';
+ return `<div class="mp"><div class="back m">${MSG}${o.note?`<div class="note8">${o.note}</div>`:''}${(sheet)?'<div class="scrim"></div>':''}${sheet}${o.pick?'':compH(t)}</div></div>`;};
+const OUT={'falcon|Harbor':1};
+const stateRows=[
+ ['Open, nothing chosen yet: Auto first, then Favourites and Recent, then all models. One row per model; every provider that serves it is a tag; the first tag is tried first',()=>frame({pick:pickH({body:defBody({})}),det:detH(by('falcon'))})],
+ ['Filters on: Provider Meadow, Can do Code, Free only. The count says how many match; a model must have a provider that fits Provider and Free together',()=>frame({pick:pickH({filters:1,nf:3,prov:['Meadow'],caps:['Code'],free:1,body:`<div class="sec">2 of 6 models</div>${rowH(by('falcon'),{})}${rowH(by('otter'),{})}`}),det:detH(by('falcon'))})],
+ ['No match: a plain sentence and one way out',()=>frame({pick:pickH({filters:1,nf:2,prov:['Quill'],caps:['Image'],body:`<div class="empty">No model matches these filters. Clear a filter to see more.<div style="margin-top:8px;color:var(--accent)">Clear filters</div></div>`}),det:detH(by('falcon'))})],
+ ['The details panel for one model: a thinking choice, its providers in the order Bunny tries them (move with the arrows), and a favourite. On phone it is a sheet that replaces the list; Back returns',()=>frame({pick:pickH({body:defBody({})}),det:detH(by('willow')),detOnly:1})],
+ ['A provider is out: Harbor ran out of its daily free limit. Its tag is struck through in the list and the panel says "Back tomorrow". The model is still pickable; Bunny uses the next provider',()=>frame({pick:pickH({body:defBody(OUT)}),det:detH(by('falcon'),OUT),detOnly:1})],
+ ['The switch note: when a provider fails, the reply carries on with the same model on the next provider, and one quiet line says so (not red: nothing is broken)',()=>frame({note:'↪ Switched to Falcon Flash on Meadow: Harbor used up today’s free limit.',trig:{a:'Auto',v:'· Falcon Flash on Meadow'}})]
+];
+const legend=()=>`<div class="mp"><div class="legend"><div><span class="tags"><i class="fr">Free</i></span><span>No cost. Shown only where the provider’s own catalogue says so.</span></div><div><span class="tags"><i class="fr d">Free daily</i></span><span>Free up to a daily limit that resets every day. When it is used up the tag says &ldquo;Back tomorrow&rdquo;.</span></div><div><span class="tags"><span class="pt">Quill</span></span><span>No tag: you pay, or Bunny does not know. Bunny never guesses a tag.</span></div><div><span class="tgl on" style="flex:none"></span><span><b>Free only</b> shows both Free and Free daily.</span></div></div></div>`;
+const SEC=[{t:'The model picker, redrawn (W4-13)',risk:'MEDIUM (the picker every chat uses, plus the model list and the fallback on the chat path); the Free tags are only as true as the provider catalogue (UNKNOWN who keeps it)',files:'src/ui/chat.js:321 renderPicker (trigger), :366 openPicker, :425-455 the list build, :458 pickerItem; src/ui/app.css:1209-1228, :1621-1624; model list and fallback on the server (Builder to name the files)'}];
+const NOTES=[
+ '<b>Today (the picture above):</b> the picker lists every model once <i>per provider</i>: the same model appears under "Best for Chat" several times and again under each provider heading. There are no filters, no free labels, no details, and no way to say which provider to use first. The names in the picture were replaced for the drawing (the offline test models all look alike); the layout is the real one.',
+ '<b>One row per model.</b> Providers are tags under the name; the first tag, in dark text, is the one tried first. Right side: context size and a "Default ›" link that opens the details (the word is the current thinking choice).',
+ '<b>Free (owner, 2026-11-17):</b> two kinds, "Free" (no cost) and "Free daily" (free up to a limit that resets every day). "Free only" shows both. The owner\'s words: most providers have daily free limits, so they count as free.',
+ '<b>Switching (owner: "Yes, with a note"):</b> when a provider fails or runs out, Bunny switches by itself to the same model on the next provider in the order and writes one dim line under the reply: "Switched to Falcon Flash on Meadow: Harbor used up today’s free limit." If no provider has the model left: "Switched to Otter 3 Coder: no provider has Falcon Flash left (Harbor hit its limit)." It is the same amber note as the model-fallback line, never an error box.',
+ '<b>Filters:</b> a Filters button beside the search opens a strip with Provider chips, Can-do chips, Free only, Sort (Recommended, Name, Context size) and Clear filters; the button shows how many are on. Filters combine with AND, and a model must have a provider that fits Provider and Free together. Filtering hides Auto, Favourites and Recent and shows "N of M models".',
+ '<b>Details:</b> opens from "Default ›" or by choosing a model. Desktop: a panel beside the list (300 px). Phone: a sheet over the list with a Back button. The thinking choice and the provider order are saved per model.',
+ '<b>Keys:</b> Ctrl+\' opens the picker (as the prototype), type to search, arrows and Enter pick, Esc closes. Clicking a row picks the model with its provider order; Auto stays the first row.',
+ '<b>Phone:</b> the picker is a bottom sheet with a scrim, the filters strip wraps, rows keep 40 px height, and the details replace the list. Both widths are drawn with the toggle at the top.',
+ '<b>Same commit (O7):</b> help text and any picture of the picker. Not changed: the "Show models" setting, which still hides models by its own rule.'];
+const DEC=[
+ ['Source of the Free and Free daily tags','Only what the provider catalogue states; nothing is guessed, and a missing tag means unknown or paid. UNKNOWN who maintains the catalogue today; Builder to say where it lives. Recommendation: as drawn.'],
+ ['Does the order of providers belong to the model or to the person?','To the person: saved per model, on this computer. Default order: Free first, then Free daily, then the rest. Recommendation: as drawn.'],
+ ['Automatic switch (owner: yes, with a note)','Same model, next provider, one amber line. It never switches to a different model silently; if no provider is left it says so and falls back as today. Recommendation: as drawn.'],
+ ['Is it a new picker or a change to the old one?','A change to the same control (same trigger, same keys), so nothing else in the app moves. Recommendation: as drawn.'],
+ ['Names in the drawing','Models and providers (Falcon Flash, Harbor, Meadow, Quill) are invented. Recommendation: Builder checks the real catalogue for the first build and shoots the proof on invented data again.']];
+let theme='light',size='d';
+const q=(s)=>document.querySelector(s);
+const fit=()=>document.querySelectorAll('.fitbox').forEach(b=>{const fr=b.firstElementChild&&b.firstElementChild.firstElementChild&&b.firstElementChild.firstElementChild.firstElementChild;if(!fr)return;const w=fr.offsetWidth;const sc=Math.min(1,(b.clientWidth-4)/w);b.firstElementChild.style.transform='scale('+sc+')';b.firstElementChild.style.transformOrigin='0 0';b.style.height=(fr.offsetHeight*sc+4)+'px';});
+function render(){
+ const out=q('#out');out.innerHTML='';
+ const s=SEC[0];const sec=document.createElement('section');sec.className='screen';
+ let h='<h2>'+s.t+'</h2><div class="meta"><span class="tag">Risk: '+s.risk+'</span><span class="tag">'+s.files+'</span></div>';
+ h+=`<figure class="f"><figcaption>Today, as built (${theme}, ${size==='d'?'1440':'390'})</figcaption><div class="imgbox"><img src="shots/today-picker-${theme}-${size}.png" alt="Today: the model picker"></div></figure>`;
+ h+=stateRows.map(([l,f])=>`<figure class="f"><figcaption class="p">${l}</figcaption><div class="fitbox"><div style="width:max-content"><div>${f()}</div></div></div></figure>`).join('');
+ h+=`<figure class="f"><figcaption class="p">What the two free tags mean (the legend, shown once in the picker’s help and in the details panel)</figcaption><div style="padding:14px">${legend()}</div></figure>`;
+ h+='<ul class="notes">'+NOTES.map(n=>'<li>'+n+'</li>').join('')+'</ul>';
+ sec.innerHTML=h;out.append(sec);
+ q('#dec').innerHTML=DEC.map(d=>'<div class="q"><b>'+d[0]+'</b><br><span class="pg-dim">'+d[1]+'</span></div>').join('');
+ fit();
+}
+for(const [id,set] of [['theme',v=>{theme=v;document.documentElement.dataset.theme=v}],['size',v=>{size=v}]])
+ q('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;q('#'+id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));set(b.dataset.v);render();});
+if(matchMedia('(prefers-color-scheme:dark)').matches){theme='dark';document.documentElement.dataset.theme='dark';q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='dark'))}
+addEventListener('resize',fit);
+render();
+</script></body></html>
