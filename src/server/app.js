@@ -2205,9 +2205,20 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           send('tasks', { tasks: currentTasks });
           return `The person now sees your plan: ${currentTasks.filter((t) => t.done).length} of ${currentTasks.length} done.`;
         }
+        // One check for every path: a tool that was not offered to the model in this reply never runs, whatever
+        // it is (a hallucinated call, or text in a file telling it to). Plan mode relies on this.
+        if (!toolDefinitions.some((d) => d.function?.name === name)) {
+          send('tool', { tool: name, status: 'denied' });
+          return `${name} is not available in this reply, so it was not run.`;
+        }
         if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
           const summary = describeBrowserTool(name, parsed);
+          if (planRefuses(BROWSER_TOOL_RISK[name])) {
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            send('tool', { tool: summary, status: 'denied' });
+            return planRefusal(name);
+          }
           if (needsOk(BROWSER_TOOL_RISK[name])) {
             const allowed = await askPermission(summary, '');
             if (!allowed) {
