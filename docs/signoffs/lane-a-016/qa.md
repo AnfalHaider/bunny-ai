@@ -1,9 +1,9 @@
 ---
 piece: lane-a-016
 role: qa
-sha: 19e1455
+sha: aebb866
 verdict: PASS
 date: 2026-11-16
 ---
 
-Supersedes my PASS at 9fb372f (19e1455 adds LA-4, a 5 s budget for regex searches). Gate at 19e1455, one run under machine load: 7/7 (unit 74s, e2e 339s), no failing test. Walk of a Code chat on an invented folder, 12 of 12 PASS: search_files regex plus case switch plus path plus include reads Searched for /TODO[digits]/ in src (*.js) with the right matches only; find_files reads Searched for files matching **/*.test.js, newest first; a search and a find in one reply group as Searched two times; counts output works; an invalid regex is a clear failed step; multi_edit with a failing edit changes nothing and shows no Undo; multi_edit with three edits gives one Undo card and one Changes card, and Undo restores the file byte for byte; a catastrophic regex stops in 2 s with That pattern is too slow; a pathological glob answers in 0.7 s; an edit past 20 MB is refused and the file is untouched. NOT exercised: the LA-4 5 s total budget message on a very large folder (covered by Builder unit tests only), and the two-gates-at-once proof, which the Chief runs at assembly. Walk script e2e/lane-a-walk.mjs. Electron not run.
+Supersedes my PASS at 19e1455. The delta 19e1455 to aebb866 is test-only (test/workspace-search.test.js, timing bounds measured in CPU time with room for a saturated machine); no app code changed, so my walk at 19e1455 (12 of 12) and gate (7 of 7) stand. Unit run at aebb866, named: run 1 hit my 400 s limit on a machine with about 97 node processes from other sessions and showed two timing failures, LA-2 regex search across many files stays fast (7.6 s, Search stopped after 5 s) and LA-4 the event loop keeps ticking while a regex search walks many files (5.6 s, Search stopped after 5 s); every test file passes on its own (test/workspace-search.test.js 30 of 30 twice, 7.7 s) and run 2 of the whole suite was clean: 553 pass, 0 fail, 47 s (8 todo). So the new bounds are not yet saturation-proof: the two tests fail when the whole suite runs on a loaded machine, because the 5 s total budget of the search itself (LA-4) is a wall-clock limit that the tests cannot loosen. Not a lane A defect; belongs to W4-1c. Walk script e2e/lane-a-walk.mjs. Electron not run.
