@@ -197,6 +197,8 @@ function refuseGh(words, ctx) {
   const { group, sub, at } = ghCall(words);
   const live = (ctx.livePushers ?? ['release-ops', 'hotfix']).includes(ctx.role);
   const ownerOnly = 'changes or removes a published release that every installed copy updates from: only the owner runs it.';
+  // Tech Lead 51562ee: gh auth status prints the sign-in token with --show-token (-t): refused for every role, live pushers too
+  if (group === 'auth' && words.some((w) => /^--show-token(=|$)/.test(w.text) || /^-[A-Za-z]*t[A-Za-z]*$/.test(w.text))) return '"gh auth" with --show-token (-t) prints the sign-in token: it is refused for every role.';
   if (GH_OWNER_ONLY.some(([g, s]) => g === group && s === sub)) return `"gh ${group} ${sub}" ${ownerOnly}`;
   if (group === 'release' && sub === 'upload' && words.some((w) => /^--clobber(=|$)/.test(w.text))) return `"gh release upload --clobber" replaces a published file: it ${ownerOnly}`;
   if (group === 'api') {
