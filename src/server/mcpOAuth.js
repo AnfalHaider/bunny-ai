@@ -24,6 +24,17 @@ const REFRESH_SKEW_MS = 60_000;
 const CALLBACK_PATH = '/api/connectors/oauth/callback';
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
+/** An address on this computer or this network (not the internet): loopback in any spelling, 0.0.0.0, private and link-local ranges. */
+function isLocalHost(hostname) {
+  const h = String(hostname).toLowerCase().replace(/\.$/, '');
+  if (h === 'localhost' || h.endsWith('.localhost') || h === '[::1]' || h === '[::]' || h === '0.0.0.0') return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return /^\[(::1|::ffff:|fe80:|fc|fd)/i.test(h);
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+const notRemoteSafe = (url) => { const u = new URL(url); return u.protocol !== 'https:' || isLocalHost(u.hostname); };
+
 const tokenKey = (serverId) => `mcp:${serverId}:oauth`;
 const clientKey = (issuer, redirectUri) => `mcp-oauth-client:${issuer}|${redirectUri}`;
 
@@ -125,7 +136,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
   function assertScope(meta, serverUrl) {
     if (!serverUrl || LOOPBACK.has(new URL(serverUrl).hostname)) return meta;
     for (const field of ['issuer', 'authorization_endpoint', 'token_endpoint', 'registration_endpoint', 'revocation_endpoint', 'userinfo_endpoint']) {
-      if (meta[field] && new URL(meta[field]).protocol !== 'https:') throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
+      if (meta[field] && notRemoteSafe(meta[field])) throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
     }
     return meta;
   }
@@ -169,7 +180,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
   async function discover(server, { resourceMetadataUrl = null } = {}) {
     const target = checkUrl(server?.url, 'connector address');
     const remote = !LOOPBACK.has(target.hostname);
-    if (remote && resourceMetadataUrl && new URL(resourceMetadataUrl).protocol !== 'https:') throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
+    if (remote && resourceMetadataUrl && notRemoteSafe(resourceMetadataUrl)) throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
     const prmUrl = resourceMetadataUrl ? checkUrl(resourceMetadataUrl, 'protected-resource information').href : `${target.origin}/.well-known/oauth-protected-resource`;
     const prm = await getJson(prmUrl, 'protected-resource information');
     let issuerUrl;
@@ -182,7 +193,7 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     } else {
       issuerUrl = target.origin; // fall back to the connector's own origin
     }
-    if (remote && new URL(issuerUrl).protocol !== 'https:') throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
+    if (remote && notRemoteSafe(issuerUrl)) throw fail('This connector pointed sign-in at an address on this computer, so Bunny AI refuses it.', 'mcp.oauth.badUrl');
     const meta = await authServerMetadata(issuerUrl, target.href);
     const list = (scopes ?? meta.scopes_supported ?? []).filter((s) => typeof s === 'string');
     return { issuer: meta.issuer, meta, scope: list.length ? list.join(' ') : null };

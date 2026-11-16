@@ -546,3 +546,16 @@ test('a connector out on the internet cannot send sign-in to an address on this 
   };
   await rejectsWith(createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl: mixed }).discover(server), 'mcp.oauth.badUrl', /address on this computer/);
 });
+
+test('a remote connector may not name this computer or this network, over https either, in any spelling', async () => {
+  const secrets = memorySecretStore();
+  const server = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', url: 'https://connector.example.test/mcp' };
+  const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
+  for (const bad of ['https://127.0.0.1:9', 'https://localhost:9', 'https://localhost.:9', 'https://127.1.2.3', 'https://10.0.0.5', 'https://192.168.1.1', 'https://172.20.0.1', 'https://169.254.169.254', 'https://[::1]', 'https://0.0.0.0', 'https://sub.localhost']) {
+    const fetchImpl = async (url) => (String(url).includes('oauth-protected-resource') ? json({ authorization_servers: [bad] }) : json({ issuer: bad, authorization_endpoint: `${bad}/a`, token_endpoint: `${bad}/t` }));
+    await rejectsWith(createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl }).discover(server), 'mcp.oauth.badUrl', /address on this computer/);
+  }
+  // a public https address is still fine
+  const ok = async (url) => (String(url).includes('oauth-protected-resource') ? json({ authorization_servers: ['https://auth.example.test'] }) : json({ issuer: 'https://auth.example.test', authorization_endpoint: 'https://auth.example.test/a', token_endpoint: 'https://auth.example.test/t' }));
+  assert.equal((await createMcpOAuth({ secrets, redirectBase: REDIRECT_BASE, fetchImpl: ok }).discover(server)).issuer, 'https://auth.example.test');
+});
