@@ -375,9 +375,16 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Keep going on long jobs</div>
-          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps.</div>
+          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps or the time below, whichever comes first.</div>
         </div>
         <div class="right"><input id="auto-steps" type="number" min="0" step="50" aria-label="Most steps in one reply" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Longest long job</div>
+          <div class="desc">The most minutes one reply may keep working in Code mode. The default is 120 (2 hours).</div>
+        </div>
+        <div class="right"><input id="auto-minutes" type="number" min="0" step="10" aria-label="Most minutes in one reply" /></div>
       </div>
       <div class="row">
         <div class="meta-col">
@@ -866,6 +873,11 @@
     e.target.value = n;
     await save({ autoContinueSteps: n });
   });
+  $('auto-minutes').addEventListener('change', async (e) => {
+    const n = Math.max(0, Math.round(Number(e.target.value) || 0));
+    e.target.value = n;
+    await save({ autoContinueMinutes: n });
+  });
   $('max-tokens').addEventListener('change', async (e) => {
     const n = Math.max(256, Math.round(Number(e.target.value) || 4096));
     e.target.value = n;
@@ -978,6 +990,7 @@
     renderAliases(settings.aliases ?? {});
     $('max-tokens').value = Number(settings.maxTokens) || 4096;
     $('auto-steps').value = settings.autoContinueSteps ?? 500;
+    $('auto-minutes').value = settings.autoContinueMinutes ?? 120;
     language.value = settings.language ?? 'en';
     applyLanguage(language.value);
     notifications.checked = Boolean(settings.notifications);
