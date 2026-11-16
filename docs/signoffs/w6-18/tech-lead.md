@@ -1,9 +1,9 @@
 ---
 piece: w6-18
 role: tech-lead
-sha: ca3e309
+sha: a09ca84
 verdict: PASS
 date: 2026-11-16
 ---
 
-Reviewed the diff against 9fb372f (the branch is cut from 9fb372f, not 19e1455: merge lane A before the gate). Results are kept whole for a model that takes over (newest 12 steps 4,000 characters, older 400, 40,000 per turn), big results (over 6,000) are saved to .bunny/notes/step-*.txt with the path stored (only a path matching that pattern is accepted by the session store), and the plan and the latest two screenshots are carried over. Saving is limited to workspace tools, never in Plan mode, never through a linked .bunny or notes folder (lstat before mkdir, realpath check), with a .bunny/.gitignore of *. Unit suite at ca3e309: 554 pass, 1 fail (the known wall-clock 5,000-file search under load). Notes for the owner, not blocking: the files are written without a per-write question in Manual mode and are not in the undo list; they can hold anything a command printed (a secret), so the .gitignore matters; they are never cleaned up. e2e not run by me.
+Re-review of ca3e309..a09ca84. The notes are now in the reply's undo list, written with the exclusive flag and checked after writing for a real location inside the workspace, and notes older than a week are removed whenever a new one is saved. New secretLike.js: a result that looks like a key, token, password, an env or key file, or is over 128 KB is neither kept for replay nor saved (fails closed; patterns are bounded, no catastrophic backtracking seen). Lane A is merged. Tests extended. Still true: the file is written without a question in Manual mode (it is in the undo list now). e2e not run by me.

@@ -1,9 +1,9 @@
 ---
 piece: w6-4
 role: tech-lead
-sha: 442d61c
-verdict: FAIL
+sha: 71b8fff
+verdict: PASS
 date: 2026-11-16
 ---
 
-Reviewed the diff on 19e1455; merges cleanly with W6-2 and with W6-3 apart from their own adjacent conflict. The hold-back, the show-it-if-it-was-not-a-call path and the error for an unoffered tool are sound. One required fix: an unclosed written call now runs whatever ended it. I probed parseTextToolCalls with a reply cut off by the token limit in the middle of a write_file content parameter: it returns a write_file call with the half-written text, and the loop runs it (there is no check of finish). In Auto, or after the person says yes, the file is overwritten with a truncated copy. Fix: run an unclosed call only when the round ended normally; when finish is length (or the stream ended inside a tag), do not run it, say so to the model ("your reply was cut off inside a call; send it again in smaller pieces") and let it retry; add a test with a cut-off write_file. Note: text that merely quotes call markup (an explanation of the format) is still run as before. e2e not run by me.
+Re-review of 442d61c..71b8fff. A reply that ends on the length limit with a written-out call, or a native call whose JSON arguments do not parse, is not run: the model is told the call was NOT run and to resend in smaller pieces, up to 3 times, then a clear error. The tests cover both shapes and check that the half file is not sent back, and that a complete call still runs without its closing tags. Residual, not blocking: an unclosed written call that ends without a length finish (a clean connection close with no stop reason) would still run; treating a missing finish reason as cut off would close it. e2e not run by me.
