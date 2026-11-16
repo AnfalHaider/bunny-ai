@@ -94,3 +94,13 @@ test('looksSecret: keys, tokens, .env and the environment are caught; ordinary o
   assert.equal(looksSecret('', 'Run printenv'), true);
   for (const t of ['row of data\n'.repeat(50), 'Built 12 files in 3 s', 'function token() {}']) assert.equal(looksSecret(t, 'Read src/a.js'), false, t);
 });
+
+test('looksSecret keeps its reach: aligned and multiline YAML, long keys, and too-big text fail closed', () => {
+  assert.equal(looksSecret('database:\n  password:            hunter2hunter2\n'), true, 'aligned YAML');
+  assert.equal(looksSecret(`${'x'.repeat(120)}_api_key = abcdefgh12345678`), true, 'a long variable name');
+  assert.equal(looksSecret('SECRET_TOKEN   =   "abcdefgh1234"'), true, 'spaces around the sign');
+  assert.equal(looksSecret(`${'a'.repeat(200_000)}`), true, 'too big to scan: treated as secret');
+  const start = Date.now();
+  looksSecret(`${'token '.repeat(20_000)}`);
+  assert.ok(Date.now() - start < 1000, 'and a worst-case input is still quick');
+});

@@ -12,7 +12,7 @@ const PATTERNS = [
   /\bAKIA[0-9A-Z]{16}\b/,
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/, // a JWT
   /-----BEGIN [A-Z ]*PRIVATE KEY/,
-  /(?:api[_-]?key|secret|token|passwd|password|pwd|credential)[\w.-]{0,40}\s{0,4}[=:]\s{0,4}["']?[^\s"']{8,}/i,
+  /(?:api[_-]?key|secret|token|passwd|password|pwd|credential)[\w.-]{0,200}\s{0,64}[=:]\s{0,64}["']?[^\s"']{8,}/i,
   /:\/\/[^/\s:@]+:[^@\s/]{3,}@/,                                   // user:password@host
   /[?&](access_)?(token|key|api_key|apikey|sig|signature|secret)=[A-Za-z0-9._~%-]{8,}/i,
 ];
@@ -22,9 +22,8 @@ const RISKY_STEP = /(^|[\/\s])\.env(\.|\b)|\bprintenv\b|\bGet-ChildItem\s+Env:|\
 
 export function looksSecret(text, step = '') {
   if (RISKY_STEP.test(String(step))) return true;
-  // Bounded: only the start and the end are read, so a huge result cannot hold the server up.
-  const all = String(text ?? '');
-  const s = all.length > 131_072 ? `${all.slice(0, 65_536)}
-${all.slice(-65_536)}` : all;
+  // Fail closed: a result too big to scan is treated as secret (it is never kept or saved), not scanned in part.
+  const s = String(text ?? '');
+  if (s.length > 131_072) return true;
   return PATTERNS.some((p) => p.test(s));
 }
