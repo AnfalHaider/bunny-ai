@@ -542,7 +542,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   }
 
   async function check_environment({ path } = {}) {
-    return checkEnvironment({ folder: await inside(path || '.'), run: envRunner });
+    return checkEnvironment({ folder: await inside(path || '.'), root, run: envRunner });
   }
 
   const tools = { list_files, read_file, search_files, find_files, check_environment, write_file, edit_file, multi_edit, run_command };

@@ -4,8 +4,8 @@
  * The command runner is injectable so tests need no real tools.
  */
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, open, realpath } from 'node:fs/promises';
+import { join, sep } from 'node:path';
 
 const CAP = 3000;
 const TIMEOUT_MS = 5000;
@@ -114,10 +114,29 @@ async function probe(tool, run) {
   return null;
 }
 
-const read = async (folder, name) => { try { return await readFile(join(folder, name), 'utf8'); } catch { return null; } };
+const MAX_FILE = 64 * 1024;
+
+/** A regular file inside `root` (no symlink, junction or directory), at most 64 KB of it; otherwise null. */
+async function readSafe(folder, name, root) {
+  try {
+    const file = join(folder, name);
+    const info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink()) return null;
+    const real = await realpath(file);
+    const realRoot = await realpath(root);
+    if (real !== realRoot && !real.startsWith(realRoot + sep)) return null;
+    const handle = await open(real, 'r');
+    try {
+      const buf = Buffer.alloc(Math.min(info.size, MAX_FILE));
+      const { bytesRead } = await handle.read(buf, 0, buf.length, 0);
+      return buf.subarray(0, bytesRead).toString('utf8');
+    } finally { await handle.close(); }
+  } catch { return null; }
+}
 
 /** The requirements a folder states: [{ tool, range, source }]. */
-export async function readRequirements(folder) {
+export async function readRequirements(folder, root = folder) {
+  const read = (f, name) => readSafe(f, name, root);
   const found = [];
   const add = (tool, range, source) => { if (range) found.push({ tool, range: String(range).trim(), source }); };
   const pkg = await read(folder, 'package.json');
@@ -160,7 +179,7 @@ const INSTALL_HELP = {
 };
 
 /** Build the report. `run(cmd, args)` resolves { ok, out } and must not throw. */
-export async function checkEnvironment({ folder, run = defaultRunner } = {}) {
+export async function checkEnvironment({ folder, root = folder, run = defaultRunner } = {}) {
   const versions = {};
   const rows = [];
   await Promise.all(TOOLS.map(async (t) => { versions[t.id] = await probe(t, run); }));
@@ -168,7 +187,7 @@ export async function checkEnvironment({ folder, run = defaultRunner } = {}) {
     if (versions[t.id]) rows.push(`${t.label}: ${versions[t.id]}`);
     else if (!t.optional) rows.push(`${t.label}: not installed`);
   }
-  const reqs = folder ? await readRequirements(folder) : [];
+  const reqs = folder ? await readRequirements(folder, root) : [];
   const advice = [];
   for (const r of reqs) {
     const label = TOOLS.find((t) => t.id === r.tool)?.label ?? r.tool;

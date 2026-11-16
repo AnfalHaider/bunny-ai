@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { satisfies, checkEnvironment } from '../src/server/environment.js';
+import { satisfies, checkEnvironment, readRequirements } from '../src/server/environment.js';
 import { createWorkspace, workspaceToolDefinitions, TOOL_RISK, describeToolCall } from '../src/server/workspace.js';
 
 const fake = (versions) => async (cmd) => (versions[cmd] ? { ok: true, out: versions[cmd] } : { ok: false, out: '' });
@@ -76,6 +76,34 @@ test('output stays under the cap', async () => {
   try {
     const out = await checkEnvironment({ folder: dir, run: fake(ALL) });
     assert.ok(out.length <= 3000, `length ${out.length}`);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a symlink or junction named like a requirement file is not read', async () => {
+  const outside = await project({ secret: '>=99 TOPSECRET', 'package.json': JSON.stringify({ engines: { node: '>=98' } }) });
+  const dir = await project({});
+  try {
+    let linked = 0;
+    try { await symlink(join(outside, 'secret'), join(dir, '.nvmrc'), 'file'); linked++; } catch { /* OS refuses file symlinks */ }
+    try { await symlink(outside, join(dir, 'package.json'), 'junction'); linked++; } catch { /* not permitted */ }
+    // A directory named like a file is skipped too.
+    await mkdir(join(dir, '.python-version'));
+    const reqs = await readRequirements(dir);
+    assert.deepEqual(reqs, []);
+    const out = await checkEnvironment({ folder: dir, run: fake(ALL) });
+    assert.doesNotMatch(out, /TOPSECRET|99|98/);
+    assert.ok(linked >= 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test('a requirement file is read only up to 64 KB', async () => {
+  const dir = await project({ '.nvmrc': `>=77${' '.repeat(70_000)}>=88` });
+  try {
+    const reqs = await readRequirements(dir);
+    assert.equal(reqs[0].range, '>=77');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
