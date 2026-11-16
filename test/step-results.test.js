@@ -191,9 +191,9 @@ test('a 45,000-character read reaches the model whole; a 120,000-character one i
   const big = await readBig(t, { content: 'row of data\n'.repeat(10_000) }); // 120,000
   const bigTool = big.seen[1].messages.find((m) => m.role === 'tool').content;
   assert.ok(bigTool.length > 49_000 && bigTool.length < 52_000, `cut to about 50,000 (${bigTool.length})`);
-});
   assert.match(bigTool, /Cut to 50000 characters\. Read the rest with start_line and end_line/);
   assert.ok((await readFile(join(big.folder, big.step.resultFile), 'utf8')).length >= 119_000, 'the whole read is saved, to page through');
+});
 
 test('looksSecret catches Cookie and Set-Cookie lines', () => {
   assert.equal(looksSecret('Cookie: session=abcdef123456; theme=dark'), true);
