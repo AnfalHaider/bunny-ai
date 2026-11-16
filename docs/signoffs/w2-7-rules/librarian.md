@@ -1,9 +1,9 @@
 ---
 piece: w2-7-rules
 role: librarian
-sha: 47e2312
+sha: 8e42b6a
 verdict: PASS
 date: 2026-11-16
 ---
 
-Librarian check of 47e2312, the review fix on top of the W2-7 permission rules screen. No Claude credit in the message. The permission rules screen already has its help text in src/ui/settings.html (the Permission rules lead paragraph, from fd3761d and earlier). Lessons L001 to L008 checked; none is due.
+Librarian re-stamp of 8e42b6a, after the PASS at 47e2312. Help text is unchanged: no change to src/ui/settings.html since 47e2312, and the CSS change is two lines of styling. The delta is rule matching in commandSplit.js and tests, plus proof pictures. Commit message has no Claude credit: the only match is the branch name in a merge message. Lessons L001 to L008 checked; none is newly due.

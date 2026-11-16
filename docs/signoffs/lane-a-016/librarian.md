@@ -1,9 +1,9 @@
 ---
 piece: lane-a-016
 role: librarian
-sha: 19e1455
+sha: aebb866
 verdict: PASS
 date: 2026-11-16
 ---
 
-Librarian check of lane A tip 19e1455, covering W4-1, W2-1 to W2-4 and LA-1 to LA-4. Commit messages have no Claude credit. No Settings screen in this lane, so no help line is needed under O7. Lessons L001 to L008 checked; none is due. The search budget and the regex sandbox are covered by test/workspace-search.test.js in the same commit.
+Librarian re-stamp of aebb866, after the PASS at 19e1455. The delta is test-only: test/workspace-search.test.js loosens timing bounds. No Settings or UI text, so no help line is needed under O7. No Claude credit in the message. Lessons L001 to L008 checked; none is newly due.
