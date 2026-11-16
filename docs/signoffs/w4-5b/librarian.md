@@ -1,9 +1,9 @@
 ---
 piece: w4-5b
 role: librarian
-sha: f8ee7e8
+sha: bac4ae5
 verdict: PASS
 date: 2026-11-16
 ---
 
-Librarian check of w4-5b at f8ee7e8. The new UI text (thinking, Thought for Ns, waiting for the model) is in ea6bf7a, the W4-5b commit that f8ee7e8 sits on; f8ee7e8 itself adds proof pictures. Help text: the repo has no help page for the chat screen. The Settings row Default transcript view still says Thinking opens the model's thinking, which the line's chevron now does, so it stays accurate; no new line is needed under O7. Proof pictures are present. Lessons: L005 applied, the .bunny-working hooks are kept and e2e/working-line.spec.js covers the line. No Claude credit in the message.
+Librarian re-check of w4-5b at bac4ae5, after the PASS at f8ee7e8. The W4-5c changes are in src/ui and tests only (bunny-working.js, chat.js, app.css and the working-line and narration tests). No settings.html or other help text changed, so the earlier Default transcript view check still holds and no new help line is needed under O7. No Claude credit in the message. Lessons L001 to L008 checked; L005 applied, the existing working-line hooks are kept.
