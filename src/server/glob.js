@@ -5,7 +5,11 @@
  *   {a,b}  either a or b              a pattern with no / matches the file name at any depth ("*.js")
  *   a pattern ending in / or naming a folder ("src/**") matches everything below it
  *
- * Paths are relative to the workspace, with forward slashes.
+ * Paths are relative to the workspace, with forward slashes. Matching is case-insensitive.
+ *
+ * It does not build regular expressions: a pattern like "*a*a*a*a*b" over a long path must not take exponential time, because the
+ * pattern comes from the model. Each path segment is matched with the two-pointer wildcard method, and "**" is a dynamic program over
+ * segments, so the work is bounded by (pattern segments x path segments) plus the segment lengths.
  */
 
 const MAX_PATTERN = 300;     // characters in one pattern
@@ -38,26 +42,55 @@ function expandBraces(pattern) {
   return all;
 }
 
-function oneToRegExp(glob) {
+/** One pattern as segments; "**" (alone in a segment) stays "**", any other run of stars inside a segment is one "*". */
+function compile(glob) {
   if (glob.length > MAX_PATTERN) throw new Error(`A file pattern is longer than ${MAX_PATTERN} characters.`);
-  // "***" and "**/**" mean what "**" means; collapsing them keeps the matcher from backtracking badly.
-  let g = glob.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\*{2,}/g, '**').replace(/(?:\*\*\/){2,}/g, '**/');
+  let g = glob.replace(/\\/g, '/').replace(/^\.\//, '');
   if ((g.match(/\*/g) ?? []).length > MAX_STARS) throw new Error(`A file pattern has more than ${MAX_STARS} wildcards.`);
   const anywhere = !g.includes('/');
   if (g.endsWith('/')) g += '**';
-  let out = '';
-  for (let i = 0; i < g.length; i += 1) {
-    const c = g[i];
-    if (c === '*') {
-      if (g[i + 1] === '*') {
-        i += 1;
-        if (g[i + 1] === '/') { i += 1; out += '(?:.*/)?'; } else out += '.*';
-      } else out += '[^/]*';
-    } else if (c === '?') out += '[^/]';
-    else out += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const segs = g.split('/').filter((s) => s !== '' && s !== '.').map((s) => (/^\*+$/.test(s) && s.length > 1 ? '**' : s.replace(/\*{2,}/g, '*').toLowerCase()));
+  // a bare name matches at any depth, and a folder pattern covers what is inside it
+  if (anywhere) segs.unshift('**');
+  if (segs[segs.length - 1] !== '**') segs.push('**');
+  // "**/**" is "**"
+  return segs.filter((s, i) => !(s === '**' && segs[i - 1] === '**'));
+}
+
+/** One segment against a pattern with * and ?: linear-time greedy matching with one backtrack point. */
+function segmentMatches(pat, text) {
+  let p = 0;
+  let t = 0;
+  let star = -1;
+  let mark = 0;
+  while (t < text.length) {
+    if (p < pat.length && (pat[p] === '?' || pat[p] === text[t])) { p += 1; t += 1; }
+    else if (p < pat.length && pat[p] === '*') { star = p; p += 1; mark = t; }
+    else if (star >= 0) { p = star + 1; mark += 1; t = mark; }
+    else return false;
   }
-  // "src" or "src/**" style patterns also cover what is inside the folder.
-  return new RegExp(`^${anywhere ? '(?:.*/)?' : ''}${out}(?:/.*)?$`, 'i');
+  while (p < pat.length && pat[p] === '*') p += 1;
+  return p === pat.length;
+}
+
+/** Pattern segments against path segments: "**" takes zero or more whole segments. Dynamic program, no recursion. */
+function pathMatches(pat, parts) {
+  const P = pat.length;
+  const N = parts.length;
+  // ok[j] = the pattern from segment i matches parts from j; filled from the last pattern segment backwards
+  let next = new Array(N + 1).fill(false);
+  next[N] = true; // an empty remainder matches an empty remainder
+  for (let i = P - 1; i >= 0; i -= 1) {
+    const cur = new Array(N + 1).fill(false);
+    if (pat[i] === '**') {
+      cur[N] = next[N];
+      for (let j = N - 1; j >= 0; j -= 1) cur[j] = next[j] || cur[j + 1];
+    } else {
+      for (let j = 0; j < N; j += 1) cur[j] = next[j + 1] && segmentMatches(pat[i], parts[j]);
+    }
+    next = cur;
+  }
+  return next[0];
 }
 
 /** "*.js, *.ts" or one per line; a comma inside {a,b} stays part of its pattern. */
@@ -80,7 +113,10 @@ export function globMatcher(patterns) {
     .map((p) => String(p).trim()).filter(Boolean);
   if (!list.length) return () => true;
   if (list.length > 50) throw new Error('Give at most 50 file patterns.');
-  const res = list.flatMap(expandBraces).map(oneToRegExp);
-  if (res.length > MAX_EXPANDED) throw new Error(`Those file patterns expand to more than ${MAX_EXPANDED} patterns.`);
-  return (path) => res.some((re) => re.test(path));
+  const compiled = list.flatMap(expandBraces).map(compile);
+  if (compiled.length > MAX_EXPANDED) throw new Error(`Those file patterns expand to more than ${MAX_EXPANDED} patterns.`);
+  return (path) => {
+    const parts = String(path).replace(/\\/g, '/').split('/').filter((s) => s !== '' && s !== '.').map((s) => s.toLowerCase());
+    return compiled.some((pat) => pathMatches(pat, parts));
+  };
 }

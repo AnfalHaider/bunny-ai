@@ -15,6 +15,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
 import { globMatcher } from './glob.js';
+import { createContext, Script } from 'node:vm';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_OUTPUT = 8_000;          // characters of command output kept
@@ -22,6 +23,8 @@ const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
+const REGEX_TIMEOUT_MS = 1000;     // one file's scan with a model-written regular expression
+const MAX_EDIT_BYTES = 20_000_000; // an edit may not grow a file past this
 // Nobody can answer a prompt from a command Bunny runs: tools are told not to ask.
 export const NON_INTERACTIVE = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', npm_config_yes: 'true', NO_UPDATE_NOTIFIER: '1' };
 
@@ -294,6 +297,20 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     } catch (err) {
       throw new Error(`The search pattern is not a valid regular expression: ${err.message}`);
     }
+    // A pattern the model wrote can backtrack for hours ((a+)+$ over 40 letters). A literal cannot, so only a regex runs in a
+    // separate context with a time limit; the limit stops the match mid-way.
+    let hitsOf = (lines) => { const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; };
+    if (regex) {
+      const sandbox = createContext({ lines: [], at: [] });
+      const script = new Script(`(() => { const re = new RegExp(${JSON.stringify(re.source)}, ${JSON.stringify(re.flags)}); const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; })()`);
+      hitsOf = (lines) => {
+        sandbox.lines = lines;
+        try { return [...script.runInContext(sandbox, { timeout: REGEX_TIMEOUT_MS })]; } catch (err) {
+          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('That pattern is too slow; simplify it.');
+          throw err;
+        }
+      };
+    }
     const around = Math.min(Math.max(Number(context) || 0, 0), 10);
     const max = Math.min(Math.max(Number(limit) || MAX_MATCHES, 1), 1000);
     const start = await inside(path);
@@ -318,9 +335,8 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
       const rel = show(abs);
       if (!lines) return;
       filesSeen += 1;
-      const hitAt = [];
-      // A very long line (minified code) is judged by its first 2,000 characters, so one pattern cannot run for minutes on it.
-      for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i].length > 2000 ? lines[i].slice(0, 2000) : lines[i])) hitAt.push(i);
+      // A very long line (minified code) is judged by its first 2,000 characters.
+      const hitAt = hitsOf(lines.map((l) => (l.length > 2000 ? l.slice(0, 2000) : l)));
       if (!hitAt.length) return;
       if (shape !== 'lines') {
         if (found >= max) { cut = true; return; }
@@ -417,6 +433,8 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     const count = text.split(old).length - 1;
     if (count === 0) throw new Error(`${label} was not found in ${path}`);
     if (count > 1 && !replace_all) throw new Error(`${label} appears ${count} times in ${path}; include more surrounding lines, or set replace_all`);
+    const grown = text.length + count * (String(new_text ?? '').length - old.length);
+    if (grown > MAX_EDIT_BYTES) throw new Error(`That edit would make ${path} about ${Math.round(grown / 1e6)} MB, past the ${MAX_EDIT_BYTES / 1e6} MB limit. Nothing was changed.`);
     return { text: text.split(old).join(String(new_text ?? '')), count };
   }
 

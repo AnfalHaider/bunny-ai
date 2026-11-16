@@ -223,3 +223,58 @@ test('find_files searches a 5,000-file folder in under 2 seconds', async (t) => 
   assert.equal(r.split('\n').length, 6);
   assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
 });
+
+// ---- LA-1 / LA-2 (Tech Lead a72d361, Security bf35321): a pattern the model writes must not hang the app
+
+test('LA-2: a catastrophic regular expression is stopped with a clear message, quickly', async (t) => {
+  const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n`, 'b.txt': 'fine\n' });
+  const t0 = Date.now();
+  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /That pattern is too slow; simplify it\./);
+  assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+  // the next search still works (the stopped one left nothing behind), and an ordinary regex is unaffected
+  assert.match(await ws.run('search_files', { query: '^f(i|j)ne$', regex: true }), /b\.txt:1: fine/);
+});
+
+test('LA-2: a literal search of the same text is not run in the time-limited context and is fast', async (t) => {
+  const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n` });
+  const t0 = Date.now();
+  assert.match(await ws.run('search_files', { query: '(a+)+$' }), /No matches/);
+  assert.ok(Date.now() - t0 < 1000);
+});
+
+test('LA-2: regex search across many files stays fast when the pattern is fine', async (t) => {
+  const files = {};
+  for (let i = 0; i < 2000; i += 1) files[`d${i % 20}/f${i}.js`] = `const v${i} = ${i};\n${i === 1500 ? 'needle99\n' : ''}`;
+  const { ws } = folder(t, files);
+  const t0 = Date.now();
+  assert.match(await ws.run('search_files', { query: 'needle\\d+', regex: true }), /f1500\.js:2: needle99/);
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+});
+
+test('LA-1: stars in a glob do not backtrack: the 11-star pattern over a 100-character path returns at once', () => {
+  const t0 = Date.now();
+  assert.equal(globMatcher('*a*a*a*a*a*a*a*a*a*a*a*b')('a'.repeat(100)), false);
+  assert.equal(globMatcher('*a*a*a*a*a*a*a*a*a*a*a*b')(`${'a'.repeat(99)}b`), true);
+  assert.equal(globMatcher('**/**/**/*a*a*a*a*c')(`${'a/'.repeat(40)}${'a'.repeat(60)}`), false);
+  assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
+});
+
+test('LA-1: find_files and search_files include take the star pattern against a long file name without hanging', async (t) => {
+  const { ws } = folder(t, { [`sub/${'a'.repeat(150)}b.txt`]: 'x\n' });
+  const t0 = Date.now();
+  assert.equal(await ws.run('find_files', { pattern: '*a*a*a*a*a*a*a*a*a*a*a*c' }), 'No files match *a*a*a*a*a*a*a*a*a*a*a*c.');
+  assert.match(await ws.run('find_files', { pattern: '*a*a*a*a*a*a*a*a*a*a*a*b.txt' }), /sub\/a+b\.txt/);
+  assert.match(await ws.run('search_files', { query: 'x', include: '*a*a*a*a*a*a*a*a*a*a*a*c' }), /No matches/);
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+});
+
+test('LA-1: the linear matcher keeps the old meaning: ?, ** across folders, case, braces, a folder covering its contents', () => {
+  const m = (p, path) => globMatcher(p)(path);
+  assert.ok(m('src/**/x.js', 'src/x.js') && m('src/**/x.js', 'src/a/b/x.js') && !m('src/**/x.js', 'lib/x.js'));
+  assert.ok(m('a?c.js', 'abc.js') && !m('a?c.js', 'ac.js') && !m('a?c.js', 'a/c.js'));
+  assert.ok(m('*.MD', 'docs/Readme.md') && m('README*', 'README.txt') && !m('README*', 'a/b/READ'));
+  assert.ok(m('docs/', 'docs/x/y.md') && m('docs', 'docs/x/y.md') && !m('docs', 'mydocs/x'));
+  assert.ok(m('**', 'a/b/c') && m('*', 'a') && m('**/*.test.js', 'x/y.test.js'));
+  assert.ok(m('{src,lib}/**/*.{ts,tsx}', 'lib/a/b.tsx') && !m('{src,lib}/**/*.{ts,tsx}', 'test/a/b.tsx'));
+  assert.ok(m('a*b*c', 'aXXbYYc') && !m('a*b*c', 'aXXbYY'));
+});
