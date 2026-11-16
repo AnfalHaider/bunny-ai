@@ -30,7 +30,7 @@ export const FREE_ALLOWANCE = Object.freeze({
     checked: '2026-11-17',
   },
   cerebras: {
-    kind: 'daily',
+    kind: 'once',
     note: 'Free trial: $5 credits that expire 30 days after grant, then limits. The page lists 1M tokens per day on gpt-oss-120b, and a token bucket that refills continuously (no fixed reset). The research note is not consistent on the reset; re-read the page.',
     url: 'https://inference-docs.cerebras.ai/support/rate-limits',
     checked: '2026-11-17',

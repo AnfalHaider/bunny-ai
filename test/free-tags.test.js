@@ -98,7 +98,7 @@ test('FREE_ALLOWANCE entries are well formed', () => {
 
 test('FREE_ALLOWANCE: daily only for the providers the research note confirms', () => {
   const daily = Object.entries(FREE_ALLOWANCE).filter(([, e]) => e.kind === 'daily').map(([id]) => id).sort();
-  assert.deepEqual(daily, ['cerebras', 'google', 'openrouter']);
+  assert.deepEqual(daily, ['google', 'openrouter']);
 });
 
 // --- orderProviders -----------------------------------------------------
