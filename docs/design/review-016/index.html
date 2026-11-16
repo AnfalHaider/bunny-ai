@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>0.1.6 four screens</title>
+<link rel="stylesheet" href="../bunny-design-system.css">
+<style>
+
+/* page chrome (not part of the proposal) */
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif)}
+.page{max-width:1320px;margin:0 auto;padding:24px 16px 90px}
+.page h1{font-size:24px;margin:0 0 4px}.page h2{font-size:20px;margin:0}.page h3{font-size:16px;margin:22px 0 4px}
+.pg-dim{color:var(--text-dim)}
+.bar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--text);padding:6px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--on-ink)}
+.screen{margin-top:44px;border-top:1px solid var(--line);padding-top:20px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:13px;color:var(--text-dim)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;align-items:start}
+.pair.stack{grid-template-columns:1fr}
+figure.f{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;min-width:0}
+figure.f figcaption{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:14px}
+figure.f figcaption.p{color:var(--accent)}
+.imgbox{padding:10px;text-align:center}.imgbox img{max-width:100%;height:auto;border:1px solid var(--line)}
+.fitbox{padding:10px;overflow:hidden}
+ul.notes{margin:12px 0 0;padding-left:20px}ul.notes li{margin:4px 0}
+.page code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.q{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 14px;margin:8px 0}
+@media (max-width:1000px){.pair{grid-template-columns:1fr}}
+
+/* ---------- proposal drawing: everything below is the proposed UI, tokens only ---------- */
+.d2{font:15px/1.55 var(--font-sans,system-ui,"Segoe UI",sans-serif);color:var(--text);background:var(--bg);text-align:left}
+.d2 *{box-sizing:border-box}
+.d2 .frame{position:relative;background:var(--bg);display:flex;overflow:hidden;border:1px solid var(--line)}
+.d2 .frame.d{width:1440px;height:900px}
+.d2 .frame.m{width:390px;height:844px;flex-direction:column}
+.d2 .sbar{width:248px;flex:none;background:var(--bg-sidebar);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.d2 .sbar .brand{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px}
+.d2 .sbar .row{padding:6px 8px;border-radius:8px;color:var(--text-dim)}
+.d2 .sbar .row.on{background:var(--surface);color:var(--text)}
+.d2 .main{flex:1;min-width:0;display:flex;flex-direction:column}
+.d2 .top{height:48px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:14px;border-bottom:1px solid var(--line)}
+.d2 .top b{font-weight:600}
+.d2 .top .sp{flex:1}
+.d2 .top .ib{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--text-dim)}
+.d2 .top .ib.on{background:var(--hover);color:var(--text)}
+.d2 .thread{flex:1;overflow:hidden;padding:20px 16px 0}
+.d2 .col{max-width:720px;margin:0 auto}
+.d2 .user{margin-left:auto;width:max-content;max-width:90%;background:var(--bg-sidebar);border-radius:16px;padding:10px 16px;margin-bottom:22px}
+.d2 .note,.d2 .reply{margin:10px 0}
+.d2 .reply p{margin:0 0 10px}
+.d2 .reply code,.d2 .note code{background:var(--bg-sidebar);border-radius:4px;padding:0 5px;font:13px var(--font-mono,ui-monospace,Consolas,monospace)}
+/* tool group */
+.d2 .grp{margin:8px 0}
+.d2 .gh{display:flex;align-items:center;gap:8px;color:var(--text-dim);font-size:14px;padding:3px 0;cursor:pointer}
+.d2 .gh .chev{width:14px;height:14px;transition:transform .15s;flex:none}
+.d2 .gh.open .chev{transform:rotate(90deg)}
+.d2 .gh .sum{flex:1;min-width:0}
+.d2 .gh .meta2{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.d2 .lab-fail{font-size:12px;font-weight:600;color:var(--bad);background:var(--bad-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .lab-stop{font-size:12px;font-weight:600;color:var(--warn);background:var(--warn-soft);border-radius:999px;padding:0 8px;line-height:20px}
+.d2 .subs{margin:2px 0 4px 6px;padding-left:14px;border-left:1px solid var(--line)}
+.d2 .sub{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-dim);padding:3px 0}
+.d2 .sub .chev{width:12px;height:12px;flex:none;color:var(--text-faint)}
+.d2 .sub.open .chev{transform:rotate(90deg)}
+.d2 .sub .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d2 .detail{margin:4px 0 8px 20px;border:1px solid var(--line);border-radius:10px;background:var(--bg-sidebar);overflow:hidden;font-size:13px}
+.d2 .detail .dh{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);color:var(--text-dim);font-size:12px}
+.d2 .detail .dh .sp{flex:1}
+.d2 .detail pre{margin:0;padding:10px;font:12.5px/1.5 var(--font-mono,ui-monospace,Consolas,monospace);white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.d2 .detail pre.err{color:var(--bad)}
+.d2 .detail pre.cmd::before{content:"$ ";color:var(--text-faint)}
+.d2 .cp{border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text-dim);font-size:12px;padding:0 8px;line-height:22px}
+/* running */
+.d2 .running{display:flex;align-items:center;gap:10px;color:var(--text-dim);margin:8px 0}
+.d2 .bunny{width:22px;height:22px;flex:none;animation:d2hop 1.1s ease-out infinite;transform-origin:50% 100%}
+.d2 .bunny .ear{fill:var(--accent);fill-opacity:.55}.d2 .bunny .face{fill:var(--accent)}.d2 .bunny .eye,.d2 .bunny .nose{fill:var(--on-accent)}
+@keyframes d2hop{0%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){.d2 .bunny{animation:none}}
+.d2 .running .w{color:var(--text)}.d2 .running .t{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.d2 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run);border-top-color:transparent;flex:none}
+/* stopped + fallback */
+.d2 .stopped{border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--surface);padding:12px 14px;margin:12px 0}
+.d2 .stopped b{display:block;margin-bottom:4px}
+.d2 .stopped ul{margin:4px 0 8px;padding-left:18px;list-style:disc;color:var(--text-dim);font-size:14px}
+.d2 .btns{display:flex;gap:8px;flex-wrap:wrap}
+.d2 .btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 12px;font-size:13px}
+.d2 .btn.pri{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.d2 .btn.bad{color:var(--bad);border-color:var(--bad)}
+.d2 .fb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);margin:8px 0}
+.d2 .fb i{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+/* composer */
+.d2 .comp{flex:none;padding:0 16px 14px}
+.d2 .comp .box{max-width:720px;margin:0 auto;border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:12px 16px;color:var(--text-faint);box-shadow:var(--shadow-sm)}
+.d2 .comp .meta3{max-width:720px;margin:6px auto 0;font-size:12px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap}
+/* right pane */
+.d2 .pane{width:420px;flex:none;border-left:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-height:0}
+.d2 .frame.m .pane{width:100%;flex:1;border-left:0}
+.d2 .ph{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.d2 .ph .sp{flex:1}.d2 .ph .x{color:var(--text-dim);font-weight:400}
+.d2 .tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.d2 .tabs span{padding:3px 10px;border-radius:999px;color:var(--text-dim)}
+.d2 .tabs span.on{background:var(--hover);color:var(--text)}
+.d2 .pbody{flex:1;overflow:hidden;padding:12px 14px;font-size:13.5px}
+.d2 .sec{margin-bottom:16px}.d2 .sec h5{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:none;letter-spacing:0}
+.d2 .kv{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+.d2 .kv:last-child{border-bottom:0}
+.d2 .kv .k{color:var(--text-dim);width:92px;flex:none}.d2 .kv .v{flex:1;min-width:0;overflow-wrap:anywhere}
+.d2 .kv .v small{display:block;color:var(--text-dim);font-size:12px}
+.d2 .meter{height:6px;border-radius:999px;background:var(--hover);overflow:hidden;margin-top:4px}
+.d2 .meter span{display:block;height:100%;background:var(--accent)}
+.d2 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--ok)}
+.d2 .dot.off{background:var(--text-faint)}.d2 .dot.run{background:var(--run)}
+.d2 .banner{border:1px solid var(--line);border-radius:10px;background:var(--bg-sidebar);padding:8px 12px;font-size:12.5px;color:var(--text-dim);margin-bottom:12px}
+.d2 .cpt{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.d2 .cpt .ch{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+.d2 .cpt .ch b{color:var(--text);font-weight:600}.d2 .cpt .ch .sp{flex:1}
+.d2 .fr{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px}
+.d2 .fr .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono,ui-monospace,Consolas,monospace);font-size:12.5px}
+.d2 .add{color:var(--ok);font-variant-numeric:tabular-nums}.d2 .del{color:var(--bad);font-variant-numeric:tabular-nums}
+.d2 .badge{font-size:11px;border-radius:999px;padding:0 7px;line-height:18px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.d2 .diff{font:12.5px/1.55 var(--font-mono,ui-monospace,Consolas,monospace);border-top:1px solid var(--line)}
+.d2 .diff div{display:flex;padding:0 10px;white-space:pre-wrap;word-break:break-all}
+.d2 .diff .ln{width:28px;flex:none;color:var(--text-faint);text-align:right;margin-right:10px;user-select:none}
+.d2 .diff .a{background:var(--ok-soft)}.d2 .diff .r{background:var(--bad-soft)}.d2 .diff .h{color:var(--text-dim);background:var(--bg-sidebar)}
+.d2 .tree .t{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:6px;font-size:13px}
+.d2 .tree .t .chev{width:12px;height:12px;color:var(--text-faint)}.d2 .tree .t .chev.o{transform:rotate(90deg)}
+.d2 .tree .t.fresh{background:var(--accent-soft)}.d2 .tree .t.cur{background:var(--hover);font-weight:600}
+.d2 .tree .t .ago{margin-left:auto;font-size:11.5px;color:var(--accent)}
+.d2 .tree .ind1{margin-left:18px}.d2 .tree .ind2{margin-left:36px}
+.d2 .file{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:12px;overflow:hidden}
+.d2 .file .fh{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+.d2 .file .fh b{color:var(--text)}.d2 .file .fh .sp{flex:1}
+.d2 .file .code{font:12.5px/1.55 var(--font-mono,ui-monospace,Consolas,monospace)}
+.d2 .file .code div{display:flex;padding:0 10px}.d2 .file .code .ln{width:24px;text-align:right;margin-right:10px;color:var(--text-faint)}
+.d2 .file .code .hl{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.d2 .specimen{max-width:760px}
+.d2 .specimen.m{max-width:390px}
+.d2 .spec{border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:6px 14px 10px;margin-bottom:12px}
+.d2 .spec .lbl{font-size:11.5px;font-weight:600;color:var(--accent);padding:6px 0 0}
+
+.d2 .gmark{text-align:center;padding:36px 0 18px}
+.d2 .gmark h1{font-size:28px;margin:0;font-weight:600;letter-spacing:-.01em}
+.d2 .gmark p{margin:6px 0 0;color:var(--text-dim)}
+.d2 .c2{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:14px 16px;box-shadow:var(--shadow-sm);margin:10px 0}
+.d2 .c2 h4{margin:0 0 2px;font-size:15px;font-weight:600}
+.d2 .c2 .sub2{margin:0 0 10px;color:var(--text-dim);font-size:13.5px}
+.d2 .c2 .foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.d2 .c2 .foot .sp{flex:1}
+.d2 .c2 .lnk{color:var(--accent);font-size:13px}
+.d2 .c2 .fine{font-size:12.5px;color:var(--text-dim);margin-top:8px}
+.d2 .files2{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.d2 .fpill{font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);border:1px solid var(--line);background:var(--bg-sidebar);border-radius:6px;padding:0 8px;line-height:22px}
+.d2 .quote{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:var(--bg);padding:8px 12px;font-size:13px;color:var(--text);max-height:150px;overflow:hidden;position:relative}
+.d2 .quote .qh{font-size:11.5px;font-weight:600;color:var(--accent);margin-bottom:4px}
+.d2 .quote p{margin:0 0 4px}
+.d2 .quote.cut::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(transparent,var(--bg))}
+.d2 .offer{border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden;background:var(--bg)}
+.d2 .offer .oh{display:flex;align-items:center;gap:10px;padding:8px 10px}
+.d2 .offer .oh .nm{font:13px var(--font-mono,ui-monospace,Consolas,monospace);flex:1;min-width:0;overflow-wrap:anywhere}
+.d2 .offer .oh .ds{color:var(--text-dim);font-size:12.5px}
+.d2 .cb{width:16px;height:16px;border:1.5px solid var(--line-strong);border-radius:4px;flex:none;background:var(--surface);display:grid;place-items:center}
+.d2 .cb.on{background:var(--accent);border-color:var(--accent)}
+.d2 .cb.on::after{content:"";width:8px;height:4px;border-left:2px solid var(--on-accent);border-bottom:2px solid var(--on-accent);transform:rotate(-45deg) translate(1px,-1px)}
+.d2 .offer .diff{border-top:1px solid var(--line);font:12px/1.55 var(--font-mono,ui-monospace,Consolas,monospace);max-height:190px;overflow:hidden}
+.d2 .offer .diff div{padding:0 10px;white-space:pre-wrap;word-break:break-word}
+.d2 .offer .diff .a{background:var(--ok-soft)}.d2 .offer .diff .r{background:var(--bad-soft)}.d2 .offer .diff .h{background:var(--bg-sidebar);color:var(--text-dim)}
+.d2 .offer.off{opacity:.8}
+.d2 .okline{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text);margin:8px 0}
+.d2 .okline i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.d2 .okline .lnk{color:var(--accent);margin-left:auto}
+.d2 .chipU{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:0 9px;line-height:22px;background:var(--surface);color:var(--text-dim)}
+.d2 .chipU i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.d2 .pop{border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-pop);padding:10px 12px;font-size:13px;width:290px;margin-top:8px}
+.d2 .pop .r{display:flex;align-items:center;gap:8px;padding:2px 0}
+.d2 .sw{width:30px;height:18px;border-radius:999px;background:var(--accent);position:relative;flex:none}
+.d2 .sw::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--on-accent)}
+
+/* ---- 0.1.6 additions (proposal drawing, tokens only) ---- */
+.d2 .acts{display:flex;gap:2px;justify-content:flex-end;margin:-16px 0 16px;position:relative}
+.d2 .acts>span{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--text-dim);position:relative}
+.d2 .acts>span.hot{background:var(--hover);color:var(--text)}
+.d2 .acts>span.dis{opacity:.4}
+.d2 .tip{position:absolute;top:32px;right:0;white-space:nowrap;font-style:normal;font-size:12px;background:var(--ink);color:var(--on-ink);border-radius:6px;padding:2px 8px;z-index:3}
+.d2 .scrim{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:5}
+.d2 .sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px;max-height:80%;overflow:hidden}
+.d2 .sheet .c2{border:0;box-shadow:none;padding:0}
+.d2 .ov{z-index:6}
+.d2 .chg{margin:6px 0 2px;padding:0;list-style:none;font-size:13.5px}
+.d2 .chg li{display:flex;gap:10px;padding:3px 0;align-items:baseline}
+.d2 .chg li>b{font-weight:600;min-width:64px;flex:none}
+.d2 .mono{font:12.5px var(--font-mono,ui-monospace,Consolas,monospace)}
+.d2 .undo2{display:flex;gap:10px;align-items:baseline;font-size:12.5px;color:var(--text-dim);margin:4px 0 14px}
+.d2 .undo2 .lnk{color:var(--text);text-decoration:underline;text-underline-offset:2px}
+.d2 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:12.5px;color:var(--text-dim);background:var(--surface)}
+.d2 .chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.d2 .row2{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.d2 .row2.first{border-top:0}
+.d2 .row2 .tx{flex:1;min-width:0}.d2 .row2 .tx b{display:block;font-size:14px;font-weight:600}
+.d2 .row2 .tx span{font-size:13px;color:var(--text-dim)}
+.d2 .sw.off{background:var(--hover);border:1px solid var(--line-strong)}
+.d2 .sw.off::after{right:auto;left:2px;background:var(--text-faint)}
+.d2 .sw.dis{opacity:.45}
+.d2 .radio{width:16px;height:16px;border:1.5px solid var(--line-strong);border-radius:50%;flex:none;margin-top:3px;background:var(--bg)}
+.d2 .radio.on{border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--bg);background:var(--accent)}
+.d2 .opt{display:flex;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:var(--bg)}
+.d2 .opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.d2 .opt.bad.sel{border-color:var(--bad);background:var(--bad-soft)}
+.d2 .opt .tx b{display:block;font-size:14px;font-weight:600}.d2 .opt .tx span{font-size:12.5px;color:var(--text-dim)}
+.d2 .notice{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;background:var(--surface);padding:8px 12px;font-size:13.5px;max-width:720px;margin:0 auto 8px}
+.d2 .notice .nt{flex:1;min-width:0}.d2 .notice .nt b{display:block;font-size:13.5px}.d2 .notice .nt span{color:var(--text-dim);font-size:13px}
+.d2 .notice .lnk{color:var(--accent);font-size:13px;white-space:nowrap}
+.d2 .dim{position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:4}
+.d2 .modalx{position:absolute;left:200px;top:70px;width:1040px;height:760px;background:var(--bg);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-pop);z-index:6;display:flex;flex-direction:column;overflow:hidden}
+.d2 .modalx .mh{height:57px;flex:none;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--line);font-weight:600;font-size:17px}
+.d2 .modalx .mh .sp{flex:1}.d2 .modalx .mh .x{color:var(--text-dim);font-weight:400}
+.d2 .modalx .mb{flex:1;display:flex;min-height:0}
+.d2 .snav{width:240px;flex:none;border-right:1px solid var(--line);padding:12px 10px;font-size:14px;overflow:hidden}
+.d2 .snav .s{padding:8px 11px;border-radius:8px;color:var(--text)}
+.d2 .snav .s.on{background:var(--hover);font-weight:500}
+.d2 .snav hr{border:0;border-top:1px solid var(--line);margin:10px}
+.d2 .snav .srch{border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--text-faint);margin-bottom:8px;background:var(--bg-sidebar)}
+.d2 .spane{flex:1;min-width:0;padding:24px 24px 0;overflow:hidden}
+.d2 .spane h2{margin:0 0 12px;font-size:19px}
+.d2 .frame.m .pills{display:flex;gap:6px;overflow:hidden;padding:8px 12px;border-bottom:1px solid var(--line);font-size:14px;flex:none}
+.d2 .frame.m .pills span{white-space:nowrap;padding:6px 14px;border-radius:999px;color:var(--text-dim)}
+.d2 .frame.m .pills span.on{background:var(--hover);color:var(--text)}
+.d2 .frame.m .spane{padding:14px 14px 0}
+.d2 .srow{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.d2 .srow:last-child{border-bottom:0}
+.d2 .srow .tx{flex:1;min-width:0}.d2 .srow .tx b{display:block;font-size:14px;font-weight:600}.d2 .srow .tx span{font-size:13px;color:var(--text-dim)}
+.d2 .scard{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden;margin-bottom:14px}
+.d2 .sel2{border:1px solid var(--line-strong);border-radius:8px;padding:3px 12px;font-size:13.5px;background:var(--bg)}
+.d2 .rules h3{margin:16px 0 4px;font-size:15px}
+.d2 .rules .lead{margin:0 0 10px;color:var(--text-dim);font-size:13.5px}
+.d2 .tabs2{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;margin:0 0 12px;background:var(--bg-sidebar);font-size:13px}
+.d2 .tabs2 span{padding:3px 14px;border-radius:999px;color:var(--text-dim)}.d2 .tabs2 span.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
+.d2 .rl{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.d2 .rl .rh{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px;font-weight:600}
+.d2 .rl .rh i{width:8px;height:8px;border-radius:50%;flex:none}
+.d2 .rl.deny .rh i{background:var(--bad)}.d2 .rl.ask .rh i{background:var(--warn)}.d2 .rl.allow .rh i{background:var(--ok)}
+.d2 .rl .rh small{font-weight:400;color:var(--text-dim);margin-left:auto}
+.d2 .rr{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.d2 .rr:last-child{border-bottom:0}
+.d2 .rr .kind{font-size:11.5px;color:var(--text-dim);border:1px solid var(--line);border-radius:6px;padding:0 6px;line-height:18px;flex:none}
+.d2 .rr .pat{flex:1;min-width:0;font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);overflow-wrap:anywhere}
+.d2 .rr .rm{color:var(--text-dim);font-size:12.5px}
+.d2 .rr.empty{color:var(--text-faint)}
+.d2 .addr{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;border:1px dashed var(--line-strong);border-radius:12px;margin:10px 0}
+.d2 .addr .in{flex:1;min-width:150px;border:1px solid var(--line-strong);border-radius:8px;padding:4px 10px;font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);color:var(--text-faint);background:var(--bg)}
+.d2 .try{border:1px solid var(--line);border-radius:12px;background:var(--bg-sidebar);padding:10px 12px;font-size:13px}
+.d2 .try .in{border:1px solid var(--line-strong);border-radius:8px;padding:4px 10px;font:12.5px var(--font-mono,ui-monospace,Consolas,monospace);background:var(--bg);margin:6px 0}
+.d2 .res{display:inline-flex;gap:6px;align-items:center;font-weight:600;font-size:12.5px;border-radius:999px;padding:0 10px;line-height:22px}
+.d2 .res.deny{color:var(--bad);background:var(--bad-soft)}.d2 .res.ask{color:var(--warn);background:var(--warn-soft)}.d2 .res.allow{color:var(--ok);background:var(--ok-soft)}
+.d2 .warnline{font-size:12.5px;color:var(--warn);margin-top:6px}
+.d2 .errline{font-size:12.5px;color:var(--bad);margin-top:6px}
+.d2 .diff .mk{width:14px;flex:none;color:var(--text-faint)}
+.d2 .crop{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.d2 .crop{position:relative}
+.d2 .crop img{display:block;max-width:none;width:auto;height:auto;position:absolute}
+.pr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin:10px 0 26px}
+.pr h4{margin:0 0 6px;font-size:14px;font-weight:600}
+@media (max-width:1000px){.pr{grid-template-columns:1fr}}
+
+</style></head><body>
+<div class="bar">
+  <strong>0.1.6 four screens</strong>
+  <span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></span>
+  <span class="seg" id="size"><button data-v="d" aria-pressed="true">Desktop 1440</button><button data-v="m" aria-pressed="false">Phone 390</button></span>
+</div>
+<div class="page">
+<h1>0.1.6 screens: today beside proposed</h1>
+<p class="pg-dim">Design session, 2026-11-16, against <code>origin/release/0.1.5</code> (e3c3157). Four screens the plan asks to be drawn before they are built: <strong>1</strong> Rewind and Undo to here that covers commands (W2-8), <strong>2</strong> a worktree per code chat (W2-9), <strong>3</strong> permission rules in Settings (W2-7), <strong>4</strong> five polish changes (W4-5). <strong>Today</strong> is the real app on an invented profile (a temp git folder "design-repo", user "Bunny AI", fake upstream), unedited. <strong>Proposed</strong> is drawn with the project's design tokens (<code>docs/design/bunny-design-system.css</code>, linked, so both themes follow it) and the purple bunny. A drawing of a screen, not a running build: nothing is built until it is approved.</p>
+<p class="pg-dim"><strong>Not covered, stated plainly:</strong> no contrast ratios measured (UNKNOWN); the drawn runs, files, branches and paths are invented; the running-group spinner has no "today" picture because a run is too short to hold still; Today's Changes picture is Builder's shot at 9ca3f77 on an invented profile; the settings picture is shot inside the real Settings window.</p>
+<div id="out"></div>
+<div class="screen" id="decisions"><h2>Decisions, each with a recommendation</h2><div id="dec"></div></div>
+</div>
+<script>const CH='<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"/></svg>';
+const BUNNY='<svg class="bunny" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="ear" cx="8.5" cy="6" rx="2.2" ry="5.5" transform="rotate(-12 8.5 6)"/><ellipse class="ear" cx="15.5" cy="6" rx="2.2" ry="5.5" transform="rotate(12 15.5 6)"/><circle class="face" cx="12" cy="15" r="7"/><circle class="eye" cx="9.5" cy="14" r="1"/><circle class="eye" cx="14.5" cy="14" r="1"/><circle class="nose" cx="12" cy="16.6" r=".9"/></svg>';
+const IC='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>';
+
+/* ---- transcript pieces ---- */
+const grp=(open,sum,meta,subs)=>'<div class="grp"><div class="gh '+(open?'open':'')+'">'+CH+'<span class="sum">'+sum+'</span>'+(meta||'')+'</div>'+(open?'<div class="subs">'+subs+'</div>':'')+'</div>';
+const sub=(open,nm,label,detail)=>'<div class="sub '+(open?'open':'')+'">'+CH+'<span class="nm">'+nm+'</span>'+(label||'')+'</div>'+(open?detail:'');
+const FAIL='<span class="lab-fail">Failed</span>';
+const detailRead='<div class="detail"><div class="dh">Read src/app.test.js<span class="sp"></span></div><pre class="err">Error: ENOENT: no such file or directory, open src/app.test.js</pre></div>';
+const detailRun='<div class="detail"><div class="dh">Command · exit code 1 · 2.1s<span class="sp"></span><span class="cp">Copy</span></div><pre class="cmd">npm test</pre><pre class="err">not ok 1 - greet\n  AssertionError: expected "Hello, Ada!" got undefined\n  at src/app.test.js:1:1\n# tests 1   # pass 0   # fail 1</pre></div>';
+function _unused_transcript(){return ''
+ +'<div class="user">Add a bye() next to greet() and a test for both, then run the tests.</div>'
+ +'<div class="note">I will look at the greeter first and see whether a test file already exists.</div>'
+ +grp(true,'Read a file, tried to read another','<span class="lab-fail">1 failed</span>',
+    sub(false,'Read src/app.js')+sub(true,'Read src/app.test.js',FAIL,detailRead))
+ +'<div class="note">There is no test yet. I will write one, then add <code>bye()</code> to the greeter.</div>'
+ +grp(false,'Wrote a file, edited a file','<span class="meta2">+4 −1</span>')
+ +grp(true,'Ran a command','<span class="lab-fail">Failed</span>',sub(true,'Run npm test',FAIL,detailRun))
+ +'<div class="reply"><p>I added <code>bye()</code> and a test, but the test run failed: the test file only has a title and no assertion yet. Want me to write the assertions?</p></div>';}
+function frameD(inner,paneHtml,active){return '<div class="d2"><div class="frame d"><div class="sbar"><div class="brand">'+BUNNY.replace('class="bunny"','class="bunny" style="animation:none"')+'Bunny AI</div><div class="row">New chat</div><div class="row">Incognito</div><div class="row">Artifacts</div><div class="row">Search chats</div><div class="row on">Add a goodbye to the greeter</div></div><div class="main"><div class="top"><b>Add a goodbye to the greeter</b><span class="sp"></span><span class="ib '+(active==='session'?'on':'')+'">☰</span><span class="ib">›_</span><span class="ib '+(active==='changes'?'on':'')+'">±</span><span class="ib">◎</span><span class="ib '+(active==='files'?'on':'')+'">▢</span></div><div class="thread"><div class="col">'+inner+'</div></div><div class="comp"><div class="box">Ask about or change the code in your folder…</div><div class="meta3"><span>bunny-design-project</span><span>main</span><span>Manual</span><span>Medium</span><span>Auto · Chat</span></div></div></div>'+(paneHtml?'<div class="pane">'+paneHtml+'</div>':'')+'</div></div>';}
+function frameM(inner,paneHtml,active){const t='<div class="top"><span class="ib">☰</span><b>Add a goodbye…</b><span class="sp"></span><span class="ib '+(active==='session'?'on':'')+'">☰</span><span class="ib '+(active==='changes'?'on':'')+'">±</span><span class="ib '+(active==='files'?'on':'')+'">▢</span></div>';
+ if(paneHtml)return '<div class="d2"><div class="frame m">'+t+'<div class="pane">'+paneHtml+'</div></div></div>';
+ return '<div class="d2"><div class="frame m">'+t+'<div class="thread"><div class="col">'+inner+'</div></div><div class="comp"><div class="box">Ask about or change the code…</div></div></div></div>';}
+
+
+document.head.insertAdjacentHTML('beforeend','<style>.d2 .ctx{max-width:720px;margin:0 auto 6px;display:flex;gap:8px;flex-wrap:wrap}.d2 .specimen .stopped{margin:0}.d2 .crop.top img{object-position:top;height:280px}</style>');
+const svg=(d)=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I={copy:svg('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>'),edit:svg('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),rewind:svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/>'),branch:svg('<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 8v8M18 10c0 4-6 3-12 6"/>'),folder:svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),git:svg('<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 8v8M18 11c0 4-8 2-12 5"/>')};
+const U=(t)=>`<div class="user">${t}</div>`;
+const acts=(hot,tip,dis)=>`<div class="acts">${['copy','edit','rewind','branch'].map(k=>`<span class="${hot===k?'hot':''} ${dis===k?'dis':''}">${I[k]}${hot===k&&tip?`<em class="tip">${tip}</em>`:''}</span>`).join('')}</div>`;
+const card=(h,sub,body,foot,fine)=>`<div class="c2"><h4>${h}</h4>${sub?`<p class="sub2">${sub}</p>`:''}${body||''}${fine?`<div class="fine">${fine}</div>`:''}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
+const btn=(t,k)=>`<span class="btn ${k||''}">${t}</span>`;
+const li=(k,v)=>`<li><b>${k}</b><span>${v}</span></li>`;
+const m=(t)=>`<span class="mono">${t}</span>`;
+const S=(l,h)=>`<div class="spec"><div class="lbl">${l}</div>${h}</div>`;
+const SP=(inner)=>`<div class="d2"><div class="specimen ${size==='m'?'m':''}">${inner}</div></div>`;
+const overlay=(frame,html,dpos)=>{const o=size==='d'?`<div class="ov" style="position:absolute;${dpos};width:430px">${html}</div>`:`<div class="scrim"></div><div class="sheet">${html}</div>`;const i=frame.lastIndexOf('</div></div>');return frame.slice(0,i)+o+frame.slice(i);};
+const SPIN='<span class="spin"></span>';
+const reply=(t)=>`<div class="reply"><p>${t}</p></div>`;
+
+/* ---------- 1. Rewind and Undo to here ---------- */
+const UNDO_NOTE='Only files in this folder. Bunny cannot take back what a command did elsewhere, such as a push, an install or a web request.';
+const rewindCard=()=>card('Rewind to here?','Your files and this chat go back to just before this message. Everything after it is removed.',`<ul class="chg">${li('Restores',`${m('src/app.js')} (edited), ${m('build/')} (14 files a command deleted)`)}${li('Removes',`${m('notes.txt')} (created)`)}${li('Chat','4 later messages')}</ul>`,`${btn('Rewind','pri')}${btn('Cancel')}`,`${UNDO_NOTE} A copy of the current state is kept for 10 minutes: Undo rewind.`);
+const undoCard=()=>card('Undo to here?','Puts the files back as they were before this reply. The chat stays.',`<ul class="chg">${li('Restores',`${m('src/app.js')} (edited), ${m('build/')} (14 files deleted by ${m('rm -r build')})`)}</ul>`,`${btn('Undo','pri')}${btn('Cancel')}`,UNDO_NOTE);
+const t1=()=>U('Rename greet to hello and remove the old build folder.')+acts('rewind','Rewind to here')
+ +grp(false,'Edited a file, ran a command','<span class="meta2">2 steps</span>')
+ +reply('Renamed greet to hello and removed the build folder.')
+ +'<div class="undo2"><span>Files changed: 2 (1 by a command)</span><span class="lnk">Undo to here</span></div>'
+ +U('Now add a farewell.')+grp(false,'Edited a file','<span class="meta2">1 step</span>')+reply('Added a farewell next to hello.');
+const spec1=()=>SP(
+ S('Hover on one of your own messages: Rewind joins Copy, Edit and Branch (assistant messages do not get it)',U('Now add a farewell.')+acts('rewind','Rewind to here'))
++S('The Undo line under a reply: today it counts files written by Bunny\'s edit tools; proposed it also counts files a command changed',`<div class="undo2"><span class="pg-dim">Today:</span><span>Files changed: 1</span><span class="lnk">Undo file changes</span></div><div class="undo2"><span class="pg-dim" style="color:var(--accent)">Proposed:</span><span>Files changed: 2 (1 by a command)</span><span class="lnk">Undo to here</span></div>`)
++S('Undo to here: the confirm names what comes back, commands included',undoCard())
++S('After a rewind: the chat ends at your message, the message is back in the box to change and send again',`${U('Rename greet to hello and remove the old build folder.')}<div class="okline"><i></i>Rewound to your message: 3 files restored, 4 messages removed.<span class="lnk">Undo rewind</span></div><div class="fine" style="margin:0 0 6px;font-size:12.5px;color:var(--text-dim)">The kept copy expires in 10 minutes.</div>`)
++S('Rewind is off for a message that has no snapshot (older chats, Incognito chats, chats with no folder)',U('Hello')+`<div class="acts"><span>${I.copy}</span><span>${I.edit}</span><span class="hot dis">${I.rewind}<em class="tip">No snapshot for this message</em></span><span>${I.branch}</span></div>`)
++S('A command ran but Bunny could not save a snapshot first: say so on the step, so Undo is never trusted wrongly',grp(true,'Ran a command','<span class="lab-stop">Not undoable</span>',sub(true,'Run npm run clean','<span class="lab-stop">Not undoable</span>','<div class="detail"><div class="dh">Command · exit code 0<span class="sp"></span></div><pre class="cmd">npm run clean</pre><pre>Bunny could not save a snapshot first (the folder is over the size limit), so Undo will not bring back what this command changed.</pre></div>')))
+);
+/* ---------- 2. Worktree per chat ---------- */
+const OWN='bunny/tidy-the-greeter';
+const folderCard=(st)=>{
+ const sw=st==='on'||st==='busy'||st==='conflict'?'sw':st==='nogit'?'sw off dis':'sw off';
+ const status=st==='busy'?`<div class="okline" style="margin:8px 0 0">${SPIN}Making the copy…</div>`:st==='on'||st==='conflict'?`<ul class="chg">${li('Branch',`${m(OWN)} (new, from ${m('main')})`)}${li('Copy',`${m('…/BunnyAI/worktrees/design-repo/tidy-the-greeter')}`)}${li('Base','main, 3 commits behind')}</ul>`:'';
+ const sub=st==='nogit'?'Needs a git folder. This folder is not one.':'Bunny makes a separate working copy on a new branch, so two chats can edit this project at once without clashing. New copies start without installed packages or build output.';
+ const foot=st==='on'||st==='conflict'?`${btn('Finish…','pri')}${btn('Change folder')}<span class="sp"></span><span class="lnk">Open the copy</span>`:`${btn('Change folder')}`;
+ return `<div class="c2"><h4>Working folder</h4><div class="chg" style="margin:4px 0 6px"><li style="display:flex;gap:8px;align-items:center;list-style:none">${I.folder}<span><b>design-repo</b><br><span class="mono pg-dim">D:\\Projects\\design-repo</span></span></li></div><div class="row2"><div class="tx"><b>Give this chat its own copy of the project</b><span>${sub}</span></div><span class="${sw}"></span></div>${status}<div class="foot">${foot}</div></div>`;};
+const finishCard=(st)=>{
+ const body=st==='conflict'?`<div class="errline" style="margin:0 0 8px"><b>Merging into main hit a conflict in ${m('src/app.js')}.</b> Nothing was changed. Keep the branch and merge it yourself, or ask Bunny to resolve it in this chat.</div><div class="foot" style="margin-top:0">${btn('Ask Bunny to resolve it','pri')}${btn('Keep the branch')}</div>`
+ :`<div class="opt"><span class="radio"></span><div class="tx"><b>Merge into main</b><span>3 files changed. Merges cleanly. Then the copy is removed.</span></div></div><div class="opt sel"><span class="radio on"></span><div class="tx"><b>Keep the branch</b><span>Leaves ${m(OWN)} in your repository for you to merge later. The copy folder is removed.</span></div></div><div class="opt bad"><span class="radio"></span><div class="tx"><b>Discard the copy and its changes</b><span>Deletes the branch too. Asks once more before it does.</span></div></div>`;
+ return card('Finish this copy?',st==='conflict'?'':'The chat keeps going in the main folder afterwards.',body,st==='conflict'?'':`${btn('Finish','pri')}${btn('Cancel')}`);};
+const t2=()=>U('Add a farewell to the greeter.')+grp(false,'Edited a file','<span class="meta2">1 step</span>')+reply('Added <code>bye()</code> next to <code>hello()</code>.');
+const chips2=`<span class="chip">${I.folder} design-repo</span><span class="chip on">${I.git} ${OWN} · own copy</span>`;
+const spec2=()=>SP(
+ S('Switch off (the default): nothing changes, the chat works in the folder itself',folderCard('off'))
++S('Switch on, while Bunny makes the copy',folderCard('busy'))
++S('Switch on and ready: the branch name and the copy\'s place, Finish is one tap away',folderCard('on'))
++S('Not a git folder: the switch is dimmed and says why',folderCard('nogit'))
++S('Finish: three choices. "Keep the branch" is chosen first, because it destroys nothing',finishCard('choose'))
++S('Finish, merge hit a conflict: nothing is changed and the three next steps are plain',finishCard('conflict'))
++S('Two chats on one repository: each shows its own branch in the sidebar line',`<div class="chg"><li style="display:flex;gap:8px;list-style:none;align-items:center"><span class="chip on">${I.git} bunny/tidy-the-greeter</span><span>Tidy the greeter</span></li><li style="display:flex;gap:8px;list-style:none;align-items:center"><span class="chip on">${I.git} bunny/add-a-test</span><span>Add a test</span></li></div><div class="fine" style="font-size:12.5px;color:var(--text-dim);margin-top:6px">Changes and Files follow the chat's own copy; the branch chip in the footer shows its branch.</div>`)
+);
+/* ---------- 3. Permission rules ---------- */
+const rr=(kind,pat,orig)=>`<div class="rr"><span class="kind">${kind}</span><span class="pat">${pat}</span>${orig==='All folders'?'<span class="chip">All folders</span>':'<span class="rm">Remove</span>'}</div>`;
+const rl=(cls,name,note,rows)=>`<div class="rl ${cls}"><div class="rh"><i></i>${name}<small>${note}</small></div>${rows||'<div class="rr empty">No rules.</div>'}</div>`;
+const addRow=(v)=>{
+ const pat=v==='bad'?'..\secrets\**':v==='conflict'?'Remove-Item -Recurse build':'npm run lint*';
+ const extra=v==='conflict'?`<div class="warnline">A Deny rule already covers this: ${m('Remove-Item -Recurse*')} (All folders). Deny wins, so this Allow would never apply.</div>`:v==='bad'?`<div class="errline">A path pattern cannot leave the folder. Remove the ${m('..\\')} and try again.</div>`:'';
+ return `<div class="addr"><span class="sel2">${v==='bad'?'Path':'Command'} ⌄</span><span class="in">${pat}</span><span class="sel2">Allow ⌄</span><span class="sel2">${v==='all'?'All folders':'This folder'} ⌄</span>${btn('Add rule','pri')}</div>${extra}`;};
+const rulesBlock=(v)=>{
+ const tab=v==='all'?'<div class="tabs2"><span class="on">All folders</span><span>design-repo</span></div>':'<div class="tabs2"><span>All folders</span><span class="on">design-repo</span></div>';
+ const head=`<h3>Permission rules</h3><p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say.</p>`;
+ if(v==='empty')return `<div class="rules">${head}${tab}${rl('deny','Deny','Bunny is told no','')}${rl('ask','Ask','Bunny always asks first','')}${rl('allow','Allow','Bunny goes ahead','')}<div class="addr"><span class="pg-dim" style="font-size:13px">Start from:</span><span class="chip">Ask before ${m('git push*')}</span><span class="chip">Deny ${m('Remove-Item -Recurse*')}</span><span class="chip">Deny edits under ${m('secrets/**')}</span></div></div>`;
+ const g='All folders';
+ const deny=rr('Command','Remove-Item -Recurse*',g)+rr('Path · edits','secrets/**',g);
+ const ask=rr('Command','git push*',g);
+ const allow=v==='all'?rr('Command','node --test*','x'):rr('Command','npm test*','x')+rr('Command','npm run build','x');
+ return `<div class="rules">${head}${tab}${rl('deny','Deny','Bunny is told no',deny)}${rl('ask','Ask','Bunny always asks first',ask)}${rl('allow','Allow','Bunny goes ahead',allow)}${addRow(v)}</div>`;};
+const tryBox=`<div class="try"><b>Try a command</b><div class="in">npm test --watch</div><span class="res allow">Allowed</span> by ${m('npm test*')} (design-repo)<div class="in" style="margin-top:10px">git push origin main</div><span class="res ask">Ask</span> because of ${m('git push*')} (All folders)<div class="in" style="margin-top:10px">Remove-Item -Recurse build</div><span class="res deny">Denied</span> by ${m('Remove-Item -Recurse*')} (All folders)<div class="in" style="margin-top:10px">node scripts/tidy.js</div><span class="chip">No rule</span> The mode decides: Manual, so Bunny asks.</div>`;
+const settingsRows=`<div class="scard"><div class="srow"><div class="tx"><b>Default permission mode</b><span>How careful a new chat starts out. You can change it per chat under the message box.</span></div><span class="sel2">Manual ⌄</span></div></div>`;
+const settingsPane=(rules)=>`<h2>Code</h2>${settingsRows}${rules}<div class="fine" style="font-size:12.5px;color:var(--text-dim);margin:10px 0">Default effort, Branch prefix and the other Code rows follow, unchanged.</div>`;
+const NAV=['Profile','Usage','-','Appearance','My Dear Bunny','Language','Notifications','Privacy','Capabilities','-','Providers and abilities','Models','Connection','Customize','Automation','-','Code','About'];
+const settingsFrame=(content)=>{
+ if(size==='d')return frameD(t1(),null,'').replace(/Add a goodbye to the greeter/g,'Tidy the greeter').replace('<span>bunny-design-project</span>','<span>design-repo</span>').replace(/<\/div><\/div>$/,`<div class="dim"></div><div class="modalx"><div class="mh">Settings<span class="sp"></span><span class="x">✕</span></div><div class="mb"><div class="snav"><div class="srch">Search</div>${NAV.map(n=>n==='-'?'<hr>':`<div class="s ${n==='Code'?'on':''}">${n}</div>`).join('')}</div><div class="spane">${content}</div></div></div></div></div>`);
+ return `<div class="d2"><div class="frame m"><div class="top"><span class="ib">←</span><b>Settings</b><span class="sp"></span><span class="x pg-dim">Close</span></div><div class="pills"><span>Capabilities</span><span>Models</span><span>Automation</span><span class="on">Code</span><span>About</span></div><div class="spane">${content}</div></div></div>`;};
+const spec3=()=>SP(
+ S('The "All folders" tab: rules that apply everywhere',rulesBlock('all'))
++S('Try a command: shows the outcome and the rule behind it, so a rule can be checked without running anything',tryBox)
++S('Adding a rule that a Deny already covers: a warning, not a block',addRow('conflict'))
++S('A pattern that cannot work: say so on the line',addRow('bad'))
++S('Nothing set yet: empty lists with three starting points',rulesBlock('empty'))
++S('In the chat: a rule that asks says so; a rule that denies shows a Blocked step and Bunny is told why',`<div class="pop" style="max-width:430px"><b>Run ${m('git push origin main')}?</b><div class="fine" style="font-size:12.5px;color:var(--text-dim);margin:2px 0 8px">Asked because of your rule ${m('git push*')} (All folders).</div><div class="btns">${btn('Allow once','pri')}${btn('Deny')}</div></div>`+grp(true,'Tried to run a command','<span class="lab-stop">Blocked</span>',sub(true,'Run Remove-Item -Recurse build','<span class="lab-stop">Blocked</span>',`<div class="detail"><div class="dh">Blocked by your rule<span class="sp"></span></div><pre>Remove-Item -Recurse* (All folders). Bunny was told no and may suggest another way.</pre></div>`)))
+);
+/* ---------- 4. Polish ---------- */
+const imgToday=(name,cap,r)=>{const [x,y,h]=r[size];return `<div class="d2"><div class="crop" style="height:${h}px"><img src="shots/today-${name}-${theme}-${size}.png" alt="Today: ${cap}" style="left:${-x}px;top:${-y}px"></div></div>`;};
+const noShot=(t)=>`<div class="d2"><div class="spec" style="margin:0"><div class="lbl">Today</div><div style="font-size:13.5px;color:var(--text-dim);padding:6px 0">${t}</div></div></div>`;
+const pr=(title,today,prop)=>`<h3>${title}</h3><div class="pr"><div><h4>Today, as built</h4>${today}</div><div><h4 style="color:var(--accent)">Proposed</h4>${prop}</div></div>`;
+const lineD=(n1,n2,mk,t,c)=>`<div class="${c}"><span class="ln">${n1}</span><span class="ln">${n2}</span><span class="mk">${mk}</span>${t}</div>`;
+const diffN=`<div class="diff"><div class="h"><span class="ln"></span><span class="ln"></span><span class="mk"></span>@@ src/greet.js</div>${lineD(1,'','−','export const greet = (n) =&gt; "Hi " + n;','r')}${lineD('',1,'+','export const hello = (n) =&gt; `Hi, ${n}!`;','a')}${lineD('',2,'+','export const bye = () =&gt; "Bye";','a')}${lineD(2,3,'','','')}</div>`;
+const changesN=`<div class="d2"><div class="pane" style="width:100%;border:1px solid var(--line);border-radius:10px;overflow:hidden"><div class="ph">Changes<span class="badge">2 files</span><span class="add">+5</span><span class="del">−1</span></div><div class="pbody" style="padding:10px"><div class="cpt"><div class="ch"><b>Checkpoint 1</b> just now<span class="sp"></span><span>Undo to here</span></div><div class="fr"><span class="nm">src/greet.js</span><span class="badge">edited</span><span class="add">+2</span><span class="del">−1</span></div>${diffN}</div></div></div></div>`;
+const polish=()=>
+ pr('a. A live spinner on a running group',noShot('While a run is going, the page shows live step lines and the bunny. The grouped line only appears when the reply is saved, so nothing on screen says "this group is still working". (Builder, 9ca3f77; not shot because a run is too short to hold still.)'),
+  SP(grp(true,'Running a command…',`${SPIN}<span class="meta2">12s</span>`,sub(false,'Read src/app.js','<span class="meta2">0.1s</span>')+sub(true,'Run npm test',SPIN,'<div class="detail"><div class="dh">Command · running<span class="sp"></span></div><pre class="cmd">npm test</pre></div>'))+`<div class="running">${BUNNY}<span class="w">Thumping npm test…</span><span class="t">12s</span></div>`))
++pr('b. Elapsed time and line counts on group lines',imgToday('rewind','group lines show only a step count',{d:[480,130,190],m:[0,170,150]}),
+  SP(grp(false,'Edited a file, ran a command','<span class="meta2">2 steps · +3 −1 · 4s</span>')+grp(false,'Read 3 files','<span class="meta2">3 steps</span>')+grp(true,'Wrote a file, edited a file','<span class="meta2">2 steps · +12 −3 · 2s</span>',sub(false,'Write src/app.test.js','<span class="add">+9</span>')+sub(false,'Edit src/app.js','<span class="add">+3</span><span class="del">−3</span><span class="meta2">1.2s</span>'))+'<div class="fine" style="font-size:12.5px;color:var(--text-dim);margin-top:6px">Order: steps, then lines changed, then time. Lines only for writes and edits; time only when it took 1 s or more; a part that does not apply is left out.</div>'))
++pr('c. Undo on the Stopped report',imgToday('stopped','the Stopped report',{d:[480,130,330],m:[0,170,320]}),
+  SP(`<div class="stopped"><b>Stopped</b><div class="pg-dim" style="font-size:14px">You stopped Bunny after 2 steps.</div><ul><li>Done: read a file, edited a file</li><li>Not done: move the helper, run the tests</li></ul><div class="btns">${btn('Continue','pri')}${btn('Undo these changes (1 file)')}</div></div><div class="fine" style="font-size:12.5px;color:var(--text-dim);margin-top:6px">Already built; two small changes: the file count in the button, and a "Not done" list when the plan is known. The button opens the same Undo confirm as the line under a reply.</div>`))
++pr('d. Line numbers in Changes diffs',imgToday('changes','a diff without line numbers',{d:[1040,0,320],m:[0,0,320]}),changesN)
++pr('e. A message when a folder pick is refused',`${imgToday('rewind','nothing happens when the pick is refused',{d:[480,740,160],m:[0,650,194]})}<div class="fine" style="font-size:12.5px;color:var(--text-dim);margin-top:6px">Today the native picker quietly returns nothing (electron/main.js:140), so choosing a drive root or Bunny's own data folder looks like a broken button.</div>`,
+  SP(`<div class="notice"><i style="width:8px;height:8px;border-radius:50%;background:var(--warn);margin-top:6px;flex:none"></i><div class="nt"><b>Bunny cannot work in C:\\</b><span>That is a whole drive. Pick a folder inside it.</span></div><span class="lnk">Choose another folder</span></div><div class="notice"><i style="width:8px;height:8px;border-radius:50%;background:var(--warn);margin-top:6px;flex:none"></i><div class="nt"><b>That folder is where Bunny keeps its own files</b><span>Pick a different folder for your project.</span></div><span class="lnk">Choose another folder</span></div><div class="notice"><i style="width:8px;height:8px;border-radius:50%;background:var(--warn);margin-top:6px;flex:none"></i><div class="nt"><b>That folder is not there any more</b><span>It may have been moved or deleted.</span></div><span class="lnk">Choose another folder</span></div><div class="fine" style="font-size:12.5px;color:var(--text-dim)">One notice above the message box, gone after the next successful pick or 10 seconds after the person closes it; the chat keeps its old folder meanwhile.</div>`));
+/* ---------- sections ---------- */
+const SEC=[
+ {t:'1. W2-8 Rewind, and Undo to here that covers commands',risk:'MEDIUM',files:'src/ui/chat.js:1263 (message actions), :1871 (undo line); src/server/checkpoints.js; new: a snapshot before each command that can change files',today:'rewind',
+  title:'Tidy the greeter',folder:'design-repo',
+  prop:()=>{const f=frameFor(t1());return overlay(f,rewindCard(),'left:760px;top:182px');},spec:spec1,
+  notes:['<b>Today:</b> your own messages have Copy, Edit and Branch. The line under a reply says "Files changed: N" with "Undo file changes", and counts only files Bunny wrote with its edit tools; a command that deletes a folder is not covered.',
+   '<b>Proposed:</b> a fourth action on your messages, <b>Rewind</b> (a counter-clockwise arrow). It opens one confirm that names what it restores, what it removes and how many messages go. <b>Undo to here</b> keeps its place under each reply but now also covers files a command changed, and says so in its count.',
+   '<b>Rewind vs Branch:</b> Branch copies the chat into a new chat; Rewind changes this chat and its files. <b>Rewind vs Undo:</b> Undo to here puts files back for one reply and keeps the chat; Rewind does both, from a message.',
+   '<b>Safety:</b> a rewind keeps a copy of the current state for 10 minutes ("Undo rewind"), because it removes messages. The confirm says in plain words that commands outside the folder cannot be taken back.',
+   '<b>Phone:</b> the confirm is a bottom sheet; the actions row shows on tap, as today.']},
+ {t:'2. W2-9 A worktree for a code chat',risk:'MEDIUM',files:'src/ui/index.html:205-211 (folder and branch chips); src/ui/chat.js:249 (renderComposerHeader), :3150 (chooseFolder); settings Branch prefix (settings.html:431); new: git worktree create, status, finish',today:'rewind',
+  title:'Tidy the greeter',folder:'design-repo',
+  prop:()=>{const f=frameFor(t2(),chips2);return overlay(f,folderCard('on'),'left:500px;bottom:96px');},spec:spec2,
+  notes:['<b>Today:</b> the footer has a folder chip and a branch chip. Clicking the folder chip only opens the folder picker; there is no card, and no way to give a chat its own copy.',
+   '<b>Proposed:</b> the folder chip opens a small <b>Working folder card</b> with the folder, a switch "Give this chat its own copy of the project", and, once on, the branch name (the Settings "Branch prefix", so <code>bunny/…</code>), where the copy lives and <b>Finish…</b>. The footer then shows the copy\'s branch in the accent colour with "own copy".',
+   '<b>Finish:</b> three choices, <b>Keep the branch</b> chosen first because it destroys nothing; Merge into main; Discard (asks once more). A conflict changes nothing and offers three plain next steps.',
+   '<b>Decision for Tech Lead:</b> where the copy lives. Proposed: Bunny\'s data folder, never inside or beside your project. A new copy has no <code>node_modules</code> or build output, and the card says so.',
+   '<b>Phone:</b> the card is a bottom sheet; the chips wrap above the message box.']},
+ {t:'3. W2-7 Permission rules in Settings (HIGH: owner\'s go needed)',risk:'HIGH (permissions) — Security signs, the owner\'s go is needed before building',files:'src/ui/settings.html:399-467 (Code section; new group goes right below "Default permission mode", :404); src/server/app.js and src/server/workspace.js (where the mode is checked); new rules store',today:'settings-code',
+  title:'Tidy the greeter',folder:'design-repo',
+  prop:()=>settingsFrame(settingsPane(rulesBlock('folder'))),spec:spec3,
+  notes:['<b>Today:</b> Settings, Code has one control for permissions: <b>Default permission mode</b> (Manual here). There is no way to say "always allow <code>npm test</code>" or "never touch <code>secrets/</code>".',
+   '<b>Proposed:</b> a <b>Permission rules</b> group right below it, with two tabs: <b>All folders</b> and the current folder. Three lists in order of strength: <b>Deny</b>, <b>Ask</b>, <b>Allow</b>. A rule is a <b>Command</b> pattern (<code>npm test*</code>) or a <b>Path</b> pattern with edits or reads (<code>secrets/**</code>); simple wildcards, no regular expressions.',
+   '<b>Precedence, said on the screen:</b> rules are checked before the mode; Deny always wins, then Ask, then Allow; Plan mode still refuses edits whatever the rules say. A folder tab also shows the global rules, tagged "All folders", so the person sees everything that applies.',
+   '<b>Checks:</b> "Try a command" shows the outcome and the rule behind it without running anything; adding an Allow that a Deny covers shows a warning; a bad path pattern is rejected on the line.',
+   '<b>Risk:</b> HIGH under AGENTS.md (permissions). This page is the drawing only; nothing is built until the owner says go.',
+   '<b>Phone:</b> the Settings page shows the section as a sideways pill row (as built in 0.1.5); lists stack; the add row wraps.']},
+ {t:'4. W4-5 Polish: five small changes to what is built',risk:'LOW (Design approves)',files:'src/ui/chat.js:958 (summariseSteps), :1837 (stoppedReport), :1871 (undoBar); src/ui/work-panes.js:49-54 (diffView); electron/main.js:135-140 (folder pick)',today:null,
+  title:'Tidy the greeter',folder:'design-repo',polish:true,
+  notes:['<b>a.</b> A group that is still working shows a small spinner and a ticking time, so it is clear it is not stuck. <b>b.</b> Group lines carry "steps · lines changed · time" in that order; the line counts and time appear only when there is something to say. <b>c.</b> Undo on the Stopped report is already built; only the file count in its label and a "Not done" list are new. <b>d.</b> Changes diffs get old and new line numbers and a +/− mark, so a line can be found in the file. <b>e.</b> A refused folder pick says why, once, above the message box.',
+   '<b>Phone:</b> all five are single-column and need no new space; the notices wrap; the diff scrolls sideways inside its card.']}
+];
+const DEC=[
+ ['Keep both Undo to here and Rewind?','Yes. Undo to here: files for one reply, chat kept. Rewind: files and chat from one of your messages. Recommendation: yes, as drawn.'],
+ ['Does a rewind keep a safety copy?','Yes, for 10 minutes, with "Undo rewind". Recommendation: yes; it removes messages, which cannot otherwise come back.'],
+ ['Where does a chat\'s own copy live?','In Bunny\'s data folder, under worktrees/<project>/<chat>; never inside or beside your project. Recommendation: the data folder (Tech Lead to confirm).'],
+ ['Which Finish choice is chosen first?','Keep the branch (destroys nothing). Merge is one tap away; Discard asks twice. Recommendation: as drawn.'],
+ ['Permission rule patterns','Simple wildcards (<code>*</code> and <code>**</code>), not regular expressions; Deny, then Ask, then Allow; per folder and global; shown on the permission prompt. HIGH: needs the owner\'s go. Recommendation: as drawn.'],
+ ['An "Always allow this" button on the permission prompt?','Not in 0.1.6; the rules screen is the one place. Recommendation: later, if people ask.']
+];
+const frameFor=(inner,chips)=>{
+ let f=size==='d'?frameD(inner,null,''):frameM(inner,null,'');
+ f=f.split('Add a goodbye to the greeter').join('Tidy the greeter').split('Add a goodbye…').join('Tidy the greeter…');
+ if(size==='d')f=f.split('<span>bunny-design-project</span><span>main</span>').join(chips||'<span>design-repo</span><span>main</span>');
+ else if(chips)f=f.replace('<div class="comp"><div class="box">','<div class="comp"><div class="ctx">'+chips+'</div><div class="box">');
+ return f;};
+let theme='light',size='d';
+const q=(s)=>document.querySelector(s);
+const fit=()=>document.querySelectorAll('.fitbox').forEach(b=>{const fr=b.querySelector('.frame');if(!fr)return;const w=fr.offsetWidth;const sc=Math.min(1,(b.clientWidth-20)/w);fr.parentElement.style.transform='scale('+sc+')';fr.parentElement.style.transformOrigin='0 0';b.style.height=(fr.offsetHeight*sc+20)+'px';});
+function render(){
+ const out=q('#out');out.innerHTML='';
+ for(const s of SEC){
+  const sec=document.createElement('section');sec.className='screen';sec.id='s'+SEC.indexOf(s);
+  let h='<h2>'+s.t+'</h2><div class="meta"><span class="tag">Risk: '+s.risk+'</span><span class="tag">'+s.files+'</span></div>';
+  if(s.polish){h+=polish();}
+  else{
+   h+='<div class="pair stack"><figure class="f"><figcaption>Today, as built ('+theme+', '+(size==='d'?'1440':'390')+')</figcaption><div class="imgbox"><img src="shots/today-'+s.today+'-'+theme+'-'+size+'.png" alt="'+s.t+': today"></div></figure>'
+   +'<figure class="f"><figcaption class="p">Proposed</figcaption><div class="fitbox"><div style="width:max-content">'+s.prop()+'</div></div></figure></div>'
+   +'<h3>Proposed: the other states</h3><figure class="f"><figcaption class="p">States (proposed)</figcaption><div style="padding:14px">'+s.spec()+'</div></figure>';}
+  h+='<ul class="notes">'+s.notes.map(n=>'<li>'+n+'</li>').join('')+'</ul>';
+  sec.innerHTML=h;out.append(sec);
+ }
+ q('#dec').innerHTML=DEC.map(d=>'<div class="q"><b>'+d[0]+'</b><br><span class="pg-dim">'+d[1]+'</span></div>').join('');
+ fit();
+}
+for(const [id,set] of [['theme',v=>{theme=v;document.documentElement.dataset.theme=v}],['size',v=>{size=v}]])
+ q('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;q('#'+id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));set(b.dataset.v);render();});
+if(matchMedia('(prefers-color-scheme:dark)').matches){theme='dark';document.documentElement.dataset.theme='dark';q('#theme').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='dark'))}
+addEventListener('resize',fit);
+render();
+</script></body></html>
