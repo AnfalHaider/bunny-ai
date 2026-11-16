@@ -193,11 +193,12 @@ export function normalisePart(part, depth = 0) {
  */
 export function analyseCommand(command, depth = 0) {
   // PowerShell reads the typographic quotes as quotes. Read the line with them as plain quotes too, and let nothing be allowed if they are there.
-  const typographic = /[\u2018\u2019\u201A\u201B\u201C\u201D\u201E]/.test(String(command ?? ''));
+  const typographic = /[\u2018\u2019\u201A\u201B\u201C\u201D\u201E\u2013\u2014\u2015]/.test(String(command ?? ''));
   if (typographic && depth < 4) {
-    const plain = String(command).replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E]/g, '"');
+    // the en dash, em dash and horizontal bar are dashes to PowerShell: Remove-Item (en dash)Recurse is Remove-Item -Recurse
+    const plain = String(command).replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E]/g, '"').replace(/[\u2013\u2014\u2015]/g, '-');
     const other = analyseCommand(plain, depth + 1);
-    const own = analyseCommand(String(command).replace(/[\u2018\u2019\u201A\u201B\u201C\u201D\u201E]/g, ''), depth + 1);
+    const own = analyseCommand(String(command).replace(/[\u2018\u2019\u201A\u201B\u201C\u201D\u201E\u2013\u2014\u2015]/g, ''), depth + 1);
     return { readings: [...other.readings, ...own.readings], texts: [...new Set([...other.texts, ...own.texts])], unsafe: true, wrapper: other.wrapper || own.wrapper, whole: other.whole };
   }
   const whole = String(command ?? '').replace(/\s+/g, ' ').trim();
