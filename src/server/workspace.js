@@ -4,16 +4,18 @@
  * Every path is resolved against the chosen folder and refused if it leaves it
  * (including through "..", an absolute path, or a symlink that points outside).
  * Tools are split by risk so the permission mode can decide what runs freely:
- *   read  - list_files, read_file, search_files
- *   edit  - write_file, edit_file
+ *   read  - list_files, read_file, search_files, find_files
+ *   edit  - write_file, edit_file, multi_edit
  *   run   - run_command
  */
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
+import { globMatcher } from './glob.js';
+import { createContext, Script } from 'node:vm';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_OUTPUT = 8_000;          // characters of command output kept
@@ -21,6 +23,9 @@ const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
+const REGEX_TIMEOUT_MS = 1000;     // one file's scan with a model-written regular expression
+const REGEX_BUDGET_MS = 5000;      // all of one search's regex time together (files just under the limit must not add up to minutes)
+const MAX_EDIT_BYTES = 20_000_000; // an edit may not grow a file past this
 // Nobody can answer a prompt from a command Bunny runs: tools are told not to ask.
 export const NON_INTERACTIVE = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', npm_config_yes: 'true', NO_UPDATE_NOTIFIER: '1' };
 
@@ -114,8 +119,8 @@ export function endsInBackground(command) {
 }
 
 export const TOOL_RISK = {
-  list_files: 'read', read_file: 'read', search_files: 'read',
-  write_file: 'edit', edit_file: 'edit',
+  list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read',
+  write_file: 'edit', edit_file: 'edit', multi_edit: 'edit',
   run_command: 'run',
 };
 
@@ -131,12 +136,32 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
         depth: { type: 'integer', description: 'How many levels deep, 1 to 4. Default 2' } }, []),
     fn('read_file', 'Read a file from the workspace: text and code, and documents (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, old .doc/.xls/.ppt) as their text, with the words in their pictures. Optionally a line range.',
       { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
-    fn('search_files', 'Search file contents in the workspace for a plain-text string (case-insensitive). Returns path:line: text.',
-      { query: { type: 'string' }, path: { type: 'string', description: 'Folder to search, default "."' } }, ['query']),
+    fn('search_files', 'Search file contents in the workspace. By default query is plain text, case-insensitive; set regex for a regular expression and case_sensitive for exact case. '
+      + 'include / exclude are file patterns such as "*.js", "src/**" or "*.{ts,tsx}" (comma-separated for several). context adds lines around each match. '
+      + 'output: "lines" (path:line: text, the default), "files" (only the names of files that match) or "counts" (matches per file). '
+      + 'Skips .git, node_modules, build output and binary files, and says so when it stops at the limit.',
+      { query: { type: 'string', description: 'Text, or a regular expression when regex is true' },
+        path: { type: 'string', description: 'Folder (or one file) to search, default "."' },
+        regex: { type: 'boolean', description: 'Treat query as a regular expression' },
+        case_sensitive: { type: 'boolean', description: 'Match case exactly. Default false' },
+        include: { type: 'string', description: 'Only files matching this pattern, e.g. "*.js,src/**"' },
+        exclude: { type: 'string', description: 'Skip files matching this pattern, e.g. "*.test.js"' },
+        context: { type: 'integer', description: 'Lines to show before and after each match, 0 to 10' },
+        output: { type: 'string', enum: ['lines', 'files', 'counts'], description: 'Result shape. Default "lines"' },
+        limit: { type: 'integer', description: 'Most results to return, up to 1000. Default 80' } }, ['query']),
+    fn('find_files', 'Find files by name pattern, newest first. pattern examples: "**/*.test.js", "src/**", "*.{ts,tsx}", "README*" (a pattern with no / matches the file name at any depth). Skips .git, node_modules and build output. Use it to locate files; use search_files to look inside them.',
+      { pattern: { type: 'string', description: 'File pattern, comma-separated for several' },
+        path: { type: 'string', description: 'Folder to search in, default "."' },
+        limit: { type: 'integer', description: 'Most files to return, up to 1000. Default 100' } }, ['pattern']),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
-    fn('edit_file', 'Replace one exact snippet in a file. old_text must appear exactly once.',
-      { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' } }, ['path', 'old_text', 'new_text']),
+    fn('edit_file', 'Replace an exact snippet in a file. old_text must appear exactly once, unless replace_all is true, which replaces every occurrence (renaming a variable, say).',
+      { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' },
+        replace_all: { type: 'boolean', description: 'Replace every occurrence of old_text. Default false' } }, ['path', 'old_text', 'new_text']),
+    fn('multi_edit', 'Apply several exact replacements to ONE file in order, all or nothing: if any one fails, the file is left untouched. One Undo covers all of them. Each edit sees the result of the ones before it.',
+      { path: { type: 'string' },
+        edits: { type: 'array', description: 'The replacements, applied in order (at most 50)',
+          items: { type: 'object', properties: { old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['old_text', 'new_text'] } } }, ['path', 'edits']),
     fn('run_command', 'Run a command yourself and get its output (2 minute limit). It runs in Windows PowerShell 5.1: '
       + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
@@ -150,9 +175,14 @@ export function describeToolCall(name, args = {}) {
   switch (name) {
     case 'list_files': return `List ${args.path || '.'}`;
     case 'read_file': return `Read ${args.path}`;
-    case 'search_files': return `Search "${String(args.query ?? '').slice(0, 60)}"`;
+    case 'search_files': {
+      const q = String(args.query ?? '').slice(0, 60);
+      return `Search ${args.regex ? `/${q}/` : `"${q}"`}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}${args.include ? ` (${String(args.include).slice(0, 40)})` : ''}`;
+    }
+    case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
-    case 'edit_file': return `Edit ${args.path}`;
+    case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
+    case 'multi_edit': return `Edit ${args.path} (${Array.isArray(args.edits) ? args.edits.length : 0} changes)`;
     case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
     default: return name;
   }
@@ -181,7 +211,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null, signal = null } = {}) {
+export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, hidden = null, clock = Date.now } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -214,6 +244,29 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
 
   const show = (abs) => relative(root, abs).split(sep).join('/') || '.';
 
+  /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder; false when it cannot be worked out (a dangling link, no permission). For the person's rules. */
+  async function canon(path = '.') {
+    const rest = [];
+    let cur = resolve(root, String(path || '.'));
+    for (let guard = 0; guard < 256; guard += 1) {
+      try {
+        const real = join(await realpath(cur), ...rest.reverse());
+        const rel = relative(await realpath(root), real);
+        return rel.startsWith('..') || isAbsolute(rel) ? null : (rel.split(sep).join('/') || '.');
+      } catch (err) {
+        // A link that points nowhere is not "a file that does not exist yet": where a write through it would land is unknown. Say so (false).
+        if (err?.code !== 'ENOENT') return false;
+        const link = await lstat(cur).catch(() => null);
+        if (link?.isSymbolicLink()) return false;
+        const up = dirname(cur);
+        if (up === cur) return null;
+        rest.push(basename(cur));
+        cur = up;
+      }
+    }
+    return false;
+  }
+
   async function list_files({ path = '.', depth = 2 } = {}) {
     const start = await inside(path);
     const max = Math.min(Math.max(Number(depth) || 2, 1), 4);
@@ -227,6 +280,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
         if (lines.length >= MAX_LIST) { lines.push('… (more not shown)'); return; }
         if (e.isDirectory() && SKIP_DIRS.has(e.name)) continue;
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue; // a path the person's rules do not let Bunny read
         lines.push(`${'  '.repeat(level)}${show(abs)}${e.isDirectory() ? '/' : ''}`);
         if (e.isDirectory() && level + 1 < max) await walk(abs, level + 1);
       }
@@ -256,33 +310,145 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     return text.length > MAX_READ ? `${text.slice(0, MAX_READ)}\n… (file truncated)` : text;
   }
 
-  async function search_files({ query, path = '.' } = {}) {
-    const needle = String(query ?? '').toLowerCase();
-    if (!needle) throw new Error('search_files needs a query');
+  async function search_files({ query, path = '.', regex = false, case_sensitive = false, include, exclude, context = 0, output = 'lines', limit } = {}) {
+    const text0 = String(query ?? '');
+    if (!text0) throw new Error('search_files needs a query');
+    if (text0.length > 500) throw new Error('The search text is longer than 500 characters.');
+    const shape = String(output || 'lines').toLowerCase();
+    if (!['lines', 'files', 'counts'].includes(shape)) throw new Error('search_files output must be "lines", "files" or "counts"');
+    let re;
+    try {
+      re = new RegExp(regex ? text0 : text0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), case_sensitive ? '' : 'i');
+    } catch (err) {
+      throw new Error(`The search pattern is not a valid regular expression: ${err.message}`);
+    }
+    // A pattern the model wrote can backtrack for hours ((a+)+$ over 40 letters). A literal cannot, so only a regex runs in a
+    // separate context with a time limit; the limit stops the match mid-way.
+    let hitsOf = (lines) => { const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; };
+    let regexSpent = 0;
+    if (regex) {
+      const sandbox = createContext({ lines: [], at: [] });
+      const script = new Script(`(() => { const re = new RegExp(${JSON.stringify(re.source)}, ${JSON.stringify(re.flags)}); const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; })()`);
+      hitsOf = (lines) => {
+        if (regexSpent >= REGEX_BUDGET_MS) throw new Error('Search stopped after 5 s; narrow the folder or the pattern.');
+        sandbox.lines = lines;
+        const began = clock();
+        try { return [...script.runInContext(sandbox, { timeout: Math.max(50, Math.min(REGEX_TIMEOUT_MS, REGEX_BUDGET_MS - regexSpent)) })]; } catch (err) {
+          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('That pattern is too slow; simplify it.');
+          throw err;
+        } finally { regexSpent += Math.max(0, clock() - began); }
+      };
+    }
+    const around = Math.min(Math.max(Number(context) || 0, 0), 10);
+    const max = Math.min(Math.max(Number(limit) || MAX_MATCHES, 1), 1000);
     const start = await inside(path);
-    const hits = [];
+    const wanted = globMatcher(include);
+    const unwanted = exclude ? globMatcher(exclude) : () => false;
+    const out = [];
+    let found = 0;       // result rows counted against the limit
+    let cut = false;
+    let filesSeen = 0;
+    const isFile = (rel) => wanted(rel) && !unwanted(rel);
+
+    // Files are read a few at a time (the disk, not the CPU, is the wait), then judged in order so the output stays stable.
+    async function load(abs) {
+      try {
+        const buf = await readFile(abs);
+        if (buf.length > 1_000_000 || buf.subarray(0, 8192).includes(0)) return null; // too big, or binary
+        return buf.toString('utf8').split('\n');
+      } catch { return null; }
+    }
+
+    function scan(abs, lines) {
+      const rel = show(abs);
+      if (!lines) return;
+      filesSeen += 1;
+      // A very long line (minified code) is judged by its first 2,000 characters.
+      const hitAt = hitsOf(lines.map((l) => (l.length > 2000 ? l.slice(0, 2000) : l)));
+      if (!hitAt.length) return;
+      if (shape !== 'lines') {
+        if (found >= max) { cut = true; return; }
+        out.push(shape === 'files' ? rel : `${rel}: ${hitAt.length}`);
+        found += 1;
+        return;
+      }
+      const shown = new Set();
+      const keep = [];
+      for (const i of hitAt) {
+        if (found >= max) { cut = true; break; }
+        found += 1;
+        for (let j = Math.max(0, i - around); j <= Math.min(lines.length - 1, i + around); j += 1) {
+          if (!shown.has(j)) { shown.add(j); keep.push(j); }
+        }
+      }
+      keep.sort((a, b) => a - b);
+      const hitSet = new Set(hitAt);
+      let prev = -2;
+      for (const j of keep) {
+        if (around && prev >= 0 && j > prev + 1) out.push('--');
+        out.push(`${rel}${hitSet.has(j) ? ':' : '-'}${j + 1}${hitSet.has(j) ? ':' : '-'} ${lines[j].replace(/\r$/, '').trim().slice(0, 200)}`);
+        prev = j;
+      }
+      if (around) out.push('--');
+    }
+
+    const candidates = [];
     async function walk(dir) {
-      if (hits.length >= MAX_MATCHES) return;
+      let entries = [];
+      try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const e of entries) {
+        const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue;
+        if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
+        if (e.isFile() && isFile(show(abs))) candidates.push(abs);
+      }
+    }
+
+    const info = await stat(start);
+    if (info.isFile()) candidates.push(start); else await walk(start);
+    for (let i = 0; i < candidates.length && !cut; i += 48) {
+      const batch = candidates.slice(i, i + 48);
+      const loaded = await Promise.all(batch.map(load));
+      for (let k = 0; k < batch.length && !cut; k += 1) {
+        scan(batch[k], loaded[k]);
+        if (regex) await new Promise((r) => setImmediate(r)); // the event loop keeps ticking between files
+      }
+    }
+    while (out.length && out[out.length - 1] === '--') out.pop();
+    if (!out.length) return `No matches in ${filesSeen} file${filesSeen === 1 ? '' : 's'} searched.`;
+    if (cut) out.push(`… (stopped at the limit of ${max} ${shape === 'lines' ? 'matches' : 'files'}; narrow the search with path or include, or raise limit)`);
+    return out.join('\n');
+  }
+
+  async function find_files({ pattern, path = '.', limit } = {}) {
+    const text = String(pattern ?? '').trim();
+    if (!text) throw new Error('find_files needs a pattern');
+    const matches = globMatcher(text);
+    const max = Math.min(Math.max(Number(limit) || 100, 1), 1000);
+    const start = await inside(path);
+    const found = [];
+    let seen = 0;
+    async function walk(dir) {
       let entries = [];
       try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
-        if (hits.length >= MAX_MATCHES) return;
         const abs = join(dir, e.name);
+        if (hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
-        let text;
-        try {
-          const info = await stat(abs);
-          if (info.size > 1_000_000) continue;
-          text = await readFile(abs, 'utf8');
-        } catch { continue; }
-        if (text.includes('\u0000')) continue; // binary
-        text.split('\n').forEach((line, i) => {
-          if (hits.length < MAX_MATCHES && line.toLowerCase().includes(needle)) hits.push(`${show(abs)}:${i + 1}: ${line.trim().slice(0, 200)}`);
-        });
+        if (!e.isFile() || !matches(relative(start, abs).split(sep).join('/'))) continue;
+        seen += 1;
+        found.push(abs);
       }
     }
     await walk(start);
-    return hits.join('\n') || 'No matches.';
+    if (!found.length) return `No files match ${text}.`;
+    // Newest first: what changed last is usually what is wanted. A file that vanished meanwhile sorts last.
+    const dated = await Promise.all(found.map(async (abs) => ({ abs, at: await stat(abs).then((s) => s.mtimeMs, () => 0) })));
+    dated.sort((a, b) => b.at - a.at || a.abs.localeCompare(b.abs));
+    const lines = dated.slice(0, max).map((f) => show(f.abs));
+    if (seen > max) lines.push(`… (${seen - max} more not shown; narrow the pattern or raise limit)`);
+    return lines.join('\n');
   }
 
   async function write_file({ path, content = '' } = {}) {
@@ -293,17 +459,45 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     return `Wrote ${show(abs)} (${String(content).split('\n').length} lines)`;
   }
 
-  async function edit_file({ path, old_text, new_text } = {}) {
+  // One replacement on text already in memory. Plain split/join, so "$&" and friends in new_text stay literal.
+  function replaceIn(text, { old_text, new_text, replace_all = false }, path, label = 'old_text') {
+    const old = String(old_text ?? '');
+    if (!old) throw new Error(`${label === 'old_text' ? 'edit_file' : label} needs old_text`);
+    const count = text.split(old).length - 1;
+    if (count === 0) throw new Error(`${label} was not found in ${path}`);
+    if (count > 1 && !replace_all) throw new Error(`${label} appears ${count} times in ${path}; include more surrounding lines, or set replace_all`);
+    const grown = text.length + count * (String(new_text ?? '').length - old.length);
+    if (grown > MAX_EDIT_BYTES) throw new Error(`That edit would make ${path} about ${Math.round(grown / 1e6)} MB, past the ${MAX_EDIT_BYTES / 1e6} MB limit. Nothing was changed.`);
+    return { text: text.split(old).join(String(new_text ?? '')), count };
+  }
+
+  async function edit_file({ path, old_text, new_text, replace_all = false } = {}) {
     const abs = await inside(path);
     const text = await readFile(abs, 'utf8');
-    const old = String(old_text ?? '');
-    if (!old) throw new Error('edit_file needs old_text');
-    const count = text.split(old).length - 1;
-    if (count === 0) throw new Error(`old_text was not found in ${path}`);
-    if (count > 1) throw new Error(`old_text appears ${count} times in ${path}; include more surrounding lines`);
+    const done = replaceIn(text, { old_text, new_text, replace_all: replace_all === true }, path);
     await beforeWrite?.(abs);
-    await writeFile(abs, text.replace(old, String(new_text ?? '')), 'utf8');
-    return `Edited ${show(abs)}`;
+    await writeFile(abs, done.text, 'utf8');
+    return `Edited ${show(abs)}${done.count > 1 ? ` (${done.count} replacements)` : ''}`;
+  }
+
+  async function multi_edit({ path, edits } = {}) {
+    if (!Array.isArray(edits) || !edits.length) throw new Error('multi_edit needs a list of edits');
+    if (edits.length > 50) throw new Error('multi_edit takes at most 50 edits at a time; split it up');
+    const abs = await inside(path);
+    let text = await readFile(abs, 'utf8');
+    let total = 0;
+    for (let i = 0; i < edits.length; i += 1) {
+      try {
+        const done = replaceIn(text, { ...edits[i], replace_all: edits[i]?.replace_all === true }, path, `edit ${i + 1}'s old_text`);
+        text = done.text;
+        total += done.count;
+      } catch (err) {
+        throw new Error(`${err.message}. Nothing was changed: no edit was applied.`);
+      }
+    }
+    await beforeWrite?.(abs); // once, so one Undo restores the file
+    await writeFile(abs, text, 'utf8');
+    return `Edited ${show(abs)} (${edits.length} edits, ${total} replacements)`;
   }
 
   async function run_command({ command, cwd } = {}) {
@@ -369,12 +563,13 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     });
   }
 
-  const tools = { list_files, read_file, search_files, write_file, edit_file, run_command };
+  const tools = { list_files, read_file, search_files, find_files, write_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
+    canon,
     run: (name, args) => tools[name](args ?? {}),
   };
 }
