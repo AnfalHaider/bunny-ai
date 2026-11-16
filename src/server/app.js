@@ -2448,6 +2448,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       };
 
       const runTool = async ({ name, arguments: args }) => {
+        closeThinking(); // a step ends the thinking that led to it
         let parsed = {};
         try {
           parsed = JSON.parse(args || '{}');
@@ -2607,6 +2608,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // How far one reply may go, clamped whatever Settings holds (see caps.js). A scheduled run has nobody watching: it gets less.
       const replyCaps = capsFor(settings, Boolean(scheduledTask));
       let permissionNudges = 0;
+      // How long the model thought, kept with the reply ("Thought for 21s"): from its first thinking text to the first word or step after it.
+      let thinkingMs = 0;
+      let thinkingSince = 0;
+      const closeThinking = () => { if (thinkingSince) { thinkingMs += Date.now() - thinkingSince; thinkingSince = 0; } };
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
@@ -2669,9 +2674,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             extraBody,
             parallel: (name) => name === 'run_subagent',
             // The model's thinking, shown folded above the reply and kept with it.
-            onThinking: (piece) => { if (agentScope.getStore()) return; thinking += piece; send('thinking', { text: piece }); },
+            onThinking: (piece) => { if (agentScope.getStore()) return; if (!thinkingSince) thinkingSince = Date.now(); thinking += piece; send('thinking', { text: piece }); },
             auth: provider.auth ?? null,
           })) {
+            closeThinking();
             assembled += delta;
             sinceStep += delta;
             send('delta', { text: delta });
@@ -2715,7 +2721,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             }
             // A fallback model has answered: the failed attempts' "could not finish" notes are not left behind.
             if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
-            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking } : {}) });
+            closeThinking();
+            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
             session = await sessions.get(id);
             send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
