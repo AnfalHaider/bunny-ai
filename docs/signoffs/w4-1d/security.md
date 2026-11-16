@@ -1,9 +1,9 @@
 ---
 piece: w4-1d
 role: security
-sha: 0bdb7f3
+sha: 1d8f6ec
 verdict: PASS
 date: 2026-11-16
 ---
 
-Re-stamp: token budget clamped to at least 100000 and never 0 (caps.js, tested on 11 inputs); Cookie/Set-Cookie secret pattern catches and stays fast; 27/27 related tests pass at 0bdb7f3. Earlier notes closed.
+Re-stamp at 1d8f6ec: the only change since 0bdb7f3 is one help-text line in settings.html (token budget cannot be turned off, minimum 100,000), which matches caps.js.
