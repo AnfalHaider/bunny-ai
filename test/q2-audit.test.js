@@ -227,3 +227,9 @@ test('Q2-23: when the server answers 403 "request.noToken" (a window left open a
   const ui = (await Promise.all(['api.js', 'chat.js', 'token.js'].map((f) => read(`src/ui/${f}`).catch(() => '')))).join(' ');
   assert.ok(/noToken|out of date/i.test(ui), 'no UI code handles the out-of-date window answer');
 });
+
+test('Q2-31: after Stop, the page waits for the stopped reply itself, not for a tool step (which is saved first)', { todo: 'Q2-31 (found on the Builder branch at 6ef4ccf): src/ui/chat.js refreshSession counts every assistant-role message, tool steps included, so it reads the chat before the partial reply and the Stopped report are saved; they appear only after a reload' }, async () => {
+  const js = await read('src/ui/chat.js');
+  const body = (js.split('async function refreshSession')[1] ?? '').split('async function openSession')[0];
+  assert.ok(/tool_call/.test(body), 'refreshSession does not tell a tool step from a reply');
+});

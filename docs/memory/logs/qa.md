@@ -2,6 +2,14 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-16 - D1 signed FAIL at 2cfeec5; T-3 and D-2 walked at 6ef4ccf
+
+- **D1** at 2cfeec5: gate 7 of 7; my d1 sign-off is FAIL for Q2-28 (phone Settings pills one at a time). Re-sign on the release sha once fixed.
+- **6ef4ccf** gate 7 of 7 (123 e2e). A stray test server on port 5199 from an earlier run made the e2e step fail in 2 s ("already used") twice; kill it before running the gate.
+- **T-3 core** (Q2-10 to 13): a model that never answers now switches in 33 s (picked), 63 s (Auto) and stops after 93 s with one saved note; before it was 122, 242 and 363 s with red lines. **T-3 offline:** calm line, waiting bubble, Offline chip, Cancel, replace, exactly-once resend, local model answers: all pass, also with real offline emulation. New: Q2-30 (a closed local provider is tried offline and fails in red).
+- **D-2:** grouped steps, narration, reload and 26 older chats pass in four combinations. New: Q2-29 (a non-zero exit code is not marked Failed), Q2-31 (after Stop, the Stopped report appears only after a reload).
+- **Lesson:** when a check passes on a clean profile and fails on a reused one, the reused profile is the suspect: start every walk on a fresh data folder.
+
 ## 2026-11-16 - Builder fixes re-walked at 4405dc0; D1 walked
 
 Gate 7 of 7 (111 e2e). Verified fixed: Q2-1, 2, 3, 8, 9, 17, 19, 23 (table in `docs/plans/audit-q2.md`). New: Q2-27 (a false "restarted" banner when the in-app browser opens Bunny's own API) and Q2-28 (D1: on a phone each Settings pill is as wide as the strip, so one section is visible at a time; `.nav-row { width: 100% }` at `src/ui/app.css:259`). D1 walk `e2e/q2-d1-walk.mjs`: 22 of 24 (the two failures are Q2-28). Add-a-provider button, custom form before Popular providers, full-width phone Automation buttons and the purple bunny (accent token `#6a4fd8` / `#b3a1ff`, grumpy the same) all pass. D1 not signed: waiting for its sha. **Lesson:** a check I wrote to match what I had seen (one pill in view) passed a layout that was wrong; assert what a person needs to see (several pills at once), not what the screen shows.

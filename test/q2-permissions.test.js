@@ -35,7 +35,7 @@ async function setup(t) {
       const tool = /^call (\w+)/.exec(asked)?.[1];
       const done = body.messages.some((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool, arguments: JSON.stringify(ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
+      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool, arguments: JSON.stringify(tool === 'run_command' && /exit3/.test(asked) ? { command: 'exit 3' } : (ARGS[tool] ?? {})) } }] }) + 'data: [DONE]\n\n');
       else res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n');
     });
   });
@@ -46,13 +46,13 @@ async function setup(t) {
 }
 
 /** Run one reply that calls `tool` in `mode`; answer cards; say what was asked and whether the tool ran. */
-async function run(base, mode, tool, { answer = true, settings = {} } = {}) {
+async function run(base, mode, tool, { answer = true, settings = {}, suffix = '' } = {}) {
   await fetch(`${base}/api/settings`, { method: 'PUT', headers: j, body: JSON.stringify(settings) });
   const folder = await mkdtemp(join(tmpdir(), 'bunny-q2-perm-'));
   const { body: s } = await post(base, '/api/sessions', { title: 'perm', providerId: 'openai', model: 'gpt-4o' });
   const set = (name, value) => fetch(`${base}/api/sessions/${s.id}/setting/${name}`, { method: 'PATCH', headers: j, body: JSON.stringify({ value }) });
   await set('folder', folder); await set('workMode', 'code'); await set('permissionMode', mode);
-  const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: `call ${tool}`, providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) });
+  const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: `call ${tool}${suffix}`, providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) });
   const asked = []; let buf = '';
   const reader = res.body.getReader(); const dec = new TextDecoder();
   for (;;) {
@@ -155,4 +155,12 @@ test('Building a tool always asks, in every mode (today: by design, so a program
     const r = await run(base, mode, 'create_tool', { answer: false, settings: { customToolsEnabled: true } });
     assert.equal(r.asked.length, 1, mode);
   }
+});
+
+// ---------------------------------------------------------------- a command that fails is shown as failed (D-2)
+
+test('Q2-29: a command that ends with an error code is a failed step, not a "done" one', { todo: 'Q2-29 (found on the Builder branch at 6ef4ccf): src/server/workspace.js run_command returns "[exit code N]" as text and src/server/app.js logs status "done"; the transcript shows no Failed label' }, async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'auto', 'run_command', { suffix: ' exit3' });
+  assert.equal(r.status, 'failed', `the step is saved as "${r.status}"`);
 });

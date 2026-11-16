@@ -21,7 +21,7 @@ Docs and tests only. Nothing in `src/` was changed. Nothing here touched `%LOCAL
 | Controls inventoried (live DOM, 5 pages) | 316 (`docs/plans/audit-q2-inventory.md`, one row each) |
 | Verdicts in the inventory | 245 PASS, 23 FAIL, 48 UNKNOWN |
 | Checks driven in this audit | 79 (`controls` 43, `panes` 17, `pages` 19) plus the six fallback and Code-mode reproductions |
-| Defects | 27 raised (5 High, 12 Medium, 10 Low), 1 decision for the owner and 1 open question; 8 are fixed and re-walked on `4405dc0` (see below) |
+| Defects | 30 raised (5 High, 15 Medium, 10 Low), 1 decision for the owner and 1 open question; 8 are fixed and re-walked on `4405dc0` (see below) |
 | New tests | 23 unit (6 pass, 17 todo = defects), 17 browser (7 pass, 10 expected-fail = defects); the gate passes 6/6 with them |
 
 The owner's reports are all real. Four of the six panes the owner mentioned are partly or wholly empty shells, and the model fallback is slower and messier than the screen suggests.
@@ -82,6 +82,9 @@ Severity: **High** = wrong or unsafe result, or a control that does nothing; **M
 | Q2-25 | Low | In Manual mode every Allow covers one call only; there is no "allow for this chat" or "allow this kind of step" on the card, so a ten-file job is ten cards. (Switching to Accept edits or Auto is the way out, but the card does not say so.) | `src/ui/chat.js:1017-1030` (the card has only Allow and Deny); `src/server/app.js:1636-1644`. | `test/q2-permissions.test.js` Manual rows: one card per call. | (design; no test) |
 | Q2-27 | Low | **A false "Bunny AI restarted, so this window is out of date" banner** appears when the in-app browser is pointed at one of Bunny's own `/api/...` addresses. The new reachability probe sends the page's request with `mode: 'no-cors'`, the browser drops the token header, the server answers 403 `request.noToken`, the token refresh finds the same token, and the banner is shown anyway. Rare (only Bunny's own API in its own browser pane), but the banner has no dismiss and tells the person to reload for nothing. | `src/ui/browser-pane.js` `reachable()` (found on the Builder branch at `4405dc0`) with `src/ui/token.js` `window.fetch` (`say()` after a refresh that changed nothing) | probe: browser pane to `http://127.0.0.1:PORT/api/settings`: two 403s without a token, then `#bunny-restarted` is present and covers the toolbar (`e2e/q2-s1-walk.mjs` B8). | (found on the Builder branch; no test here yet) |
 | Q2-28 | Medium | **D1 fix 2 (phone Settings pill row) shows one pill at a time.** On a 390 px phone each section pill is as wide as the whole strip (364 px), so only the selected section ("Appearance") is visible and the other 14 sections can only be found by swiping sideways blind. Design's own built screenshot (`docs/design/review-0.1.4/built/settings-light-m.png`) shows the same. | `.nav-row { width: 100% }` at `src/ui/app.css:259` is not overridden by the phone rule `.settings-nav-list .nav-row { flex: none; … }` (D1, `2cfeec5`). Needs `width: auto`. | `e2e/q2-d1-walk.mjs` S-phone-light and S-phone-dark: 15 pills at `Profile -723..-359, Usage -355..9, Appearance 13..377, My Dear Bunny 381..745 …`; 1 fully visible. | `e2e/q2-d1-walk.mjs` (script, not in the gate) |
+| Q2-29 | Medium | **A command that ends with an error code is shown as done, not Failed** (D-2). `exit 3` is a green "Ran a command" with no red marker; only a tool that itself errors (a file that is not there) gets the red Failed label and the error. | `src/server/workspace.js` `run_command` returns `[exit code N]` as text; `src/server/app.js` logs the step with status `done` (found on the Builder branch at `6ef4ccf`). | `e2e/q2-t3d2-walk.mjs` D2 in all four widths and themes: "no red Failed marker visible"; screenshot `d2-desktop-light-failed.png` shows `Ran a command` and the reply "That command failed." | unit Q2-29 (todo) |
+| Q2-30 | Medium | **Offline with a local provider that is connected but not running (an Ollama that is closed): the message is sent anyway and fails in red.** Bunny prefers a local model when offline; when that one is down it does not fall back to the calm waiting state. | the T-3 offline path in `src/ui/chat.js` (local model preferred offline, `092cc6d`) | `e2e/q2-t3d2-walk.mjs` T4b: queued bubble 0, red failure lines 1, one request sent while offline. | (script; needs the offline switch) |
+| Q2-31 | Medium | **After Stop in a Code chat that ran steps, the Stopped report and the partial reply do not appear until the page is reloaded** (they are saved). Same family as Q2-19, one case left: the steps are saved before the partial, and the wait ends at the first step. | `src/ui/chat.js:2056-2073` `refreshSession`: `assistants()` counts every assistant-role message, tool steps included (found on the Builder branch at `6ef4ccf`). | `e2e/q2-t3d2-walk.mjs` D3, four combinations: "no stopped report on screen within 6 s after Stop (saved kinds: text,tool_call,partial); after a reload it is there". | unit Q2-31 (todo) |
 
 ### Permission modes and grants (owner's rule: "when allowed by me, everything should be allowed")
 
@@ -116,6 +119,26 @@ Gate on `4405dc0`: 7 of 7 (111 e2e). Scripts re-run against it with the launch t
 | Q2-4, 5, 6, 7, 10 to 16, 18, 20 to 22, 24, 25 | still open (Builder: next) | controls, panes and permission scripts |
 
 New on the Builder branch: **Q2-27** (false restart banner) and **Q2-28** (D1 phone pills). The service-worker change (other sites left alone) was exercised by PN2, PN4, PN5 and B7; no regression found.
+
+### T-3 and D-2 on the Builder branch at `6ef4ccf` (QA, 2026-11-16)
+
+Gate on `6ef4ccf`: 7 of 7 (123 e2e). Invented profile, guard on.
+
+**Q2-10 to Q2-13, a model that never answers** (`e2e/q2-fallback.mjs`, same scenarios as the first audit):
+
+| Run | Before (`19163fa`) | Now (`6ef4ccf`) | What the person sees now |
+|---|---|---|---|
+| Picked model stalls | 122 s, one red line left, "...was busy" | **33 s** | one line: "Answered by offline/bunny-large because offline/bunny-code did not answer in time"; no red line; the saved chat has only the answer |
+| Auto, two models stall | 242 s, two red lines, note named the last | **63 s** | "Auto · Chat → offline/bunny-small (Bunny Code (offline) did not answer)": no red line; the note names only the first model that failed, not the second |
+| Every model stalls | 363 s, three identical red lines | **93 s**, three attempts then stop | one collapsed line "The reply failed / Failed"; the saved chat holds one error note with the reason (it opens to it) |
+| Picked model answers 429 | switched at 3 s, one red line left | 3 s | "...because offline/bunny-code was busy (rate limit or overloaded)"; no red line |
+| All providers unreachable | three red lines | 1 to 5 s | one note "The reply failed", opens to the reason, with Try again and Choose another model; **one note after a reload** |
+
+Still true: for the 30 s of each attempt the screen says only "Streaming..." (no "trying the next model" line was seen on the status line), and Auto names only the first failed model.
+
+**T-3 offline** (`q2-t3d2-walk.mjs`: the server test switch plus the browser's offline event, and once the browser's real offline emulation): the message waits with a calm line ("You are offline. I will send this when the network is back."), a waiting bubble and an Offline chip, with no red line and no request; Cancel removes it; typing a new message replaces the waiting one; on reconnect exactly one request is sent and answered, with one user bubble; a local model (127.0.0.1) answers while offline; real offline emulation behaves the same and recovers. **One defect: Q2-30.**
+
+**D-2 transcript** (four widths and themes): a reply with several tool runs and narrations shows narration lines between collapsed groups ("Listed a folder", "Read a file, wrote a file", "Ran a command"), sub-rows on demand, no horizontal overflow, and the same groups, notes and summaries after a reload; a failing tool (a missing file) shows the red Failed label, the file and the error; 26 chats saved by an older build (46 tool groups or rows) all open and render. **Two defects: Q2-29, Q2-31.**
 
 ### Open question (UNKNOWN, not counted)
 
