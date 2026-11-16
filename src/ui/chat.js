@@ -965,6 +965,14 @@ function stepKind(tool) {
 
 /** "Read 3 files, tried to read another", in the order the steps ran, numbers under ten in words. */
 function summariseSteps(steps) {
+  // One search on its own says what it looked for: "Searched for /TODO\d+/ in src".
+  if (steps.length === 1 && steps[0].status !== 'failed' && steps[0].status !== 'denied') {
+    const what = String(steps[0].tool ?? '').replace(/^.* › /, '').trim();
+    const search = /^Search (\S.*)$/.exec(what);
+    const find = /^Find (\S.*)$/.exec(what);
+    if (search) return `Searched for ${search[1].slice(0, 100)}`;
+    if (find) return `Searched for files matching ${find[1].slice(0, 100)}`;
+  }
   const parts = [];
   for (const s of steps) {
     const failed = s.status === 'failed' || s.status === 'denied';

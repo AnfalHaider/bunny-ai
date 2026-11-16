@@ -40,6 +40,25 @@ test('three steps in a row are one collapsed line with a plain summary, and open
   await expect(page.locator('.msg.assistant .body').last()).toContainText('All good.');
 });
 
+test('W2-4: a lone search names what it looked for; several searches are still counted', async ({ page, request }) => {
+  await seeded(page, request, [
+    user('where is it'),
+    step('Search /TODO\d+/ in src (*.js)'),
+    reply('Found it.'),
+    user('and files'),
+    step('Find **/*.test.js'),
+    reply('Those.'),
+    user('again'),
+    step('Search "a"'), step('Search "b"'),
+    reply('Done.'),
+  ]);
+  const lines = page.locator('.tool-group-summary');
+  await expect(lines).toHaveCount(3);
+  await expect(lines.nth(0)).toHaveText('Searched for /TODO\d+/ in src (*.js)');
+  await expect(lines.nth(1)).toHaveText('Searched for files matching **/*.test.js');
+  await expect(lines.nth(2)).toHaveText('Searched two times');
+});
+
 test('narration between steps splits the groups and stays visible', async ({ page, request }) => {
   await seeded(page, request, [
     user('go'),
