@@ -121,6 +121,18 @@ const fake = createServer((req, res) => {
       if (FAIL.mode === 'stall') { res.writeHead(200, { 'content-type': 'text/event-stream' }); return; } // never a byte, never an end
     }
     if ((SPECIAL === 'ask' || SPECIAL === 'ask2') && done === 0 && !/Do not stop to ask permission/.test(JSON.stringify(body.messages))) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: SPECIAL === 'ask' ? 'The folders are ready. Please confirm that you would like me to make the files?' : 'I can set that up for you. I have the plan ready. Let me know if you want me to continue.' }) + 'data: [DONE]\n\n'); return; }
+    if (SPECIAL === 'ask3' || SPECIAL === 'ask4') {
+      const nudged = /Do not stop to ask permission/.test(JSON.stringify(body.messages));
+      const reply = (d) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(d + 'data: [DONE]\n\n'); };
+      if (nudged) { reply(done === 0 ? call('write_file', { path: 'nudged.txt', content: 'carried on' + '\n' }) : frame({ content: 'All done after the nudge.' })); return; }
+      if (done === 0) { reply(call('update_tasks', { tasks: SPECIAL === 'ask3' ? [{ text: 'Make the page' }, { text: 'Check it' }] : [{ text: 'Make the page', done: true }, { text: 'Check it', done: true }] })); return; }
+      reply(frame({ content: SPECIAL === 'ask3' ? 'The plan is set. Let me know if you want me to continue.' : 'Everything is finished and checked. Let me know if you want me to also add tests.' })); return;
+    }
+    if (SPECIAL === 'cutwrite') {
+      const reply = (d) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(d + 'data: [DONE]\n\n'); };
+      if (done === 0 && !/too long|smaller pieces|cut off/i.test(JSON.stringify(body.messages))) { reply(frame({ tool_calls: [{ index: 0, id: 'c_cut', function: { name: 'write_file', arguments: '{"path":"cut.txt","content":"hello wor' } }] }) + 'data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] }) + '\n\n'); return; }
+      reply(frame({ content: 'Sorry, I will resend it in smaller pieces.' })); return;
+    }
     if (SPECIAL === 'written' && done === 0) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: 'Writing it now. <tool_call><function=write_file><parameter=path>written.txt</parameter><parameter=content>hello from a written call</parameter></function></tool_call>' }) + 'data: [DONE]\n\n'); return; }
     if (SPECIAL === 'written' && done === 1) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(frame({ content: 'Now the second. <tool_call><function=write_file><parameter=path>written2.txt</parameter><parameter=content>unclosed call' }) + 'data: [DONE]\n\n'); return; }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -156,7 +168,7 @@ try {
     return { title: await winPage.title(), url: winPage.url(), text: (await winPage.evaluate(() => document.body.innerText)).slice(0, 6000), elements: el };
   };
 
-  async function run(name, { message, steps, fail = null, auto = false, model = TOP, answerDelayMs = 0, perm = 'auto', special = null }) {
+  async function run(name, { message, steps, fail = null, auto = false, model = TOP, answerDelayMs = 0, perm = 'auto', special = null, pick = null }) {
     if (process.env.SCEN && !process.env.SCEN.split(',').some((x) => name.startsWith(x))) return { name, work: '', events: [], answered: [], reqError: null, steps: [], final: '(skipped)', seen: [], ms: 0, session: '' };
     SPECIAL = special; SCRIPT = steps; FAIL = fail; FIRST = null; SEEN.length = 0; t0 = Date.now();
     const work = mkdtempSync(join(tmpdir(), 'bunny-w6-work-'));
@@ -174,7 +186,7 @@ try {
           const block = buf.slice(0, i); buf = buf.slice(i + 2); const ev = /^event: (\w+)/m.exec(block)?.[1]; const data = /^data: (.*)$/m.exec(block)?.[1]; if (!ev) continue;
           let p = null; try { p = JSON.parse(data); } catch { /* not json */ }
           events.push({ t: Date.now() - t0, ev, brief: ev === 'tool' ? `${p?.tool} [${p?.status}]` : ev === 'status' ? JSON.stringify(p).slice(0, 120) : ev === 'error' ? JSON.stringify(p).slice(0, 200) : '' });
-          if (ev === 'question') { const late = /look right/.test(p.question ?? '') ? answerDelayMs : 0; setTimeout(() => api(`/api/sessions/${s.id}/question/${p.id}`, 'POST', { choices: [p.choices?.[0]?.label ?? 'Yes'] }), late); answered.push(p.question); }
+          if (ev === 'question') { const late = /look right/.test(p.question ?? '') ? answerDelayMs : 0; setTimeout(() => api(`/api/sessions/${s.id}/question/${p.id}`, 'POST', { choices: [(pick && p.choices?.find((c) => c.label === pick)?.label) ?? p.choices?.[0]?.label ?? 'Yes'] }), late); answered.push(p.question); }
           if (ev === 'permission') { await api(`/api/sessions/${s.id}/permission/${p.id}`, 'POST', { allowed: true }); }
           if (ev === 'capability') { await api(`/api/sessions/${s.id}/capability/${p.id}`, 'POST', { granted: false }); }
           if (ev === 'browser') {
@@ -242,6 +254,11 @@ try {
   results.push(await run('S9 manual-mode', { message: MSG, steps: plan(), model: 'offline/bunny-large', perm: 'ask' }));
   results.push(await run('S10 ask-permission', { message: 'W6 set it up', steps: [['write_file', { path: 'a.txt', content: 'a\n' }], ['write_file', { path: 'b.txt', content: 'b\n' }]], special: 'ask', model: 'offline/bunny-large' }));
   results.push(await run('S10b ask-permission-letmeknow', { message: 'W6 set it up too', steps: [['write_file', { path: 'a.txt', content: 'a' + String.fromCharCode(10) }]], special: 'ask2', model: 'offline/bunny-large' }));
+  results.push(await run('S10c nudge-open-plan', { message: 'W6 plan then stop', steps: [], special: 'ask3', model: 'offline/bunny-large' }));
+  results.push(await run('S10d no-nudge-finished', { message: 'W6 finished job', steps: [], special: 'ask4', model: 'offline/bunny-large' }));
+  results.push(await run('S13a loop-keep-going', { message: 'W6 repeat the same step', steps: Array.from({ length: 6 }, () => ['run_command', { command: 'Write-Output same' }]), model: 'offline/bunny-large', pick: 'Keep going' }));
+  results.push(await run('S13b loop-stop', { message: 'W6 repeat the same step again', steps: Array.from({ length: 8 }, () => ['run_command', { command: 'Write-Output same2' }]), model: 'offline/bunny-large', pick: 'Stop here' }));
+  results.push(await run('S14 cut-write', { message: 'W6 write a big file', steps: [], special: 'cutwrite', model: 'offline/bunny-large' }));
   results.push(await run('S11 written-calls', { message: 'W6 write it out', steps: [], special: 'written', model: 'offline/bunny-large' }));
   // S12 (last, it ends the app server): a program the server started must be gone after the server is killed hard (a crash, not a clean stop)
   const KILL_PORT = 5880 + Math.floor(Math.random() * 90);
@@ -268,7 +285,7 @@ try {
   for (const r of results) {
     log(NL + '=== ' + r.name + ` (${Math.round(r.ms / 1000)} s)  request error: ${r.reqError ?? 'none'}  steps saved: ${r.steps.length}`);
     r.steps.forEach((s, i) => log(String(i).padStart(2), (s.status ?? '').padEnd(8), (s.tool ?? '').slice(0, 62).padEnd(62), '|', s.result.slice(0, 110), s.att ? `[+${s.att} image]` : ''));
-    for (const x of r.seen.filter((q) => q.roles)) { log('  first request of', x.model, 'at', Math.round(x.t / 1000) + 's:', 'roles=' + x.roles.slice(0, 120), 'sawEarlierSteps=' + x.prevSteps, 'tool msgs=' + x.toolMsgs, 'system tail:', String(x.sys).slice(0, 120)); if (x.extraUser) log('  EXTRA USER MESSAGE the fallback model was given (' + x.extraUser.length + ' chars):', x.extraUser.replace(/\s+/g, ' ').slice(0, 1800)); } if (r.posts) log('  client sends:', r.posts.join(' || ')); log('  written-out call markup left in the saved chat:', r.markup); log('  tool result sizes the model received (chars):', r.seen.map((x) => x.lastTool).join(',')); log('  permission cards:', r.events.filter((e) => e.ev === 'permission').length); log('  final:', r.final.replace(/\s+/g, ' ')); log('  models by step:', r.seen.map((x) => `${x.step}:${x.model.replace('offline/bunny-', '')}`).join(' ').slice(0, 400));
+    for (const x of r.seen.filter((q) => q.roles)) { log('  first request of', x.model, 'at', Math.round(x.t / 1000) + 's:', 'roles=' + x.roles.slice(0, 120), 'sawEarlierSteps=' + x.prevSteps, 'tool msgs=' + x.toolMsgs, 'system tail:', String(x.sys).slice(0, 120)); if (x.extraUser) log('  EXTRA USER MESSAGE the fallback model was given (' + x.extraUser.length + ' chars):', x.extraUser.replace(/\s+/g, ' ').slice(0, 1800)); } if (r.posts) log('  client sends:', r.posts.join(' || ')); log('  written-out call markup left in the saved chat:', r.markup); log('  tool result sizes the model received (chars):', r.seen.map((x) => x.lastTool).join(',')); log('  questions asked:', JSON.stringify(r.answered).slice(0, 300)); log('  permission cards:', r.events.filter((e) => e.ev === 'permission').length); log('  final:', r.final.replace(/\s+/g, ' ')); log('  models by step:', r.seen.map((x) => `${x.step}:${x.model.replace('offline/bunny-', '')}`).join(' ').slice(0, 400));
     const marks = r.events.filter((e) => e.ev === 'status' || e.ev === 'error' || e.ev === 'newChat' || e.ev === 'done'); log('  status/error events:', marks.map((e) => `${Math.round(e.t / 1000)}s ${e.ev} ${e.brief}`).join(' | ').slice(0, 900));
   }
   log(NL + 'disk (S1):', JSON.stringify(disk));
