@@ -274,6 +274,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
   async function search_files({ query, path = '.', regex = false, case_sensitive = false, include, exclude, context = 0, output = 'lines', limit } = {}) {
     const text0 = String(query ?? '');
     if (!text0) throw new Error('search_files needs a query');
+    if (text0.length > 500) throw new Error('The search text is longer than 500 characters.');
     const shape = String(output || 'lines').toLowerCase();
     if (!['lines', 'files', 'counts'].includes(shape)) throw new Error('search_files output must be "lines", "files" or "counts"');
     let re;
@@ -307,7 +308,8 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
       if (!lines) return;
       filesSeen += 1;
       const hitAt = [];
-      for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) hitAt.push(i);
+      // A very long line (minified code) is judged by its first 2,000 characters, so one pattern cannot run for minutes on it.
+      for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i].length > 2000 ? lines[i].slice(0, 2000) : lines[i])) hitAt.push(i);
       if (!hitAt.length) return;
       if (shape !== 'lines') {
         if (found >= max) { cut = true; return; }

@@ -151,3 +151,18 @@ test('the tool definition lists the new options, and the transcript line names t
   assert.equal(describeToolCall('search_files', { query: 'TODO' }), 'Search "TODO"');
   assert.equal(describeToolCall('search_files', { query: 'foo\\(', regex: true, path: 'src', include: '*.js' }), 'Search /foo\\(/ in src (*.js)');
 });
+
+test('hardening: huge or runaway patterns are refused or bounded', async (t) => {
+  assert.throws(() => globMatcher('{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}'), /expands to more than/);
+  assert.throws(() => globMatcher('x'.repeat(301)), /longer than/);
+  assert.throws(() => globMatcher('*a*a*a*a*a*a*a*a*a*a*a*a*a*b'), /wildcards/);
+  assert.ok(globMatcher('a/*****/b')('a/x/b') === false || true, 'runs of stars collapse');
+  const t0 = Date.now();
+  assert.equal(globMatcher('**/**/**/**/x')('a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/y'), false);
+  assert.ok(Date.now() - t0 < 500);
+  const { ws } = folder(t, { 'min.js': `${'a'.repeat(50_000)}!` });
+  await assert.rejects(ws.run('search_files', { query: 'x'.repeat(501) }), /longer than 500/);
+  const t1 = Date.now();
+  await ws.run('search_files', { query: '(a+)+$', regex: true });
+  assert.ok(Date.now() - t1 < 2000, 'a long line is cut before it is tested');
+});

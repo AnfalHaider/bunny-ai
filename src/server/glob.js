@@ -8,6 +8,10 @@
  * Paths are relative to the workspace, with forward slashes.
  */
 
+const MAX_PATTERN = 300;     // characters in one pattern
+const MAX_EXPANDED = 256;    // patterns one {a,b} list may expand to
+const MAX_STARS = 12;        // wildcards in one pattern
+
 function expandBraces(pattern) {
   const open = pattern.indexOf('{');
   if (open < 0) return [pattern];
@@ -29,11 +33,16 @@ function expandBraces(pattern) {
     else if (pattern[i] === ',' && level === 0) { parts.push(pattern.slice(from, i)); from = i + 1; }
   }
   parts.push(pattern.slice(from, close));
-  return parts.flatMap((p) => expandBraces(head + p + tail));
+  const all = parts.flatMap((p) => expandBraces(head + p + tail));
+  if (all.length > MAX_EXPANDED) throw new Error(`That file pattern expands to more than ${MAX_EXPANDED} patterns; use fewer {a,b} choices.`);
+  return all;
 }
 
 function oneToRegExp(glob) {
-  let g = glob.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (glob.length > MAX_PATTERN) throw new Error(`A file pattern is longer than ${MAX_PATTERN} characters.`);
+  // "***" and "**/**" mean what "**" means; collapsing them keeps the matcher from backtracking badly.
+  let g = glob.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\*{2,}/g, '**').replace(/(?:\*\*\/){2,}/g, '**/');
+  if ((g.match(/\*/g) ?? []).length > MAX_STARS) throw new Error(`A file pattern has more than ${MAX_STARS} wildcards.`);
   const anywhere = !g.includes('/');
   if (g.endsWith('/')) g += '**';
   let out = '';
@@ -70,6 +79,8 @@ export function globMatcher(patterns) {
   const list = (Array.isArray(patterns) ? patterns : splitList(String(patterns ?? '')))
     .map((p) => String(p).trim()).filter(Boolean);
   if (!list.length) return () => true;
+  if (list.length > 50) throw new Error('Give at most 50 file patterns.');
   const res = list.flatMap(expandBraces).map(oneToRegExp);
+  if (res.length > MAX_EXPANDED) throw new Error(`Those file patterns expand to more than ${MAX_EXPANDED} patterns.`);
   return (path) => res.some((re) => re.test(path));
 }
