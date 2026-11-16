@@ -26,8 +26,13 @@ function killOwnTree() {
   process.exit(1);
 }
 
-const child = spawn(command, args, { stdio: 'inherit', windowsHide: true });
+// The guard itself runs as plain Node (ELECTRON_RUN_AS_NODE); the program it starts must not inherit that or other Electron-internal variables.
+const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^ELECTRON_/i.test(k)));
+const child = spawn(command, args, { stdio: ['ignore', 'inherit', 'inherit'], windowsHide: true, env });
 child.on('exit', (code) => process.exit(code ?? 1));
 child.on('error', (err) => { process.stderr.write(`${err.message}\n`); process.exit(1); });
 
+// Two ways to notice the server is gone. The pipe the server holds open on our stdin ends when it dies, whatever its pid
+// is later reused for; the pid check is the fallback if the pipe is somehow never closed.
+process.stdin.on('end', killOwnTree).on('close', killOwnTree).on('error', killOwnTree).resume();
 setInterval(() => { if (!alive(serverPid)) killOwnTree(); }, 500);

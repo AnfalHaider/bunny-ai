@@ -32,7 +32,8 @@ export function createProcessStore() {
 ${translateChains(command)}`]
       : ['sh', '-c', command];
     const child = spawn(process.execPath, [GUARD, String(process.pid), JSON.stringify(inner)],
-      { cwd, windowsHide: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...(win ? NON_INTERACTIVE : {}), ELECTRON_RUN_AS_NODE: '1' } });
+      { cwd, windowsHide: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(win ? NON_INTERACTIVE : {}), ELECTRON_RUN_AS_NODE: '1' } });
+    child.stdin?.on('error', () => {}); // held open on purpose: its end tells the guard this server is gone
     const p = { id, command, cwd, owner, child, out: '', read: 0, exitCode: null, started: Date.now() };
     const add = (chunk) => {
       p.out += chunk.toString();

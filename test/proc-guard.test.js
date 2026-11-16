@@ -24,3 +24,17 @@ test('a started program is gone after the server that started it is killed', asy
   server.kill('SIGKILL'); // no graceful shutdown: nothing in the server runs after this
   assert.ok(await wait(() => !alive(childPid), 15_000), 'the program is gone after the server was killed');
 });
+
+// Security review of W4-1d: the program must not inherit Electron's internal variables.
+test('a started program does not inherit ELECTRON_RUN_AS_NODE', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-guard-env-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const { createProcessStore } = await import('../src/server/processes.js');
+  const store = createProcessStore();
+  t.after(() => store.stopAll());
+  process.env.ELECTRON_SOMETHING = 'leak';
+  t.after(() => { delete process.env.ELECTRON_SOMETHING; });
+  const p = store.start({ command: "node -e \"console.log('ERN=' + process.env.ELECTRON_RUN_AS_NODE + ' ES=' + process.env.ELECTRON_SOMETHING)\"", cwd: dir, owner: 'x' });
+  assert.ok(await wait(() => /ERN=/.test(p.out), 20_000), 'the program printed');
+  assert.match(p.out, /ERN=undefined ES=undefined/);
+});
