@@ -15,6 +15,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
 import { globMatcher } from './glob.js';
+import { checkEnvironment } from './environment.js';
 import { createContext, Script } from 'node:vm';
 import { fetchLimited } from './download.js';
 
@@ -120,7 +121,7 @@ export function endsInBackground(command) {
 }
 
 export const TOOL_RISK = {
-  list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read',
+  list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read', check_environment: 'read',
   write_file: 'edit', edit_file: 'edit', multi_edit: 'edit', download_file: 'edit',
   run_command: 'run',
 };
@@ -154,6 +155,8 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       { pattern: { type: 'string', description: 'File pattern, comma-separated for several' },
         path: { type: 'string', description: 'Folder to search in, default "."' },
         limit: { type: 'integer', description: 'Most files to return, up to 1000. Default 100' } }, ['pattern']),
+    fn('check_environment', 'Check which of node, npm, git and python (and their versions) are installed, compare them with what the project asks for (package.json engines, .nvmrc, .python-version, pyproject.toml, runtime.txt, .tool-versions) and get plain advice. Read-only; installs nothing. Call it once before installing a project\'s packages.',
+      { path: { type: 'string', description: 'Folder inside the workspace to inspect. Default "."' } }, []),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
     fn('download_file', 'Download a file from an http or https address into the workspace (up to 50 MB, public addresses only). Returns the saved path, size and content type.',
@@ -183,6 +186,7 @@ export function describeToolCall(name, args = {}) {
       return `Search ${args.regex ? `/${q}/` : `"${q}"`}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}${args.include ? ` (${String(args.include).slice(0, 40)})` : ''}`;
     }
     case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
+    case 'check_environment': return `Check environment${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
     case 'download_file': return `Download ${String(args.url ?? '').slice(0, 100)} to ${args.path}`;
     case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
@@ -215,7 +219,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
+export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite = null, signal = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -551,7 +555,11 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
     });
   }
 
-  const tools = { list_files, read_file, search_files, find_files, write_file, download_file, edit_file, multi_edit, run_command };
+  async function check_environment({ path } = {}) {
+    return checkEnvironment({ folder: await inside(path || '.'), root, run: envRunner });
+  }
+
+  const tools = { list_files, read_file, search_files, find_files, check_environment, write_file, download_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),

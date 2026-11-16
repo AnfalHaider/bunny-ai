@@ -1708,6 +1708,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'Do not ask in words first: the card is the question, and the person answers it with one click.',
         code: 'Mode: Code. You are working on the project in the workspace folder. Look before you change: list and read the files you need, '
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it. '
+          + 'Before installing a project\'s packages, call check_environment once. '
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
           + 'and update it as you go; when you continue a job, read it first. '
           + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command. '
