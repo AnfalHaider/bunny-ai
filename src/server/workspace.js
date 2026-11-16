@@ -4,7 +4,7 @@
  * Every path is resolved against the chosen folder and refused if it leaves it
  * (including through "..", an absolute path, or a symlink that points outside).
  * Tools are split by risk so the permission mode can decide what runs freely:
- *   read  - list_files, read_file, search_files
+ *   read  - list_files, read_file, search_files, find_files
  *   edit  - write_file, edit_file
  *   run   - run_command
  */
@@ -115,7 +115,7 @@ export function endsInBackground(command) {
 }
 
 export const TOOL_RISK = {
-  list_files: 'read', read_file: 'read', search_files: 'read',
+  list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read',
   write_file: 'edit', edit_file: 'edit',
   run_command: 'run',
 };
@@ -145,6 +145,10 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
         context: { type: 'integer', description: 'Lines to show before and after each match, 0 to 10' },
         output: { type: 'string', enum: ['lines', 'files', 'counts'], description: 'Result shape. Default "lines"' },
         limit: { type: 'integer', description: 'Most results to return, up to 1000. Default 80' } }, ['query']),
+    fn('find_files', 'Find files by name pattern, newest first. pattern examples: "**/*.test.js", "src/**", "*.{ts,tsx}", "README*" (a pattern with no / matches the file name at any depth). Skips .git, node_modules and build output. Use it to locate files; use search_files to look inside them.',
+      { pattern: { type: 'string', description: 'File pattern, comma-separated for several' },
+        path: { type: 'string', description: 'Folder to search in, default "."' },
+        limit: { type: 'integer', description: 'Most files to return, up to 1000. Default 100' } }, ['pattern']),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
     fn('edit_file', 'Replace one exact snippet in a file. old_text must appear exactly once.',
@@ -166,6 +170,7 @@ export function describeToolCall(name, args = {}) {
       const q = String(args.query ?? '').slice(0, 60);
       return `Search ${args.regex ? `/${q}/` : `"${q}"`}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}${args.include ? ` (${String(args.include).slice(0, 40)})` : ''}`;
     }
+    case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
     case 'edit_file': return `Edit ${args.path}`;
     case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
@@ -362,6 +367,35 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     return out.join('\n');
   }
 
+  async function find_files({ pattern, path = '.', limit } = {}) {
+    const text = String(pattern ?? '').trim();
+    if (!text) throw new Error('find_files needs a pattern');
+    const matches = globMatcher(text);
+    const max = Math.min(Math.max(Number(limit) || 100, 1), 1000);
+    const start = await inside(path);
+    const found = [];
+    let seen = 0;
+    async function walk(dir) {
+      let entries = [];
+      try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const abs = join(dir, e.name);
+        if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
+        if (!e.isFile() || !matches(relative(start, abs).split(sep).join('/'))) continue;
+        seen += 1;
+        found.push(abs);
+      }
+    }
+    await walk(start);
+    if (!found.length) return `No files match ${text}.`;
+    // Newest first: what changed last is usually what is wanted. A file that vanished meanwhile sorts last.
+    const dated = await Promise.all(found.map(async (abs) => ({ abs, at: await stat(abs).then((s) => s.mtimeMs, () => 0) })));
+    dated.sort((a, b) => b.at - a.at || a.abs.localeCompare(b.abs));
+    const lines = dated.slice(0, max).map((f) => show(f.abs));
+    if (seen > max) lines.push(`… (${seen - max} more not shown; narrow the pattern or raise limit)`);
+    return lines.join('\n');
+  }
+
   async function write_file({ path, content = '' } = {}) {
     const abs = await inside(path, { mustExist: false });
     await beforeWrite?.(abs);
@@ -446,7 +480,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     });
   }
 
-  const tools = { list_files, read_file, search_files, write_file, edit_file, run_command };
+  const tools = { list_files, read_file, search_files, find_files, write_file, edit_file, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),

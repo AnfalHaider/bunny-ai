@@ -166,3 +166,60 @@ test('hardening: huge or runaway patterns are refused or bounded', async (t) => 
   await ws.run('search_files', { query: '(a+)+$', regex: true });
   assert.ok(Date.now() - t1 < 2000, 'a long line is cut before it is tested');
 });
+
+// ---- W2-2: find_files
+
+import { utimesSync } from 'node:fs';
+
+const aged = (root, name, secondsAgo) => { const at = new Date(Date.now() - secondsAgo * 1000); utimesSync(join(root, name), at, at); };
+
+test('find_files: nested patterns, newest first', async (t) => {
+  const { root, ws } = folder(t, { 'a.test.js': 'x', 'src/b.test.js': 'x', 'src/deep/c.test.js': 'x', 'src/d.js': 'x', 'node_modules/e.test.js': 'x' });
+  aged(root, 'a.test.js', 300); aged(root, 'src/b.test.js', 100); aged(root, 'src/deep/c.test.js', 200);
+  assert.equal(await ws.run('find_files', { pattern: '**/*.test.js' }), ['src/b.test.js', 'src/deep/c.test.js', 'a.test.js'].join('\n'));
+  assert.equal(await ws.run('find_files', { pattern: '*.test.js' }), ['src/b.test.js', 'src/deep/c.test.js', 'a.test.js'].join('\n'), 'a bare name pattern matches at any depth');
+});
+
+test('find_files: a folder pattern, braces, a path to search in, and several patterns', async (t) => {
+  const { root, ws } = folder(t, { 'src/a.ts': 'x', 'src/b.tsx': 'x', 'src/c.js': 'x', 'lib/d.ts': 'x', 'README.md': 'x' });
+  for (const [n, s] of [['src/a.ts', 5], ['src/b.tsx', 4], ['src/c.js', 3], ['lib/d.ts', 2], ['README.md', 1]]) aged(root, n, s * 10);
+  assert.equal(await ws.run('find_files', { pattern: 'src/**' }), 'src/c.js\nsrc/b.tsx\nsrc/a.ts');
+  assert.equal(await ws.run('find_files', { pattern: '*.{ts,tsx}' }), 'lib/d.ts\nsrc/b.tsx\nsrc/a.ts');
+  assert.equal(await ws.run('find_files', { pattern: '*.ts', path: 'src' }), 'src/a.ts');
+  assert.equal(await ws.run('find_files', { pattern: 'README*, *.js' }), 'README.md\nsrc/c.js');
+});
+
+test('find_files: no match, no pattern, outside the workspace', async (t) => {
+  const { ws } = folder(t, { 'a.js': 'x' });
+  assert.equal(await ws.run('find_files', { pattern: '*.py' }), 'No files match *.py.');
+  await assert.rejects(ws.run('find_files', {}), /needs a pattern/);
+  await assert.rejects(ws.run('find_files', { pattern: '*', path: '..' }), /outside/);
+});
+
+test('find_files: the limit keeps the newest and says how many were left out', async (t) => {
+  const files = {};
+  for (let i = 0; i < 7; i += 1) files[`f${i}.txt`] = 'x';
+  const { root, ws } = folder(t, files);
+  for (let i = 0; i < 7; i += 1) aged(root, `f${i}.txt`, (7 - i) * 10); // f6 is newest
+  const r = await ws.run('find_files', { pattern: '*.txt', limit: 3 });
+  assert.equal(r, 'f6.txt\nf5.txt\nf4.txt\n… (4 more not shown; narrow the pattern or raise limit)');
+  assert.doesNotMatch(await ws.run('find_files', { pattern: '*.txt', limit: 7 }), /more not shown/);
+});
+
+test('find_files is a read tool, described in the transcript, and offered in read-only mode', () => {
+  const names = workspaceToolDefinitions(['read']).map((d) => d.function.name);
+  assert.ok(names.includes('find_files'));
+  assert.ok(!workspaceToolDefinitions(['edit']).some((d) => d.function.name === 'find_files'));
+  assert.equal(describeToolCall('find_files', { pattern: '**/*.test.js' }), 'Find **/*.test.js');
+  assert.equal(describeToolCall('find_files', { pattern: '*.js', path: 'src' }), 'Find *.js in src');
+});
+
+test('find_files searches a 5,000-file folder in under 2 seconds', async (t) => {
+  const files = {};
+  for (let i = 0; i < 5000; i += 1) files[`pkg${i % 50}/f${i}.js`] = 'x';
+  const { ws } = folder(t, files);
+  const t0 = Date.now();
+  const r = await ws.run('find_files', { pattern: 'pkg7/**', limit: 5 });
+  assert.equal(r.split('\n').length, 6);
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+});
