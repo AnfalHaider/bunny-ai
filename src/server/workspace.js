@@ -16,6 +16,7 @@ import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
 import { globMatcher } from './glob.js';
 import { createContext, Script } from 'node:vm';
+import { fetchLimited } from './download.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_OUTPUT = 50_000;         // characters of command output kept
@@ -120,7 +121,7 @@ export function endsInBackground(command) {
 
 export const TOOL_RISK = {
   list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read',
-  write_file: 'edit', edit_file: 'edit', multi_edit: 'edit',
+  write_file: 'edit', edit_file: 'edit', multi_edit: 'edit', download_file: 'edit',
   run_command: 'run',
 };
 
@@ -155,6 +156,8 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
         limit: { type: 'integer', description: 'Most files to return, up to 1000. Default 100' } }, ['pattern']),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
+    fn('download_file', 'Download a file from an http or https address into the workspace (up to 50 MB, public addresses only). Returns the saved path, size and content type.',
+      { url: { type: 'string', description: 'http or https address' }, path: { type: 'string', description: 'Where to save it, relative to the workspace root' } }, ['url', 'path']),
     fn('edit_file', 'Replace an exact snippet in a file. old_text must appear exactly once, unless replace_all is true, which replaces every occurrence (renaming a variable, say).',
       { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' },
         replace_all: { type: 'boolean', description: 'Replace every occurrence of old_text. Default false' } }, ['path', 'old_text', 'new_text']),
@@ -181,6 +184,7 @@ export function describeToolCall(name, args = {}) {
     }
     case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
+    case 'download_file': return `Download ${String(args.url ?? '').slice(0, 100)} to ${args.path}`;
     case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
     case 'multi_edit': return `Edit ${args.path} (${Array.isArray(args.edits) ? args.edits.length : 0} changes)`;
     case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
@@ -211,7 +215,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, clock = Date.now } = {}) {
+export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -433,6 +437,16 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
     return `Wrote ${show(abs)} (${String(content).split('\n').length} lines)`;
   }
 
+  async function download_file({ url, path } = {}) {
+    if (!String(path ?? '').trim()) throw new Error('download_file needs a path to save to');
+    const abs = await inside(path, { mustExist: false });
+    const got = await fetchLimited(url, { signal: typeof signal === 'function' ? signal() : signal, allowLoopback });
+    await beforeWrite?.(abs);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, got.bytes);
+    return `Downloaded to ${show(abs)}\nSize: ${got.bytes.length} bytes\nContent type: ${got.type}\nFinal URL: ${got.url}`;
+  }
+
   // One replacement on text already in memory. Plain split/join, so "$&" and friends in new_text stay literal.
   function replaceIn(text, { old_text, new_text, replace_all = false }, path, label = 'old_text') {
     const old = String(old_text ?? '');
@@ -537,7 +551,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
     });
   }
 
-  const tools = { list_files, read_file, search_files, find_files, write_file, edit_file, multi_edit, run_command };
+  const tools = { list_files, read_file, search_files, find_files, write_file, download_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),
