@@ -278,3 +278,31 @@ test('LA-1: the linear matcher keeps the old meaning: ?, ** across folders, case
   assert.ok(m('{src,lib}/**/*.{ts,tsx}', 'lib/a/b.tsx') && !m('{src,lib}/**/*.{ts,tsx}', 'test/a/b.tsx'));
   assert.ok(m('a*b*c', 'aXXbYYc') && !m('a*b*c', 'aXXbYY'));
 });
+
+// ---- LA-4 (Security): files that each take just under the per-file limit must not add up to minutes
+
+test('LA-4: a regex search has a total time budget of 5 s and answers that it stopped', async (t) => {
+  const files = {};
+  for (let i = 0; i < 20; i += 1) files[`f${String(i).padStart(2, '0')}.txt`] = 'plain line\n';
+  const root = mkdtempSync(join(tmpdir(), 'bunny-ws-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(root, name), body);
+  // a clock that says every file's regex took 1.5 s: the fourth file is past the 5 s budget
+  let now = 0;
+  const ws = createWorkspace(root, { clock: () => { now += 750; return now; } }); // two reads of the clock per file = 1.5 s
+  await assert.rejects(ws.run('search_files', { query: 'zzz', regex: true }), /Search stopped after 5 s; narrow the folder or the pattern\./);
+  // a normal clock: the same search finishes
+  const fast = createWorkspace(root);
+  assert.match(await fast.run('search_files', { query: 'zzz', regex: true }), /No matches in 20 files/);
+});
+
+test('LA-4: the event loop keeps ticking while a regex search walks many files', async (t) => {
+  const files = {};
+  for (let i = 0; i < 300; i += 1) files[`d/f${i}.txt`] = `line ${i}\n`;
+  const { ws } = folder(t, files);
+  let ticks = 0;
+  const timer = setInterval(() => { ticks += 1; }, 1);
+  await ws.run('search_files', { query: 'line \\d+9$', regex: true });
+  clearInterval(timer);
+  assert.ok(ticks > 5, `the loop ticked ${ticks} times during the search`);
+});

@@ -385,9 +385,11 @@ export async function* fakeStream(model, messages, signal) {
     'console.log("hello from the test reply");',
     '```',
   ].join('\n');
+  // A prompt that asks for a long answer is streamed slowly (a few seconds), so a test can press Stop mid-reply on a busy machine.
+  const gap = /long answer/i.test(content) ? 80 : 8;
   for (const word of reply.split(/(\s+)/)) {
     if (signal?.aborted) return;
-    await new Promise((r) => setTimeout(r, 8));
+    await new Promise((r) => setTimeout(r, gap));
     yield word;
   }
 }

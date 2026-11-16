@@ -24,6 +24,7 @@ const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
 const REGEX_TIMEOUT_MS = 1000;     // one file's scan with a model-written regular expression
+const REGEX_BUDGET_MS = 5000;      // all of one search's regex time together (files just under the limit must not add up to minutes)
 const MAX_EDIT_BYTES = 20_000_000; // an edit may not grow a file past this
 // Nobody can answer a prompt from a command Bunny runs: tools are told not to ask.
 export const NON_INTERACTIVE = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', npm_config_yes: 'true', NO_UPDATE_NOTIFIER: '1' };
@@ -210,7 +211,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null, signal = null } = {}) {
+export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, clock = Date.now } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -300,15 +301,18 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     // A pattern the model wrote can backtrack for hours ((a+)+$ over 40 letters). A literal cannot, so only a regex runs in a
     // separate context with a time limit; the limit stops the match mid-way.
     let hitsOf = (lines) => { const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; };
+    let regexSpent = 0;
     if (regex) {
       const sandbox = createContext({ lines: [], at: [] });
       const script = new Script(`(() => { const re = new RegExp(${JSON.stringify(re.source)}, ${JSON.stringify(re.flags)}); const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; })()`);
       hitsOf = (lines) => {
+        if (regexSpent >= REGEX_BUDGET_MS) throw new Error('Search stopped after 5 s; narrow the folder or the pattern.');
         sandbox.lines = lines;
-        try { return [...script.runInContext(sandbox, { timeout: REGEX_TIMEOUT_MS })]; } catch (err) {
+        const began = clock();
+        try { return [...script.runInContext(sandbox, { timeout: Math.max(50, Math.min(REGEX_TIMEOUT_MS, REGEX_BUDGET_MS - regexSpent)) })]; } catch (err) {
           if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('That pattern is too slow; simplify it.');
           throw err;
-        }
+        } finally { regexSpent += Math.max(0, clock() - began); }
       };
     }
     const around = Math.min(Math.max(Number(context) || 0, 0), 10);
@@ -381,7 +385,10 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null 
     for (let i = 0; i < candidates.length && !cut; i += 48) {
       const batch = candidates.slice(i, i + 48);
       const loaded = await Promise.all(batch.map(load));
-      for (let k = 0; k < batch.length && !cut; k += 1) scan(batch[k], loaded[k]);
+      for (let k = 0; k < batch.length && !cut; k += 1) {
+        scan(batch[k], loaded[k]);
+        if (regex) await new Promise((r) => setImmediate(r)); // the event loop keeps ticking between files
+      }
     }
     while (out.length && out[out.length - 1] === '--') out.pop();
     if (!out.length) return `No matches in ${filesSeen} file${filesSeen === 1 ? '' : 's'} searched.`;
