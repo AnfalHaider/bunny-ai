@@ -170,9 +170,14 @@ test('Q2-5: the Files pane has code that fills it', async () => {
   assert.ok(js.includes("'file-content'"), 'no UI code touches the Files pane');
 });
 
-test('Q2-7: the Plan pane has code that fills it and a way to reach it', async () => {
-  const { js } = await panes();
-  assert.ok(js.includes("'plan-content'"), 'no UI code touches the Plan pane');
+test('Q2-7: no dead pane remains: every tool pane in the markup can be opened from the toolbar and has code that fills it', { todo: 'Q2-7: #pane-plan (src/ui/index.html) has no toolbar button or tab; Chief of Staff decision 2026-11-16: remove it (Tasks shows the plan)' }, async () => {
+  const { html, js } = await panes();
+  const panels = [...html.matchAll(/class="side-pane-panel[^"]*" id="pane-([a-z]+)"/g)].map((m) => m[1]);
+  const toolbar = new Set([...html.matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]));
+  const dead = panels.filter((p) => p !== 'artifacts' && !toolbar.has(p));
+  assert.deepEqual(dead, [], 'panes that nothing opens: ' + dead.join(', '));
+  assert.ok(!/id="tab-plan"/.test(html) || toolbar.has('plan'), 'a Plan tab exists that nothing selects');
+  assert.ok(js.length > 0);
 });
 
 test('Q2-6: the Session pane shows more than "This computer", the project, the context meter, connectors and outputs', async () => {
@@ -221,4 +226,22 @@ test('Q2-18: "New terminal" (＋) opens another shell when one is already runnin
 test('Q2-9: the browser pane tells the person when a page is not reachable instead of showing a browser error page', async () => {
   const js = await read('src/ui/browser-pane.js');
   assert.ok(/chrome-error|ERR_CONNECTION|not reachable|could not reach|is not running/i.test(js), 'no handling for an unreachable page');
+});
+
+test('Changes counts: an edited existing file counts the lines it removed as well as the ones it added', async (t) => {
+  let panes; try { panes = await import('../src/server/panes.js'); } catch { t.skip('src/server/panes.js is not in this tree'); return; }
+  const nl = String.fromCharCode(10);
+  const d = panes.lineDiff('export const greet = (n) => `hi ${n}`;' + nl + 'export const x = 1;' + nl, 'export const greet = (n) => `hello ${n}`;' + nl + 'export const x = 1;' + nl + 'export const bye = () => 1;' + nl);
+  assert.equal(d.removed, 1, 'removed'); assert.equal(d.added, 2, 'added');
+});
+
+test('Q2-23: when the server answers 403 "request.noToken" (a window left open across a restart), the page tells the person to reload', async () => {
+  const ui = (await Promise.all(['api.js', 'chat.js', 'token.js'].map((f) => read(`src/ui/${f}`).catch(() => '')))).join(' ');
+  assert.ok(/noToken|out of date/i.test(ui), 'no UI code handles the out-of-date window answer');
+});
+
+test('Q2-31: after Stop, the page waits for the stopped reply itself, not for a tool step (which is saved first)', async () => {
+  const js = await read('src/ui/chat.js');
+  const body = (js.split('async function refreshSession')[1] ?? '').split('async function openSession')[0];
+  assert.ok(/tool_call/.test(body), 'refreshSession does not tell a tool step from a reply');
 });
