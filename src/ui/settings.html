@@ -374,6 +374,13 @@
       </div>
       <div class="row">
         <div class="meta-col">
+          <div class="name">Keep going on long jobs</div>
+          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps.</div>
+        </div>
+        <div class="right"><input id="auto-steps" type="number" min="0" step="50" aria-label="Most steps in one reply" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
           <div class="name">Allowed models</div>
           <div class="desc">One model id per line. Leave empty to offer every model the provider has.</div>
         </div>
@@ -854,6 +861,11 @@
 
   // ---- models ----
   $('model-filter').addEventListener('change', (e) => save({ modelFilter: e.target.value }));
+  $('auto-steps').addEventListener('change', async (e) => {
+    const n = Math.max(0, Math.round(Number(e.target.value) || 0));
+    e.target.value = n;
+    await save({ autoContinueSteps: n });
+  });
   $('max-tokens').addEventListener('change', async (e) => {
     const n = Math.max(256, Math.round(Number(e.target.value) || 4096));
     e.target.value = n;
@@ -965,6 +977,7 @@
     allowlist.value = (settings.allowlist ?? []).join('\n');
     renderAliases(settings.aliases ?? {});
     $('max-tokens').value = Number(settings.maxTokens) || 4096;
+    $('auto-steps').value = settings.autoContinueSteps ?? 500;
     language.value = settings.language ?? 'en';
     applyLanguage(language.value);
     notifications.checked = Boolean(settings.notifications);

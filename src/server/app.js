@@ -2442,6 +2442,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
       let assembled = '';
       let thinking = '';
+      const replyStartedAt = Date.now();
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
@@ -2463,6 +2464,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
+            // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
+            extendRounds: (round) => {
+              if (workMode !== 'code' && !workspace) return false;
+              const capSteps = Math.max(0, Number(settings.autoContinueSteps ?? 500) || 0);
+              const capMs = Math.max(0, Number(settings.autoContinueMinutes ?? 120) || 0) * 60_000;
+              if (round >= capSteps || Date.now() - replyStartedAt >= capMs) return false;
+              maxToolRounds = round + Math.max(EFFORT.code, 12);
+              send('working', { step: round + 1 });
+              return true;
+            },
+            contextChars: workspace ? 240_000 : 0,
             extraBody,
             parallel: (name) => name === 'run_subagent',
             // The model's thinking, shown folded above the reply and kept with it.
