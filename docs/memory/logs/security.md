@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - v0.1.8 W4-8 quick-ask bar and W4-10 plugin install and uninstall (`e061ce6`): both PASS
+
+W4-8: `desktopCapturer` is called in one place, reachable only from the bar's own IPC (sender and frame URL checked) after two clicks ("+", "Add a screenshot"); one PNG, chip with ×, kept in memory until sent, then only in the new Chat-mode chat (no tools, no folder, a leading `/` neutralised); the bar is sandboxed with a closed CSP and a two-function bridge; `quickAskEnabled` and `quickAskShortcut` answer 403 to a token holder; the shortcut is off by default. W4-10: `POST /api/plugins`, `DELETE /api/plugins/:id`, `/api/plugins/install` and the `plugins` key answer 403 to a token holder; uninstall removes only the ids written down at install (add always makes fresh ids, so a person's own connectors and skills are never touched); a bundle can add only remote connectors. Note for W3-6: uninstall must sign the connector out. 38 of 38 tests; no Electron run. Review `docs/security/2026-11-17-w4-8-w4-10-review.md`. Lesson: when a route is added in a branch, the first probe is the token-only request; this one was caught by the builder, which is the habit working.
+
 ## 2026-11-17 - release-0.1.7 build fix, tip `6b06ed9` (91b659f + Builder B's build-css change): PASS stands
 
 Read only. `package.json` is unchanged since 91b659f (`--publish never`, publish block AnfalHaider/bunny-ai). The one new change is in `scripts/build-css.mjs`: it builds the CSS in memory, compares it with `src/ui/app.css` ignoring CR, leaves the file alone when only line endings differ, and otherwise writes it with the file's own endings. It reads two design files and writes one file in `src/ui`; no network, no process, no other path. Lesson: a pre-review of a moving branch should end with the tip's sha, so the stamp names what was read.
