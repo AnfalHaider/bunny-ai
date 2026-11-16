@@ -1,0 +1,10 @@
+process.env.KIT_NEXT = '1';
+const CO = process.argv[2].split(String.fromCharCode(92)).join('/');
+const h = await import('file:///' + CO + '/test/guard-helpers.js');
+const root = h.makeRepo({ after() {} }, 'builder');
+h.stage(root, { 'docs/a.md': 'a' }); h.commitAll(root, 'seed');
+const t = (label, command) => { const s = Date.now(); const r = h.guard.decide({ tool: 'Bash', command, cwd: root }); console.log(label.padEnd(60), (r.allow ? 'ALLOWED' : 'REFUSED').padEnd(8), String(Date.now() - s).padStart(7) + ' ms'); };
+const rep = (s, n) => s.repeat(n);
+t('150 pushes to a claude branch, then a push to main', rep('git push origin claude/x; ', 150) + 'git push origin main');
+t('300 pushes to a claude branch, then a push to main', rep('git push origin claude/x; ', 300) + 'git push origin main');
+t('300 pushes to a claude branch, then a write to AGENTS.md', rep('git push origin claude/x; ', 300) + 'echo x > AGENTS.md');

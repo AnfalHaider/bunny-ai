@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - K-1 landing commit `f45f024`: PASS stands; K1-5 open (time bound)
+
+Only `guard.mjs` changed: commands over 64 KB or with over 2,000 parts are refused unread (0.2 s); policy, hooks and roles unchanged. The edge cases hold (1,999 plain parts read in 0.6 s, 2,001 refused). But the limits do not bound the time of shapes that start a process per part: 100 `git push` parts take 6.2 s, 150 plus a push to main 9.1 s, 300 take 18.4 s, 1,999 (51 KB) take 232 s, against the hook's 10 s timeout; the same in the live guard. Fix proposed: read the branch once per decision, a deadline inside `decide()`, a child process with a timeout around it. Accepted for landing, not closed. The flow-editor.html note does not block: the file and its server are the plugin's own, local, tokened and Host-checked, fed by files only the Chief can change. Review `docs/security/2026-11-17-k1-landing-f45f024.md`. Lesson: a size limit and a time limit are different things; time the shape that spawns a process, not only the shape that is long.
+
 ## 2026-11-17 - K-1 landing commit `46add98`: PASS stands
 
 Only `guard.mjs` changed in `bin/` (+5 lines: a shell command over 256 KB is refused unread, so a hook cut off at 10 s cannot become a pass; 255 KB parsed in at most 3.3 s here, late attacks still seen). The rest is non-bin kit data identical to the plugin; all 13 live role briefs have the same limits as the staged ones and `init` does not overwrite them; the policy is the same as at 9538bcb. Answered the landing plan: agreed, with checks for the policy and bin at landing, honest wording of the owner's yes in the kit record, and my post-landing run; the "don't run plain upgrade" rule in the plan and README is acceptable for landing because only the Chief of Staff can run it and the push check needs Security for bin changes. Review `docs/security/2026-11-17-k1-landing-46add98.md`. Lesson: for a "same except one file" claim, diff the tree and then look at what each unchanged-looking file can change (here the role briefs, which hold the limits).
