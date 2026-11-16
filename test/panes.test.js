@@ -262,6 +262,13 @@ test('In the desktop app the folder of a chat must be one the person picked: a s
   assert.equal((await patch(dir)).status, 200, 'picked');
   assert.equal((await patch('')).status, 200, 'clearing the folder is always fine');
   assert.equal((await call('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 'y', folder: dir }) })).status, 200);
+  // the third way in: PATCH the chat itself
+  const other = await folder(t);
+  assert.equal((await call(`/api/sessions/${made.id}`, { method: 'PATCH', body: JSON.stringify({ folder: other }) })).status, 403, 'PATCH /api/sessions/:id is gated like the others');
+  assert.equal((await call(`/api/sessions/${made.id}`, { method: 'PATCH', body: JSON.stringify({ title: 'renamed' }) })).status, 200, 'other fields are untouched');
+  assert.equal((await call(`/api/sessions/${made.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 200);
+  const stored = (await (await call(`/api/sessions/${made.id}`)).json()).folder;
+  assert.equal(stored.toLowerCase().replace(/[\\/]+/g, '/'), (await (await import('node:fs/promises')).realpath(dir)).toLowerCase().replace(/[\\/]+/g, '/'), 'the normalised real path is what is stored');
 });
 
 test('a chat saved before D-2 (old message shapes) still loads through every pane route', async (t) => {

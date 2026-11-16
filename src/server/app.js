@@ -166,6 +166,14 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check and chooseFolder)
   // Record a folder the person chose (the desktop app calls this with what its native picker returned). Never a drive root or Bunny's own data.
   const isChosen = async (folder) => { const r = await checkFolder(folder); return r.ok && chosenFolders.has(r.folder); };
+  // Every path that writes a chat's folder goes through this: in the desktop app only a picked folder is accepted, and the
+  // normalised real path is what is stored. Returns the value to store, or null when it is refused.
+  const folderToStore = async (value) => {
+    if (!value) return '';
+    if (!folderPickerOnly) return value;
+    const r = await checkFolder(value);
+    return r.ok && chosenFolders.has(r.folder) ? r.folder : null;
+  };
   const chooseFolder = async (folder) => {
     const result = await checkFolder(folder);
     if (!result.ok || (await neverBrowse(result.folder, dataDir))) return false;
@@ -694,7 +702,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
-      if (folderPickerOnly && body.folder && !(await isChosen(body.folder))) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+      if (body.folder) {
+        const stored = await folderToStore(body.folder);
+        if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+        body.folder = stored;
+      }
       const session = await sessions.create(body);
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
@@ -1265,9 +1277,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (sessionSettingMatch && method === 'PATCH') {
       try {
         if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
-          const wanted = (await readBody(req)).value;
-          if (wanted && !(await isChosen(wanted))) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
-          const session = await sessions.update(sessionSettingMatch[1], { folder: wanted });
+          const stored = await folderToStore((await readBody(req)).value);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          const session = await sessions.update(sessionSettingMatch[1], { folder: stored });
           return sendJson(res, 200, { ...session, context: sessions.context(session) });
         }
         const session = await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value });
@@ -1349,7 +1361,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (sessionMatch && method === 'PATCH') {
       try {
-        const session = await sessions.update(sessionMatch[1], await readBody(req));
+        const patch = await readBody(req);
+        if (patch.folder !== undefined) {
+          const stored = await folderToStore(patch.folder);
+          if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          patch.folder = stored;
+        }
+        const session = await sessions.update(sessionMatch[1], patch);
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'session.failed', message: err.message });
