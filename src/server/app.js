@@ -1782,7 +1782,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           await writeFile(join(screensDir, `${sid}.png`), Buffer.from(answer.image.slice('data:image/png;base64,'.length), 'base64'));
           attachments = [{ kind: 'image', name: 'Screenshot.png', mime: 'image/png', data: `/api/screens/${sid}.png` }];
         }
-        return { text: browserResultText(answer), attachments };
+        // W6-20: a model that can see gets the picture itself, not only the line "Screenshot taken."
+        const seen = attachments.length ? (vision ? [answer.image] : []) : [];
+        const note = attachments.length ? (vision ? ' (the picture is attached below)' : ' (this model cannot see pictures: work from the text)') : '';
+        return { text: browserResultText(answer) + note, attachments, images: seen };
       };
 
       // ---- asking for a capability, and the tools it brings ----
@@ -2339,8 +2342,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           let result;
           let status = 'done';
           let attachments = [];
+          let seenImages = [];
           try {
-            ({ text: result, attachments } = await runBrowserTool(name, parsed));
+            ({ text: result, attachments, images: seenImages } = await runBrowserTool(name, parsed));
           } catch (err) {
             status = 'failed';
             result = `The browser action failed: ${err.message}`;
@@ -2348,7 +2352,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           result = String(result).slice(0, 9000);
           await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), attachments });
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
-          return result;
+          return seenImages?.length ? { content: result, images: seenImages } : result;
         }
         const isApp = appTools.has(name);
         const isWorkspace = !isApp && workspace?.has(name);
