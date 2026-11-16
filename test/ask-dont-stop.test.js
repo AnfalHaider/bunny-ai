@@ -14,6 +14,9 @@ test('a closing "please confirm" is recognised; a finished report and a real que
     'Phase 1 is done.\n\nShould I proceed with building the pages?',
     'Do you want me to continue with the CSS?',
     'Shall I start on the scripts now?',
+    'Phase 1 is done. Let me know if you want me to continue.',
+    'The folders are ready. When you are ready, say the word and I will build the pages.',
+    'I can do the CSS next if you would like.',
   ]) assert.equal(asksPermissionToContinue(t), true, t);
   for (const t of [
     'Done. The site builds and all 12 checks pass.',
@@ -74,4 +77,13 @@ test('with no open plan steps, a closing offer is left alone', async (t) => {
   assert.equal(done.length, 2, 'the finished job ended on its question');
   const none = await run(t, [ASK]);
   assert.equal(none.length, 1, 'and so did a reply with no plan at all');
+});
+
+test('with open plan steps, a closing statement that hands the turn back is nudged too; without them it is left alone', async (t) => {
+  const HANDBACK = 'Phase 1 is done. Let me know if you want me to continue.';
+  const open = await run(t, [{ name: 'update_tasks', args: { tasks: [{ text: 'Phase 1', done: true }, { text: 'Phase 2' }] } }, HANDBACK, 'Phase 2 is built and checked.']);
+  assert.equal(open.length, 3, 'nudged and carried on');
+  assert.match(open[2].messages.at(-1).content, /Do not stop to ask permission/);
+  const closed = await run(t, [{ name: 'update_tasks', args: { tasks: [{ text: 'Phase 1', done: true }] } }, HANDBACK]);
+  assert.equal(closed.length, 2, 'a finished plan is not nudged');
 });

@@ -409,6 +409,6 @@ export async function* fakeStream(model, messages, signal) {
  */
 export function asksPermissionToContinue(text) {
   const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
-  if (!/\?\s*$/.test(tail) && !/\b(please confirm|awaiting your (confirmation|go|approval))\b/i.test(tail)) return false;
-  return /\b(please confirm|would you like me to|do you want me to|shall i|should i (proceed|go ahead|continue|start|begin)|want me to (proceed|go ahead|continue|start|begin)|ready for me to|can i proceed|may i proceed|awaiting your)\b/i.test(tail);
+  // Handing the turn back, as a question or as a statement.
+  return /\b(please confirm|would you like( me)? to|do you want me to|shall i|should i\b|want me to|ready for me to|can i (proceed|go ahead|continue)|may i (proceed|go ahead|continue)|let me know (if|when|whether|how|once)|tell me (if|when|whether|to)|say the word|just say|awaiting your|once you (confirm|say|approve)|when you('re| are) ready|whenever you('re| are) ready|if you('d| would) like|if you want me to)\b/i.test(tail);
 }
