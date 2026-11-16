@@ -15,6 +15,7 @@ function script(body) {
   const tools = body.messages.filter((m) => m.role === 'tool').length;
   if (/write note/.test(asked)) return tools === 0 ? call('write_file', { path: 'note.txt', content: 'carrots\nand more\n' }) : frame({ content: 'Wrote note.txt.' });
   if (/edit greet/.test(asked)) return tools === 0 ? call('write_file', { path: 'src/greet.js', content: 'export const greet = (n) => `hi ${n}`;\nexport const bye = () => 1;\n' }) : frame({ content: 'Edited.' });
+  if (/stop me/.test(asked)) return tools === 0 ? call('write_file', { path: 'stop-note.txt', content: 'x\n' }) : 'SLOW';
   return frame({ content: 'ok' });
 }
 let server; let port;
@@ -22,9 +23,12 @@ test.beforeAll(async () => {
   server = createServer((req, res) => {
     let raw = ''; req.on('data', (c) => { raw += c; });
     req.on('end', () => {
+      if (req.method !== 'POST' && !req.url.endsWith('/models')) { res.writeHead(200); res.end('ok'); return; } // a reachability probe
       if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"scripted"}]}'); return; }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(`${script(JSON.parse(raw))}data: [DONE]\n\n`);
+      const out = script(JSON.parse(raw));
+      if (out === 'SLOW') { res.write(frame({ content: 'Starting… ' })); setTimeout(() => res.end('data: [DONE]\n\n'), 8000); return; }
+      res.end(`${out}data: [DONE]\n\n`);
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -149,4 +153,65 @@ test('Session: folder, branch, model, permissions, effort, tokens and messages a
   await expect(rail.locator('#rail-cost')).toHaveText('not reported');
   await expect(rail.locator('#rail-running')).toContainText('Nothing running.');
   await expect(rail.locator('#rail-project')).toContainText('No project');
+});
+
+test.describe('on a 390 px phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('the Changes and Files buttons are in the top bar with 40 px targets, and open their pane', async ({ page }) => {
+    await page.goto('/');
+    for (const view of ['diff', 'file']) {
+      const button = page.locator(`.toolbar [data-view="${view}"]`);
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box.width).toBeGreaterThanOrEqual(39);
+      expect(box.height).toBeGreaterThanOrEqual(39);
+      await button.click();
+      await expect(page.locator(view === 'diff' ? '#pane-diff' : '#pane-file')).toBeVisible();
+      await page.locator('#pane [data-close]:visible').first().click(); // the pane replaces the thread; Close returns to it
+      await expect(page.locator('#pane')).not.toHaveClass(/is-open/);
+    }
+  });
+
+  test('the status text shows as one dim line above the composer (the top bar hides it at this width)', async ({ page, request }) => {
+    await page.goto('/');
+    await expect(page.locator('#status')).toBeHidden();
+    await page.evaluate(() => { document.getElementById('status').textContent = 'You are offline. Using a model on this computer.'; });
+    await expect(page.locator('#status-line')).toHaveText('You are offline. Using a model on this computer.');
+    await expect(page.locator('#status-line')).toBeVisible();
+    const lineBox = await page.locator('#status-line').boundingBox();
+    const composerBox = await page.locator('#composer').boundingBox();
+    expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(composerBox.y + 1);
+    expect(request).toBeTruthy();
+  });
+});
+
+test('Q2-31: after Stop in a chat with steps, the Stopped report is there at once, without a reload', async ({ page }) => {
+  const dir = project();
+  await open(page); await useFolder(page, dir); await pickMode(page, 'Auto');
+  await page.locator('#input').fill('stop me'); await page.locator('#send').click();
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Starting', { timeout: 15_000 });
+  await page.locator('#stop').click();
+  await expect(page.locator('.stopped-report')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('.stopped-report')).toContainText('You stopped Bunny after one step.');
+});
+
+test('Q2-30: offline with a local provider that is not running, the message waits instead of failing in red', async ({ page, request }) => {
+  // a provider on this computer whose server is not there (port 9 refuses connections): the only local one
+  for (const p of (await (await request.get('/api/providers')).json()).filter((x) => x.custom)) await request.delete(`/api/providers/${p.id}`);
+  const added = await request.post('/api/providers/custom', { data: { name: 'Closed local', baseUrl: 'http://127.0.0.1:9/v1' } });
+  expect(added.ok()).toBeTruthy();
+  await page.goto('/');
+  await expect(page.locator('#picker-button')).toBeVisible();
+  await request.put('/api/network', { data: { offline: true } });
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+    window.dispatchEvent(new Event('offline'));
+  });
+  await page.locator('#input').fill('hello offline');
+  await page.locator('#send').click();
+  await expect(page.locator('#queued-msg .body')).toHaveText('hello offline');
+  await expect(page.locator('.offline-line')).toBeVisible();
+  await expect(page.locator('#error')).toHaveText('');
+  await request.put('/api/network', { data: { offline: false } });
 });

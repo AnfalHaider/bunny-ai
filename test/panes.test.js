@@ -247,6 +247,23 @@ test('In the desktop app only the native picker chooses a folder; a typed check 
   assert.equal((await call(`/api/folder/files?folder=${encodeURIComponent(dir)}&path=`)).status, 200);
 });
 
+test('In the desktop app the folder of a chat must be one the person picked: a script cannot set one (D2-5, session routes)', async (t) => {
+  const { app, base } = await startApp(t, { localGuard: true, apiToken: 'panes-token', folderPickerOnly: true });
+  const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
+  const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  const dir = await folder(t);
+  const refused = await call('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 'x', folder: dir }) });
+  assert.equal(refused.status, 403);
+  const made = await (await call('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 'x' }) })).json();
+  const patch = (value) => call(`/api/sessions/${made.id}/setting/folder`, { method: 'PATCH', body: JSON.stringify({ value }) });
+  assert.equal((await patch(dir)).status, 403, 'not picked');
+  assert.equal((await patch('C:/')).status, 403);
+  await app.chooseFolder(dir);
+  assert.equal((await patch(dir)).status, 200, 'picked');
+  assert.equal((await patch('')).status, 200, 'clearing the folder is always fine');
+  assert.equal((await call('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 'y', folder: dir }) })).status, 200);
+});
+
 test('a chat saved before D-2 (old message shapes) still loads through every pane route', async (t) => {
   const { base } = await startApp(t);
   const dir = await folder(t);

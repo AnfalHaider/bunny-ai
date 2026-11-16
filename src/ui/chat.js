@@ -21,6 +21,7 @@ import { resolveArtifact, htmlDocument } from './artifact-content.js';
 import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
+import { reachable } from './browser-pane.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -2113,7 +2114,7 @@ async function refreshSession({ expectAssistant = false } = {}) {
   // so poll briefly rather than read the transcript too early and lose it.
   // "A reply has arrived" means MORE assistant messages than the last transcript this page read, not "any":
   // in a chat that already has replies, any would stop the wait before the stopped reply is saved (Q2-19).
-  const assistants = (list) => list.filter((m) => m.role === 'assistant').length;
+  const assistants = (list) => list.filter((m) => m.role === 'assistant' && m.kind !== 'tool_call').length; // a tool step is not the reply (Q2-31)
   const known = assistants(state.session?.messages ?? []);
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const session = await getJSON(`/api/sessions/${state.sessionId}`);
@@ -2309,6 +2310,11 @@ async function send() {
   let offlineLocal = null;
   if (navigator.onLine === false && await networkDown()) {
     offlineLocal = localModel();
+    // A local server that is not running (Ollama closed) is no help: the message waits instead of failing in red (Q2-30).
+    if (offlineLocal) {
+      const owner = state.providers.find((p) => p.id === offlineLocal.providerId);
+      if (!(await reachable(owner?.baseUrl ?? ''))) offlineLocal = null;
+    }
     if (!offlineLocal) { queueTurn({ text, files }); return; }
     flashStatus(say('offline.local', { m: offlineLocal.displayName }), 8000);
     setOfflineChip(true);
@@ -3512,6 +3518,13 @@ async function boot() {
       if (state.terminalId) await terminalWrite(state.terminalId, command + '\n');
     },
   });
+  // The status text (Checking…, Back online. Sending…, X is slow. Trying Y…) also shows above the composer at phone width.
+  const statusEl = $('status');
+  if (statusEl && $('status-line')) {
+    const mirror = () => { $('status-line').textContent = statusEl.textContent; };
+    new MutationObserver(mirror).observe(statusEl, { childList: true, characterData: true, subtree: true });
+    mirror();
+  }
   state.workPanes = initWorkPanes({
     getSessionId: () => state.sessionId,
     getPendingFolder: () => state.pendingFolder?.folder ?? null,

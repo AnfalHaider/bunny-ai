@@ -165,6 +165,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   let fakeOffline = false; // test mode only: see /api/network
   const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check and chooseFolder)
   // Record a folder the person chose (the desktop app calls this with what its native picker returned). Never a drive root or Bunny's own data.
+  const isChosen = async (folder) => { const r = await checkFolder(folder); return r.ok && chosenFolders.has(r.folder); };
   const chooseFolder = async (folder) => {
     const result = await checkFolder(folder);
     if (!result.ok || (await neverBrowse(result.folder, dataDir))) return false;
@@ -692,6 +693,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
+      // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
+      if (folderPickerOnly && body.folder && !(await isChosen(body.folder))) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
       const session = await sessions.create(body);
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
@@ -1261,6 +1264,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const sessionSettingMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/setting\/([A-Za-z-]+)$/);
     if (sessionSettingMatch && method === 'PATCH') {
       try {
+        if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
+          const wanted = (await readBody(req)).value;
+          if (wanted && !(await isChosen(wanted))) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          const session = await sessions.update(sessionSettingMatch[1], { folder: wanted });
+          return sendJson(res, 200, { ...session, context: sessions.context(session) });
+        }
         const session = await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value });
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
@@ -2335,7 +2344,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 8000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200) });
+        // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
+        if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
+        const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200) });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };

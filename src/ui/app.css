@@ -1989,3 +1989,13 @@ details.thinking.is-live summary { color: var(--accent); }
   .file-tree.has-file { display: none; }
   .file-back { display: inline-flex; }
 }
+
+/* Phone: the status text is one dim line above the composer; the top bar scrolls sideways and its buttons are 40px targets. */
+.status-line { display: none; }
+@media (max-width: 760px) {
+  .topbar .hint#status { display: none; }
+  .status-line { display: block; min-height: 0; padding: 0 var(--sp-6) var(--sp-3); color: var(--text-dim); font-size: var(--fs-sm); text-align: left; }
+  .status-line:empty { display: none; }
+  .topbar .toolbar { overflow-x: auto; scrollbar-width: none; min-width: 0; }
+  .topbar .toolbar .icon-btn { width: 40px; height: 40px; flex: none; }
+}

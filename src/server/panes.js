@@ -36,7 +36,7 @@ export async function inside(root, rel = '') {
   const relation = relative(base, real);
   if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation)) throw refuse('path.outside', 'That path is outside the folder.');
   // The list hides .git and node_modules; reading them is refused too, so the two agree (.git/config can hold a token).
-  if (HIDDEN_DIRS.has(relation.split(sep)[0].toLowerCase())) throw refuse('path.hidden', 'That folder is not shown.');
+  if (relation.split(sep).some((segment) => HIDDEN_DIRS.has(segment.toLowerCase()))) throw refuse('path.hidden', 'That folder is not shown.');
   return { base, real, rel: relation.split(sep).join('/') };
 }
 
