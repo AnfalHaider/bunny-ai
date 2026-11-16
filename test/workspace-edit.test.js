@@ -106,3 +106,16 @@ test('multi_edit is an edit-risk tool: offered with edit tools, not with read-on
   assert.equal(describeToolCall('edit_file', { path: 'a.js', replace_all: true }), 'Edit a.js (all occurrences)');
   assert.equal(describeToolCall('edit_file', { path: 'a.js' }), 'Edit a.js');
 });
+
+test('LA-3: an edit that would grow the file past the limit is refused before the text is built, and the file is untouched', async (t) => {
+  const { ws, read } = setup(t, 'a'.repeat(1000));
+  const t0 = Date.now();
+  await assert.rejects(
+    ws.run('multi_edit', { path: 'f.txt', edits: Array.from({ length: 50 }, () => ({ old_text: 'a', new_text: 'aa', replace_all: true })) }),
+    /past the 20 MB limit\. Nothing was changed/);
+  assert.equal(read(), 'a'.repeat(1000), 'all or nothing: the doubling did not partly happen');
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+  await assert.rejects(ws.run('edit_file', { path: 'f.txt', old_text: 'a', new_text: 'x'.repeat(50_000), replace_all: true }), /past the 20 MB limit/);
+  assert.equal(read(), 'a'.repeat(1000));
+  assert.match(await ws.run('edit_file', { path: 'f.txt', old_text: 'a', new_text: 'bb', replace_all: true }), /1000 replacements/, 'a normal growth is fine');
+});
