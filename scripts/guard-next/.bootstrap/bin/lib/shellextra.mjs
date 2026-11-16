@@ -1,6 +1,7 @@
 // W5-1b: what Tech Lead's review (W5-1b rows) and Security's follow-ups W5S-1 and W5S-2 added, for roles that may not push live.
 // Used by lib/shellrules.mjs: tags and bare-URL pushes, remote URLs, moving the live branch label, and the gh allowlist.
 import { execFileSync } from 'node:child_process';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 /** A long option, or any unique prefix git accepts of it: isLong("--ta", "--tags") with a minimum length. */
 export function isLong(arg, full, min = 4) {
@@ -58,11 +59,12 @@ export function refuseRemote(args) {
 /** Why this branch/checkout/switch call moves the live branch's label by force, or null. `live` is the policy's live branch name. */
 export function refuseLabelMove(sub, args, live) {
   if (!live) return null;
-  const names = args.filter((a) => !a.startsWith('-')).map((a) => a.replace(/^refs\/heads\//i, '').toLowerCase());
+  const attached = args.flatMap((a) => (/^-[A-Za-z]*?[BCbc].+$/.test(a) && !a.startsWith('--') ? [a.replace(/^-[A-Za-z]*?[BCbc]/, '').replace(/^=/, '')] : /^--[a-z-]+=/.test(a) ? [a.slice(a.indexOf('=') + 1)] : []));
+  const names = [...args.filter((a) => !a.startsWith('-')), ...attached].map((a) => a.replace(/^refs\/heads\//i, '').toLowerCase());
   const touchesLive = names.includes(String(live).toLowerCase()); // Main, MAIN and main are one branch to a Windows checkout
   if (!touchesLive) return null;
   const flags = args.filter((a) => a.startsWith('-'));
-  const short = (letters) => flags.some((f) => /^-[A-Za-z]+$/.test(f) && [...f.slice(1)].some((c) => letters.includes(c)));
+  const short = (letters) => flags.some((f) => { const m = /^-([A-Za-z]+)/.exec(f); return Boolean(m) && !f.startsWith('--') && [...m[1]].some((c) => letters.includes(c)); }); // -fd, -Bmain and -B=main
   if (sub === 'branch' && (short('fMCmDd') || flags.some((f) => isLong(f, '--force', 4) || isLong(f, '--move', 4) || isLong(f, '--delete', 4)))) {
     return `moving, renaming or deleting the "${live}" branch label is not allowed for this role.`;
   }
@@ -94,16 +96,24 @@ export function ghDownloadTarget(words) {
   return targets;
 }
 
-const PROTECTED_START = /^(\.git|\.bootstrap|\.githooks|\.claude|agents\.md|claude\.md|docs[\\/]+(signoffs|releases))([\\/]|$)/i;
+const PROTECTED_FIRST = new Set(['.git', '.bootstrap', '.githooks', '.claude', 'agents.md', 'claude.md']);
 
-/** Why a gh download target is refused, or null. */
-export function refuseDownloadTarget(target) {
-  const t = String(target).replace(/\\/g, '/');
-  if (t === '' ) return 'a gh download target must be spelled out.';
-  if (t === '-') return null; // to the terminal
-  if (/[$`%]/.test(t)) return `a gh download target with a variable in it cannot be checked ("${target}"): spell it out.`;
-  if (/^([A-Za-z]:|\/|~)/.test(t) || t.split('/').includes('..')) return `a gh download may only write inside the working folder ("${target}" leaves it).`;
-  if (PROTECTED_START.test(t.replace(/^\.\//, ''))) return `a gh download may not write into "${target}" (toolkit configuration or records).`;
+/** Why a gh download target is refused, or null. `ctx` = { cwd, root }: the folder the command runs in and the repository root. */
+export function refuseDownloadTarget(target, ctx = {}) {
+  const raw = String(target);
+  if (raw === '') return 'a gh download target must be spelled out.';
+  if (raw === '-') return null; // to the terminal
+  if (/[$`%]/.test(raw)) return `a gh download target with a variable in it cannot be checked ("${raw}"): spell it out.`;
+  const base = ctx.cwd ?? process.cwd();
+  const root = ctx.root ?? base;
+  const abs = resolve(base, raw.replace(/^~(?=[\\/]|$)/, '~~'));
+  if (/^~/.test(raw)) return `a gh download may only write inside the working folder ("${raw}" leaves it).`;
+  const rel = relative(root, abs);
+  if (rel.startsWith('..') || isAbsolute(rel)) return `a gh download may only write inside the working folder ("${raw}" leaves it).`;
+  // the segments as Windows reads them: no trailing dots or spaces, no :stream, any case
+  const segs = rel.split(/[\\/]+/).filter(Boolean).map((seg) => (seg.split(':')[0].replace(/[. ]+$/, '') || seg).toLowerCase());
+  if (segs.length && PROTECTED_FIRST.has(segs[0])) return `a gh download may not write into "${raw}" (toolkit configuration or the .git folder).`;
+  if (segs[0] === 'docs' && (segs[1] === 'signoffs' || segs[1] === 'releases')) return `a gh download may not write into "${raw}" (sign-off and release records).`;
   return null;
 }
 
@@ -140,7 +150,8 @@ export function ghNotAllowed(words, group, sub, ctx) {
     return prCreateOnClaudeBranch(words, ctx.cwd) ? null : `"gh pr create" is allowed only for a claude/* branch (the head here is not one). ${offer}`;
   }
   if (sub === 'download') {
-    for (const target of ghDownloadTarget(words)) { const why = refuseDownloadTarget(target); if (why) return why; }
+    const targets = ghDownloadTarget(words);
+    for (const target of targets.length ? targets : ['.']) { const why = refuseDownloadTarget(target, ctx); if (why) return why; } // no -D/-O: the folder it runs in
     return null;
   }
   if (sub !== null && GH_READ_SUBS.has(sub)) return null;

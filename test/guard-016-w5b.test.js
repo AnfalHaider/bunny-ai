@@ -200,3 +200,15 @@ test('W5B-5: the pre-push hook refuses tag pushes and deletions for a role that 
   assert.deepEqual(check('chief-of-staff', 'refs/tags/v1').filter((e) => /tag/.test(e)), []);
   assert.deepEqual(check('builder', 'refs/heads/claude/x').filter((e) => /tag/.test(e)), [], 'a branch is not a tag');
 });
+
+test('W5-1c review: attached branch names, Windows spellings of a download target, and the folder the command runs in', (t) => {
+  for (const c of ['git worktree add -Bmain ../w', 'git worktree add -B=main ../w', 'git checkout -Bmain', 'git switch -Cmain', 'git switch --force-create=main']) denied(t, c);
+  allowed(t, 'git worktree add -Bclaude/x ../w');
+  for (const c of ['gh run download 5 -D .BOOTSTRAP', 'gh run download 5 -D .bootstrap.', 'gh run download 5 -D ".githooks "', 'gh run download 5 -D docs/../.bootstrap', 'gh run download 5 -D ./.git/hooks', 'gh release download v1 -D Docs/Signoffs', 'gh release download v1 -D docs/releases.', 'gh release download v1 -O .bootstrap/policy.json', 'gh release download v1 -D .bootstrap::$DATA']) denied(t, c);
+  allowed(t, 'gh run download 5 -D docs/design');
+  // run from inside a protected folder with no -D: it would write there
+  const root = makeRepo(t, 'builder');
+  mkdirSync(join(root, '.bootstrap', 'x'), { recursive: true });
+  assert.equal(guard.decide({ tool: 'Bash', command: 'gh run download 5', cwd: join(root, '.bootstrap') }).allow, false, 'the folder it runs in is the toolkit');
+  assert.equal(guard.decide({ tool: 'Bash', command: 'gh run download 5', cwd: root }).allow, true);
+});
