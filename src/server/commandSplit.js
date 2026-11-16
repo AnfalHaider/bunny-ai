@@ -116,7 +116,7 @@ const ALIASES = new Map(Object.entries({
   sl: 'Set-Location', cd: 'Set-Location', chdir: 'Set-Location', iwr: 'Invoke-WebRequest', curl: 'Invoke-WebRequest', wget: 'Invoke-WebRequest', irm: 'Invoke-RestMethod',
 }));
 // things that run other text, or rename a command so a name no longer means what it says
-const WRAPPER_WORDS = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'wsl', 'zsh', 'invoke-expression', 'invoke-command', 'start-process', 'set-alias', 'new-alias', 'start-job', 'invoke-item', 'register-scheduledjob', 'schtasks']);
+const WRAPPER_WORDS = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'wsl', 'zsh', 'invoke-expression', 'invoke-command', 'start-process', 'set-alias', 'new-alias', 'start-job', 'start-threadjob', 'invoke-item', 'import-alias', 'export-alias', 'register-scheduledjob', 'schtasks']);
 const INNER_FLAG = /^(\/c|\/k|-c|-command|-commandwithargs|-encodedcommand|-ec|-e)$/i;
 const GIT_GLOBAL_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
 
@@ -220,6 +220,10 @@ export function analyseCommand(command, depth = 0) {
       }
     }
   }
+  // the alias: and function: drives redefine what a name means (Set-Item alias:rm ...)
+  if (/(alias|function|variable):/i.test(String(command ?? ''))) wrapper = true;
+  // the alias: and function: drives redefine what a name means (Set-Item alias:rm ...)
+  if (/\b(alias|function|variable):/i.test(String(command ?? ''))) wrapper = true;
   // a call operator followed by a variable, a group or a script block (& $x, & (Get-Command ...), . $profile): the name is computed
   if (/(?:^|[;|&\n\r{(])\s*[&.]\s*(?:[$(@]|["'][^"']*\$)/.test(String(command ?? ''))) wrapper = true;
   // the text inside $( ) and backtick pairs, for a Deny or Ask

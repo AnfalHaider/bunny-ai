@@ -239,3 +239,14 @@ test('review: typographic quotes (PowerShell reads them as quotes), computed nam
     assert.ok(v?.effect === 'ask' || v?.effect === 'deny', `${c} -> ${v?.effect}`);
   }
 });
+
+test('review 3: en and em dashes are dashes to PowerShell; the alias: and function: drives redefine names', () => {
+  const deny = [cmd('deny', 'Remove-Item*-r*')];
+  for (const c of ['Remove-Item –Recurse build', 'Remove-Item —Recurse build', 'rm –r build', 'Remove-Item build ―Recurse']) assert.equal(checkCommand(deny, c)?.effect, 'deny', c);
+  assert.notEqual(checkCommand([cmd('allow', 'npm test*')], 'npm test –x')?.effect, 'allow', 'a dash of another kind: no Allow');
+  const g = [cmd('deny', 'Remove-Item*'), cmd('ask', 'git push*')];
+  for (const c of ['Set-Item alias:rm Get-Date', 'New-Item alias:zz -Value Remove-Item', 'si function:rm { 1 }', 'ni variable:x', 'Start-ThreadJob { 1 }', 'Import-Alias a.txt']) {
+    const v = checkCommand(g, c);
+    assert.ok(v?.effect === 'ask' || v?.effect === 'deny', `${c} -> ${v?.effect}`);
+  }
+});
