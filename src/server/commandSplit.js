@@ -226,9 +226,10 @@ export function computedArguments(line) {
       if (text[i + 1] === '-') return true;
       outside += text[i + 1] ?? ''; // a backtick makes the next character ordinary
       i += 1;
-    } else outside += c;
+    } else if (c === '@' && (text[i + 1] === "'" || text[i + 1] === '"')) return true; // a here-string: its lines are the argument
+    else outside += c;
   }
-  return /[(]|\$[A-Za-z_{(?]|(?:^|\s)@[({A-Za-z_$]/.test(outside);
+  return /[({]|\$[A-Za-z_{(?]|(?:^|\s)@[({A-Za-z_$]/.test(outside);
 }
 
 /**

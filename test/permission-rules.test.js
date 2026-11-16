@@ -271,7 +271,7 @@ test('W2-7d (Security 6ca4aff): quotes inside a word do not hide a command; glob
 
 test('W27d-1: computed arguments cannot dodge a Deny: git ("push"), git @("push"), git $("push") and a backtick before a hyphen ask', () => {
   const rules = [cmd('deny', 'git push*')];
-  for (const line of ['git ("push")', 'git @("push")', 'git $("push")', 'git `-C . push', 'git ("pu"+"sh") origin main', 'git @{a=1}', 'git $x', 'git @args', 'git ${x}', 'git $env:A', 'git "x;" ("push")', 'git "unpaired (push', "git -c \"a.b='\" (\"push\") origin main; echo \"'\""]) {
+  for (const line of ['git ("push")', 'git @("push")', 'git $("push")', 'git `-C . push', 'git ("pu"+"sh") origin main', 'git @{a=1}', 'git $x', 'git @args', 'git ${x}', 'git $env:A', 'git "x;" ("push")', 'git "unpaired (push', "git @'\npush\n'@", 'git @"\npush\n"@', 'git {push}', 'git -c ‘a’ ("push")', "git -c \"a.b='\" (\"push\") origin main; echo \"'\""]) {
     assert.equal(checkCommand(rules, line)?.effect, 'ask', line);
   }
   assert.equal(checkCommand(rules, 'git push')?.effect, 'deny', 'plain spellings still deny');
