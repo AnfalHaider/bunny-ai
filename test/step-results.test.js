@@ -179,6 +179,8 @@ test('an incognito chat keeps no note file and no long replay copy', async (t) =
   assert.equal(step.resultFile, undefined);
   assert.equal(step.modelResult, undefined);
   assert.deepEqual((await readdir(folder)).filter((f) => f === '.bunny'), [], 'no .bunny folder was made');
+});
+
 // W6-21: results are no longer cut at 8,000 characters.
 test('a 45,000-character read reaches the model whole; a 120,000-character one is cut at 50,000 with the whole saved', async (t) => {
   const mid = await readBig(t, { content: 'row of data\n'.repeat(3750) }); // 45,000
