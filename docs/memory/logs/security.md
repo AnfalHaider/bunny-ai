@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - K-1 (bootstrap kit 0.6.0 port): pre-review of the kit, list of weakenings
+
+Owner's go "go on K-1" (via the Chief of Staff, plan 66b6e57). Read 0.6.0 (`guard.mjs`, `prepush.mjs`, `policy.mjs`, `bootstrap.mjs`, hooks, changelog), no run. The Chief's three regressions are right (push detection without a tokenizer, case-sensitive globs with no Windows normalisation, no id check). New by reading: `bootstrap signoff ../../.bootstrap/roles` writes a role's own brief and drops its limits (A3 is worse than a path slip); shell writes are never checked against protected files; no tag, `gh`, label or remote rules; role binding only by env or `session.json`; no pre-commit or commit-msg hook (the upgrade must keep ours, including the no-Claude-credit rule); the allow rule `Bash(git push:*)` removes the click; flow and kit "records" let a guard change skip Security's sign-off. Doc `docs/security/2026-11-17-k1-kit-0.6.0-weakenings.md` (rows A1-A3, B1-B12, attack list D). Not signable until the staged guard covers every row. Lesson: a kit upgrade is a security change to the guard even when its changelog calls it a convenience; read the diff of the guard files first.
+
 ## 2026-11-17 - release-0.1.7 build fix, tip `6b06ed9` (91b659f + Builder B's build-css change): PASS stands
 
 Read only. `package.json` is unchanged since 91b659f (`--publish never`, publish block AnfalHaider/bunny-ai). The one new change is in `scripts/build-css.mjs`: it builds the CSS in memory, compares it with `src/ui/app.css` ignoring CR, leaves the file alone when only line endings differ, and otherwise writes it with the file's own endings. It reads two design files and writes one file in `src/ui`; no network, no process, no other path. Lesson: a pre-review of a moving branch should end with the tip's sha, so the stamp names what was read.
