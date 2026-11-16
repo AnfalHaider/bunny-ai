@@ -116,6 +116,23 @@ test('T3-15: offline with a model on this computer connected: it answers, and th
   }
 });
 
+test('a model that did not answer: a calm "is slow. Trying ..." line while the next model starts, then one line under the reply', async ({ page }) => {
+  await ready(page);
+  let hits = 0;
+  await page.route('**/api/sessions/*/messages', async (route) => {
+    hits += 1;
+    if (hits === 1) { await route.fetch(); /* the server saves the turn, as it does when a real model stalls */ await route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'event: error' + String.fromCharCode(10) + 'data: {"code":"chat.stalled","message":"The provider did not answer in time","scope":"model","reason":"timeout"}' + String.fromCharCode(10, 10) }); return; }
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await page.locator('#input').fill('please answer');
+  await page.locator('#send').click();
+  await expect(page.locator('#status')).toContainText(/is slow\. Trying /);
+  await expect(page.locator('.msg.assistant .body').last()).not.toHaveText('', { timeout: 15_000 });
+  await expect(page.locator('.msg.assistant .auto-meta').last()).toContainText('did not answer in time');
+  await expect(page.locator('.error-note')).toHaveCount(0);
+});
+
 test('T3-10 (real offline): the browser really cut off, the probe cannot be reached either: still the calm state', async ({ page, context }) => {
   await ready(page);
   const posted = sends(page);

@@ -1168,7 +1168,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     const job = JOBS[m.job]?.label ?? 'Chat';
     wrap.append(element('div', { className: 'msg-meta auto-meta',
       textContent: m.auto
-        ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${say('model.didNotAnswer', { model: m.fellBackFrom })})` : ''}`
+        ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} ${reasonPhrase(m.fellBackReason)}${alsoFailed(m.fellBackTries)})` : ''}`
         : `${say('model.answeredInstead', { model: m.model, from: m.fellBackFrom, reason: reasonPhrase(m.fellBackReason) })}${alsoFailed(m.fellBackTries)}` }));
   }
   if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking));
@@ -1490,7 +1490,9 @@ function renderRailDetails() {
 function setStreaming(on) {
   $('send').disabled = on;
   $('stop').hidden = !on;
-  $('status').textContent = on ? 'Streaming…' : '';
+  // While the next model starts after a failure, the calm "X is slow. Trying Y…" line stays instead of "Streaming…".
+  $('status').textContent = on ? (state.tryingNote || 'Streaming…') : '';
+  if (!on) state.tryingNote = null;
   renderSidebar();
   renderRail();
 }
@@ -2426,7 +2428,8 @@ async function send() {
     if (!next || attempt >= MAX_ATTEMPTS) break;
     // A calm line while the next model starts: what happened, and who is trying now.
     const live = say(`model.live.${reason}`) !== `model.live.${reason}` ? say(`model.live.${reason}`) : reasonPhrase(reason);
-    flashStatus(say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id }), 30000);
+    state.tryingNote = say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
+    flashStatus(state.tryingNote, 30000);
   }
   const { meter, aborted } = result;
   // The reply failed because the network is down (both signals agree): not a model fault. Say so calmly,
