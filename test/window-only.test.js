@@ -229,7 +229,7 @@ test('desktop app: instructions in settings and in a project are refused over HT
 });
 
 test('W5-7 leftovers: the long-reply caps, the helpers switch and the model filter are window-only; unknown settings keys are refused', async (t) => {
-  for (const key of ['autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter']) {
+  for (const key of ['autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy']) {
     assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: 1 }), true, key);
   }
   for (const key of ['providerId', 'model', 'theme']) assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: 'x' }), false, key);
@@ -264,4 +264,16 @@ test('Tech Lead 51562ee: every setting the screens write is a known key (no scre
   const unknown = [...seen].filter(([key]) => !known.has(key)).map(([key, file]) => `${key} (${file})`);
   assert.deepEqual(unknown, [], 'a screen writes a setting the server refuses');
   for (const key of ['chartsEnabled', 'fallbackWhenBusy', 'statusLabels', 'transcriptView', 'promptSuggestions', 'autoUpdate']) assert.ok(known.has(key), key);
+});
+
+test('Security c141d27: with only the page token, updates cannot be switched off (autoUpdate), nor the busy fallback; the window can', async (t) => {
+  const { app, base } = await startApp(t, { folderPickerOnly: true });
+  for (const body of [{ autoUpdate: false }, { fallbackWhenBusy: false }]) {
+    const r = await put(base, '/api/settings', body);
+    assert.equal(r.status, 403, JSON.stringify(body));
+    assert.equal(r.body.code, 'request.windowOnly');
+  }
+  assert.notEqual((await json(base, '/api/settings')).body.autoUpdate, false, 'nothing was saved');
+  assert.equal((await app.adminFetch('/api/settings', { method: 'PUT', headers: j, body: JSON.stringify({ autoUpdate: false }) })).status, 200);
+  assert.equal((await json(base, '/api/settings')).body.autoUpdate, false);
 });

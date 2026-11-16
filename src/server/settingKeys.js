@@ -6,6 +6,6 @@ export const ORDINARY_SETTING_KEYS = [
   'theme', 'language', 'notifications', 'displayName', 'callName', 'speechVoice', 'defaultEffort', 'providerId', 'model',
   'codeFont', 'codeFontSize', 'codeThemeDark', 'codeThemeLight', 'interfaceFont', 'responseFont', 'motion', 'transcriptSize', 'transcriptWidth', 'uiZoom',
   'artifactsEnabled', 'autoMemory', 'memoryEnabled', 'memorySensitive', 'searchChats', 'summaryNextSteps', 'unrelatedTask', 'branchPrefix',
-  'chartsEnabled', 'fallbackWhenBusy', 'statusLabels', 'transcriptView', 'promptSuggestions', 'autoUpdate',
+  'chartsEnabled', 'statusLabels', 'transcriptView', 'promptSuggestions',
   'aiDesktopName', 'aiDesktopDesc', 'buildName', 'buildDesc', 'fallbackName', 'fallbackDesc', 'toolsTitle',
 ];
