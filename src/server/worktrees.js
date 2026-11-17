@@ -39,7 +39,7 @@ export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS, hooksDir = null } 
     const program = gitPath();
     if (!program) { fail(Object.assign(new Error('git was not found on this computer. Install Git for Windows to give a chat its own copy of a project.'), { code: 'git.missing' })); return; }
     // commit.gpgSign and tag.gpgSign off: a project's own signing setting would start the signing program it names (gpg.program, gpg.ssh.program), and skipping hooks does not skip signing
-    const safe = ['-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', '-c', 'rebase.gpgSign=false', ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
+    const safe = ['-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', '-c', 'rebase.gpgSign=false', '-c', 'merge.verifySignatures=false', '-c', 'log.showSignature=false', '-c', 'gpg.program=bunny-no-such-signer', '-c', 'gpg.ssh.program=bunny-no-such-signer', '-c', 'gpg.x509.program=bunny-no-such-signer',...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
     execFile(program, [...safe, ...args], { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, shell: false, env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }) }, (err, stdout, stderr) => {
       if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed', exit: err.code }));
       else done(String(stdout).trim());
@@ -246,7 +246,7 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
         try { current = await git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: worktree.repo }); } catch { return { ok: false, action, reason: 'Your project folder is not reachable. Keep the branch.' }; }
         if (current !== worktree.base) return { ok: false, action, reason: `Your project folder is on ${current}, not ${worktree.base}. Keep the branch, or switch the folder back to ${worktree.base}.` };
         if (await git(['status', '--porcelain'], { cwd: worktree.repo })) return { ok: false, action, reason: 'Your project folder has changes of its own. Keep the branch and merge it yourself.' };
-        try { await git(['merge', '--ff-only', worktree.branch], { cwd: worktree.repo }); } catch (err) { return { ok: false, action, reason: `It cannot be merged cleanly (${err.message.split('\n')[0]}). Nothing was changed. Keep the branch and merge it yourself.` }; }
+        try { await git(['merge', '--ff-only', '--no-verify-signatures', worktree.branch], { cwd: worktree.repo }); } catch (err) { return { ok: false, action, reason: `It cannot be merged cleanly (${err.message.split('\n')[0]}). Nothing was changed. Keep the branch and merge it yourself.` }; }
         await removeCopy(worktree);
         await git(['branch', '-d', worktree.branch], { cwd: worktree.repo }).catch(() => {});
         return { ok: true, action };

@@ -230,3 +230,29 @@ test('LOW (Security, signing): a project\'s own commit signing never starts its 
   assert.equal(git(repo, 'log', '-1', '--format=%s', made.branch), 'Bunny: work in progress', 'the work was saved, unsigned');
   assert.equal(git(repo, 'show', `${made.branch}:work.txt`), 'work');
 });
+
+test('LOW (automated review, signature checks): merging a copy never starts the project\'s signing program, even with merge.verifySignatures and log.showSignature on', async (t) => {
+  const repo = tmp('verify');
+  const data = tmp('verifydata');
+  const marks = tmp('verifymarks');
+  clean(t, repo, data, marks);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const fwd = (p) => p.split(String.fromCharCode(92)).join('/');
+  const marker = join(marks, 'verifier-ran.txt');
+  const signer = join(marks, 'verifier.cjs');
+  writeFileSync(signer, `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran'); process.exit(1);\n`);
+  const wrapper = join(marks, process.platform === 'win32' ? 'verifier.cmd' : 'verifier.sh');
+  writeFileSync(wrapper, process.platform === 'win32' ? `@echo off\r\n"${process.execPath}" "${signer}" %*\r\n` : `#!/bin/sh\nexec "${process.execPath}" "${signer}" "$@"\n`, { mode: 0o755 });
+  for (const [key, value] of [['merge.verifySignatures', 'true'], ['log.showSignature', 'true'], ['gpg.program', fwd(wrapper)], ['gpg.ssh.program', fwd(wrapper)], ['gpg.x509.program', fwd(wrapper)]]) git(repo, 'config', key, value);
+  const wt = createWorktrees({ dataDir: data });
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'verify' });
+  writeFileSync(join(made.path, 'work.txt'), 'work\n');
+  const done = await wt.finish(made, { action: 'merge' });
+  assert.equal(done.ok, true, JSON.stringify(done));
+  assert.equal(existsSync(marker), false, 'no signing or verifying program ran');
+  assert.equal(readFileSync(join(repo, 'work.txt'), 'utf8').trim(), 'work', 'the work was merged');
+});
