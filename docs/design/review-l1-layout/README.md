@@ -53,3 +53,14 @@ Profile (including the "Sign-in apps (advanced)" block opened, at 390), Usage, M
 - **Customize with connectors, skills and plugins present** (the `.auto-card` list): the invented profile had none; `src/ui/app.css:1900` gives that card its own padding, but I did not look at it filled.
 - **Settings window itself** (the left list, the Search box, the top bar) was seen in the Code shot at 1280 and looked fine; not looked at on a phone-width window.
 - The script's phone "outside the card" hits on Profile come from the closed Sign-in apps block; with it opened nothing overflows.
+
+## Review of the fix: claude/builder-a-l1 at fca5fb3 (2026-11-17): PASS
+Shot on an invented profile, desktop (800 px content width) and phone (390), light and dark, `shots-fix/`. The measuring script flags nothing new; Privacy is no longer flagged.
+
+1. **Permission rules: fixed.** Block padded like a row, divider above it; text, switch, lists, add row, "Start from" and Try box all sit 24 px in on desktop and share one left edge with the rows below (heading at 41 px, the same as "Default effort"). Light, dark, phone.
+2. **Privacy Storage: fixed.** Labels and values 24 px in; the Session pane keeps its own tight `.kv` (4 px and 0 padding, 92 px label) because that rule now lives under `.pane-section`.
+3. **Appearance code pickers: fixed.** Lined up with the rows below, desktop and phone.
+4. **Providers footnote: fixed.** 12 px below the list.
+5. **Capabilities "No tools built yet.": partly.** It now has row padding, but the line still sits low in the card with a large gap above it. Not blocking.
+
+Two small notes, neither blocking: (a) on the phone the Permission rules block is inset 20 px (`--sp-6`, which I asked for in item 1) while the rows are inset 24 px, so its text starts 4 px left of the row text (37 px against 41); my spec was wrong, use `--sp-8` there too. (b) The "No rules." lines touch their own list border by design (they are rows in a list card).

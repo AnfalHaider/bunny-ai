@@ -1,0 +1,16 @@
+dlight openai: ["Default:true","Low:false","Medium:false","High:false"]
+dlight after High: ["Default:false","Low:false","Medium:false","High:true"]
+dlight cerebras: ["Default","Low","High"]
+dlight unknown provider: seg count 0, Thinking label count 0
+ddark openai: ["Default:true","Low:false","Medium:false","High:false"]
+ddark after High: ["Default:false","Low:false","Medium:false","High:true"]
+ddark cerebras: ["Default","Low","High"]
+ddark unknown provider: seg count 0, Thinking label count 0
+mlight openai: ["Default:true","Low:false","Medium:false","High:false"]
+mlight after High: ["Default:false","Low:false","Medium:false","High:true"]
+mlight cerebras: ["Default","Low","High"]
+mlight unknown provider: seg count 0, Thinking label count 0
+mdark openai: ["Default:true","Low:false","Medium:false","High:false"]
+mdark after High: ["Default:false","Low:false","Medium:false","High:true"]
+mdark cerebras: ["Default","Low","High"]
+mdark unknown provider: seg count 0, Thinking label count 0

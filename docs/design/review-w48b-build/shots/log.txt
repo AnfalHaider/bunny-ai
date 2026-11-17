@@ -1,0 +1,26 @@
+light image menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+light image chip {"hidden":false,"text":"error-screen.png\n×","w":658,"cw":658,"imgs":1} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+light image calls [["pickFile"],["submit","What is in this?","[{\"kind\":\"file\",\"id\":\"f1\"}]"]]
+light pdf menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+light pdf chip {"hidden":false,"text":"quarterly-report-final-version-2-with-a-very-long-file-name.pdf\n×","w":658,"cw":658,"imgs":0} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+light pdf calls [["pickFile"],["submit","What is in this?","[{\"kind\":\"file\",\"id\":\"f2\"}]"]]
+light text menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+light text chip {"hidden":false,"text":"notes.txt\n×","w":658,"cw":658,"imgs":0} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+light toobig menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+light toobig chip {"hidden":true,"text":"","w":0,"cw":0,"imgs":0} msg {"hidden":false,"text":"That file is over 8 MB, so Bunny left it out.","cls":"msg is-problem"} overflow false
+light cancel menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+light cancel chip {"hidden":true,"text":"","w":0,"cw":0,"imgs":0} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+light remove: chipsHidden true calls ["dropFile"] removeLabel check done
+dark image menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+dark image chip {"hidden":false,"text":"error-screen.png\n×","w":658,"cw":658,"imgs":1} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+dark image calls [["pickFile"],["submit","What is in this?","[{\"kind\":\"file\",\"id\":\"f1\"}]"]]
+dark pdf menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+dark pdf chip {"hidden":false,"text":"quarterly-report-final-version-2-with-a-very-long-file-name.pdf\n×","w":658,"cw":658,"imgs":0} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+dark pdf calls [["pickFile"],["submit","What is in this?","[{\"kind\":\"file\",\"id\":\"f2\"}]"]]
+dark text menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+dark text chip {"hidden":false,"text":"notes.txt\n×","w":658,"cw":658,"imgs":0} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+dark toobig menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+dark toobig chip {"hidden":true,"text":"","w":0,"cw":0,"imgs":0} msg {"hidden":false,"text":"That file is over 8 MB, so Bunny left it out.","cls":"msg is-problem"} overflow false
+dark cancel menu items: ["Add a screenshot\nTakes a picture of this screen when you choose it","Add a file…\nA picture, a PDF or a text file, up to 8 MB"]
+dark cancel chip {"hidden":true,"text":"","w":0,"cw":0,"imgs":0} msg {"hidden":true,"text":"","cls":"msg"} overflow false
+dark remove: chipsHidden true calls ["dropFile"] removeLabel check done
