@@ -40,7 +40,7 @@ export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS, hooksDir = null } 
     if (!program) { fail(Object.assign(new Error('git was not found on this computer. Install Git for Windows to give a chat its own copy of a project.'), { code: 'git.missing' })); return; }
     const safe = ['-c', 'core.fsmonitor=false', ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
     execFile(program, [...safe, ...args], { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, shell: false, env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }) }, (err, stdout, stderr) => {
-      if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed' }));
+      if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed', exit: err.code }));
       else done(String(stdout).trim());
     });
   });
@@ -78,16 +78,28 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
    * @returns {Promise<string|null>} the reason, or null
    */
   async function filterDrivers(folder) {
+    // The settings as git will read them when it checks files out: the project's .git/config AND everything it includes (include.path, includeIf), its worktree config and a -c on the
+    // command line all count. --show-scope tells where each came from: only the person's own global and system settings (Git LFS is installed there) are theirs and are let through.
+    // Only "nothing found" (exit 1) is read as none: any other failure of git refuses the copy.
     let found = '';
-    // only the project's OWN settings (--local): the person's own global and system settings (Git LFS is installed there) are theirs. Git LFS's own filter, set in the project by `git lfs install`, is let through.
-    try { found = await git(['config', '--local', '-z', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch { return null; } // git config exits 1 when there is none
-    // -z: one record per setting, ended by NUL; inside a record the key ends at the first newline and the value is everything after it. A value that itself holds a line break is refused (a shell would run each line).
-    const own = found.split(String.fromCharCode(0)).filter((r) => r.length > 0).filter((record) => {
-      const at = record.indexOf(String.fromCharCode(10));
-      if (at < 0) return true;
+    try { found = await git(['config', '--show-scope', '-z', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch (err) {
+      if (err?.exit === 1) return null;
+      return 'Git could not say whether this project runs its own programs when files are checked out, so Bunny will not make a copy of it.';
+    }
+    // -z with --show-scope: for each setting, the scope, a NUL, then "<key><NEWLINE><value>", a NUL. A value that itself holds a line break is refused (a shell would run each line).
+    const NL = String.fromCharCode(10);
+    const parts = found.split(String.fromCharCode(0));
+    const own = [];
+    for (let k = 0; k + 1 < parts.length; k += 2) {
+      const scope = parts[k].trim();
+      const record = parts[k + 1];
+      const at = record.indexOf(NL);
+      if (at < 0) { own.push(record); continue; }
+      if (scope === 'global' || scope === 'system') continue;
       const value = record.slice(at + 1);
-      return /[\r\n]/.test(value) || LFS_FILTERS[record.slice(0, at).toLowerCase()] !== value.trim();
-    });
+      if (/[\r\n]/.test(value) || LFS_FILTERS[record.slice(0, at).toLowerCase()] !== value.trim()) own.push(record);
+    }
+    if (parts.filter((x) => x.trim().length > 0).length % 2 === 1) own.push('unreadable'); // a record that does not pair up is not understood: refuse
     return own.length ? 'This project runs its own programs when git checks files out (a filter in its git settings), so Bunny will not make a copy of it.' : null;
   }
 

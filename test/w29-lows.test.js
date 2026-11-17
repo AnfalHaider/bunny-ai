@@ -103,3 +103,46 @@ test('LOW 3 (Security, w2-9-lows): only the exact values `git lfs install` write
   git(repo, 'config', 'filter.other.clean', standard['filter.lfs.clean']);
   assert.equal((await wt.eligibility(repo)).ok, false, 'the standard value under another filter name is not LFS');
 });
+
+test('LOW 3 (automated review): a filter reached through an include, a worktree config or a command-line setting is refused; the person\'s own global filter is not; a git that fails refuses', async (t) => {
+  const repo = tmp('inc');
+  const data = tmp('incdata');
+  const extra = tmp('incextra');
+  clean(t, repo, data, extra);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const wt = createWorktrees({ dataDir: data });
+  // 1. an include: the filter sits in a file the project's .git/config includes
+  const included = join(extra, 'filters.cfg').split(String.fromCharCode(92)).join('/');
+  writeFileSync(included, '[filter "evil"]\n\tsmudge = calc.exe\n');
+  git(repo, 'config', 'include.path', included);
+  const viaInclude = await wt.eligibility(repo);
+  assert.equal(viaInclude.ok, false, 'a filter reached through include.path is refused');
+  assert.match(viaInclude.reason, /runs its own programs/);
+  git(repo, 'config', '--unset', 'include.path');
+  assert.equal((await wt.eligibility(repo)).ok, true);
+  // 2. includeIf
+  git(repo, 'config', 'includeIf.gitdir:**.path', included);
+  assert.equal((await wt.eligibility(repo)).ok, false, 'includeIf too');
+  git(repo, 'config', '--unset', 'includeIf.gitdir:**.path');
+  // 3. the worktree config
+  git(repo, 'config', 'extensions.worktreeConfig', 'true');
+  git(repo, 'config', '--worktree', 'filter.evil.clean', 'calc.exe');
+  assert.equal((await wt.eligibility(repo)).ok, false, 'a filter in the worktree config is refused');
+  git(repo, 'config', '--worktree', '--unset', 'filter.evil.clean');
+  assert.equal((await wt.eligibility(repo)).ok, true);
+  // 4. the person's own GLOBAL filter (Git LFS in a normal install) does not refuse the copy
+  const globalCfg = join(extra, 'global.cfg');
+  writeFileSync(globalCfg, '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n[filter "mine"]\n\tsmudge = my-own-tool\n');
+  const saved = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = globalCfg;
+  try { assert.equal((await wt.eligibility(repo)).ok, true, 'the person\'s global settings are theirs'); } finally { if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = saved; }
+  // 5. any failure of git other than "nothing found" refuses
+  const failing = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error('fatal: bad config'), { exit: 128 }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+  const e = await failing.eligibility(repo);
+  assert.equal(e.ok, false);
+  assert.match(e.reason, /could not say whether/);
+});
