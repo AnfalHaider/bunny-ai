@@ -74,3 +74,54 @@ test('the same or an older release downloads nothing; switched off, only a manua
 test('a release without an installer is not offered', async () => {
   assert.equal(await readRelease({ tag_name: 'v1.0.0', assets: [{ name: 'notes.txt' }] }), null);
 });
+
+// S-UPD (Security): no checksum, no install; and a release with a suffix is older than the plain one.
+const noChecksum = (variant) => {
+  const installer = Buffer.from('pretend installer bytes');
+  const asked = [];
+  const fetchImpl = async (url) => {
+    asked.push(url);
+    if (url.endsWith('/releases/latest')) {
+      const assets = [{ name: 'Bunny-AI-Setup-0.2.0.exe', size: installer.length, browser_download_url: 'https://dl/setup.exe' }];
+      if (variant !== 'no-file') assets.push({ name: 'latest.yml', size: 10, browser_download_url: 'https://dl/latest.yml' });
+      return new Response(JSON.stringify({ tag_name: 'v0.2.0', body: '', assets }), { status: 200 });
+    }
+    if (url === 'https://dl/latest.yml') return new Response(variant === 'no-sha' ? 'version: 0.2.0\npath: x.exe\n' : 'version: 0.2.0\nsha512:\n', { status: 200 });
+    if (url === 'https://dl/setup.exe') return new Response(installer, { status: 200 });
+    return new Response('', { status: 404 });
+  };
+  return { fetchImpl, asked };
+};
+
+for (const variant of ['no-file', 'no-sha', 'empty-sha']) {
+  test(`S-UPD: a release with ${variant === 'no-file' ? 'no latest.yml' : variant === 'no-sha' ? 'a latest.yml without sha512' : 'an empty sha512'} is not downloaded or installed`, async (t) => {
+    const dir = await mkdtemp(join(tmpdir(), 'bunny-update-'));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const gh = noChecksum(variant);
+    const updater = createUpdater({ currentVersion: '0.1.0', feed: 'https://api/releases/latest', fetchImpl: gh.fetchImpl, downloadDir: dir });
+    const status = await updater.check();
+    assert.equal(status.state, 'error');
+    assert.match(status.message, /no published checksum/);
+    assert.ok(!gh.asked.includes('https://dl/setup.exe'), 'the installer was never fetched');
+    assert.equal(updater.hasUpdate(), false);
+    assert.equal(updater.install(), false, 'nothing to install');
+  });
+}
+
+test('S-UPD: pre-release suffixes are compared like semver', () => {
+  const order = ['0.1.9-alpha', '0.1.9-alpha.1', '0.1.9-alpha.beta', '0.1.9-beta', '0.1.9-beta.2', '0.1.9-beta.11', '0.1.9-rc.1', '0.1.9', '0.1.10-rc.1', '0.1.10'];
+  for (let i = 0; i < order.length - 1; i += 1) {
+    assert.equal(compareVersions(order[i], order[i + 1]), -1, `${order[i]} < ${order[i + 1]}`);
+    assert.equal(compareVersions(order[i + 1], order[i]), 1, `${order[i + 1]} > ${order[i]}`);
+  }
+  assert.equal(compareVersions('v0.1.9-rc.1', '0.1.9-rc.1'), 0);
+  assert.equal(compareVersions('0.1.9+build5', '0.1.9'), 0, 'build metadata is ignored');
+  assert.equal(compareVersions('0.1.9', '0.1.9-rc.1'), 1);
+});
+
+test('S-UPD: a release candidate is not offered to a copy that is already on the plain version', async () => {
+  const gh = fakeGithub({ version: '0.1.9-rc.1' });
+  const updater = createUpdater({ currentVersion: '0.1.9', feed: 'https://api/releases/latest', fetchImpl: gh.fetchImpl });
+  assert.equal((await updater.check()).state, 'none');
+  assert.ok(!gh.asked.includes('https://dl/setup.exe'));
+});
