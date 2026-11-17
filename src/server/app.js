@@ -1952,6 +1952,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         }
       }
 
+      // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,
+      // never cut: the part the person cannot see could be the part that matters.
+      const CARD_LIMIT = 2000;
+      const cardTooLong = (detail) => String(detail ?? '').length > CARD_LIMIT
+        ? `This is too long to show in full on the confirmation card (more than ${CARD_LIMIT} characters), so it was not run. Use a shorter command, or put the work in a file and run that.`
+        : null;
       // Ask the person, and wait for the answer (or for them to leave).
       const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
@@ -2280,6 +2286,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
         if (ruledProcess?.effect === 'ask' || (needsOk(risk) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const tooLong = name === 'start_process' ? cardTooLong(detail) : null;
+          if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -2593,6 +2601,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
         if (localConnector || ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const tooLong = (localConnector || name === 'run_command') ? cardTooLong(detail) : null;
+          if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });

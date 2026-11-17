@@ -19,6 +19,8 @@ const ARGS = {
   list_files: { depth: 2 }, write_file: { path: 'note.txt', content: 'carrots\n' }, run_command: { command: 'echo hi' },
   read_file: { path: 'secrets/key.txt' }, search_files: { query: 'TOPSECRET' }, find_files: { pattern: '*.txt' },
   chained: { command: 'echo hi; echo there' },
+  long_command: { command: `echo ${'a'.repeat(2100)} & echo the-hidden-tail` },
+  fits_command: { command: `echo ${'a'.repeat(1900)}` },
   download_file: { url: 'http://example.invalid/x', path: 'secrets/key.txt' },
 };
 
@@ -34,7 +36,7 @@ async function setup(t) {
       const rest = /^call \w+ (.+)$/.exec(asked)?.[1]; // W69-1: read_url takes the address from the message
       const done = body.messages.some((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool === 'chained' ? 'run_command' : tool, arguments: JSON.stringify(tool === 'read_url' ? { url: rest } : ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
+      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool === 'chained' || tool.endsWith('_command') && tool !== 'run_command' ? 'run_command' : tool, arguments: JSON.stringify(tool === 'read_url' ? { url: rest } : ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
       else res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n');
     });
   });
@@ -301,4 +303,23 @@ test('W69-1: with no rule, a file: address inside the folder still reads', async
     say: (folder) => 'call read_url file:///' + join(folder, 'hello.txt').split(String.fromCharCode(92)).join('/'),
   });
   assert.equal(r.status, 'done');
+});
+
+// W614-1 (Security): the confirm card shows at most 2,000 characters, so a longer command is refused, never cut.
+test('W614-1: a run_command whose card would be cut at 2,000 characters is refused in every mode that asks, and never runs', async (t) => {
+  const base = await setup(t);
+  for (const mode of ['ask', 'accept']) {
+    const r = await run(base, mode, 'long_command', {});
+    assert.deepEqual(r.cards, [], `${mode}: no card with a cut command`);
+    assert.equal(r.ran, false, mode);
+    assert.match(r.stream, /"status":"denied"/, mode);
+    assert.match(r.stream, /too long to show in full/, mode);
+  }
+});
+
+test('W614-1: a command that fits the card is shown whole', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'ask', 'fits_command', {});
+  assert.equal(r.cards.length, 1);
+  assert.equal(r.cards[0].detail, `echo ${'a'.repeat(1900)}`);
 });

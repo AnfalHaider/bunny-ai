@@ -74,3 +74,14 @@ test('a program outside the short list is refused with no card, and nothing is a
   assert.deepEqual(servers, []);
   assert.match(text, /can only run one of: npx, node, uvx, python, python3, docker/);
 });
+
+// W614-1 (Security): the card shows at most 2,000 characters; a longer proposal is refused before any card, in every mode.
+for (const mode of ['ask', 'auto']) {
+  test(`${mode}: a local connector whose command line is over 2,000 characters is refused, not shown cut`, async (t) => {
+    const padded = { name: 'Padded', command: 'node', args: ['-e', 'a'.repeat(900), 'b'.repeat(900), 'c'.repeat(900), 'process.exit(1)'] };
+    const { asked, servers, text } = await run(t, mode, padded, true);
+    assert.equal(asked.length, 0, 'no card was shown');
+    assert.equal(servers.length, 0, 'nothing was added');
+    assert.match(text, /too long to show in full/);
+  });
+}
