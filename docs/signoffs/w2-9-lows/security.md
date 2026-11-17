@@ -1,7 +1,7 @@
 ---
 piece: w2-9-lows
 role: security
-sha: 69b35e9
+sha: 66b95b6
 verdict: PASS
 date: 2026-11-17
 ---
@@ -86,3 +86,10 @@ Tests from a copy of 598ebc1, with the variable unset:
 - **Exit codes (cd39ef0).** Every git failure other than exit 1 refuses the copy, in the status check and in Finish.
 - **Tests,** from a copy of 69b35e9 with the variable unset: `w29-lows` 7 of 7, `w2-9-worktree` 12 of 12, `w29-safe-exec` 4 of 4.
 - **Still accepted (LOW):** a file the person's own global config includes from inside a project is trusted as global. That is their own config choice.
+
+## Re-stamp at 66b95b6: PASS (supersedes 69b35e9)
+
+- **Signature verification is off.** A project's `merge.verifySignatures` would make Finish's merge start `gpg.program` to verify. `runGit` now also sets `merge.verifySignatures=false` and `log.showSignature=false`, and the merge passes `--no-verify-signatures`.
+- **The three signing programs** (`gpg.program`, `gpg.ssh.program`, `gpg.x509.program`) point at a name that doesn't exist.
+- **Tests,** from a copy of 66b95b6 with the variable unset: `w29-lows` 8 of 8, `w2-9-worktree` 12 of 12.
+- **LOW:** the stand-in name `bunny-no-such-signer` is bare and predictable, so git would look it up on PATH, never in the project folder. Signing and verification are both off, so it should never be started. An absolute path that doesn't exist, under Bunny's data folder, would be cleaner.
