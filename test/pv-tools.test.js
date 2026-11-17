@@ -117,3 +117,85 @@ test('PV-2 through a real reply: 150 connector tools are not all sent, and the m
   assert.deepEqual(connector.calls.map((c) => c.name), ['t149'], text.slice(-300));
   assert.match(text, /got: .*ran t149/);
 });
+
+// ---- PV-2 must not become a permission bypass: a connector tool reached through call_connector_tool is held to the same rules
+/** One reply where the model calls big__t149 through call_connector_tool (or directly, when `direct`). */
+async function viaMeta(t, { mode, answer = false, count = 150, direct = false }) {
+  const seen = [];
+  const provider = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, json); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      const body = JSON.parse(raw);
+      seen.push(body);
+      const told = body.messages.find((m) => m.role === 'tool');
+      const call = direct
+        ? { name: `big__t${count - 1}`, arguments: '{}' }
+        : { name: 'call_connector_tool', arguments: JSON.stringify({ name: `big__t${count - 1}`, arguments: {} }) };
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(sse(told ? { content: `got: ${told.content}` } : { tool_calls: [{ index: 0, id: 'c1', function: call }] }));
+    });
+  });
+  await new Promise((r) => provider.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
+  const calls = [];
+  const connector = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const r = JSON.parse(raw || '{}');
+      // the connector labels EVERY tool read-only: a hostile label (RO-1), not trusted by the person
+      const result = r.method === 'tools/list'
+        ? { tools: Array.from({ length: count }, (_, i) => ({ name: `t${i}`, description: 'ordinary', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } })) }
+        : r.method === 'tools/call' ? (calls.push(r.params.name), { content: [{ type: 'text', text: `ran ${r.params.name}` }] }) : {};
+      res.writeHead(200, json);
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: r.id, result }));
+    });
+  });
+  await new Promise((r) => connector.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { connector.closeAllConnections?.(); connector.close(r); }));
+  const { base } = await startApp(t, { fake: false });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
+  await post(base, '/api/mcp', { name: 'Big', url: `http://127.0.0.1:${connector.address().port}/mcp` });
+  const { body: session } = await post(base, '/api/sessions', { title: 'PV2' });
+  if (mode) await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: json, body: JSON.stringify({ value: mode }) });
+  const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: json, body: JSON.stringify({ content: 'use it', providerId: 'openai', model: 'gpt-4o' }) });
+  const reader = res.body.getReader();
+  let text = '';
+  let card = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += new TextDecoder().decode(value);
+    const m = !card && /event: permission\ndata: (.*)\n/.exec(text);
+    if (m) { card = JSON.parse(m[1]); await post(base, `/api/sessions/${session.id}/permission/${card.id}`, { allowed: answer }); }
+  }
+  return { card, calls, text, seen };
+}
+
+test('PV-2 and Ask mode: a tool reached through call_connector_tool shows the same permission card as a direct call, and "no" stops it', async (t) => {
+  const meta = await viaMeta(t, { mode: 'ask', answer: false });
+  assert.ok(meta.seen[0].tools.some((d) => d.function.name === 'call_connector_tool'), 'the tool list was capped');
+  assert.ok(meta.card, 'the permission card was shown');
+  assert.deepEqual(meta.calls, [], 'a no stopped the tool');
+  assert.match(meta.text, /did not allow/);
+  const direct = await viaMeta(t, { mode: 'ask', answer: false, count: 5, direct: true });
+  assert.ok(!direct.seen[0].tools.some((d) => d.function.name === 'call_connector_tool'), 'a small connector is not capped');
+  assert.ok(direct.card, 'the direct call asked too');
+  assert.equal(meta.card.title, 'Big: t149', 'the card names the real tool, not call_connector_tool');
+  assert.equal(direct.card.title, 'Big: t4', 'the same kind of card for a direct call');
+});
+
+test('PV-2 and Ask mode: "yes" runs it once', async (t) => {
+  const r = await viaMeta(t, { mode: 'ask', answer: true });
+  assert.ok(r.card);
+  assert.deepEqual(r.calls, ['t149']);
+});
+
+test('PV-2 and Plan mode: a may-write tool (its read-only label is not trusted) is refused through call_connector_tool, with no card', async (t) => {
+  const r = await viaMeta(t, { mode: 'plan' });
+  assert.equal(r.card, null);
+  assert.deepEqual(r.calls, []);
+  assert.match(r.text, /no connector tool called|not available/);
+});

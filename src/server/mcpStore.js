@@ -82,6 +82,8 @@ export function createMcpStore({ file }) {
       if (!/^https?:\/\//i.test(address)) {
         throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
       }
+      // RO-1: trust was given to the connector at its old address; a different address is a different connector
+      if (address.slice(0, 500) !== server.url) server.trustReadOnly = false;
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
