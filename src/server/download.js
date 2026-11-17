@@ -9,6 +9,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { isOwnServer, isLoopbackAddress, ownPorts } from './ownAddress.js';
 
 export const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
 export const DOWNLOAD_TIMEOUT_MS = 60_000;
@@ -64,6 +65,7 @@ export function isPrivateAddress(ip) {
 }
 
 const hostOf = (u) => u.hostname.replace(/^\[|\]$/g, '');
+const refusedOwn = () => new Error('Bunny AI will not fetch its own server (its address on this computer): its pages hold things only the person may see.');
 const refusedHost = (name) => new Error(`${name} is on this computer or a private network; download_file only fetches public addresses.`);
 
 const stopped = (signal) => new Error(signal?.aborted ? 'Stopped by the person.' : `The download took longer than ${DOWNLOAD_TIMEOUT_MS / 1000} s and was stopped.`);
@@ -80,6 +82,8 @@ function requestOnce(url, { sig, allowLoopback, lookupImpl }) {
       Promise.resolve(lookupImpl(hostname, { all: true })).then((found) => {
         const list = Array.isArray(found) ? found : [found];
         if (!list.length) throw new Error(`Could not find the host ${hostname}`);
+        // a name that points at this PC's own loopback at Bunny's own port is Bunny's server, whatever the name says
+        if (ownPorts.has(String(url.port || (url.protocol === 'https:' ? '443' : '80'))) && list.some((x) => isLoopbackAddress(x.address))) throw refusedOwn();
         if (!allowLoopback && list.some((x) => isPrivateAddress(x.address))) throw refusedHost(hostname);
         const first = { address: list[0].address, family: list[0].family || isIP(list[0].address) };
         if (opts?.all) cb(null, [first]); else cb(null, first.address, first.family);
@@ -101,12 +105,14 @@ export async function fetchLimited(url, { signal, allowLoopback = false, lookupI
   const sig = AbortSignal.any([AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS), ...(signal ? [signal] : [])]);
   for (let hop = 0; ; hop += 1) {
     if (current.protocol !== 'http:' && current.protocol !== 'https:') throw new Error(`download_file only fetches http or https addresses, not ${current.protocol}`);
+    if (isOwnServer(current)) throw refusedOwn(); // every hop, so a redirect cannot lead there either
     let res;
     try {
-      res = await requestOnce(current, { sig, allowLoopback, lookupImpl });
+      // allowLoopback may be a function of the address, asked again on every hop
+      res = await requestOnce(current, { sig, allowLoopback: typeof allowLoopback === 'function' ? allowLoopback(current) : allowLoopback, lookupImpl });
     } catch (err) {
       if (sig.aborted) throw stopped(signal);
-      if (/private network|find the host/.test(err.message)) throw err;
+      if (/private network|find the host|will not fetch its own server/.test(err.message)) throw err;
       throw new Error(`Could not download: ${err.code || err.message}`);
     }
     if ([301, 302, 303, 307, 308].includes(res.statusCode)) {

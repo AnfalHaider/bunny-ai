@@ -48,7 +48,8 @@ import { clip } from './clip.js';
 import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
-import { capturePage, captureFolderName } from './capture.js';
+import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
+import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited } from './download.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
@@ -2162,13 +2163,10 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
           if (got?.error) throw new Error(got.error);
           const info = got?.inspected;
           if (!info || info.error) throw new Error(info?.error ?? 'The browser panel did not answer.');
-          const target = `${captureFolderName(info.url)}/index.html`;
-          const ruled = checkToolCall(activeRules(), 'write_file', { path: target }, await workspace.canon(target).catch(() => false));
-          if (ruled?.effect === 'deny') throw new Error(`Blocked by your permission rule ${describeRule(ruled)}: nothing was saved.`);
-          if (ruled?.effect === 'ask' && !(await askPermission(describeBrowserTool(name, parsed), `Save a copy of ${String(info.url).slice(0, 200)} into ${target.replace('/index.html', '/')}\n\nAsked because of your rule ${describeRule(ruled)}.`))) {
-            return { text: 'The person did not allow this. Do not try it again; carry on without it or ask them.', attachments: [], images: [] };
-          }
-          const saved = await capturePage({ info, workspace, fetchLimited: (url, o) => fetchLimited(url, { ...o, signal: controller.signal }), signal: controller.signal });
+          const folderName = captureFolderName(info.url);
+          // W610-2: every path that will be written is judged by the person's rules before anything is written
+          const authorize = (paths) => authorizeWrites({ paths, rules: activeRules(), canon: (path) => workspace.canon(path), folder: folderName, ask: (text) => askPermission(describeBrowserTool(name, parsed), text) });
+          const saved = await capturePage({ info, workspace, authorize, fetchLimited: (url, o) => fetchLimited(url, { ...o, signal: controller.signal }), signal: controller.signal });
           return { text: saved.text, attachments: [], images: [] };
         }
         const answer = await askBrowser(name.replace(/^browser_/, ''), parsed);
@@ -3252,6 +3250,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       res.end();
     });
   });
+
+  // W610-1: nothing the model or a page names may be fetched from this server (download_file, a page capture): its port is known to the fetcher
+  server.on('listening', () => registerOwnPort(server.address().port));
 
   // Programs the model left running stop with the server.
   server.on('close', () => { processes.stopAll().catch(() => {}); localMcp.stopAll().catch(() => {}); });

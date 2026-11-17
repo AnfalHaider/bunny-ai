@@ -7,6 +7,8 @@
  * download_file: a private or local address is refused, unless the page itself is on this PC.
  */
 import { basename, extname, posix } from 'node:path';
+import { isIP } from 'node:net';
+import { checkToolCall, describeRule } from './permissionRules.js';
 
 export const MAX_CAPTURE_FILES = 300;
 export const MAX_CAPTURE_BYTES = 50 * 1024 * 1024;
@@ -18,7 +20,7 @@ export function isLocalHost(hostname) {
   const h = String(hostname).toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (h === 'localhost' || h.endsWith('.localhost') || h === '::1' || h === '::' || h === '0.0.0.0') return true;
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
-  if (!m) return /^(fe80|fc|fd)/.test(h);
+  if (!m) return isIP(h) === 6 && /^(fe[89ab][0-9a-f]:|f[cd][0-9a-f]{2}:)/.test(h); // an IPv6 literal only: a NAME such as fdn.example.com or fcbarcelona.com is not local
   const [a, b] = [Number(m[1]), Number(m[2])];
   return a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
@@ -46,12 +48,14 @@ const safeName = (url, index) => {
  * @param {Function} o.fetchLimited  (url, { allowLoopback, signal }) => { bytes, type, url }
  * @returns {Promise<{ folder: string, files: number, bytes: number, skipped: {url: string, why: string}[], text: string }>}
  */
-export async function capturePage({ info, workspace, fetchLimited, signal, now = new Date(), maxFiles = MAX_CAPTURE_FILES, maxBytes = MAX_CAPTURE_BYTES }) {
+export async function capturePage({ info, workspace, fetchLimited, authorize = null, signal, now = new Date(), maxFiles = MAX_CAPTURE_FILES, maxBytes = MAX_CAPTURE_BYTES }) {
   if (!workspace) throw new Error('Choose a folder for this chat first.');
   let page;
   try { page = new URL(info?.url); } catch { throw new Error('The page has no address that can be saved.'); }
   if (page.protocol !== 'http:' && page.protocol !== 'https:') throw new Error('Only http and https pages can be saved.');
-  const allowLoopback = isLocalHost(page.hostname); // a page on this PC may name files on this PC; any other page may not
+  // a page on this PC may name files on this PC, but only on its OWN origin (same scheme, host and port), also after a redirect; any other page may not
+  const pageIsLocal = isLocalHost(page.hostname);
+  const allowLoopback = (u) => pageIsLocal && u.origin === page.origin;
   const folder = captureFolderName(page.href, now);
   const saved = new Map(); // address -> { rel (inside the capture folder), bytes }
   const skipped = [];
@@ -121,10 +125,27 @@ export async function capturePage({ info, workspace, fetchLimited, signal, now =
   // 3. write it all, through the workspace
   const entries = [{ path: `${folder}/index.html`, bytes: Buffer.from(`<!-- A copy of ${page.href} saved by Bunny AI -->\n${html}`, 'utf8') },
     ...[...saved.values()].map((e) => ({ path: `${folder}/${e.rel}`, bytes: e.bytes }))];
+  await authorize?.(entries.map((e) => e.path)); // the person's rules, for every path that is about to be written (any Deny: nothing is written)
   await workspace.writeFiles(entries);
   const kb = Math.round(entries.reduce((n, e) => n + e.bytes.length, 0) / 1024);
   const lines = [`Saved a copy of ${page.href} in ${folder}/ (${entries.length} files, ${kb} KB). Open ${folder}/index.html to see it offline.`];
   if (info.truncated) lines.push('The page\'s HTML was longer than 5 MB and was cut.');
   if (skipped.length) lines.push(`Not saved (${skipped.length}):`, ...skipped.slice(0, 15).map((s) => `- ${s.url.slice(0, 120)}: ${s.why}`));
   return { folder, files: entries.length, bytes: entries.reduce((n, e) => n + e.bytes.length, 0), skipped, text: lines.join('\n') };
+}
+
+/**
+ * W610-2: judge EVERY path a capture will write against the person's rules, as if each were a write_file. Any Deny: throws, so nothing is written.
+ * Any Ask: one question that names the folder. `ask(text)` answers true or false.
+ */
+export async function authorizeWrites({ paths, rules, canon, ask, folder }) {
+  let asked = null;
+  for (const path of paths) {
+    const verdict = checkToolCall(rules, 'write_file', { path }, await canon(path).catch(() => false));
+    if (verdict?.effect === 'deny') throw new Error(`Blocked by your permission rule ${describeRule(verdict)} (it covers ${path}): nothing was saved.`);
+    if (verdict?.effect === 'ask' && !asked) asked = verdict;
+  }
+  if (asked && !(await ask(`Save a copy of this page (${paths.length} files) into ${folder}/\n\nAsked because of your rule ${describeRule(asked)}.`))) {
+    throw new Error('The person did not allow this. Do not try it again; carry on without it or ask them.');
+  }
 }

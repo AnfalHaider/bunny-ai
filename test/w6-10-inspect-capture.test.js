@@ -206,3 +206,107 @@ test('W6-10: the files go through the workspace: nothing is written outside the 
   assert.equal(await readFile(join(dir, 'captures', 'a', 'index.html'), 'utf8'), 'ok');
   assert.equal(workspace.has('writeFiles'), false, 'not a tool the model can call');
 });
+
+// ---------------------------------------------------------------- Security's findings on W6-10 (W610-1, W610-2 and the automated notes)
+import { registerOwnPort, ownPorts, isOwnServer } from '../src/server/ownAddress.js';
+import { authorizeWrites } from '../src/server/capture.js';
+
+async function bunnyStandIn(t) {
+  const hits = [];
+  const server = createServer((req, res) => { hits.push(req.url); res.writeHead(200, { 'content-type': 'text/html' }); res.end('<script>window.token = "bunny-token-SECRET"</script>'); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = String(server.address().port);
+  registerOwnPort(port);
+  t.after(() => { ownPorts.delete(port); server.closeAllConnections?.(); server.close(); });
+  return { port, hits, base: `http://127.0.0.1:${port}` };
+}
+
+test('W610-1: Bunny\'s own server is never fetched, whatever allowLoopback says, in any spelling, after a redirect, or by a name that points at it', async (t) => {
+  const own = await bunnyStandIn(t);
+  assert.equal(isOwnServer(`${own.base}/`), true);
+  for (const url of [`${own.base}/`, `http://localhost:${own.port}/`, `http://[::1]:${own.port}/`, `http://127.1.2.3:${own.port}/`, `http://[::ffff:127.0.0.1]:${own.port}/`, `http://0.0.0.0:${own.port}/`]) {
+    await assert.rejects(fetchLimited(url, { allowLoopback: true }), /will not fetch its own server/, url);
+    await assert.rejects(fetchLimited(url, { allowLoopback: () => true }), /will not fetch its own server|find the host|Could not download/, `${url} (function form)`);
+  }
+  assert.deepEqual(own.hits, [], 'not one request reached it');
+  // a redirect from another local server to Bunny's port is refused at that hop
+  const hop = createServer((req, res) => { res.writeHead(302, { location: `${own.base}/index.html` }); res.end(); });
+  await new Promise((r) => hop.listen(0, '127.0.0.1', r));
+  t.after(() => { hop.closeAllConnections?.(); hop.close(); });
+  await assert.rejects(fetchLimited(`http://127.0.0.1:${hop.address().port}/`, { allowLoopback: true }), /will not fetch its own server/);
+  assert.deepEqual(own.hits, []);
+  // a name that resolves to this PC's loopback at Bunny's port
+  await assert.rejects(fetchLimited(`http://evil.test:${own.port}/`, { allowLoopback: true, lookupImpl: async () => [{ address: '127.0.0.1', family: 4 }] }), /will not fetch its own server/);
+  assert.deepEqual(own.hits, []);
+  // another local server on another port is still fine for a caller that allows it
+  const other = await site(t);
+  assert.equal((await fetchLimited(`${other.base}/js/app.js`, { allowLoopback: true })).bytes.toString(), 'console.log("hi")');
+});
+
+test('W610-1: download_file is refused for Bunny\'s own server too (the workspace allows loopback, the own port is still refused)', async (t) => {
+  const own = await bunnyStandIn(t);
+  const dir = await folderOf(t);
+  const workspace = createWorkspace(dir, { allowLoopback: true });
+  await assert.rejects(workspace.run('download_file', { url: `${own.base}/`, path: 'index.html' }), /will not fetch its own server/);
+  assert.equal(existsSync(join(dir, 'index.html')), false, 'nothing was saved');
+  assert.deepEqual(own.hits, []);
+});
+
+test('W610-1: a capture of a local page that names Bunny\'s own page saves the page without it, and the skipped line says why', async (t) => {
+  const own = await bunnyStandIn(t);
+  const s = await site(t);
+  const dir = await folderOf(t);
+  const info = { url: `${s.base}/index.html`, html: `<img src="/img/logo.png"><script src="${own.base}/">`, resources: [
+    { raw: '/img/logo.png', url: `${s.base}/img/logo.png`, kind: 'image' },
+    { raw: `${own.base}/`, url: `${own.base}/`, kind: 'script' },
+  ] };
+  const done = await capturePage({ info, workspace: createWorkspace(dir), fetchLimited });
+  assert.equal(done.skipped.length, 1);
+  assert.match(done.skipped[0].why, /will not fetch its own server/);
+  assert.match(done.text, /will not fetch its own server/);
+  assert.deepEqual(own.hits, []);
+  const files = await readdir(join(dir, done.folder, 'assets'));
+  assert.equal(files.length, 1, 'only the logo was saved');
+  assert.doesNotMatch(await readFile(join(dir, done.folder, 'assets', files[0]), 'utf8').catch(() => ''), /bunny-token-SECRET/);
+});
+
+test('notes: a local page may name local files only on its own origin; a NAME that starts like an IPv6 prefix is not local', async (t) => {
+  const a = await site(t);
+  const b = await site(t);
+  const dir = await folderOf(t);
+  const info = { url: `${a.base}/index.html`, html: '', resources: [
+    { raw: '/img/logo.png', url: `${a.base}/img/logo.png`, kind: 'image' },
+    { raw: `${b.base}/img/logo.png`, url: `${b.base}/img/logo.png`, kind: 'image' },
+  ] };
+  const done = await capturePage({ info, workspace: createWorkspace(dir), fetchLimited });
+  assert.equal(done.skipped.length, 1, 'the other local server (another port) is refused');
+  assert.ok(!b.hits.includes('/img/logo.png'), 'it was never asked');
+  assert.ok(a.hits.includes('/img/logo.png'));
+  for (const name of ['fdn.example.com', 'fcbarcelona.com', 'fe80sample.org', 'fd', 'fc00.example', 'example.com']) assert.equal(isLocalHost(name), false, name);
+  for (const literal of ['fe80::1', '[fd00::1]', 'fc00::5', '127.0.0.1', '10.1.2.3', '192.168.0.4', 'localhost', 'app.localhost', '[::1]']) assert.equal(isLocalHost(literal), true, literal);
+});
+
+test('W610-2: EVERY path a capture writes is judged by the person\'s rules: any Deny writes nothing, any Ask is one question naming the folder', async (t) => {
+  const s = await site(t);
+  const dir = await folderOf(t);
+  const rule = (effect, pattern) => ({ kind: 'path', effect, pattern, ops: 'edits' });
+  const workspace = createWorkspace(dir);
+  const canon = (path) => workspace.canon(path);
+  // Deny **/*.js: the script asset is covered, so nothing at all is written (not even index.html)
+  const denied = (paths) => authorizeWrites({ paths, rules: [rule('deny', '**/*.js')], canon, ask: async () => true, folder: 'captures/x' });
+  await assert.rejects(capturePage({ info: s.info, workspace, fetchLimited, authorize: denied }), /Blocked by your permission rule "\*\*\/\*\.js".*assets\/\d+-app\.js.*nothing was saved/);
+  assert.equal(existsSync(join(dir, 'captures')), false, 'nothing was written');
+  // Ask on css: one question, naming the folder; a no stops it with nothing written, a yes lets it go on
+  const asked = [];
+  const askRules = (answer) => (paths) => authorizeWrites({ paths, rules: [rule('ask', '**/*.css'), rule('ask', '**/*.png')], canon, ask: async (text) => { asked.push(text); return answer; }, folder: 'captures/x' });
+  await assert.rejects(capturePage({ info: s.info, workspace, fetchLimited, authorize: askRules(false) }), /did not allow this/);
+  assert.equal(asked.length, 1, 'one question however many files match');
+  assert.match(asked[0], /into captures\/x\//);
+  assert.match(asked[0], /Asked because of your rule/);
+  assert.equal(existsSync(join(dir, 'captures')), false);
+  const done = await capturePage({ info: s.info, workspace, fetchLimited, authorize: askRules(true) });
+  assert.equal(asked.length, 2);
+  assert.ok(existsSync(join(dir, done.folder, 'index.html')));
+  // no rule: no question, no refusal
+  await authorizeWrites({ paths: ['captures/x/index.html'], rules: [], canon, ask: async () => { throw new Error('asked'); }, folder: 'captures/x' });
+});
