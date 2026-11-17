@@ -3,7 +3,8 @@
 // A screenshot is taken only when the person chooses "Add a screenshot" in the bar, and lives only in the message it is sent with.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
+import { lstat, readFile } from 'node:fs/promises';
+import { FILE_DIALOG_FILTERS, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BAR_DIR = join(here, 'quick-ask');
@@ -30,7 +31,7 @@ export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
   };
 }
 
-export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit }) {
+export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, readFile } }) {
   let bar = null;
   let registered = null; // the accelerator currently held
   let keepTimer = null;
@@ -72,7 +73,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
       if (input.type === 'keyDown' && input.key === 'Escape') { event.preventDefault(); destroyBar(); } // closes and forgets the text
     });
     win.on('blur', () => {
-      if (bar !== win || !alive() || capturing) return;
+      if (bar !== win || !alive() || capturing || picking) return;
       win.hide();
       clearTimeout(keepTimer);
       keepTimer = setTimeout(() => { if (bar === win) destroyBar(); }, KEEP_TEXT_MS);
@@ -84,6 +85,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   }
 
   let capturing = false;
+  let picking = false; // the file dialog is open: the bar losing focus to it is not the person clicking away
 
   /** One picture of the screen the bar is on. Called only from the bar's "Add a screenshot". */
   async function capture() {
@@ -115,12 +117,38 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     }
   }
 
+  /**
+   * W4-8b: one file the person chooses in the native dialog. The page sends no path; the dialog is the only source of one. The file must be a real file
+   * (a link is refused), at most 8 MB, of a kind in the table, and its bytes must agree with its name. Held in memory until sent; nothing is written.
+   */
+  async function pickFile() {
+    if (!alive() || picking || !dialog) return { ok: false, message: 'Bunny could not open the file dialog.' };
+    picking = true;
+    const win = bar;
+    try {
+      const chosen = await dialog.showOpenDialog(win, { title: 'Add a file', properties: ['openFile'], filters: FILE_DIALOG_FILTERS });
+      if (chosen.canceled || !chosen.filePaths?.length) return { ok: false, cancelled: true };
+      const path = chosen.filePaths[0];
+      const info = await fileOps.lstat(path);
+      if (info.isSymbolicLink() || !info.isFile()) return { ok: false, message: 'That is not a plain file.' };
+      if (info.size > MAX_SHOT_BYTES) return { ok: false, message: 'The file is over 8 MB.' };
+      const checked = checkFile(path, await fileOps.readFile(path));
+      return checked.ok ? { ok: true, ...checked.file } : checked;
+    } catch {
+      return { ok: false, message: 'Bunny could not read that file.' };
+    } finally {
+      picking = false;
+      if (bar === win && alive()) { win.show(); win.focus(); }
+    }
+  }
+
+  ipcMain.handle('quickask:pickFile', async (event) => (fromBar(event) ? pickFile() : { ok: false, message: 'Not allowed' }));
   ipcMain.handle('quickask:capture', async (event) => (fromBar(event) ? capture() : { ok: false, message: 'Not allowed' }));
   ipcMain.handle('quickask:submit', async (event, text, attachments) => {
     if (!fromBar(event)) return { ok: false, message: 'Not allowed' };
     const checked = validateSubmission(text, attachments);
     if (!checked.ok) return checked;
-    const opened = await onSubmit(buildNewChatRequest(checked.text, checked.shot));
+    const opened = await onSubmit(buildNewChatRequest(checked.text, checked.shot, checked.file));
     if (opened === false) return { ok: false, message: 'Bunny could not open.' };
     destroyBar(); // the screenshot is gone with the bar; it now lives only in the new chat
     return { ok: true };

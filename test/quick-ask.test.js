@@ -78,11 +78,11 @@ test('new chat request: Chat mode, no folder, text as plain data, the screenshot
   assert.equal(withShot.files[0].data, pngUrl(shot));
 });
 
-test('structure: the bar preload exposes exactly two functions and nothing else', async () => {
+test('structure: the bar preload exposes exactly three functions (submit, the screenshot, one file) and nothing else', async () => {
   const src = await readFile(new URL('../electron/quick-ask/preload.cjs', import.meta.url), 'utf8');
   const bridge = /exposeInMainWorld\('quickAsk', \{([\s\S]*?)\}\);/.exec(src)[1];
   const names = [...bridge.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
-  assert.deepEqual(names, ['submit', 'captureScreenshot']);
+  assert.deepEqual(names, ['submit', 'captureScreenshot', 'pickFile']);
   assert.equal((src.match(/exposeInMainWorld/g) ?? []).length, 1);
   assert.doesNotMatch(src, /ipcRenderer\.(send|on|once)\b|require\((?!'electron')/);
 });

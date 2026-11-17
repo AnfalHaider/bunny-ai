@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const text = $('text');
 const go = $('go');
-let shot = null; // { data } a data:image/png URL, held only in this page until sent
+let shot = null; // { data, name?, kind? } a screenshot (a data:image/png URL) or a file the person chose, held only in this page until sent
 let busy = false;
 
 // kind 'busy': the normal sending moment (text colour, a small spinner). Anything else is a problem (amber).
@@ -33,17 +33,19 @@ function renderChip() {
   if (!shot) return;
   const chip = document.createElement('span');
   chip.className = 'chip';
+  const isFile = shot.kind === 'file';
   const img = document.createElement('img');
   img.alt = '';
-  img.src = shot.data;
+  if (!isFile || shot.mime?.startsWith('image/')) img.src = shot.data;
   const label = document.createElement('span');
-  label.textContent = 'Screenshot';
+  label.textContent = isFile ? shot.name : 'Screenshot';
   const x = document.createElement('button');
   x.type = 'button';
-  x.setAttribute('aria-label', 'Remove the screenshot');
+  x.setAttribute('aria-label', isFile ? 'Remove the file' : 'Remove the screenshot');
   x.textContent = '×';
   x.addEventListener('click', () => { shot = null; renderChip(); text.focus(); });
-  chip.append(img, label, x);
+  if (img.src) chip.append(img);
+  chip.append(label, x);
   host.append(chip);
 }
 
@@ -67,6 +69,19 @@ $('shot-item').addEventListener('click', async () => {
     else message((result && result.message) || 'Bunny could not take a screenshot.');
   } catch {
     message('Bunny could not take a screenshot.');
+  }
+  text.focus();
+});
+
+$('file-item').addEventListener('click', async () => {
+  closeMenu();
+  message('');
+  try {
+    const result = await window.quickAsk.pickFile();
+    if (result && result.ok && typeof result.data === 'string') { shot = { kind: 'file', name: String(result.name), mime: String(result.mime), data: result.data }; renderChip(); }
+    else if (!(result && result.cancelled)) message((result && result.message) || 'Bunny could not add that file.');
+  } catch {
+    message('Bunny could not add that file.');
   }
   text.focus();
 });
