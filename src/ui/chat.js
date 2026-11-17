@@ -13,6 +13,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { orderProviders } from './provider-order.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
@@ -363,6 +364,32 @@ function renderPicker() {
   });
 }
 
+/** The person's own provider order, on this computer: {person: [...ids], models: {modelId: [...ids]}}. */
+function readProviderOrder() {
+  try {
+    const o = JSON.parse(localStorage.getItem('bunny.providerOrder') || '{}');
+    return { person: Array.isArray(o.person) ? o.person : [], models: o.models && typeof o.models === 'object' ? o.models : {} };
+  } catch { return { person: [], models: {} }; }
+}
+
+/** The rows of one model (one per provider) in the order Bunny tries them: Free first, then the person's own order. */
+function providerRowsInOrder(group) {
+  const saved = readProviderOrder();
+  const order = orderProviders(group.map((m) => m.providerId), {
+    free: Object.fromEntries(group.map((m) => [m.providerId, m.freeKind ?? null])),
+    personOrder: saved.person, modelOrder: saved.models[group[0].id] ?? [],
+    out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
+  });
+  return order.map((id) => group.find((m) => m.providerId === id));
+}
+
+/** A short list of model ids kept on this computer (favourites, recent). */
+function readList(key) {
+  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+}
+function writeList(key, list) { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* private window: the list lives only until the page closes */ } }
+function rememberRecent(modelId) { writeList('bunny.recent', [modelId, ...readList('bunny.recent').filter((id) => id !== modelId)].slice(0, 5)); }
+
 function closePicker() {
   document.querySelector('.picker-panel')?.remove();
   $('picker-button')?.setAttribute('aria-expanded', 'false');
@@ -379,7 +406,44 @@ function openPicker(host, trigger) {
   });
   const list = element('div', { className: 'picker-list', role: 'listbox' });
 
-  panel.append(search, list);
+  // W4-13: filters combine with AND; a model must have a provider that fits Provider and Free together
+  const filters = { providers: new Set(), abilities: new Set(), freeOnly: false };
+  const filterCount = () => filters.providers.size + filters.abilities.size + (filters.freeOnly ? 1 : 0);
+  const CAN_DO = ['code', 'see', 'image', 'video', 'speech'];
+  // Speech is shown and filtered only for models that make sound themselves; any chat model can be read out by a Windows voice
+  const has = (m, a) => (a === 'speech' ? modelAbilities(m).nativeSpeech : modelAbilities(m).abilities.has(a));
+  let sort = 'recommended';
+  const SORTS = [['recommended', 'Recommended'], ['name', 'Name'], ['context', 'Context size']];
+  const filtersBtn = button('Filters', { className: 'picker-filters-btn', 'aria-expanded': 'false' });
+  const bar = element('div', { className: 'picker-filters', hidden: true });
+  const count = element('div', { className: 'picker-count', hidden: true });
+  const providerNames = new Map(state.models.map((m) => [m.providerId, m.providerName]));
+  const chipFor = (label, on, toggle) => {
+    const c = button(label, { className: 'picker-chip', 'aria-pressed': String(on) });
+    c.addEventListener('click', () => { toggle(); paintBar(); paint(search.value); });
+    return c;
+  };
+  const paintBar = () => {
+    bar.replaceChildren(
+      element('span', { className: 'picker-chip-label', textContent: 'Provider' }),
+      ...[...providerNames].map(([id, name]) => chipFor(name, filters.providers.has(id), () => { if (!filters.providers.delete(id)) filters.providers.add(id); })),
+      element('span', { className: 'picker-chip-label', textContent: 'Can do' }),
+      ...CAN_DO.map((a) => chipFor(JOBS[a].label, filters.abilities.has(a), () => { if (!filters.abilities.delete(a)) filters.abilities.add(a); })),
+      chipFor('Free only (Free and Free daily)', filters.freeOnly, () => { filters.freeOnly = !filters.freeOnly; }),
+      element('span', { className: 'picker-chip-label', textContent: 'Sort' }),
+      ...SORTS.map(([id, label]) => chipFor(label, sort === id, () => { sort = id; })),
+    );
+    if (filterCount()) {
+      const clear = button('Clear filters', { className: 'picker-clear' });
+      clear.addEventListener('click', () => { filters.providers.clear(); filters.abilities.clear(); filters.freeOnly = false; paintBar(); paint(search.value); });
+      bar.append(clear);
+    }
+    filtersBtn.textContent = filterCount() ? `Filters · ${filterCount()}` : 'Filters';
+  };
+  filtersBtn.addEventListener('click', () => { bar.hidden = !bar.hidden; filtersBtn.setAttribute('aria-expanded', String(!bar.hidden)); });
+  paintBar();
+
+  panel.append(search, filtersBtn, bar, count, list);
   host.append(panel);
   search.focus();
 
@@ -417,8 +481,19 @@ function openPicker(host, trigger) {
   const paint = (query) => {
     const q = query.trim().toLowerCase();
     list.replaceChildren();
-    const matches = state.models.filter((m) =>
-      !q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q));
+    const filtered = filterCount() > 0;
+    const rows = state.models.filter((m) =>
+      (!q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q))
+      && (!filters.providers.size || filters.providers.has(m.providerId))
+      && (!filters.abilities.size || [...filters.abilities].every((a) => has(m, a)))
+      && (!filters.freeOnly || m.freeKind));
+    // one entry per model; every provider that serves it (and fits the filters) is a tag
+    const byModel = new Map();
+    for (const m of rows) { if (!byModel.has(m.id)) byModel.set(m.id, []); byModel.get(m.id).push(m); }
+    const totalModels = new Set(state.models.map((m) => m.id)).size;
+    count.hidden = !filtered;
+    count.textContent = `${byModel.size} of ${totalModels} models`;
+    const matches = rows;
     if (!matches.length) {
       list.append(element('div', { className: 'picker-empty', textContent: say('chat.noModelMatches') }));
       addShowAll();
@@ -427,7 +502,7 @@ function openPicker(host, trigger) {
       return;
     }
     let currentProvider = null;
-    if (!q) {
+    if (!q && !filtered) { // filtering hides Auto and the suggestions, as drawn
       const job = state.resolvedJob ?? 'chat';
       const autoItem = button('', { className: 'picker-item picker-auto', role: 'option', 'aria-selected': String(Boolean(state.modelAuto)) });
       autoItem.id = 'model-auto';
@@ -442,24 +517,123 @@ function openPicker(host, trigger) {
         refreshAutoPreview();
       });
       list.append(autoItem);
-      const best = rankModels(state.models, job).slice(0, 5);
-      if (best.length) {
+      const favs = readList('bunny.favourites');
+      const groupOf = (id) => { const g = state.models.filter((m) => m.id === id); return g.length ? g : null; };
+      for (const [label, ids, key] of [['Favourites', favs, 'fav-'], ['Recent', readList('bunny.recent').filter((id) => !favs.includes(id)), 'recent-']]) {
+        const groups = ids.map(groupOf).filter(Boolean);
+        if (!groups.length) continue;
+        list.append(element('div', { className: 'picker-group', textContent: label }));
+        for (const g of groups) list.append(modelItem(g, key));
+      }
+      const bestIds = [...new Set(rankModels(state.models, job).map((m) => m.id))].slice(0, 5);
+      if (bestIds.length) {
         list.append(element('div', { className: 'picker-group', textContent: `Best for ${JOBS[job].label}` }));
-        for (const m of best) list.append(pickerItem(m, 'best'));
+        for (const id of bestIds) list.append(modelItem(state.models.filter((m) => m.id === id), 'best-'));
       }
       list.append(element('div', { className: 'picker-group picker-group-all', textContent: 'All models' }));
     }
-    for (const m of matches) {
-      if (m.providerId !== currentProvider) {
-        currentProvider = m.providerId;
-        list.append(element('div', { className: 'picker-group', textContent: m.providerName }));
-      }
-      list.append(pickerItem(m));
-    }
+    const groups = [...byModel.values()];
+    const top = (g) => Math.max(0, ...g.map((m) => Number(m.contextLength) || 0));
+    const nameOf = (g) => String(g[0].displayName ?? g[0].id);
+    if (sort === 'name') groups.sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' }));
+    else if (sort === 'context') groups.sort((a, b) => top(b) - top(a) || nameOf(a).localeCompare(nameOf(b)));
+    for (const group of groups) list.append(modelItem(group));
     addShowAll();
     active = 0;
     highlight();
   };
+
+  // One row per model: its name, its context size, and every provider as a tag in the order Bunny tries them (Free first, then Free daily).
+  const rowsInOrderOf = providerRowsInOrder;
+
+  function modelItem(group, section = '') {
+    const first = group[0];
+    const rowsInOrder = rowsInOrderOf(group);
+    const chosen = rowsInOrder[0];
+    const item = pickerItem(chosen);
+    item.classList.add('picker-model');
+    if (section) item.dataset.section = section.replace(/-$/, ''); // the same model again, under Best for / Favourites / Recent
+    item.id = `model-${section}${first.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
+    if (readList('bunny.favourites').includes(first.id)) item.querySelector('.model-name')?.append(element('span', { className: 'picker-star', textContent: '★', title: 'Favourite' }));
+    const tags = element('span', { className: 'picker-tags' });
+    for (const m of rowsInOrder) {
+      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerName });
+      if (m.freeKind) tag.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+      tags.append(tag);
+    }
+    item.append(tags);
+    // the details open from their own button beside the row (a button inside a button is not valid)
+    const more = button('Details ›', { className: 'picker-details-link', 'aria-label': `Details for ${first.displayName ?? first.id}` });
+    more.addEventListener('click', (e) => { e.stopPropagation(); openDetails(group); });
+    const ctx = compactContext(rowsInOrder.reduce((n, m) => Math.max(n, Number(m.contextLength) || 0), 0));
+    return element('div', { className: 'picker-row' }, item, ctx ? element('span', { className: 'picker-ctx', title: 'Context size', textContent: ctx }) : '', more);
+  }
+
+  // The details of one model: its providers in the order Bunny tries them (move with the arrows, saved on this computer per model) and a favourite.
+  function openDetails(group) {
+    const first = group[0];
+    const parts = [search, filtersBtn, bar, count, list];
+    const wasHidden = parts.map((p) => p.hidden);
+    parts.forEach((p) => { p.hidden = true; });
+    const det = element('div', { className: 'picker-details', role: 'region', 'aria-label': `${first.displayName ?? first.id} details` });
+    const back = button('‹ Back', { className: 'picker-back' });
+    const leave = () => { det.remove(); parts.forEach((p, i) => { p.hidden = wasHidden[i]; }); paint(search.value); search.focus(); };
+    back.addEventListener('click', leave);
+    det.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); leave(); } });
+    const move = (id, by) => {
+      const ids = rowsInOrderOf(group).map((m) => m.providerId);
+      const at = ids.indexOf(id);
+      const to = at + by;
+      if (at < 0 || to < 0 || to >= ids.length) return;
+      [ids[at], ids[to]] = [ids[to], ids[at]];
+      const saved = readProviderOrder();
+      saved.models[first.id] = ids;
+      try { localStorage.setItem('bunny.providerOrder', JSON.stringify(saved)); } catch { /* kept for this page only */ }
+      draw(id, by);
+    };
+    const draw = (focusId, by) => {
+      const rows = rowsInOrderOf(group);
+      const isFav = readList('bunny.favourites').includes(first.id);
+      const abilities = [...modelAbilities(first).abilities].filter((a) => a !== 'chat' && a !== 'research' && (a !== 'speech' || modelAbilities(first).nativeSpeech)).map((a) => JOBS[a].label);
+      const fav = button(isFav ? '★ Remove from favourites' : '☆ Add to favourites', { className: 'picker-fav', 'aria-pressed': String(isFav) });
+      fav.addEventListener('click', () => {
+        const now = readList('bunny.favourites');
+        writeList('bunny.favourites', now.includes(first.id) ? now.filter((id) => id !== first.id) : [first.id, ...now]);
+        draw();
+      });
+      const order = element('ol', { className: 'picker-order' });
+      rows.forEach((m, i) => {
+        const up = button('↑', { className: 'picker-move', 'aria-label': `Move ${m.providerName} up` });
+        const down = button('↓', { className: 'picker-move', 'aria-label': `Move ${m.providerName} down` });
+        up.disabled = i === 0;
+        down.disabled = i === rows.length - 1;
+        up.addEventListener('click', () => move(m.providerId, -1));
+        down.addEventListener('click', () => move(m.providerId, 1));
+        const name = element('span', { className: 'picker-order-name', textContent: m.providerName });
+        if (m.freeKind) name.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+        order.append(element('li', { 'data-provider': m.providerId },
+          element('span', { className: 'picker-order-n', textContent: String(i + 1) }), name,
+          element('span', { className: 'picker-order-state' + (m.unavailable ? ' is-out' : ''), textContent: m.unavailable ? 'Unavailable' : 'Ready' }), up, down));
+      });
+      det.replaceChildren(
+        back,
+        element('h3', { textContent: first.displayName ?? first.id }),
+        element('div', { className: 'picker-details-meta', textContent: [first.contextLength ? `${Number(first.contextLength).toLocaleString()} tokens of context` : '', ...abilities].filter(Boolean).join(' · ') || first.id }),
+        element('div', { className: 'picker-details-k', textContent: 'Providers, in the order Bunny tries them' }),
+        order,
+        element('div', { className: 'picker-details-note', textContent: rows.length > 1 ? 'The first one is used when you pick this model. The order is kept on this computer.' : 'Only one provider has this model.' }),
+        fav,
+      );
+      if (focusId) {
+        const li = [...det.querySelectorAll('li')].find((x) => x.dataset.provider === focusId);
+        const target = li?.querySelectorAll('.picker-move')[by < 0 ? 0 : 1];
+        (target && !target.disabled ? target : det.querySelector('.picker-back')).focus();
+      }
+    };
+    draw();
+    panel.append(det);
+    det.querySelector('.picker-back').focus();
+  }
 
   function pickerItem(m, section = '') {
       const isCurrent = !state.modelAuto && state.selected
@@ -475,7 +649,7 @@ function openPicker(host, trigger) {
         element('span', { className: 'model-name', textContent: m.displayName ?? m.id }),
         element('span', {
           className: 'model-desc',
-          textContent: m.contextLength ? `${Number(m.contextLength).toLocaleString()} tokens · ${m.id}` : m.id,
+          textContent: m.id,
         }),
       );
       if (m.unavailable) {
@@ -487,7 +661,7 @@ function openPicker(host, trigger) {
         item.querySelector('.model-name')?.append(
           element('span', { className: 'tag', textContent: 'unavailable' }));
       }
-      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research');
+      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research' && (a !== 'speech' || modelAbilities(m).nativeSpeech));
       if (abilities.length) item.querySelector('.model-desc')?.append(` · ${abilities.map((a) => JOBS[a].label).join(', ')}`);
       item.addEventListener('click', () => selectModel(m));
       return item;
@@ -507,11 +681,24 @@ function openPicker(host, trigger) {
   });
   panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
   setTimeout(() => {
-    document.addEventListener('click', (ev) => { if (!host.contains(ev.target)) closePicker(); }, { once: true });
+    // a click on something inside the picker that was rebuilt by that very click (the arrows in the details) is not outside
+    const outside = (ev) => {
+      if (!document.querySelector('.picker-panel')) { document.removeEventListener('click', outside); return; }
+      if (!host.contains(ev.target) && ev.target.isConnected) { document.removeEventListener('click', outside); closePicker(); }
+    };
+    document.addEventListener('click', outside);
   }, 0);
 }
 
+// 1048576 -> "1M", 262144 -> "256K", 128000 -> "128K"
+function compactContext(n) {
+  if (!n) return '';
+  if (n >= 900000) return `${Math.round(n / 1e5) / 10}M`.replace('.0M', 'M');
+  return `${Math.round(n % 1000 === 0 ? n / 1000 : n / 1024)}K`;
+}
+
 async function selectModel(m) {
+  rememberRecent(m.id);
   state.modelAuto = false;
   localStorage.setItem('bunny.modelAuto', '0');
   state.selected = { providerId: m.providerId, providerName: m.providerName, model: m.id };
@@ -1251,7 +1438,16 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
   }
 
   // Which model answered, when Auto chose it (and what it fell back from).
-  if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
+  if (m.role === 'assistant' && m.model && (m.fellBackKind === 'provider' || m.fellBackKind === 'model')) {
+    // W4-13 slice 3: one calm amber line, never an error
+    const row = state.models?.find((x) => x.id === m.model && x.providerId === m.providerId) ?? state.models?.find((x) => x.id === m.model);
+    const reason = reasonPhrase(m.fellBackReason);
+    const text = m.fellBackKind === 'provider'
+      ? say('model.switchedProvider', { model: row?.displayName ?? m.model, provider: row?.providerName ?? m.providerId ?? '', from: m.fellBackFrom, reason })
+        + (m.fellBackTries > 1 ? ` (${m.fellBackTries - 1} other provider${m.fellBackTries - 1 === 1 ? '' : 's'} also failed)` : '')
+      : say('model.switchedModel', { model: row?.displayName ?? m.model, from: m.fellBackFrom, provider: m.fellBackProvider ?? '', reason });
+    wrap.append(element('div', { className: 'msg-meta switch-note', textContent: `↪ ${text}.` }));
+  } else if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
     const job = JOBS[m.job]?.label ?? 'Chat';
     wrap.append(element('div', { className: 'msg-meta auto-meta',
       textContent: m.auto
@@ -2506,22 +2702,28 @@ async function send() {
 
   const job = jobFor(text, files);
   state.lastJob = job;
-  const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
+  const fixed = state.selected ? [{ providerId: state.selected.providerId, providerName: state.selected.providerName, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
   const fallbackOn = !state.modelAuto && !offlineLocal && state.settings?.fallbackWhenBusy !== false;
+  // W4-13 slice 3: the same model on its other providers (the person's order) comes before any other model
+  let sameModel = [];
+  if (fallbackOn && state.selected) {
+    const group = state.models.filter((m) => m.id === state.selected.model);
+    sameModel = group.length ? providerRowsInOrder(group).filter((m) => m.providerId !== state.selected.providerId && !m.unavailable) : [];
+    candidates.push(...sameModel);
+  }
   if (fallbackOn) {
-    const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
-    candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
+    candidates.push(...rankModels(state.models, job).filter((m) => m.id !== state.selected?.model).slice(0, 2));
   }
   // Errors that are not the model's fault: another model would not help.
   const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
   let result = { meter: null, aborted: false };
   // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
   // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = Math.min(6, 3 + sameModel.length);
   const queue = [...candidates];
   const failures = []; // { name, providerId, reason }
   const badProviders = new Set();
@@ -2533,7 +2735,11 @@ async function send() {
     const i = attempt;
     attempt += 1;
     const stillToTry = () => queue.filter((q) => !badProviders.has(q.providerId)).length;
-    const failed = failures[0]?.name ?? null;
+    const f0 = failures[0];
+    // the same model on the next provider ('provider'), or another model once no provider had it left ('model')
+    const switchKind = !f0 || !state.selected || f0.modelId !== state.selected.model ? undefined
+      : (pick.id === f0.modelId ? 'provider' : (sameModel.length ? 'model' : undefined));
+    const failed = switchKind === 'provider' ? f0.providerName : (f0?.name ?? null);
     $('error').textContent = '';
     result = await streamInto(bodyEl, {
       quietError: true,
@@ -2552,6 +2758,8 @@ async function send() {
         fellBackFrom: failed ?? undefined,
         fellBackReason: failures[0]?.reason,
         fellBackTries: failures.length || undefined,
+        fellBackKind: switchKind,
+        fellBackProvider: switchKind ? f0.providerName : undefined,
         attemptsLeft: Math.min(MAX_ATTEMPTS - attempt, stillToTry()),
       },
       mood: failed ? 'fallback' : 'waiting',
@@ -2564,13 +2772,16 @@ async function send() {
     if (result.errorInfo?.unavailable) { const dead = state.models.find((m) => m.providerId === pick.providerId && m.id === pick.id); if (dead) dead.unavailable = result.errorInfo.message ?? 'not available for this account'; }
     if (result.errorInfo?.coolingUntil) for (const m of state.models) if (m.providerId === pick.providerId && (result.errorInfo.coolingScope === 'provider' || m.id === pick.id)) m.coolingUntil = result.errorInfo.coolingUntil;
     const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
-    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
+    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, providerName: pick.providerName ?? pick.providerId, modelId: pick.id, reason });
     if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);
     const next = queue.find((q) => !badProviders.has(q.providerId));
     if (!next || attempt >= MAX_ATTEMPTS) break;
     // A calm line while the next model starts: what happened, and who is trying now.
     const live = say(`model.live.${reason}`) !== `model.live.${reason}` ? say(`model.live.${reason}`) : reasonPhrase(reason);
-    state.tryingNote = say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
+    const sameAgain = next.id === pick.id;
+    state.tryingNote = say('model.trying', sameAgain
+      ? { from: failures.at(-1).providerName, state: live, to: `${next.displayName ?? next.id} on ${next.providerName ?? next.providerId}` }
+      : { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
     flashStatus(state.tryingNote, 30000);
   }
   const { meter, aborted } = result;

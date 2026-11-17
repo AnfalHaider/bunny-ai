@@ -122,3 +122,14 @@ test('an error that is not about the model is saved even when attempts remain (a
   const body = await notConnected.text();
   assert.ok(notConnected.status >= 400 || /event: error/.test(body), body.slice(0, 200));
 });
+
+test('W4-13 slice 3: an answer from the same model on the next provider keeps what the amber line needs', async (t) => {
+  const { base, id } = await app(t);
+  await say(base, id, 'limited', { attemptsLeft: 2 });
+  await say(base, id, 'good', { retry: true, attemptsLeft: 0, fellBackFrom: 'Harbor', fellBackReason: 'rate-limit', fellBackTries: 1, fellBackKind: 'provider', fellBackProvider: 'Harbor' });
+  const answer = (await saved(base, id)).findLast((m) => m.role === 'assistant');
+  assert.deepEqual([answer.fellBackKind, answer.fellBackProvider, answer.fellBackFrom], ['provider', 'Harbor', 'Harbor']);
+  // anything else is dropped, not stored
+  await say(base, id, 'good', { retry: true, attemptsLeft: 0, fellBackKind: '<b>x</b>' });
+  assert.equal((await saved(base, id)).findLast((m) => m.role === 'assistant').fellBackKind, undefined);
+});

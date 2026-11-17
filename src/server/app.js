@@ -76,6 +76,7 @@ import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
+import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
@@ -627,7 +628,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
     if (path === '/api/models' && method === 'GET') {
       const models = await allModels({ refresh: url.searchParams.get('refresh') === '1' });
-      return sendJson(res, 200, models);
+      // W4-13: the Free tag comes only from the catalogue and the provider's own list entry: 'free', 'daily' (a stated daily allowance) or null
+      return sendJson(res, 200, models.map((m) => ({ ...m, freeKind: freeKindOf(m.providerId, m.free === true) })));
     }
 
     // Model ability labels, for the picker to group by ability.
@@ -2737,6 +2739,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // Why the first model was left (timeout, rate-limit, unavailable, empty, refused, unreachable, key) and how many failed.
         fellBackReason: typeof body.fellBackReason === 'string' ? body.fellBackReason.slice(0, 30) : undefined,
         fellBackTries: Number.isInteger(body.fellBackTries) && body.fellBackTries > 0 ? Math.min(body.fellBackTries, 9) : undefined,
+        // W4-13 slice 3: 'provider' = the same model on the next provider; 'model' = no provider had the model left. fellBackProvider names the provider that failed.
+        fellBackKind: body.fellBackKind === 'provider' || body.fellBackKind === 'model' ? body.fellBackKind : undefined,
+        fellBackProvider: typeof body.fellBackProvider === 'string' ? body.fellBackProvider.slice(0, 100) : undefined,
       };
 
       // When the person presses Stop, the browser closes the connection. What
