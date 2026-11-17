@@ -2,6 +2,17 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - v0.1.9: Builder B specs, RUN signed (in progress)
+
+**Specs:** `docs/plans/2026-11-17-v0.1.9-builder-b-specs.md` at ed0dcc5 (W6-12, W6-16, W6-24, W6-10/11, W2-9, W6-6), and ADR-002 (W2-9) brought to `docs/adr/` from 2817b76. Chief's ruling: W2-9 stays in, built last, ships only with its 10 tests and a passing review.
+**RUN:** PASS at 29aba58 (`claude/builder-b-run`, cherry-picked onto main 4995d5f), sign-off e285cdd, supersedes my 0f0e5a4 sign-off (a8f272d). `git diff 0f0e5a4 29aba58 -- scripts/unit-tests.mjs package.json` is only `"version": "0.1.7"` -> `"0.1.8"`, the same line main changed since 0f0e5a4's base; the runner is byte-identical. Evidence in the sign-off note (98 = 80 + 18 files, env split probe, failing kit test exits 1, watchdog at 3 s on a copy).
+**Waiting for:** K-5 sha, each `claude/release-0.1.9` merge sha (check `src/ui/app.css` against v0.1.8 for removed lines), the candidate.
+
+**Follow-up rows (not built):**
+| Row | What | Risk |
+|---|---|---|
+| RUN-1 | `scripts/unit-tests.mjs`: on a hang, `child.kill('SIGKILL')` on Windows stops the `node --test` runner but not its per-file child processes, which can keep holding ports and folders. Kill the tree (`taskkill /pid <pid> /T /F` on win32) and test it with a file that starts a child that never exits | LOW |
+
 ## 2026-11-17 - FINAL entry for this session (retired after v0.1.8; restarts for v0.1.9)
 
 **Reviewed and signed (sign-off files under `docs/signoffs/<piece>/tech-lead.md`, each on the branch named):** `k1-kit-0.6.0` PASS at 4a0fa01 (earlier shas 8c39d76, 714a0a8, 9538bcb, 46add98, f45f024); `k2-guard` PASS at 1d3a77c (ec605fd, bec112e before it); `kit-land` PASS at da999b0 (88bbd53, ba091a6 before it); `release-0.1.8` PASS at a6afcf5 (e028d3b before it); `release-0.1.7` PASS at 6b06ed9; the W2-7, W4-5b, W5-1, W5-7, W5-8, W6-2/3/4/18, lane-a-016 pieces earlier (FAIL then PASS where a first sha was wrong).
