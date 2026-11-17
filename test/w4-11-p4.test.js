@@ -115,3 +115,17 @@ test('P4-1: a switched-on skill whose instructions changed is switched OFF by an
   assert.deepEqual(third.skillsSwitchedOff, ['pick']);
   assert.match(third.message, /1 skill changed/);
 });
+
+test('P4-1: a change of case or of the description alone also switches the skill off; a change of line endings alone does not', async (t) => {
+  const s = await setup(t);
+  const growId = async () => (await s.skills.list()).find((x) => x.name === 'grow').id;
+  s.files.current = { ...V1, 'skills/grow/SKILL.md': skill('grow', 'WATER them every morning.') };
+  assert.deepEqual((await s.tools.updatePlugin(s.record.id)).skillsSwitchedOff, ['grow'], 'case only');
+  await s.skills.update(await growId(), { enabled: true });
+  s.files.current = { ...V1, 'skills/grow/SKILL.md': skill('grow', 'WATER them every morning.', 'a new description') };
+  assert.deepEqual((await s.tools.updatePlugin(s.record.id)).skillsSwitchedOff, ['grow'], 'description only');
+  await s.skills.update(await growId(), { enabled: true });
+  s.files.current = { ...V1, 'skills/grow/SKILL.md': skill('grow', 'WATER them every morning.', 'a new description').replace(/\n/g, '\r\n') };
+  assert.deepEqual((await s.tools.updatePlugin(s.record.id)).skillsSwitchedOff, [], 'line endings only');
+  assert.equal((await s.skills.list()).find((x) => x.name === 'grow').enabled, true);
+});

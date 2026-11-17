@@ -188,7 +188,9 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
         const same = ownedSkills.find((o) => norm(o.name) === norm(s.name) && !keepSkill.has(o.id));
         if (same) {
           // P4-1: a skill that is ON and whose instructions changed does not stay on silently: new words from the source are the person's to look at first
-          const changed = norm(same.instructions) !== norm(s.instructions);
+          // exact words, not folded: a change of case ("do NOT" to "do not") or of the description (which also reaches the model) is a change; only line endings and the ends are ignored
+          const exact = (x) => String(x ?? '').replace(/\r\n/g, '\n').trim();
+          const changed = exact(same.instructions) !== exact(s.instructions) || exact(same.description) !== exact(s.description);
           const patch = { description: s.description ?? '', instructions: s.instructions };
           if (changed && same.enabled !== false) { patch.enabled = false; switchedOff.push(same.name); }
           await skills.update(same.id, patch);
