@@ -30,7 +30,7 @@ function script(body) {
     return told ? frame({ content: `Painting it. (${told})` }) : call('ask_user', { question: 'Which colour?', choices: [{ label: 'Blue', reason: 'Calm, like the current header' }, { label: 'Green', reason: 'Matches the carrot leaves in the logo', recommended: true }] });
   }
   // W4-12: the same step again and again; once the person said keep going (a fourth step was run) it finishes
-  if (/go round in circles/.test(JSON.stringify(body.messages))) return tools >= 4 ? frame({ content: 'Finished after all.' }) : call('update_tasks', { tasks: [{ text: 'Look again' }] });
+  if (/go round in circles/.test(JSON.stringify(body.messages))) return tools >= 4 ? frame({ content: /skip the tests/.test(JSON.stringify(body.messages)) ? 'Finished without the tests.' : 'Finished after all.' }) : call('update_tasks', { tasks: [{ text: 'Look again' }] });
   if (/use a helper/.test(asked)) return tools === 0 ? call('run_subagent', { title: 'Carrot counter', task: 'Count carrots' }) : frame({ content: 'The helper reported.' });
   if (/long code/.test(asked)) return frame({ content: `Here:\n\n\`\`\`python\n${LONG}\n\`\`\`\n` });
   return frame({ content: 'hello' });
@@ -245,4 +245,13 @@ test('W4-12: typing "keep going please" in the message box carries on', async ({
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
   await expect(page.locator('.question-card.is-answered')).toContainText('You answered: keep going please');
   await expect(page.locator('.msg.assistant .body').last()).toContainText('Finished after all.');
+});
+
+test('W4-12: "yes, but skip the tests" carries on AND the model gets those words', async ({ page }) => {
+  await circles(page);
+  await page.locator('#input').fill('yes, but skip the tests');
+  await page.locator('#send').click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: yes, but skip the tests');
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Finished without the tests.');
 });

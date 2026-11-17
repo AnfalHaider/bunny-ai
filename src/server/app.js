@@ -2790,7 +2790,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               const typedSaid = String(answer.text ?? '').trim().slice(0, 200);
               const said = ((Array.isArray(answer.choices) ? answer.choices : []).join('') || typedSaid).trim();
               await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: said || 'No answer', question: { question: q.question, choices: q.choices, answer: said || null } });
-              return said === 'Keep going' || (!answer.skipped && /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b/i.test(typedSaid) && !(Array.isArray(answer.choices) && answer.choices.length));
+              const goOn = said === 'Keep going' || (!answer.skipped && /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b/i.test(typedSaid) && !(Array.isArray(answer.choices) && answer.choices.length));
+              // "yes, but skip X": carrying on is not the whole answer, the model gets the person's words too
+              if (goOn && typedSaid && typedSaid.toLowerCase().replace(/[^a-z ]+/g, '').trim() !== 'keep going') return { go: true, answer: `The person answered your question ("${q.question.slice(0, 200)}"): ${typedSaid}` };
+              return goOn;
             },
             // W6-3: a Code reply that ends by asking permission for the job it was given carries on instead (up to 3 times).
             onReplyEnd: ({ text }) => {

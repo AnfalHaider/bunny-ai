@@ -98,8 +98,14 @@ export async function* streamChat({
       const kind = tokenBudget && inputTokens >= tokenBudget ? 'tokens' : repeats >= 3 ? 'repeat' : sinceNew >= 25 ? 'stalled' : null;
       if (kind) {
         let go = false;
-        try { go = !signal?.aborted && Boolean(await onLimit({ kind, round, inputTokens, repeats, sinceNew, step: lastSig.split('|')[0] })); } catch { go = false; }
+        let said = '';
+        try {
+          const r = signal?.aborted ? false : await onLimit({ kind, round, inputTokens, repeats, sinceNew, step: lastSig.split('|')[0] });
+          go = Boolean(r);
+          if (r && typeof r === 'object' && typeof r.answer === 'string') said = r.answer; // the person's own words go on to the model
+        } catch { go = false; }
         if (!go) break;
+        if (said) conversation.push({ role: 'user', content: said });
         if (kind === 'tokens') inputTokens = 0;
         repeats = 0; sinceNew = 0; lastSig = '';
       }
