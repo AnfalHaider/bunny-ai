@@ -86,3 +86,9 @@ None of them decides tools, folders, mode or unattended running.
 - `remember` from a device's chat adds standing memory for every chat in the window. Make it ask, or block it, for devices.
 - The real-Electron probe `remote-access-smoke.cjs` was not re-run by Security. This verdict rests on the code reading and the HTTP tests.
 - Design's check of the screens against the drawing is still to come.
+
+## Re-stamp at b1b8af5: PASS (supersedes da9a3a8)
+
+- The only code change is to `remoteAccess.js`: `remoteToolBlocked` also blocks `remember` and `list_scheduled_tasks`. That closes the `remember` recommendation.
+- The new test scripts `schedule_task` and `remember` calls from a device chat in Auto. They create no schedule and save no memory, the tools are not offered, and the window's own chat still has them.
+- `remote-access` 29 of 29 at da9a3a8 is now 30 of 30, from a copy of b1b8af5 with the variable unset.
