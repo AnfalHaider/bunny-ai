@@ -580,6 +580,28 @@
         </div>
       </div>
     </div>
+    <div id="browser-section" hidden>
+    <h3 style="margin:22px 0 8px">Use Bunny in a browser</h3>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Open in your browser</div>
+          <div class="desc">Opens Bunny in your usual browser, on this computer only, next to this window. Things that change what Bunny may do (permissions, connectors, installs, updates) can only be changed in this window. Bunny has to keep running: turn on Keep running in the tray above to close the window and still use the browser.</div>
+        </div>
+        <div class="right"><button type="button" id="open-browser" class="btn">Open in your browser</button></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Keep the same address after restart</div>
+          <div class="desc">Bunny uses the same address every time, so a bookmark keeps working. Takes effect the next time Bunny starts.</div>
+          <div class="desc" id="address-note" role="status" style="color:var(--warn,#b45309)" hidden></div>
+        </div>
+        <div class="right">
+          <label class="switch"><input type="checkbox" id="keep-address" aria-label="Keep the same address after restart" /><span id="address-state">off</span></label>
+        </div>
+      </div>
+    </div>
+    </div>
   </section>
 
   <section data-section="about">
@@ -1175,6 +1197,12 @@
     };
     bind('launch-at-login', 'launch-state', 'launchAtLogin');
     bind('close-to-tray', 'tray-state', 'closeToTray');
+    // BROWSER step 1: this computer only
+    $('browser-section').hidden = false;
+    bind('keep-address', 'address-state', 'keepAddress');
+    $('address-note').textContent = prefs.addressNote || '';
+    $('address-note').hidden = !prefs.addressNote;
+    $('open-browser').addEventListener('click', async () => { try { await desk.openInBrowser(); } catch { /* the shell says nothing more */ } });
 
     // Quick ask (W4-8): the shell checks the shortcut and keeps it in step with the tray setting; this page shows what it says.
     const quickBox = $('quick-ask');

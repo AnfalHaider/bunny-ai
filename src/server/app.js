@@ -543,7 +543,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (!verdict.ok) return sendJson(res, 403, { code: verdict.code, message: verdict.message });
     }
 
-    if (path === '/api/health') return sendJson(res, 200, { ok: true, fake });
+    if (path === '/api/health') return sendJson(res, 200, { ok: true, fake, windowOnlyLock: Boolean(folderPickerOnly) }); // BROWSER: a page in a browser can say "Change this in Bunny's window." early
 
     if (path === '/api/providers' && method === 'GET') {
       return sendJson(res, 200, registry.list());
