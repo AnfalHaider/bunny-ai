@@ -1,0 +1,44 @@
+d-light closed(auto) {"text":"Auto | · Falcon Flash | Free","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":869,"chipRight":1069,"sendLeft":1073,"width":199,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | Enter sends","dotColour":"rgb(204, 143, 51)","aria":"Model: Auto: Falcon Flash (Harbor)"}
+d-light open {"left":649,"right":1069,"top":211,"bottom":691,"width":420,"W":1280,"H":800,"chipTop":701,"opensUpward":true,"scrimShown":false,"handleShown":false,"focusIsSearch":"INPUT#.","hasChevUp":null}
+d-light search {"count":"2 of 5 models","rows":["Falcon Flash / falcon-flash / Harbor / Free / Meadow / Free ","Lynx Flash Lite / lynx-flash-lite / Meadow / Free daily"],"sections":[]}
+d-light after ArrowDown, focus: INPUT
+d-light Esc: panelOpen=0 focus=picker-button
+d-light click outside: panelOpen=0 focus=BODY
+d-light all rows: ["Falcon Flash / falcon-flash / Harbor / Free / Mead","Otter 3 Coder / otter-3-coder · Code / Harbor / Fr","Heron Mini / heron-mini / Fjord / Free","Lynx Flash Lite / lynx-flash-lite / Meadow / Free ","Marten Pro / marten-pro / Quill"]
+d-light picked Otter {"text":"Otter 3 Coder | Free daily","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":873,"chipRight":1069,"sendLeft":1073,"width":196,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | Enter sends","dotColour":"rgb(204, 143, 51)","aria":"Model: Otter 3 Coder, Harbor"}
+d-light after pick: panelOpen=0 focus=picker-button
+d-light errors []
+d-dark closed(auto) {"text":"Auto | · Falcon Flash | Free","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":869,"chipRight":1069,"sendLeft":1073,"width":199,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | Enter sends","dotColour":"rgb(204, 143, 51)","aria":"Model: Auto: Falcon Flash (Harbor)"}
+d-dark open {"left":649,"right":1069,"top":211,"bottom":691,"width":420,"W":1280,"H":800,"chipTop":701,"opensUpward":true,"scrimShown":false,"handleShown":false,"focusIsSearch":"INPUT#.","hasChevUp":null}
+d-dark search {"count":"2 of 5 models","rows":["Falcon Flash / falcon-flash / Harbor / Free / Meadow / Free ","Lynx Flash Lite / lynx-flash-lite / Meadow / Free daily"],"sections":[]}
+d-dark after ArrowDown, focus: INPUT
+d-dark Esc: panelOpen=0 focus=picker-button
+d-dark click outside: panelOpen=0 focus=BODY
+d-dark all rows: ["Falcon Flash / falcon-flash / Harbor / Free / Mead","Otter 3 Coder / otter-3-coder · Code / Harbor / Fr","Heron Mini / heron-mini / Fjord / Free","Lynx Flash Lite / lynx-flash-lite / Meadow / Free ","Marten Pro / marten-pro / Quill"]
+d-dark picked Otter {"text":"Otter 3 Coder | Free daily","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":873,"chipRight":1069,"sendLeft":1073,"width":196,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | Enter sends","dotColour":"rgb(204, 143, 51)","aria":"Model: Otter 3 Coder, Harbor"}
+d-dark after pick: panelOpen=0 focus=picker-button
+d-dark errors []
+m-light closed(auto) {"text":"Auto | · Falcon Flash","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":168,"chipRight":318,"sendLeft":322,"width":150,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat","dotColour":"rgb(204, 143, 51)","aria":"Model: Auto: Falcon Flash (Harbor)"}
+m-light open {"left":0,"right":390,"top":160,"bottom":800,"width":390,"W":390,"H":800,"chipTop":701,"opensUpward":false,"scrimShown":true,"handleShown":true,"focusIsSearch":"INPUT#.","hasChevUp":null}
+m-light search {"count":"2 of 5 models","rows":["Falcon Flash / falcon-flash / Harbor / Free / Meadow / Free ","Lynx Flash Lite / lynx-flash-lite / Meadow / Free daily"],"sections":[]}
+m-light after ArrowDown, focus: INPUT
+m-light Esc: panelOpen=0 focus=picker-button
+m-light click outside: panelOpen=0 focus=picker-button
+m-light all rows: ["Falcon Flash / falcon-flash / Harbor / Free / Mead","Otter 3 Coder / otter-3-coder · Code / Harbor / Fr","Heron Mini / heron-mini / Fjord / Free","Lynx Flash Lite / lynx-flash-lite / Meadow / Free ","Marten Pro / marten-pro / Quill"]
+m-light picked Otter {"text":"Otter 3 Coder","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":201,"chipRight":318,"sendLeft":322,"width":117,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat","dotColour":"rgb(204, 143, 51)","aria":"Model: Otter 3 Coder, Harbor"}
+m-light after pick: panelOpen=0 focus=picker-button
+m-light scrim tap: panelOpen=0 focus=picker-button
+m-light handle tap: panelOpen=0 focus=picker-button
+m-light errors []
+m-dark closed(auto) {"text":"Auto | · Falcon Flash","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":168,"chipRight":318,"sendLeft":322,"width":150,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat","dotColour":"rgb(204, 143, 51)","aria":"Model: Auto: Falcon Flash (Harbor)"}
+m-dark open {"left":0,"right":390,"top":160,"bottom":800,"width":390,"W":390,"H":800,"chipTop":701,"opensUpward":false,"scrimShown":true,"handleShown":true,"focusIsSearch":"INPUT#.","hasChevUp":null}
+m-dark search {"count":"2 of 5 models","rows":["Falcon Flash / falcon-flash / Harbor / Free / Meadow / Free ","Lynx Flash Lite / lynx-flash-lite / Meadow / Free daily"],"sections":[]}
+m-dark after ArrowDown, focus: INPUT
+m-dark Esc: panelOpen=0 focus=picker-button
+m-dark click outside: panelOpen=0 focus=picker-button
+m-dark all rows: ["Falcon Flash / falcon-flash / Harbor / Free / Mead","Otter 3 Coder / otter-3-coder · Code / Harbor / Fr","Heron Mini / heron-mini / Fjord / Free","Lynx Flash Lite / lynx-flash-lite / Meadow / Free ","Marten Pro / marten-pro / Quill"]
+m-dark picked Otter {"text":"Otter 3 Coder","inRow":true,"order":["attach","voice","spacer","picker","send"],"chipLeft":201,"chipRight":318,"sendLeft":322,"width":117,"under":"Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat","dotColour":"rgb(204, 143, 51)","aria":"Model: Otter 3 Coder, Harbor"}
+m-dark after pick: panelOpen=0 focus=picker-button
+m-dark scrim tap: panelOpen=0 focus=picker-button
+m-dark handle tap: panelOpen=0 focus=picker-button
+m-dark errors []
