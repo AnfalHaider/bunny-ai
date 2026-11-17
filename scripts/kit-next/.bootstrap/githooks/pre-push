@@ -1,0 +1,6 @@
+#!/bin/sh
+# bootstrap-environment: sign-off, release-record and conflict-marker checks (AGENTS.md O10, O11, 7E, 7F).
+# Runs for every tool and every human, because git runs it. Never bypass with --no-verify.
+# If Node is missing this fails, and so does the push: a guard that cannot run must not pass.
+root="$(git rev-parse --show-toplevel)" || exit 1
+exec node "$root/.bootstrap/bin/prepush.mjs" "$@"

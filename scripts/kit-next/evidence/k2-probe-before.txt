@@ -1,0 +1,57 @@
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+hook started in project    | W session worktree (role file builder)
+     refused push main  you are "builder"
+     refused redirect into AGENTS.md  role "builder"
+     ALLOWED Write the project AGENTS.md
+     ALLOWED Write the project policy
+hook started in project    | OLD worktree with no policy
+     refused push main  you are "unassigned"
+     refused redirect into AGENTS.md  role "unassigned"
+     ALLOWED Write the project AGENTS.md
+     ALLOWED Write the project policy
+hook started in project    | EVIL planted git dir (own policy, own role)
+     ALLOWED push main
+     ALLOWED redirect into AGENTS.md
+     ALLOWED Write the project AGENTS.md
+     ALLOWED Write the project policy
+hook started in in the cwd | W session worktree (role file builder)
+     refused push main  you are "builder"
+     refused redirect into AGENTS.md  role "builder"
+     ALLOWED Write the project AGENTS.md
+     ALLOWED Write the project policy
+hook started in in the cwd | OLD worktree with no policy
+     refused push main  you are "unassigned"
+     refused redirect into AGENTS.md  role "unassigned"
+     ALLOWED Write the project AGENTS.md
+     ALLOWED Write the project policy
+hook started in in the cwd | EVIL planted git dir (own policy, own role)
+     ALLOWED push main
+     ALLOWED redirect into AGENTS.md
+     ALLOWED Write the project AGENTS.md
+     ALLOWED Write the project policy
+--- from W (role builder): files of the MAIN checkout by absolute path
+     ALLOWED Write main/.githooks/pre-commit
+     ALLOWED Write main/.bootstrap/bin/guard.mjs
+     ALLOWED shell redirect into main/.githooks/pre-commit
+     ALLOWED shell redirect into main/AGENTS.md
+     ALLOWED Set-Content main/.bootstrap/policy.json
+--- the pre-push hook (prepush.mjs) started in each place, pushing main as builder (exit must be non-zero)
+     W session worktree        exit 1  pre-push: refs/heads/main: commit c5085b71d: .bootstrap/policy.json is protected toolkit config. Onl
+     OLD no policy file        exit 0  
+     EVIL planted git dir      exit 0  
+--- the steps of the escape, each judged from W as builder
+     ALLOWED git worktree add of an older commit
+     ALLOWED git worktree add --detach of a commit
+     ALLOWED git worktree add of a branch with no policy
+     ALLOWED git init a nested repository
+     ALLOWED git clone into a nested folder
+     ALLOWED write a .git file pointing at a planted git dir
+     ALLOWED Write tool: a .git file
+     ALLOWED Write tool: commondir of a planted git dir
+     ALLOWED Write tool: a role file in a planted git dir
+     ALLOWED Write tool: a policy.json under a nested folder
+     refused cd into it and push (one command; refused today)
