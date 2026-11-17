@@ -16,7 +16,9 @@ const MODELS = [
   row('meadow', 'Meadow', 'reef-image', 'Reef Image', 'daily', 0),
 ];
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request }) => {
+  // the default "Show models" hides non-free models: this spec needs them all, whatever ran before it
+  await request.put('/api/settings', { data: { modelFilter: 'all' } });
   await page.route('**/api/models*', (route) => route.fulfill({ json: MODELS }));
   await page.goto('/');
   await page.locator('#picker-button').click();
@@ -55,6 +57,57 @@ test('choosing a model uses its first provider (the order Bunny tries them)', as
   await page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().click();
   await expect(page.locator('#picker-button')).toContainText('falcon-flash');
   await expect(page.locator('#picker-button')).toContainText('Harbor');
+});
+
+// slice 2b: the details of one model, its provider order with arrows, favourites and recent, and the Can do filter
+const details = (page, name) => page.getByRole('button', { name: `Details for ${name}` });
+const orderNames = (page) => page.locator('.picker-details .picker-order li .picker-order-name');
+
+test('details: the providers in the order Bunny tries them; the arrows change the order, it is kept, and the model then uses the new first one', async ({ page }) => {
+  await details(page, 'Falcon Flash').click();
+  await expect(page.getByRole('heading', { name: 'Falcon Flash' })).toBeVisible();
+  await expect(orderNames(page)).toHaveText(['HarborFree', 'MeadowFree daily', 'Quill']);
+  await expect(page.getByRole('button', { name: 'Move Harbor up' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move Quill down' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Move Harbor down' }).click();
+  await expect(orderNames(page)).toHaveText(['MeadowFree daily', 'HarborFree', 'Quill']);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.providerOrder')).models['falcon-flash'])).toEqual(['meadow', 'harbor', 'quill']);
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  await expect(page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().locator('.picker-tag').first()).toContainText('Meadow');
+  await page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().click();
+  await expect(page.locator('#picker-button')).toContainText('Meadow');
+});
+
+test('favourites and recent: a favourite is starred and listed first; a chosen model is listed under Recent', async ({ page }) => {
+  await expect(page.locator('.picker-group', { hasText: 'Favourites' })).toHaveCount(0);
+  await details(page, 'Willow 7B').click();
+  await page.getByRole('button', { name: 'Add to favourites' }).click();
+  await expect(page.getByRole('button', { name: 'Remove from favourites' })).toBeVisible();
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  await expect(page.locator('.picker-group', { hasText: 'Favourites' })).toBeVisible();
+  await expect(page.locator('.picker-panel .picker-star')).toHaveCount(2); // in Favourites and again in All models
+  await page.locator('.picker-panel .picker-model', { hasText: 'Otter 3 Coder' }).first().click();
+  await page.locator('#picker-button').click();
+  await expect(page.locator('.picker-group', { hasText: 'Recent' })).toBeVisible();
+  await expect(page.locator('.picker-group', { hasText: 'Recent' }).locator('xpath=following-sibling::div[1]')).toContainText('Otter 3 Coder');
+});
+
+test('Can do chips filter by ability and combine with the other filters', async ({ page }) => {
+  await page.getByRole('button', { name: 'Filters' }).click();
+  await page.locator('.picker-panel').getByRole('button', { name: 'Code', exact: true }).click();
+  await expect(page.locator('.picker-count')).toContainText('of 5 models');
+  await expect(page.locator('.picker-panel .picker-model', { hasText: 'Otter 3 Coder' })).toHaveCount(1);
+  await expect(page.locator('.picker-panel .picker-model', { hasText: 'Reef Image' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(models(page)).toHaveCount(5);
+});
+
+test('details at 390 px: no horizontal scroll, Back returns to the list', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await details(page, 'Falcon Flash').click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  await expect(models(page)).toHaveCount(5);
 });
 
 test('no horizontal scroll at 390 px', async ({ page }) => {

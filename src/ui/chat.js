@@ -371,6 +371,13 @@ function readProviderOrder() {
   } catch { return { person: [], models: {} }; }
 }
 
+/** A short list of model ids kept on this computer (favourites, recent). */
+function readList(key) {
+  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+}
+function writeList(key, list) { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* private window: the list lives only until the page closes */ } }
+function rememberRecent(modelId) { writeList('bunny.recent', [modelId, ...readList('bunny.recent').filter((id) => id !== modelId)].slice(0, 5)); }
+
 function closePicker() {
   document.querySelector('.picker-panel')?.remove();
   $('picker-button')?.setAttribute('aria-expanded', 'false');
@@ -388,8 +395,9 @@ function openPicker(host, trigger) {
   const list = element('div', { className: 'picker-list', role: 'listbox' });
 
   // W4-13: filters combine with AND; a model must have a provider that fits Provider and Free together
-  const filters = { providers: new Set(), freeOnly: false };
-  const filterCount = () => filters.providers.size + (filters.freeOnly ? 1 : 0);
+  const filters = { providers: new Set(), abilities: new Set(), freeOnly: false };
+  const filterCount = () => filters.providers.size + filters.abilities.size + (filters.freeOnly ? 1 : 0);
+  const CAN_DO = ['code', 'see', 'image', 'video', 'speech'];
   const filtersBtn = button('Filters', { className: 'picker-filters-btn', 'aria-expanded': 'false' });
   const bar = element('div', { className: 'picker-filters', hidden: true });
   const count = element('div', { className: 'picker-count', hidden: true });
@@ -403,11 +411,13 @@ function openPicker(host, trigger) {
     bar.replaceChildren(
       element('span', { className: 'picker-chip-label', textContent: 'Provider' }),
       ...[...providerNames].map(([id, name]) => chipFor(name, filters.providers.has(id), () => { if (!filters.providers.delete(id)) filters.providers.add(id); })),
+      element('span', { className: 'picker-chip-label', textContent: 'Can do' }),
+      ...CAN_DO.map((a) => chipFor(JOBS[a].label, filters.abilities.has(a), () => { if (!filters.abilities.delete(a)) filters.abilities.add(a); })),
       chipFor('Free only (Free and Free daily)', filters.freeOnly, () => { filters.freeOnly = !filters.freeOnly; }),
     );
     if (filterCount()) {
       const clear = button('Clear filters', { className: 'picker-clear' });
-      clear.addEventListener('click', () => { filters.providers.clear(); filters.freeOnly = false; paintBar(); paint(search.value); });
+      clear.addEventListener('click', () => { filters.providers.clear(); filters.abilities.clear(); filters.freeOnly = false; paintBar(); paint(search.value); });
       bar.append(clear);
     }
     filtersBtn.textContent = filterCount() ? `Filters · ${filterCount()}` : 'Filters';
@@ -457,6 +467,7 @@ function openPicker(host, trigger) {
     const rows = state.models.filter((m) =>
       (!q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q))
       && (!filters.providers.size || filters.providers.has(m.providerId))
+      && (!filters.abilities.size || [...filters.abilities].every((a) => modelAbilities(m).abilities.has(a)))
       && (!filters.freeOnly || m.freeKind));
     // one entry per model; every provider that serves it (and fits the filters) is a tag
     const byModel = new Map();
@@ -488,6 +499,14 @@ function openPicker(host, trigger) {
         refreshAutoPreview();
       });
       list.append(autoItem);
+      const favs = readList('bunny.favourites');
+      const groupOf = (id) => { const g = state.models.filter((m) => m.id === id); return g.length ? g : null; };
+      for (const [label, ids, key] of [['Favourites', favs, 'fav-'], ['Recent', readList('bunny.recent').filter((id) => !favs.includes(id)), 'recent-']]) {
+        const groups = ids.map(groupOf).filter(Boolean);
+        if (!groups.length) continue;
+        list.append(element('div', { className: 'picker-group', textContent: label }));
+        for (const g of groups) list.append(modelItem(g, key));
+      }
       const best = rankModels(state.models, job).slice(0, 5);
       if (best.length) {
         list.append(element('div', { className: 'picker-group', textContent: `Best for ${JOBS[job].label}` }));
@@ -502,19 +521,24 @@ function openPicker(host, trigger) {
   };
 
   // One row per model: its name, its context size, and every provider as a tag in the order Bunny tries them (Free first, then Free daily).
-  function modelItem(group) {
-    const first = group[0];
+  const rowsInOrderOf = (group) => {
     const saved = readProviderOrder();
     const order = orderProviders(group.map((m) => m.providerId), {
       free: Object.fromEntries(group.map((m) => [m.providerId, m.freeKind ?? null])),
-      personOrder: saved.person, modelOrder: saved.models[first.id] ?? [],
+      personOrder: saved.person, modelOrder: saved.models[group[0].id] ?? [],
       out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
     });
-    const rowsInOrder = order.map((id) => group.find((m) => m.providerId === id));
+    return order.map((id) => group.find((m) => m.providerId === id));
+  };
+
+  function modelItem(group, section = '') {
+    const first = group[0];
+    const rowsInOrder = rowsInOrderOf(group);
     const chosen = rowsInOrder[0];
     const item = pickerItem(chosen);
     item.classList.add('picker-model');
-    item.id = `model-${first.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
+    item.id = `model-${section}${first.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
+    if (readList('bunny.favourites').includes(first.id)) item.querySelector('.model-name')?.append(element('span', { className: 'picker-star', textContent: '★', title: 'Favourite' }));
     const tags = element('span', { className: 'picker-tags' });
     for (const m of rowsInOrder) {
       const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerName });
@@ -522,7 +546,76 @@ function openPicker(host, trigger) {
       tags.append(tag);
     }
     item.append(tags);
-    return item;
+    // the details open from their own button beside the row (a button inside a button is not valid)
+    const more = button('Details ›', { className: 'picker-details-link', 'aria-label': `Details for ${first.displayName ?? first.id}` });
+    more.addEventListener('click', (e) => { e.stopPropagation(); openDetails(group); });
+    return element('div', { className: 'picker-row' }, item, more);
+  }
+
+  // The details of one model: its providers in the order Bunny tries them (move with the arrows, saved on this computer per model) and a favourite.
+  function openDetails(group) {
+    const first = group[0];
+    const parts = [search, filtersBtn, bar, count, list];
+    const wasHidden = parts.map((p) => p.hidden);
+    parts.forEach((p) => { p.hidden = true; });
+    const det = element('div', { className: 'picker-details', role: 'region', 'aria-label': `${first.displayName ?? first.id} details` });
+    const back = button('‹ Back', { className: 'picker-back' });
+    const leave = () => { det.remove(); parts.forEach((p, i) => { p.hidden = wasHidden[i]; }); paint(search.value); search.focus(); };
+    back.addEventListener('click', leave);
+    det.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); leave(); } });
+    const move = (id, by) => {
+      const ids = rowsInOrderOf(group).map((m) => m.providerId);
+      const at = ids.indexOf(id);
+      const to = at + by;
+      if (at < 0 || to < 0 || to >= ids.length) return;
+      [ids[at], ids[to]] = [ids[to], ids[at]];
+      const saved = readProviderOrder();
+      saved.models[first.id] = ids;
+      try { localStorage.setItem('bunny.providerOrder', JSON.stringify(saved)); } catch { /* kept for this page only */ }
+      draw(id, by);
+    };
+    const draw = (focusId, by) => {
+      const rows = rowsInOrderOf(group);
+      const isFav = readList('bunny.favourites').includes(first.id);
+      const abilities = [...modelAbilities(first).abilities].filter((a) => a !== 'chat' && a !== 'research').map((a) => JOBS[a].label);
+      const fav = button(isFav ? '★ Remove from favourites' : '☆ Add to favourites', { className: 'picker-fav', 'aria-pressed': String(isFav) });
+      fav.addEventListener('click', () => {
+        const now = readList('bunny.favourites');
+        writeList('bunny.favourites', now.includes(first.id) ? now.filter((id) => id !== first.id) : [first.id, ...now]);
+        draw();
+      });
+      const order = element('ol', { className: 'picker-order' });
+      rows.forEach((m, i) => {
+        const up = button('↑', { className: 'picker-move', 'aria-label': `Move ${m.providerName} up` });
+        const down = button('↓', { className: 'picker-move', 'aria-label': `Move ${m.providerName} down` });
+        up.disabled = i === 0;
+        down.disabled = i === rows.length - 1;
+        up.addEventListener('click', () => move(m.providerId, -1));
+        down.addEventListener('click', () => move(m.providerId, 1));
+        const name = element('span', { className: 'picker-order-name', textContent: m.providerName });
+        if (m.freeKind) name.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+        order.append(element('li', { 'data-provider': m.providerId },
+          element('span', { className: 'picker-order-n', textContent: String(i + 1) }), name,
+          element('span', { className: 'picker-order-state' + (m.unavailable ? ' is-out' : ''), textContent: m.unavailable ? 'Unavailable' : 'Ready' }), up, down));
+      });
+      det.replaceChildren(
+        back,
+        element('h3', { textContent: first.displayName ?? first.id }),
+        element('div', { className: 'picker-details-meta', textContent: [first.contextLength ? `${Number(first.contextLength).toLocaleString()} tokens of context` : '', ...abilities].filter(Boolean).join(' · ') || first.id }),
+        element('div', { className: 'picker-details-k', textContent: 'Providers, in the order Bunny tries them' }),
+        order,
+        element('div', { className: 'picker-details-note', textContent: rows.length > 1 ? 'The first one is used when you pick this model. The order is kept on this computer.' : 'Only one provider has this model.' }),
+        fav,
+      );
+      if (focusId) {
+        const li = [...det.querySelectorAll('li')].find((x) => x.dataset.provider === focusId);
+        const target = li?.querySelectorAll('.picker-move')[by < 0 ? 0 : 1];
+        (target && !target.disabled ? target : det.querySelector('.picker-back')).focus();
+      }
+    };
+    draw();
+    panel.append(det);
+    det.querySelector('.picker-back').focus();
   }
 
   function pickerItem(m, section = '') {
@@ -571,11 +664,17 @@ function openPicker(host, trigger) {
   });
   panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
   setTimeout(() => {
-    document.addEventListener('click', (ev) => { if (!host.contains(ev.target)) closePicker(); }, { once: true });
+    // a click on something inside the picker that was rebuilt by that very click (the arrows in the details) is not outside
+    const outside = (ev) => {
+      if (!document.querySelector('.picker-panel')) { document.removeEventListener('click', outside); return; }
+      if (!host.contains(ev.target) && ev.target.isConnected) { document.removeEventListener('click', outside); closePicker(); }
+    };
+    document.addEventListener('click', outside);
   }, 0);
 }
 
 async function selectModel(m) {
+  rememberRecent(m.id);
   state.modelAuto = false;
   localStorage.setItem('bunny.modelAuto', '0');
   state.selected = { providerId: m.providerId, providerName: m.providerName, model: m.id };

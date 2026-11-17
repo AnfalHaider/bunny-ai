@@ -1128,3 +1128,24 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .picker-tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--text-dim); display: inline-flex; gap: 5px; align-items: center; }
 .picker-tag.is-out { opacity: .55; text-decoration: line-through; }
 .picker-free { color: var(--accent); font-weight: var(--fw-medium); }
+/* W4-13 slice 2b: favourites and recent, the details of one model (provider order with arrows), a favourite star */
+.picker-row { display: flex; align-items: stretch; gap: var(--sp-2); }
+.picker-row .picker-item { flex: 1; min-width: 0; }
+.picker-details-link { align-self: center; border: 0; background: none; color: var(--accent); font-size: var(--fs-xs); padding: 4px 8px; border-radius: var(--r-md); cursor: pointer; white-space: nowrap; }
+.picker-details-link:hover { background: var(--hover); }
+.picker-star { color: var(--accent); margin-left: 6px; font-size: var(--fs-xs); }
+.picker-details { display: grid; gap: var(--sp-4); padding: var(--sp-4) var(--sp-5); overflow-y: auto; }
+.picker-details h3 { margin: 0; font-size: var(--fs-base); font-weight: var(--fw-medium); }
+.picker-details-meta, .picker-details-note { font-size: var(--fs-xs); color: var(--text-dim); }
+.picker-details-k { font-size: var(--fs-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+.picker-back, .picker-fav { justify-self: start; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-md); padding: 4px 10px; font-size: var(--fs-sm); color: var(--text); cursor: pointer; }
+.picker-fav[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.picker-order { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.picker-order li { display: flex; align-items: center; gap: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); padding: 5px 8px; font-size: var(--fs-sm); }
+.picker-order-n { font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: 11px; color: var(--text-faint); width: 12px; }
+.picker-order-name { flex: 1; min-width: 0; display: inline-flex; gap: 6px; align-items: center; }
+.picker-order-state { font-size: 11px; color: var(--ok); }
+.picker-order-state.is-out { color: var(--warn); }
+.picker-move { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; width: 28px; height: 28px; color: var(--text-dim); cursor: pointer; }
+.picker-move:disabled { opacity: .35; cursor: default; }
+.picker-details[hidden], .picker-row[hidden] { display: none; }
