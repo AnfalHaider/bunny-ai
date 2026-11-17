@@ -1,6 +1,6 @@
 /** Thin client for the Bunny AI server. */
 
-import { LOCK_MESSAGE, installRevert, lockPage, showBrowserLockNote, showNotRunning, windowOnlyLocked } from './browser-mode.js';
+import { LOCK_MESSAGE, installRevert, lockPage, showBrowserLockNote, showNotRunning, watchCards, windowOnlyLocked } from './browser-mode.js';
 
 const refused = () => { try { document.dispatchEvent(new CustomEvent('bunny:window-only-refused')); } catch { /* no page */ } };
 
@@ -113,6 +113,7 @@ if (typeof document !== 'undefined' && document.body && /\/src\/ui\/(settings|cu
     if (!/index\.html$/.test(location.pathname)) showBrowserLockNote(document);
     installRevert(document);
     lockPage(document, location.pathname, WINDOW_ONLY_SETTING_KEYS);
+    if (/index\.html$/.test(location.pathname)) watchCards(document); // the Allow / Deny of a card this page may not answer
   }).catch(() => {});
 }
 

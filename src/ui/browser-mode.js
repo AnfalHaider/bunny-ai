@@ -58,7 +58,7 @@ export function lockSelectorsFor(pathname, keys = []) {
   const name = String(pathname ?? '').split('/').pop();
   if (name === 'settings.html') return [...SETTINGS_IDS, '#perm-rules', ...keys.map((k) => `[data-cap="${k}"]`)];
   if (name === 'customize.html' || name === 'providers.html' || name === 'automation.html') return [WHOLE_PAGE];
-  if (name === 'index.html') return ['#mode-button'];
+  if (name === 'index.html') return isDevicePage() ? [] : ['#mode-button']; // a signed-in device chooses the mode of its own chats
   return [];
 }
 
@@ -105,6 +105,53 @@ export function installRevert(doc = globalThis.document) {
   });
   // a refused write that nobody caught is not an error page: it is said, not logged
   globalThis.addEventListener?.('unhandledrejection', (e) => { if (e.reason?.code === 'window.only') e.preventDefault(); });
+}
+
+/** The capability cards a signed-in device may answer for its own chat (the server's REMOTE_CAPABILITIES): the others change what Bunny may do and stay with the window. */
+export const DEVICE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
+
+/** Is this page one served to a signed-in device on the network? (Only those pages carry the CSRF meta; none carries the launch token.) */
+export const isDevicePage = (doc = globalThis.document) => Boolean(doc?.querySelector?.('meta[name="bunny-csrf"]'));
+
+/**
+ * Must the Allow / Deny / answer controls of this card be switched off on this page?
+ *  - Bunny's window (it has the bridge): never.
+ *  - a tab on this computer (a browser, the window-only lock on): always. The server would refuse the answer; the card stays waiting for the window.
+ *  - a signed-in device: only the capability cards a device may not answer (computer use, building tools, switching things on).
+ */
+export function cardNeedsLock({ kind, capability = '' }, { bridge = false, device = false, locked = false } = {}) {
+  if (bridge || !locked) return false;
+  if (device) return kind === 'capability' && !DEVICE_CAPABILITIES.includes(capability);
+  return true;
+}
+
+/** Which kind of card is this element? (chat.js builds all four with the class permission-prompt.) */
+export function cardKind(card) {
+  if (card.classList?.contains('capability-card')) return { kind: 'capability', capability: card.dataset?.capability ?? '' };
+  if (card.classList?.contains('question-card')) return { kind: 'question' };
+  return { kind: 'permission' };
+}
+
+/** Switch a card's controls off and say why beside them. The card is left as it is: it waits, and the window can answer it. */
+export function lockCard(card, doc = globalThis.document) {
+  if (!card || card.dataset?.windowOnlyLocked) return;
+  card.dataset.windowOnlyLocked = '1';
+  for (const c of card.querySelectorAll('button, input, textarea, select')) { c.disabled = true; c.setAttribute('aria-disabled', 'true'); c.style.opacity = '.5'; c.style.cursor = 'not-allowed'; c.title = LOCK_MESSAGE; }
+  const note = doc.createElement('p');
+  note.className = 'window-only-note';
+  note.textContent = LOCK_MESSAGE;
+  note.style.cssText = 'font-size:12px;color:var(--text-dim,#62666f);margin:6px 0 0';
+  card.append(note);
+}
+
+/** Watch the page for permission, capability and question cards and lock the ones this page may not answer. */
+export function watchCards(doc = globalThis.document, state = {}) {
+  const check = (root) => {
+    const cards = root.matches?.('.permission-prompt') ? [root] : [...(root.querySelectorAll?.('.permission-prompt') ?? [])];
+    for (const card of cards) if (cardNeedsLock(cardKind(card), { bridge: false, device: isDevicePage(doc), locked: true, ...state })) lockCard(card, doc);
+  };
+  check(doc.body);
+  new MutationObserver((records) => { for (const r of records) for (const n of r.addedNodes) if (n.nodeType === 1) check(n); }).observe(doc.body, { childList: true, subtree: true });
 }
 
 /** A page-wide note on a Settings page opened in a browser, so a locked control is not a surprise. */

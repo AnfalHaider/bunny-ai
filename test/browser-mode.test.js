@@ -73,3 +73,20 @@ test('a Settings page in a browser gets one note saying controls that change wha
   assert.match(note.textContent, /Change this in Bunny's window\./);
   assert.equal(mode.showBrowserLockNote(doc), note, 'only one');
 });
+
+test('which cards a page may answer: the window always, a tab on this computer never, a signed-in device all but the capability cards that change what Bunny may do', async () => {
+  const { cardNeedsLock, cardKind, DEVICE_CAPABILITIES } = mode;
+  const kinds = [{ kind: 'permission' }, { kind: 'question' }, { kind: 'capability', capability: 'code_mode' }, { kind: 'capability', capability: 'leave_plan_mode' }, { kind: 'capability', capability: 'computer_use' }, { kind: 'capability', capability: 'custom_tools' }, { kind: 'capability', capability: 'switch_on_added' }];
+  for (const k of kinds) {
+    assert.equal(cardNeedsLock(k, { bridge: true, locked: true }), false, 'the window: never');
+    assert.equal(cardNeedsLock(k, { locked: false }), false, 'a server without the lock (the plain web build): never');
+    assert.equal(cardNeedsLock(k, { locked: true }), true, 'a tab on this computer: always');
+  }
+  assert.deepEqual([...DEVICE_CAPABILITIES], ['code_mode', 'leave_plan_mode']);
+  const device = (k) => cardNeedsLock(k, { device: true, locked: true });
+  assert.deepEqual(kinds.map(device), [false, false, false, false, true, true, true]);
+  const fake = (classes, capability) => ({ classList: { contains: (c) => classes.includes(c) }, dataset: { capability } });
+  assert.deepEqual(cardKind(fake(['permission-prompt', 'capability-card'], 'computer_use')), { kind: 'capability', capability: 'computer_use' });
+  assert.deepEqual(cardKind(fake(['permission-prompt', 'question-card'])), { kind: 'question' });
+  assert.deepEqual(cardKind(fake(['permission-prompt'])), { kind: 'permission' });
+});
