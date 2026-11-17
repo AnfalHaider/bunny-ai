@@ -87,8 +87,18 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
 
   const findInstalled = (name, source) => (getSettings().plugins ?? []).find((p) => (source ? p.source === source : !p.source && p.name === name));
 
+  /** G11: is this connector still named by another installed plugin? Then it stays. */
+  const usedByAnother = (connectorId, pluginId) => (getSettings().plugins ?? []).some((p) => p.id !== pluginId && ((p.connectors ?? []).includes(connectorId) || (p.uses ?? []).includes(connectorId)));
+  /** G11: a connector that stays because another plugin counts on it becomes that plugin's own, so removing that plugin later removes it. */
+  async function handOver(connectorId, fromId) {
+    const plugins = (getSettings().plugins ?? []).map((p) => (p.id !== fromId && (p.uses ?? []).includes(connectorId) && !(p.connectors ?? []).includes(connectorId)
+      ? { ...p, connectors: [...(p.connectors ?? []), connectorId], uses: p.uses.filter((u) => u !== connectorId) } : p));
+    await saveSettings({ plugins });
+  }
+
   async function removeParts(record) {
     for (const id of record.connectors ?? []) {
+      if (usedByAnother(id, record.id)) { await handOver(id, record.id); continue; } // G11
       // W3-6: a remote connector's sign-in ends with it, as when the connector itself is deleted, so no stored token is left behind.
       const leaving = await mcp.get?.(id);
       if (leaving && leaving.type !== 'local') await signOutConnector(leaving).catch(() => {});
@@ -102,11 +112,11 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
   function installParts(plugin, source, { off = false } = {}) {
     return serial(async () => {
       if (findInstalled(plugin.name, source)) throw Object.assign(new Error(`${plugin.name} is already installed. Uninstall it first to install it again.`), { code: 'plugin.installed' });
-      const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), connectors: [], skills: [] };
+      const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), connectors: [], uses: [], skills: [] };
       try {
         for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: !off })).id);
         for (const c of plugin.connectors ?? []) {
-          try { record.connectors.push((await mcp.add({ ...c, enabled: off ? false : c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ }
+          try { record.connectors.push((await mcp.add({ ...c, enabled: off ? false : c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ if (err.existing) record.uses.push(err.existing); /* G11: but this plugin counts on it */ }
         }
       } catch (err) { // half an install is undone, so nothing is left behind
         await removeParts(record);
@@ -217,6 +227,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       }
       for (const o of ownedConnectors) {
         if (keepConnector.has(o.id)) continue;
+        if (usedByAnother(o.id, id)) { done.connectorsKept += 1; continue; } // G11: another plugin still uses it
         await stopConnector(o.id).catch(() => {});
         if (o.type !== 'local') await signOutConnector(o).catch(() => {});
         await mcp.remove(o.id);

@@ -90,6 +90,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // directory, but there is no reason to expose source files either.
 const UI_ROOT = normalize(join(ROOT, 'src', 'ui'));
 const MAX_BODY = 1024 * 1024;
+const MAX_MESSAGE_BODY = 48 * 1024 * 1024; // a message with its attachments: documents up to 30 MB (a third more as a data address) and pictures; the files themselves are limited one by one in attachments.js
 const MAX_BROWSER_ANSWER = 12 * 1024 * 1024; // W620-1: one screenshot from the browser panel; only the route that waits for it reads this much
 const MAX_IMPORT = 300 * 1024 * 1024;
 
@@ -1692,7 +1693,7 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
       let session = await sessions.get(id);
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
 
-      const body = await readBody(req);
+      const body = await readBody(req, MAX_MESSAGE_BODY);
       const retry = body.retry === true;
       const content = String(body.content ?? '').trim();
       if (!retry && !content) return sendJson(res, 400, { code: 'message.empty', message: 'Message cannot be empty' });

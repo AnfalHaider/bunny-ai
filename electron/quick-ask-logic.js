@@ -3,7 +3,10 @@ import { looksSecret } from '../src/server/secretLike.js';
 
 export const DEFAULT_SHORTCUT = 'Ctrl+Alt+Space';
 export const MAX_TEXT = 20_000;
-export const MAX_SHOT_BYTES = 8 * 1024 * 1024;
+export const MAX_SHOT_BYTES = 8 * 1024 * 1024; // the most the bar will read of any file
+// What the chat accepts (src/server/attachments.js): a picture up to 4 MB as a data address (3 MB of bytes), text up to 256 KB, a PDF up to 30 MB. The bar refuses what the chat would, in plain words, before it is added.
+export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+export const MAX_TEXT_FILE_BYTES = 128 * 1024; // half the chat's limit: the key check (looksSecret) reads at most 128 KB
 export const TAKEN_MESSAGE = 'That shortcut is already used by another app';
 
 const MODIFIERS = new Map([
@@ -122,6 +125,8 @@ export function checkFile(name, bytes) {
   if (!type) return { ok: false, message: 'That kind of file cannot be added. Pictures, PDFs and plain text can.' };
   if (!Buffer.isBuffer(bytes) || !bytes.length) return { ok: false, message: 'That file is empty.' };
   if (bytes.length > MAX_SHOT_BYTES) return { ok: false, message: 'The file is over 8 MB.' };
+  if (type.kind === 'image' && bytes.length > MAX_IMAGE_BYTES) return { ok: false, message: 'The picture is over 3 MB.' };
+  if (type.kind === 'text' && bytes.length > MAX_TEXT_FILE_BYTES) return { ok: false, message: 'The text file is over 128 KB.' };
   if (!bytesAgree(type.kind, ext, bytes)) return { ok: false, message: 'That file is not what its name says.' };
   if (type.kind === 'text' && looksSecret(bytes.toString('utf8'))) return { ok: false, message: SECRET_FILE_MESSAGE }; // W6-18's check, on the text
   return { ok: true, file: { name: clean, mime: type.mime, kind: type.kind, size: bytes.length, data: `data:${type.mime};base64,${bytes.toString('base64')}` } };
@@ -148,9 +153,9 @@ export function validateSubmission(text, attachments, held = null) {
     const a = list[0];
     const m = a && typeof a === 'object' && typeof a.data === 'string' ? /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(a.data) : null;
     if (!m) return { ok: false, message: 'The screenshot was not valid.' };
-    if (m[1].length > Math.ceil(MAX_SHOT_BYTES * 4 / 3) + 4) return { ok: false, message: 'The screenshot is over 8 MB.' };
+    if (m[1].length > Math.ceil(MAX_IMAGE_BYTES * 4 / 3) + 4) return { ok: false, message: 'The screenshot is over 3 MB.' };
     shot = Buffer.from(m[1], 'base64');
-    if (shot.length > MAX_SHOT_BYTES) return { ok: false, message: 'The screenshot is over 8 MB.' };
+    if (shot.length > MAX_IMAGE_BYTES) return { ok: false, message: 'The screenshot is over 3 MB.' };
     if (shot.length < PNG_SIGNATURE.length || !shot.subarray(0, 8).equals(PNG_SIGNATURE)) return { ok: false, message: 'The screenshot was not valid.' };
   }
   return { ok: true, text: trimmed, shot, file };

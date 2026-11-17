@@ -139,3 +139,19 @@ test('P4-1: a change of case or of the description alone also switches the skill
   assert.deepEqual((await s.tools.updatePlugin(s.record.id)).skillsSwitchedOff, [], 'line endings only');
   assert.equal((await s.skills.list()).find((x) => x.name === 'grow').enabled, true);
 });
+
+test('G11: uninstalling one plugin keeps a connector that another plugin counts on; it is handed to that plugin and goes with it', async (t) => {
+  const s = await setup(t); // carrot-helper owns weather and soil
+  const other = await s.tools.installBundle({ name: 'second', connectors: [{ name: 'weather again', url: 'https://weather.example.com/mcp' }], skills: [{ name: 'second-skill', instructions: 'x' }] });
+  assert.equal(other.connectors.length, 0, 'it did not create a connector of its own');
+  assert.equal(other.uses.length, 1, 'it counts on the existing one');
+  const names = async () => (await s.mcp.list()).map((c) => c.name).sort();
+  assert.deepEqual(await names(), ['soil', 'weather']);
+  await s.tools.uninstall(s.record.id);
+  assert.deepEqual(await names(), ['weather'], 'soil went with its plugin; weather stays because the second plugin counts on it');
+  const second = s.settings().plugins.find((p) => p.id === other.id);
+  assert.equal(second.connectors.length, 1, 'now the second plugin owns it');
+  assert.deepEqual(second.uses, []);
+  await s.tools.uninstall(other.id);
+  assert.deepEqual(await names(), [], 'and it leaves with the second plugin');
+});

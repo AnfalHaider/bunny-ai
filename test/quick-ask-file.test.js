@@ -139,3 +139,13 @@ test('a submission without a file still takes one screenshot, and a held file be
   const file = checkFile('a.pdf', PDF).file;
   assert.deepEqual(buildNewChatRequest('t', null, file).files, [{ name: 'a.pdf', mime: 'application/pdf', kind: 'pdf', data: asData('application/pdf', PDF), size: PDF.length }]);
 });
+
+test('QA: the bar refuses by the chat\'s own limits with a plain size message (never the key message): text over 128 KB, a picture over 3 MB; a 5 MB PDF passes', () => {
+  assert.equal(checkFile('notes.txt', Buffer.alloc(128 * 1024, 0x61)).ok, true, 'exactly 128 KB');
+  const text = checkFile('notes.txt', Buffer.alloc(128 * 1024 + 1, 0x61));
+  assert.equal(text.message, 'The text file is over 128 KB.');
+  const big = Buffer.concat([PNG, Buffer.alloc(3 * 1024 * 1024)]);
+  assert.equal(checkFile('a.png', big).message, 'The picture is over 3 MB.');
+  assert.equal(checkFile('a.png', Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)])).ok, true);
+  assert.equal(checkFile('a.pdf', Buffer.concat([PDF, Buffer.alloc(5 * 1024 * 1024)])).ok, true);
+});
