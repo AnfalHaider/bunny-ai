@@ -37,7 +37,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -1975,6 +1975,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         toolDefinitions.push(...offered.definitions);
         for (const [name, entry] of offered.index) toolIndex.set(name, entry);
       }
+      // PV-2: too many tools for a provider: the connector tools are reached through two small tools instead
+      const capped = capTools(toolDefinitions, toolIndex);
+      const deferredTools = capped.deferred;
+      if (deferredTools.size) toolDefinitions.splice(0, toolDefinitions.length, ...capped.definitions);
 
       // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,
       // never cut: the part the person cannot see could be the part that matters.
@@ -2574,6 +2578,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
         let parsed = {};
+        const viaMeta = name === 'call_connector_tool' && deferredTools.size > 0;
         try {
           parsed = JSON.parse(args || '{}');
         } catch {
@@ -2582,6 +2587,15 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
           send('tool', { tool: `${name}: arguments cut off`, status: 'failed' });
           return `Your call to ${name} could not be read: its arguments were not complete JSON, probably cut off because they were too long. `
             + 'Try again with shorter content (for an artifact, make it smaller, or create it and then add to it with update_artifact).';
+        }
+        // PV-2: the two small tools that reach the connector tools not listed in the request
+        if (name === 'list_connector_tools' && deferredTools.size > 0) return describeDeferred(deferredTools, parsed.match);
+        if (viaMeta) {
+          const target = String(parsed.name ?? '');
+          if (!deferredTools.has(target)) return `There is no connector tool called ${target}. Call list_connector_tools to see the names.`;
+          name = target;
+          parsed = parsed.arguments && typeof parsed.arguments === 'object' ? parsed.arguments : {};
+          args = JSON.stringify(parsed);
         }
         // The checklist changes quietly: no step line for each update.
         if (name === 'update_tasks') {
@@ -2592,7 +2606,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         }
         // One check for every path: a tool that was not offered to the model in this reply never runs, whatever
         // it is (a hallucinated call, or text in a file telling it to). Plan mode relies on this.
-        if (!toolDefinitions.some((d) => d.function?.name === name)) {
+        if (!toolDefinitions.some((d) => d.function?.name === name) && !(viaMeta && deferredTools.has(name))) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not available in this reply, so it was not run.`;
         }
@@ -2793,6 +2807,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             },
             contextChars: workspace ? 240_000 : 0,
             tokenBudget: replyCaps.tokens,
+            // PV-1: this model refused tools, so the reply goes on without them; the person is told once
+            onToolsRefused: () => send('tool', { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no connectors, skills or files). Pick another model to use them.' }),
             // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
             onLimit: async ({ kind, inputTokens, step }) => {
               if (scheduledTask) return false; // nobody is there to answer
