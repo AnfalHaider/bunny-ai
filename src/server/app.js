@@ -2786,9 +2786,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                   : 'I have made no new progress in 25 steps. Keep going, or stop here?';
               const q = cleanQuestion({ question, choices: [{ label: 'Keep going', recommended: kind === 'tokens' }, { label: 'Stop here', recommended: kind !== 'tokens' }] });
               const answer = await askQuestion(q);
-              const said = (Array.isArray(answer.choices) ? answer.choices : []).join('');
+              // W4-12: a click on a choice, or the person's own words (typed in the card or in the message box): "keep going" and its plain synonyms carry on, anything else stops
+              const typedSaid = String(answer.text ?? '').trim().slice(0, 200);
+              const said = ((Array.isArray(answer.choices) ? answer.choices : []).join('') || typedSaid).trim();
               await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: said || 'No answer', question: { question: q.question, choices: q.choices, answer: said || null } });
-              return said === 'Keep going';
+              return said === 'Keep going' || (!answer.skipped && /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b/i.test(typedSaid) && !(Array.isArray(answer.choices) && answer.choices.length));
             },
             // W6-3: a Code reply that ends by asking permission for the job it was given carries on instead (up to 3 times).
             onReplyEnd: ({ text }) => {
