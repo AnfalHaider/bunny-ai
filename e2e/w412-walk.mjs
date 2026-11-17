@@ -110,6 +110,16 @@ async function limitCard(answerFn) {
   check('Y10', 'the saved card record still shows what the person typed', saved2.saved?.answer === 'yes, but skip the tests', JSON.stringify(saved2.saved?.answer));
   const twice = await limitCard(() => ({ text: 'continue, but only read, do not write' }));
   check('Y11', 'a second kind of go-ahead word ("continue, but only read, do not write") is passed on too', twice.carried === true && /only read, do not write/.test(twice.afterMsgs[0] ?? ''), JSON.stringify(twice.afterMsgs).slice(0, 200));
+  // ---- f6180e8: a go-ahead word followed by stop, don't, no, not, wait or hold is a stop; "but" and other words still carry on
+  const stops = ['yes, stop', 'yes, wait', "yes, don't", 'yes, do not', 'yes stop', 'Yes. Stop.', 'continue, stop', 'go on, hold on', 'keep going, no', 'yes - not now', 'carry on; wait'];
+  for (const w of stops) { const r = await limitCard(() => ({ text: w })); check(`F+ "${w}"`, `typed "${w}" is a stop (nothing more is run)`, r.carried === false && r.afterMsgs.length === 0, `${r.requestsAfter} requests after`); }
+  const goes = ['yes, but skip the tests', 'yes but stop touching the config', 'continue, but only read', 'yes, skip the tests', 'yes, only the docs', 'keep going, carefully', 'yes please', 'go on and finish'];
+  for (const w of goes) { const r = await limitCard(() => ({ text: w })); check(`F- "${w}"`, `typed "${w}" carries on and the model gets the words`, r.carried === true && r.afterMsgs.length === 1 && r.afterMsgs[0].includes(w), `${r.requestsAfter} requests after`); }
+  for (const w of ['yes, no problem', "yes, don't worry about it", "continue, don't stop", 'yes, not a problem', 'go on, no need to ask']) { const r = await limitCard(() => ({ text: w })); console.log(`INFO  typed "${w}" -> ${r.carried ? 'carries on' : 'STOPS'} (starts with a go-ahead word then no, not or don't)`); }
+  const skipSaved = await limitCard(() => ({ skipped: true }));
+  check('F1', 'Skip on the limit-check card is saved as Skipped (not empty) and stops', skipSaved.carried === false && skipSaved.saved?.answer === 'Skipped', JSON.stringify(skipSaved.saved?.answer));
+  const forged = await limitCard(() => ({ skipped: true, gone: true }));
+  check('F2', 'a request that adds gone:true to a skip is saved as no answer (the same as a closed window); harmless', forged.saved?.answer === null && forged.carried === false, JSON.stringify(forged.saved?.answer));
   const odd = await limitCard(() => ({ text: { a: 1 }, choices: 'Keep going' }));
   console.log(`INFO  odd shapes ({text: object, choices: string}) -> ${odd.carried ? 'carries on' : 'stops'}, the reply did not crash`);
 }
@@ -288,6 +298,31 @@ for (const [sz, w] of [['desktop', 1280], ['phone', 390]]) for (const theme of [
   await ctx.close();
 }
 
+// f6180e8: a card the person skipped keeps saying so after the reply ends and after a reload; a card nobody answered still says Not answered
+for (const [sz, w] of [['desktop', 1280], ['phone', 390]]) for (const theme of ['light', 'dark']) {
+  const tag = `${sz}/${theme}`;
+  const { ctx, page } = await openChat({ width: w, theme });
+  seen = []; steps = [ASK(), undefined];
+  await ask(page);
+  await page.locator('.question-card button', { hasText: 'Skip' }).click();
+  await page.waitForTimeout(1800);
+  const cardsAfter = (await page.locator('.question-card').allTextContents()).map((x) => x.replace(/\s+/g, ' ').trim());
+  check(`SK1 ${tag}`, 'after Skip and the end of the reply the card says "You skipped this question." with no "Bunny stopped waiting" note', cardsAfter.length === 1 && /You skipped this question\./.test(cardsAfter[0]) && !/stopped waiting/.test(cardsAfter[0]) && !/Not answered/.test(cardsAfter[0]), cardsAfter.join(' | ').slice(0, 200));
+  await page.reload(); await page.waitForTimeout(2200);
+  const cardsReload = (await page.locator('.question-card').allTextContents()).map((x) => x.replace(/\s+/g, ' ').trim());
+  const staticChoices = await page.locator('.question-card .question-choice.is-static').count();
+  check(`SK2 ${tag}`, 'after a reload the skipped card still says "You skipped this question." with its choices as plain text, no note, not marked unanswered', cardsReload.length === 1 && /You skipped this question\./.test(cardsReload[0]) && !/stopped waiting/.test(cardsReload[0]) && (await page.locator('.question-card.is-unanswered').count()) === 0 && staticChoices === 2, cardsReload.join(' | ').slice(0, 200));
+  await ctx.close();
+}
+{
+  const { ctx, page } = await openChat({ width: 1280, theme: 'light' });
+  seen = []; steps = [ASK(), undefined];
+  await ask(page);
+  await page.reload(); await page.waitForTimeout(2500);
+  const txt = (await page.locator('.question-card').allTextContents()).map((x) => x.replace(/\s+/g, ' ').trim()).join(' | ');
+  check('SK3', 'a reload while Bunny waits (not a Skip) still shows Not answered and the stopped-waiting note', /Not answered/.test(txt) && /stopped waiting/.test(txt) && !/You skipped/.test(txt), txt.slice(0, 220));
+  await ctx.close();
+}
 await browser.close(); upstream.close();
 for (const f of cleanups) { try { await f(); } catch { /* ignore */ } }
 const bad = rows.filter((r) => !r.ok);
