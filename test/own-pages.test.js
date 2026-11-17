@@ -57,3 +57,13 @@ test('main.js and the preload use these rules, and the preload\'s own list equal
   assert.deepEqual(listed, [...OWN_PAGE_PATHS]);
   assert.match(preload, /if \(isOwnPagePath\) \{/, 'the bridge is only exposed in an own page');
 });
+
+import { navigationAllowed } from '../electron/own-pages.js';
+test('SB1-a: any address on Bunny\'s own server may be LOADED (an artifact window\'s first load is a navigation), other sites are turned away', async () => {
+  assert.equal(navigationAllowed(`${ORIGIN}/api/artifacts/abc/raw`, ORIGIN), true);
+  assert.equal(navigationAllowed(`${ORIGIN}/src/ui/index.html`, ORIGIN), true);
+  for (const url of ['https://example.com/', `${ORIGIN}.evil.test/x`, 'file:///C:/x', 'javascript:1', '', null]) assert.equal(navigationAllowed(url, ORIGIN), false, String(url));
+  const main = await readFile(new URL('../electron/main.js', import.meta.url), 'utf8');
+  assert.match(main, /!navigationAllowed\(url, origin\)/, 'will-navigate uses it');
+  assert.match(main, /const isOwn = \(url\) => isOwnPage\(/, 'the IPC checks still use the allow-list');
+});

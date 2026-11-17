@@ -14,7 +14,7 @@ import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { createUpdater } from './updater.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
-import { childWindowOptions, isOwnPage, openDecision } from './own-pages.js';
+import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -102,7 +102,8 @@ function guard(contents) {
     return { action: 'deny' };
   });
   contents.on('will-navigate', (event, url) => {
-    if (!isOwn(url)) {
+    // SB1-a: loading anything on Bunny's own server is fine (an artifact window's first load is a navigation); the IPC checks still use isOwn (the allow-list)
+    if (!navigationAllowed(url, origin)) {
       event.preventDefault();
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     }

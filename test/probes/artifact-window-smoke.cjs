@@ -33,12 +33,15 @@ async function main() {
     return rules.isOwnPage(from, origin) ? 'ACCEPTED' : 'REFUSED';
   });
   const created = [];
+  const blocked = [];
+  // the same will-navigate rule as main.js: only addresses outside Bunny's own server are turned away
+  const guardNavigation = (contents) => contents.on('will-navigate', (event, url) => { if (!rules.navigationAllowed(url, origin)) { event.preventDefault(); blocked.push(url); } });
   const guardWindow = (contents) => contents.setWindowOpenHandler(({ url }) => {
     const kind = rules.openDecision(url, origin);
     if (kind === 'bunny' || kind === 'plain') return { action: 'allow', overrideBrowserWindowOptions: rules.childWindowOptions(kind, { bunnyPreferences }) };
     return { action: 'deny' };
   });
-  app.on('web-contents-created', (_e, c) => { if (c.getType() === 'window') guardWindow(c); });
+  app.on('web-contents-created', (_e, c) => { if (c.getType() === 'window') { guardWindow(c); guardNavigation(c); } });
 
   const main = new BrowserWindow({ width: 600, height: 400, x: 0, y: 0, show: false, skipTaskbar: true, focusable: false, webPreferences: bunnyPreferences() });
   main.webContents.on('did-create-window', (w) => created.push(w));
@@ -51,9 +54,18 @@ async function main() {
   const art = created.find((w) => w.webContents.getURL().includes('/api/artifacts/'));
   check('the artifact window was opened', Boolean(art), created.map((w) => w.webContents.getURL()).join(' '));
   if (art) {
+    check('the artifact window RENDERS its content (its first load was not turned away)', (await art.webContents.executeJavaScript('document.body.innerText')).includes('page /api/artifacts/abc/raw'), blocked.join(' '));
+    check('no navigation of the artifact window was refused', blocked.length === 0, blocked.join(' '));
     check('the artifact window has NO desktop bridge', (await art.webContents.executeJavaScript('typeof window.bunnyDesktop')) === 'undefined');
     const tried = await art.webContents.executeJavaScript('(async () => { try { return await window.bunnyDesktop.secureWrite("PATCH", "/api/settings", {}); } catch (e) { return "no bridge: " + e.message; } })()');
     check('secure:write from the artifact window does not work', String(tried).startsWith('no bridge'), tried);
+  }
+
+  // an address outside Bunny's server is still turned away from the artifact window
+  if (art) {
+    await art.webContents.executeJavaScript(`location.href = 'https://example.com/'; 0`).catch(() => {});
+    await wait(600);
+    check('a navigation to another site is still refused', blocked.includes('https://example.com/'), blocked.join(' '));
   }
 
   // 2. a pop-out of a real Bunny page keeps its bridge and is believed
