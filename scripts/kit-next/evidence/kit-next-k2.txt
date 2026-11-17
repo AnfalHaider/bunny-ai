@@ -1,0 +1,431 @@
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.claude/settings.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.claude/settings.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/x.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/x.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/BIN/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/BIN/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/notes.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/b-1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+✔ the staged kit is the 0.6.0 kit: flow, kit apply, family and the helper cap are all there (1.6402ms)
+✔ no conflict markers anywhere in the staged files (2.5002ms)
+✔ A1: pushes are read through the tokenizer (git -C, quotes, global options, --repo=) (11735.1146ms)
+✔ A2: protected paths in any case, with Windows tricks (Write tool and shell) (6803.6974ms)
+✔ A3: the CLI refuses ids that are paths (signoff, approve, require, piece), and writes nothing (3020.0821ms)
+✔ B1: shell writes into protected folders are refused (3700.2217ms)
+✔ B2: tags and gh (7941.0354ms)
+✔ B3: label, remote and ref moves (6161.9219ms)
+✔ B4/B10: the role cannot be changed from a command, in any spelling (4229.0925ms)
+✔ B5: our commit hooks are staged unchanged (no Claude credit, record and scope checks at commit) (0.7333ms)
+✔ B6: skipping hooks, in every spelling (7029.2577ms)
+✔ B7: a command run inside a nested repository is still judged by the outer policy (1968.0307ms)
+✔ B8: the upgrade never adds a broad git push allow rule (nor touches .claude/settings.json) (0.7529ms)
+✔ Tech Lead #4: unassigned is not the owner at a terminal; a role is not signed for another (1772.7382ms)
+✔ Tech Lead #7: a normally signed piece still pushes to main on the upgraded kit (no flow.json, no lanes) (4565.3435ms)
+✔ Security B12 / Tech Lead #5: a change to the guard needs Security on the same commit; a kit record does not replace it (8884.6928ms)
+✔ Tech Lead #6: .md files that steer the agents are code at push, ordinary docs are not (4607.4259ms)
+✔ G1-2: a sign-off whose file name and role disagree is not counted (1392.4051ms)
+✔ Tech Lead #9 (written down, not code): the plugin copy of the guard runs beside ours (0.0954ms)
+✔ review round: a planted policy in a nested repository does not switch the guard off; registry and DWIM refspec spellings; guard paths in any case (4693.899ms)
+✔ review round: guard paths in another case still need Security (1513.7153ms)
+✔ Security K1-1: role ids and every other id are plain names; reserved Windows names and a trailing dot are refused (13705.6139ms)
+✔ Security K1-2: the nested-repository check holds wherever the hook runs (CLAUDE_PROJECT_DIR, a cwd inside the nested repo, no project cwd) (32694.2122ms)
+✔ Security 714a0a8: git's default fetch refspec is fine; a glob that can write a branch label or a tag is not (4486.2871ms)
+✔ QA: a command over 64 KB, or with over 2,000 parts, is refused before anything is parsed, in well under a second; everyday commands still pass (2481.4341ms)
+✔ the kit works from a worktree nested inside the main checkout: its own role and policy, not the main checkout's (3117.5947ms)
+✔ the plugin's own 0.6.0 guard (it runs beside ours) allows everyday commands against the staged policy and still blocks a force push (939.4342ms)
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+✔ K2-1: every attack from the old-history worktree and the planted git directory is refused as "unassigned"; the session worktree keeps its own role (21895.1793ms)
+✔ K2-3: from a session worktree the main checkout's protected files cannot be written by absolute path (6141.9689ms)
+✔ K2-2: the pre-push hook started from the old-history worktree or the planted git directory never exits 0 for a push to main as builder (4598.9991ms)
+✔ K2-1: the steps of the escape (a .git file, commondir, a role file, a policy.json under a nested folder, git worktree add) are refused for a builder (9498.3484ms)
+✔ K1-2 stays closed: a nested independent repository with a policy of its own is still judged by the project (1985.1475ms)
+✔ K-2 hooks: pre-push run from a folder with a planted permissive prepush.mjs runs the PROJECT's checks, and fails closed when the project has none (3358.3712ms)
+✔ K-2 hooks: pre-commit runs the project's checks and fails closed when they are missing (1903.7757ms)
+✔ commit-msg: a message that credits Claude is refused, an ordinary one passes (the owner's rule survives) (280.823ms)
+✔ K2-4: an independent repository outside the project, and a planted .git inside it whose commondir points there, are judged by the project as "unassigned" (13859.3781ms)
+landing: roles added: none
+landing: files changed or added in the clone: 23
+  bootstrap/bin/adapt.mjs
+  .bootstrap/bin/bootstrap.mjs
+  .bootstrap/bin/detect-stack.mjs
+  .bootstrap/bin/guard.mjs
+  .bootstrap/bin/lib/fm.mjs
+  .bootstrap/bin/lib/policy.mjs
+  .bootstrap/bin/lib/shellrules.mjs
+  .bootstrap/bin/lib/shellwrites.mjs
+  .bootstrap/bin/mem.mjs
+  .bootstrap/bin/precommit.mjs
+  .bootstrap/bin/prepush.mjs
+  .gitignore
+  .bootstrap/bin/flow-ui.mjs
+  .bootstrap/bin/lib/flow.mjs
+  .bootstrap/bin/lib/ops.mjs
+  .bootstrap/bin/lib/records.mjs
+  .bootstrap/bin/lib/shellblank.mjs
+  .bootstrap/bin/lib/shellextra.mjs
+  .bootstrap/bin/lib/shellgit.mjs
+  .bootstrap/flow/
+  .bootstrap/kit.json
+  .bootstrap/ui/
+  docs/research/
+✔ the staged kit folder has everything `upgrade` copies from (9.2089ms)
+✔ upgrading a copy of origin/main: bin is the staged bin; flow.json, settings and our hooks are untouched; policy is kept (3565.873ms)
+✔ the live policy.json needs the staged additions: with its own records.globs the flow and kit record folders are not protected (3.2288ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 137554.5606
