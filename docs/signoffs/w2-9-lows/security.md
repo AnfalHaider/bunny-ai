@@ -1,7 +1,7 @@
 ---
 piece: w2-9-lows
 role: security
-sha: 66b95b6
+sha: 4f63b27
 verdict: PASS
 date: 2026-11-17
 ---
@@ -93,3 +93,9 @@ Tests from a copy of 598ebc1, with the variable unset:
 - **The three signing programs** (`gpg.program`, `gpg.ssh.program`, `gpg.x509.program`) point at a name that doesn't exist.
 - **Tests,** from a copy of 66b95b6 with the variable unset: `w29-lows` 8 of 8, `w2-9-worktree` 12 of 12.
 - **LOW:** the stand-in name `bunny-no-such-signer` is bare and predictable, so git would look it up on PATH, never in the project folder. Signing and verification are both off, so it should never be started. An absolute path that doesn't exist, under Bunny's data folder, would be cleaner.
+
+## Re-stamp at 4f63b27, the frozen final head: PASS (supersedes 66b95b6)
+
+- `noSignerPath()` gives `<data>/bunny-no-such-signer`, an absolute path that doesn't exist, beside the empty hooks folder. All three signing programs point at it, and the test asserts it.
+- **Tests,** from a copy of 4f63b27 with the variable unset: `w29-lows` 8 of 8, `w2-9-worktree` 12 of 12.
+- **LOW:** a `runGit` call made without a hooks folder falls back to the temp folder for this path, which anything running as the person can write. Every worktree call passes the hooks folder, so this stays LOW.
