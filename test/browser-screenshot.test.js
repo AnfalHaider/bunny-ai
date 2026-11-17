@@ -6,7 +6,7 @@ import { startApp, post } from './helpers.js';
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 /** One chat with browser control on; the "window" (this test) answers the screenshot request with a picture. */
-async function screenshotChat(t, { vision }) {
+async function screenshotChat(t, { vision, image = PNG, statuses = null }) {
   const seen = [];
   const server = createServer((req, res) => {
     let raw = '';
@@ -42,7 +42,8 @@ async function screenshotChat(t, { vision }) {
       const ask = JSON.parse(m[1]);
       if (answered.has(ask.id)) continue;
       answered.add(ask.id);
-      await post(base, `/api/sessions/${session.id}/browser/${ask.id}`, { note: 'Screenshot taken.', image: PNG });
+      const sent = await post(base, `/api/sessions/${session.id}/browser/${ask.id}`, { note: 'Screenshot taken.', image });
+      statuses?.push(sent.status);
     }
   }
   return seen;
@@ -60,4 +61,31 @@ test('a model that cannot see is told so and gets no picture', async (t) => {
   const seen = await screenshotChat(t, { vision: false });
   assert.ok(!JSON.stringify(seen[1].messages).includes('image_url'));
   assert.match(seen[1].messages.find((m) => m.role === 'tool').content, /cannot see pictures: work from the text/);
+});
+
+// W620-1: a real capture is over 1 MB. The route that waits for it reads up to 12 MB; a picture over that is answered at once with a plain message.
+const bigPng = (megabytes) => `data:image/png;base64,${'A'.repeat(Math.round(megabytes * 1024 * 1024))}`;
+
+test('a screenshot of 1.3 MB (over the usual request limit) still reaches a model that can see', async (t) => {
+  const statuses = [];
+  const seen = await screenshotChat(t, { vision: true, image: bigPng(1.3), statuses });
+  assert.deepEqual(statuses, [200]);
+  assert.ok(JSON.stringify(seen[1].messages).includes('"type":"image_url"'), 'the picture is in the next request');
+});
+
+test('a screenshot just under 12 MB is accepted', async (t) => {
+  const statuses = [];
+  const seen = await screenshotChat(t, { vision: true, image: bigPng(11.5), statuses });
+  assert.deepEqual(statuses, [200]);
+  assert.ok(JSON.stringify(seen[1].messages).includes('"type":"image_url"'));
+});
+
+test('a screenshot over 12 MB is refused at once and the waiting chat is told in plain words, not left to time out', async (t) => {
+  const statuses = [];
+  const started = Date.now();
+  const seen = await screenshotChat(t, { vision: true, image: bigPng(12.6), statuses });
+  assert.deepEqual(statuses, [413]);
+  assert.ok(Date.now() - started < 20_000, 'no 90 second wait');
+  assert.match(seen[1].messages.find((m) => m.role === 'tool').content, /is too large .over 12 MB. to send. Take a smaller capture/);
+  assert.ok(!JSON.stringify(seen[1].messages).includes('image_url'));
 });

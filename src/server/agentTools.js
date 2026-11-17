@@ -307,8 +307,15 @@ export function askToolDefinition() {
  */
 export function asksToRunCommands(q = {}) {
   const text = [q.question, ...(Array.isArray(q.choices) ? q.choices.map((c) => c?.label ?? c) : [])].join(' ');
-  return /\b(run|execute|paste|type|enter)\b[^.?!\n]{0,60}\b(commands?|scripts?)\b/i.test(text)
-    || /\b(run|execute|paste|type|enter)\b[^.?!\n]{0,80}\b(in|into|using|from)\s+(a\s+|the\s+|your\s+)?(terminal|powershell|command prompt|cmd|shell|console)\b/i.test(text);
+  const verb = '(?:run|execute|paste|type|enter)';
+  const place = '(?:in|into|using|from|on)\\s+(?:a\\s+|the\\s+|your\\s+)?(?:terminal|powershell|command prompt|cmd|shell|console)';
+  // Only a hand-off to the person: "can you / please / you can / you need to" + a verb, "run this ... in your terminal", "paste the output".
+  // Not a decision about what Bunny itself does ("Should I run the migration command now?", "Do you want me to run the commands now?").
+  return new RegExp(`\\b(?:can|could|would|will) you (?:please )?${verb}\\b`, 'i').test(text)
+    || new RegExp(`\\bplease ${verb}\\b`, 'i').test(text)
+    || new RegExp(`\\byou (?:can|could|should|need to|must|have to|will need to) ${verb}\\b`, 'i').test(text)
+    || new RegExp(`\\b${verb}\\b[^.?!\\n]{0,80}\\b${place}\\b`, 'i').test(text) && !/\b(?:me|I) (?:to )?(?:run|execute)\b/i.test(text)
+    || /\bpaste\b[^.?!\n]{0,40}\b(?:output|results?|errors?)\b/i.test(text);
 }
 
 export function cleanQuestion(a = {}) {

@@ -51,6 +51,8 @@
   --ok:            #1f9d6a;  /* healthy, added lines, passed */
   --warn:          #c07a12;  /* waiting on you, provider switched */
   --bad:           #cf3f55;  /* down, removed lines, errors, destructive */
+  --ok-text:       #146c49;  /* the same colours as small text on the light canvas (4.5:1 or better) */
+  --warn-text:     #825408;
   --run:           #2f7fd6;  /* running */
   --ok-soft:       rgba(31, 157, 106, .12);
   --warn-soft:     rgba(192, 122, 18, .10);
@@ -91,6 +93,8 @@
   --ok:            #53cf9b;
   --warn:          #e9ad52;
   --bad:           #f07a8c;
+  --ok-text:       #53cf9b;
+  --warn-text:     #e9ad52;
   --run:           #6cb0ff;
   --ok-soft:       rgba(83, 207, 155, .12);
   --warn-soft:     rgba(233, 173, 82, .12);
@@ -109,7 +113,7 @@
     --text-faint: #6e717a; --accent: #b3a1ff; --accent-hover: #c4b5ff;
     --accent-soft: rgba(179,161,255,.10); --accent-ring: rgba(179,161,255,.40);
     --on-accent: #15121f; --ink: #ececee; --on-ink: #141518;
-    --ok: #53cf9b; --warn: #e9ad52; --bad: #f07a8c; --run: #6cb0ff;
+    --ok: #53cf9b; --warn: #e9ad52; --bad: #f07a8c; --run: #6cb0ff; --ok-text: #53cf9b; --warn-text: #e9ad52;
     --ok-soft: rgba(83,207,155,.12); --warn-soft: rgba(233,173,82,.12); --bad-soft: rgba(240,122,140,.12);
     --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow-pop: 0 8px 28px rgba(0,0,0,.45);
     --shadow-modal: 0 24px 64px rgba(0,0,0,.6); --scrim: rgba(0,0,0,.55);
@@ -1467,8 +1471,8 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-status-detail { color: var(--text-dim); font-weight: 400; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
 .cz-note { margin-top: var(--sp-6); }
-.cz-status.is-warn .cz-status-word { color: var(--warn); }
-.cz-status.text-ok .cz-status-word { color: var(--ok); }
+.cz-status.is-warn .cz-status-word { color: var(--warn-text); }
+.cz-status.text-ok .cz-status-word { color: var(--ok-text); }
 .cz-status.text-bad .cz-status-word { color: var(--bad); }
 main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px of a settings page */
 .cz-signin-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-md); color: var(--text-dim); }

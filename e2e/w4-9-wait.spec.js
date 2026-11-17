@@ -70,3 +70,18 @@ test('at 390 px the row does not scroll sideways', async ({ page }) => {
   await page.locator('#wait-custom-input').fill('5');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('choosing a preset while the Custom box has focus keeps the preset: the box does not save its old value back', async ({ page }) => {
+  await page.goto('/src/ui/settings.html');
+  await page.locator('#wait-select').selectOption('custom');
+  const box = page.locator('#wait-custom-input');
+  await box.fill('45');
+  await expect.poll(() => saved(page)).toBe(45);
+  await box.focus();
+  await page.locator('#wait-select').selectOption('90');
+  await expect.poll(() => saved(page)).toBe(90);
+  await page.waitForTimeout(500);
+  expect(await saved(page)).toBe(90);
+  await page.reload();
+  await expect(page.locator('#wait-select')).toHaveValue('90');
+});

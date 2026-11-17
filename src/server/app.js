@@ -87,6 +87,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // directory, but there is no reason to expose source files either.
 const UI_ROOT = normalize(join(ROOT, 'src', 'ui'));
 const MAX_BODY = 1024 * 1024;
+const MAX_BROWSER_ANSWER = 12 * 1024 * 1024; // W620-1: one screenshot from the browser panel; only the route that waits for it reads this much
 const MAX_IMPORT = 300 * 1024 * 1024;
 
 const TYPES = {
@@ -1367,7 +1368,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       if (!pending || pending.sessionId !== browserMatch[1]) {
         return sendJson(res, 404, { code: 'browser.gone', message: 'That browser action is no longer waiting' });
       }
-      pending.resolve(await readBody(req));
+      let answer;
+      try { answer = await readBody(req, MAX_BROWSER_ANSWER); } catch (err) {
+        // Too large (or not JSON): the chat that is waiting is told at once, so it does not wait for the 90 seconds to run out.
+        pending.resolve({ error: err.code === 'request.tooLarge' ? `The picture from the browser panel is too large (over ${MAX_BROWSER_ANSWER / 1024 / 1024} MB) to send. Take a smaller capture.` : 'The browser panel sent an answer Bunny could not read.' });
+        return sendJson(res, err.code === 'request.tooLarge' ? 413 : 400, { code: err.code ?? 'request.invalid', message: err.message });
+      }
+      pending.resolve(answer);
       return sendJson(res, 200, { ok: true });
     }
     // Screenshots the model took of the browser panel.

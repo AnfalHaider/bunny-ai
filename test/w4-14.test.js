@@ -82,6 +82,9 @@ async function setup(t, steps, startOptions = {}) {
 test('W4-14: the question check catches "run these commands" and leaves real choices alone', () => {
   for (const q of ['Can you run these commands in PowerShell for me?', 'Please paste the output from the terminal', 'Run the following script in your terminal and tell me what it prints']) assert.equal(asksToRunCommands({ question: q }), true, q);
   for (const q of ['Which command should I run?', 'Run the tests now or later?', 'Should I use React or Vue?', 'Where should the project go?']) assert.equal(asksToRunCommands({ question: q }), false, q);
+  // QA and Security: a real decision about what Bunny will do is shown, whatever words it uses
+  for (const q of ['Should I run the migration command now?', 'I will run the commands now. Do you agree with the plan?', 'Do you want me to run the commands now or review them first?', 'Is it OK if I run the install script?']) assert.equal(asksToRunCommands({ question: q }), false, q);
+  for (const q of ['Please run npm install in your terminal and tell me the result', 'You can run these in PowerShell', 'Could you run the script for me?']) assert.equal(asksToRunCommands({ question: q }), true, q);
 });
 
 test('W4-14-a: in a Code chat in Plan mode the model is not promised run_command, is not given it, and is told how to leave Plan mode', async (t) => {

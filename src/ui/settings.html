@@ -946,6 +946,7 @@
     if (sel.value === 'custom') box.value = String(saved);
     show();
     const update = (final) => {
+      if (sel.value !== 'custom') return; // a preset is chosen: the Custom box (hidden now, its blur fires) must not save its old value back
       const text = box.value.trim();
       const n = /^\d+$/.test(text) ? Number(text) : NaN;
       if (valid(n)) {
