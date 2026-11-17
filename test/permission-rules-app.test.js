@@ -329,5 +329,5 @@ test('W614-1: a long file being written is shown cut with a note that says how m
   const base = await setup(t);
   const r = await run(base, 'ask', 'write_long', {});
   assert.equal(r.cards.length, 1);
-  assert.match(r.cards[0].detail, /… 1000 more characters are not shown here$/);
+  assert.match(r.cards[0].detail, /… 700 more characters are not shown here$/);
 });
