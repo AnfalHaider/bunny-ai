@@ -1888,6 +1888,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
     onThinking: (info) => { working.alive(); working.addThinking(info.text ?? ''); },
     onQuestion: (info) => { settleThinking(); flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
+    onWaiting: (info) => notifyWaiting(info), // W6-25
     onNewChat: (info) => { state.pendingNewChat = info; },
   };
   function flushNote() {
@@ -2881,6 +2882,18 @@ function notifyReply() {
   } catch {
     // A browser that will not show notifications is not an error.
   }
+}
+
+/** W6-25: a question or a permission prompt has waited a while: say so in the status line, and as a notification when the window is hidden. */
+function notifyWaiting(info) {
+  const what = info?.kind === 'permission' ? 'a permission' : info?.kind === 'capability' ? 'a choice' : 'an answer';
+  const text = `Bunny is still waiting for ${what}${info?.title ? `: ${String(info.title).slice(0, 100)}` : ''}`;
+  flashStatus(text, 30000);
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !document.hidden) return;
+  try {
+    const note = new Notification(say('app.name'), { body: text, tag: `waiting-${state.sessionId ?? 'bunny'}` });
+    note.onclick = () => { window.focus(); note.close(); };
+  } catch { /* a browser that will not show notifications is not an error */ }
 }
 
 /** Files picked but not yet sent. */

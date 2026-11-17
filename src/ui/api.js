@@ -139,6 +139,7 @@ export async function streamAt(path, body, handlers = {}) {
       else if (event === 'tasks') handlers.onTasks?.(parsed);
       else if (event === 'thinking') handlers.onThinking?.(parsed);
       else if (event === 'question') handlers.onQuestion?.(parsed);
+      else if (event === 'waiting') handlers.onWaiting?.(parsed);
       else if (event === 'newChat') handlers.onNewChat?.(parsed);
     }
   }
