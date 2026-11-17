@@ -105,12 +105,23 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     };
     child.on('exit', (code) => fail(`The connector stopped (exit code ${code}).${conn.stderr ? ` It said: ${conn.say(conn.stderr.slice(-300))}` : ''}`));
     child.on('error', (err) => fail(`The connector could not start: ${err.message}`));
-    conn.request = (method, params, timeoutMs) => new Promise((resolve, reject) => {
+    conn.request = (method, params, timeoutMs, signal = null) => new Promise((resolve, reject) => {
       if (conn.exited) { reject(new LocalMcpError('The connector is not running')); return; }
+      if (signal?.aborted) { reject(new LocalMcpError('Stopped.', 'mcp.cancelled')); return; }
       const id = conn.nextId++;
-      const timer = setTimeout(() => { conn.pending.delete(id); reject(new LocalMcpError('The connector did not answer in time', 'mcp.timeout')); }, timeoutMs);
+      // R-7: Stop ends the wait now and tells the connector to give up on that request
+      const onAbort = () => {
+        if (!conn.pending.has(id)) return;
+        conn.pending.delete(id);
+        clearTimeout(timer);
+        try { child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id, reason: 'The person pressed Stop' } })}\n`); } catch { /* the program is gone */ }
+        reject(new LocalMcpError('Stopped.', 'mcp.cancelled'));
+      };
+      const timer = setTimeout(() => { conn.pending.delete(id); signal?.removeEventListener('abort', onAbort); reject(new LocalMcpError('The connector did not answer in time', 'mcp.timeout')); }, timeoutMs);
+      signal?.addEventListener('abort', onAbort, { once: true });
       conn.pending.set(id, (msg) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         if (msg.error) reject(new LocalMcpError(msg.error.message ?? 'The connector refused', 'mcp.refused'));
         else resolve(msg.result);
       });
@@ -201,7 +212,7 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
 
   async function callTool(server, { name, arguments: args = {}, timeoutMs = 120_000, onProgress = null, signal = null }) {
     const conn = await connection(server, { onProgress, signal });
-    return conn.request('tools/call', { name, arguments: args }, timeoutMs);
+    return conn.request('tools/call', { name, arguments: args }, timeoutMs, signal);
   }
 
   /** The instructions the connector gave when it started (empty if none, or if it is not running). */
