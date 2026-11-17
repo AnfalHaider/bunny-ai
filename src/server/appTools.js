@@ -163,6 +163,61 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     }, null);
   }
 
+  /**
+   * P-4: read the plugin's source again and bring what it owns up to date. A skill with the same name is updated where it is (its on or off state stays);
+   * a new skill is added (on only if all the plugin's skills were on); a skill that is gone from the source is removed. A connector at the same address is
+   * kept as it is (its trust and sign-in stay); a new connector is added switched OFF, whatever the plugin's state (an update never switches a connector on);
+   * one that is gone from the source is removed. The person's own other skills and connectors are never touched.
+   */
+  function updatePlugin(id) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, code: 'plugin.notFound', message: 'No such plugin' };
+      if (!record.source) return { ok: false, code: 'plugin.noSource', message: 'This plugin came from a file, so there is nowhere to update it from.' };
+      const plugin = await readGithubPlugin(record.source, { fetchImpl });
+      const norm = (x) => String(x ?? '').trim().toLowerCase();
+      const allSkills = typeof skills.list === 'function' ? await skills.list() : [];
+      const ownedSkills = (record.skills ?? []).map((sid) => allSkills.find((s) => s.id === sid)).filter(Boolean);
+      const wasOn = ownedSkills.length > 0 && ownedSkills.every((s) => s.enabled !== false);
+      const next = { skills: [], connectors: [] };
+      const done = { skillsUpdated: 0, skillsAdded: 0, skillsRemoved: 0, connectorsKept: 0, connectorsAdded: 0, connectorsRemoved: 0 };
+      const keepSkill = new Set();
+      for (const s of plugin.skills ?? []) {
+        const same = ownedSkills.find((o) => norm(o.name) === norm(s.name) && !keepSkill.has(o.id));
+        if (same) {
+          await skills.update(same.id, { description: s.description ?? '', instructions: s.instructions });
+          keepSkill.add(same.id); next.skills.push(same.id); done.skillsUpdated += 1;
+        } else {
+          const added = await skills.add({ ...s, enabled: wasOn });
+          next.skills.push(added.id); done.skillsAdded += 1;
+        }
+      }
+      for (const o of ownedSkills) if (!keepSkill.has(o.id)) { await skills.remove(o.id); done.skillsRemoved += 1; }
+      const allConnectors = typeof mcp.list === 'function' ? await mcp.list() : [];
+      const ownedConnectors = (record.connectors ?? []).map((cid) => allConnectors.find((c) => c.id === cid)).filter(Boolean);
+      const keepConnector = new Set();
+      for (const c of plugin.connectors ?? []) {
+        const same = ownedConnectors.find((o) => norm(o.url).replace(/\/+$/, '') === norm(c.url).replace(/\/+$/, ''));
+        if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; continue; }
+        try {
+          const added = await mcp.add({ ...c, enabled: false });
+          next.connectors.push(added.id); done.connectorsAdded += 1;
+        } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector of the person's own: left as it is */ }
+      }
+      for (const o of ownedConnectors) {
+        if (keepConnector.has(o.id)) continue;
+        await stopConnector(o.id).catch(() => {});
+        if (o.type !== 'local') await signOutConnector(o).catch(() => {});
+        await mcp.remove(o.id);
+        done.connectorsRemoved += 1;
+      }
+      const plugins = (getSettings().plugins ?? []).map((p) => (p.id === id
+        ? { ...p, name: plugin.name, description: plugin.description, skills: next.skills, connectors: next.connectors, updatedAt: new Date().toISOString() } : p));
+      await saveSettings({ plugins });
+      return { ok: true, ...done, skipped: plugin.skipped ?? [] };
+    });
+  }
+
   /** P-5: switch a plugin's skills and connectors on or off together. A part that is already gone is skipped. */
   function setEnabled(id, on) {
     return serial(async () => {
@@ -239,6 +294,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     takePending,
     switchOn,
     setEnabled,
+    updatePlugin,
     previewPlugin,
   };
 }

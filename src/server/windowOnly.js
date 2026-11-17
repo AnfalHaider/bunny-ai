@@ -30,6 +30,7 @@ export const WINDOW_ONLY_ROUTES = [
   [WRITES, `^/api/skills(/${UUID})?$`],                     // skills are instructions the model follows
   [['POST'], '^/api/plugins/install$'],
   [['POST'], '^/api/plugins$'],                            // a plugin from the catalog or a file (W4-10)
+  [['POST'], `^/api/plugins/${UUID}/update$`],             // update a plugin from its source (W4-11 P-4)
   [['DELETE', 'PATCH'], `^/api/plugins/${UUID}$`],         // uninstall a plugin (W4-10), switch one on or off as a whole (W4-11 P-5)
   [['DELETE'], '^/api/tools/[a-z][a-z0-9_]{1,39}$'],        // custom tools
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt

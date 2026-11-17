@@ -237,7 +237,7 @@
           id: p.id,
           name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
           status: pluginState(p).label, statusClass: pluginState(p).on ? 'text-ok' : '',
-          actions: [toggle(pluginState(p).on, `Use ${p.name}`, (on) => sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on })), act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
+          actions: [p.source ? act('Update', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Updating…'; try { const r = await sendJSON(`/api/plugins/${p.id}/update`, 'POST'); notice = `Updated ${p.name}: ${r.skillsUpdated} skill(s) refreshed, ${r.skillsAdded} added, ${r.skillsRemoved} removed; ${r.connectorsAdded} new connector(s) added switched off.`; } catch (err) { notice = err.message; } await load(); }) : null, toggle(pluginState(p).on, `Use ${p.name}`, (on) => sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on })), act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
         }));
       }
     }

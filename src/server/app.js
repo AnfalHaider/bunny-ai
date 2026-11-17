@@ -1113,6 +1113,15 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const done = await appTools.setEnabled(pluginMatch[1], patch.enabled);
       return sendJson(res, done.ok ? 200 : 404, done.ok ? done : { code: 'plugin.notFound', message: 'No such plugin' });
     }
+    const pluginUpdateMatch = path.match(/^\/api\/plugins\/([a-f0-9-]{36})\/update$/);
+    if (pluginUpdateMatch && method === 'POST') {
+      try {
+        const done = await appTools.updatePlugin(pluginUpdateMatch[1]);
+        return sendJson(res, done.ok ? 200 : done.code === 'plugin.notFound' ? 404 : 400, done);
+      } catch (err) {
+        return sendJson(res, 502, { code: 'plugin.updateFailed', message: err.message });
+      }
+    }
     if (pluginMatch && method === 'DELETE') {
       try {
         return sendJson(res, 200, await appTools.uninstall(pluginMatch[1]));
