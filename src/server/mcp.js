@@ -116,7 +116,7 @@ export async function callTool(server, { name, arguments: args = {}, timeoutMs =
     if (!res.ok) {
       throw new McpError(`The server answered ${res.status}`, 'mcp.http');
     }
-    const payload = await readPayload(res);
+    const payload = await readPayload(res, 1);
     if (payload?.error) {
       throw new McpError(payload.error.message ?? 'The tool failed', 'mcp.toolFailed');
     }
@@ -142,18 +142,24 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
   try {
     const opts = { signal: controller.signal, auth, fetchImpl };
     await ensureSession(url, server, opts);
-    const list = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
-    let res = await send(url, server, list, opts);
-    if (res.status === 404 && sessions.get(sessionKey(server, url))?.id) { forgetSession(server); await ensureSession(url, server, opts); res = await send(url, server, list, opts); }
-
-    if (!res.ok) throw new McpError(`The server answered ${res.status}`, 'mcp.http');
-    const payload = await readPayload(res);
-    if (payload?.error) throw new McpError(payload.error.message ?? 'The server refused', 'mcp.refused');
-    const tools = payload?.result?.tools ?? [];
+    // R-5: a server with a long list sends it in pages; follow nextCursor (at most 20 pages)
+    const tools = [];
+    let cursor = null;
+    for (let page = 0; page < 20; page += 1) {
+      const list = { jsonrpc: '2.0', id: 1 + page, method: 'tools/list', params: cursor ? { cursor } : {} };
+      let res = await send(url, server, list, opts);
+      if (page === 0 && res.status === 404 && sessions.get(sessionKey(server, url))?.id) { forgetSession(server); await ensureSession(url, server, opts); res = await send(url, server, list, opts); }
+      if (!res.ok) throw new McpError(`The server answered ${res.status}`, 'mcp.http');
+      const payload = await readPayload(res, list.id);
+      if (payload?.error) throw new McpError(payload.error.message ?? 'The server refused', 'mcp.refused');
+      tools.push(...(payload?.result?.tools ?? []));
+      cursor = payload?.result?.nextCursor || null;
+      if (!cursor) break;
+    }
     return tools.map((t) => ({
       name: t.name,
-      description: String(t.description ?? '').slice(0, 400),
-      inputSchema: t.inputSchema ?? null,
+      description: String(t.description ?? '').slice(0, 1000),
+      inputSchema: cleanSchema(t.inputSchema),
       readOnlyHint: t.annotations?.readOnlyHint === true, // what the server SAYS: a suggestion only (RO-1)
       readOnly: false,
     }));
@@ -172,15 +178,21 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
  * A streamable HTTP server may answer with plain JSON or with a single
  * server-sent event; both are handled.
  */
-async function readPayload(res) {
+async function readPayload(res, wantedId = null) {
   const type = res.headers.get('content-type') ?? '';
   if (type.includes('text/event-stream')) {
     const text = await res.text();
-    const frame = text.split('\n\n').find((part) => part.includes('data:'));
-    if (!frame) throw new McpError('The server sent no answer', 'mcp.empty');
-    const data = frame.split('\n').filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trim()).join('');
-    return JSON.parse(data);
+    // R-6: progress and log notifications may come first; the answer is the message with our request id (or, with none, the first with a result or error)
+    const messages = [];
+    for (const part of text.split('\n\n')) {
+      const data = part.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('');
+      if (!data) continue;
+      try { messages.push(JSON.parse(data)); } catch { /* a frame that is not JSON is not the answer */ }
+    }
+    const answer = messages.find((x) => wantedId !== null && x?.id === wantedId && ('result' in x || 'error' in x))
+      ?? messages.find((x) => x && !x.method && ('result' in x || 'error' in x));
+    if (!answer) throw new McpError('The server sent no answer', 'mcp.empty');
+    return answer;
   }
   const text = await res.text();
   if (!text.trim()) throw new McpError('The server sent no answer', 'mcp.empty');
@@ -302,6 +314,13 @@ export function mcpResultText(result) {
  * question in Ask mode and offer it in Plan mode), but because the person marked the connector as one whose labels they trust.
  */
 export const isReadOnlyTool = (server, tool) => server?.trustReadOnly === true && (tool?.readOnlyHint === true || tool?.readOnly === true);
+
+/** R-8: a tool's input schema in the form providers accept: an object with a type, without $schema. */
+export function cleanSchema(schema) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return { type: 'object', properties: {} };
+  const { $schema, ...rest } = schema;
+  return { ...rest, type: 'object', properties: rest.properties && typeof rest.properties === 'object' ? rest.properties : {} };
+}
 
 /** A tool name prefix that is safe to use in a function name. */
 export function toolPrefix(name) {

@@ -151,7 +151,8 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     search_plugins: ({ query }) => searchPlugins(query),
     read_skill: async ({ name, part }) => {
       const skill = await skills.find(name);
-      if (!skill) throw new Error(`There is no skill called ${name}`);
+      // S-6: a skill that is switched off, or all skills switched off, cannot be read either
+      if (!skill || skill.enabled === false || getSettings().skillsEnabled === false) throw new Error(`There is no skill called ${name}`);
       const text = String(skill.instructions ?? '');
       const SIZE = 8000;
       if (text.length <= SIZE) return text;
