@@ -6,7 +6,7 @@
 // Nothing is skipped and no assertion or deadline is changed: the same files run, in the same way as before, apart from the order.
 import { readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -29,13 +29,30 @@ const isGuardFile = (f) => /^test\/(guard-[^/]*|kit-next-[^/]*)\.test\.js$/.test
 const guard = all.filter(isGuardFile);
 const others = all.filter((f) => !isGuardFile(f));
 
+// A step that prints nothing for SILENT_MS is stopped and named, so a hang is a failure that says where it stopped, not silence.
+const SILENT_MS = 4 * 60_000;
 function run(label, args, env) {
   console.log(`\n# ${label}: ${args.filter((a) => a.startsWith('test/')).length} files`);
-  const r = spawnSync(process.execPath, ['--test', '--test-timeout=120000', ...args], { cwd: root, stdio: 'inherit', env });
-  return r.status ?? 1;
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ['--test', '--test-timeout=120000', ...args], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let last = '';
+    let timer;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        console.error(`\nHUNG: "${label}" printed nothing for ${SILENT_MS / 60_000} minutes. The last thing it printed:\n${last.slice(-600)}`);
+        child.kill('SIGKILL');
+      }, SILENT_MS);
+    };
+    const pass = (stream, out) => stream.on('data', (chunk) => { out.write(chunk); last = (last + chunk.toString()).slice(-2000); arm(); });
+    pass(child.stdout, process.stdout);
+    pass(child.stderr, process.stderr);
+    arm();
+    child.on('close', (code, signal) => { clearTimeout(timer); resolve(signal ? 1 : code ?? 1); });
+  });
 }
 
-const first = run('all other unit tests, in parallel', others, process.env);
+const first = await run('all other unit tests, in parallel', others, process.env);
 const { CLAUDE_PROJECT_DIR, ...withoutProjectDir } = process.env;
-const second = run('guard and kit tests, one at a time', ['--test-concurrency=1', ...guard], withoutProjectDir);
+const second = await run('guard and kit tests, one at a time', ['--test-concurrency=1', ...guard], withoutProjectDir);
 process.exit(first || second ? 1 : 0);
