@@ -256,6 +256,7 @@ test('W5-1d: commands that print a sign-in token into the session are refused fo
 
 const prepushMod = await import(pathToFileURL(join(BIN, 'prepush.mjs')).href);
 const policyMod = await import(pathToFileURL(join(BIN, 'lib', 'policy.mjs')).href);
+const recordsMod = await import(pathToFileURL(join(BIN, 'lib', 'records.mjs')).href);
 test('W5-1d: the pre-push hook refuses notes, review and release refs and the live branch in another case from a non-live role', (t) => {
   const { P, W } = setup(t);
   const policy = policyMod.loadPolicy(P);
@@ -291,6 +292,56 @@ test('K1-5: the guard has a deadline: a line of 1,999 pushes answers BLOCK in ti
   assert.ok(Date.now() - t1 < 10000, `the hook answered in ${Date.now() - t1} ms (the host cuts a hook off at 10 s)`);
   const ok = spawnSync(process.execPath, [join(BIN, 'guard.mjs')], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git status' }, cwd: W }), encoding: 'utf8', cwd: P, env: { ...process.env, CLAUDE_PROJECT_DIR: P, BOOTSTRAP_ROLE: '' }, timeout: 20000 });
   assert.equal(ok.status, 0, ok.stderr);
+});
+
+// K-3 (Security's review of the landing, 88bbd53)
+test('K-3 (1): a hook skip handed to an interpreter, another shell or xargs is refused; prose that mentions the flag is not', (t) => {
+  const { P, W } = setup(t);
+  withHook(P, P, () => {
+    const refused = [
+      `node -e "require('child_process').execSync('git commit --no-verify')"`,
+      `python -c "import os; os.system('git commit --no-verify')"`,
+      `python -c "import os; os.system('git -c core.hooksPath=/dev/null commit -m x')"`,
+      'echo git commit --no-verify | sh',
+      'echo git commit --no-verify | bash',
+      'echo x | xargs git commit --no-verify',
+      'xargs git commit --no-verify',
+    ];
+    for (const c of refused) assert.equal(guard.decide({ tool: 'Bash', command: c, cwd: W }).allow, false, c);
+    const prose = ['echo "never use --no-verify"', 'git commit -m "docs: explain why --no-verify is refused" --allow-empty', 'echo the flag --no-verify is refused', 'git log --oneline -3'];
+    for (const c of prose) assert.equal(guard.decide({ tool: 'Bash', command: c, cwd: W }).allow, true, c);
+  });
+});
+
+test('K-3 (2): `bootstrap flow` (any subcommand) and flow-ui.mjs are the Chief of Staff only', (t) => {
+  const { P, W } = setup(t);
+  withHook(P, P, () => {
+    for (const c of ['node .bootstrap/bin/bootstrap.mjs flow show', 'node .bootstrap/bin/bootstrap.mjs flow apply', 'node .bootstrap/bin/flow-ui.mjs', 'node ./.bootstrap/bin/flow-ui.mjs --port 5']) {
+      assert.equal(guard.decide({ tool: 'Bash', command: c, cwd: W }).allow, false, `builder: ${c}`);
+      assert.equal(guard.decide({ tool: 'Bash', command: c, cwd: P }).allow, true, `chief: ${c}`);
+    }
+  });
+});
+
+test('K-3 (3): docs/flow-changes and docs/kit-changes are written by the Chief of Staff only', (t) => {
+  const { P } = setup(t);
+  const policy = policyMod.loadPolicy(P);
+  const changes = (paths) => paths.map((path) => ({ status: 'A', path }));
+  const run = (role, paths) => recordsMod.recordChecks({ changes: changes(paths), role, policy, readNew: () => '', readOld: () => '' });
+  const paths = ['docs/flow-changes/2026-11-17-x.md', 'docs/kit-changes/2026-11-17-landing.md'];
+  for (const role of ['builder', 'security', 'qa', 'release-ops']) assert.equal(run(role, paths).length, 2, role);
+  assert.deepEqual(run('chief-of-staff', paths), []);
+  assert.deepEqual(run('builder', ['docs/notes/x.md']), [], 'other docs are unaffected');
+});
+
+test('K-3 (4): a session with no role takes a working role only, never chief-of-staff, release-ops or hotfix', (t) => {
+  const { P, OLD } = setup(t);
+  withHook(P, P, () => {
+    for (const r of ['chief-of-staff', 'release-ops', 'hotfix']) {
+      assert.equal(guard.decide({ tool: 'Bash', command: `node .bootstrap/bin/bootstrap.mjs role ${r}`, cwd: OLD }).allow, false, `unassigned -> ${r}`);
+    }
+    for (const r of ['builder', 'design']) assert.equal(guard.decide({ tool: 'Bash', command: `node .bootstrap/bin/bootstrap.mjs role ${r}`, cwd: OLD }).allow, true, `unassigned -> ${r}`);
+  });
 });
 
 // a slow git: a copy of node.exe named git.exe on PATH that sleeps 1 s and then runs the real git (mode "pass") or fails (mode "fail")

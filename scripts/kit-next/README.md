@@ -1,6 +1,6 @@
 # kit-next: bootstrap kit 0.6.0 with our guard hardening put back (K-1)
 
-Staged here, not landed: nothing in `.bootstrap/` or `.githooks/` at the repository root was touched. Landing is a separate step after the reviews and the owner's yes to "Apply the kit upgrade?".
+This folder is the staged kit. It was landed on 2026-11-17: see `docs/kit-changes/2026-11-17-landing.md` for what was done, by whom and with whose word. Later changes to the kit (K-3 and after) are staged here first and landed the same way.
 
 Owner's go for K-1, typed in the Chief of Staff's chat on 2026-11-17: "go on K-1" (recorded in the plan at 66b6e57). HIGH: a security control.
 
@@ -116,3 +116,12 @@ node --test test/kit-next-k1.test.js
 - Tests: with a git that sleeps 1 s per call (works, or fails), 40 chained pushes exit 2 with "did not finish" in under 9 s through the hook entry. A git that hangs 30 s is refused at about 6.2 s by the deadline.
 - The 8 s belt is a second line for a CPU-bound hang; the deadline fires first when git is the slow part, so the belt was not what cut in. Not tested: that the belt kills grandchild processes on Windows.
 - Evidence: `evidence/kit-next-k2-deadline.txt`.
+
+## K-3 (Security's review of the landing, 88bbd53)
+
+- HIGH: the hook-skip patterns (`legacy_deny_all`: `--no-verify`, `core.hooksPath`, `git commit -n`) also run over the raw text of a command that hands text to an interpreter or another shell (`node -e`, `python -c`, `| sh`, `xargs`), as they already did for commands the guard cannot read. Prose that merely mentions the flag (`echo "never use --no-verify"`) stays allowed.
+- MEDIUM: `bootstrap flow` (every subcommand) and `flow-ui.mjs` are the Chief of Staff's, for every other role: the guard reads flow overrides from the committed flow of the main checkout.
+- LOW: `docs/flow-changes/**` and `docs/kit-changes/**` are record folders for the commit and push checks (`recordChecks`): only the Chief of Staff changes them.
+- MEDIUM: a session with no role may take a working role with `bootstrap role <id>`, never `chief-of-staff`, `release-ops` or `hotfix`; those are set by the Chief of Staff or the owner. The check is in the guard (it knows who is asking); the CLI itself cannot tell who runs it.
+- **`upgrade` does not replace `.githooks/` files that already exist** (it writes a hook only when it is missing, `writeOnce`). The hook scripts of this kit (`scripts/kit-next/.githooks/pre-push` and `pre-commit`, which find the main checkout through git's common directory and fail closed) therefore land by the landing commit copying `scripts/kit-next/.githooks/*` over `.githooks/*` as files, the same way `policy.json` is taken from the staged copy. `upgrade` was not changed to overwrite hooks: a hook that someone edited by hand would be lost silently.
+- Tests: `test/kit-next-k2.test.js`, the four tests named "K-3 (1)" to "K-3 (4)".

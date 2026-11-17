@@ -175,7 +175,7 @@ function decideInner({ tool, command = '', filePath = '', cwd = process.cwd(), s
     };
     const patterns = [
       ...denyAll.filter(hits).map((e) => e.pattern),
-      ...[...(policy.destructive_commands || []), ...(brief.deny_commands || []), ...(strict || ansi ? policy.legacy_deny_all || [] : [])].filter((pat) => new RegExp(pat).test(command)),
+      ...[...(policy.destructive_commands || []), ...(brief.deny_commands || []), ...(strict || ansi || interpreter ? policy.legacy_deny_all || [] : [])].filter((pat) => new RegExp(pat).test(command)),
     ];
     if (patterns.length) {
       return { allow: false, reason: `Blocked for role "${role}": command matches a rule in .bootstrap/policy.json or roles/${role}.md (${patterns[0]}). If the owner wants this, they run it themselves, or the Chief of Staff records their word first.` };

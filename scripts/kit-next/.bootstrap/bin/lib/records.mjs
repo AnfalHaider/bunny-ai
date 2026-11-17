@@ -32,8 +32,13 @@ export function recordChecks({ changes, role, policy, readNew, readOld, message 
   const ownerPatterns = policy.records?.owner_patterns?.[role] ?? [];
   for (const ch of changes) {
     const path = norm(ch.path);
-    if (!path.startsWith(`${signDir}/`) && !path.startsWith(`${relDir}/`)) continue;
+    const changeDirs = ['docs/flow-changes', 'docs/kit-changes'];
     const refuse = (why) => out.push(`${path}: ${why}`);
+    if (changeDirs.some((d) => path.startsWith(`${d}/`))) { // K-3: flow and kit change records are the Chief of Staff's
+      if (role !== CHIEF) refuse(`flow and kit change records are the Chief of Staff's (role "${role}" may not ${ch.status === 'D' ? 'delete' : 'write'} them).`);
+      continue;
+    }
+    if (!path.startsWith(`${signDir}/`) && !path.startsWith(`${relDir}/`)) continue;
     if (path.startsWith(`${relDir}/`)) {
       if (role !== CHIEF && !matchesAny(path, ownerPatterns, { ci: true })) refuse(`release records are the Chief of Staff's (role "${role}" may not ${ch.status === 'D' ? 'delete' : 'write'} them).`);
       continue;

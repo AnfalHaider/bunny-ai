@@ -287,6 +287,9 @@ const okId = (w) => !w.dynamic && isPlainId(w.text);
 function checkBootstrapCli(args, ctx) {
   const sub = args[0]?.text;
   if (sub === 'role' && args[1] && !args[1].text.startsWith('-') && !okId(args[1])) return 'a role id must be a plain name (letters, digits, dot, dash), never a path.';
+  if (sub === 'role' && ctx.role === 'unassigned' && args[1] && !args[1].text.startsWith('-') && (args[1].text === 'chief-of-staff' || (ctx.livePushers ?? ['release-ops', 'hotfix']).includes(args[1].text))) {
+    return `a session with no role may take a working role only, not "${args[1].text}" (chief-of-staff, release-ops and hotfix are set by the Chief of Staff or the owner).`;
+  }
   if (sub === 'role' && ctx.role !== 'unassigned' && ctx.role !== 'chief-of-staff') {
     return `a session that already has a role ("${ctx.role}") does not change it. The Chief of Staff assigns roles.`;
   }
@@ -307,7 +310,7 @@ function checkBootstrapCli(args, ctx) {
   const only = (who, what) => (who.includes(ctx.role) ? null : `\`bootstrap ${what}\` is for ${who.join(' / ')} only (you are "${ctx.role}").`);
   if (sub === 'upgrade') { const w = only(['chief-of-staff'], 'upgrade'); if (w) return w; }
   if (sub === 'kit' && second === 'apply') { const w = only(['chief-of-staff'], 'kit apply'); if (w) return w; }
-  if (sub === 'flow' && second === 'apply') { const w = only(['chief-of-staff'], 'flow apply'); if (w) return w; }
+  if (sub === 'flow') { const w = only(['chief-of-staff'], 'flow'); if (w) return w; } // K-3: the guard reads flow overrides from the committed flow, so any `flow` command is the Chief's
   if (sub === 'approve') { const w = only(['chief-of-staff'], 'approve'); if (w) return w; }
   if (sub === 'piece' && !args.some((x) => x.text === '--suggest')) { const w = only(['chief-of-staff'], 'piece'); if (w) return w; }
   if (sub === 'release') { const w = only(['chief-of-staff', 'release-ops', 'hotfix'], 'release'); if (w) return w; }
@@ -343,6 +346,8 @@ export function checkShell(parsed, ctx, depth = 0) {
     if (ctx.role !== 'chief-of-staff' && cmd.words.some((w) => (/^[^=]*[$`][^=]*=/.test(w.text) && !w.text.startsWith('-')) || /^\$\{?env:[^=]*[$`]/i.test(w.text))) {
       return 'the name of an environment variable cannot be a variable: the guard cannot see what it sets.';
     }
+    // K-3: the flow editor (flow-ui.mjs) writes the flow; only the Chief of Staff runs it.
+    if (ctx.role !== 'chief-of-staff' && cmd.words.some((w) => /(^|[\\/])flow-ui\.mjs$/i.test(w.text))) return 'the flow editor (flow-ui.mjs) is the Chief of Staff\'s.';
     // A5: the role is not set from a command line.
     if (cmd.words.some((w) => ROLE_WORD.test(w.text))) return 'the session role cannot be set from a command. The Chief of Staff assigns roles.';
     // K-1 (Security B4): and not through the Windows environment either ([Environment]::SetEnvironmentVariable, setx, Set-Item env:)
