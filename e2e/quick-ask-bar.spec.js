@@ -1,9 +1,26 @@
 import { test, expect } from '@playwright/test';
-import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 
 // W4-8: the quick-ask bar page, at the real window size (700 x 300), with a stand-in for the two bridge calls.
-const BAR = pathToFileURL(resolve('electron/quick-ask/bar.html')).href;
+// The bar page imports the app's own markdown module (../../src/ui/markdown.js). Electron loads it from a file; a plain browser cannot import a module from file://,
+// so this spec serves the project folder (read only, localhost) and opens the same page from there.
+const ROOT = resolve('.');
+let origin = '';
+let staticServer;
+test.beforeAll(async () => {
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+  staticServer = createServer(async (req, res) => {
+    const target = normalize(join(ROOT, decodeURIComponent(new URL(req.url, 'http://x').pathname)));
+    if (!target.startsWith(ROOT + sep) || !/[\/](electron[\/]quick-ask|src[\/]ui)[\/]/.test(target)) { res.writeHead(404).end(); return; }
+    try { res.writeHead(200, { 'content-type': types[extname(target)] ?? 'application/octet-stream' }).end(await readFile(target)); } catch { res.writeHead(404).end(); }
+  });
+  await new Promise((r) => staticServer.listen(0, '127.0.0.1', r));
+  origin = `http://127.0.0.1:${staticServer.address().port}`;
+});
+test.afterAll(() => new Promise((r) => staticServer.close(r)));
+const barUrl = () => `${origin}/electron/quick-ask/bar.html`;
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 async function openBar(page, { submit }) {
@@ -14,9 +31,11 @@ async function openBar(page, { submit }) {
       pickFile: async () => (mode === 'cancel' ? { ok: false, cancelled: true } : mode === 'refuse' ? { ok: false, message: 'That file is over 8 MB.' } : { ok: true, id: 'invented-id-1', name: 'report.pdf', kind: 'pdf', size: 5 }),
       dropFile: async () => ({ ok: true }),
       submit: () => (mode === 'wait' ? new Promise(() => {}) : Promise.resolve({ ok: false })),
+      // QA-ANSWERS: the rest of the bridge the page uses
+      ask: async () => ({ ok: true }), stop: async () => ({ ok: true }), openInBunny: async () => ({ ok: true }), resize: async () => ({ ok: true }), onAnswer: () => () => {},
     };
   }, { pixel: PIXEL, mode: submit });
-  await page.goto(BAR);
+  await page.goto(barUrl());
 }
 
 for (const scheme of ['light', 'dark']) {
