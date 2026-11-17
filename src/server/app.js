@@ -49,6 +49,9 @@ import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
 import { createToolInstaller } from './toolInstall.js';
+import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
+import { registerOwnPort } from './ownAddress.js';
+import { fetchLimited } from './download.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
@@ -2161,6 +2164,19 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         send('browser', { id: rid, action, args: parsed });
       });
       const runBrowserTool = async (name, parsed) => {
+        // W6-10: a saved copy of the page goes into the chat's folder, through the workspace (the person's rules and checkpoints apply)
+        if (name === 'browser_capture') {
+          if (!workspace) throw new Error('Choose a folder for this chat first.');
+          const got = await askBrowser('capture', {});
+          if (got?.error) throw new Error(got.error);
+          const info = got?.inspected;
+          if (!info || info.error) throw new Error(info?.error ?? 'The browser panel did not answer.');
+          const folderName = captureFolderName(info.url);
+          // W610-2: every path that will be written is judged by the person's rules before anything is written
+          const authorize = (paths) => authorizeWrites({ paths, rules: activeRules(), canon: (path) => workspace.canon(path), folder: folderName, ask: (text) => askPermission(describeBrowserTool(name, parsed), text) });
+          const saved = await capturePage({ info, workspace, authorize, fetchLimited: (url, o) => fetchLimited(url, { ...o, signal: controller.signal }), signal: controller.signal });
+          return { text: saved.text, attachments: [], images: [] };
+        }
         const answer = await askBrowser(name.replace(/^browser_/, ''), parsed);
         let attachments = [];
         if (typeof answer?.image === 'string' && answer.image.startsWith('data:image/png;base64,')) {
@@ -2789,7 +2805,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             status = 'failed';
             result = `The browser action failed: ${err.message}`;
           }
-          result = String(result).slice(0, 9000);
+          result = String(result).slice(0, name === 'browser_inspect' ? 200_000 : 9000); // an inspected page may be long: the step keeps the rest for the model like any long result
           await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), fullResult: result, attachments });
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return seenImages?.length ? { content: result, images: seenImages } : result;
@@ -3248,6 +3264,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       res.end();
     });
   });
+
+  // W610-1: nothing the model or a page names may be fetched from this server (download_file, a page capture): its port is known to the fetcher
+  server.on('listening', () => registerOwnPort(server.address().port));
 
   // Programs the model left running stop with the server.
   server.on('close', () => { processes.stopAll().catch(() => {}); localMcp.stopAll().catch(() => {}); });

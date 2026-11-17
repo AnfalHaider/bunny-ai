@@ -4,7 +4,7 @@ import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResu
 
 test('plan mode only offers the browser tools that look', () => {
   const names = browserToolDefinitions(['read']).map((d) => d.function.name);
-  assert.deepEqual(names.sort(), ['browser_back', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll']);
+  assert.deepEqual(names.sort(), ['browser_back', 'browser_inspect', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll']); // browser_inspect (W6-10) only looks
   assert.equal(browserToolDefinitions().length, Object.keys(BROWSER_TOOL_RISK).length);
 });
 

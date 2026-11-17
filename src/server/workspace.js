@@ -513,6 +513,18 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     return `Downloaded to ${show(abs)}\nSize: ${got.bytes.length} bytes\nContent type: ${got.type}\nFinal URL: ${got.url}`;
   }
 
+  /** W6-10: write several files at once (bytes, not text) for a saved page copy: every path is checked first (inside the folder, never .git), the checkpoint is made once per file, and nothing is written if any path is refused. Not a tool the model calls. */
+  async function writeFiles(entries) {
+    const checked = [];
+    for (const e of entries) checked.push({ abs: await insideEdit(e.path, { mustExist: false }), bytes: e.bytes });
+    for (const { abs, bytes } of checked) {
+      await beforeWrite?.(abs);
+      await mkdir(dirname(abs), { recursive: true });
+      await writeFile(abs, bytes);
+    }
+    return checked.length;
+  }
+
   // One replacement on text already in memory. Plain split/join, so "$&" and friends in new_text stay literal.
   function replaceIn(text, { old_text, new_text, replace_all = false }, path, label = 'old_text') {
     const old = String(old_text ?? '');
@@ -660,6 +672,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
     readFileUrl,
+    writeFiles,
     fileUrlPath,
     canon,
     run: (name, args, ctx) => tools[name](args ?? {}, ctx ?? {}),

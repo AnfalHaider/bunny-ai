@@ -12,6 +12,7 @@
 //  - it asks for nothing (camera, location, devices...) and is told no; a download is stopped and the panel says so;
 //  - only Bunny's own page, in a Bunny window, may command a view, and only the views that page opened.
 import { controlView } from './browserAgent.js';
+import { isBunnyOwn } from '../src/server/ownAddress.js';
 
 export const PARTITION = 'persist:bunny-browser';
 const TAB = /^bunny-tab-\d+$/;
@@ -23,20 +24,8 @@ export function allowedUrl(value) {
   try { const u = new URL(String(value)); return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password; } catch { return false; }
 }
 
-const OWN_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1', '0.0.0.0', '[::]', '::']);
-/** Bunny's own server: this PC's loopback names at Bunny's port (in any spelling a browser accepts for it). Other local dev servers are fine. */
-export function isBunnyOwn(value, ownPort) {
-  if (!ownPort) return false;
-  try {
-    const u = new URL(String(value));
-    const port = u.port || (u.protocol === 'https:' || u.protocol === 'wss:' ? '443' : '80');
-    const host = u.hostname.toLowerCase().replace(/\.$/, '');
-    // the URL parser writes an IPv4-mapped address in hex: http://[::ffff:127.0.0.1]/ is [::ffff:7f00:1] (and the compatible form [::7f00:1])
-    const mapped = /^\[::(?:ffff:)?(?:7f[0-9a-f]{2}|0):[0-9a-f]{1,4}\]$/.test(host);
-    const loopback = OWN_HOSTS.has(host) || host.endsWith('.localhost') || /^127\.\d+\.\d+\.\d+$/.test(host) || mapped;
-    return loopback && port === String(ownPort);
-  } catch { return false; }
-}
+// One definition of Bunny's own server for the app and the panel (src/server/ownAddress.js).
+export { isBunnyOwn };
 
 /** A page of the panel may be loaded as a page: http(s), and not Bunny itself. */
 export const loadable = (url, ownPort) => allowedUrl(url) && !isBunnyOwn(url, ownPort);
