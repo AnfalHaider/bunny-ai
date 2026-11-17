@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { checkExceptions, highAdvisories, judgeAudit, auditStep } from '../scripts/audit-exceptions.mjs';
+import { checkExceptions, highAdvisories, judgeAudit, auditStep, exceptionsSource } from '../scripts/audit-exceptions.mjs';
 
 // The gate's audit exceptions: a high finding passes only when it is listed, signed by the owner, and not expired. Invented audit data.
 const NOW = new Date('2026-11-17T12:00:00Z');
@@ -13,7 +13,7 @@ const audit = {
     minimatch: { name: 'minimatch', severity: 'moderate', via: [{ ...advisory, severity: 'moderate', url: 'https://github.com/advisories/GHSA-g3hv-75wg-m249' }], nodes: ['node_modules/minimatch'] },
   },
 };
-const entry = (over = {}) => ({ advisory: 'GHSA-fc5q-39xc-vjpf', package_path: 'node_modules/picomatch', why: 'build time only', accepted_by: 'The Owner', review_by: '2026-12-10', ...over });
+const entry = (over = {}) => ({ advisory: 'GHSA-fc5q-39xc-vjpf', package_path: 'node_modules/picomatch', why: 'build time only', accepted_by: 'The Owner', owner_words: 'accept it for now', said_at: '2026-11-17 09:00', review_by: '2026-12-10', ...over });
 
 test('only high and critical advisories are counted, once each, not the packages that pass them on', () => {
   assert.deepEqual(highAdvisories(audit).map((f) => [f.advisory, f.package_path]), [['GHSA-fc5q-39xc-vjpf', 'node_modules/picomatch']]);
@@ -51,11 +51,56 @@ test('an expired entry, one more than 30 days ahead, a bad date and missing fiel
   assert.equal(checkExceptions('not a list', NOW).entries.length, 0);
 });
 
-test('the gate step: JSON that cannot be read or an npm error fails; a missing exceptions file means no exceptions', () => {
-  assert.equal(auditStep('not json', 'no-such-file.json', NOW).ok, false);
-  assert.equal(auditStep(JSON.stringify({ error: { summary: 'offline' } }), 'no-such-file.json', NOW).ok, false);
-  assert.equal(auditStep(JSON.stringify({ vulnerabilities: {} }), 'no-such-file.json', NOW).ok, true, 'nothing found, nothing needed');
-  assert.equal(auditStep(JSON.stringify(audit), 'no-such-file.json', NOW).ok, false);
+const source = (text) => ({ ok: true, text, lines: [] });
+
+test('the gate step: JSON that cannot be read or an npm error fails; no exceptions file means no exceptions', () => {
+  assert.equal(auditStep('not json', source(null), NOW).ok, false);
+  assert.equal(auditStep(JSON.stringify({ error: { summary: 'offline' } }), source(null), NOW).ok, false);
+  assert.equal(auditStep(JSON.stringify({ vulnerabilities: {} }), source(null), NOW).ok, true, 'nothing found, nothing needed');
+  assert.equal(auditStep(JSON.stringify(audit), source(null), NOW).ok, false);
+  assert.equal(auditStep(JSON.stringify(audit), source('{ not json'), NOW).ok, false);
+  assert.equal(auditStep(JSON.stringify(audit), source(JSON.stringify({ exceptions: [entry()] })), NOW).ok, true);
+});
+
+test('an entry without the words of the owner and when they were said does not count (missing or pending)', () => {
+  for (const over of [{ owner_words: '' }, { owner_words: 'PENDING: the owner' }, { said_at: '' }, { said_at: 'PENDING' }]) {
+    const r = judgeAudit(audit, [entry(over)], NOW);
+    assert.equal(r.ok, false, JSON.stringify(over));
+    assert.match(r.problems[0], /owner_words|said_at/);
+  }
+});
+
+test('the path is compared exactly: a nested copy, another case and a trailing slash are not covered by the top-level entry', () => {
+  const at = (path) => ({ vulnerabilities: { picomatch: { name: 'picomatch', severity: 'high', via: [advisory], nodes: [path] } } });
+  assert.equal(judgeAudit(at('node_modules/picomatch'), [entry()], NOW).ok, true);
+  assert.equal(judgeAudit(at('node_modules/foo/node_modules/picomatch'), [entry()], NOW).ok, false, 'a nested copy is its own finding');
+  assert.equal(judgeAudit(at('node_modules/Picomatch'), [entry()], NOW).ok, false, 'case-sensitive');
+  assert.equal(judgeAudit(at('node_modules/picomatch'), [entry({ package_path: 'node_modules/picomatch/' })], NOW).ok, false, 'no trailing slash');
+});
+
+test('the gate reads the COMMITTED file: a working copy that differs, or a file that is not committed, fails', async () => {
+  const { mkdtempSync, writeFileSync, rmSync, mkdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = mkdtempSync(join(tmpdir(), 'bunny-ae-'));
+  try {
+    mkdirSync(join(root, 'docs', 'security'), { recursive: true });
+    const file = join(root, 'docs', 'security', 'audit-exceptions.json');
+    const text = JSON.stringify({ exceptions: [entry()] });
+    const run = (committed) => () => (committed === null ? { status: 128, stdout: '' } : { status: 0, stdout: committed });
+    assert.deepEqual(exceptionsSource(root, undefined, run(null)), { ok: true, text: null, lines: [] }, 'nowhere: no exceptions');
+    writeFileSync(file, text);
+    assert.match(exceptionsSource(root, undefined, run(null)).lines[0], /not committed/);
+    assert.equal(exceptionsSource(root, undefined, run(text)).ok, true);
+    assert.equal(exceptionsSource(root, undefined, run(text)).text, text);
+    writeFileSync(file, text.replace('The Owner', 'Somebody'));
+    const edited = exceptionsSource(root, undefined, run(text));
+    assert.equal(edited.ok, false);
+    assert.match(edited.lines[0], /differs from the commit/);
+    assert.equal(auditStep(JSON.stringify(audit), edited, NOW).ok, false, 'an uncommitted edit can never pass the audit');
+    rmSync(file);
+    assert.equal(exceptionsSource(root, undefined, run(text)).ok, false, 'deleted in the working folder but still committed');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('the proposed entry in docs/security/audit-exceptions.json is waiting for the owner, so it cannot pass anything yet', () => {
@@ -64,5 +109,7 @@ test('the proposed entry in docs/security/audit-exceptions.json is waiting for t
   assert.equal(exceptions.length, 1);
   assert.equal(exceptions[0].advisory, 'GHSA-fc5q-39xc-vjpf');
   assert.equal(exceptions[0].accepted_by, 'PENDING OWNER');
+  assert.match(exceptions[0].owner_words, /^PENDING/);
+  assert.equal(exceptions[0].said_at, 'PENDING');
   assert.equal(judgeAudit(audit, exceptions, new Date('2026-11-20T00:00:00Z')).ok, false);
 });

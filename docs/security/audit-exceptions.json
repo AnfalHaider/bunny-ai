@@ -1,11 +1,13 @@
 {
-  "about": "Advisories the owner has looked at and accepted for now. The gate's dependency audit passes a HIGH finding only if it is listed here for that package path, signed (accepted_by is the owner's name, never PENDING OWNER) and not expired (review_by is today or later, and at most 30 days ahead). Only the owner signs an entry. What ships is checked separately, with no exceptions, by `npm audit --omit=dev` at moderate.",
+  "about": "Advisories the owner has looked at and accepted for now. The gate's dependency audit passes a HIGH finding only if it is listed here for that package path, signed (accepted_by is the owner's name, never PENDING OWNER; owner_words is what the owner typed; said_at is when) and not expired (review_by is today or later, and at most 30 days ahead). Only the owner signs an entry. What ships is checked separately, with no exceptions, by `npm audit --omit=dev` at moderate.",
   "exceptions": [
     {
       "advisory": "GHSA-fc5q-39xc-vjpf",
       "package_path": "node_modules/picomatch",
       "why": "PROPOSED, not yet accepted. picomatch is reached only through tinyglobby and fdir, which node-gyp and electron-builder use at BUILD time to match file names. No fix is published. It is not in the app's production dependencies, so it is not in the installed app; to be confirmed by `npm ls picomatch --omit=dev` showing nothing before the owner signs.",
       "accepted_by": "PENDING OWNER",
+      "owner_words": "PENDING: the owner's exact words, copied in",
+      "said_at": "PENDING",
       "review_by": "2026-12-17"
     }
   ]

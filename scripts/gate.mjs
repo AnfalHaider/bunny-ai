@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { auditStep } from './audit-exceptions.mjs';
+import { auditStep, exceptionsSource } from './audit-exceptions.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quick = process.argv.includes('--quick');
@@ -86,10 +86,9 @@ step('request guard stays on', 'git', ['grep', '-nE', 'localGuard\\s*:\\s*false'
 step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
 if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });
-// Everything npm installs is audited at high; a high finding passes only if docs/security/audit-exceptions.json lists it, signed by the owner and not expired.
-const exceptionsFile = join(root, 'docs', 'security', 'audit-exceptions.json');
+// Everything npm installs is audited at high; a high finding passes only if the COMMITTED docs/security/audit-exceptions.json lists it, with the owner's words, signed and not expired (an uncommitted edit fails the step).
 let auditJudged = { ok: false, lines: [] };
-step('dependency audit (high+, owner exceptions)', npm, ['audit', '--json'], { ok: (r) => { auditJudged = auditStep(r.stdout, exceptionsFile); return auditJudged.ok; }, lines: () => auditJudged.lines });
+step('dependency audit (high+, owner exceptions)', npm, ['audit', '--json'], { ok: (r) => { auditJudged = auditStep(r.stdout, exceptionsSource(root)); return auditJudged.ok; }, lines: () => auditJudged.lines });
 // What ships (no dev tools) is held to a stricter line and has no exceptions.
 step('dependency audit of what ships (moderate+)', npm, ['audit', '--omit=dev', '--audit-level=moderate'], { tail: 6 });
 secretScan();
