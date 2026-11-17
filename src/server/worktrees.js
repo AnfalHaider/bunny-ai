@@ -14,7 +14,9 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { access, mkdir, readdir, realpath, rm, stat } from 'node:fs/promises';
+import { gitPath, safeEnv } from './safeExec.js';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 const GIT_TIMEOUT_MS = 120_000;
@@ -22,10 +24,16 @@ const WIP_MESSAGE = 'Bunny: work in progress';
 
 const refuse = (code, message) => Object.assign(new Error(message), { code });
 
-/** The real git: arguments only (never a shell), no prompts. */
-export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS } = {}) {
+/**
+ * The real git: found once as an absolute path in the PATH folders (W29-1: never a bare name, which Windows would look up in the project folder first), arguments only (never a shell),
+ * no prompts, the current folder never searched for programs, and (W29-2) the project's own hooks and fsmonitor never run: hooksDir is an empty folder of Bunny's.
+ */
+export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS, hooksDir = null } = {}) {
   return new Promise((done, fail) => {
-    execFile('git', args, { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' } }, (err, stdout, stderr) => {
+    const program = gitPath();
+    if (!program) { fail(Object.assign(new Error('git was not found on this computer. Install Git for Windows to give a chat its own copy of a project.'), { code: 'git.missing' })); return; }
+    const safe = ['-c', 'core.fsmonitor=false', ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
+    execFile(program, [...safe, ...args], { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, shell: false, env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }) }, (err, stdout, stderr) => {
       if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed' }));
       else done(String(stdout).trim());
     });
@@ -37,8 +45,12 @@ const slugOf = (text, max) => String(text ?? '').toLowerCase().replace(/[^a-z0-9
 const prefixOf = (prefix) => { const p = String(prefix ?? 'bunny/').replace(/[^A-Za-z0-9/_-]+/g, '-').replace(/\/{2,}/g, '/').replace(/^[/-]+/, '').slice(0, 30); return p ? (p.endsWith('/') ? p : `${p}/`) : 'bunny/'; };
 const within = (base, target) => { const rel = relative(base, target); return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel); };
 
-export function createWorktrees({ dataDir, git = runGit, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const root = join(dataDir, 'worktrees');
+  // W29-2: an empty folder as the hooks folder, so a repository's own hooks never run when Bunny asks git something
+  const hooksDir = join(dataDir, 'empty-hooks');
+  try { mkdirSync(hooksDir, { recursive: true }); } catch { /* git then runs without the setting only if the folder cannot be made: refuse instead */ }
+  const git = gitOverride ?? ((args, o = {}) => runGit(args, { ...o, hooksDir }));
   const queues = new Map(); // git takes locks inside the shared .git: one worktree add/remove/prune at a time per repository
 
   /** Run `task` after everything already queued for this repository. */
@@ -230,5 +242,5 @@ export function createWorktrees({ dataDir, git = runGit, wait = (ms) => new Prom
     return total;
   }
 
-  return { root, eligibility, create, usable, status, finish, leftovers, removeLeftover, sizeBytes };
+  return { root, git, eligibility, create, usable, status, finish, leftovers, removeLeftover, sizeBytes };
 }

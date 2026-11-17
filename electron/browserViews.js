@@ -14,6 +14,16 @@
 import { controlView } from './browserAgent.js';
 import { pixelDifference, fitBitmap, sideBySide, describeScore } from './pageCompare.js';
 import { isBunnyOwn } from '../src/server/ownAddress.js';
+import { isLocalHost } from '../src/server/capture.js';
+import { randomUUID } from 'node:crypto';
+
+/** A page on this computer or a private network (an address, localhost, or a name that only a network inside a building answers to). */
+export const isLanAddress = (url) => {
+  try {
+    const host = new URL(String(url)).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return isLocalHost(host) || /[.](local|lan|internal|home|corp|intranet|localdomain)$/.test(host) || (!host.includes('.') && !host.includes(':'));
+  } catch { return true; }
+};
 
 export const PARTITION = 'persist:bunny-browser';
 const TAB = /^bunny-tab-\d+$/;
@@ -243,12 +253,26 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     }
     const list = (Array.isArray(widths) && widths.length ? widths : [1280, 390]).map(Number).filter((w) => Number.isFinite(w) && w >= 320 && w <= 1920).slice(0, 3);
     if (!list.length) return { error: 'widths must be between 320 and 1920 pixels.' };
-    prepareSession();
+    // W6-11 (Security): the hidden windows share nothing with the panel: a fresh partition in memory (no cookies, no storage, gone with the comparison), and a page on this
+    // computer or a private network is refused unless the panel already has that very page open (the person has seen it).
+    const openHosts = new Set([...views.values()].filter((e) => e.owner === sender).map((e) => { try { return new URL(e.view.webContents.getURL()).host.toLowerCase(); } catch { return ''; } }));
+    for (const [label, url] of [['first', a], ['second', b]]) {
+      if (isLanAddress(url) && !openHosts.has(new URL(String(url)).host.toLowerCase())) return { error: `The ${label} address is on this computer or a private network. Open that page in the browser panel first (then it can be compared), or compare pages on the internet.` };
+    }
+    const partition = `bunny-compare-${randomUUID()}`; // no "persist:" prefix: in memory only
+    const ses = session.fromPartition(partition);
+    ses.setPermissionRequestHandler((_c, _p, callback) => callback(false));
+    ses.setPermissionCheckHandler(() => false);
+    ses.webRequest?.onBeforeRequest((details, callback) => {
+      let host = '';
+      try { host = new URL(details.url).host.toLowerCase(); } catch { /* refused below */ }
+      callback({ cancel: !requestAllowed(details, ownPort()) || (isLanAddress(details.url) && !openHosts.has(host)) });
+    });
     const HEIGHT = 800;
     const shoot = async (url, width) => {
       const win = new BrowserWindow({
         show: false, width, height: HEIGHT, useContentSize: true, frame: false, skipTaskbar: true, focusable: false,
-        webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true, allowRunningInsecureContent: false, navigateOnDragDrop: false, safeDialogs: true, offscreen: true },
+        webPreferences: { partition, sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true, allowRunningInsecureContent: false, navigateOnDragDrop: false, safeDialogs: true, offscreen: true },
       });
       try {
         const contents = win.webContents;
@@ -278,7 +302,7 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
         if (side.width > 1600) picture = picture.resize({ width: 1600 });
         images.push(picture.toDataURL());
       }
-    } catch (err) { return { error: String(err?.message ?? err) }; }
+    } catch (err) { return { error: String(err?.message ?? err) }; } finally { try { await ses.clearStorageData?.(); } catch { /* nothing kept */ } }
     lines.push('The picture shows the first page, the second page, and where they differ (red).');
     return { note: lines.join('\n'), image: images[0], images };
   }

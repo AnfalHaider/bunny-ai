@@ -79,7 +79,7 @@ test('W6-11: compare of a page with itself scores 0; with a page with one change
   for (const [, pct] of scores) assert.ok(pct > 0 && pct < 100, `score ${pct}`);
   assert.equal(diff.images.length, 2, 'one picture per width');
   assert.ok(diff.image.startsWith('data:image/png;base64,'));
-  assert.ok(log.some((l) => l[0] === 'load' && l[3] === 'persist:bunny-browser' && l[4] === true), 'off-screen, in the panel\'s own partition');
+  assert.ok(log.some((l) => l[0] === 'load' && /^bunny-compare-/.test(String(l[3])) && l[4] === true), 'off-screen, in the panel\'s own partition');
   assert.equal(log.filter((l) => l[0] === 'destroy').length, log.filter((l) => l[0] === 'load').length, 'every window is closed');
 });
 
@@ -99,4 +99,22 @@ test('W6-11: the tool is offered with the read tools (so Plan mode keeps it), ch
   assert.ok(browserToolDefinitions(['read']).some((d) => d.function.name === 'browser_compare'));
   assert.ok(!browserToolDefinitions(['edit']).some((d) => d.function.name === 'browser_compare'));
   assert.match(describeBrowserTool('browser_compare', { a: 'https://one.example/', b: 'https://two.example/' }), /one\.example.*two\.example/);
+});
+
+test('W6-11 (Security): the hidden windows use a fresh in-memory partition of their own, and a private or LAN page is refused unless the panel has it open', async () => {
+  const { isLanAddress } = await import('../electron/browserViews.js');
+  for (const lan of ['http://192.168.1.5/', 'http://10.0.0.2:8080/x', 'http://localhost:3000/', 'http://printer.local/', 'http://nas/', 'http://[::1]:9000/', 'http://172.16.4.4/']) assert.equal(isLanAddress(lan), true, lan);
+  for (const open of ['https://example.com/', 'http://93.184.216.34/']) assert.equal(isLanAddress(open), false, open);
+  const log = [];
+  const { FakeWindow, nativeImage } = fakes({ 'https://example.com/a': (w, h) => solid(w, h, WHITE) }, log);
+  const parts = [];
+  const v = createBrowserViews({ WebContentsView: class {}, session: { fromPartition: (name) => { parts.push(name); return { setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, on() {}, webRequest: { onBeforeRequest() {} } }; } }, getWindow: () => null, getOwnPort: () => '5173', BrowserWindow: FakeWindow, nativeImage });
+  const lanTry = await v.compare({}, { a: 'https://example.com/a', b: 'http://192.168.1.5/admin' });
+  assert.match(lanTry.error, /private network/);
+  assert.equal(log.filter((l) => l[0] === 'load').length, 0, 'nothing was loaded');
+  await v.compare({}, { a: 'https://example.com/a', b: 'https://example.com/a', widths: [320] });
+  const used = log.find((l) => l[0] === 'load')[3];
+  assert.match(used, /^bunny-compare-/);
+  assert.ok(!used.startsWith('persist:') && used !== 'persist:bunny-browser', 'a fresh partition in memory, never the panel\'s');
+  assert.ok(parts.includes(used));
 });

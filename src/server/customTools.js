@@ -15,6 +15,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
+import { powershellPath } from './safeExec.js';
 
 const NAME = /^[a-z][a-z0-9_]{1,39}$/;
 const MAX_SCRIPT = 20_000;
@@ -94,7 +95,7 @@ export function createCustomTools({ dir }) {
       const prelude = '$ErrorActionPreference = "Stop"\n[Console]::OutputEncoding = [Text.Encoding]::UTF8\n$params = $env:BUNNY_ARGS | ConvertFrom-Json\n';
       await writeFile(file, `﻿${prelude}${tool.script}`, 'utf8');
       const output = await new Promise((resolve) => {
-        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file],
+        execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file],
           { cwd: cwd || work, timeout: RUN_TIMEOUT_MS, windowsHide: true, maxBuffer: 8 << 20, env: { ...process.env, BUNNY_ARGS: JSON.stringify(args ?? {}) } },
           (err, stdout, stderr) => {
             const text = `${stdout ?? ''}${stderr ? `\n${stderr}` : ''}`.trim();

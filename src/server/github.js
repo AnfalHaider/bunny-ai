@@ -13,6 +13,7 @@
 import { execFile } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
 import { stat } from 'node:fs/promises';
+import { gitPath, ghPath, safeEnv } from './safeExec.js';
 
 const API = 'https://api.github.com';
 const MAX_TEXT = 12_000;
@@ -20,11 +21,26 @@ const MAX_TEXT = 12_000;
 /** The token the GitHub CLI holds, or null when it is missing or signed out. */
 export function ghCliToken() {
   return new Promise((done) => {
-    execFile('gh', ['auth', 'token'], { timeout: 10_000, windowsHide: true }, (err, stdout) => {
+    const program = ghPath();
+    if (!program) { done(null); return; }
+    execFile(program, ['auth', 'token'], { timeout: 10_000, windowsHide: true, shell: false, env: safeEnv() }, (err, stdout) => {
       const token = String(stdout ?? '').trim();
       done(err || !token ? null : token);
     });
   });
+}
+
+/**
+ * The git command that clones a repository with the person's token. The token travels in git's ENVIRONMENT (GIT_CONFIG_COUNT/KEY/VALUE), never in the arguments, where any
+ * program on the computer could read it from the process list. git is an absolute path (W29-1); the token is never written into .git/config.
+ */
+export function cloneCommand({ token, full, target, program = gitPath() }) {
+  const header = `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+  return {
+    program,
+    args: ['clone', '--depth', '50', `https://github.com/${full}.git`, target],
+    env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: header, GIT_CONFIG_KEY_1: 'core.fsmonitor', GIT_CONFIG_VALUE_1: 'false' }),
+  };
 }
 
 /** Talk to the GitHub API with a token. */
@@ -245,10 +261,11 @@ export async function runGithubTool(client, name, a = {}, { workspaceRoot = null
       if (!target.startsWith(resolve(workspaceRoot) + sep)) throw new Error('The folder must be inside the workspace.');
       if (await stat(target).then(() => true, () => false)) throw new Error(`${name} already exists in the workspace.`);
       // The token goes in a header for this one command only; it is never written into .git/config.
-      const header = `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+      const run = cloneCommand({ token, full, target });
+      if (!run.program) throw new Error('git was not found on this computer. Install Git for Windows to clone a repository.');
       await new Promise((done, fail) => {
-        execFile('git', ['-c', `http.https://github.com/.extraheader=${header}`, 'clone', '--depth', '50', `https://github.com/${full}.git`, target],
-          { timeout: 300_000, windowsHide: true, maxBuffer: 4 << 20 },
+        execFile(run.program, run.args,
+          { timeout: 300_000, windowsHide: true, maxBuffer: 4 << 20, shell: false, env: run.env },
           (err, _out, stderr) => (err ? fail(new Error(String(stderr || err.message).replace(/Basic [A-Za-z0-9+/=]+/g, 'Basic ***').slice(0, 400))) : done()));
       });
       return `Cloned ${full} into ${join(name)} (last 50 commits).`;

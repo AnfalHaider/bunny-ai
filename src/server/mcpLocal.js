@@ -16,6 +16,7 @@
 import { spawn, execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cleanSchema, MAX_PAGES, MAX_TOOLS } from './mcp.js';
+import { taskkillPath } from './safeExec.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 const START_TIMEOUT_MS = 60_000; // a start of a program that has already started once in this run
@@ -237,7 +238,7 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     conn.exited = true;
     return new Promise((done) => {
       const pid = conn.child.pid;
-      if (process.platform === 'win32' && pid) execFile('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true }, () => done());
+      if (process.platform === 'win32' && pid) execFile(taskkillPath() ?? 'taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true }, () => done());
       else {
         try { process.kill(-pid, 'SIGKILL'); } catch { try { conn.child.kill('SIGKILL'); } catch { /* gone */ } }
         done();

@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { powershellPath } from './safeExec.js';
 
 const MAX_CHARS = 6000;
 
@@ -26,7 +27,7 @@ export function speakableText(markdown) {
 
 function powershell(script, timeoutMs = 120_000) {
   return new Promise((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+    execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
       { timeout: timeoutMs, windowsHide: true, maxBuffer: 1 << 20 },
       (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).trim().slice(0, 300))) : resolve(String(stdout))));
   });
