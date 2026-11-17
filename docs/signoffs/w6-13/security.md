@@ -1,9 +1,9 @@
 ---
 piece: w6-13
 role: security
-sha: e061ce6
-verdict: FAIL
+sha: 55e3f20
+verdict: PASS
 date: 2026-11-17
 ---
 
-download_file addresses, redirects, size and write location hold (33 private spellings, one DNS lookup used for the connect, 50 MB, same gate as write_file) but W613-1: permissionRules EDIT_TOOLS lacks download_file, so a Deny-edit rule on secrets/** is not applied (verified). One-line fix. See docs/security/2026-11-17-w6-13-w6-9-w6-21-review.md
+W613-1 closed: download_file is in EDIT_TOOLS, a Deny-edit rule on secrets/x now answers deny for it (verified); W613-2 closed (::ffff:0:127.0.0.1 no longer public); W6-NEW-1 closed for download_file and the other edit tools (15 .git spellings refused incl. GIT~1, .git., ::$DATA, nested .git, a junction into .git; .gitignore and .github stay writable). 50/50 tests. Low: the .git pattern has an unescaped dot, so a file named agit or a folder xgit is refused too.
