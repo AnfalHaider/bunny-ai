@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - v0.1.8 W6-13 download_file FAIL, W6-9 file:// FAIL, W6-21 big results PASS (`e061ce6`)
+
+W6-13: addresses (33 private spellings, parsed literals, one DNS lookup used for the connect, every hop re-checked, 50 MB, 60 s, no cookies) and the write location (same gate as write_file) hold; but the person's path rules do not see `download_file` (`EDIT_TOOLS` lacks it), so a Deny-edit rule on `secrets/**` is not applied (W613-1). W6-9: containment holds in 15 spellings (outside, `..`, `%2e%2e`, junction, remote host, drive root); but `read_url file://` skips the rule check (`ruled` is only for workspace tools), so a Deny-read rule on `.env` does not stop it (W69-1, `ENV-SECRET` returned). Both are one-line fixes. W6-21: what is stored stays behind the W6-18 gate (`looksSecret`, incognito, Plan); note the "saved in .bunny/notes" sentence is wrong above 128 KB. New, all edit tools: they can write `.git/hooks/pre-commit` (W6-NEW-1). W6-14 not yet on the line. Review `docs/security/2026-11-17-w6-13-w6-9-w6-21-review.md`. Lesson: every new tool that reads or writes a path needs a line in the rules engine; the test for a new tool is "does my Deny rule still hold".
+
 ## 2026-11-17 - W3-6 fixes `3155e20`: PASS; W2-9 and W3-3 not built
 
 W36-1 (token bound to the origin it was issued for, https or this PC only, address edit signs out, tokens saved before the fix count as signed out) and W36-2 (a renewal in flight cannot restore a signed-out token, sign-out waits for it) verified with a stub-provider probe and 48 of 48 tests; `100.64/10` and `.local` are private, one registered client per provider. The fix branch is not on the v0.1.8 line yet, and `appTools.uninstall` must sign connectors out when it is merged. W2-9 and W3-3 have no commit anywhere (only a plan line), so there is nothing to review. Review `docs/security/2026-11-17-w3-6-fixes-and-queue.md`. Lesson: test a binding with the look-alikes (subdomain, port, scheme, userinfo), not only the obvious other host.
