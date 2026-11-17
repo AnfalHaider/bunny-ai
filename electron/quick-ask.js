@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { lstat, open } from 'node:fs/promises';
-import { FILE_DIALOG_FILTERS, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, checkPath, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
+import { FILE_DIALOG_FILTERS, MAX_IMAGE_BYTES, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, checkPath, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BAR_DIR = join(here, 'quick-ask');
@@ -105,12 +105,12 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
       if (!source) return { ok: false, message: 'Bunny could not take a screenshot.' };
       let image = source.thumbnail;
       let png = image.toPNG();
-      for (let i = 0; i < 4 && png.length > MAX_SHOT_BYTES; i += 1) { // shrink until it fits the limit
+      for (let i = 0; i < 5 && png.length > MAX_IMAGE_BYTES; i += 1) { // shrink until it fits what the chat accepts
         const s = image.getSize();
         image = image.resize({ width: Math.max(320, Math.floor(s.width * 0.7)) });
         png = image.toPNG();
       }
-      if (!png.length || png.length > MAX_SHOT_BYTES) return { ok: false, message: 'The screenshot is over 8 MB.' };
+      if (!png.length || png.length > MAX_IMAGE_BYTES) return { ok: false, message: 'The screenshot is over 3 MB.' };
       return { ok: true, data: `data:image/png;base64,${png.toString('base64')}` };
     } catch {
       return { ok: false, message: 'Bunny could not take a screenshot.' };

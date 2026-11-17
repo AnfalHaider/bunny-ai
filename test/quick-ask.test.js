@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { DEFAULT_SHORTCUT, MAX_SHOT_BYTES, MAX_TEXT, applyTrayRule, buildNewChatRequest, validateAccelerator, validateSubmission } from '../electron/quick-ask-logic.js';
+import { DEFAULT_SHORTCUT, MAX_IMAGE_BYTES as MAX_SHOT_BYTES, MAX_TEXT, applyTrayRule, buildNewChatRequest, validateAccelerator, validateSubmission } from '../electron/quick-ask-logic.js';
 import { barWindowOptions, createQuickAsk } from '../electron/quick-ask.js';
 
 const PNG_HEAD = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -53,7 +53,7 @@ test('submission: text limits', () => {
   assert.equal(validateSubmission('a'.repeat(MAX_TEXT + 1), []).ok, false);
 });
 
-test('submission: one PNG screenshot at most, a real PNG, and at most 8 MB', () => {
+test('submission: one PNG screenshot at most, a real PNG, and at most 3 MB (what the chat accepts)', () => {
   const ok = validateSubmission('what is this?', [{ data: smallPng() }]);
   assert.equal(ok.ok, true);
   assert.ok(Buffer.isBuffer(ok.shot));
