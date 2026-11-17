@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - K-2 `k2-guard` PASS at `1d3a77c`; K-1 landing checks pending
+
+K2-1 to K2-4 (the project's policy judges every folder, hooks fail closed, `.git` internals and trust anchors protected), K1-5 (6 s deadline on every git spawn, a git that cannot answer is a refusal) and W5-1d (credential printing, notes/for/releases refs) hold; the K-1 lists are no worse than at 4a0fa01. I first stamped FAIL at ec605fd and bec112e on a K1-5 timing that measured the repository's own 0.6.0 guard, because I ran the helper without `KIT_NEXT=1`; both are superseded. Also stamped: w3-6 and w4-10 at 9209d78, w6-13 and w6-9 at 55e3f20. Review `docs/security/2026-11-17-k1-k2-guard-review.md`, probes in `docs/security/k2-probe/`. Lesson: print which `guard.mjs` ran in every probe before believing a timing.
+
 ## 2026-11-17 - v0.1.8 W6-13 download_file FAIL, W6-9 file:// FAIL, W6-21 big results PASS (`e061ce6`)
 
 W6-13: addresses (33 private spellings, parsed literals, one DNS lookup used for the connect, every hop re-checked, 50 MB, 60 s, no cookies) and the write location (same gate as write_file) hold; but the person's path rules do not see `download_file` (`EDIT_TOOLS` lacks it), so a Deny-edit rule on `secrets/**` is not applied (W613-1). W6-9: containment holds in 15 spellings (outside, `..`, `%2e%2e`, junction, remote host, drive root); but `read_url file://` skips the rule check (`ruled` is only for workspace tools), so a Deny-read rule on `.env` does not stop it (W69-1, `ENV-SECRET` returned). Both are one-line fixes. W6-21: what is stored stays behind the W6-18 gate (`looksSecret`, incognito, Plan); note the "saved in .bunny/notes" sentence is wrong above 128 KB. New, all edit tools: they can write `.git/hooks/pre-commit` (W6-NEW-1). W6-14 not yet on the line. Review `docs/security/2026-11-17-w6-13-w6-9-w6-21-review.md`. Lesson: every new tool that reads or writes a path needs a line in the rules engine; the test for a new tool is "does my Deny rule still hold".
