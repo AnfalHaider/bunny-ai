@@ -54,6 +54,9 @@ export function createMcpStore({ file }) {
     if (!/^https?:\/\//i.test(address)) {
       throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
     }
+    // W4-11 R-4: the same address twice would offer every tool twice
+    const same = servers.find((s) => s.url && String(s.url).trim().toLowerCase().replace(/\/+$/, '') === address.toLowerCase().replace(/\/+$/, ''));
+    if (same) throw Object.assign(new Error(`That address is already a connector (${same.name}).`), { code: 'mcp.duplicate', existing: same.id });
     const server = {
       id: randomUUID(),
       name: clean.slice(0, 60),

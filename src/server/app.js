@@ -37,7 +37,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions, toolPrefix } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -1968,13 +1968,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             await mcp.setStatus(server.id, { status: 'error', error: err.message }).catch(() => {});
           }
         }
-        const prefix = toolPrefix(server.name);
-        for (const tool of server.tools ?? []) {
-          if (permissionMode === 'plan' && !tool.readOnly) continue;
-          const definition = toToolDefinitions([tool], { prefix })[0];
-          toolDefinitions.push(definition);
-          toolIndex.set(definition.function.name, { server, tool });
-        }
+      }
+      // W4-11 R-3, R-4: names a provider accepts, and no name twice
+      {
+        const offered = connectorTools(servers, { planMode: permissionMode === 'plan' });
+        toolDefinitions.push(...offered.definitions);
+        for (const [name, entry] of offered.index) toolIndex.set(name, entry);
       }
 
       // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,

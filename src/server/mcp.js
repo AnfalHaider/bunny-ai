@@ -141,16 +141,58 @@ async function readPayload(res) {
   }
 }
 
+/**
+ * W4-11 R-3: a function name an OpenAI-compatible endpoint accepts: only letters, digits, _ and -, at most 64 characters.
+ * An MCP tool name may hold dots or slashes and the prefix takes up to 24 characters, so the real name is cleaned and, when it is too long,
+ * cut with a short hash of the whole name (so two long names that start alike stay apart). The real name stays in the tool index.
+ */
+export function functionName(prefix, name) {
+  const joined = `${prefix ? `${prefix}__` : ''}${name}`;
+  const clean = joined.replace(/[^a-zA-Z0-9_-]/g, '_');
+  if (clean.length <= 64) return clean;
+  let h = 5381;
+  for (const ch of joined) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0;
+  const tag = h.toString(36).padStart(7, '0').slice(-7);
+  return clean.slice(0, 56) + '_' + tag;
+}
+
 /** The tool definitions an OpenAI-compatible endpoint expects. */
 export function toToolDefinitions(tools, { prefix } = {}) {
   return (tools ?? []).map((tool) => ({
     type: 'function',
     function: {
-      name: `${prefix ? `${prefix}__` : ''}${tool.name}`,
+      name: functionName(prefix, tool.name),
       description: tool.description,
       parameters: tool.inputSchema ?? { type: 'object', properties: {} },
     },
   }));
+}
+
+/**
+ * W4-11 R-4: the definitions of every connector at once, with names that are unique (a second connector of the same name, or two tool names
+ * that clean to the same text, get _2, _3 ...) and an index from each offered name back to its server and real tool.
+ * A provider refuses a request with two functions of the same name, so one duplicate would break every message.
+ */
+export function connectorTools(servers, { planMode = false } = {}) {
+  const definitions = [];
+  const index = new Map();
+  const usedPrefixes = new Set();
+  for (const server of servers ?? []) {
+    const base = toolPrefix(server.name) || 'connector';
+    let prefix = base;
+    for (let n = 2; usedPrefixes.has(prefix); n += 1) prefix = `${base.slice(0, 20)}_${n}`;
+    usedPrefixes.add(prefix);
+    for (const tool of server.tools ?? []) {
+      if (planMode && !tool.readOnly) continue;
+      const definition = toToolDefinitions([tool], { prefix })[0];
+      let name = definition.function.name;
+      for (let n = 2; index.has(name); n += 1) name = `${definition.function.name.slice(0, 60)}_${n}`;
+      definition.function.name = name;
+      definitions.push(definition);
+      index.set(name, { server, tool });
+    }
+  }
+  return { definitions, index };
 }
 
 /** A tool name prefix that is safe to use in a function name. */
