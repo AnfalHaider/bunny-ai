@@ -60,7 +60,8 @@ test.beforeAll(async () => {
       if (brokenAsk && !brokenModels.size) {
         brokenModels.add(body.model);
         res.writeHead(400, { 'content-type': 'application/json' });
-        res.end('{"error":{"message":"This model does not support tool use"}}');
+        // not about tools (PV-1 retries a refusal of tools on the same model without them): this model is simply gone
+        res.end('{"error":{"message":"This model has been retired"}}');
         return;
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
