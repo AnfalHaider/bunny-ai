@@ -18,6 +18,16 @@ Newest entry on top. Only this session writes this file.
 
 **Rollback:** a higher version (0.1.9) with the last good code; pulling the release is owner-only.
 
+**Open items at close (Chief of Staff retired 2026-11-17; Release Ops holds):**
+
+- Leftover `src/ui/app.css` (line endings only) uncommitted in my old worktree `release-ops-7f2a25`; my role may not revert it, and the Chief said to leave it. It also stops me merging origin/main into this branch, so this branch still has the old `.bootstrap` (no `brief` command).
+- The scratchpad worktree `release-0.1.8` (detached at af77b62, role release-ops) is left in place until told to remove it. Older worktrees `release-ops-v016`, `release-ops-v017` and `release-ops-v017b` under `.claude/worktrees/` are also still there.
+- QA gap 15: the updater skips the checksum when there is no `latest.yml`. Reported to me by the Chief of Staff; I have not checked it myself.
+- QA gap 19: the installer's sha512 is not verified locally. Same: reported, not checked by me.
+- Not checked for 0.1.5 to 0.1.8: an update on an invented profile; the sign-off files (a hook bars my role).
+- 0.1.2 to 0.1.4 have no release records (predate the family); the Librarian holds the owner question.
+- Next: v0.1.9 only on the owner's go, via a 7E relay or "release v0.1.9" typed in my chat.
+
 **Lesson:** the record's `scope:` line must read `v<version>` exactly; `release.mjs` greps for it. Run the dry run right after the record lands, before the owner is waiting on the build.
 
 ## 2026-11-17 - Published v0.1.7
