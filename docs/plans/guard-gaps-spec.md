@@ -63,7 +63,7 @@ Git sees what actually changed, whatever tool changed it.
 
 | File | `toRepoPath` | Guard result |
 |---|---|---|
-| `C:\Users\anfal\x.txt` | `C:/Users/anfal/x.txt` | **block** ("outside that") — the false block |
+| `C:\Users\<user>\x.txt` | `C:/Users/<user>/x.txt` | **block** ("outside that") — the false block |
 | `D:\other\x.txt` | `../../../../../../other/x.txt` | allow (correct) |
 | `\\srv\sh\a.md` | `//srv/sh/a.md` | same shape as `C:`; not run through `decide()` |
 | `..foo.md` (a file inside the repo) | `..foo.md` | `startsWith('..')` is true → treated as outside → **skips protected and scope checks** |
