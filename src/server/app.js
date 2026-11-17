@@ -37,7 +37,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -255,7 +255,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const connectorSignIn = createConnectorSignIn({ secrets, mcp, getBase: () => `http://127.0.0.1:${server.address().port}` });
   // L-4: a local connector's settings come back from the secret store only to start it
   const withEnv = async (server) => ({ ...server, env: await mcp.resolveEnv(server.id) });
-  const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server) }));
+  const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }));
   const mcpCallTool = async (server, call) => (server.type === 'local' ? localMcp.callTool(await withEnv(server), call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
   const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
@@ -1965,11 +1965,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const toolIndex = new Map();
       for (const server of servers) {
         // A connector that was never checked has no tools on file yet: ask it once now.
-        if (!server.tools?.length && server.status !== 'error') {
+        const relist = relistReason(server);
+        if (relist) {
           try {
             // A local connector's first start can take minutes: the chat shows a step with the seconds so far.
             const startStep = `Start ${server.name}`;
-            server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }) });
+            server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }), ...(relist === 'retry' ? { timeoutMs: RETRY_FAILED_MS } : {}) });
             if (server.tools.truncated) send('tool', { tool: `${server.name}`, status: 'done', result: `${server.name} has more tools than the ${server.tools.length} listed here; the rest are not offered.` });
             if (server.type === 'local') send('tool', { tool: startStep, status: 'done', result: `${server.tools.length} tool(s) ready` });
             await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
