@@ -1955,6 +1955,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,
       // never cut: the part the person cannot see could be the part that matters.
       const CARD_LIMIT = 2000;
+      // Anything that is code or an action is refused when too long (cardTooLong); text that is only content (a file being written, a mail body)
+      // is cut with a visible note that says how much is not shown.
+      const cardText = (detail) => {
+        const text = String(detail ?? '');
+        return text.length > CARD_LIMIT ? `${text.slice(0, CARD_LIMIT)}
+… ${text.length - CARD_LIMIT} more characters are not shown here` : text;
+      };
       const cardTooLong = (detail) => String(detail ?? '').length > CARD_LIMIT
         ? `This is too long to show in full on the confirmation card (more than ${CARD_LIMIT} characters), so it was not run. Use a shorter command, or put the work in a file and run that.`
         : null;
@@ -1966,7 +1973,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const timer = setTimeout(() => { pendingPermissions.delete(pid); resolveAnswer(false); }, 10 * 60_000);
         pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { clearTimeout(timer); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
-        send('permission', { id: pid, title: summary, detail: String(detail ?? '').slice(0, 2000) });
+        send('permission', { id: pid, title: summary, detail: cardText(detail) });
       });
 
       // Ask the window to do a browser action, and wait for what happened.
@@ -2286,7 +2293,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
         if (ruledProcess?.effect === 'ask' || (needsOk(risk) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
-          const tooLong = name === 'start_process' ? cardTooLong(detail) : null;
+          const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || custom) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {

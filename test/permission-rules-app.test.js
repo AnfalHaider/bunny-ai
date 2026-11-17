@@ -20,6 +20,7 @@ const ARGS = {
   read_file: { path: 'secrets/key.txt' }, search_files: { query: 'TOPSECRET' }, find_files: { pattern: '*.txt' },
   chained: { command: 'echo hi; echo there' },
   long_command: { command: `echo ${'a'.repeat(2100)} & echo the-hidden-tail` },
+  write_long: { path: 'note.txt', content: 'x'.repeat(3000) },
   fits_command: { command: `echo ${'a'.repeat(1900)}` },
   download_file: { url: 'http://example.invalid/x', path: 'secrets/key.txt' },
 };
@@ -36,7 +37,7 @@ async function setup(t) {
       const rest = /^call \w+ (.+)$/.exec(asked)?.[1]; // W69-1: read_url takes the address from the message
       const done = body.messages.some((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool === 'chained' || tool.endsWith('_command') && tool !== 'run_command' ? 'run_command' : tool, arguments: JSON.stringify(tool === 'read_url' ? { url: rest } : ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
+      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool === 'write_long' ? 'write_file' : tool === 'chained' || tool.endsWith('_command') && tool !== 'run_command' ? 'run_command' : tool, arguments: JSON.stringify(tool === 'read_url' ? { url: rest } : ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
       else res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n');
     });
   });
@@ -322,4 +323,11 @@ test('W614-1: a command that fits the card is shown whole', async (t) => {
   const r = await run(base, 'ask', 'fits_command', {});
   assert.equal(r.cards.length, 1);
   assert.equal(r.cards[0].detail, `echo ${'a'.repeat(1900)}`);
+});
+
+test('W614-1: a long file being written is shown cut with a note that says how much is not shown', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'ask', 'write_long', {});
+  assert.equal(r.cards.length, 1);
+  assert.match(r.cards[0].detail, /… 1000 more characters are not shown here$/);
 });
