@@ -125,3 +125,24 @@ node --test test/kit-next-k1.test.js
 - MEDIUM: a session with no role may take a working role with `bootstrap role <id>`, never `chief-of-staff`, `release-ops` or `hotfix`; those are set by the Chief of Staff or the owner. The check is in the guard (it knows who is asking); the CLI itself cannot tell who runs it.
 - **`upgrade` does not replace `.githooks/` files that already exist** (it writes a hook only when it is missing, `writeOnce`). The hook scripts of this kit (`scripts/kit-next/.githooks/pre-push` and `pre-commit`, which find the main checkout through git's common directory and fail closed) therefore land by the landing commit copying `scripts/kit-next/.githooks/*` over `.githooks/*` as files, the same way `policy.json` is taken from the staged copy. `upgrade` was not changed to overwrite hooks: a hook that someone edited by hand would be lost silently.
 - Tests: `test/kit-next-k2.test.js`, the four tests named "K-3 (1)" to "K-3 (4)".
+
+## K-5 (v0.1.10, HIGH, Security signs): guard follow-ups staged here
+
+Tests: `test/kit-next-k5.test.js` (13). Run with `CLAUDE_PROJECT_DIR` unset, one file at a time. Spec: `docs/plans/K-5-guard-followups.md` (Tech Lead), `docs/security/2026-11-16-g1-guard-review.md`.
+
+| Row | Change | Where |
+|---|---|---|
+| K5-T | Read-only git questions (`rev-parse`, `symbolic-ref`, `worktree list`) are asked once per decision and remembered until it ends; the hook's child counts its deadline from the process start: **8.5 s total, belt 9 s** (the host cuts at 10 s). A decision called in a test process still gets 6 s of deciding. A test with a git that waits 700 ms per call gives the same decisions, and git is started at most 14 times for an everyday decision. | `lib/policy.mjs` (`setDeadline`, `git`, `gitSpawnCount`), `guard.mjs` |
+| K5-T (found by the test) | A fractional deadline made `git` impossible to start (`timeout` must be a whole number), and "git could not start" was read as "not a repository": **the guard allowed everything**. The deadline is now a whole number. A reason to look at that fallback again: git failing for any reason still reads as "not ours". | `lib/policy.mjs` |
+| K5-1 | Reading the hooks-folder setting (`--get`, `--get-all`, one plain key) is allowed: a read. Any write, value, unknown flag, `-c` or env spelling is still refused. | `lib/shellrules.mjs` (`configIsRead`) |
+| K5-3 | `$(FOO=1 date)` and an `echo` of text with `x=y` after a space are not "a variable as a name"; `$($N=1 x)`, `env $N=x`, `$R=BOOTSTRAP_ROLE` still are. | `lib/shellrules.mjs` (`dynamicAssignmentName`) |
+| K5-4 | A role that may not push live cannot run a writing git command with `-C` at another registered work tree of the project; reads stay open; live pushers unchanged. | `lib/shellrules.mjs` |
+| K5-F | Role overrides come from `flow.json` as committed (HEAD of the project's checkout), never from a working-tree file. | `guard.mjs` (`committedFlow`) |
+| K5-C | The company layer by path must be inside the project (no absolute path, no `..`), read from the committed copy when a ref is given; a refused path is reported by `validate`. | `lib/flow.mjs` |
+| K5-E | The flow editor puts only the three role states and a whole number 0 to 5 into the page. | `ui/flow-editor.html` (the live copy lands with this kit) |
+| K5-D | `scripts/kit-next/.bootstrap/policy.json` is no longer "a policy.json under .bootstrap" for the write guard, so the staged policy can be edited and committed like the rest of the staged kit (before: only the Chief could write it, and the Chief commits docs only). | `lib/policy.mjs` (`plantedGitPath`) |
+| G1-3..G1-5 | Already refused for builders since K-1 (alias and `core.*` config writes, `rm`/`mv` of `.githooks`, `--git-dir`, `GIT_DIR`, `commit-tree`, `update-ref`, a push target built from a variable, a role set through a variable). Regression table in the test. | `lib/shellgit.mjs`, `lib/shellrules.mjs` |
+| Chief's gap: shell writes vs write_globs | Not reproducible: a docs-only role is refused `echo >`, `Set-Content`, `tee`, `cp`, `mv`, `sed -i`, a heredoc, `touch`, `rm`, `mkdir` into `src` (`lib/shellwrites.mjs` `judge`). Test added. | test only |
+| Chief's gap: another drive treated as inside the repo | Not reproducible: `toRepoPath` returns outside for `E:` paths and shares, and refuses what it cannot resolve (fail closed). Only one drive was available, so a real second drive was not tried; the test uses a drive that does not exist. | test only |
+
+**At landing:** `scripts/kit-next/.bootstrap/policy.json` lacks two entries the live `.bootstrap/policy.json` has: `docs/security/audit-exceptions.json` and `scripts/audit-exceptions.mjs` under `protected_globs`, and `docs/security/audit-exceptions.json` under `records.globs`. Copy them over before landing, or the landing removes those protections. (The builder could not write that file with the live guard; K5-D makes it possible after landing.)
