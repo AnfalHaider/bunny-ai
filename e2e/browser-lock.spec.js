@@ -14,7 +14,7 @@ test('a Settings page in a browser: the window-only controls are disabled, greye
   await expect(mode).toBeDisabled();
   await expect(mode).toHaveCSS('opacity', '0.5');
   await expect(mode).toHaveAttribute('title', SENTENCE);
-  await expect(page.locator('#default-permission').locator('xpath=following-sibling::*[contains(@class,"window-only-note")] | xpath=../following-sibling::*[contains(@class,"window-only-note")] | xpath=../*[contains(@class,"window-only-note")]').first()).toHaveText(SENTENCE);
+  await expect(page.locator('#default-permission + .window-only-note')).toHaveText(SENTENCE); // beside the control
   // the permission rules block: every control off, the sentence once at its top
   const rules = page.locator('#perm-rules');
   for (const c of await rules.locator('input, select, textarea, button').all()) await expect(c).toBeDisabled();
