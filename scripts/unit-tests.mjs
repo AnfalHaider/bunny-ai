@@ -12,14 +12,14 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const testDir = join(root, 'test');
 
-/** Every .js, .cjs and .mjs file under test/, as `node --test test/` picks them (node_modules left out). */
+/** Every *.test.js file under test/ (node_modules left out). The helpers, fixtures and probes beside them define no tests, and some are servers that never exit. */
 function files(dir) {
   const found = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue;
     const path = join(dir, entry.name);
     if (entry.isDirectory()) found.push(...files(path));
-    else if (/\.(c|m)?js$/.test(entry.name)) found.push(path);
+    else if (/\.test\.js$/.test(entry.name)) found.push(path);
   }
   return found.sort();
 }
@@ -28,6 +28,12 @@ const all = files(testDir).map((f) => relative(root, f).replace(/\\/g, '/'));
 const isGuardFile = (f) => /^test\/(guard-[^/]*|kit-next-[^/]*)\.test\.js$/.test(f);
 const guard = all.filter(isGuardFile);
 const others = all.filter((f) => !isGuardFile(f));
+
+// `node scripts/unit-tests.mjs --list` only prints how the files are split; it runs nothing.
+if (process.argv.includes('--list')) {
+  console.log(`${others.length} parallel files, ${guard.length} guard and kit files (one at a time)`);
+  process.exit(0);
+}
 
 // A step that prints nothing for SILENT_MS is stopped and named, so a hang is a failure that says where it stopped, not silence.
 const SILENT_MS = 4 * 60_000;
