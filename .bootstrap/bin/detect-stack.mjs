@@ -79,6 +79,10 @@ function frameworks(dir) {
   if (has(pkg, /"svelte"\s*:/)) found.push('svelte');
   if (has(pkg, /"@angular\/core"\s*:/)) found.push('angular');
   if (has(pkg, /"@nestjs\/core"\s*:/)) found.push('nestjs');
+  if (has(pkg, /"express"\s*:/)) found.push('express');
+  if (has(pkg, /"fastify"\s*:/)) found.push('fastify');
+  if (has(pkg, /"koa"\s*:/)) found.push('koa');
+  if (has(pkg, /"hono"\s*:/)) found.push('hono');
   if (has(pkg, /"expo"\s*:/)) found.push('expo');
   if (has(pkg, /"react-native"\s*:/)) found.push('react-native');
   if (has(pkg, /"electron"\s*:/)) found.push('electron');
@@ -93,6 +97,17 @@ function frameworks(dir) {
 
 function scripts(dir) {
   try { return Object.keys(JSON.parse(read(join(dir, 'package.json'))).scripts || {}); } catch { return []; }
+}
+
+// scripts that usually are the merge gate, best first; a hint for the agent, not a decision
+const GATE_SCRIPTS = ['ci', 'check', 'verify', 'validate', 'test'];
+function gateCandidates(workspaces) {
+  const out = [];
+  for (const w of workspaces) {
+    const mgr = (w.installs.find((i) => ['npm', 'pnpm', 'yarn', 'bun'].includes(i.manager)) || { manager: 'npm' }).manager;
+    for (const name of GATE_SCRIPTS) if (w.scripts.includes(name)) out.push(`${w.dir === '.' ? '' : `(cd ${w.dir} && `}${mgr} run ${name}${w.dir === '.' ? '' : ')'}`);
+  }
+  return out;
 }
 
 export function detect(root) {
@@ -133,7 +148,8 @@ export function detect(root) {
     languages, workspaces, frameworks: allFw, ui, lsp_suggestions: lsp,
     needs: ['language server per primary language', allFw.length ? `framework plugin/skill: ${allFw.join(', ')}` : null,
       ui ? 'browser/E2E driver (e.g. playwright) + design skills' : null, 'one static-analysis/security reviewer', 'workflow skills (plans, TDD, debugging, verification)'].filter(Boolean),
-    merge_gate: null, // the agent must find or build it (Phase 0B, O2) — never guessed here
+    merge_gate: null, // the agent must confirm or build it (Phase 0B, O2) — never assumed here
+    gate_candidates: gateCandidates(workspaces),
   };
 }
 
@@ -152,7 +168,9 @@ function main() {
   console.log('\nlanguage servers:');
   for (const l of p.lsp_suggestions) console.log(`  ${l.plugin}  (binary: ${l.binary})`);
   console.log('\nneeds to fill (Phase 3): ' + p.needs.join('; '));
-  console.log('merge gate: NOT DETECTED — find or build it (Phase 0B / O2)');
+  console.log(p.gate_candidates.length
+    ? `merge gate: not confirmed — candidates: ${p.gate_candidates.join(' | ')} (run it on a clean tree, then confirm with the owner)`
+    : 'merge gate: NOT DETECTED — find or build it (Phase 0B / O2)');
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main();

@@ -13,7 +13,11 @@ test.beforeEach(async ({ request }) => {
 
 test('the command palette opens with Ctrl+K and runs a command', async ({ page }) => {
   await connectAnthropic(page);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'networkidle' });
+  // The shortcut is bound once the page has started: pressing right after goto raced it (about 1 run in 9).
+  await expect(page.locator('#input')).toBeVisible();
+  await expect(page.locator('#send')).toBeVisible();
+  await page.waitForFunction(() => document.readyState === 'complete');
 
   await page.keyboard.press('Control+k');
   await expect(page.locator('#palette-backdrop')).toBeVisible();

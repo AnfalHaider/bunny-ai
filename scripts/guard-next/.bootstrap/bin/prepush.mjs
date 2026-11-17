@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
+import { recordChecks } from './lib/records.mjs';
 import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, scopeViolations } from './lib/policy.mjs';
 
 const ZERO = /^0+$/;
@@ -32,7 +33,7 @@ function sameSha(a, b) {
   return n >= 7 && a.slice(0, n) === b.slice(0, n);
 }
 
-export function completeSignoffs(root, sha, policy) {
+export function completeSignoffs(root, sha, policy, forged = null) {
   // Returns [{piece, sha}] for every piece whose required roles all signed PASS on one sha.
   const byPiece = new Map();
   for (const f of lsTree(root, sha, policy.signoffs.dir)) {
@@ -47,6 +48,8 @@ export function completeSignoffs(root, sha, policy) {
       const { data } = parseFrontmatter(show(root, sha, f));
       if (!data) continue;
       if (name === '_required') { if (Array.isArray(data.roles)) required = data.roles; continue; }
+      // the file name and its front matter must name the same role: a hand-copied sign-off is not counted
+      if (data.role && data.role !== name) { (forged ?? []).push(f); continue; }
       if (String(data.verdict || '').toUpperCase() === 'PASS' && data.sha) signed[data.role || name] = data.sha;
     }
     const shas = required.map((r) => signed[r]);
@@ -78,6 +81,11 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
   const branch = remoteRef.replace(/^refs\/heads\//, '');
   const guarded = branch === policy.branches.live || branch === policy.branches.dev;
 
+  // W5B-5: tags can mark a release; only the live pushers push or delete one (the shell rules say so first; this is the hook that catches the rest)
+  if (/^refs\/tags\//.test(remoteRef) && !policy.releases.live_pushers.includes(role)) {
+    errors.push(`role "${role}" may not push or delete the tag "${remoteRef.replace(/^refs\/tags\//, '')}" (only ${policy.releases.live_pushers.join(' / ')})`);
+  }
+
   if (ZERO.test(localSha)) {
     if (guarded) errors.push(`refusing to delete "${branch}"`);
     return errors;
@@ -106,6 +114,29 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
     }
   }
 
+  // G1-2: records are authenticated at push too, so a commit made with the hooks off is caught. Roles whose job is to move
+  // other roles' commits (release-ops, hotfix) are not asked; the Chief of Staff is, for the removal line and flipped verdicts.
+  if (policy.records_check !== false && (role === 'chief-of-staff' || !(sc.push_exempt_roles || []).includes(role))) {
+    // First-parent commits, merges included: a merge brings in other roles' records legitimately (not asked), but a record the
+    // merge itself changes (a conflict resolved by hand) differs from every parent, and that is the pusher's doing (git --cc).
+    const own = (git(['rev-list', '--first-parent', ...range], root) || '').split('\n').filter(Boolean);
+    for (const c of own) {
+      const isMerge = (git(['rev-list', '--parents', '-n', '1', c], root) || '').split(' ').length > 2;
+      const out = (isMerge
+        ? git(['diff-tree', '--no-commit-id', '--name-only', '-r', '--cc', '-z', '--root', c], root)
+        : git(['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--no-renames', '--root', c], root)) || '';
+      const parts = out.split('\0').filter(Boolean);
+      const changes = [];
+      if (isMerge) for (const f of parts) changes.push({ status: 'M', path: f });
+      else for (let i = 0; i + 1 < parts.length; i += 2) changes.push({ status: parts[i][0], path: parts[i + 1] });
+      if (!changes.some((x) => /^docs\/(signoffs|releases)\//.test(x.path.replace(/\\/g, '/')))) continue;
+      const message = git(['log', '-1', '--format=%B', c], root) ?? '';
+      const readNew = (p) => git(['show', `${c}:${p}`], root) ?? '';
+      const readOld = (p) => git(['show', `${c}^1:${p}`], root) ?? '';
+      for (const why of recordChecks({ changes, role, policy, readNew, readOld, message })) errors.push(`commit ${c.slice(0, 9)}: ${why}`);
+    }
+  }
+
   if (!guarded) return errors;
 
   const codeCommits = commits.filter((c) => {
@@ -128,7 +159,9 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
 
   const exempt = branch === policy.branches.live && policy.releases.exempt_from_signoffs.includes(role);
   if (codeCommits.length && !exempt) {
-    const signed = completeSignoffs(root, localSha, policy);
+    const forgedFiles = [];
+    const signed = completeSignoffs(root, localSha, policy, forgedFiles);
+    if (forgedFiles.length) errors.push(`forged or misnamed sign-off(s), not counted: ${forgedFiles.join(', ')} (the file name and its "role:" must match)`);
     const unsigned = codeCommits.filter((c) =>
       !signed.some((s) => git(['merge-base', '--is-ancestor', c, s.sha], root) !== null));
     if (unsigned.length) {

@@ -12,16 +12,16 @@ const user = (content) => ({ role: 'user', content });
 const reply = (content, kind = 'text') => ({ role: 'assistant', content, kind });
 const step = (tool, result) => ({ role: 'assistant', kind: 'tool_call', tool, status: 'done', result, content: '' });
 
-test('the steps of a turn go back in front of its reply, shortened', () => {
+test('the steps of a turn go back in front of its reply, a very long result shortened', () => {
   const { history, interrupted } = buildHistory([
     user('add a test'),
     step('Write test/a.test.js', 'Wrote test/a.test.js (12 lines)'),
-    step('Run node --test', 'x'.repeat(1000)),
+    step('Run node --test', 'x'.repeat(5000)),
     reply('Added the test; it passes.'),
     user('thanks'),
   ], plain);
   assert.equal(history.length, 3);
-  assert.match(history[1].content, /^\[Steps taken for this reply:\n- Write test\/a\.test\.js \(done\) → Wrote test\/a\.test\.js \(12 lines\)\n- Run node --test \(done\) → x{75}\n… \(\d+ characters left out\) …\nx+\]\n\nAdded the test; it passes\.$/);
+  assert.match(history[1].content, /^\[Steps taken for this reply:\n- Write test\/a\.test\.js \(done\) → Wrote test\/a\.test\.js \(12 lines\)\n- Run node --test \(done\) → x{1000}\n… \(\d+ characters left out\) …\nx+\]\n\nAdded the test; it passes\.$/);
   assert.equal(interrupted, false, 'that turn finished');
 });
 
@@ -108,4 +108,30 @@ test('when another model takes over mid-work, the steps go in as a note, never a
   assert.equal(history.at(-1).role, 'user');
   assert.match(history.at(-1).content, /already started[\s\S]*Run npm install[\s\S]*Write a\.js[\s\S]*Do not redo them/);
   assert.equal(history.filter((m) => m.role === 'assistant').length, 0);
+});
+
+test('W6-18: the model that takes over still reads what was read: full results, the saved-file path, the plan', () => {
+  const read = 'line of the file\n'.repeat(120); // about 2,000 characters, far more than the old 300
+  const { history, interrupted, pictures } = buildHistory([
+    user('port the page'),
+    { ...step('Read index.html', 'short'), modelResult: read },
+    { ...step('Run the build', 'short'), modelResult: 'tail of build', resultFile: '.bunny/notes/step-a-1.txt', tasks: [{ text: 'Read', done: true }, { text: 'Port', done: false }],
+      attachments: [{ kind: 'image', name: 'Screenshot.png', data: '/api/screens/00000000-0000-0000-0000-000000000000.png' }] },
+    user('continue'),
+  ], plain);
+  assert.equal(interrupted, true);
+  const text = history.map((h) => h.content).join('\n');
+  assert.ok(text.includes('line of the file line of the file'.slice(0, 16)), 'the read result is in what the model reads');
+  assert.ok(text.split('line of the file').length - 1 >= 100, 'all of its lines, not the first 300 characters');
+  assert.match(text, /full output saved in \.bunny\/notes\/step-a-1\.txt/);
+  assert.match(text, /\[x\] Read\n\[ \] Port/);
+  assert.equal(pictures.length, 1);
+});
+
+test('W6-18: a very long turn keeps its newest steps whole and shortens the older ones within the budget', () => {
+  const steps = Array.from({ length: 40 }, (_, i) => ({ ...step(`Step ${i}`, 'r'), modelResult: `${i}:` + 'y'.repeat(3000) }));
+  const { history } = buildHistory([user('big job'), ...steps, user('continue')], plain);
+  const note = history.find((h) => /cut off/.test(h.content)).content;
+  assert.ok(note.length < 45_000, `kept within the budget (was ${note.length})`);
+  assert.match(note, /Step 39 \(done\) → 39:y{3000}/, 'the newest step is whole');
 });

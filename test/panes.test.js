@@ -298,16 +298,19 @@ test('in the desktop app a schedule or a project cannot be given a folder the pe
   const { app, base } = await startApp(t, { localGuard: true, apiToken: 'panes-token', folderPickerOnly: true });
   const H = { 'content-type': 'application/json', 'x-bunny-token': 'panes-token' };
   const call = (path, init = {}) => fetch(base + path, { ...init, headers: H });
+  // schedules are window-only in the desktop app (W5-7): the window's own channel (the main process) makes those requests
+  const admin = (path, init = {}) => app.adminFetch(path, { ...init, headers: { 'content-type': 'application/json' } });
+  assert.equal((await call('/api/schedules', { method: 'POST', body: JSON.stringify({ name: 'x', prompt: 'x', everyMinutes: 60 }) })).status, 403, 'a token alone cannot make a schedule');
   const dir = await folder(t);
   const sched = { name: 'nightly', prompt: 'tidy', everyMinutes: 60, folder: dir };
-  assert.equal((await call('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 403);
+  assert.equal((await admin('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 403);
   assert.equal((await call('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'p', folder: dir }) })).status, 403);
   const project = await (await call('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'plain' }) })).json();
   assert.equal((await call(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 403);
   await app.chooseFolder(dir);
-  assert.equal((await call('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 200);
+  assert.equal((await admin('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 200);
   assert.equal((await call(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 200);
-  const created = await call('/api/schedules', { method: 'POST', body: JSON.stringify({ name: 'no folder', prompt: 'x', everyMinutes: 60 }) });
+  const created = await admin('/api/schedules', { method: 'POST', body: JSON.stringify({ name: 'no folder', prompt: 'x', everyMinutes: 60 }) });
   assert.equal(created.status, 200, 'no folder at all is fine');
 });
 

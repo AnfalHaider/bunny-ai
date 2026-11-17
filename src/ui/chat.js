@@ -13,7 +13,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
-import { createWorking } from './bunny-working.js';
+import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
@@ -343,14 +343,16 @@ function renderPicker() {
   } else {
     trigger.append(element('span', {
       className: 'label',
-      textContent: state.models.length ? say('chat.chooseModel') : say('chat.noModels'),
+      textContent: state.models.length ? say('chat.chooseModel') : hiddenModelCount() ? `${hiddenModelCount()} ${hiddenModelCount() === 1 ? 'model is' : 'models are'} hidden` : say('chat.noModels'),
     }));
   }
   trigger.append(icon('chevron'));
   host.append(trigger);
 
   if (!state.models.length) {
-    trigger.addEventListener('click', () => { location.href = './providers.html'; });
+    // Models exist but the "Show models" setting hides them: one click shows them. Otherwise there is nothing yet: add a provider.
+    if (hiddenModelCount()) trigger.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+    else trigger.addEventListener('click', () => { location.href = './providers.html'; });
     return;
   }
 
@@ -400,6 +402,17 @@ function openPicker(host, trigger) {
     }
   };
 
+  // The default setting shows only free and Nvidia models: the last row says what is left out and shows it. It is
+  // part of the list, so the arrow keys reach it and Enter uses it.
+  const addShowAll = () => {
+    const hidden = hiddenModelCount();
+    if (!hidden) return;
+    const more = button(`Show all models (${hidden} more)`, { className: 'picker-item picker-show-all', role: 'option', 'aria-selected': 'false' });
+    more.id = 'model-show-all';
+    more.addEventListener('click', () => { closePicker(); showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+    list.append(more);
+  };
+
   const paint = (query) => {
     const q = query.trim().toLowerCase();
     list.replaceChildren();
@@ -407,6 +420,7 @@ function openPicker(host, trigger) {
       !q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q));
     if (!matches.length) {
       list.append(element('div', { className: 'picker-empty', textContent: say('chat.noModelMatches') }));
+      addShowAll();
       active = 0;
       highlight();
       return;
@@ -441,6 +455,7 @@ function openPicker(host, trigger) {
       }
       list.append(pickerItem(m));
     }
+    addShowAll();
     active = 0;
     highlight();
   };
@@ -917,8 +932,23 @@ function paintMessages() {
   let run = [];
   const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
   const groupable = (m) => m.kind === 'tool_call' && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  // W4-5c: a reply saves ONE thinking text; when steps came before its answer, its "Thought for" row goes before the first of them
+  // (thinking, then the step it led to), the same order the live line settles in.
+  const thoughtAt = new Map();
   state.messages.forEach((m, index) => {
-    const el = renderMessage(m);
+    if (m.role !== 'assistant' || m.kind === 'tool_call' || !m.thinking) return;
+    let first = index;
+    while (first > 0 && state.messages[first - 1].kind === 'tool_call') first -= 1;
+    if (first < index) thoughtAt.set(first, m);
+  });
+  const early = new Set(thoughtAt.values());
+  state.messages.forEach((m, index) => {
+    if (thoughtAt.has(index)) {
+      flushRun();
+      const t = thoughtAt.get(index);
+      host.append(thoughtRow(t.thinking, t.thinkingMs));
+    }
+    const el = renderMessage(m, { skipThinking: early.has(m) });
     if (!groupable(m)) { flushRun(); host.append(el); return; }
     if (m.note) flushRun(); // narration starts a new group
     run.push({ m, el, last: index === state.messages.length - 1 });
@@ -956,6 +986,14 @@ function stepKind(tool) {
 
 /** "Read 3 files, tried to read another", in the order the steps ran, numbers under ten in words. */
 function summariseSteps(steps) {
+  // One search on its own says what it looked for: "Searched for /TODO\d+/ in src".
+  if (steps.length === 1 && steps[0].status !== 'failed' && steps[0].status !== 'denied') {
+    const what = String(steps[0].tool ?? '').replace(/^.* › /, '').trim();
+    const search = /^Search (\S.*)$/.exec(what);
+    const find = /^Find (\S.*)$/.exec(what);
+    if (search) return `Searched for ${search[1].slice(0, 100)}`;
+    if (find) return `Searched for files matching ${find[1].slice(0, 100)}`;
+  }
   const parts = [];
   for (const s of steps) {
     const failed = s.status === 'failed' || s.status === 'denied';
@@ -985,7 +1023,8 @@ function chevron() { return element('span', { className: 'step-chev', 'aria-hidd
 /** One collapsed line for a run of steps; opening it shows one sub-row per step, each opening to its detail. */
 function buildToolGroup(run) {
   const steps = run.map((r) => r.m);
-  const failedCount = steps.filter((s) => s.status === 'failed' || s.status === 'denied').length;
+  const failedCount = steps.filter((s) => s.status === 'failed').length;
+  const blockedCount = steps.filter((s) => s.status === 'denied').length; // a rule, the mode or the person said no: nothing broke
   const last = run.at(-1);
   // A failed group stays collapsed, except the last failed step of a reply that ended on it.
   const openLast = last.last && last.m.status === 'failed';
@@ -994,7 +1033,9 @@ function buildToolGroup(run) {
   line.append(chevron(), element('span', { className: 'tool-group-summary', textContent: summariseSteps(steps) }));
   const meta = failedCount
     ? element('span', { className: 'tool-group-meta is-failed', textContent: steps.length === 1 ? 'Failed' : `${failedCount} failed` })
-    : element('span', { className: 'tool-group-meta', textContent: steps.length === 1 ? '' : `${steps.length} steps` });
+    : blockedCount
+      ? element('span', { className: 'tool-group-meta is-blocked', textContent: steps.length === 1 ? 'Blocked' : `${blockedCount} blocked` })
+      : element('span', { className: 'tool-group-meta', textContent: steps.length === 1 ? '' : `${steps.length} steps` });
   line.append(meta);
   line.addEventListener('click', () => {
     const open = !group.classList.contains('is-open');
@@ -1074,7 +1115,7 @@ function renderTitle() {
   el.textContent = state.session?.title || say('chat.new');
 }
 
-function renderMessage(m) {
+function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
   // Tool call block: collapsible, shows the tool name, args and result
@@ -1086,7 +1127,8 @@ function renderMessage(m) {
     const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
     header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
     const failedStep = m.status === 'failed' || m.status === 'denied';
-    if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
+    if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
+    else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
     // A read step opens that file in the Files pane.
     const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
@@ -1172,7 +1214,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
         ? `Auto · ${job} → ${m.model}${m.fellBackFrom ? ` (${m.fellBackFrom} ${reasonPhrase(m.fellBackReason)}${alsoFailed(m.fellBackTries)})` : ''}`
         : `${say('model.answeredInstead', { model: m.model, from: m.fellBackFrom, reason: reasonPhrase(m.fellBackReason) })}${alsoFailed(m.fellBackTries)}` }));
   }
-  if (m.role === 'assistant' && m.thinking) wrap.append(thinkingBlock(m.thinking));
+  if (m.role === 'assistant' && m.thinking && !skipThinking) wrap.append(thinkingBlock(m.thinking, { ms: m.thinkingMs }));
   const body = element('div', { className: 'body' });
   if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
   else body.textContent = m.content;
@@ -1561,12 +1603,21 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
   };
   bodyEl.textContent = '';
   // The hopping bunny under the reply, with a word that matches what is happening.
-  const working = createWorking(mood);
+  const working = createWorking(mood, { model: state.selected?.model ?? '', openThinking: ['thinking', 'verbose'].includes(state.settings?.transcriptView) });
   bodyEl.closest('.msg')?.after(working.el);
+  // The thinking the line was showing settles into a quiet "Thought for 21s" row above the reply, where it can be opened any time.
+  const settleThinking = () => {
+    if (!working.isThinking()) return;
+    const done = working.endThinking();
+    const msg = bodyEl.closest('.msg');
+    // a sibling above the reply, like the steps (msg.before): so thinking, then the step it led to, in the order they happened
+    if (done.text && msg) msg.before(thoughtRow(done.text, done.ms));
+  };
 
   const handlers = {
     signal: controller.signal,
     onDelta: (delta) => {
+      settleThinking();
       assembled += delta;
       segment += delta;
       working.alive();
@@ -1577,9 +1628,11 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
       flashStatus('Compacted automatically');
       renderContext(info.after);
     },
+    onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
     onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
+      settleThinking();
       flushNote();
       showLiveTool(bodyEl, info);
       if (info.status === 'failed' || info.status === 'denied') working.thump();
@@ -1587,12 +1640,12 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
       else working.set('thinking');
       working.el.parentNode?.append(working.el);
     },
-    onPermission: (info) => { working.set('asking'); showLivePermission(bodyEl, info); },
+    onPermission: (info) => { settleThinking(); working.set('asking'); showLivePermission(bodyEl, info); },
     onBrowser: (info) => runBrowserAction(info),
-    onCapability: (info) => { working.set('asking'); showLiveCapability(bodyEl, info); },
+    onCapability: (info) => { settleThinking(); working.set('asking'); showLiveCapability(bodyEl, info); },
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
-    onThinking: (info) => { working.alive(); if (!segment) working.set('thinking'); showLiveThinking(bodyEl, info.text ?? ''); },
-    onQuestion: (info) => { flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
+    onThinking: (info) => { working.alive(); working.addThinking(info.text ?? ''); },
+    onQuestion: (info) => { settleThinking(); flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
     onNewChat: (info) => { state.pendingNewChat = info; },
   };
   function flushNote() {
@@ -1621,6 +1674,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
       errorCode = 'chat.noReply';
       showError('The reply stopped without finishing. Send "continue" to pick up where it stopped.');
     }
+    settleThinking(); // thinking that was still open when the reply ended is kept as its row
     working.stop();
     state.streaming = null;
     setStreaming(false);
@@ -1772,29 +1826,21 @@ function answeredQuestionCard(q) {
 /** How much of a step's result shows: all of it in the Verbose transcript view. */
 const resultLimit = () => (state.settings?.transcriptView === 'verbose' ? 100_000 : 500);
 
-function thinkingBlock(text, { live = false } = {}) {
-  const box = element('details', { className: `thinking${live ? ' is-live' : ''}` });
+/** The "Thought for" row as its own line in the thread, so it can sit among the steps. */
+function thoughtRow(text, ms) {
+  return element('div', { className: 'msg assistant thinking-row' }, thinkingBlock(text, { ms }));
+}
+
+/** A finished stretch of thinking as a quiet row: "Thought for 21s" (just "Thought" when the time was not kept, as in old chats). */
+function thinkingBlock(text, { ms = 0 } = {}) {
+  const box = element('details', { className: 'thinking' });
   if (['thinking', 'verbose'].includes(state.settings?.transcriptView)) box.open = true;
-  const words = String(text).trim().split(/\s+/).filter(Boolean).length;
   box.append(
-    element('summary', { textContent: live ? say('thinking.live') : say('thinking.done', { words }) }),
+    element('summary', { textContent: Number(ms) >= 1000 ? `Thought for ${fmtDuration(Number(ms))}` : 'Thought' }),
     element('div', { className: 'thinking-text', textContent: text }),
   );
   return box;
 }
-function showLiveThinking(bodyEl, piece) {
-  const msg = bodyEl.closest('.msg');
-  if (!msg) return;
-  let box = msg.querySelector(':scope > details.thinking');
-  if (!box) {
-    box = thinkingBlock('', { live: true });
-    msg.insertBefore(box, bodyEl);
-  }
-  const textEl = box.querySelector('.thinking-text');
-  textEl.textContent += piece;
-  if (box.open) textEl.scrollTop = textEl.scrollHeight;
-}
-
 /** The model's checklist: drawn as one list that updates in place, and in the Tasks pane. */
 function taskList(tasks) {
   const tl = element('div', { className: 'task-list', role: 'list', 'aria-label': 'Plan' });
@@ -3219,6 +3265,28 @@ function visibleModels(all) {
   return all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
 }
 
+/** How many models the "Show models" setting is hiding right now. */
+function hiddenModelCount() {
+  if (state.settings?.modelFilter === 'all') return 0;
+  return Math.max(0, (state.allModelCount ?? 0) - (state.models?.length ?? 0));
+}
+
+/** Settings, Models, "Show models": everything a connected provider offers. */
+async function showAllModels() {
+  await sendJSON('/api/settings', 'PUT', { modelFilter: 'all' });
+  state.settings = { ...state.settings, modelFilter: 'all' };
+  state.models = visibleModels(await getJSON('/api/models'));
+  if ($('greeting')) $('greeting').hidden = false;
+  if (!state.selected && state.models.length) {
+    const first = state.models[0];
+    state.selected = { providerId: first.providerId, providerName: first.providerName, model: first.id };
+    const empty = $('empty-text');
+    if (empty) { empty.replaceChildren(); empty.setAttribute('data-i18n', 'chat.startText'); applyLanguage(state.language); }
+  }
+  renderPicker();
+  renderComposerHeader();
+}
+
 function applyCapabilities(settings) {
   // Settings, Capabilities, Artifacts: off hides the button and the save action.
   const on = settings?.artifactsEnabled !== false;
@@ -3772,7 +3840,18 @@ async function boot() {
       // Nothing to pick yet: the one way forward is a button, not a line of small print.
       const empty = $('empty-text');
       empty.removeAttribute('data-i18n');
-      empty.replaceChildren(element('a', { className: 'primary empty-cta', href: './providers.html', textContent: say('chat.addProvider') }));
+      const connected = state.providers.some((p) => p.status === 'connected');
+      if (connected && hiddenModelCount()) {
+        const n = hiddenModelCount();
+        if ($('greeting')) $('greeting').hidden = true; // the hidden-models note replaces the "Pick a model…" greeting
+        const show = element('button', { type: 'button', className: 'primary empty-cta', textContent: 'Show all models' });
+        show.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+        empty.replaceChildren(element('span', { className: 'empty-note', textContent: `${n} ${n === 1 ? 'model is' : 'models are'} hidden by your "Show models" setting.` }), show);
+      } else if (connected) {
+        empty.replaceChildren(element('span', { className: 'empty-note', textContent: 'Your connected providers offer no models right now.' }), element('a', { className: 'primary empty-cta', href: './providers.html', textContent: 'Manage providers' }));
+      } else {
+        empty.replaceChildren(element('a', { className: 'primary empty-cta', href: './providers.html', textContent: say('chat.addProvider') }));
+      }
     }
   } catch (err) {
     $('error').textContent = err.message;

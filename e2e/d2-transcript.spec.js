@@ -40,6 +40,25 @@ test('three steps in a row are one collapsed line with a plain summary, and open
   await expect(page.locator('.msg.assistant .body').last()).toContainText('All good.');
 });
 
+test('W2-4: a lone search names what it looked for; several searches are still counted', async ({ page, request }) => {
+  await seeded(page, request, [
+    user('where is it'),
+    step('Search /TODO\d+/ in src (*.js)'),
+    reply('Found it.'),
+    user('and files'),
+    step('Find **/*.test.js'),
+    reply('Those.'),
+    user('again'),
+    step('Search "a"'), step('Search "b"'),
+    reply('Done.'),
+  ]);
+  const lines = page.locator('.tool-group-summary');
+  await expect(lines).toHaveCount(3);
+  await expect(lines.nth(0)).toHaveText('Searched for /TODO\d+/ in src (*.js)');
+  await expect(lines.nth(1)).toHaveText('Searched for files matching **/*.test.js');
+  await expect(lines.nth(2)).toHaveText('Searched two times');
+});
+
 test('narration between steps splits the groups and stays visible', async ({ page, request }) => {
   await seeded(page, request, [
     user('go'),
@@ -128,4 +147,48 @@ test('a chat saved before D-2 (old message shapes) renders without errors', asyn
   await expect(page.locator('#messages .msg').first()).toBeVisible();
   await expect(page.locator('.msg.assistant .body').last()).toContainText('plain reply');
   expect(errors).toEqual([]);
+});
+
+test('W2-7b (Design): a step stopped by a rule is an amber "Blocked", not a red "Failed", on the group line and on the step', async ({ page, request }) => {
+  await seeded(page, request, [
+    user('clean up'),
+    step('Run Remove-Item -Recurse build', 'denied', { content: 'Remove-Item -Recurse build', result: 'Blocked by your permission rule "Remove-Item*-r*" (All folders).' }),
+    reply('I was told no.'),
+    user('and again'),
+    step('Run a', 'denied'), step('Run b', 'failed'),
+    reply('Mixed.'),
+  ]);
+  const metas = page.locator('.tool-group-meta');
+  await expect(metas.nth(0)).toHaveText('Blocked');
+  await expect(metas.nth(0)).toHaveClass(/is-blocked/);
+  await expect(metas.nth(0)).not.toHaveClass(/is-failed/);
+  await expect(metas.nth(1)).toHaveText('1 failed');
+  await page.locator('.tool-group-line').first().click();
+  const tag = page.locator('.tool-group').first().locator('.tool-call-header .tag');
+  await expect(tag).toHaveText('Blocked');
+  await expect(tag).toHaveClass(/is-blocked/);
+  // amber, the colour of a warning, not the red of a failure
+  const color = (loc) => loc.evaluate((e) => getComputedStyle(e).color);
+  const failedTag = page.locator('.tool-group').nth(1).locator('.tool-call-header .tag.is-failed');
+  await page.locator('.tool-group-line').nth(1).click();
+  expect(await color(tag)).not.toBe(await color(failedTag));
+});
+
+test('W2-7b (QA): the permission prompt wraps a long rule line instead of cutting it off, on a phone', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await seeded(page, request, [user('hi'), reply('ok')]);
+  const wrap = await page.evaluate(() => {
+    const card = document.createElement('div');
+    card.className = 'permission-prompt live-permission';
+    card.innerHTML = '<h4>Allow: Run git push?</h4><pre class="code"><code>git push origin main --set-upstream --follow-tags --verbose --some-very-long-flag-with-no-break-points-at-all-so-it-must-wrap\n\nAsked because of your rule "git push*" (All folders).</code></pre>';
+    document.body.append(card);
+    const pre = card.querySelector('pre');
+    const code = pre.querySelector('code');
+    const out = { white: getComputedStyle(code).whiteSpace, wrap: getComputedStyle(code).overflowWrap, fits: code.scrollWidth <= code.clientWidth + 1 && pre.scrollWidth <= pre.clientWidth + 1 };
+    card.remove();
+    return out;
+  });
+  expect(wrap.white).toBe('pre-wrap');
+  expect(wrap.wrap).toBe('anywhere');
+  expect(wrap.fits).toBe(true);
 });

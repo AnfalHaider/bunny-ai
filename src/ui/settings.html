@@ -356,7 +356,7 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Show models</div>
-          <div class="desc">Which models the model picker offers. Free models cost nothing to use; Nvidia models are always included.</div>
+          <div class="desc">Which models the model picker offers. Free models cost nothing to use; Nvidia models are always included. The chat's Show all models button sets this to All.</div>
         </div>
         <div class="right">
           <select id="model-filter" aria-label="Show models">
@@ -371,6 +371,27 @@
           <div class="desc">The most tokens a single reply may use.</div>
         </div>
         <div class="right"><input id="max-tokens" type="number" min="256" step="256" aria-label="Longest reply in tokens" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Keep going on long jobs</div>
+          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps or the time below, whichever comes first. 0 turns it off.</div>
+        </div>
+        <div class="right"><input id="auto-steps" type="number" min="0" step="50" aria-label="Most steps in one reply" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Longest long job</div>
+          <div class="desc">The most minutes one reply may keep working in Code mode. The default is 120 (2 hours). 0 turns it off.</div>
+        </div>
+        <div class="right"><input id="auto-minutes" type="number" min="0" step="10" aria-label="Most minutes in one reply" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Token budget for one reply</div>
+          <div class="desc">When a long job has used this many input tokens, Bunny asks whether to keep going instead of stopping. The default is 5,000,000; it cannot be turned off, and the smallest allowed is 100,000.</div>
+        </div>
+        <div class="right"><input id="auto-tokens" type="number" min="100000" step="500000" aria-label="Token budget for one reply" /></div>
       </div>
       <div class="row">
         <div class="meta-col">
@@ -411,6 +432,41 @@
             <option value="plan">Plan</option>
             <option value="auto">Auto</option>
           </select>
+        </div>
+      </div>
+      <div class="rules" id="perm-rules">
+        <h3>Permission rules</h3>
+        <p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say. A command pattern like <code>npm test*</code> matches what Bunny is about to run; a path pattern like <code>secrets/**</code> matches the files Bunny's own tools read or edit (not what a command does). Simple wildcards only: <code>*</code> and <code>**</code>.</p>
+        <p class="lead"><b>Only from Bunny's window.</b> In the desktop app, the rules, the permission mode, connectors, schedules, hooks, skills, sign-ins, providers, automatic updates, "use another model when busy" and the other settings that decide what Bunny may do change only from this window. Anything else on this computer that tries gets "Change this in Bunny's window.", which means the request was refused and nothing was changed.</p>
+        <p class="lead"><b>A guard rail, not a sandbox.</b> Command rules read the command Bunny is about to run; they do not cover custom tools, MCP or local connectors, computer-use typing, the browser tools or schedules, and a wrapper such as <code>cmd /c</code> or <code>powershell -Command</code> can hide what it runs (Bunny asks about those when you have a Deny or Ask rule).</p>
+        <div class="tabs2" role="tablist" aria-label="Where the rules apply">
+          <button type="button" class="tab" role="tab" id="rules-tab-all" aria-selected="true">All folders</button>
+          <button type="button" class="tab" role="tab" id="rules-tab-folder" aria-selected="false">One folder</button>
+        </div>
+        <label class="rules-folder" id="rules-folder-wrap" hidden>Folder
+          <select id="rules-folder" aria-label="Folder the rules apply to"></select>
+        </label>
+        <div id="rules-lists"></div>
+        <div class="addr" id="rules-add">
+          <select id="rules-kind" aria-label="What the rule matches">
+            <option value="command">Command</option>
+            <option value="path:edits">Path · edits</option>
+            <option value="path:reads">Path · reads</option>
+          </select>
+          <input id="rules-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
+          <select id="rules-effect" aria-label="What happens">
+            <option value="allow">Allow</option>
+            <option value="ask">Ask</option>
+            <option value="deny">Deny</option>
+          </select>
+          <button type="button" class="btn primary" id="rules-add-btn">Add rule</button>
+        </div>
+        <div class="rules-line" id="rules-line" role="status" aria-live="polite"></div>
+        <div class="addr" id="rules-starters"><span class="rules-dim">Start from:</span></div>
+        <div class="try" id="rules-try-box">
+          <label for="rules-try">Try a command</label>
+          <input id="rules-try" type="text" placeholder="git push origin main" autocomplete="off" spellcheck="false" />
+          <div id="rules-try-out" role="status" aria-live="polite"></div>
         </div>
       </div>
       <div class="row">
@@ -510,7 +566,7 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Update automatically</div>
-          <div class="desc">Bunny AI checks GitHub Releases for a new version, downloads it in the background, checks it against its published fingerprint, and installs it when you restart.</div>
+          <div class="desc">Bunny AI checks GitHub Releases for a new version, downloads it in the background, checks it against its published fingerprint, and installs it when you restart. In the desktop app this changes only from Bunny's window.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="autoUpdate" /><span>on</span></label></div>
       </div>
@@ -848,12 +904,147 @@
     }
   }
 
+
+  // ---- permission rules (W2-7): Deny, then Ask, then Allow, checked before the permission mode ----
+  const rulesUi = (() => {
+    const lists = $('rules-lists');
+    const line = $('rules-line');
+    const state = { rules: { global: [], folders: {} }, tab: 'all', folder: null, folders: [] };
+    const EFFECTS = [['deny', 'Deny', 'Bunny is told no'], ['ask', 'Ask', 'Bunny always asks first'], ['allow', 'Allow', 'Bunny goes ahead']];
+    const STARTERS = [
+      { label: 'Ask before git push*', rule: { kind: 'command', effect: 'ask', pattern: 'git push*' } },
+      { label: 'Deny Remove-Item -Recurse', rule: { kind: 'command', effect: 'deny', pattern: 'Remove-Item*-r*' } },
+      { label: 'Deny edits under secrets/**', rule: { kind: 'path', effect: 'deny', pattern: 'secrets/**', ops: 'edits' } },
+    ];
+    // One change at a time: a second click waits for the first to be saved, so it never works from a stale list.
+    let busy = Promise.resolve();
+    const queued = (fn) => { busy = busy.then(fn, fn); return busy; };
+    const say = (text, bad = false) => { line.textContent = text; line.classList.toggle('is-bad', bad); };
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+    const own = () => (state.tab === 'all' ? state.rules.global : (state.rules.folders[state.folder] ?? []));
+    const setOwn = (list) => { if (state.tab === 'all') state.rules.global = list; else if (list.length) state.rules.folders[state.folder] = list; else delete state.rules.folders[state.folder]; };
+
+    async function persist() {
+      try { state.rules = await sendJSON('/api/permission-rules', 'PUT', state.rules); say(''); } catch (err) { say(err.message, true); await reload(); }
+      paint();
+    }
+    async function reload() { state.rules = await getJSON('/api/permission-rules'); }
+
+    function row(rule, scopeLabel) {
+      const r = el('div', 'rr');
+      r.append(el('span', 'kind', rule.kind === 'command' ? 'Command' : `Path · ${rule.ops === 'reads' ? 'reads' : 'edits'}`), el('span', 'pat', rule.pattern));
+      if (scopeLabel) r.append(el('span', 'chip', scopeLabel));
+      else {
+        const rm = el('button', 'rm', 'Remove');
+        rm.type = 'button';
+        rm.setAttribute('aria-label', `Remove rule ${rule.pattern}`);
+        rm.addEventListener('click', () => queued(async () => { setOwn(own().filter((x) => x.id !== rule.id)); await persist(); }));
+        r.append(rm);
+      }
+      return r;
+    }
+    function paint() {
+      lists.replaceChildren();
+      const mine = own();
+      const inherited = state.tab === 'all' ? [] : state.rules.global;
+      for (const [effect, name, note] of EFFECTS) {
+        const box = el('div', `rl ${effect}`);
+        const head = el('div', 'rh');
+        head.append(el('i'), document.createTextNode(name), el('small', '', note));
+        box.append(head);
+        const rows = [...mine.filter((r) => r.effect === effect).map((r) => row(r, null)), ...inherited.filter((r) => r.effect === effect).map((r) => row(r, 'All folders'))];
+        if (rows.length) box.append(...rows); else box.append(el('div', 'rr empty', 'No rules.'));
+        lists.append(box);
+      }
+      $('rules-tab-all').setAttribute('aria-selected', String(state.tab === 'all'));
+      $('rules-tab-folder').setAttribute('aria-selected', String(state.tab === 'folder'));
+      $('rules-folder-wrap').hidden = state.tab !== 'folder';
+      const noFolder = state.tab === 'folder' && !state.folder;
+      for (const id of ['rules-add-btn', 'rules-pattern']) $(id).disabled = noFolder;
+      if (noFolder) say('No folder yet: open a chat in a folder first, then its rules can be set here.');
+    }
+
+    async function add(rule) {
+      if (state.tab === 'folder' && !state.folder) return;
+      let checked;
+      try { checked = await sendJSON('/api/permission-rules/check', 'POST', { rule, folder: state.tab === 'folder' ? state.folder : null }); } catch (err) { say(err.message, true); return; }
+      if (!checked.ok) { say(checked.message, true); return; }
+      setOwn([...own(), rule]);
+      await persist();
+      if (checked.coveredBy) say(`A Deny rule already covers this: ${checked.coveredBy.pattern} (${checked.coveredBy.scope}). Deny wins, so this Allow would never apply.`);
+    }
+
+    $('rules-add-btn').addEventListener('click', async () => {
+      const [kind, ops] = $('rules-kind').value.split(':');
+      const pattern = $('rules-pattern').value;
+      const effect = $('rules-effect').value;
+      $('rules-pattern').value = '';
+      await queued(() => add({ kind, pattern, effect, ...(ops ? { ops } : {}) }));
+      if (line.classList.contains('is-bad') && !$('rules-pattern').value) $('rules-pattern').value = pattern; // keep what was typed so it can be fixed
+    });
+    $('rules-pattern').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('rules-add-btn').click(); } });
+    $('rules-kind').addEventListener('change', () => { $('rules-pattern').placeholder = $('rules-kind').value === 'command' ? 'npm run lint*' : 'secrets/**'; });
+    for (const s of STARTERS) {
+      const b = el('button', 'chip', s.label);
+      b.type = 'button';
+      b.addEventListener('click', () => queued(() => add({ ...s.rule })));
+      $('rules-starters').append(b);
+    }
+    $('rules-tab-all').addEventListener('click', () => { state.tab = 'all'; say(''); paint(); tryNow(); });
+    $('rules-tab-folder').addEventListener('click', () => { state.tab = 'folder'; say(''); paint(); tryNow(); });
+    $('rules-folder').addEventListener('change', (e) => { state.folder = e.target.value || null; say(''); paint(); tryNow(); });
+
+    let tryTimer = null;
+    async function tryNow() {
+      const command = $('rules-try').value;
+      const out = $('rules-try-out');
+      out.replaceChildren();
+      if (!command.trim()) return;
+      try {
+        const r = await sendJSON('/api/permission-rules/try', 'POST', { command, folder: state.folder });
+        if (r.outcome === 'none') { out.append(el('span', 'res none', 'No rule'), document.createTextNode(' The mode decides.')); return; }
+        out.append(el('span', `res ${r.outcome}`, { deny: 'Denied', ask: 'Ask', allow: 'Allowed' }[r.outcome]), document.createTextNode(` by `), el('code', '', r.rule.pattern), document.createTextNode(` (${r.rule.scope})`));
+      } catch (err) { out.textContent = err.message; }
+    }
+    $('rules-try').addEventListener('input', () => { clearTimeout(tryTimer); tryTimer = setTimeout(tryNow, 200); });
+
+    return {
+      async load() {
+        await reload();
+        let sessions = [];
+        try { sessions = await getJSON('/api/sessions'); } catch { /* the lists still work without recent folders */ }
+        const seen = [];
+        for (const f of [...sessions.map((s) => s.folder), ...Object.keys(state.rules.folders)]) if (f && !seen.some((x) => x.toLowerCase() === f.toLowerCase())) seen.push(f);
+        state.folders = seen;
+        state.folder = seen[0] ?? null;
+        const pick = $('rules-folder');
+        pick.replaceChildren(...seen.map((f) => { const o = el('option', '', f.split(/[\\/]/).filter(Boolean).pop() ?? f); o.value = f; o.title = f; return o; }));
+        paint();
+      },
+    };
+  })();
+
   // ---- code defaults ----
   $('default-permission').addEventListener('change', (e) => save({ defaultPermissionMode: e.target.value }));
   $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
 
   // ---- models ----
   $('model-filter').addEventListener('change', (e) => save({ modelFilter: e.target.value }));
+  $('auto-steps').addEventListener('change', async (e) => {
+    const n = Math.max(0, Math.round(Number(e.target.value) || 0));
+    e.target.value = n;
+    await save({ autoContinueSteps: n === 0 ? 0 : Math.min(2000, Math.max(1, n)) });
+  });
+  $('auto-minutes').addEventListener('change', async (e) => {
+    const n = Math.max(0, Math.round(Number(e.target.value) || 0));
+    e.target.value = n;
+    await save({ autoContinueMinutes: n === 0 ? 0 : Math.min(600, Math.max(1, n)) });
+  });
+  $('auto-tokens').addEventListener('change', async (e) => {
+    const n = Math.min(100000000, Math.max(100000, Math.round(Number(e.target.value) || 5000000)));
+    e.target.value = n;
+    await save({ autoContinueTokens: n });
+  });
   $('max-tokens').addEventListener('change', async (e) => {
     const n = Math.max(256, Math.round(Number(e.target.value) || 4096));
     e.target.value = n;
@@ -965,6 +1156,9 @@
     allowlist.value = (settings.allowlist ?? []).join('\n');
     renderAliases(settings.aliases ?? {});
     $('max-tokens').value = Number(settings.maxTokens) || 4096;
+    $('auto-steps').value = settings.autoContinueSteps ?? 500;
+    $('auto-minutes').value = settings.autoContinueMinutes ?? 120;
+    $('auto-tokens').value = settings.autoContinueTokens ?? 5000000;
     language.value = settings.language ?? 'en';
     applyLanguage(language.value);
     notifications.checked = Boolean(settings.notifications);
@@ -972,6 +1166,7 @@
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
     $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
+    rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);
     renderCustomTools();

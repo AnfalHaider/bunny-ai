@@ -58,7 +58,7 @@ Running 62 tests using 1 worker
   62 passed (1.5m)
 ```
 
-The browser suite starts its own server in test mode on port 5199 with a
+The browser suite starts its own server in test mode on its own port (BUNNY_E2E_PORT, else a free one picked per run) with a
 throwaway profile, so a run never touches the real profile.
 
 ## Bugs the tests found

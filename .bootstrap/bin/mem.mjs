@@ -3,11 +3,13 @@
 //   mem index            regenerate docs/memory/INDEX.md from lesson frontmatter
 //   mem report           regenerate docs/memory/LAST_REPORT.md (newest entry of each session log)
 //   mem find <topic>     print ONLY lessons whose triggers/title match — retrieval, not reading
+//   mem new "<title>" --triggers a,b --files p1,p2 --cost "..." --evidence "..."   write one lesson file
 //   mem check            budget + missing files + malformed frontmatter + conflict markers; exit 1 on errors
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
+import { currentRole } from './lib/policy.mjs';
 
 const REQUIRED = ['id', 'date', 'session', 'title', 'triggers', 'files', 'cost', 'evidence', 'status'];
 
@@ -90,6 +92,25 @@ function report(root) {
   writeFileSync(join(root, 'docs', 'memory', 'LAST_REPORT.md'), parts.join('\n'));
 }
 
+// One file per lesson (R7): the session, next id and date are filled in; every field is required.
+export function newLesson(root, title, opts) {
+  const missing = ['triggers', 'files', 'cost', 'evidence'].filter((k) => !opts[k]);
+  if (!title || missing.length) return { error: `need a title and --${missing.join(', --') || 'title'}` };
+  const dir = join(root, 'docs', 'memory', 'lessons');
+  mkdirSync(dir, { recursive: true });
+  const nums = lessons(root).map((l) => parseInt(String((l.data || {}).id || '').replace(/\D/g, ''), 10)).filter((n) => n > 0);
+  const id = `L${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0')}`;
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+  const list = (v) => `[${String(v).split(',').map((x) => x.trim()).filter(Boolean).join(', ')}]`;
+  const q = (v) => String(v).replace(/\s*\n\s*/g, ' ');
+  const file = join(dir, `${id}-${slug}.md`);
+  writeFileSync(file, [
+    '---', `id: ${id}`, `date: ${new Date().toISOString().slice(0, 10)}`, `session: ${currentRole(root)}`, `title: ${q(title)}`,
+    `triggers: ${list(opts.triggers)}`, `files: ${list(opts.files)}`, `cost: ${q(opts.cost)}`, `evidence: ${q(opts.evidence)}`,
+    'status: live', '---', '', opts.body || '', ''].join('\n'));
+  return { file: relative(root, file).replace(/\\/g, '/') };
+}
+
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const root = process.cwd();
@@ -99,6 +120,12 @@ function main() {
     const hits = find(root, rest.join(' '));
     for (const { file, data } of hits) console.log(`${data.id}  ${data.title}\n    cost: ${data.cost}\n    ${file}`);
     if (!hits.length) console.log('no live lesson matches');
+  } else if (cmd === 'new') {
+    const opts = {}; const words = [];
+    for (let i = 0; i < rest.length; i++) { if (rest[i].startsWith('--')) opts[rest[i].slice(2)] = rest[++i]; else words.push(rest[i]); }
+    const r = newLesson(root, words.join(' '), opts);
+    if (r.error) { console.error(`mem new: ${r.error}`); process.exit(1); }
+    console.log(`CREATE  ${r.file} — then \`mem index\` and \`mem check\``);
   } else if (cmd === 'check') {
     const { errors, warnings, tokens } = check(root);
     console.log(`always-loaded instructions: ~${tokens} tokens`);
@@ -107,7 +134,7 @@ function main() {
     console.log(errors.length ? `check FAILED (${errors.length})` : 'check OK');
     process.exit(errors.length ? 1 : 0);
   } else {
-    console.log('usage: mem index | mem report | mem find <topic> | mem check');
+    console.log('usage: mem index | mem report | mem find <topic> | mem new "<title>" --triggers … --files … --cost … --evidence … | mem check');
     process.exit(cmd ? 1 : 0);
   }
 }

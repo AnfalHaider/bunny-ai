@@ -223,6 +223,9 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
+    // W6-18: the model's own, longer copy of a step's result, and where the whole of it was saved.
+    if (typeof message.modelResult === 'string' && message.modelResult) entry.modelResult = message.modelResult.slice(0, 8000);
+    if (typeof message.resultFile === 'string' && /^\.bunny\/notes\/[\w.-]+$/.test(message.resultFile)) entry.resultFile = message.resultFile;
     // A question the model asked, its choices and the person's answer (null: not answered).
     if (message.question && typeof message.question === 'object') {
       const q = message.question;
@@ -234,6 +237,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     }
     // The model's thinking, when it sent any (shown folded above the reply).
     if (typeof message.thinking === 'string' && message.thinking.trim()) entry.thinking = message.thinking.slice(0, 40_000);
+    // ...and how long it thought, in milliseconds ("Thought for 21s"); old chats have none.
+    if (entry.thinking && Number.isFinite(message.thinkingMs) && message.thinkingMs > 0) entry.thinkingMs = Math.min(Math.round(message.thinkingMs), 24 * 3600 * 1000);
     // The checklist the model kept while it worked (update_tasks).
     if (Array.isArray(message.tasks) && message.tasks.length) {
       entry.tasks = message.tasks.slice(0, 20).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));

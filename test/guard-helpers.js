@@ -9,8 +9,17 @@ export const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 // Once G-1 has landed (the new pre-commit checker exists in the live .bootstrap/), these tests exercise the LIVE guard;
 // before that they exercise the staged copy in scripts/guard-next/.
-export const NEXT = existsSync(join(ROOT, '.bootstrap', 'bin', 'precommit.mjs')) ? ROOT : join(ROOT, 'scripts', 'guard-next');
+// KIT_NEXT=1 (K-1) runs the same suites against the 0.6.0 kit with our G-1 hardening put back (scripts/kit-next/).
+export const NEXT = process.env.KIT_NEXT ? join(ROOT, 'scripts', 'kit-next') : !process.env.GUARD_STAGED && existsSync(join(ROOT, '.bootstrap', 'bin', 'precommit.mjs')) ? ROOT : join(ROOT, 'scripts', 'guard-next'); // GUARD_STAGED=1 runs this suite against the staged copy (what the Chief of Staff will land)
 export const BIN = join(NEXT, '.bootstrap', 'bin');
+// K-4: once the 0.6.0 kit is installed, the live guard IS scripts/kit-next, so the suites that tell the old guard from the new one
+// (they check process.env.KIT_NEXT) must follow the kit that is actually installed: NEW_KIT is true when KIT_NEXT is set, or when the live
+// .bootstrap/bin/guard.mjs and lib/policy.mjs are the staged ones. Nothing about the new guard is checked less: an old live guard still gets the old checks.
+const text = (f) => readFileSync(f, 'utf8').split('\r\n').join('\n');
+const same = (a, b) => existsSync(a) && existsSync(b) && text(a) === text(b);
+export const LIVE_IS_KIT_NEXT = ['guard.mjs', join('lib', 'policy.mjs')].every((f) => same(join(ROOT, '.bootstrap', 'bin', f), join(ROOT, 'scripts', 'kit-next', '.bootstrap', 'bin', f)));
+export const NEW_KIT = Boolean(process.env.KIT_NEXT) || (NEXT === ROOT && LIVE_IS_KIT_NEXT);
+process.env.CLAUDE_CONFIG_DIR ||= mkdtempSync(join(tmpdir(), 'bunny-claude-config-')); // never the person's own user settings
 export const fileUrl = (p) => new URL(`file:///${p.replace(/\\/g, '/')}`);
 
 export const lib = await import(fileUrl(join(BIN, 'lib', 'policy.mjs')));

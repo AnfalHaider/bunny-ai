@@ -1,4 +1,4 @@
- 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Sonnet | 2026-11-16 — own worktree, Haiku |# AGENTS.md — standing rules
+# AGENTS.md — standing rules
 
 <!-- Written by bootstrap-environment. Edited only by the Chief of Staff, on the owner's typed word.
      Every rule keeps its reason: a rule without its reason gets argued away. Fill every <…>. -->
@@ -7,7 +7,7 @@
 
 | Question | Answer | Date |
 |---|---|---|
-| Live branch / dev branch | `main` / `main` — only main (owner's answer). Each writing session works on its own branch; nothing merges to main without sign-offs. `initial-import` is GitHub's default branch and kept as history. | 2026-11-16 |
+| Live branch / dev branch | `main` / `main` — only main (owner's answer). Each writing session works on its own branch; nothing merges to main without sign-offs. GitHub's default branch is `main` since 2026-11-17 (owner: "yes make main default"); `initial-import` is kept as history. | 2026-11-16 |
 | What moves live, and from whom | `main` plus a GitHub Release (`npm run release`), which every installed copy auto-updates to within hours. Only on the owner's "release <scope>" (or "apply" for Hotfix), typed in that session's chat or relayed under 7E | 2026-11-16 |
 | REAL databases, folders, services | The GitHub Releases feed of AnfalHaider/bunny-ai (owner's answer). Everything else must be provably a copy: tests, screenshots and previews use an invented profile (`BUNNY_DATA_DIR`), never `%LOCALAPPDATA%\BunnyAI` | 2026-11-16 |
 | Must never leave this machine | Provider keys and sign-in tokens (DPAPI store); the owner's real chats, memory, attachments and profile photo (`%LOCALAPPDATA%\BunnyAI`); screenshots of the real profile — only invented-profile pictures go in the repo, release notes or help (owner's answer) | 2026-11-16 |

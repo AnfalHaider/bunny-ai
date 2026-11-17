@@ -7,11 +7,13 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { dirname, extname, join, normalize, sep } from 'node:path';
+import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
+import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
@@ -38,13 +40,14 @@ import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions
 import { createLocalMcp } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat, stripToolMarkup } from './chat.js';
+import { streamChat, stripToolMarkup, asksPermissionToContinue } from './chat.js';
 import { clip } from './clip.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
+import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
@@ -66,6 +69,8 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { looksSecret } from './secretLike.js';
+import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
@@ -160,6 +165,15 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
   // and is handed to the pages the server itself serves.
+  // W27-3 / W5-7: in the desktop app a few writes (permission rules and mode, and what W5-7 adds) need a second secret that only the
+  // Electron main process holds, so a program that merely read the page's token cannot make them. Plain-browser dev mode has no main process.
+  const adminSecret = randomBytes(32).toString('hex');
+  const adminOk = (req) => { const h = Buffer.from(String(req.headers['x-bunny-admin'] ?? '')); const s = Buffer.from(adminSecret); return h.length === s.length && timingSafeEqual(h, s); };
+  const windowOnly = (req, res) => {
+    if (!folderPickerOnly || adminOk(req)) return false;
+    sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+    return true;
+  };
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true });
 
   let fakeOffline = false; // test mode only: see /api/network
@@ -459,6 +473,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
+    // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
+    if (isWindowOnlyRoute(method, path) && windowOnly(req, res)) return;
 
     if (localGuard !== false) {
       const verdict = guard.check(req, path, method, url.searchParams);
@@ -610,9 +626,60 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
+      const unknown = Object.keys(patch).filter((k) => !WINDOW_ONLY_SETTING_KEYS.includes(k) && !ORDINARY_SETTING_KEYS.includes(k));
+      if (unknown.length) return sendJson(res, 400, { code: 'settings.unknownKey', message: `Bunny AI has no setting called ${unknown.slice(0, 3).map((k) => JSON.stringify(k.slice(0, 40))).join(', ')}.` });
+      if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
       return sendJson(res, 200, settings);
+    }
+
+    // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
+    if (path === '/api/permission-rules' && method === 'GET') return sendJson(res, 200, normaliseRules(settings.permissionRules));
+    if (path === '/api/permission-rules' && method === 'PUT') {
+      if (windowOnly(req, res)) return;
+      const body = await readBody(req);
+      // answers 400 and says so with a marker: sendJson returns nothing, so "return bad(...)" would look like success to the caller
+      const bad = (message, scope, index) => { sendJson(res, 400, { code: 'rules.bad', message, scope, index }); return { failed: true }; };
+      const tidy = (list, scope) => {
+        if (!Array.isArray(list)) return bad('The rules must be a list.', scope, -1);
+        if (list.length > MAX_RULES) return bad(`At most ${MAX_RULES} rules per list.`, scope, -1);
+        const out = [];
+        for (let i = 0; i < list.length; i += 1) {
+          const checked = checkRule(list[i]);
+          if (checked.error) return bad(checked.error, scope, i);
+          out.push(checked.rule);
+        }
+        return { out };
+      };
+      const global = tidy(body.global ?? [], 'global');
+      if (global.failed) return;
+      const folders = {};
+      for (const [folder, list] of Object.entries(body.folders && typeof body.folders === 'object' ? body.folders : {})) {
+        if (!isAbsolute(folder)) { bad('A folder rule list needs the full path of the folder.', folder, -1); return; }
+        const t = tidy(list, folder);
+        if (t.failed) return;
+        if (t.out.length) folders[folder] = t.out;
+      }
+      settings = { ...settings, permissionRules: { global: global.out, folders } };
+      await writeJson(settingsFile, settings);
+      return sendJson(res, 200, normaliseRules(settings.permissionRules));
+    }
+    // "Try a command": the outcome and the rule behind it, without running anything.
+    if (path === '/api/permission-rules/try' && method === 'POST') {
+      const body = await readBody(req);
+      const rules = rulesFor(settings.permissionRules, typeof body.folder === 'string' ? body.folder : null);
+      const verdict = typeof body.command === 'string' ? checkCommand(rules, body.command)
+        : typeof body.path === 'string' ? checkPath(rules, body.path, body.op === 'reads' ? 'reads' : 'edits') : null;
+      return sendJson(res, 200, { outcome: verdict?.effect ?? 'none', rule: verdict ? { pattern: verdict.rule.pattern, scope: verdict.rule.scope, effect: verdict.effect } : null });
+    }
+    // Would a new Allow ever apply? (a Deny that already covers it wins)
+    if (path === '/api/permission-rules/check' && method === 'POST') {
+      const body = await readBody(req);
+      const checked = checkRule(body.rule);
+      if (checked.error) return sendJson(res, 200, { ok: false, message: checked.error });
+      const covering = coveredByDeny(rulesFor(settings.permissionRules, typeof body.folder === 'string' ? body.folder : null), checked.rule);
+      return sendJson(res, 200, { ok: true, coveredBy: covering ? { pattern: covering.pattern, scope: covering.scope } : null });
     }
 
     // ---- profile photo: kept as a file on this computer, shown in the sidebar ----
@@ -701,6 +768,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
+      if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
         const stored = await folderToStore(body.folder);
@@ -724,6 +792,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (path === '/api/projects' && method === 'POST') {
       try {
         const body = await readBody(req);
+        if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return;
         if (body.folder) {
           const stored = await folderToStore(body.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -738,6 +807,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (projectMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
+        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return;
         if (patch.folder) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -1209,6 +1279,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     // ---- a question card: the person's answer ----
     const questionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/question\/([a-f0-9-]{36})$/);
     if (questionMatch && method === 'POST') {
+      if (windowOnly(req, res)) return;
       const pending = pendingQuestions.get(questionMatch[2]);
       if (!pending || pending.sessionId !== questionMatch[1]) {
         return sendJson(res, 404, { code: 'question.gone', message: 'That question is no longer waiting' });
@@ -1299,6 +1370,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     // ---- session settings (folder, branch, permission mode, effort) ----
     const sessionSettingMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/setting\/([A-Za-z-]+)$/);
     if (sessionSettingMatch && method === 'PATCH') {
+      if (WINDOW_ONLY_SESSION_SETTINGS.includes(sessionSettingMatch[2]) && windowOnly(req, res)) return;
       try {
         if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
           const stored = await folderToStore((await readBody(req)).value);
@@ -1386,6 +1458,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
     if (sessionMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
+        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -1549,7 +1622,17 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const project = session.projectId ? await projects.get(session.projectId) : null;
       // What the model reads: the chat since the latest summary, with the steps it took,
       // so it remembers what it already did (vision: whether this model can see pictures).
-      const { history, interrupted } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
+      const { history, interrupted, pictures } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
+      // W6-18: the latest pictures of work that was cut off (screenshots the model took) go back in, if this model can see.
+      if (pictures.length && body.vision !== false) {
+        const urls = [];
+        for (const pic of pictures) {
+          const m = /^\/api\/screens\/([a-f0-9-]{36})\.png$/.exec(String(pic.data ?? ''));
+          if (!m) continue;
+          try { urls.push(`data:image/png;base64,${(await readFile(join(screensDir, `${m[1]}.png`))).toString('base64')}`); } catch { /* the file is gone */ }
+        }
+        if (urls.length) history.push({ role: 'user', content: [{ type: 'text', text: '[The latest screenshots from the work so far:]' }, ...urls.map((url) => ({ type: 'image_url', image_url: { url } }))] });
+      }
       if (project?.instructions) {
         history.unshift({ role: 'system', content: `Project instructions for ${project.name}:\n${project.instructions}` });
       }
@@ -1590,7 +1673,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // next step, so the chat reads as a running account of the work, also after a reload.
       let sinceStep = '';
       const stepsTaken = [];
-      const logStep = (entry) => {
+      const logStep = async (entry) => {
         const scope = agentScope.getStore();
         if (!scope && entry.kind === 'tool_call') {
           const note = stripToolMarkup(sinceStep);
@@ -1598,7 +1681,60 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           if (note) entry = { ...entry, note: note.slice(0, 2000) };
           stepsTaken.push(`${entry.tool}${entry.status && entry.status !== 'done' ? ` (${entry.status})` : ''}`);
         }
+        if (entry.kind === 'tool_call') entry = await keepForModel(entry);
         return sessions.append(scope?.logTo ?? id, entry);
+      };
+      // W6-18: the chat shows a short result; the model gets the whole one back if it has to take over. Past a size it
+      // is saved in the workspace (.bunny/notes/step-N.txt) and only its path stays in the chat.
+      let stepSeq = 0;
+      // Notes older than a week are removed whenever a new one is saved.
+      const pruneNotes = async (dir) => {
+        const week = Date.now() - 7 * 24 * 3600 * 1000;
+        for (const name of await readdir(dir).catch(() => [])) {
+          if (!/^step-[\w-]+\.txt$/.test(name)) continue;
+          const info = await lstat(join(dir, name)).catch(() => null);
+          if (info?.isFile() && info.mtimeMs < week) await rm(join(dir, name), { force: true }).catch(() => {});
+        }
+      };
+      const keepForModel = async (entry) => {
+        const { fullResult, saveable, ...rest } = entry;
+        const out = { ...rest, ...(currentTasks.length ? { tasks: currentTasks } : {}) };
+        const full = String(fullResult ?? '');
+        if (full.length <= String(rest.result ?? '').length) return out;
+        // The longer copy that is replayed to a model taking over (maybe another provider) is kept only for the workspace's own
+        // file and command tools, and never when the result looks like it holds a secret.
+        const secretish = looksSecret(full, `${rest.tool ?? ''} ${rest.content ?? ''}`);
+        // An incognito chat leaves nothing behind: no longer copy, no note file.
+        if (!saveable || secretish || session.incognito) return out;
+        out.modelResult = clip(full, 6000);
+        // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
+        // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
+        // inside the workspace. A .bunny/.gitignore keeps the notes out of the person's repository.
+        if (full.length > 6000 && workspace && permissionMode !== 'plan') {
+          stepSeq += 1;
+          const rel = `.bunny/notes/step-${Date.now().toString(36)}-${stepSeq}.txt`;
+          try {
+            const root = await realpath(workspace.root);
+            const bunny = join(root, '.bunny');
+            const notes = join(bunny, 'notes');
+            // Look before creating: a link is never followed, not even to make a folder behind it.
+            for (const dir of [bunny, notes]) {
+              const found = await lstat(dir).catch(() => null);
+              if (found?.isSymbolicLink() || (found && !found.isDirectory())) throw new Error('linked folder');
+              if (!found) await mkdir(dir);
+            }
+            if (!(await realpath(notes)).startsWith(root + sep)) throw new Error('outside the workspace');
+            await writeFile(join(bunny, '.gitignore'), '*', { encoding: 'utf8', flag: 'wx' }).catch(() => {}); // only the first time
+            await pruneNotes(notes);
+            // 'wx': never into an existing file or link. Then check where it really landed.
+            // If this reply already changes files, the note is in its undo list too (Undo removes it with the rest).
+            if (checkpoint) await checkpoint.capture(join(root, rel));
+            await writeFile(join(root, rel), full, { encoding: 'utf8', flag: 'wx' });
+            if (!(await realpath(join(root, rel))).startsWith(root + sep)) { await rm(join(root, rel), { force: true }); throw new Error('outside the workspace'); }
+            out.resultFile = rel;
+          } catch { /* the clipped text still goes to the model */ }
+        }
+        return out;
       };
 
       // ---- the work mode decides what the model may do ----
@@ -1615,7 +1751,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
@@ -1628,6 +1764,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Whatever the person allowed applies in full: in Auto, build actions (a new tool, a schedule that may change things, a
       // local connector, computer-use clicks and typing) run without asking; Manual and Accept edits still ask. Sending an
       // email speaks for the person, so it asks in every mode. A project file can grant none of this.
+      // W2-7: the person's permission rules for this folder (its own, then the global ones), read fresh at every call.
+      // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
+      // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
+      const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       const needsOk = (risk) => risk === 'send'
         || (risk === 'build' && permissionMode !== 'auto')
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
@@ -1646,8 +1786,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'make focused edits, run the project\'s own checks when useful, and say what you changed and how you verified it. '
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
           + 'and update it as you go; when you continue a job, read it first. '
-          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command, '
-          + 'and never say you cannot run commands. They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command. '
+          + 'Bunny runs commands, installs packages and starts servers itself, for you: never say you are not able to run commands. '
+          + 'They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + 'Finish the whole task you were given. Never stop to ask permission for work the person already asked for ("Please confirm that you would like me to..." is wrong): just do it. '
+          + 'Ask only a real decision, one that changes what you would build or that you cannot choose yourself, and ask it with ask_user (the card waits for the answer); then carry on. '
+          + 'For a job of about ten steps or more (build a site, port a project, fix many files), start by writing a task list with update_tasks and keep it current as you finish each step. '
+          + 'A reply with no question and no steps left is a finished job: end with what you did and how you checked it. '
           + `When you create a git branch, start its name with "${branchPrefix}/" (for example ${branchPrefix}/fix-login).`,
       };
       const modeText = modeTexts[workMode];
@@ -1819,7 +1964,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           const fresh = await sessions.get(id);
           const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
           if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal });
+          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.
@@ -2055,6 +2200,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // A schedule that may change things runs unwatched later: it asks in Manual and Accept edits, and runs in Auto.
         const risk = custom ? 'run' : name === 'schedule_task' && parsed.may_change === true ? 'build' : AGENT_TOOL_RISK[name];
         if (planRefuses(risk, name)) return planRefusal(name);
+        const ruledProcess = name === 'start_process' ? checkToolCall(activeRules(), name, parsed) : null;
+        if (ruledProcess?.effect === 'deny') {
+          const why = `Blocked by your permission rule ${describeRule(ruledProcess)}.`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+          send('tool', { tool: summary, status: 'denied', result: why });
+          return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+        }
         let detail = '';
         let checkedTool = null;
         if (name === 'create_tool') {
@@ -2071,8 +2223,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
-        if (needsOk(risk)) {
-          const allowed = await askPermission(summary, detail);
+        if (ruledProcess?.effect === 'ask' || (needsOk(risk) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -2290,12 +2442,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 12000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
         send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
         return images.length ? { content: result, images } : result;
       };
 
       const runTool = async ({ name, arguments: args }) => {
+        closeThinking(); // a step ends the thinking that led to it
         let parsed = {};
         try {
           parsed = JSON.parse(args || '{}');
@@ -2346,7 +2499,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             result = `The browser action failed: ${err.message}`;
           }
           result = String(result).slice(0, 9000);
-          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), attachments });
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), fullResult: result, attachments });
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return result;
         }
@@ -2360,13 +2513,22 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const localConnector = name === 'add_connector' && String(parsed.command ?? '').trim();
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : entry.tool.readOnly ? 'read' : 'run';
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
-        const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'run_command' ? parsed.command
+        // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
+        // ask always asks, in every mode; allow skips the question.
+        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed, await workspace.canon(parsed.path ?? '.').catch(() => false)) : null;
+        if (ruled?.effect === 'deny') {
+          const why = `Blocked by your permission rule ${describeRule(ruled)}.`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+          send('tool', { tool: summary, status: 'denied', result: why });
+          return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+        }
+        const detail = name === 'write_file' ? parsed.content : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
-        if (needsOk(risk)) {
-          const allowed = await askPermission(summary, detail);
+        if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -2390,7 +2552,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: result, saveable: isWorkspace });
         send('tool', { tool: summary, status, result: clip(result, 1200) });
         return result;
       };
@@ -2442,6 +2604,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
       let assembled = '';
       let thinking = '';
+      const replyStartedAt = Date.now();
+      // How far one reply may go, clamped whatever Settings holds (see caps.js). A scheduled run has nobody watching: it gets less.
+      const replyCaps = capsFor(settings, Boolean(scheduledTask));
+      let permissionNudges = 0;
+      // How long the model thought, kept with the reply ("Thought for 21s"): from its first thinking text to the first word or step after it.
+      let thinkingMs = 0;
+      let thinkingSince = 0;
+      const closeThinking = () => { if (thinkingSince) { thinkingMs += Date.now() - thinkingSince; thinkingSince = 0; } };
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
@@ -2463,12 +2633,51 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
+            // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
+            extendRounds: (round) => {
+              if (workMode !== 'code' && !workspace) return false;
+              if (!replyCaps.steps || !replyCaps.minutes || round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
+              maxToolRounds = round + Math.max(EFFORT.code, 12);
+              send('working', { step: round + 1 });
+              return true;
+            },
+            contextChars: workspace ? 240_000 : 0,
+            tokenBudget: replyCaps.tokens,
+            // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
+            onLimit: async ({ kind, inputTokens, step }) => {
+              if (scheduledTask) return false; // nobody is there to answer
+              const question = kind === 'tokens' ? `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`
+                : kind === 'repeat' ? `I have run the same step (${String(step).slice(0, 60)}) three times in a row. Keep trying, or stop here?`
+                  : 'I have made no new progress in 25 steps. Keep going, or stop here?';
+              const q = cleanQuestion({ question, choices: [{ label: 'Keep going', recommended: kind === 'tokens' }, { label: 'Stop here', recommended: kind !== 'tokens' }] });
+              const answer = await askQuestion(q);
+              const said = (Array.isArray(answer.choices) ? answer.choices : []).join('');
+              await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: said || 'No answer', question: { question: q.question, choices: q.choices, answer: said || null } });
+              return said === 'Keep going';
+            },
+            // W6-3: a Code reply that ends by asking permission for the job it was given carries on instead (up to 3 times).
+            onReplyEnd: ({ text }) => {
+              // Only while the plan still has open steps: an offer after a finished job ("want me to also...?") is not a permission question.
+              const open = currentTasks.filter((t) => !t.done).length;
+              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !asksPermissionToContinue(text)) return null;
+              // No plan at all: a model that stops mid-job without one is asked to say whether it is finished (W6-3b).
+              if (!currentTasks.length) {
+                permissionNudges += 1;
+                return 'If the task is not finished, make a task list with update_tasks and carry on; if it is finished, say so plainly.';
+              }
+              if (!open) return null;
+              permissionNudges += 1;
+              return 'Do not stop to ask permission: the person already asked for this. '
+                + `Your plan still has ${open} open step${open === 1 ? '' : 's'}. Carry on and finish the job. `
+                + 'If you truly need a decision only the person can make, ask it with ask_user (the card waits for the answer); otherwise do not ask.';
+            },
             extraBody,
             parallel: (name) => name === 'run_subagent',
             // The model's thinking, shown folded above the reply and kept with it.
-            onThinking: (piece) => { if (agentScope.getStore()) return; thinking += piece; send('thinking', { text: piece }); },
+            onThinking: (piece) => { if (agentScope.getStore()) return; if (!thinkingSince) thinkingSince = Date.now(); thinking += piece; send('thinking', { text: piece }); },
             auth: provider.auth ?? null,
           })) {
+            closeThinking();
             assembled += delta;
             sinceStep += delta;
             send('delta', { text: delta });
@@ -2512,7 +2721,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             }
             // A fallback model has answered: the failed attempts' "could not finish" notes are not left behind.
             if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
-            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking } : {}) });
+            closeThinking();
+            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
             session = await sessions.get(id);
             send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
@@ -2679,6 +2889,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     chooseFolder,
     dataDir,
     apiToken: guard.token,
+    /** For the Electron main process only: a request that carries both the token and the window-only secret. */
+    adminFetch: (path, init = {}) => fetch(`http://127.0.0.1:${server.address().port}${path}`, { ...init, headers: { ...(init.headers ?? {}), 'x-bunny-token': guard.token, 'x-bunny-admin': adminSecret } }),
     runHooks,
     runDueSchedules,
   };
