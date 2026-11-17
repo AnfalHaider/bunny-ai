@@ -57,7 +57,7 @@ export const firstByteLimit = (model, setting) => { const l = waitLimits(setting
  */
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
-  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting,
+  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting, onThinkingRefused = null,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
   onReplyEnd = null, onToolsRefused = null,
@@ -129,12 +129,28 @@ export async function* streamChat({
         baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
       });
     } catch (err) {
-      // PV-1: a model or provider that refuses tools would fail every message while any tool is on. Ask again without them, once, and stay without them.
-      if (!(offerTools && refusesTools(err)) || signal?.aborted) throw err;
-      offerTools = false;
-      delete body.tools;
-      if (typeof onToolsRefused === 'function') { try { onToolsRefused(err.message); } catch { /* a notice only */ } }
-      first = yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: false });
+      // Two kinds of refusal can come back on the first request, each answered once: PV-1 (the tools) and W4-13b (the thinking field). Either, or both in turn.
+      let refused = err;
+      for (let again = 0; again < 2 && refused; again += 1) {
+        if (signal?.aborted) throw refused;
+        if (offerTools && refusesTools(refused)) {
+          // PV-1: a model or provider that refuses tools would fail every message while any tool is on. Ask again without them, once, and stay without them.
+          offerTools = false;
+          delete body.tools;
+          if (typeof onToolsRefused === 'function') { try { onToolsRefused(refused.message); } catch { /* a notice only */ } }
+        } else if (refusesThinking(refused, body)) {
+          // W4-13b: a model that refuses the thinking field is asked again without it, once
+          for (const key of THINKING_KEYS) delete body[key];
+          if (typeof onThinkingRefused === 'function') { try { onThinkingRefused(refused.message); } catch { /* a notice only */ } }
+        } else throw refused;
+        try {
+          first = yield* streamRound({
+            baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
+          });
+          refused = null;
+        } catch (next) { refused = next; }
+      }
+      if (refused) throw refused;
     }
     let { text, toolCalls, finish, aborted, shown } = first;
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
@@ -551,6 +567,19 @@ async function scriptedFetch(_url, init) {
     ? frame({ tool_calls: [{ index: 0, id: `call_${results.length}`, function: { name: next[1], arguments: next[2] } }] })
     : frame({ content: `Scripted: ${String(results.at(-1)?.content ?? '').slice(0, 400)}` });
   return new Response(`${sse}data: [DONE]\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+
+/** The request fields a Thinking choice adds (see src/providers/thinking.js). */
+const THINKING_KEYS = ['reasoning_effort', 'reasoning', 'thinking'];
+
+/** W4-13b: did the provider answer 400 and say the trouble is the reasoning or thinking field, which this request carries? */
+export function refusesThinking(err, body) {
+  if (!err || err.code !== 'chat.http' || !THINKING_KEYS.some((k) => body && k in body)) return false;
+  const m = String(err.message ?? '');
+  const detail = m.split(':').slice(1).join(':');
+  const about = /\b(reasoning|thinking)(_effort)?\b[^.]{0,60}\b(not|n't|unsupported|invalid|unknown|unrecognized|cannot|can't|no support)\b|\b(not|n't|unsupported|invalid|unknown|unrecognized|no support for|does not support|doesn't support)\b[^.]{0,40}\b(reasoning|thinking)(_effort)?\b/i;
+  return /answered (400|404|405|415|422)\b/.test(m) && about.test(detail) && !/max_tokens|context|too (large|long)|rate/i.test(detail);
 }
 
 /** Deterministic stand-in so the UI is fully exercisable offline. */

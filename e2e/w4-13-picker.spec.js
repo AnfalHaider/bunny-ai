@@ -163,3 +163,24 @@ test('Speech is shown only for models that make sound themselves, not for every 
   await page.locator('.picker-panel').getByRole('button', { name: 'Speech', exact: true }).click();
   await expect(page.locator('.picker-panel .picker-empty')).toBeVisible(); // none of the invented models makes sound
 });
+
+// W4-13b: Thinking in a model's Details, only for providers whose field is known; kept per model on this computer
+test('Thinking: shown for a known provider (Default, Low, Medium, High), kept per model, and hidden for a provider whose field is not known', async ({ page }) => {
+  const KNOWN = [row('openai', 'OpenAI', 'think-a', 'Think A', null), row('nvidia', 'NVIDIA', 'quiet-b', 'Quiet B', null)];
+  await page.unroute('**/api/models*');
+  await page.route('**/api/models*', (route) => route.fulfill({ json: KNOWN }));
+  await page.reload();
+  await page.locator('#picker-button').click();
+  await page.getByRole('button', { name: 'Details for Think A' }).last().click();
+  const group = page.getByRole('group', { name: 'Thinking' });
+  await expect(group.getByRole('button')).toHaveText(['Default', 'Low', 'Medium', 'High']);
+  await expect(group.getByRole('button', { name: 'Default' })).toHaveAttribute('aria-pressed', 'true');
+  await group.getByRole('button', { name: 'High' }).click();
+  await expect(group.getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.thinking'))['think-a'])).toBe('high');
+  await group.getByRole('button', { name: 'Default' }).click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.thinking'))['think-a'])).toBeUndefined();
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  await page.getByRole('button', { name: 'Details for Quiet B' }).last().click();
+  await expect(page.getByRole('group', { name: 'Thinking' })).toHaveCount(0);
+});

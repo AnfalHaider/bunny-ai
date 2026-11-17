@@ -14,6 +14,7 @@ import {
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
 import { orderProviders } from './provider-order.js';
+import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
@@ -384,6 +385,21 @@ function providerRowsInOrder(group) {
   return order.map((id) => group.find((m) => m.providerId === id));
 }
 
+/** W4-13b: the Thinking level the person chose for a model (kept on this computer), or null for Default and for a provider whose field is not known. */
+function chosenThinking(providerId, modelId) {
+  try {
+    const level = JSON.parse(localStorage.getItem('bunny.thinking') || '{}')[modelId];
+    return thinkingLevels(providerId).includes(level) ? level : null;
+  } catch { return null; }
+}
+function writeThinking(modelId, level) {
+  try {
+    const all = JSON.parse(localStorage.getItem('bunny.thinking') || '{}');
+    if (level) all[modelId] = level; else delete all[modelId];
+    localStorage.setItem('bunny.thinking', JSON.stringify(all));
+  } catch { /* private window: the choice lasts until the page closes */ }
+}
+
 /** A short list of model ids kept on this computer (favourites, recent). */
 function readList(key) {
   try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
@@ -616,6 +632,17 @@ function openPicker(host, trigger) {
           element('span', { className: 'picker-order-n', textContent: String(i + 1) }), name,
           element('span', { className: 'picker-order-state' + (m.unavailable ? ' is-out' : ''), textContent: m.unavailable ? 'Unavailable' : 'Ready' }), up, down));
       });
+      // W4-13b: Thinking, for a provider whose field is known; hidden for any other
+      const levels = thinkingLevels(rows[0].providerId);
+      const nowLevel = chosenThinking(rows[0].providerId, first.id);
+      const think = levels.length ? element('div', { className: 'picker-thinking' },
+        element('div', { className: 'picker-details-k', textContent: 'Thinking' }),
+        element('div', { className: 'picker-seg', role: 'group', 'aria-label': 'Thinking' }, ...['default', ...levels].map((lv) => {
+          const on = (lv === 'default' && !nowLevel) || lv === nowLevel;
+          const b = button(lv[0].toUpperCase() + lv.slice(1), { className: 'picker-chip', 'aria-pressed': String(on) });
+          b.addEventListener('click', () => { writeThinking(first.id, lv === 'default' ? null : lv); draw(); });
+          return b;
+        }))) : null;
       det.replaceChildren(
         back,
         element('h3', { textContent: first.displayName ?? first.id }),
@@ -623,6 +650,7 @@ function openPicker(host, trigger) {
         element('div', { className: 'picker-details-k', textContent: 'Providers, in the order Bunny tries them' }),
         order,
         element('div', { className: 'picker-details-note', textContent: rows.length > 1 ? 'The first one is used when you pick this model. The order is kept on this computer.' : 'Only one provider has this model.' }),
+        ...(think ? [think] : []),
         fav,
       );
       if (focusId) {
@@ -2773,6 +2801,7 @@ async function send() {
         retry: i > 0, // the user turn is already saved after the first try
         providerId: pick.providerId,
         model: pick.id,
+        ...(chosenThinking(pick.providerId, pick.id) ? { thinking: chosenThinking(pick.providerId, pick.id) } : {}),
         attachments: i > 0 ? [] : files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
         workMode: state.workMode ?? 'chat',
         browserControl: Boolean(window.bunnyDesktop?.browserAct),
