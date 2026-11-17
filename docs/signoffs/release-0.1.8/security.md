@@ -1,9 +1,9 @@
 ---
 piece: release-0.1.8
 role: security
-sha: e028d3b
+sha: a6afcf5
 verdict: PASS
 date: 2026-11-17
 ---
 
-e028d3b = 375d368 plus W4-13, W4-12 (f6180e8) and W4-8 merges and the version bump. Guard files unchanged from main (git diff main e028d3b of .bootstrap, .githooks, .claude is empty). The window-only table, api.js copy, request guard, permission rules, mcp.js, mcpLocal.js and appTools.js have no diff since 375d368. Re-checked by single-file runs on e028d3b: window-only 16, mcp-local-confirm 7, permission-rules-app 20, permission-modes 9 (W33-1 schedule card), w4-14 10 (leave_plan_mode), browser-screenshot 5 (12 MB on that route only), ask 4, ask-dont-stop 7, auto-continue 8, auto-asks 3, security-w018 8, plugin-uninstall 8, permission-rules 24, free-tags 21, t3-fallback 9, quick-ask 15, all pass. In the source: both W614-1 card refusals (local connector and run_command; schedule_task and the other code cards) are present; asksInAuto is wired; typed answers are routed from one place (state.openQuestion in showLiveQuestion). New code is the model picker and provider order (no innerHTML, no new route, no IPC; fellBackKind is an enum and fellBackProvider is cut at 100 characters, stored as metadata only), the free-allowance tag (pure data), isFree pricing reader and quick-ask bar text (textNode). The package-lock change is the version only. NOT in this release: W4-11 (connector sign-in handshake, RO-1 trust, call_connector_tool, P-6 and L-4). Known and open in v0.1.8, as in 0.1.7, not made worse: a connector can label its own tools read-only (MEDIUM); installing a plugin in Auto switches its connectors on without a card (P-6, HIGH); local connector env values are stored in plain text in mcp.json and returned by /api/mcp (L-4, HIGH); the guard residuals listed in the kit-land review (nested git init, worktree repair/prune/move/lock, flow.json read from the working tree, company layer by path).
+Supersedes my PASS at e028d3b. git diff e028d3b a6afcf5 is three CSS files only (bunny-design-system.css, bunny-app-bindings.css, app.css; +34 -8): no script, route, guard or manifest file; the added lines hold no url(), @import, expression, behavior, javascript: or script. Everything in my e028d3b note stands, including the three items that ship open (P-6, L-4, RO-1) because W4-11 is not in this release.
