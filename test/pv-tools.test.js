@@ -199,3 +199,19 @@ test('PV-2 and Plan mode: a may-write tool (its read-only label is not trusted) 
   assert.deepEqual(r.calls, []);
   assert.match(r.text, /no connector tool called|not available/);
 });
+
+test('PV-1 combined: a provider refuses tools, the retry without tools fails too, and the error is the retry\'s (so the next model is tried), with no more than two requests', async () => {
+  const bodies = [];
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    bodies.push(body);
+    if (body.tools) return new Response('{"error":{"message":"tools is not supported by this model"}}', { status: 400, headers: json });
+    return new Response('{"error":{"message":"upstream exploded"}}', { status: 500, headers: json });
+  };
+  let told = 0;
+  await assert.rejects(async () => {
+    for await (const _ of streamChat({ baseUrl: 'http://x', model: 'm', messages: [{ role: 'user', content: 'hi' }], fetchImpl, tools: [tool('a')], runTool: async () => '', onToolsRefused: () => { told += 1; } })) { /* nothing */ }
+  }, (err) => err.code === 'chat.http' && /500/.test(err.message) && /upstream exploded/.test(err.message));
+  assert.equal(bodies.length, 2, 'asked once with tools, once without, and no more');
+  assert.equal(told, 1);
+});
