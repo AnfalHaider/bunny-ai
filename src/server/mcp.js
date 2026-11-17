@@ -33,6 +33,7 @@ export function resourceMetadataFrom(res) {
  * then becomes mcp.needsSignIn; the raw 401 text never reaches the model or the window.
  */
 async function send(url, server, body, { signal, auth, fetchImpl }) {
+  const session = sessions.get(sessionKey(server, url));
   for (let attempt = 0; ; attempt++) {
     const extra = auth ? ((await auth({ refresh: attempt > 0 })) ?? {}) : {};
     const res = await fetchImpl(url, {
@@ -40,6 +41,8 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
       headers: {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
+        ...(session?.version ? { 'mcp-protocol-version': session.version } : {}),
+        ...(session?.id ? { 'mcp-session-id': session.id } : {}),
         ...(server.headers ?? {}),
         ...extra,
       },
@@ -54,6 +57,46 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
   }
 }
 
+/**
+ * R-2: the handshake. A streamable-HTTP server expects `initialize`, then `notifications/initialized`, and then the session id and protocol version it
+ * answered with on every later request; many refuse (400 or 404) without it. One handshake per connector, kept in memory; a server that does not
+ * speak it (the answer is not an initialize result) is used as before. The connector's own `instructions` are kept too (L-1).
+ */
+const sessions = new Map();
+const sessionKey = (server, url) => String(server?.id ?? url);
+
+async function ensureSession(url, server, { signal, auth, fetchImpl }) {
+  const key = sessionKey(server, url);
+  if (sessions.has(key)) return sessions.get(key);
+  const state = { id: null, version: null, instructions: '' };
+  try {
+    const res = await send(url, server, { jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'Bunny AI', version: '0.1.8' } } }, { signal, auth, fetchImpl });
+    if (res.ok) {
+      const payload = await readPayload(res);
+      if (payload?.result?.protocolVersion) {
+        state.version = String(payload.result.protocolVersion).slice(0, 40);
+        state.id = res.headers.get('mcp-session-id') || null;
+        state.instructions = String(payload.result.instructions ?? '').slice(0, 2000);
+        sessions.set(key, state); // the next request carries the session
+        const done = await send(url, server, { jsonrpc: '2.0', method: 'notifications/initialized' }, { signal, auth, fetchImpl }).catch(() => null);
+        await done?.body?.cancel?.().catch(() => {});
+        return state;
+      }
+    } else await res.body?.cancel?.().catch(() => {});
+  } catch (err) {
+    if (err instanceof McpError && err.code === 'mcp.needsSignIn') throw err;
+    if (err?.name === 'AbortError') throw err;
+    /* a server that does not take the handshake is used as before */
+  }
+  sessions.set(key, state);
+  return state;
+}
+
+/** What the connector said about itself in the handshake (L-1), cut to 2,000 characters. */
+export const connectorInstructions = (server) => sessions.get(sessionKey(server, String(server?.url ?? '').trim()))?.instructions ?? '';
+/** The session is gone (the server forgot it): the next request starts a new one. */
+export const forgetSession = (server) => { sessions.delete(sessionKey(server, String(server?.url ?? '').trim())); };
+
 /** @param {{name: string, url: string, headers?: object}} server */
 export async function callTool(server, { name, arguments: args = {}, timeoutMs = 30_000, fetchImpl = globalThis.fetch, auth = null }) {
   const url = String(server?.url ?? '').trim();
@@ -64,8 +107,11 @@ export async function callTool(server, { name, arguments: args = {}, timeoutMs =
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await send(url, server, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
-      { signal: controller.signal, auth, fetchImpl });
+    const opts = { signal: controller.signal, auth, fetchImpl };
+    await ensureSession(url, server, opts);
+    const call = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } };
+    let res = await send(url, server, call, opts);
+    if (res.status === 404 && sessions.get(sessionKey(server, url))?.id) { forgetSession(server); await ensureSession(url, server, opts); res = await send(url, server, call, opts); } // the server forgot the session: start one again, once
 
     if (!res.ok) {
       throw new McpError(`The server answered ${res.status}`, 'mcp.http');
@@ -94,8 +140,11 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await send(url, server, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
-      { signal: controller.signal, auth, fetchImpl });
+    const opts = { signal: controller.signal, auth, fetchImpl };
+    await ensureSession(url, server, opts);
+    const list = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+    let res = await send(url, server, list, opts);
+    if (res.status === 404 && sessions.get(sessionKey(server, url))?.id) { forgetSession(server); await ensureSession(url, server, opts); res = await send(url, server, list, opts); }
 
     if (!res.ok) throw new McpError(`The server answered ${res.status}`, 'mcp.http');
     const payload = await readPayload(res);
