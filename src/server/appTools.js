@@ -270,9 +270,11 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     add_skill: async (args, ctx) => {
       const head = `Skill ${String(args.name ?? '').trim()}: ${String(args.description ?? '').trim()}\n\n`;
       const text = String(args.instructions ?? '').trim();
-      if (head.length + text.length > 1800) throw new Error(`That skill is too long to show you whole (${head.length + text.length} characters; the limit is 1,800). Make it shorter.`);
+      const footer = '\n\nIt is added switched OFF.';
+      const shownLength = String(args.name ?? '').trim().slice(0, 60).length + 1 + head.length + text.length + footer.length; // exactly what the card holds: title, a line break, the text and the footer
+      if (shownLength > 1800) throw new Error(`That skill is too long to show you whole (${shownLength} characters; the limit is 1,800). Make it shorter.`);
       const added = await skills.add({ ...args, enabled: false });
-      keep(ctx, { title: added.name, text: `${head}${text}\n\nIt is added switched OFF.`, skillIds: [added.id], connectorIds: [] });
+      keep(ctx, { title: added.name, text: `${head}${text}${footer}`, skillIds: [added.id], connectorIds: [] });
       return `Added the skill ${added.name}. It is switched OFF until the person says to switch it on (they were just asked).`;
     },
     add_connector: async (args, ctx) => {

@@ -7,6 +7,7 @@
  */
 
 import { readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { trustSnapshot } from './mcp.js';
 import { randomUUID } from 'node:crypto';
 
 /**
@@ -155,21 +156,31 @@ export function createMcpStore({ file, secrets = null }) {
         throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
       }
       // RO-1: trust was given to the connector at its old address; a different address is a different connector
-      if (address.slice(0, 500) !== server.url) server.trustReadOnly = false;
+      if (address.slice(0, 500) !== server.url) { server.trustReadOnly = false; delete server.trustedTools; server.tools = []; server.status = 'unknown'; } // a new address is a new list
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
     // L-5: the command of a local connector can be changed (the route asks for the same confirmation as adding); trust given to the old program is gone
     if (server.type === 'local' && (patch.command !== undefined || patch.args !== undefined || patch.cwd !== undefined)) {
       const next = cleanLocal({ command: patch.command ?? server.command, args: patch.args ?? server.args, env: {}, cwd: patch.cwd !== undefined ? patch.cwd : server.cwd });
-      if (next.command !== server.command || JSON.stringify(next.args) !== JSON.stringify(server.args ?? []) || (next.cwd ?? null) !== (server.cwd ?? null)) server.trustReadOnly = false;
+      if (next.command !== server.command || JSON.stringify(next.args) !== JSON.stringify(server.args ?? []) || (next.cwd ?? null) !== (server.cwd ?? null)) { server.trustReadOnly = false; delete server.trustedTools; }
       server.command = next.command;
       server.args = next.args;
       server.cwd = next.cwd;
       server.tools = [];
       server.status = 'unknown';
     }
-    if (patch.trustReadOnly !== undefined) server.trustReadOnly = patch.trustReadOnly === true; // RO-1: trust this connector's own read-only labels
+    // RO-1: trust this connector's own read-only labels, for the tools it has NOW. A connector that has not listed its tools yet has nothing to trust.
+    if (patch.trustReadOnly !== undefined) {
+      if (patch.trustReadOnly === true) {
+        if (!server.tools?.length) throw Object.assign(new Error('Check the connector first (Test), so Bunny knows what it offers, then trust its labels.'), { code: 'mcp.listFirst' });
+        server.trustReadOnly = true;
+        server.trustedTools = trustSnapshot(server.tools);
+      } else {
+        server.trustReadOnly = false;
+        delete server.trustedTools;
+      }
+    }
     // L-4: a setting named with a value is set; named with a blank value it is cleared; a name not mentioned keeps its stored value
     if (server.type === 'local' && patch.env && typeof patch.env === 'object') {
       if (secrets && server.env && Object.keys(server.env).length) {

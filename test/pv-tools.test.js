@@ -107,7 +107,7 @@ test('PV-2 through a real reply: 150 connector tools are not all sent, and the m
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   await fetch(`${base}/api/settings`, { method: 'PUT', headers: json, body: JSON.stringify({ defaultPermissionMode: 'auto' }) });
   const { body: added } = await post(base, '/api/mcp', { name: 'Big', url: connector.url });
-  await fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: json, body: JSON.stringify({ trustReadOnly: true }) }); // RO-1: its read-only labels are trusted, so no question card
+  await fetch(`${base}/api/mcp/${added.id}/tools`).then(() => fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: json, body: JSON.stringify({ trustReadOnly: true }) })); // RO-1: its read-only labels are trusted, so no question card
   const { body: session } = await post(base, '/api/sessions', { title: 'Big' });
   const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: json, body: JSON.stringify({ content: 'use the needle tool', providerId: 'openai', model: 'gpt-4o' }) });
   const text = await res.text();

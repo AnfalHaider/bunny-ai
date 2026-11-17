@@ -39,7 +39,7 @@ test('R-4: two connectors of the same name, and two names that clean to the same
 });
 
 test('Plan mode offers only the tools that read', () => {
-  const { definitions } = connectorTools([{ id: 's', name: 'X', trustReadOnly: true, tools: [{ name: 'look', readOnly: true }, { name: 'change' }] }], { planMode: true });
+  const { definitions } = connectorTools([{ id: 's', name: 'X', trustReadOnly: true, trustedTools: { look: true, change: false }, tools: [{ name: 'look', readOnly: true }, { name: 'change' }] }], { planMode: true });
   assert.deepEqual(definitions.map((d) => d.function.name), ['x__look']);
 });
 

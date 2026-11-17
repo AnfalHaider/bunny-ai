@@ -360,7 +360,16 @@ export function mcpResultText(result, { vision = false } = {}) {
  * RO-1: does this tool only read? Not because the server says so (a hostile connector can label a write tool as reading, which would skip the
  * question in Ask mode and offer it in Plan mode), but because the person marked the connector as one whose labels they trust.
  */
-export const isReadOnlyTool = (server, tool) => server?.trustReadOnly === true && (tool?.readOnlyHint === true || tool?.readOnly === true);
+export const isReadOnlyTool = (server, tool) => server?.trustReadOnly === true
+  && (tool?.readOnlyHint === true || tool?.readOnly === true)
+  // only a tool that was in the list when the person trusted it, with that same label: a new tool, or a label that changed to "read only", is not trusted
+  && server.trustedTools?.[tool.name] === true;
+
+/** The tools (and whether each said it only reads) at the moment the person trusts a connector's labels. */
+export const trustSnapshot = (tools) => Object.fromEntries((tools ?? []).map((t) => [t.name, t.readOnlyHint === true || t.readOnly === true]));
+
+/** Does the connector's list now hold anything the person's trust did not cover: a new tool, or one that now says it only reads? */
+export const outsideTrust = (server, tools) => (tools ?? []).some((t) => !(t.name in (server?.trustedTools ?? {})) || ((t.readOnlyHint === true || t.readOnly === true) && server.trustedTools[t.name] !== true));
 
 /**
  * L-3: when to ask a connector for its tools again. Never listed: now (unless it is marked as failed). Listed more than an hour ago: again, in case it

@@ -76,7 +76,7 @@ test('H-1: a look-only helper gets the tools of a connector the person trusts, n
   const s = await setup(t, { readOnly: true });
   const { body: trusted } = await post(s.base, '/api/mcp', { name: 'Trusted', url: await connector(t, 'look') });
   await post(s.base, '/api/mcp', { name: 'Stranger', url: await connector(t, 'peek') });
-  await fetch(`${s.base}/api/mcp/${trusted.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) });
+  await fetch(`${s.base}/api/mcp/${trusted.id}/tools`).then(() => fetch(`${s.base}/api/mcp/${trusted.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) }));
   await s.run();
   assert.ok(s.helper.length > 0);
   const names = (s.helper[0].tools ?? []).map((d) => d.function.name);

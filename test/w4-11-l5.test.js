@@ -29,7 +29,7 @@ test('L-5: ping and roots/list from the connector are answered, and a request we
 test('L-5: changing the command of a local connector needs the confirmation, and then replaces the program and drops old trust', async (t) => {
   const { base } = await startApp(t, { fake: false });
   const { body: added } = await post(base, '/api/mcp', { name: 'Echo', command: process.execPath, args: [echo], env: {}, confirmLocal: true });
-  await fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) });
+  await fetch(`${base}/api/mcp/${added.id}/tools`).then(() => fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) }));
   const refused = await fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ command: process.execPath, args: [ping] }) });
   assert.equal(refused.status, 400);
   assert.equal((await refused.json()).code, 'mcp.confirmLocal');

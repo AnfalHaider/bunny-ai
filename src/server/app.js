@@ -37,7 +37,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -1980,14 +1980,13 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       for (const server of servers) {
         // A connector that was never checked has no tools on file yet: ask it once now.
         const relist = relistReason(server);
-        const knownBefore = new Set((server.tools ?? []).map((t) => t.name));
         if (relist) {
           try {
             // A local connector's first start can take minutes: the chat shows a step with the seconds so far.
             const startStep = `Start ${server.name}`;
             server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }), ...(relist === 'retry' ? { timeoutMs: RETRY_FAILED_MS } : {}) });
             // L3-1: the person trusted this connector's read-only labels for the tools it had; tools that appear later were not part of that
-            if (server.trustReadOnly && knownBefore.size && server.tools.some((t) => !knownBefore.has(t.name))) {
+            if (server.trustReadOnly && outsideTrust(server, server.tools)) {
               await mcp.update(server.id, { trustReadOnly: false });
               server.trustReadOnly = false;
               send('tool', { tool: `${server.name}`, status: 'done', result: `${server.name} now offers tools it did not have before, so its read-only labels are no longer trusted. Trust them again in Customize if you want.` });
@@ -2768,7 +2767,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);
               if (!added) return said;
-              const answer = await askCapability('switch_on_added', `${added.title}\n${added.text}`);
+              const shown = `${added.title}\n${added.text}`;
+              if (shown.length > 1800) return `${said}\nIt is too long to show you whole, so it stays switched OFF; the person can read and switch it on in Settings, Customize.`;
+              const answer = await askCapability('switch_on_added', shown);
               if (answer.granted) { await appTools.switchOn(added); return `${said}\nThe person said yes: it is now switched on.`; }
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
             })()

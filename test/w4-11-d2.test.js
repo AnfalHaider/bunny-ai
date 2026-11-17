@@ -59,7 +59,7 @@ async function reply(t, { vision }) {
   const { base } = await startApp(t, { fake: false });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   const { body: added } = await post(base, '/api/mcp', { name: 'Charts', url: `http://127.0.0.1:${connector.address().port}/mcp` });
-  await fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) });
+  await fetch(`${base}/api/mcp/${added.id}/tools`).then(() => fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) }));
   const { body: session } = await post(base, '/api/sessions', { title: 'D2' });
   await (await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: jsonH, body: JSON.stringify({ content: 'plot it', providerId: 'openai', model: 'gpt-4o', vision }) })).text();
   return seen.at(-1).messages;

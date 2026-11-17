@@ -47,6 +47,7 @@ async function setup(t) {
 test('P-4: skills are updated in place (their state stays), new ones added, gone ones removed; connectors kept, new ones OFF, gone ones removed', async (t) => {
   const s = await setup(t);
   const [weather] = (await s.mcp.list()).filter((c) => c.name === 'weather');
+  await s.mcp.setStatus(weather.id, { status: 'connected', tools: [{ name: 'look', readOnlyHint: true }] });
   await s.mcp.update(weather.id, { trustReadOnly: true });
   const mine = await s.skills.add({ name: 'my-own', description: 'not from the plugin', instructions: 'mine', enabled: true });
   const growBefore = (await s.skills.list()).find((x) => x.name === 'grow');

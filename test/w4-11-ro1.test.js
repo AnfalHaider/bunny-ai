@@ -13,15 +13,19 @@ test('RO-1: the label alone does not make a tool read-only; the person trusting 
   const hostile = { readOnlyHint: true, name: 'delete_everything' };
   assert.equal(isReadOnlyTool({ id: 's' }, hostile), false);
   assert.equal(isReadOnlyTool({ id: 's', trustReadOnly: false }, hostile), false);
-  assert.equal(isReadOnlyTool({ id: 's', trustReadOnly: true }, hostile), true);
-  assert.equal(isReadOnlyTool({ id: 's', trustReadOnly: true }, { name: 'writes' }), false, 'a trusted connector still needs the label');
-  assert.equal(isReadOnlyTool({ id: 's', trustReadOnly: true }, { readOnly: true }), true, 'a list saved before RO-1 keeps its label as the suggestion');
+  const trusted = { id: 's', trustReadOnly: true, trustedTools: { delete_everything: true, writes: false, old: true } };
+  assert.equal(isReadOnlyTool(trusted, hostile), true);
+  assert.equal(isReadOnlyTool(trusted, { name: 'writes' }), false, 'a trusted connector still needs the label');
+  assert.equal(isReadOnlyTool(trusted, { name: 'old', readOnly: true }), true, 'a list saved before RO-1 keeps its label as the suggestion');
+  assert.equal(isReadOnlyTool({ id: 's', trustReadOnly: true }, hostile), false, 'trust with no snapshot trusts nothing');
+  assert.equal(isReadOnlyTool(trusted, { name: 'brand_new', readOnlyHint: true }), false, 'a tool that was not there when the person trusted is not covered');
+  assert.equal(isReadOnlyTool(trusted, { name: 'writes', readOnlyHint: true }), false, 'a label that changed to read-only after the person trusted is not covered');
 });
 
 test('RO-1: Plan mode offers no tool of a connector that is not trusted, however it labels them', () => {
   const tools = [{ name: 'look', readOnlyHint: true }, { name: 'change' }];
   assert.deepEqual(connectorTools([{ id: 's', name: 'X', tools }], { planMode: true }).definitions, []);
-  assert.deepEqual(connectorTools([{ id: 's', name: 'X', trustReadOnly: true, tools }], { planMode: true }).definitions.map((d) => d.function.name), ['x__look']);
+  assert.deepEqual(connectorTools([{ id: 's', name: 'X', trustReadOnly: true, trustedTools: { look: true, change: false }, tools }], { planMode: true }).definitions.map((d) => d.function.name), ['x__look']);
 });
 
 async function hostileConnector(t) {
@@ -62,7 +66,7 @@ async function reply(t, { trust, answer = false }) {
   const { base } = await startApp(t, { fake: false });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   const { body: added } = await post(base, '/api/mcp', { name: 'Bad', url: connector.url });
-  if (trust) await fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: json, body: JSON.stringify({ trustReadOnly: true }) });
+  if (trust) await fetch(`${base}/api/mcp/${added.id}/tools`).then(() => fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: json, body: JSON.stringify({ trustReadOnly: true }) }));
   const { body: session } = await post(base, '/api/sessions', { title: 'RO' });
   const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: json, body: JSON.stringify({ content: 'tidy up', providerId: 'openai', model: 'gpt-4o' }) });
   const reader = res.body.getReader();
@@ -99,12 +103,16 @@ test('RO-1: a changed address is a different connector: the trust given at the o
   t.after(() => rm(dir, { recursive: true, force: true }));
   const store = createMcpStore({ file: join(dir, 'mcp.json') });
   const added = await store.add({ name: 'Notes', url: 'https://one.example.com/mcp' });
+  await assert.rejects(store.update(added.id, { trustReadOnly: true }), (err) => err.code === 'mcp.listFirst', 'a connector that has not listed its tools has nothing to trust');
+  await store.setStatus(added.id, { status: 'connected', tools: [{ name: 'look', readOnlyHint: true }, { name: 'change' }] });
   await store.update(added.id, { trustReadOnly: true });
+  assert.deepEqual((await store.get(added.id)).trustedTools, { look: true, change: false }, 'the snapshot of what the person saw');
   assert.equal((await store.get(added.id)).trustReadOnly, true);
   await store.update(added.id, { name: 'Notes renamed' });
   assert.equal((await store.get(added.id)).trustReadOnly, true, 'a rename keeps it');
   await store.update(added.id, { url: 'https://two.example.com/mcp' });
   assert.notEqual((await store.get(added.id)).trustReadOnly, true, 'a new address does not');
-  await store.update(added.id, { url: 'https://three.example.com/mcp', trustReadOnly: true });
-  assert.equal((await store.get(added.id)).trustReadOnly, true, 'unless the person trusts it again in the same change');
+  assert.equal((await store.get(added.id)).trustedTools, undefined, 'and the snapshot goes with it');
+  assert.deepEqual((await store.get(added.id)).tools, [], 'the tools of the old address are not the new address\'s');
+  await assert.rejects(store.update(added.id, { url: 'https://three.example.com/mcp', trustReadOnly: true }), (err) => err.code === 'mcp.listFirst', 'trust cannot be given to a list that was not read from this address');
 });

@@ -43,7 +43,7 @@ async function callBig(t, { mode = 'auto', workMode = 'code', text = BIG } = {})
   const { base } = await startApp(t, { fake: false });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   const { body: added } = await post(base, '/api/mcp', { name: 'Rows', url: `http://127.0.0.1:${connector.address().port}/mcp` });
-  await fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) });
+  await fetch(`${base}/api/mcp/${added.id}/tools`).then(() => fetch(`${base}/api/mcp/${added.id}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ trustReadOnly: true }) }));
   const { body: session } = await post(base, '/api/sessions', { title: 'D3' });
   const patch = (k, v) => fetch(`${base}/api/sessions/${session.id}/setting/${k}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: v }) });
   await patch('permissionMode', mode);
