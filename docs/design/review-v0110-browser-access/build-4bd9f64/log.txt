@@ -1,0 +1,13 @@
+light-d section visible: true, rows: ["Open in your browser","Keep the same address after restart","Allow other devices to open Bunny"]
+open-in-browser clicked, bridge called: true
+after toggle: setup visible=true toggle checked=false
+warning text: Before you turn this on. This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. They get ordinary chats, with their tools, and can answer a chat's own permission questions there. They cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. The first time, Windows asks about the firewall: choose Private networks 
+short passcode: error="The passcode needs at least 12 characters." visible=true
+turned on: open row visible=true status="Open to other devices · 0 signed in" address="On your network, open http://127.0.0.2:5791/ in a browser and sign in with the passcode. Bunny has to stay running on this computer." toggleText=on
+device first page: title="Sign in to Bunny AI" h1="Bunny AI" text="This computer is sharing Bunny with devices on your network. Enter the passcode that was set on the computer."
+device wrong: msg="That passcode is not right."
+device after repeated wrong: msg="Wait 30 seconds and try again." buttonDisabled=true
+device after correct passcode: url=http://127.0.0.2:5791/ msg="Wait 28 seconds and try again." title="Sign in to Bunny AI"
+light-m section visible: true, rows: ["Open in your browser","Keep the same address after restart","Allow other devices to open Bunny"]
+dark-d section visible: true, rows: ["Open in your browser","Keep the same address after restart","Allow other devices to open Bunny"]
+dark-m section visible: true, rows: ["Open in your browser","Keep the same address after restart","Allow other devices to open Bunny"]
