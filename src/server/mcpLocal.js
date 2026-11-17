@@ -185,7 +185,8 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
       name: t.name,
       description: String(t.description ?? '').slice(0, 400),
       inputSchema: t.inputSchema ?? null,
-      readOnly: t.annotations?.readOnlyHint === true,
+      readOnlyHint: t.annotations?.readOnlyHint === true, // what the connector SAYS: a suggestion only (RO-1)
+      readOnly: false,
     }));
   }
 

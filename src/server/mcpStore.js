@@ -85,6 +85,7 @@ export function createMcpStore({ file }) {
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
+    if (patch.trustReadOnly !== undefined) server.trustReadOnly = patch.trustReadOnly === true; // RO-1: trust this connector's own read-only labels
     await persist();
     return server;
   }
