@@ -262,6 +262,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const pendingCapabilities = new Map();
   // Questions the model asked, waiting for the person's answer.
   const pendingQuestions = new Map();
+  // PV-1: a model (on a provider, in a chat) that refused tools is not asked with them again in that chat
+  const toolsRefused = new Set();
   // How each chat's reply is going: working, needs you (a card is waiting), ready (finished,
   // not opened yet) or failed. Kept in memory: it describes this run of the app only.
   const replyStatus = new Map();
@@ -982,7 +984,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       try {
         const tools = await mcpListTools(server);
         await mcp.setStatus(server.id, { status: 'connected', tools, error: null });
-        return sendJson(res, 200, { status: 'connected', tools });
+        return sendJson(res, 200, { status: 'connected', tools, ...(tools.truncated ? { truncated: true, note: `Only the first ${tools.length} tools are listed.` } : {}) });
       } catch (err) {
         if (err.code === 'mcp.needsSignIn') {
           const said = await connectorSignIn.needsSignIn(server, err);
@@ -1944,6 +1946,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             // A local connector's first start can take minutes: the chat shows a step with the seconds so far.
             const startStep = `Start ${server.name}`;
             server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }) });
+            if (server.tools.truncated) send('tool', { tool: `${server.name}`, status: 'done', result: `${server.name} has more tools than the ${server.tools.length} listed here; the rest are not offered.` });
             if (server.type === 'local') send('tool', { tool: startStep, status: 'done', result: `${server.tools.length} tool(s) ready` });
             await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
           } catch (err) {
@@ -2821,7 +2824,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // The stand-in upstream (tests) answers for built-in providers; a custom one is reached for real.
             fake: fake && !provider.custom,
             signal: controller.signal,
-            tools: toolDefinitions,
+            tools: toolsRefused.has(`${id}|${providerId}|${model}`) ? null : toolDefinitions,
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
@@ -2836,7 +2839,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             contextChars: workspace ? 240_000 : 0,
             tokenBudget: replyCaps.tokens,
             // PV-1: this model refused tools, so the reply goes on without them; the person is told once
-            onToolsRefused: () => send('tool', { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no connectors, skills or files). Pick another model to use them.' }),
+            onToolsRefused: () => { toolsRefused.add(`${id}|${providerId}|${model}`); send('tool', { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no connectors, skills or files). Pick another model to use them.' }); },
             // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
             onLimit: async ({ kind, inputTokens, step }) => {
               if (scheduledTask) return false; // nobody is there to answer
