@@ -2941,6 +2941,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           // why, but a retry REPLACES the note of the attempt before it and a later success removes it: the chat
           // never holds more than one, and none once a model has answered (T3-7, T3-8).
           if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
+          // W3-8: the words that arrived before the model failed are kept (as a reply that was cut off), so the model that takes over carries on from them
+          const cutOff = stripToolMarkup(stepsTaken.length ? sinceStep : assembled);
+          if (cutOff.trim()) await sessions.append(id, { role: 'assistant', content: cutOff, kind: 'partial', ...undoInfo() }).catch(() => {});
           await sessions.append(id, { role: 'assistant', kind: 'error', content: `${model} could not finish: ${err.message}`, model, providerId }).catch(() => {});
           break;
         }

@@ -23,7 +23,7 @@ import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
-import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked } from './model-abilities.js';
+import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, preferLastAnswered } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -382,6 +382,14 @@ function providerRowsInOrder(group) {
     out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
   });
   return order.map((id) => group.find((m) => m.providerId === id));
+}
+
+/** W3-8: the model that answered last (kept on this computer), for Auto to start from. */
+function lastAnswered() {
+  try { const v = JSON.parse(localStorage.getItem('bunny.lastAnswered') || 'null'); return v && typeof v.id === 'string' ? v : null; } catch { return null; }
+}
+function rememberAnswered(m) {
+  try { localStorage.setItem('bunny.lastAnswered', JSON.stringify({ providerId: m.providerId, id: m.id })); } catch { /* private window */ }
 }
 
 /** A short list of model ids kept on this computer (favourites, recent). */
@@ -2724,7 +2732,7 @@ async function send() {
   const job = jobFor(text, files);
   state.lastJob = job;
   const fixed = state.selected ? [{ providerId: state.selected.providerId, providerName: state.selected.providerName, id: state.selected.model, displayName: state.selected.model }] : [];
-  const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
+  const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? preferLastAnswered(rankModels(state.models, job), lastAnswered()).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
@@ -2806,6 +2814,7 @@ async function send() {
     flashStatus(state.tryingNote, 30000);
   }
   const { meter, aborted } = result;
+  if (!result.errorCode && !aborted && pick && state.modelAuto) rememberAnswered(pick); // W3-8: Auto starts from here next time
   // The reply failed because the network is down (both signals agree): not a model fault. Say so calmly,
   // keep the turn, and send it once when the network is back. No red line.
   if (!aborted && result.errorCode && navigator.onLine === false && await networkDown()) {
@@ -3459,7 +3468,7 @@ function jobFor(text, files = state.pendingFiles ?? []) {
 function refreshAutoPreview() {
   const job = jobFor($('input')?.value ?? '');
   state.resolvedJob = job;
-  state.autoPick = rankModels(state.models ?? [], job)[0] ?? null;
+  state.autoPick = preferLastAnswered(rankModels(state.models ?? [], job), lastAnswered())[0] ?? null;
   const label = $('job-label');
   if (label) label.textContent = state.jobChoice === 'auto' ? `Auto · ${JOBS[job].label}` : JOBS[job].label;
   $('job-button')?.classList.toggle('is-auto', state.jobChoice === 'auto');

@@ -111,6 +111,14 @@ export function rankModels(models, job) {
     .map((x) => x.m);
 }
 
+/** W3-8: Auto starts from the model that answered last, when it is still among those that can do the job; the rest keep their order. */
+export function preferLastAnswered(ranked, last) {
+  if (!last) return ranked;
+  const at = ranked.findIndex((m) => m.providerId === last.providerId && m.id === last.id);
+  if (at <= 0) return ranked;
+  return [ranked[at], ...ranked.slice(0, at), ...ranked.slice(at + 1)];
+}
+
 /** Which jobs have at least one model that can see it through here. */
 export function jobAvailability(models) {
   const out = {};
