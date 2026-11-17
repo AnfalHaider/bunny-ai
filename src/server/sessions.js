@@ -143,6 +143,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       // A chat a helper agent or another chat started: who made it, and how its work is going.
       agent: session.agent ?? null,
       agentStatus: session.agentStatus ?? null,
+      origin: session.origin ?? null,
       messageCount: session.messages?.length ?? 0,
       preview: String(last?.content ?? '').replace(/\s+/g, ' ').slice(0, 90),
       context: context(session),
@@ -181,7 +182,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     });
   }
 
-  async function create({ title = 'New chat', providerId = null, model = null, parentId = null, branchFrom = null, projectId = null, folder = null, branch = null, permissionMode = 'ask', effort = null, incognito = false, messages = [], agent = null, agentStatus = null, workMode = null } = {}) {
+  async function create({ title = 'New chat', providerId = null, model = null, parentId = null, branchFrom = null, projectId = null, folder = null, branch = null, permissionMode = 'ask', effort = null, incognito = false, messages = [], agent = null, agentStatus = null, workMode = null, origin = null } = {}) {
     const now = new Date().toISOString();
     const session = normalise({
       id: randomUUID(),
@@ -200,6 +201,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       incognito,
       ...(agent ? { agent: String(agent).slice(0, 40), agentStatus } : {}),
       ...(workMode ? { workMode: workMode === 'code' ? 'code' : 'chat' } : {}),
+      ...(origin === 'quick-ask' ? { origin: 'quick-ask' } : {}), // QA-ANSWERS: a chat that started in the Quick ask bar (the list tags it)
       createdAt: now,
       updatedAt: now,
       messages: messages.map((m) => ({ ...m, id: m.id ?? randomUUID(), at: m.at ?? now })),
