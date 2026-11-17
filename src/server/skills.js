@@ -43,7 +43,7 @@ export function createSkillStore({ file }) {
     return [...rows].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }
 
-  async function add({ name, description = '', instructions = '', enabled = false }) {
+  async function add({ name, description = '', instructions = '', enabled = false, folders = [] }) {
     await load();
     const clean = String(name ?? '').trim();
     if (!clean) throw Object.assign(new Error('A skill needs a name'), { code: 'skill.nameRequired' });
@@ -56,6 +56,7 @@ export function createSkillStore({ file }) {
       description: String(description).trim().slice(0, 200),
       instructions: String(instructions).trim().slice(0, MAX_LENGTH),
       enabled: Boolean(enabled),
+      folders: cleanFolders(folders), // W6-16: [] = everywhere
       createdAt: new Date().toISOString(),
     };
     skills.push(skill);

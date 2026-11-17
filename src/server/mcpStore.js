@@ -103,14 +103,14 @@ export function createMcpStore({ file, secrets = null }) {
     return out;
   }
 
-  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true }) {
+  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [] }) {
     await load();
     const clean = String(name ?? '').trim();
     const address = String(url ?? '').trim();
     if (!clean) throw Object.assign(new Error('A server needs a name'), { code: 'mcp.nameRequired' });
     if (String(command ?? '').trim()) {
       const local = cleanLocal({ command, args, env, cwd });
-      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
+      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
       if (secrets && Object.keys(local.env).length) {
         try {
           for (const [k, v] of Object.entries(local.env)) await putSecret(server.id, k, v);
@@ -136,6 +136,7 @@ export function createMcpStore({ file, secrets = null }) {
       name: clean.slice(0, 60),
       url: address.slice(0, 500),
       enabled: Boolean(enabled),
+      folders: cleanFolders(folders), // W6-16: [] = everywhere
       status: 'unknown',
       tools: [],
       lastError: null,

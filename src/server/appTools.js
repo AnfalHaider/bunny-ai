@@ -5,6 +5,7 @@
  */
 import { readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
+import { inScope } from './scope.js';
 
 export const APP_TOOL_RISK = {
   web_search: 'read', read_url: 'read', search_plugins: 'read', read_skill: 'read',
@@ -186,10 +187,10 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       for (const s of plugin.skills ?? []) {
         const same = ownedSkills.find((o) => norm(o.name) === norm(s.name) && !keepSkill.has(o.id));
         if (same) {
-          await skills.update(same.id, { description: s.description ?? '', instructions: s.instructions });
+          await skills.update(same.id, { description: s.description ?? '', instructions: s.instructions, folders: record.folders ?? [] }); // W616-1: the plugin's folders stay on its parts
           keepSkill.add(same.id); next.skills.push(same.id); done.skillsUpdated += 1;
         } else {
-          const added = await skills.add({ ...s, enabled: wasOn });
+          const added = await skills.add({ ...s, enabled: wasOn, folders: record.folders ?? [] }); // W616-1: a new part is limited like the rest of the plugin
           next.skills.push(added.id); done.skillsAdded += 1;
         }
       }
@@ -199,9 +200,9 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const keepConnector = new Set();
       for (const c of plugin.connectors ?? []) {
         const same = ownedConnectors.find((o) => norm(o.url).replace(/\/+$/, '') === norm(c.url).replace(/\/+$/, ''));
-        if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; continue; }
+        if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; if ((record.folders ?? []).length || (same.folders ?? []).length) await mcp.update(same.id, { folders: record.folders ?? [] }); continue; }
         try {
-          const added = await mcp.add({ ...c, enabled: false });
+          const added = await mcp.add({ ...c, enabled: false, folders: record.folders ?? [] }); // W616-1
           next.connectors.push(added.id); done.connectorsAdded += 1;
         } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector of the person's own: left as it is */ }
       }
@@ -259,10 +260,11 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
     search_plugins: ({ query }) => searchPlugins(query),
-    read_skill: async ({ name, part }) => {
+    read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
-      if (!skill || skill.enabled === false || getSettings().skillsEnabled === false) throw new Error(`There is no skill called ${name}`);
+      // W6-16: nor one limited to other folders than this chat's (a chat with no folder gets only the skills for everywhere)
+      if (!skill || skill.enabled === false || getSettings().skillsEnabled === false || !inScope(skill.folders, ctx?.folder ?? null)) throw new Error(`There is no skill called ${name}`);
       const text = String(skill.instructions ?? '');
       const SIZE = 8000;
       if (text.length <= SIZE) return text;
