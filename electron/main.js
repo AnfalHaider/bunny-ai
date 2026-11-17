@@ -83,7 +83,7 @@ function contextMenu(contents) {
 // W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
 // A view may only be put in a Bunny window, by the page of that window; and never shows Bunny's own server (its port).
 const windowOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.webContents === sender ? w : null; };
-const browserViews = createBrowserViews({ WebContentsView, session, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
+const browserViews = createBrowserViews({ WebContentsView, session, BrowserWindow, nativeImage, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
 
 function guard(contents) {
   if (browserViews.ownsSession(contents.session)) return;
@@ -219,6 +219,7 @@ ipcMain.handle('dialog:pickFolder', async (event) => {
 ipcMain.handle('browser:act', async (event, name, action, args) => {
   if (!senderAllowed(event, isOwn, windowOf)) return { error: 'Not allowed' };
   try {
+    if (action === 'compare') return await browserViews.compare(event.sender, args ?? {}); // W6-11: not tied to a tab
     // a tab that is a view (W6-24) is worked in its own page; otherwise it is a frame in the panel
     const worked = await browserViews.control(event.sender, name, action, args ?? {});
     if (worked) return worked;

@@ -2217,14 +2217,16 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         }
         const answer = await askBrowser(name.replace(/^browser_/, ''), parsed);
         let attachments = [];
-        if (typeof answer?.image === 'string' && answer.image.startsWith('data:image/png;base64,')) {
+        // one picture (a screenshot), or several (W6-11: one comparison picture per width)
+        const pictures = (Array.isArray(answer?.images) && answer.images.length ? answer.images : [answer?.image]).filter((p) => typeof p === 'string' && p.startsWith('data:image/png;base64,')).slice(0, 3);
+        for (const [n, picture] of pictures.entries()) {
           const sid = randomUUID();
           await mkdir(screensDir, { recursive: true });
-          await writeFile(join(screensDir, `${sid}.png`), Buffer.from(answer.image.slice('data:image/png;base64,'.length), 'base64'));
-          attachments = [{ kind: 'image', name: 'Screenshot.png', mime: 'image/png', data: `/api/screens/${sid}.png` }];
+          await writeFile(join(screensDir, `${sid}.png`), Buffer.from(picture.slice('data:image/png;base64,'.length), 'base64'));
+          attachments.push({ kind: 'image', name: pictures.length > 1 ? `Comparison ${n + 1}.png` : (name === 'browser_compare' ? 'Comparison.png' : 'Screenshot.png'), mime: 'image/png', data: `/api/screens/${sid}.png` });
         }
         // W6-20: a model that can see gets the picture itself, not only the line "Screenshot taken."
-        const seen = attachments.length ? (vision ? [answer.image] : []) : [];
+        const seen = attachments.length ? (vision ? pictures : []) : [];
         const note = attachments.length ? (vision ? ' (the picture is attached below)' : ' (this model cannot see pictures: work from the text)') : '';
         return { text: browserResultText(answer) + note, attachments, images: seen };
       };

@@ -15,6 +15,7 @@ export const BROWSER_TOOL_RISK = {
   browser_open: 'read', browser_read: 'read', browser_scroll: 'read', browser_back: 'read', browser_screenshot: 'read',
   browser_click: 'edit', browser_type: 'edit',
   browser_inspect: 'read', // W6-10: looks only
+  browser_compare: 'read', // W6-11: photographs two pages off screen and compares the pictures; changes nothing
   browser_capture: 'edit', // W6-10: writes files into the chat's folder, so Plan mode refuses it and the permission mode and the person's rules apply
 };
 
@@ -37,6 +38,8 @@ export function browserToolDefinitions(risks = ['read', 'edit']) {
     fn('browser_screenshot', 'Take a picture of the browser panel and show it in the chat, so the person sees what you see.'),
     fn('browser_inspect', 'Look at the page in the browser panel without changing it: what "html" is the page as it is now (after its scripts), "css" is the computed style of the element matching `selector`, "network" is the list of files the page loaded (address, kind, size, time), "fonts" is the fonts it uses.',
       { what: { type: 'string', enum: ['html', 'css', 'network', 'fonts'] }, selector: { type: 'string', description: 'For what "css": a CSS selector' } }, ['what']),
+    fn('browser_compare', 'Compare two web pages as pictures: each address is opened off screen, photographed at each width, and the two pictures are compared pixel by pixel. Returns, for each width, the share of pixels that differ, and shows a picture of both pages and where they differ. Quote the score when you say whether a page matches a design or another page. Only http and https pages (a local dev server is fine); it does not use the page open in the panel.',
+      { a: { type: 'string', description: 'The first address' }, b: { type: 'string', description: 'The second address' }, widths: { type: 'array', items: { type: 'integer' }, description: 'Page widths in pixels, 320 to 1920, at most 3. Default 1280 and 390.' } }, ['a', 'b']),
     fn('browser_capture', 'Save a copy of the page in the browser panel into the chat\'s folder, under captures/<site>-<date and time>/: its HTML as it is now, and its pictures, style sheets, fonts and scripts, with the links changed to the saved copies so it opens offline. At most 300 files and 50 MB. Needs a folder for the chat.'),
   ].filter((d) => risks.includes(BROWSER_TOOL_RISK[d.function.name]));
 }
@@ -52,6 +55,7 @@ export function describeBrowserTool(name, args = {}) {
     case 'browser_screenshot': return 'Take a screenshot of the page';
     case 'browser_inspect': return `Inspect the page (${String(args.what ?? 'html').slice(0, 20)}${args.selector ? ` ${String(args.selector).slice(0, 60)}` : ''})`;
     case 'browser_capture': return 'Save a copy of the page';
+    case 'browser_compare': return `Compare ${String(args.a ?? '').slice(0, 60)} with ${String(args.b ?? '').slice(0, 60)}`;
     default: return name;
   }
 }

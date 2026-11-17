@@ -12,6 +12,7 @@
 //  - it asks for nothing (camera, location, devices...) and is told no; a download is stopped and the panel says so;
 //  - only Bunny's own page, in a Bunny window, may command a view, and only the views that page opened.
 import { controlView } from './browserAgent.js';
+import { pixelDifference, fitBitmap, sideBySide, describeScore } from './pageCompare.js';
 import { isBunnyOwn } from '../src/server/ownAddress.js';
 
 export const PARTITION = 'persist:bunny-browser';
@@ -65,7 +66,7 @@ export function senderAllowed(event, isOwn, windowOf) {
  * @param {(sender: object) => object | null} o.getWindow  the Bunny window of a page (has contentView, getContentBounds)
  * @param {() => string | number | null} o.getOwnPort  the port of Bunny's own server
  */
-export function createBrowserViews({ WebContentsView, session, getWindow, getOwnPort = () => null }) {
+export function createBrowserViews({ WebContentsView, session, getWindow, getOwnPort = () => null, BrowserWindow = null, nativeImage = null }) {
   const views = new Map(); // tab name -> { view, owner, window, visible }
   const watched = new WeakSet(); // pages already watched for leaving
   let partitionReady = false;
@@ -230,5 +231,57 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     return controlView(entry.view.webContents, tab, action, args, ISOLATED_WORLD);
   }
 
-  return { handle, control, has: (tab) => views.has(tab), isView, ownsSession, count: () => views.size, closeAll: () => { for (const tab of [...views.keys()]) drop(tab); } };
+  /**
+   * W6-11: compare two pages as pictures. Each address is opened in a hidden, off-screen window of the panel's own partition (same request rules as a tab: http(s) only, never Bunny itself),
+   * photographed at each width at the same height, and the two pictures are compared pixel by pixel. Needs the Electron classes (a fake in tests).
+   * @returns {Promise<{note?: string, image?: string, images?: string[], error?: string}>}
+   */
+  async function compare(sender, { a, b, widths } = {}) {
+    if (!BrowserWindow || !nativeImage) return { error: 'Comparing pages needs the desktop app.' };
+    for (const [label, url] of [['first', a], ['second', b]]) {
+      if (!loadable(url, ownPort())) return { error: `The ${label} address must be an http or https page, and not Bunny AI itself.` };
+    }
+    const list = (Array.isArray(widths) && widths.length ? widths : [1280, 390]).map(Number).filter((w) => Number.isFinite(w) && w >= 320 && w <= 1920).slice(0, 3);
+    if (!list.length) return { error: 'widths must be between 320 and 1920 pixels.' };
+    prepareSession();
+    const HEIGHT = 800;
+    const shoot = async (url, width) => {
+      const win = new BrowserWindow({
+        show: false, width, height: HEIGHT, useContentSize: true, frame: false, skipTaskbar: true, focusable: false,
+        webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true, allowRunningInsecureContent: false, navigateOnDragDrop: false, safeDialogs: true, offscreen: true },
+      });
+      try {
+        const contents = win.webContents;
+        contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        const guard = (event, target) => { if (!loadable(target, ownPort())) event.preventDefault(); };
+        contents.on('will-navigate', guard);
+        contents.on('will-redirect', guard);
+        await Promise.race([
+          new Promise((resolve, reject) => { contents.once('did-fail-load', (_e, code, description, _url, isMain) => { if (isMain !== false && code !== -3) reject(new Error(`Could not load ${url}: ${description}`)); }); contents.loadURL(String(url)).then(resolve, () => {}); }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`${url} took more than 25 seconds to load.`)), 25_000)),
+        ]);
+        await new Promise((r) => setTimeout(r, 700)); // late scripts and pictures
+        const image = (await contents.capturePage()).resize({ width, height: HEIGHT });
+        return Buffer.from(image.toBitmap());
+      } finally { try { win.destroy(); } catch { /* already gone */ } }
+    };
+    const lines = [`Compared ${a} with ${b}.`];
+    const images = [];
+    try {
+      for (const width of list) {
+        const first = await shoot(a, width);
+        const second = await shoot(b, width);
+        const diff = pixelDifference(fitBitmap(first, width, HEIGHT, width, HEIGHT), fitBitmap(second, width, HEIGHT, width, HEIGHT), width, HEIGHT);
+        lines.push(describeScore(width, diff.score));
+        const side = sideBySide(first, second, diff.mask, width, HEIGHT);
+        let picture = nativeImage.createFromBitmap(side.bitmap, { width: side.width, height: side.height });
+        if (side.width > 1600) picture = picture.resize({ width: 1600 });
+        images.push(picture.toDataURL());
+      }
+    } catch (err) { return { error: String(err?.message ?? err) }; }
+    lines.push('The picture shows the first page, the second page, and where they differ (red).');
+    return { note: lines.join('\n'), image: images[0], images };
+  }
+
+  return { handle, control, compare, has: (tab) => views.has(tab), isView, ownsSession, count: () => views.size, closeAll: () => { for (const tab of [...views.keys()]) drop(tab); } };
 }
