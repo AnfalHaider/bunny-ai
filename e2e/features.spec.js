@@ -189,11 +189,12 @@ test('the model picker is driven from the keyboard', async ({ page }) => {
   await search.press('End');
   await expect(options.last()).toHaveAttribute('aria-selected', 'true');
   const lastModel = await options.last().getAttribute('data-model');
+  const lastName = ((await options.last().locator('.model-name').first().textContent()) ?? '').replace('★', '').trim();
 
   // Enter takes the highlighted model.
   await search.press('Enter');
   await expect(page.locator('.picker-panel')).toHaveCount(0);
-  await expect(page.locator('#picker-button')).toContainText(lastModel ?? '');
+  await expect(page.locator('#picker-button')).toContainText(lastName || (lastModel ?? '')); // v0.1.10: the chip shows the short name
 });
 
 test('Escape closes the model picker', async ({ page }) => {

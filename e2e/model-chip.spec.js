@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { resetProfile } from './helpers.js';
 
 // v0.1.10 MODEL-CHIP: the model is a chip in the composer's button row (between the spacer and Send); it opens a floating selector
 // upward; on a phone the selector is a bottom sheet. Models are invented.
@@ -13,6 +14,7 @@ for (const [label, size] of [['desktop', { width: 1280, height: 800 }], ['phone'
   for (const scheme of ['light', 'dark']) {
     test.describe(`${label}, ${scheme}`, () => {
       test.beforeEach(async ({ page, request }) => {
+        await resetProfile(request); // no chats left by other specs: a click at a fixed spot must land on empty page
         await request.put('/api/settings', { data: { modelFilter: 'all' } });
         await page.route('**/api/models*', (route) => route.fulfill({ json: MODELS }));
         await page.emulateMedia({ colorScheme: scheme });
@@ -77,7 +79,7 @@ for (const [label, size] of [['desktop', { width: 1280, height: 800 }], ['phone'
         await page.locator('#picker-button').click();
         await expect(page.locator('.picker-panel')).toBeVisible();
         if (label === 'phone') await page.locator('.picker-scrim').click({ position: { x: 20, y: 20 } });
-        else await page.mouse.click(20, 400);
+        else { await page.waitForTimeout(200); await page.mouse.click(640, 90); }
         await expect(page.locator('.picker-panel')).toHaveCount(0);
       });
     });
