@@ -2506,6 +2506,7 @@ async function send() {
   const bodyEl = $('messages').lastElementChild?.querySelector('.body');
 
   const job = jobFor(text, files);
+  const skillCall = calledSkill(text); // S-4
   state.lastJob = job;
   const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
@@ -2541,6 +2542,7 @@ async function send() {
       path: `/api/sessions/${state.sessionId}/messages`,
       payload: {
         content: text,
+        ...(skillCall ? { useSkill: skillCall.name } : {}),
         retry: i > 0, // the user turn is already saved after the first try
         providerId: pick.providerId,
         model: pick.id,
@@ -2719,19 +2721,40 @@ const COMMANDS = [
   { name: '/help', hint: 'Show what commands exist' },
 ];
 
+// S-4: the skills that are on, as /name entries after the commands (cached for a minute)
+let skillMenu = { at: 0, list: [] };
+const skillSlug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+async function loadSkillMenu() {
+  if (Date.now() - skillMenu.at < 60_000) return false;
+  skillMenu.at = Date.now();
+  try {
+    const all = await (await fetch('/api/skills')).json();
+    skillMenu.list = (Array.isArray(all) ? all : []).filter((s) => s.enabled !== false).map((s) => ({ name: s.name, slug: skillSlug(s.name), hint: s.description || 'A skill' })).filter((s) => s.slug);
+  } catch { skillMenu.list = []; }
+  return true;
+}
+/** The skill a message calls ("/my-skill do this"), or null. Commands come first. */
+function calledSkill(text) {
+  const m = /^\/([a-z0-9-]+)(\s|$)/.exec(String(text));
+  if (!m || COMMANDS.some((c) => c.name === `/${m[1]}`)) return null;
+  return skillMenu.list.find((s) => s.slug === m[1]) ?? null;
+}
+
 function renderSlashMenu() {
   const host = $('slash');
   const value = $('input').value;
-  if (!value.startsWith('/') || value.includes('\n')) { host.hidden = true; return; }
-  const matches = COMMANDS.filter((c) => c.name.startsWith(value.split(' ')[0]));
+  if (!value.startsWith('/') || /\s/.test(value)) { host.hidden = true; return; } // once there is a space the person is typing the request, not choosing
+  loadSkillMenu().then((fresh) => { if (fresh && $('input').value === value) renderSlashMenu(); }); // the list arrived after the menu was drawn
+  const word = value.split(' ')[0];
+  const matches = [...COMMANDS, ...skillMenu.list.map((s) => ({ name: `/${s.slug}`, hint: s.hint, skill: true }))].filter((c) => c.name.startsWith(word));
   host.replaceChildren();
   if (!matches.length) { host.hidden = true; return; }
   for (const c of matches) {
     const item = button('', { className: 'slash-item', role: 'option' });
     item.append(element('span', { className: 'slash-name', textContent: c.name }),
-      element('span', { className: 'slash-hint', textContent: say(c.hint) }));
+      element('span', { className: 'slash-hint', textContent: c.skill ? c.hint : say(c.hint) }));
     item.addEventListener('click', () => {
-      $('input').value = c.name;
+      $('input').value = c.skill ? `${c.name} ` : c.name;
       $('slash').hidden = true;
       $('input').focus();
     });
