@@ -54,6 +54,7 @@ export function isPrivateAddress(ip) {
     if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return true;
     return blocked4.check(v4(g[6], g[7]), 'ipv4');
   }
+  if (g.slice(0, 4).every((x) => x === 0) && g[4] === 0xffff && g[5] === 0) return blocked4.check(v4(g[6], g[7]), 'ipv4'); // W613-2: IPv4-translated (::ffff:0:a.b.c.d), the embedded IPv4 decides
   if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return blocked4.check(v4(g[6], g[7]), 'ipv4'); // NAT64
   if (g[0] === 0x2002) return blocked4.check(v4(g[1], g[2]), 'ipv4'); // 6to4
   if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7

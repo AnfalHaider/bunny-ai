@@ -254,6 +254,32 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
 
   const show = (abs) => relative(root, abs).split(sep).join('/') || '.';
 
+  // W6-NEW-1: a file written inside .git (a hook, the config) runs the next time the person commits, so the edit tools refuse it.
+  // ".git", ".git." and ".git::$DATA" are all the same folder on NTFS, and so is its short name GIT~1.
+  const GIT_SEGMENT = /^(.git|git~d+)(?:[. ]*|:.*)$/i;
+  const inGit = (from, abs) => relative(from, abs).split(sep).some((part) => GIT_SEGMENT.test(part));
+  async function refuseGit(abs, path) {
+    let bad = inGit(root, abs);
+    if (!bad) { // where it really leads: the nearest folder that exists, with its links resolved
+      let cur = abs;
+      for (let guard = 0; guard < 256 && !bad; guard += 1) {
+        try {
+          const real = join(await realpath(cur), relative(cur, abs));
+          bad = inGit(await realpath(root), real);
+          break;
+        } catch {
+          const up = dirname(cur);
+          if (up === cur) break;
+          cur = up;
+        }
+      }
+    }
+    if (bad) throw new Error(`${path} is inside .git. Bunny does not write there: a file in .git (a hook, the config) runs the next time you commit. Change it yourself in a terminal if you mean to.`);
+    return abs;
+  }
+  /** inside(), for the tools that change a file. */
+  const insideEdit = async (path, opts) => refuseGit(await inside(path, opts), path);
+
   /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder; false when it cannot be worked out (a dangling link, no permission). For the person's rules. */
   async function canon(path = '.') {
     const rest = [];
@@ -466,7 +492,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   }
 
   async function write_file({ path, content = '' } = {}) {
-    const abs = await inside(path, { mustExist: false });
+    const abs = await insideEdit(path, { mustExist: false });
     await beforeWrite?.(abs);
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, String(content), 'utf8');
@@ -475,7 +501,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
 
   async function download_file({ url, path } = {}) {
     if (!String(path ?? '').trim()) throw new Error('download_file needs a path to save to');
-    const abs = await inside(path, { mustExist: false });
+    const abs = await insideEdit(path, { mustExist: false });
     const got = await fetchLimited(url, { signal: typeof signal === 'function' ? signal() : signal, allowLoopback });
     await beforeWrite?.(abs);
     await mkdir(dirname(abs), { recursive: true });
@@ -496,7 +522,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   }
 
   async function edit_file({ path, old_text, new_text, replace_all = false } = {}) {
-    const abs = await inside(path);
+    const abs = await insideEdit(path);
     const text = await readFile(abs, 'utf8');
     const done = replaceIn(text, { old_text, new_text, replace_all: replace_all === true }, path);
     await beforeWrite?.(abs);
@@ -507,7 +533,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   async function multi_edit({ path, edits } = {}) {
     if (!Array.isArray(edits) || !edits.length) throw new Error('multi_edit needs a list of edits');
     if (edits.length > 50) throw new Error('multi_edit takes at most 50 edits at a time; split it up');
-    const abs = await inside(path);
+    const abs = await insideEdit(path);
     let text = await readFile(abs, 'utf8');
     let total = 0;
     for (let i = 0; i < edits.length; i += 1) {
@@ -598,6 +624,11 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   }
 
   // read_url on a file:// address: read-only, only a real path inside this folder (links out are refused by inside()).
+  /** The path a file: address names, or null when it is not a valid one (for the person's read rules). */
+  function fileUrlPath(url) {
+    try { return fileURLToPath(String(url)); } catch { return null; }
+  }
+
   async function readFileUrl(url) {
     let path;
     try { path = fileURLToPath(String(url)); } catch { throw new Error('That file address is not valid.'); }
@@ -612,6 +643,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
     readFileUrl,
+    fileUrlPath,
     canon,
     run: (name, args, ctx) => tools[name](args ?? {}, ctx ?? {}),
   };

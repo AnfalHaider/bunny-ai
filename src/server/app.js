@@ -2564,7 +2564,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
         // ask always asks, in every mode; allow skips the question.
-        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed, await workspace.canon(parsed.path ?? '.').catch(() => false)) : null;
+        // W69-1: read_url on a file: address is a file read, so the person's read rules judge the path it names, as for read_file.
+        const fileAddress = name === 'read_url' && workspace && /^file:/i.test(String(parsed.url ?? '').trim()) ? workspace.fileUrlPath(String(parsed.url).trim()) : null;
+        const ruled = isWorkspace ? checkToolCall(activeRules(), name, parsed, await workspace.canon(parsed.path ?? '.').catch(() => false))
+          : fileAddress ? checkToolCall(activeRules(), 'read_file', { path: fileAddress }, await workspace.canon(fileAddress).catch(() => false)) : null;
         if (ruled?.effect === 'deny') {
           const why = `Blocked by your permission rule ${describeRule(ruled)}.`;
           await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });

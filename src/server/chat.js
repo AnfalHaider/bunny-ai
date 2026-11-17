@@ -21,7 +21,10 @@ export const RESULT_LIMIT = 50_000;
 export function fitResult(name, text) {
   const s = String(text ?? '');
   if (s.length <= RESULT_LIMIT) return s;
-  const how = name === 'read_file' ? ' Read the rest with start_line and end_line.' : ' The whole output is saved in .bunny/notes (the step says where): read_file it in parts.';
+  // W6-21: a result over 128 KB is never saved (the secret check cannot clear something that large), so do not say it is.
+  const how = name === 'read_file' ? ' Read the rest with start_line and end_line.'
+    : s.length > 128 * 1024 ? ' The whole output is too large to be saved: run the command again with a narrower filter (a path, a pattern, head or tail).'
+      : ' The whole output is saved in .bunny/notes (the step says where): read_file it in parts.';
   return `${clip(s, RESULT_LIMIT)}
 [Cut to ${RESULT_LIMIT} characters.${how}]`;
 }
