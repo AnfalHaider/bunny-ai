@@ -1,0 +1,8 @@
+lightd skipped live: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+lightd skipped after reload: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+lightm skipped live: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+lightm skipped after reload: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+darkd skipped live: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+darkd skipped after reload: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+darkm skipped live: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
+darkm skipped after reload: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You skipped this question. | is-unanswered=0
