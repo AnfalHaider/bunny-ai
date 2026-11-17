@@ -1,9 +1,9 @@
 ---
 piece: qa-batch
 role: qa
-sha: 591bf83
+sha: 883dafd
 verdict: PASS
 date: 2026-11-17
 ---
 
-Candidate head 591bf83 (Security's memory guard for request bodies). e2e/w019-memguard.mjs 7/7 over raw sockets against a real in-process server on the 15 MB photo route: a body DECLARED 40 MB is refused 413 'over 15 MB' at once (before any body); ordinary requests still work; while one large body (over 1 MB) is open a second large body gets 429 'Another large message is being sent; try again in a moment.' and small requests are not blocked; when the holder disconnects (also half way through an upload) the slot is free again (no stuck-busy); a sender that does not stop is cut off at 3 MB of 40 (connection closed). Note: the 'one large body at a time' slot is process-wide, so one slow large upload delays every other large upload (import, photo) until it ends or disconnects.
+Builder A's fix of QA's findings, walked on the candidate head ec2afa2 (holds 883dafd). e2e/w019-qabatch.mjs 14/14. Bar size rules (real logic): text 100 KB and exactly 128 KB accepted, over 128 KB refused as 'The text file is over 128 KB.' (never the key message; a small secret still gets the key message); picture 2 MB and exactly 3 MB accepted, over refused 'The picture is over 3 MB.'; PDF up to exactly 8 MB accepted, over 'The file is over 8 MB.'; screenshot 3 MB accepted, over 'The screenshot is over 3 MB.'. Chat: a 2 MB picture sent with a message reaches the model as an image (200); a 5 MB picture gets the chat's own plain 'Images must be under 4 MB.'; a message declared 60 MB is refused 413 'over 48 MB'; ordinary messages fine. G11 with the real plugin code: two plugins naming one connector address share one connector; uninstalling A keeps it and removes A's own; it is handed to B; uninstalling B removes it and the skills; updating A so it drops the shared address leaves it while B uses it. Not run: the real Electron file dialog (needs OS keys).
