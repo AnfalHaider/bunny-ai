@@ -2,7 +2,7 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
+import { app, BrowserWindow, WebContentsView, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
 import { buildContextMenuTemplate } from './context-menu.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
+import { createBrowserViews } from './browserViews.js';
 import { createUpdater } from './updater.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
@@ -79,7 +80,11 @@ function contextMenu(contents) {
   });
 }
 
+// W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
+const browserViews = createBrowserViews({ WebContentsView, session, getWindow: () => win });
+
 function guard(contents) {
+  if (browserViews.ownsSession(contents.session)) return;
   contextMenu(contents);
   try { contents.session.setSpellCheckerLanguages(['en-US']); } catch { /* dictionary unavailable: spell check stays off */ }
   // Bunny's own pages may open in new Bunny windows (pop-out chat); everything
@@ -212,10 +217,19 @@ ipcMain.handle('dialog:pickFolder', async (event) => {
 ipcMain.handle('browser:act', async (event, name, action, args) => {
   if (!isOwn(event.senderFrame?.url ?? '')) return { error: 'Not allowed' };
   try {
+    // a tab that is a view (W6-24) is worked in its own page; otherwise it is a frame in the panel
+    const worked = await browserViews.control(event.sender, name, action, args ?? {});
+    if (worked) return worked;
     return await controlFrame(event.sender, name, action, args ?? {});
   } catch (err) {
     return { error: String(err?.message ?? err) };
   }
+});
+
+// The panel's tabs as views (W6-24): only Bunny's own page, and only the views that page opened.
+ipcMain.handle('browser:view', (event, msg) => {
+  if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false, error: 'Not allowed' };
+  try { return browserViews.handle(event.sender, msg); } catch (err) { return { ok: false, error: String(err?.message ?? err) }; }
 });
 
 // ---- updates from GitHub Releases ----

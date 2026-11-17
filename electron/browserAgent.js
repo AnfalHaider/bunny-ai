@@ -172,3 +172,44 @@ export async function controlFrame(contents, name, action, args = {}) {
   if (image.getSize().width > 1280) image = image.resize({ width: 1280 });
   return { image: image.toDataURL(), note: 'Screenshot taken and shown in the chat.' };
 }
+
+/** The page script in a view's own page (W6-24): a view is a top-level page, so there is no frame to find. A page still loading is tried for a few seconds. */
+async function inView(contents, action, args = {}) {
+  let lastError = null;
+  for (let i = 0; i < 12; i += 1) {
+    try {
+      return await contents.executeJavaScript(`(${pageScript.toString()})(${JSON.stringify(action)}, ${JSON.stringify(args)})`);
+    } catch (err) { lastError = err; }
+    await wait(400);
+  }
+  throw new Error(lastError ? `The page could not be reached: ${lastError.message}` : 'The browser tab is not open.');
+}
+
+/**
+ * The same browser actions as controlFrame, for a tab that is a view (W6-24): read, click, type, scroll and screenshot.
+ * @param {object} contents the view's webContents
+ * @returns {Promise<{page?: object, image?: string, note?: string, error?: string}>}
+ */
+export async function controlView(contents, name, action, args = {}) {
+  if (!/^bunny-tab-\d+$/.test(String(name)) || !ACTIONS.has(action)) return { error: 'Not a browser action' };
+  if (action === 'read') return { page: await inView(contents, 'read') };
+  if (action === 'scroll') {
+    await inView(contents, 'scroll', { direction: args.direction });
+    await wait(250);
+    return { page: await inView(contents, 'read') };
+  }
+  if (action === 'click' || action === 'type') {
+    const pageArgs = action === 'click' ? { ref: args.ref } : { ref: args.ref, text: String(args.text ?? '').slice(0, 5000), submit: Boolean(args.submit) };
+    const done = await inView(contents, action, pageArgs);
+    if (done?.error) return done;
+    await wait(action === 'type' && !args.submit ? 250 : 1500);
+    const note = action === 'click' ? `Clicked element ${args.ref}.` : `Typed into element ${args.ref}${args.submit ? ' and pressed Enter' : ''}.`;
+    let page = await inView(contents, 'read');
+    if (!page?.text) { await wait(1500); page = await inView(contents, 'read'); }
+    return { note, page };
+  }
+  // screenshot: the whole view is the page
+  let image = await contents.capturePage();
+  if (image.getSize().width > 1280) image = image.resize({ width: 1280 });
+  return { image: image.toDataURL(), note: 'Screenshot taken and shown in the chat.' };
+}
