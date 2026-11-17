@@ -1,9 +1,9 @@
 ---
 piece: w4-8
 role: design
-sha: 304e71a
-verdict: FAIL
+sha: 5c8c25a
+verdict: PASS
 date: 2026-11-17
 ---
 
-Quick-ask bar unchanged since e061ce6: + menu still clipped (body 0-115, menu 71-138, overflow hidden); Opening Bunny still warning amber; see docs/design/review-w48-build/README.md
+Menu fits, Opening Bunny normal text with spinner, amber only for errors, contrast measured; see docs/design/review-w48-build/README-5c8c25a.md

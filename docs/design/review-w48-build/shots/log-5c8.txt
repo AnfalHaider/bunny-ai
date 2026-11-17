@@ -1,0 +1,22 @@
+light empty: {"body":[0,300],"menu":null,"msg":null}
+light typing: {"body":[0,300],"menu":null,"msg":null}
+light menu: {"body":[0,300],"menu":[71,138],"msg":null}
+light chip: {"body":[0,300],"menu":null,"msg":null}
+light contrast (WCAG ratio): text on surface 16.27; hint and placeholder (dim) on surface 5.09; bunny mark (accent) on surface 5.70; chip text on chip 15.08; send icon on dark button 16.27; + sign on surface 5.09
+light send: {"body":[0,300],"menu":null,"msg":{"text":"Opening Bunny…","color":"rgb(31, 32, 36)","spin":true}}
+light reduced-motion spinner animation: none vs normal: spin
+light contrast: Opening Bunny text on surface 16.27; spinner accent on surface 5.70
+light err-shot: {"body":[0,300],"menu":null,"msg":{"text":"Bunny could not take a screenshot.","color":"rgb(180, 83, 9)","spin":false}}
+light err-open: {"body":[0,300],"menu":null,"msg":{"text":"Bunny could not open.","color":"rgb(180, 83, 9)","spin":false}}
+light contrast: problem line (warn) on surface 5.02
+dark empty: {"body":[0,300],"menu":null,"msg":null}
+dark typing: {"body":[0,300],"menu":null,"msg":null}
+dark menu: {"body":[0,300],"menu":[71,138],"msg":null}
+dark chip: {"body":[0,300],"menu":null,"msg":null}
+dark contrast (WCAG ratio): text on surface 12.65; hint and placeholder (dim) on surface 6.14; bunny mark (accent) on surface 5.79; chip text on chip 11.48; send icon on dark button 13.81; + sign on surface 6.14
+dark send: {"body":[0,300],"menu":null,"msg":{"text":"Opening Bunny…","color":"rgb(236, 236, 240)","spin":true}}
+dark reduced-motion spinner animation: none vs normal: spin
+dark contrast: Opening Bunny text on surface 12.65; spinner accent on surface 5.79
+dark err-shot: {"body":[0,300],"menu":null,"msg":{"text":"Bunny could not take a screenshot.","color":"rgb(233, 173, 82)","spin":false}}
+dark err-open: {"body":[0,300],"menu":null,"msg":{"text":"Bunny could not open.","color":"rgb(233, 173, 82)","spin":false}}
+dark contrast: problem line (warn) on surface 7.50
