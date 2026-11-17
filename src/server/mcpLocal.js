@@ -90,6 +90,12 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
         if (!line.startsWith('{')) continue; // a log line, not a message
         let msg;
         try { msg = JSON.parse(line); } catch { continue; }
+        // L-5: a message with an id AND a method is the connector asking us something: answer ping and roots/list, refuse the rest plainly
+        if (msg.id != null && typeof msg.method === 'string') {
+          const answer = msg.method === 'ping' ? { result: {} } : msg.method === 'roots/list' ? { result: { roots: [] } } : { error: { code: -32601, message: 'Bunny AI does not answer that' } };
+          try { child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, ...answer })}\n`); } catch { /* the program is gone */ }
+          continue;
+        }
         const waiting = msg.id != null && conn.pending.get(msg.id);
         if (waiting) { conn.pending.delete(msg.id); waiting(msg); }
       }

@@ -963,7 +963,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         await localMcp.stop(mcpMatch[1]);
         const before = await mcp.get(mcpMatch[1]);
         const was = before ? { ...before } : null; // update may change the stored object itself
-        const updated = await mcp.update(mcpMatch[1], await readBody(req));
+        const patch = await readBody(req);
+        // L-5: changing what program a local connector runs needs the same confirmation as adding one
+        if (before?.type === 'local' && (patch.command !== undefined || patch.args !== undefined) && patch.confirmLocal !== true) {
+          return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'Confirm the exact command to change it.' });
+        }
+        const updated = await mcp.update(mcpMatch[1], patch);
         // W36-1: a connector pointed somewhere else is signed out of the old place, so its token is not sent to the new one
         if (was && was.type !== 'local' && was.url !== updated.url) await connectorSignIn.signOutQuietly(was);
         return sendJson(res, 200, updated);
