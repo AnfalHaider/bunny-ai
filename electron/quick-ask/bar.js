@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const text = $('text');
 const go = $('go');
-let shot = null; // { data } a data:image/png URL, held only in this page until sent
+let shot = null; // { data, name?, kind? } a screenshot (a data:image/png URL) or a file the person chose, held only in this page until sent
 let busy = false;
 
 // kind 'busy': the normal sending moment (text colour, a small spinner). Anything else is a problem (amber).
@@ -33,17 +33,20 @@ function renderChip() {
   if (!shot) return;
   const chip = document.createElement('span');
   chip.className = 'chip';
+  const isFile = shot.kind === 'file';
   const img = document.createElement('img');
   img.alt = '';
-  img.src = shot.data;
+  if (!isFile) img.src = shot.data;
+  else if (shot.preview) img.src = shot.preview;
   const label = document.createElement('span');
-  label.textContent = 'Screenshot';
+  label.textContent = isFile ? shot.name : 'Screenshot';
   const x = document.createElement('button');
   x.type = 'button';
-  x.setAttribute('aria-label', 'Remove the screenshot');
+  x.setAttribute('aria-label', isFile ? 'Remove the file' : 'Remove the screenshot');
   x.textContent = '×';
-  x.addEventListener('click', () => { shot = null; renderChip(); text.focus(); });
-  chip.append(img, label, x);
+  x.addEventListener('click', () => { if (shot?.kind === 'file') window.quickAsk.dropFile().catch(() => {}); shot = null; renderChip(); text.focus(); });
+  if (img.src) chip.append(img);
+  chip.append(label, x);
   host.append(chip);
 }
 
@@ -71,13 +74,26 @@ $('shot-item').addEventListener('click', async () => {
   text.focus();
 });
 
+$('file-item').addEventListener('click', async () => {
+  closeMenu();
+  message('');
+  try {
+    const result = await window.quickAsk.pickFile();
+    if (result && result.ok && typeof result.id === 'string') { shot = { kind: 'file', id: result.id, name: String(result.name), preview: typeof result.preview === 'string' ? result.preview : undefined }; renderChip(); }
+    else if (!(result && result.cancelled)) message((result && result.message) || 'Bunny could not add that file.');
+  } catch {
+    message('Bunny could not add that file.');
+  }
+  text.focus();
+});
+
 async function send() {
   if (busy || !text.value.trim()) return;
   busy = true;
   refresh();
   message('Opening Bunny…', 'busy');
   try {
-    const result = await window.quickAsk.submit(text.value, shot ? [shot] : []);
+    const result = await window.quickAsk.submit(text.value, shot ? [shot.kind === 'file' ? { kind: 'file', id: shot.id } : shot] : []); // a file goes by its id only
     if (result && result.ok) return; // the bar is closed by the app
     message((result && result.message) || 'Bunny could not open.');
   } catch {

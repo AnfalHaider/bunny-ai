@@ -278,7 +278,7 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
-  quickAsk = createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit: startQuickChat });
+  quickAsk = createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat });
   createWindow();
   applyQuickAsk();
   // Only the installed app updates itself (or a test pointing at its own feed).
