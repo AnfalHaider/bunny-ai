@@ -1,0 +1,9 @@
+---
+piece: w6-6
+role: tech-lead
+sha: e28bf5a
+verdict: FAIL
+date: 2026-11-17
+---
+
+Read toolInstall.js and the app.js, appTools.js, autoAsks.js and mcpStore.js diffs, and the test names (11). Right: the card comes from one commit; the clone is depth 1 and HEAD must equal the sha on the card (no gap between card and clone); install goes only into data/tools/<owner>-<repo>-<sha7>, and a failed install is removed; npm ci/install with --ignore-scripts plus npm_config_ignore_scripts and a short environment (no tokens); risk build, asked in every mode (toolPlan forces the card even past an allow rule), Plan refuses, helpers never get it; removing the connector removes the folder only if the saved name is one plain name inside tools. REQUIRED: npm reads the project .npmrc in the clone (the repository writes it). Settings there such as git (the program npm runs to fetch git dependencies), cache or prefix move npm's behaviour outside --ignore-scripts; only CLI and env settings outrank the project file. Fix: inspect() refuses a repository whose tree has a root .npmrc and says why on the card (or deletes it after the clone, before npm, and the card says so), plus a test. NOTES: (1) POST /api/mcp passes body.source to mcp.add (app.js:965), so a Bunny page could give a hand-added connector the folder of an installed tool, and deleting it would remove that tool's files (limited to the tools folder): drop source in that route. (2) For Security: confirm with a test that a git dependency with a prepare script does not run under --ignore-scripts on this npm. (3) A locked file on Windows makes removeFiles fail as 400 tool.badFolder with the rm message, so the wording is off. Spec deviations accepted: Node.js only, no CLI kind, no 'allow install scripts' option (all narrower). Tests not run by me (gate slot).
