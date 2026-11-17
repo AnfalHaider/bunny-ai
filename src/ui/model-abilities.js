@@ -95,7 +95,9 @@ export function detectJob(text, { hasImage = false, workMode = 'chat' } = {}) {
     && /\b(make|create|generate|draw|design|paint|give me|produce|render)\b/.test(t)) return 'image';
   if (hasImage) return 'see';
   // W6-19: copying or comparing how a site, a page or a design LOOKS needs eyes, even in Code mode
-  if (/\b(copy|clone|recreate|re-create|replicate|mimic|match|compare)\b[^.?!]{0,60}\b(site|website|web ?page|webpage|pages|page|landing page|design|layout|look|screenshots?|ui)\b/.test(t)) return 'see';
+  // v0.1.10 (QA 4c-4): the thing to copy must follow the verb closely ("copy this website", "match the layout") and not be only a word in a text or code job
+  // ("match the regex on the page", "copy the page title into the readme", "clone the website repository" are not picture jobs).
+  if (/\b(copy|clone|recreate|re-create|replicate|mimic|match|compare)\s+(?:(?:the|this|that|these|those|my|our|a|an|its|their)\s+)?(?:[\w'-]+\s+){0,2}?(?:site|website|web ?page|webpage|pages|page|landing page|design|layout|look|screenshots?|ui)\b(?!\s+(?:title|titles|text|content|source|url|urls|link|links|code|data|name|names|headings?|html|repo|repository|repositories|api|file|files|folder)\b)/.test(t)) return 'see';
   if (workMode === 'code' || /```|\b(code|function|bug|error|stack trace|refactor|typescript|javascript|python|sql|regex|compile|api|class|repo)\b/.test(t)) return 'code';
   if (/\b(research|latest|news|today|current|sources?|compare|look up|search( the)? (web|internet)|find out)\b/.test(t)) return 'research';
   return 'chat';

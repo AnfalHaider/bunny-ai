@@ -159,3 +159,20 @@ test('SUPD-2: the installer is saved by its file name only, whatever path the as
   assert.deepEqual(await readFile(join(dir, 'updates', 'escape-Setup.exe')), installer);
   await assert.rejects(readFile(join(dir, 'escape-Setup.exe')), 'nothing was written above the update folder');
 });
+
+test('v0.1.10 (QA 4c-7): a quoted sha512 value is accepted, a hex one is not', async () => {
+  const release = { tag_name: 'v0.2.0', assets: [{ name: 'Bunny-AI-Setup-0.2.0.exe', size: 1, browser_download_url: 'https://dl/setup.exe' }, { name: 'latest.yml', browser_download_url: 'https://dl/latest.yml' }] };
+  const yml = (text) => async () => new Response(text, { status: 200 });
+  const good = `${'C'.repeat(86)}==`;
+  assert.equal((await readRelease(release, yml(`sha512: "${good}"\n`))).sha512, good, 'double quotes');
+  assert.equal((await readRelease(release, yml(`sha512: '${good}'\n`))).sha512, good, 'single quotes');
+  assert.equal((await readRelease(release, yml(`sha512: "${good}\n`))).sha512, null, 'an unclosed quote is not a value');
+  assert.equal((await readRelease(release, yml(`sha512: ${'a1'.repeat(64)}\n`))).sha512, null, 'hex is not base64');
+});
+
+test('v0.1.10 (QA 4c-14): the release notes are kept whole, beyond the old 4,000-character cut', async () => {
+  const body = 'N'.repeat(4107) + '\nend of notes';
+  const release = { tag_name: 'v0.2.0', body, assets: [{ name: 'Bunny-AI-Setup-0.2.0.exe', size: 1, browser_download_url: 'https://dl/setup.exe' }] };
+  const got = await readRelease(release, async () => new Response('', { status: 200 }));
+  assert.equal(got.notes, body);
+});

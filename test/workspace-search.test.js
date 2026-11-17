@@ -313,3 +313,17 @@ test('LA-4: the event loop keeps ticking while a regex search walks many files',
   clearInterval(timer);
   assert.ok(ticks > 5, `the loop ticked ${ticks} times during the search`);
 });
+
+test('v0.1.10 (QA 4c-10): many files that each take just under a second end with the "in all" message, never the one-file message', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'bunny-ws-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (let i = 0; i < 40; i += 1) writeFileSync(join(root, `g${String(i).padStart(2, '0')}.txt`), 'plain line\n');
+  // every file's match is read as 0.9 s by the clock (two reads of 450 ms), so each is under the one-second limit, and the sixth finds the 5 s budget spent
+  let now = 0;
+  const ws = createWorkspace(root, { clock: () => { now += 450; return now; } });
+  await assert.rejects(ws.run('search_files', { query: 'zzz', regex: true }), (err) => {
+    assert.match(err.message, /^Search stopped after 5 s in all; narrow the folder or the pattern\.$/);
+    assert.doesNotMatch(err.message, /one file took/);
+    return true;
+  });
+});
