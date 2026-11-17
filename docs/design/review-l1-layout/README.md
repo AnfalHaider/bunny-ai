@@ -64,3 +64,8 @@ Shot on an invented profile, desktop (800 px content width) and phone (390), lig
 5. **Capabilities "No tools built yet.": partly.** It now has row padding, but the line still sits low in the card with a large gap above it. Not blocking.
 
 Two small notes, neither blocking: (a) on the phone the Permission rules block is inset 20 px (`--sp-6`, which I asked for in item 1) while the rows are inset 24 px, so its text starts 4 px left of the row text (37 px against 41); my spec was wrong, use `--sp-8` there too. (b) The "No rules." lines touch their own list border by design (they are rows in a list card).
+
+## Re-check on the release candidate 88b6082 (2026-11-17): PASS
+Same pages shot again from `claude/release-0.1.9` at 88b6082 (invented profile, 800 and 390 wide, light and dark): `shots-cand/`, readouts in `shots-cand/log.txt`. The candidate adds the spec fix (5235a0f) only in the test; the CSS is as at fca5fb3.
+- Permission rules: heading, switch, lists, add row and Try box all start at one left edge (41 px desktop, 37 px phone); no page overflow. Privacy label 17 px in from the card edge (the card's own 1 px border plus its padding; text no longer flush). Providers footnote 12 px below the list. Capabilities "No tools built yet." is a 47 px row.
+- Unchanged and not blocking: on the phone the Permission rules text starts 4 px left of the other rows (37 against 41 px, `--sp-6` against `--sp-8`, `src/ui/app.css:2068`); the Capabilities empty line still sits low.

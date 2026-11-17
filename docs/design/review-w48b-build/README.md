@@ -10,4 +10,6 @@ How shot: build `3cb6368` (branch `claude/builder-a-w48b`) extracted with `git a
 - **Remove:** the chip goes and `dropFile` is called. **Send:** the bar sends `{kind:'file', id}` only (no file bytes through the page).
 - Light and dark both read well; no overflow in any state.
 
+Re-check on the release candidate 88b6082 (`shots-cand/`, same stand-in, light and dark): menu has both items; image chip with preview and name; long PDF name on one line; the 8 MB line in amber; send passes `{kind:'file', id}`; no overflow. PASS at 88b6082.
+
 Not covered: the real Electron window, the real file dialog, the 8 MB and file-type checks in the main process (stand-in only), file names longer than the bar (the chip may need to cut them; not seen), contrast not re-measured (same colours as 5c8c25a).
