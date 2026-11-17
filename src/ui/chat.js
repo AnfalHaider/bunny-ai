@@ -19,7 +19,7 @@ import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
-import { resolveArtifact, htmlDocument } from './artifact-content.js';
+import { resolveArtifact, htmlDocument, printDocument, PRINT_SANDBOX } from './artifact-content.js';
 import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
@@ -3264,21 +3264,13 @@ function renderArtifactView(artifact, { mode } = {}) {
     // A real URL rather than a blob, so the tab can be shared and reloaded.
     iconButton('open', 'Open', () => window.open(`/api/artifacts/${artifact.id}/raw`, '_blank', 'noopener')),
     iconButton('print', 'Print', () => {
-      // A print window with the artifact alone in it, so the page prints the document and not the app.
-      const frame = window.open('', '_blank');
-      if (!frame) return;
-      frame.opener = null;
-      frame.document.write('<!doctype html><html><head><meta charset="utf-8"><title></title></head><body></body></html>');
-      frame.document.title = summary?.name ?? artifact.title;
-      if (shown.kind === 'html') frame.document.body.innerHTML = shown.body;
-      else {
-        const pre = frame.document.createElement('pre');
-        pre.textContent = shown.body;
-        pre.style.whiteSpace = 'pre-wrap';
-        frame.document.body.append(pre);
-      }
-      frame.focus();
-      frame.print();
+      // SB-2: printed from a sandboxed frame of its own (no same-origin), so a page's scripts and event handlers never run as Bunny.
+      const frame = element('iframe', { title: summary?.name ?? artifact.title });
+      frame.setAttribute('sandbox', PRINT_SANDBOX);
+      frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+      frame.srcdoc = printDocument(shown, summary?.name ?? artifact.title);
+      document.body.append(frame);
+      setTimeout(() => frame.remove(), 120000);
     }),
     iconButton('star', artifact.starred ? 'Remove star' : 'Star', async () => {
       const updated = await sendJSON(`/api/artifacts/${artifact.id}`, 'PATCH', { starred: !artifact.starred });

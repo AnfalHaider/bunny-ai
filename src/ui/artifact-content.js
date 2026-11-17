@@ -38,6 +38,21 @@ ${body}
 </body></html>`;
 }
 
+/** The sandbox of the frame an artifact is printed from: its own scripts and print() only. NEVER allow-same-origin (the artifact must not reach the app, its storage or its API). */
+export const PRINT_SANDBOX = 'allow-scripts allow-modals';
+
+const escapeHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * SB-2: the page an artifact is printed from, for a sandboxed srcdoc frame (never written into a same-origin window with innerHTML, where its event handlers would run as Bunny).
+ * A page prints itself once loaded; a text artifact is shown escaped, as text.
+ */
+export function printDocument(shown, title = '') {
+  const printer = '<script>addEventListener("load", function () { setTimeout(function () { print(); }, 50); });</script>';
+  if (shown?.kind === 'html') return `${htmlDocument(String(shown.body ?? ''))}${printer}`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><pre style="white-space:pre-wrap">${escapeHtml(shown?.body ?? '')}</pre>${printer}</body></html>`;
+}
+
 /**
  * A readable name for an artifact: the page's <title> or first heading, else the
  * saved title without the reply's lead-in ("Here is a clean, modern …").
