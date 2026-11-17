@@ -133,7 +133,7 @@ test('a signed-in device that picks a model sets THAT chat\'s model through the 
   await page.waitForTimeout(500);
   await page.locator('#picker-button').click();
   await page.locator('.picker-panel .picker-model:not([data-section])').first().click();
-  await expect(page.locator('#picker-button')).toContainText('reef-image');
+  await expect(page.locator('#picker-button')).toContainText('Reef Image');
   await page.waitForTimeout(500);
   expect(writes).toContain(`PATCH /api/sessions/${made.id}/setting/providerId`);
   expect(writes).toContain(`PATCH /api/sessions/${made.id}/setting/model`);
