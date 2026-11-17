@@ -59,11 +59,15 @@ export async function* streamChat({
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
-  onReplyEnd = null,
+  onReplyEnd = null, onToolsRefused = null,
 }) {
   if (fake) {
-    yield* fakeStream(model, messages, signal);
-    return;
+    // PV-3: with tools offered and a [[call tool {json}]] line in the person's message, the stand-in calls those tools through the real loop
+    if (!(Array.isArray(tools) && tools.length && typeof runTool === 'function' && /\[\[call [\w-]+ /.test(lastUserText(messages)))) {
+      yield* fakeStream(model, messages, signal);
+      return;
+    }
+    fetchImpl = scriptedFetch;
   }
 
   const headers = { 'content-type': 'application/json', accept: 'text/event-stream' };
@@ -76,7 +80,7 @@ export async function* streamChat({
   // The conversation grows as tools are used, so it is copied rather than
   // mutated in place.
   const conversation = messages.map((m) => ({ ...m }));
-  const offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
+  let offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
 
   // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
   const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
@@ -112,9 +116,20 @@ export async function* streamChat({
     if (offerTools) body.tools = tools;
     if (extraBody) Object.assign(body, extraBody);
 
-    let { text, toolCalls, finish, aborted, shown } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools,
-    });
+    let first;
+    try {
+      first = yield* streamRound({
+        baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools,
+      });
+    } catch (err) {
+      // PV-1: a model or provider that refuses tools would fail every message while any tool is on. Ask again without them, once, and stay without them.
+      if (!(offerTools && refusesTools(err)) || signal?.aborted) throw err;
+      offerTools = false;
+      delete body.tools;
+      if (typeof onToolsRefused === 'function') { try { onToolsRefused(err.message); } catch { /* a notice only */ } }
+      first = yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: false });
+    }
+    let { text, toolCalls, finish, aborted, shown } = first;
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
     // A thinking model can spend the whole reply limit thinking and stop with
@@ -495,6 +510,37 @@ function collectToolCall(into, fragments) {
     if (fragment.function?.arguments) existing.arguments += fragment.function.arguments;
     into.set(index, existing);
   }
+}
+
+/** PV-1: did the provider answer 400 and say the trouble is the tools (\"does not support tools\", \"tools is not allowed\")? */
+export function refusesTools(err) {
+  if (!err || err.code !== 'chat.http') return false;
+  const m = String(err.message ?? '');
+  return /answered (400|404|405|415|422)\b/.test(m) && /\btools?\b|function[ _-]?call/i.test(m.split(':').slice(1).join(':'));
+}
+
+const lastUserText = (messages) => {
+  const last = [...(messages ?? [])].reverse().find((m) => m.role === 'user');
+  return Array.isArray(last?.content) ? last.content.map((p) => p.text ?? '').join(' ') : String(last?.content ?? '');
+};
+
+/**
+ * PV-3: the fake provider's tool calls. A person's message holding `[[call name {json}]]` lines makes this stand-in ask for those tools one after
+ * another (through the real tool loop), then answer `Scripted: <last result>`. It is the fetch the loop uses in fake mode, so a test reaches
+ * connectors, skills and the permission checks through a real chat without a real model.
+ */
+async function scriptedFetch(_url, init) {
+  const body = JSON.parse(init.body);
+  const msgs = body.messages ?? [];
+  const at = msgs.map((m) => m.role).lastIndexOf('user');
+  const markers = [...lastUserText(msgs.slice(0, at + 1)).matchAll(/\[\[call ([\w-]+) (\{[\s\S]*?\})\]\]/g)];
+  const results = msgs.slice(at + 1).filter((m) => m.role === 'tool');
+  const frame = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
+  const next = markers[results.length];
+  const sse = next
+    ? frame({ tool_calls: [{ index: 0, id: `call_${results.length}`, function: { name: next[1], arguments: next[2] } }] })
+    : frame({ content: `Scripted: ${String(results.at(-1)?.content ?? '').slice(0, 400)}` });
+  return new Response(`${sse}data: [DONE]\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
 /** Deterministic stand-in so the UI is fully exercisable offline. */
