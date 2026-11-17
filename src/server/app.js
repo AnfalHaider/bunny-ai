@@ -48,6 +48,8 @@ import { clip } from './clip.js';
 import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
+import { capturePage, captureFolderName } from './capture.js';
+import { fetchLimited } from './download.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
@@ -2153,6 +2155,22 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
         send('browser', { id: rid, action, args: parsed });
       });
       const runBrowserTool = async (name, parsed) => {
+        // W6-10: a saved copy of the page goes into the chat's folder, through the workspace (the person's rules and checkpoints apply)
+        if (name === 'browser_capture') {
+          if (!workspace) throw new Error('Choose a folder for this chat first.');
+          const got = await askBrowser('capture', {});
+          if (got?.error) throw new Error(got.error);
+          const info = got?.inspected;
+          if (!info || info.error) throw new Error(info?.error ?? 'The browser panel did not answer.');
+          const target = `${captureFolderName(info.url)}/index.html`;
+          const ruled = checkToolCall(activeRules(), 'write_file', { path: target }, await workspace.canon(target).catch(() => false));
+          if (ruled?.effect === 'deny') throw new Error(`Blocked by your permission rule ${describeRule(ruled)}: nothing was saved.`);
+          if (ruled?.effect === 'ask' && !(await askPermission(describeBrowserTool(name, parsed), `Save a copy of ${String(info.url).slice(0, 200)} into ${target.replace('/index.html', '/')}\n\nAsked because of your rule ${describeRule(ruled)}.`))) {
+            return { text: 'The person did not allow this. Do not try it again; carry on without it or ask them.', attachments: [], images: [] };
+          }
+          const saved = await capturePage({ info, workspace, fetchLimited: (url, o) => fetchLimited(url, { ...o, signal: controller.signal }), signal: controller.signal });
+          return { text: saved.text, attachments: [], images: [] };
+        }
         const answer = await askBrowser(name.replace(/^browser_/, ''), parsed);
         let attachments = [];
         if (typeof answer?.image === 'string' && answer.image.startsWith('data:image/png;base64,')) {
@@ -2781,7 +2799,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             status = 'failed';
             result = `The browser action failed: ${err.message}`;
           }
-          result = String(result).slice(0, 9000);
+          result = String(result).slice(0, name === 'browser_inspect' ? 200_000 : 9000); // an inspected page may be long: the step keeps the rest for the model like any long result
           await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(result, 1200), fullResult: result, attachments });
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return seenImages?.length ? { content: result, images: seenImages } : result;

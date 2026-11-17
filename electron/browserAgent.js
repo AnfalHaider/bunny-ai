@@ -9,7 +9,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Runs inside the page. Numbers the links, buttons and fields it can see,
 // and answers one request at a time.
-function pageScript(action, args) {
+export function pageScript(action, args) {
   const SEL = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=link],[role=tab],'
     + '[role=menuitem],[role=checkbox],[role=switch],[role=option],[role=combobox],[role=searchbox],[role=textbox],[contenteditable=""],[contenteditable=true],[onclick]';
   const visible = (el) => {
@@ -55,6 +55,63 @@ function pageScript(action, args) {
   }
 
   if (action === 'read') return snapshot();
+  // W6-10: look at the page's own source, styles, requests and fonts. Fixed code only: nothing the model writes is ever run in the page.
+  if (action === 'inspect') {
+    const what = String(args.what ?? 'html');
+    if (what === 'html') {
+      const html = document.documentElement.outerHTML;
+      const cap = 200000;
+      return { what, text: html.length > cap ? html.slice(0, cap) + '\n[cut: ' + (html.length - cap) + ' more characters]' : html };
+    }
+    if (what === 'css') {
+      const sel = String(args.selector ?? '').slice(0, 300);
+      if (!sel) return { error: 'browser_inspect with what "css" needs a selector.' };
+      let target = null;
+      try { target = document.querySelector(sel); } catch { return { error: 'That is not a valid selector.' }; }
+      if (!target) return { error: 'No element matches ' + sel };
+      const style = getComputedStyle(target);
+      const LIST = ['display', 'position', 'top', 'right', 'bottom', 'left', 'z-index', 'float', 'box-sizing', 'width', 'height', 'min-width', 'max-width', 'min-height', 'max-height',
+        'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'border-top-width', 'border-top-style', 'border-top-color',
+        'border-radius', 'color', 'background-color', 'background-image', 'opacity', 'overflow', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+        'text-align', 'text-decoration-line', 'text-transform', 'white-space', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'gap', 'flex-grow', 'flex-shrink', 'flex-basis',
+        'grid-template-columns', 'grid-template-rows', 'box-shadow', 'transform', 'transition-property', 'cursor', 'visibility', 'object-fit', 'vertical-align'];
+      const plain = new Set(['none', 'normal', 'auto', '0px', 'static', 'visible', '0', 'rgba(0, 0, 0, 0)', 'transparent', 'start', 'baseline', 'row', 'nowrap', 'repeat', 'inline', 'content-box', 'left', 'stretch', 'all', 'ltr', 'medium', 'initial', 'scroll', '1']);
+      const props = [];
+      for (const name of LIST) {
+        const value = String(style.getPropertyValue(name) ?? '').trim();
+        if (value && !plain.has(value)) props.push([name, value.slice(0, 200)]);
+        if (props.length >= 60) break;
+      }
+      return { what, selector: sel, tag: String(target.tagName).toLowerCase(), props };
+    }
+    if (what === 'network') {
+      const all = performance.getEntriesByType('resource');
+      return { what, total: all.length, entries: all.slice(0, 300).map((e) => ({ url: String(e.name).slice(0, 300), type: String(e.initiatorType), size: Math.round(e.transferSize || e.encodedBodySize || 0), ms: Math.round(e.duration) })) };
+    }
+    if (what === 'fonts') {
+      const fonts = [];
+      document.fonts.forEach((f) => { if (f.status === 'loaded' && fonts.length < 100) fonts.push({ family: String(f.family).replace(/^["']|["']$/g, ''), weight: String(f.weight), style: String(f.style) }); });
+      return { what, fonts };
+    }
+    return { error: 'what must be html, css, network or fonts.' };
+  }
+  // W6-10: what a saved copy of the page needs: its HTML as it is now, and the addresses of its pictures, style sheets, scripts and icons.
+  if (action === 'capture') {
+    const found = [];
+    const seen = new Set();
+    const add = (raw, url, kind) => {
+      if (!raw || !url || seen.has(url) || found.length >= 300 || !/^https?:/i.test(url)) return;
+      seen.add(url);
+      found.push({ raw: String(raw).slice(0, 1000), url: String(url).slice(0, 2000), kind });
+    };
+    for (const el of document.querySelectorAll('img[src]')) add(el.getAttribute('src'), el.currentSrc || el.src, 'image');
+    for (const el of document.querySelectorAll('link[rel~=stylesheet][href]')) add(el.getAttribute('href'), el.href, 'style');
+    for (const el of document.querySelectorAll('script[src]')) add(el.getAttribute('src'), el.src, 'script');
+    for (const el of document.querySelectorAll('link[rel~=icon][href]')) add(el.getAttribute('href'), el.href, 'image');
+    const html = document.documentElement.outerHTML;
+    const cap = 5000000;
+    return { url: location.href, title: document.title, html: html.length > cap ? html.slice(0, cap) : html, truncated: html.length > cap, resources: found };
+  }
   if (action === 'scroll') { scrollBy(0, (args.direction === 'up' ? -1 : 1) * innerHeight * 0.85); return null; }
   const el = byRef(args.ref);
   if (!el) return { error: `There is no element ${args.ref} on the page now. Read the page again for fresh numbers.` };
@@ -105,7 +162,7 @@ function pageScript(action, args) {
   return { error: `Unknown action ${action}` };
 }
 
-const ACTIONS = new Set(['read', 'click', 'type', 'scroll', 'screenshot']);
+const ACTIONS = new Set(['read', 'click', 'type', 'scroll', 'screenshot', 'inspect', 'capture']);
 
 function findFrame(contents, name) {
   return contents.mainFrame.framesInSubtree.find((f) => f.name === name && f.parent === contents.mainFrame) ?? null;
@@ -147,6 +204,7 @@ export async function controlFrame(contents, name, action, args = {}) {
   const zoom = contents.getZoomFactor();
 
   if (action === 'read') return { page: await inPage(contents, name, 'read') };
+  if (action === 'inspect' || action === 'capture') return { inspected: await inPage(contents, name, action, action === 'inspect' ? { what: args.what, selector: args.selector } : {}) };
 
   if (action === 'scroll') {
     await inPage(contents, name, 'scroll', { direction: args.direction });
@@ -196,6 +254,7 @@ async function inView(contents, action, args = {}, world = null) {
 export async function controlView(contents, name, action, args = {}, world = null) {
   if (!/^bunny-tab-\d+$/.test(String(name)) || !ACTIONS.has(action)) return { error: 'Not a browser action' };
   if (action === 'read') return { page: await inView(contents, 'read', {}, world) };
+  if (action === 'inspect' || action === 'capture') return { inspected: await inView(contents, action, action === 'inspect' ? { what: args.what, selector: args.selector } : {}, world) };
   if (action === 'scroll') {
     await inView(contents, 'scroll', { direction: args.direction }, world);
     await wait(250);
