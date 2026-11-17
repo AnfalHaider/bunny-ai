@@ -1,9 +1,9 @@
 ---
 piece: w4-9
 role: design
-sha: 06b9d8c
+sha: a6afcf5
 verdict: PASS
-date: 2026-11-16
+date: 2026-11-17
 ---
 
-Row, presets, Custom, not-allowed note, 600 cap line, switch-off, phone and help picture match 6c8d168; see docs/design/review-w49-build/README.md
+Wait row matches settings-wait.png (desktop and phone) and connector status words are dark again (6.1:1 light) at a6afcf5; see docs/design/review-w49-build/README.md
