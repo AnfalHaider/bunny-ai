@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditStep } from './audit-exceptions.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quick = process.argv.includes('--quick');
@@ -15,16 +16,17 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 const results = [];
-function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures = false } = {}) {
+function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures = false, lines = null } = {}) {
   const t0 = Date.now();
   // Only npm/npx (.cmd files on Windows) need a shell; a shell would mangle git patterns and paths with spaces.
   const shell = process.platform === 'win32' && /\.cmd$/.test(cmd);
   const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', shell, maxBuffer: 64 << 20 });
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split(/\r?\n/);
   const pass = ok(r, out);
+  const shown = lines ? lines(r) : out.slice(-tail); // a step may say what to show instead of its last lines (the audit prints JSON)
   results.push({ name, pass, secs: Math.round((Date.now() - t0) / 1000) });
   console.log(`\n== ${pass ? 'PASS' : 'FAIL'}  ${name}  (${Math.round((Date.now() - t0) / 1000)}s)`);
-  console.log(out.slice(-tail).map((l) => `   ${l}`).join('\n'));
+  console.log(shown.map((l) => `   ${l}`).join('\n'));
   // GATE-NAMES: a failed test run names what failed (the last few lines hid it three times): every failing-test line, each failure's assertion line, and the totals.
   if (failures && !pass) {
     const marks = out.filter((l) => /^\s*(✖|not ok)\b|^ℹ (tests|suites|pass|fail|cancelled|skipped|todo)\b|AssertionError|\bError \[ERR_|^\s*(TypeError|ReferenceError|RangeError|Error):/.test(l));
@@ -84,7 +86,12 @@ step('request guard stays on', 'git', ['grep', '-nE', 'localGuard\\s*:\\s*false'
 step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
 if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });
-step('dependency audit (high+)', npm, ['audit', '--audit-level=high'], { tail: 6 });
+// Everything npm installs is audited at high; a high finding passes only if docs/security/audit-exceptions.json lists it, signed by the owner and not expired.
+const exceptionsFile = join(root, 'docs', 'security', 'audit-exceptions.json');
+let auditJudged = { ok: false, lines: [] };
+step('dependency audit (high+, owner exceptions)', npm, ['audit', '--json'], { ok: (r) => { auditJudged = auditStep(r.stdout, exceptionsFile); return auditJudged.ok; }, lines: () => auditJudged.lines });
+// What ships (no dev tools) is held to a stricter line and has no exceptions.
+step('dependency audit of what ships (moderate+)', npm, ['audit', '--omit=dev', '--audit-level=moderate'], { tail: 6 });
 secretScan();
 hooksWired();
 
