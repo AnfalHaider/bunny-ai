@@ -1975,6 +1975,18 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         toolDefinitions.push(...offered.definitions);
         for (const [name, entry] of offered.index) toolIndex.set(name, entry);
       }
+      // L-2: the model is told which connectors exist and how they stand, so it can say "your X connector is down" instead of guessing
+      if (servers.length) {
+        const stand = servers.map((sv) => {
+          const all = sv.tools ?? [];
+          const offered = [...toolIndex.values()].filter((e) => e.server.id === sv.id).length;
+          if (sv.status === 'error' && !all.length) return `${sv.name} (not connected: ${String(sv.lastError ?? 'it did not answer').slice(0, 120)})`;
+          if (!all.length) return `${sv.name} (no tools yet)`;
+          const hidden = all.length - offered;
+          return `${sv.name} (${offered} tool${offered === 1 ? '' : 's'}${hidden > 0 && permissionMode === 'plan' ? `; ${hidden} more need a mode that may change things, not Plan mode` : ''})`;
+        });
+        history.unshift({ role: 'system', content: `Connectors: ${stand.join(', ')}. If one the person needs is not connected, say so.` });
+      }
       // L-1: what a connector says about itself (its handshake instructions), as information for the model: it is the connector's text, not the person's
       {
         const said = servers

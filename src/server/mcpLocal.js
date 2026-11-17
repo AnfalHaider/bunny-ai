@@ -14,6 +14,7 @@
  * server first) and reports progress; later starts and calls keep the short limits.
  */
 import { spawn, execFile } from 'node:child_process';
+import { cleanSchema } from './mcp.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 const START_TIMEOUT_MS = 60_000; // a start of a program that has already started once in this run
@@ -180,11 +181,19 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
 
   async function listTools(server, { timeoutMs = 30_000, onProgress = null, signal = null } = {}) {
     const conn = await connection(server, { onProgress, signal });
-    const result = await conn.request('tools/list', {}, timeoutMs);
-    return (result?.tools ?? []).map((t) => ({
+    // R-5: follow nextCursor (at most 20 pages)
+    const all = [];
+    let cursor = null;
+    for (let page = 0; page < 20; page += 1) {
+      const result = await conn.request('tools/list', cursor ? { cursor } : {}, timeoutMs);
+      all.push(...(result?.tools ?? []));
+      cursor = result?.nextCursor || null;
+      if (!cursor) break;
+    }
+    return all.map((t) => ({
       name: t.name,
-      description: String(t.description ?? '').slice(0, 400),
-      inputSchema: t.inputSchema ?? null,
+      description: String(t.description ?? '').slice(0, 1000),
+      inputSchema: cleanSchema(t.inputSchema),
       readOnlyHint: t.annotations?.readOnlyHint === true, // what the connector SAYS: a suggestion only (RO-1)
       readOnly: false,
     }));

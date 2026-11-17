@@ -99,7 +99,7 @@ export function createSkillStore({ file }) {
     if (rows.length > 12) {
       return [
         `Skills that are switched on (${rows.length}). When one fits the task, call read_skill with its name first, then follow it:`,
-        ...rows.map((s) => `- ${s.name}: ${String(s.description || '').slice(0, 140)}`),
+        ...rows.map((s) => `- ${s.name}: ${String(s.description || '')}`),
       ].join('\n');
     }
     return [
