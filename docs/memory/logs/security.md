@@ -2,6 +2,43 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - v0.1.9 reviews (branch claude/security-v019-6ac7c5, last 5cb380a); release-0.1.9 still to stamp
+
+**Signed** (`docs/signoffs/<piece>/security.md`; reviews in `docs/security/2026-11-17-*.md`):
+- **PASS:**
+  - w4-11c at c5082f5 (after FAIL at cd13666, P6-1);
+  - s-upd at ab1d2fc; run at 29aba58; w4-8b at 3cb6368; s-oauth at f929949;
+  - w6-12 at 424bb72 (after FAIL at 292bead);
+  - w6-16 at 81fddb6, re-stamped at 54dee4b; w6-24 at db88c21 (the W624-1 LOW fixed in 642d60a); priv at 226114b;
+  - w6-6 at 0a6ec13 (HIGH);
+  - w6-10 at 504c388 (after FAIL at 9859ea6, W610-1);
+  - p4-1 at 9f329f5; qa-batch at 883dafd; memory-guard at 591bf83;
+  - audit-exceptions at 735e286, NOT to merge without the owner's policy.json change.
+- **Design notes given before build:** W4-8b (six changes), W6-24 (ten points).
+- **K-5:** moved out of v0.1.9 by the Chief of Staff, because it is a guard change and waits for a release with the owner present.
+
+**Found and fixed tonight:**
+- **P6-1:** the model's add_skill was switched on with no card in Accept and Auto.
+- **W612-1:** model-written task steps sat in the system role.
+- **W616-1:** a plugin update escaped its folder limit.
+- **W610-1:** capture could save Bunny's own page with its launch token. A plain GET / carries `<meta name="bunny-token">`; the real-app probe is `docs/security/w6-10-probe/`.
+- **W6-6, Windows-specific:**
+  - the clone's `.npmrc` `git=` program is started by npm (probe case 2), so it is deleted before npm runs;
+  - the clone's npm.cmd and git.exe would be found in the current folder first, so programs are now absolute paths, run with no shell and with `NoDefaultCurrentDirectoryInExePath=1`.
+
+  Probe: `docs/security/w6-6-probe/`.
+
+**Open, for the owner or later:**
+1. The audit-exceptions merge needs `.bootstrap/policy.json`: `docs/security/audit-exceptions.json` added to `records.globs` (writers chief-of-staff) and `scripts/audit-exceptions.mjs` added to `protected_globs`.
+2. index.html hands out the token to any GET with a correct Host. Later, the desktop app should give the token to its window through preload/IPC instead.
+3. The connector's own MCP requests (`mcp.js`) still use plain fetch, not the pinned fetch.
+4. The installer is not code-signed. The update checksum proves a complete download, not who published it.
+5. The slot for one large body is held until Node's 300 s requestTimeout.
+6. QA's real-window proof of W6-24 (views) is still to come.
+7. The K-5 items (my v0.1.8 items 6 to 9) are unchanged.
+
+Lesson: on Windows, any program a tool starts inside a folder it does not control (a clone, a download) must be named by an absolute path, run with no shell, and run with that folder's own config files removed. Both cmd.exe and npm's config reading trust the current folder.
+
 ## 2026-11-17 - FINAL for v0.1.8 (retired; restart for v0.1.9): what I reviewed, and EVERY open item
 
 **Reviewed and signed for v0.1.8** (all in `docs/signoffs/<piece>/security.md`, newest verdict wins): S-1 local API guard, window-only writes, W2-7 permission rules, W3-6 and W3-6b connector sign-in (token bound to origin, refresh versus sign-out), W4-8 and W4-10 plugin and quick-ask routes, W6-9, W6-13, W6-21 (file: reads, download_file, big results), `.git` refusal in the edit tools, W6-14 (local connector from chat: command list, no env, card in every mode; card cut fixed by the 2,000-character refusal), W3-3 and la-4b (Auto middle way), W6-7, W6-8, W33-1 (schedule card shows the prompt), W4-14 and W4-14b (leave_plan_mode, question filter), W4-12 (typed answers reach only question cards), W6-20 (12 MB on one route), kit 0.6.0 landing as `kit-land` (K-1, K-2, K-3, K-4; the installed files re-probed on live main 9c5ac84), the OAuth DNS question (verdict: ship), and `release-0.1.8` at a6afcf5. Also reviewed but NOT in v0.1.8: W4-11a (71f2f96) and W4-11b (4b2a311): PASS, to ship in 0.1.9. Review docs: `docs/security/2026-11-17-*.md`; probes: `docs/security/k2-probe/` (set `KIT_NEXT=` empty to judge the installed guard; print which guard ran before believing a timing).
