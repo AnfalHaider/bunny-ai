@@ -119,7 +119,7 @@ export function remoteException(method, path, body = null) {
 export const REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
 
 /** R2: tools a chat from a device never has, whatever its mode: driving the computer, building or installing anything, adding a connector or a skill, and the tools the model built. */
-export const remoteToolBlocked = (name) => /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|my_)/.test(String(name ?? ''));
+export const remoteToolBlocked = (name) => /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|schedule_task$|start_session$|message_session$|move_to_new_chat$|my_)/.test(String(name ?? '')); // also what would outlive the device's chat: a schedule, another chat
 
 /**
  * R3: allow-lists. A new chat: its title, work mode, mode, effort, model and provider (no folder, and no project: a project can carry a folder).
@@ -214,6 +214,14 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     return { ok: true, secret, session };
   }
 
+  /** Drop every session idle for too long, and tell the app (so a device's Auto chats go back to Ask). Called on a timer and before any count or list. */
+  function sweep() {
+    const gone = [];
+    for (const [secret, s] of sessions) if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); gone.push(s.deviceId); }
+    if (gone.length) ended(gone);
+    return gone.length;
+  }
+
   /** The session behind a Cookie header, or null (expired ones are dropped). */
   function sessionFor(cookieHeader) {
     const secret = readCookie(cookieHeader);
@@ -246,8 +254,9 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     signIn,
     sessionFor,
     /** The person's own browser sessions, for the list in the window (never the secrets). */
-    list() { return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString() })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
-    count() { return sessions.size; },
+    sweep,
+    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString() })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
+    count() { sweep(); return sessions.size; },
     signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); ended([deviceId]); return true; } return false; },
     signOutSecret(secret) { const s = sessions.get(secret); const gone = sessions.delete(secret); if (gone && s) ended([s.deviceId]); return gone; },
     signOutAll() { const ids = [...sessions.values()].map((s) => s.deviceId); const n = sessions.size; sessions.clear(); if (ids.length) ended(ids); return n; },

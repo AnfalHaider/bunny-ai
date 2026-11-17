@@ -3331,6 +3331,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   };
   const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
   resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
+  const remoteSweep = setInterval(() => remote.sweep(), 60_000); // idle devices are signed out even if they never call again
+  remoteSweep.unref();
   /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */
   async function noteRemoteMode(req, session) {
     if (!req.bunnyRemote || !session) return session;
@@ -3443,7 +3445,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     return route(req, res);
   }
 
-  server.on('close', () => { stopRemote().catch(() => {}); });
+  server.on('close', () => { clearInterval(remoteSweep); stopRemote().catch(() => {}); });
 
   // W610-1: nothing the model or a page names may be fetched from this server (download_file, a page capture): its port is known to the fetcher
   server.on('listening', () => registerOwnPort(server.address().port));

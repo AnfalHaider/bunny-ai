@@ -551,6 +551,21 @@ test('R7: a device that is idle for two hours is signed out', async () => {
   t += 121 * 60 * 1000;
   assert.equal(r.sessionFor(COOKIE + '=' + a.secret), null, 'out after 2 hours without use');
   assert.equal(ended.length, 1, 'the app is told, so the device\'s Auto chats go back to Ask');
+  // and with nobody calling again, a count or the sweep (a timer in the app) still ends an idle session and tells the app
+  await r.signIn('10.0.0.3', PASS);
+  t += 121 * 60 * 1000;
+  assert.equal(r.count(), 0, 'a count never includes an idle session');
+  assert.equal(ended.length, 2);
+  await r.signIn('10.0.0.4', PASS);
+  t += 121 * 60 * 1000;
+  assert.equal(r.sweep(), 1);
+  assert.equal(ended.length, 3);
+});
+
+test('R2 (more): a device chat cannot schedule a task, start another chat or move the request to a new one either', async () => {
+  const { remoteToolBlocked } = await import('../src/server/remoteAccess.js');
+  for (const name of ['schedule_task', 'start_session', 'message_session', 'move_to_new_chat', 'computer_click', 'create_tool', 'my_thing', 'add_skill']) assert.equal(remoteToolBlocked(name), true, name);
+  for (const name of ['web_search', 'read_url', 'write_file', 'run_command', 'ask_user', 'create_artifact', 'request_capability']) assert.equal(remoteToolBlocked(name), false, name);
 });
 
 test('R5: the turn-on warning says plainly that this is plain HTTP, home networks only, and Private networks only at the firewall', async () => {
