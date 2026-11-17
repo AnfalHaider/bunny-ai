@@ -80,8 +80,14 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
   async function filterDrivers(folder) {
     let found = '';
     // only the project's OWN settings (--local): the person's own global and system settings (Git LFS is installed there) are theirs. Git LFS's own filter, set in the project by `git lfs install`, is let through.
-    try { found = await git(['config', '--local', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch { return null; } // git config exits 1 when there is none
-    const own = found.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => { const at = l.search(/\s/); return at < 0 || LFS_FILTERS[l.slice(0, at).toLowerCase()] !== l.slice(at).trim(); });
+    try { found = await git(['config', '--local', '-z', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch { return null; } // git config exits 1 when there is none
+    // -z: one record per setting, ended by NUL; inside a record the key ends at the first newline and the value is everything after it. A value that itself holds a line break is refused (a shell would run each line).
+    const own = found.split(String.fromCharCode(0)).filter((r) => r.length > 0).filter((record) => {
+      const at = record.indexOf(String.fromCharCode(10));
+      if (at < 0) return true;
+      const value = record.slice(at + 1);
+      return /[\r\n]/.test(value) || LFS_FILTERS[record.slice(0, at).toLowerCase()] !== value.trim();
+    });
     return own.length ? 'This project runs its own programs when git checks files out (a filter in its git settings), so Bunny will not make a copy of it.' : null;
   }
 

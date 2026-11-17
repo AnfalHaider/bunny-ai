@@ -88,7 +88,7 @@ test('LOW 3 (Security, w2-9-lows): only the exact values `git lfs install` write
   assert.equal((await wt.status(made)).dirty, 0);
   await wt.finish(made, { action: 'discard' });
   for (const [key, value] of Object.entries(standard)) {
-    for (const tail of [' ; calc.exe', ' && echo x', ' | tee y', ' & start x', ' $(whoami)', ' `id`', '\nx', ' --extra']) {
+    for (const tail of [' ; calc.exe', ' && echo x', ' | tee y', ' & start x', ' $(whoami)', ' `id`', '\nx', ' --extra', '\nfilter.lfs.clean git-lfs clean -- %f', '\r\ngit-lfs filter-process']) {
       git(repo, 'config', key, `${value}${tail}`);
       const e = await wt.eligibility(repo);
       assert.equal(e.ok, false, `${key} with "${tail.trim()}" after it`);
