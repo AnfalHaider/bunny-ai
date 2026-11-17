@@ -193,7 +193,10 @@ const name = (id) => (F().roles[id] ? F().roles[id].name : id);
 const CORE = ['chief-of-staff'];
 const MODELS = { haiku: 'Cheapest (Haiku)', sonnet: 'Mid (Sonnet)', opus: 'Strongest (Opus)' };
 const dirty = () => JSON.stringify(isCompany() ? S.company : S.project) !== saved;
-const famOf = (id) => (id === 'chief-of-staff' ? 'on' : (F().family || {})[id] || 'optional');
+// K5-E: a role's state and the helper count come from the flow file, which anyone able to write it could fill with markup: only the three known states and a whole number 0 to 5 ever reach the page
+const STATES = ['on', 'optional', 'off'];
+const famOf = (id) => (id === 'chief-of-staff' ? 'on' : (STATES.includes((F().family || {})[id]) ? F().family[id] : 'optional'));
+const helperMax = (h) => Math.max(0, Math.min(5, Math.trunc(Number(h && h.max_per_session)) || 0));
 const roleIds = () => Object.keys(F().roles).filter((id) => F().roles[id].class !== 'lane').sort((a, b) => (a === 'chief-of-staff' ? -1 : b === 'chief-of-staff' ? 1 : 0) || ({ on: 0, optional: 1, off: 2 }[famOf(a)] - { on: 0, optional: 1, off: 2 }[famOf(b)]) || name(a).localeCompare(name(b)));
 
 function changed() {
@@ -217,8 +220,8 @@ function hub() {
     const label = name(id); const w = Math.max(74, label.length * 7.6 + 26);
     return { id, label, w, x: cx + rx * Math.cos(a) + 30, y: cy + ry * Math.sin(a), st: famOf(id) };
   });
-  const edges = nodes.map((p) => `<path class="edge ${p.st}" d="M${cx + 30} ${cy} Q ${(cx + 30 + p.x) / 2} ${(cy + p.y) / 2 - 10} ${p.x} ${p.y}"/>`).join('');
-  const boxes = nodes.map((p) => `<g class="n ${p.st}" data-go="role-${esc(p.id)}" tabindex="0" role="button" aria-label="${esc(p.label)}, ${p.st}"><rect x="${p.x - p.w / 2}" y="${p.y - 15}" width="${p.w}" height="30" rx="15"/><text x="${p.x}" y="${p.y + 4.5}" text-anchor="middle">${esc(p.label)}</text></g>`).join('');
+  const edges = nodes.map((p) => `<path class="edge ${esc(p.st)}" d="M${cx + 30} ${cy} Q ${(cx + 30 + p.x) / 2} ${(cy + p.y) / 2 - 10} ${p.x} ${p.y}"/>`).join('');
+  const boxes = nodes.map((p) => `<g class="n ${esc(p.st)}" data-go="role-${esc(p.id)}" tabindex="0" role="button" aria-label="${esc(p.label)}, ${esc(p.st)}"><rect x="${p.x - p.w / 2}" y="${p.y - 15}" width="${p.w}" height="30" rx="15"/><text x="${p.x}" y="${p.y + 4.5}" text-anchor="middle">${esc(p.label)}</text></g>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="You talk to the Chief of Staff; it routes work to ${n} sessions">
     <path class="main-edge" d="M78 ${cy} L ${cx - 46} ${cy}"/>
     <text class="lbl" x="${(78 + cx - 46) / 2}" y="${cy - 10}" text-anchor="middle">you talk here</text>
@@ -233,7 +236,7 @@ function teamCard(id) {
   const r = F().roles[id], st = famOf(id), locked = CORE.includes(id);
   const srcs = ((L().roles || {})[id] || {}).sources || [];
   const seg = ['on', 'optional', 'off'].map((v) => `<button data-act="fam" data-id="${esc(id)}" data-v="${v}" aria-pressed="${st === v}">${{ on: 'On', optional: 'Optional', off: 'Off' }[v]}</button>`).join('');
-  return `<div class="card role is-${st}" id="role-${esc(id)}">
+  return `<div class="card role is-${esc(st)}" id="role-${esc(id)}">
     <div class="rtop"><span class="dot"></span><span class="rname">${esc(r.name)}</span><span class="rmodel">${esc(r.model || '')}</span></div>
     <p class="job" title="${esc(r.job)}">${esc(r.job || 'No job written yet.')}</p>
     ${locked ? '<div class="locked">Always on · you talk here</div>' : `<div class="seg" role="group" aria-label="${esc(r.name)} session">${seg}</div>`}
@@ -273,10 +276,11 @@ function laneCard(l) {
 
 function helpersCard() {
   const h = F().helpers || { max_per_session: 2, model: 'haiku' };
+  const hm = helperMax(h);
   return `<div class="card helpers">
     <div><div class="hk">Most helpers one session may start</div>
-      <div class="stepper"><button data-act="hmax" data-d="-1" aria-label="Fewer">−</button><b>${h.max_per_session}</b><button data-act="hmax" data-d="1" aria-label="More">+</button></div>
-      <p class="hnote">${h.max_per_session === 0 ? 'Sessions do all their work themselves.' : `A ${h.max_per_session + 1}${h.max_per_session === 1 ? 'nd' : h.max_per_session === 2 ? 'rd' : 'th'} helper is refused by the guard.`}</p></div>
+      <div class="stepper"><button data-act="hmax" data-d="-1" aria-label="Fewer">−</button><b>${hm}</b><button data-act="hmax" data-d="1" aria-label="More">+</button></div>
+      <p class="hnote">${hm === 0 ? 'Sessions do all their work themselves.' : `A ${hm + 1}${hm === 1 ? 'nd' : hm === 2 ? 'rd' : 'th'} helper is refused by the guard.`}</p></div>
     <div><div class="hk">Model helpers must use</div>
       <select data-act="hmodel" aria-label="Helper model">${Object.entries(MODELS).map(([k, v]) => `<option value="${k}" ${h.model === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       <p class="hnote">A helper asking for a bigger model is refused. Each session starts helpers only when the work needs one.</p></div>

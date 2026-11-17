@@ -92,16 +92,21 @@ export function parseExtends(spec) {
 export function loadLayers(root, { ref = null } = {}) {
   const project = (root && readJson(root, '.bootstrap/flow.json', ref)) || { version: 1 };
   let company = null;
+  let refusedCompany = null;
   const ext = parseExtends(project.extends);
   if (ext && ext.kind === 'github') company = readJson(root, '.bootstrap/company.json', ref); // the reviewed, committed copy
   else if (ext && ext.kind === 'path') {
-    const p = isAbsolute(ext.path) ? ext.path : resolve(root, ext.path);
-    const rel = !isAbsolute(ext.path) ? ext.path.replace(/^\.\//, '') : null;
-    company = rel && ref ? readJson(root, rel, ref) : (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : null);
+    // K5-C: the company layer is a file INSIDE the project, read like the github kind: from the committed copy when a ref is given. An absolute path or one that
+    // climbs out of the project (..) is refused (it would read any file on the computer, and at push time too); the layers say so and the company stays empty.
+    const rel = ext.path.replace(/^[.][/]/, '');
+    const climbs = isAbsolute(ext.path) || /^[A-Za-z]:/.test(ext.path) || ext.path.startsWith('\\') || ext.path.split(/[\\/]+/).includes('..') || ext.path.includes(String.fromCharCode(0));
+    if (climbs) refusedCompany = ext.path;
+    else if (ref) company = readJson(root, rel, ref);
+    else { const p = resolve(root, rel); company = existsSync(p) ? readJson(root, rel, null) : null; }
   }
   let branches = { live: 'main', dev: 'dev' };
   try { if (root) branches = { ...branches, ...JSON.parse(readFileSync(join(root, '.bootstrap', 'policy.json'), 'utf8')).branches }; } catch { /* defaults */ }
-  return { builtin: builtin(), company, project, extends: ext, briefs: briefRoles(root), branches };
+  return { builtin: builtin(), company, project, extends: ext, briefs: briefRoles(root), branches, refusedCompany };
 }
 
 // ---------- merge ----------
@@ -259,6 +264,7 @@ export function validate(layers, flow) {
   const add = (level, msg, fix = '', where = '') => out.push({ level, msg, fix, where });
   const floor = flow.floor;
   const cname = flow.company ? flow.company.name : 'Company';
+  if (layers.refusedCompany) add('error', `The company defaults point at "${layers.refusedCompany}", which is outside this project (an absolute path, or one that climbs out with "..").`, 'Put the company file inside the project, commit it, and give its project-relative path (or a github: address with a pinned commit).', 'extends');
   // project tried to loosen a company floor
   for (const pl of layers.project.lanes || []) {
     if (!pl.dev_signoffs) continue;

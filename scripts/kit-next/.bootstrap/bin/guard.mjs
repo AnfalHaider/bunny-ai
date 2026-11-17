@@ -24,6 +24,8 @@ const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'writ
 const INTERPRETERS = new Set(['node', 'nodejs', 'deno', 'bun', 'python', 'python2', 'python3', 'py', 'perl', 'ruby', 'php', 'lua', 'tclsh', 'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'pwsh', 'powershell', 'cmd', 'eval', 'xargs', 'busybox', 'wscript', 'cscript', 'mshta', 'osascript', 'awk', 'gawk', 'invoke-expression', 'iex', 'start-process', 'invoke-command', 'source']);
 const AGENT_TOOLS = new Set(['Agent', 'Task']);
 const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3, fable: 3 };
+const DECISION_FROM_START_MS = 8500; // K5-T: from the process start, node's start-up included; the belt below cuts at 9 s, the host at 10 s
+const BELT_MS = 9000;
 const MAX_COMMAND = 64 * 1024;       // everyday commands are under 15 KB (a 12 KB sign-off note still passes)
 const MAX_SIMPLE_COMMANDS = 2000;    // counted cheaply, before the full parse
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command', 'run_terminal_cmd']);
@@ -88,9 +90,19 @@ function helperCheck(root, flow, { sessionId, model, subagentType }) {
   return null;
 }
 
+/**
+ * K5-F: the flow as committed (HEAD) in the project's checkout, or null when flow.json is not committed there. The same file read from the working tree
+ * is what a session could have changed; HEAD is what review and the flow-change record covered.
+ */
+export function committedFlow(project) {
+  if (!project || git(['rev-parse', '--verify', '--quiet', 'HEAD:.bootstrap/flow.json'], project) === null) return null;
+  return loadFlow(project, { ref: 'HEAD' });
+}
+
 /** K1-5: one decision has a deadline of about 6 s (deadlineMs overrides it for tests); running out of time is a refusal, never a pass. */
 export function decide(input) {
-  setDeadline(input?.deadlineMs ?? 6000);
+  // K5-T: in the hook's child process the budget counts from the process start (see DECISION_FROM_START_MS); anywhere else it is 6 s of deciding
+  setDeadline(input?.deadlineMs ?? (input?.fromProcessStart ? DECISION_FROM_START_MS : 6000), { fromProcessStart: input?.fromProcessStart === true });
   try {
     return decideInner(input);
   } catch (err) {
@@ -122,12 +134,15 @@ function decideInner({ tool, command = '', filePath = '', cwd = process.cwd(), s
   const roleRoot = ctx.registered ? root : ctx.project;
   // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
   let brief = loadRole(roleRoot, role) || {};
-  if (existsSync(join(roleRoot, '.bootstrap', 'flow.json'))) {
-    try { const r = loadFlow(roleRoot).flow.roles[role]; if (r) brief = { ...brief, ...r, deny_commands: r.deny_commands || brief.deny_commands }; } catch { /* keep the brief */ }
+  // K5-F: the role overrides come from the flow as COMMITTED in the project's own checkout, never from a working-tree file a session could have written
+  // (a one-line script can write flow.json; it cannot make the commit that the Chief of Staff's flow-change record is checked against).
+  const committed = committedFlow(ctx.project);
+  if (committed) {
+    try { const r = committed.flow.roles[role]; if (r) brief = { ...brief, ...r, deny_commands: r.deny_commands || brief.deny_commands }; } catch { /* keep the brief */ }
   }
 
   if (AGENT_TOOLS.has(tool)) {
-    let flow = null; try { flow = loadFlow(root).flow; } catch { /* defaults */ }
+    let flow = null; try { flow = committedFlow(ctx.project)?.flow ?? null; } catch { /* defaults */ }
     const why = helperCheck(root, flow, { sessionId, model, subagentType });
     return why ? { allow: false, reason: `Blocked: ${why}` } : { allow: true };
   }
@@ -233,6 +248,7 @@ function runDecision(raw) {
     sessionId: payload.session_id || payload.sessionId || null,
     model: input.model || null,
     subagentType: input.subagent_type || null,
+    fromProcessStart: true,
   });
   if (res.allow) process.exit(0);
   process.stderr.write(res.reason + '\n');
@@ -243,9 +259,9 @@ function main() {
   const raw = readFileSync(0, 'utf8');
   if (process.argv.includes('--decide')) return runDecision(raw); // the child below
   // K1-5, the belt: decide in a child with a hard timeout under the host's 10 s; a child that does not answer in time is a refusal.
-  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--decide'], { input: raw, encoding: 'utf8', timeout: 8000, cwd: process.cwd(), env: process.env });
+  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--decide'], { input: raw, encoding: 'utf8', timeout: BELT_MS, cwd: process.cwd(), env: process.env });
   if (child.error || child.signal || child.status === null) {
-    process.stderr.write('guard: the decision did not finish within 8 s, so the call is refused.\n');
+    process.stderr.write('guard: the decision did not finish within 9 s, so the call is refused.\n');
     process.exit(2);
   }
   if (child.stderr) process.stderr.write(child.stderr);

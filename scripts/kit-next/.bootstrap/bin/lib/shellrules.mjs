@@ -19,6 +19,9 @@ const ROLE_WORD = /^(\$env:|env:)?BOOTSTRAP_ROLE(\s*=|$)/i;
 
 const NO_HOOKS = 'skipping git hooks is not allowed: the hooks are how the family\'s limits are enforced. Fix what the hook reports.';
 
+/** K5-4: git subcommands that only read, which stay open when pointed at another work tree. */
+const GIT_READ_SUBS = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'rev-list', 'ls-files', 'ls-tree', 'cat-file', 'describe', 'blame', 'grep', 'shortlog', 'for-each-ref', 'show-ref', 'name-rev', 'merge-base', 'diff-tree', 'diff-index', 'ls-remote', 'check-ignore', 'check-attr', 'count-objects', 'whatchanged', 'version', 'help']);
+
 /** "--no-verify" and every unique prefix git accepts ("--no-ve", "--no-verif"). */
 export function isHookSkipLong(w) {
   return typeof w === 'string' && w.length >= 6 && w.startsWith('--no-v') && '--no-verify'.startsWith(w);
@@ -116,6 +119,31 @@ function pushesEverything(args) {
   return args.some((a) => isBulk(a) || (!a.startsWith('-') && (a.includes('*') || a === ':' || a === '+:')));
 }
 
+const CONFIG_WRITE_FLAGS = new Set(['--add', '--replace-all', '--unset', '--unset-all', '--edit', '-e', '--rename-section', '--remove-section', '--file', '-f', '--blob', '--stdin']);
+const CONFIG_READ_FLAGS = new Set(['--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l']);
+const CONFIG_QUIET_FLAGS = new Set(['--local', '--global', '--system', '--worktree', '--show-origin', '--show-scope', '--null', '-z', '--bool', '--int', '--bool-or-int', '--path', '--expiry-date', '--includes', '--no-includes', '--name-only', '--fixed-value', '--no-type']);
+/**
+ * K5-1: does this `git config` only READ? A read is one of the get or list forms, or exactly one plain word (the key) and no value.
+ * Anything with a write flag, a value after the key, or an option not known here is not a read (fail closed).
+ */
+export function configIsRead(args) {
+  const words = [];
+  let reads = false;
+  for (const raw of args) {
+    const a = String(raw);
+    if (a.startsWith('-')) {
+      const name = a.split('=')[0];
+      if (CONFIG_WRITE_FLAGS.has(name)) return false;
+      if (CONFIG_READ_FLAGS.has(name)) { reads = true; continue; }
+      if (CONFIG_QUIET_FLAGS.has(name) || /^--type=/.test(a) || /^--default=/.test(a)) continue;
+      return false;
+    }
+    words.push(a);
+  }
+  if (reads) return true;
+  return words.length === 1; // `git config <key>` reads; `git config <key> <value>` writes
+}
+
 function refuseGit(call, ctx = {}) {
   const { sub, args, argWords, configs } = call;
   for (const c of configs) {
@@ -123,7 +151,8 @@ function refuseGit(call, ctx = {}) {
     if (key === 'core.hookspath') return 'pointing git at another hooks folder is not allowed (it would skip the pre-commit and pre-push checks).';
     if (key.startsWith('alias.') && /\b(commit|push)\b/i.test(String(c).slice(key.length))) return `a one-off git alias for commit or push can hide a hook skip; run the real command. ${NO_HOOKS}`;
   }
-  if (sub === 'config' && args.some((a) => /core\.hookspath/i.test(a))) return 'changing the git hooks folder is not allowed (it would skip the pre-commit and pre-push checks).';
+  // K5-1: reading the setting is fine; only a write (or anything we cannot tell is a read) is refused
+  if (sub === 'config' && args.some((a) => /core\.hookspath/i.test(a)) && !configIsRead(args)) return 'changing the git hooks folder is not allowed (it would skip the pre-commit and pre-push checks).';
   if (sub === 'commit' && commitSkipsHooks(args, argWords)) return NO_HOOKS;
   if (HOOK_SKIP_SUBS.has(sub)) {
     const end = args.indexOf('--');
@@ -235,6 +264,19 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if (why) return why;
   const { sub } = call;
   const where0 = (c, cx) => { let w = cx.cwd ?? process.cwd(); for (const d of c.dirs ?? []) w = pathResolve(w, d); return w; };
+  // K5-4: `git -C <another registered worktree> <something that writes>` would be judged by THAT folder's role (the main checkout's: chief-of-staff). Reads stay open.
+  if ((call.dirs ?? []).length && sub && !GIT_READ_SUBS.has(sub)) {
+    const at = where0(call, ctx);
+    const own = ctx.ctx?.top ?? ctx.root;
+    const roots = ctx.ctx?.roots ?? [];
+    if (own && roots.length) {
+      const norm = (p) => pathResolve(String(p)).replace(/[\\/]+$/, '').toLowerCase();
+      const inside = (p, r) => p === r || p.startsWith(`${r}\\`) || p.startsWith(`${r}/`);
+      const here = norm(at);
+      const owner = roots.map(norm).filter((r) => inside(here, r)).sort((a, b) => b.length - a.length)[0];
+      if (owner && owner !== norm(own)) return `"git -C" at another work tree of this project (${at}) would run as that folder's role, not yours. Run it from your own folder; reads (status, log, diff, show) are fine.`;
+    }
+  }
   if (sub === 'checkout-index' && call.args.some((a) => isLong(a, '--prefix', 3) || isLong(a, '--all', 3) || isLong(a, '--stdin', 4) || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
   if (sub === 'push') { const why3 = refusePush(call.args, where0(call, ctx)); if (why3) return why3; }
   // K-1 (Security B6): `git hook run` runs a hook by hand, outside the commit
@@ -339,11 +381,28 @@ export function innerParsed(words) {
  * The rules above over every command in a parsed command line. Returns a reason string or null.
  * `ctx` = { role }. Recurses into `sh -c "..."` and friends.
  */
+/**
+ * G1-5 / K5-3: does this word assign to a variable whose NAME is built from $ or a backtick? What counts:
+ *   $R=BOOTSTRAP_ROLE, ${R}=x, `cmd`=x         yes (the name is not plain)
+ *   $(FOO=1   (the start of an assignment inside a command substitution; the inner command is parsed and judged on its own)   no
+ *   "$f vsP1=$a"   (text with spaces before the "=", so no variable name)   no
+ */
+export function dynamicAssignmentName(text) {
+  const t = String(text);
+  const eq = t.indexOf('=');
+  if (eq < 0) return false;
+  const left = t.slice(0, eq);
+  if (!/[$`]/.test(left)) return false;
+  if (/^(\$\(|`)\s*[A-Za-z_][A-Za-z0-9_]*$/.test(left)) return false; // FOO=1 right after "$(" or a backtick: a plain name
+  if (/\s/.test(left) && !/[$][(]|`/.test(left)) return false; // a name has no spaces: this is text that happens to hold an "="
+  return true;
+}
+
 export function checkShell(parsed, ctx, depth = 0) {
   for (const cmd of parsed.commands) {
     checkDeadline(); // K1-5: between parts
     // G1-5: the name of an environment variable is never a variable ($R=BOOTSTRAP_ROLE, env $N=x): the role cannot be hidden that way.
-    if (ctx.role !== 'chief-of-staff' && cmd.words.some((w) => (/^[^=]*[$`][^=]*=/.test(w.text) && !w.text.startsWith('-')) || /^\$\{?env:[^=]*[$`]/i.test(w.text))) {
+    if (ctx.role !== 'chief-of-staff' && cmd.words.some((w) => (dynamicAssignmentName(w.text) && !w.text.startsWith('-')) || /^\$\{?env:[^=]*[$`]/i.test(w.text))) {
       return 'the name of an environment variable cannot be a variable: the guard cannot see what it sets.';
     }
     // K-3: the flow editor (flow-ui.mjs) writes the flow; only the Chief of Staff runs it.

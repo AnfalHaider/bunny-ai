@@ -31,8 +31,23 @@ export const DEFAULT_POLICY = {
 // K1-5: one decision has a deadline (the host cuts a hook off at 10 s, and a cut-off hook must not become a pass). Every git spawn checks it first and is
 // given the time that is left; the guard turns the error into a refusal.
 let deadlineAt = Infinity;
+// K5-T: inside one decision the read-only git questions (rev-parse, symbolic-ref, worktree list) are asked once per (folder, arguments) and remembered until the decision ends.
+// The guard runs nothing that writes, so an answer cannot go stale inside one decision; nothing is kept between decisions.
+let memo = null;
+let spawned = 0;
+const MEMO_READS = (args) => args[0] === 'rev-parse' || args[0] === 'symbolic-ref' || (args[0] === 'worktree' && args[1] === 'list');
+/** How many times git was really started since the last setDeadline (a test asserts the bound, so the calls cannot quietly come back). */
+export function gitSpawnCount() { return spawned; }
 export class GuardDeadline extends Error {}
-export function setDeadline(ms) { deadlineAt = ms === null || ms === undefined ? Infinity : Date.now() + ms; }
+/**
+ * Start (ms) or end (null) a decision. fromProcessStart: the deadline counts from when this process started, so node's start-up comes out of the budget instead of being added to it.
+ */
+export function setDeadline(ms, { fromProcessStart = false } = {}) {
+  memo = ms === null || ms === undefined ? null : new Map();
+  spawned = 0;
+  if (ms === null || ms === undefined) { deadlineAt = Infinity; return; }
+  deadlineAt = (fromProcessStart ? Date.now() - process.uptime() * 1000 : Date.now()) + ms;
+}
 export function checkDeadline() { if (Date.now() > deadlineAt) throw new GuardDeadline('the decision took too long'); }
 /** K1-5: true when git itself cannot answer (missing, failing or too slow): then "not in a repository" cannot be told from "git is broken", and the guard must not read silence as a pass. */
 export function gitBroken(cwd) {
@@ -47,13 +62,19 @@ export function spawnTimeout(max = 2000) {
 
 export function git(args, cwd, opts = {}) {
   checkDeadline();
+  const key = memo && MEMO_READS(args) && Object.keys(opts).length === 0 ? `${cwd}\0${args.join('\0')}` : null;
+  if (key !== null && memo.has(key)) return memo.get(key);
   const left = deadlineAt - Date.now();
+  let answer = null;
+  spawned += 1;
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...(Number.isFinite(left) ? { timeout: Math.max(50, left) } : {}), ...opts }).trim();
+    answer = execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...(Number.isFinite(left) ? { timeout: Math.max(50, left) } : {}), ...opts }).trim();
   } catch {
     checkDeadline();
-    return null;
+    answer = null;
   }
+  if (key !== null) memo.set(key, answer);
+  return answer;
 }
 
 // The project's own branch names. Live: the remote's default branch, else the first of the usual
@@ -141,7 +162,10 @@ export function resolveContext(cwd, hints = [process.env.CLAUDE_PROJECT_DIR, pro
 /** A path that decides what git or the guard believes: a .git file, a planted git directory's commondir or role file, a policy.json under .bootstrap. */
 export function plantedGitPath(rel) {
   const p = String(rel).replace(/\\/g, '/').replace(/^\.\//, '');
-  return /(^|\/)\.git(\/|$)/i.test(p) || /(^|\/)(commondir|bootstrap-role|gitdir)$/i.test(p) || /(^|\/)\.bootstrap\/policy\.json$/i.test(p);
+  // K5-D: the STAGED kit's policy (scripts/kit-next/.bootstrap/policy.json) is a file of the repository like the rest of the staged kit, not a policy any session is judged by: it was
+  // writable by the Chief of Staff only, who may commit docs only, so nobody could update it. It lands in .bootstrap/ through the Chief's kit apply, with Security's sign-off.
+  const staged = /^scripts\/kit-next\/\.bootstrap\/policy\.json$/i.test(p);
+  return /(^|\/)\.git(\/|$)/i.test(p) || /(^|\/)(commondir|bootstrap-role|gitdir)$/i.test(p) || (!staged && /(^|\/)\.bootstrap\/policy\.json$/i.test(p));
 }
 
 /**
