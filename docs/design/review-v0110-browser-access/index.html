@@ -164,7 +164,7 @@ table.n th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:
 <blockquote>"Another thing I want with this build is the option in the build to run the application in local host."<br>"By local host I mean an option that allows me to run the application in my browser if required."<br>"I would want it to be reachable through the net if allowed in settings."</blockquote></div>
 
 <div class="ask"><b class="l">What is proposed, in one paragraph</b>
-<div>Two steps, and the second is off until the person turns it on. <b>1. Open in your browser:</b> a button in Settings (Desktop app) and an item in the tray menu open Bunny in the default browser at an address on this PC only (<code>127.0.0.1</code>), next to the desktop window. The window-only controls (permission mode and rules, connectors, installs, updates) are locked in the browser and say "Change this in Bunny's window." <b>2. Allow other devices to open Bunny:</b> a setting, off by default, that lets a phone or another computer on the same network open the same address after a plain warning, a passcode the person sets, and the Windows firewall question. Other devices sign in with the passcode, and every window-only control stays locked for them too. Reaching Bunny from the internet is not part of the default: it needs HTTPS (a tunnel or a certificate), so it is a decision for the owner, at the bottom.</div></div>
+<div>Two steps, and the second is off until the person turns it on. <b>1. Open in your browser:</b> a button in Settings (Desktop app) and an item in the tray menu open Bunny in the default browser at an address on this PC only (<code>127.0.0.1</code>), next to the desktop window. The window-only controls (permission mode and rules, connectors, installs, updates) are locked in the browser and say "Change this in Bunny's window." <b>2. Allow other devices to open Bunny:</b> a setting, off by default, that lets a phone or another computer on the same network open the same address after a plain warning, a passcode the person sets, and the Windows firewall question. Other devices sign in with the passcode, and every window-only control stays locked for them too. The owner has decided: <b>local network only</b>. Reaching Bunny from the internet is not drawn; it is a note for later (it needs HTTPS).</div></div>
 
 <!-- ============ 1 ============ -->
 <section class="sec" id="where">
@@ -231,8 +231,8 @@ table.n th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:
 <li><b>The passcode is stored hashed</b> on this computer and never shown again; the generated one is shown once with a copy button.</li>
 <li><b>Every window-only control is locked for a remote device</b>, and so are terminal, computer use and installs; the remote device can chat, read chats and files the chat already shows, nothing that runs something new on the PC without the window (to be confirmed by Security, listed in the decisions).</li>
 <li><b>Signed-in devices list</b> with a Sign out for each and a "Sign out all". Turning the setting off ends every session at once.</li>
-<li><b>Local network only</b> is the recommendation. The address is the PC's LAN address. The server refuses a request whose address or Host header is not one of the PC's own addresses, so it is not usable through a forwarded port by accident.</li>
-<li><b>Reaching it from the internet</b> needs HTTPS (a tunnel or a certificate), because a passcode and a session over plain HTTP are readable on the way. That is not drawn as a default; it is decision 1.</li>
+<li><b>Local network only</b> (decided by the owner). The address is the PC's LAN address. The server refuses a request whose address or Host header is not one of the PC's own addresses, so it is not usable through a forwarded port by accident.</li>
+<li><b>Not the internet.</b> Nothing here is meant to be reached from outside the home network. Do not forward a router port to it.</li>
 <li><b>The Windows firewall:</b> the first time Bunny listens on the network, Windows asks. Bunny tells the person what to expect before it happens, and recommends Private networks only (the dialog below).</li>
 </ul>
 
@@ -246,7 +246,7 @@ table.n th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:
 
 <h3>Decisions for the owner (my recommendation first)</h3>
 <ol class="notes">
-<li><b>Local network only, or the internet too.</b> Local network only (recommended). The internet needs HTTPS through a tunnel or a certificate, which is more to set up and a bigger target; it can come later as its own step.</li>
+<li><b>Local network only: decided.</b> The owner chose local network only. Reaching it over the internet is for later and needs HTTPS (a tunnel or a certificate); it is not drawn.</li>
 <li><b>Passcode, or approval from Bunny's window.</b> A passcode (recommended: it works when the person is away from the PC), with a second option later where each new device waits for a click in the window.</li>
 <li><b>Does it stay on after a restart?</b> "Allow other devices" turns off at every restart (recommended); "Keep the same address" stays as set.</li>
 <li><b>Bunny must stay open.</b> Closing the window ends the browser session unless Bunny keeps running in the tray. Recommended: say so in the setting and offer "Keep running in the tray" next to it, as drawn.</li>
