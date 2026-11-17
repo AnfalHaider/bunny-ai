@@ -200,7 +200,7 @@ test('plain-browser dev mode keeps HTTP for all of it', async (t) => {
 test('every page that writes uses the shared channel: no raw fetch of a write in the pages', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const dir = new URL('../src/ui/', import.meta.url);
-  for (const f of readdirSync(dir).filter((n) => /\.(js|html)$/.test(n) && n !== 'api.js' && n !== 'sw.js')) {
+  for (const f of readdirSync(dir).filter((n) => /\.(js|html)$/.test(n) && n !== 'api.js' && n !== 'sw.js' && n !== 'signin.js' /* the sign-in page of another device: never shown in Bunny's window, and its one write is not a window-only route */ && n !== 'remote.js' /* the CSRF wrapper of a page served to another device */)) {
     const text = readFileSync(new URL(f, dir), 'utf8');
     assert.doesNotMatch(text, /fetch\([^)]*\{[^}]*method:\s*'(POST|PUT|PATCH|DELETE)'/, `${f} makes a write with a raw fetch: use sendJSON so the desktop app can route it through the window`);
   }

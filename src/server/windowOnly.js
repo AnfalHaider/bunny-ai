@@ -43,6 +43,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], '^/api/providers/[a-z0-9-]+/(connect|disconnect)$'],
   [WRITES, '^/api/account/(github|google)(/.*)?$'],         // sign-ins and sign-outs
   [['POST'], '^/api/oauth/[a-z0-9-]+/(start|finish)$'],     // provider sign-in
+  [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];
 
 /** Is this request one only the window may make? `body` is the parsed JSON body (some writes are judged by what they change). */
