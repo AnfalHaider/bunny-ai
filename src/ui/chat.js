@@ -13,6 +13,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { orderProviders } from './provider-order.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
@@ -362,6 +363,14 @@ function renderPicker() {
   });
 }
 
+/** The person's own provider order, on this computer: {person: [...ids], models: {modelId: [...ids]}}. */
+function readProviderOrder() {
+  try {
+    const o = JSON.parse(localStorage.getItem('bunny.providerOrder') || '{}');
+    return { person: Array.isArray(o.person) ? o.person : [], models: o.models && typeof o.models === 'object' ? o.models : {} };
+  } catch { return { person: [], models: {} }; }
+}
+
 function closePicker() {
   document.querySelector('.picker-panel')?.remove();
   $('picker-button')?.setAttribute('aria-expanded', 'false');
@@ -378,7 +387,35 @@ function openPicker(host, trigger) {
   });
   const list = element('div', { className: 'picker-list', role: 'listbox' });
 
-  panel.append(search, list);
+  // W4-13: filters combine with AND; a model must have a provider that fits Provider and Free together
+  const filters = { providers: new Set(), freeOnly: false };
+  const filterCount = () => filters.providers.size + (filters.freeOnly ? 1 : 0);
+  const filtersBtn = button('Filters', { className: 'picker-filters-btn', 'aria-expanded': 'false' });
+  const bar = element('div', { className: 'picker-filters', hidden: true });
+  const count = element('div', { className: 'picker-count', hidden: true });
+  const providerNames = new Map(state.models.map((m) => [m.providerId, m.providerName]));
+  const chipFor = (label, on, toggle) => {
+    const c = button(label, { className: 'picker-chip', 'aria-pressed': String(on) });
+    c.addEventListener('click', () => { toggle(); paintBar(); paint(search.value); });
+    return c;
+  };
+  const paintBar = () => {
+    bar.replaceChildren(
+      element('span', { className: 'picker-chip-label', textContent: 'Provider' }),
+      ...[...providerNames].map(([id, name]) => chipFor(name, filters.providers.has(id), () => { if (!filters.providers.delete(id)) filters.providers.add(id); })),
+      chipFor('Free only (Free and Free daily)', filters.freeOnly, () => { filters.freeOnly = !filters.freeOnly; }),
+    );
+    if (filterCount()) {
+      const clear = button('Clear filters', { className: 'picker-clear' });
+      clear.addEventListener('click', () => { filters.providers.clear(); filters.freeOnly = false; paintBar(); paint(search.value); });
+      bar.append(clear);
+    }
+    filtersBtn.textContent = filterCount() ? `Filters · ${filterCount()}` : 'Filters';
+  };
+  filtersBtn.addEventListener('click', () => { bar.hidden = !bar.hidden; filtersBtn.setAttribute('aria-expanded', String(!bar.hidden)); });
+  paintBar();
+
+  panel.append(search, filtersBtn, bar, count, list);
   host.append(panel);
   search.focus();
 
@@ -416,8 +453,18 @@ function openPicker(host, trigger) {
   const paint = (query) => {
     const q = query.trim().toLowerCase();
     list.replaceChildren();
-    const matches = state.models.filter((m) =>
-      !q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q));
+    const filtered = filterCount() > 0;
+    const rows = state.models.filter((m) =>
+      (!q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q))
+      && (!filters.providers.size || filters.providers.has(m.providerId))
+      && (!filters.freeOnly || m.freeKind));
+    // one entry per model; every provider that serves it (and fits the filters) is a tag
+    const byModel = new Map();
+    for (const m of rows) { if (!byModel.has(m.id)) byModel.set(m.id, []); byModel.get(m.id).push(m); }
+    const totalModels = new Set(state.models.map((m) => m.id)).size;
+    count.hidden = !filtered;
+    count.textContent = `${byModel.size} of ${totalModels} models`;
+    const matches = rows;
     if (!matches.length) {
       list.append(element('div', { className: 'picker-empty', textContent: say('chat.noModelMatches') }));
       addShowAll();
@@ -426,7 +473,7 @@ function openPicker(host, trigger) {
       return;
     }
     let currentProvider = null;
-    if (!q) {
+    if (!q && !filtered) { // filtering hides Auto and the suggestions, as drawn
       const job = state.resolvedJob ?? 'chat';
       const autoItem = button('', { className: 'picker-item picker-auto', role: 'option', 'aria-selected': String(Boolean(state.modelAuto)) });
       autoItem.id = 'model-auto';
@@ -448,17 +495,35 @@ function openPicker(host, trigger) {
       }
       list.append(element('div', { className: 'picker-group picker-group-all', textContent: 'All models' }));
     }
-    for (const m of matches) {
-      if (m.providerId !== currentProvider) {
-        currentProvider = m.providerId;
-        list.append(element('div', { className: 'picker-group', textContent: m.providerName }));
-      }
-      list.append(pickerItem(m));
-    }
+    for (const group of byModel.values()) list.append(modelItem(group));
     addShowAll();
     active = 0;
     highlight();
   };
+
+  // One row per model: its name, its context size, and every provider as a tag in the order Bunny tries them (Free first, then Free daily).
+  function modelItem(group) {
+    const first = group[0];
+    const saved = readProviderOrder();
+    const order = orderProviders(group.map((m) => m.providerId), {
+      free: Object.fromEntries(group.map((m) => [m.providerId, m.freeKind ?? null])),
+      personOrder: saved.person, modelOrder: saved.models[first.id] ?? [],
+      out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
+    });
+    const rowsInOrder = order.map((id) => group.find((m) => m.providerId === id));
+    const chosen = rowsInOrder[0];
+    const item = pickerItem(chosen);
+    item.classList.add('picker-model');
+    item.id = `model-${first.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
+    const tags = element('span', { className: 'picker-tags' });
+    for (const m of rowsInOrder) {
+      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerName });
+      if (m.freeKind) tag.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+      tags.append(tag);
+    }
+    item.append(tags);
+    return item;
+  }
 
   function pickerItem(m, section = '') {
       const isCurrent = !state.modelAuto && state.selected

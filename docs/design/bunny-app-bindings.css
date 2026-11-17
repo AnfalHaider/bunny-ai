@@ -1113,3 +1113,18 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .rules .res.ask { color: var(--warn); background: var(--warn-soft); }
 .rules .res.allow { color: var(--ok); background: var(--ok-soft); }
 .rules .res.none { color: var(--text-dim); background: var(--bg); border: 1px solid var(--line); }
+
+/* W4-13: the model picker: one row per model, every provider a tag, Free and Free daily, filters */
+.picker-filters-btn { margin: 0 var(--sp-4) var(--sp-2); padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--text-dim); font-size: var(--fs-xs); cursor: pointer; align-self: flex-start; }
+.picker-filters-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.picker-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); background: var(--bg); }
+.picker-filters[hidden], .picker-count[hidden] { display: none; }
+.picker-chip-label { font-size: var(--fs-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+.picker-chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 9px; font-size: var(--fs-xs); color: var(--text-dim); cursor: pointer; }
+.picker-chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.picker-clear { border: 0; background: none; color: var(--accent); font-size: var(--fs-xs); cursor: pointer; }
+.picker-count { padding: var(--sp-2) var(--sp-5); font-size: var(--fs-xs); color: var(--text-dim); }
+.picker-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.picker-tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--text-dim); display: inline-flex; gap: 5px; align-items: center; }
+.picker-tag.is-out { opacity: .55; text-decoration: line-through; }
+.picker-free { color: var(--accent); font-weight: var(--fw-medium); }

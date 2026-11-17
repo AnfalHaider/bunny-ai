@@ -166,3 +166,16 @@ test('orderProviders: with no options returns the input order', () => {
   assert.deepEqual(orderProviders(['x', 'y', 'z']), ['x', 'y', 'z']);
   assert.deepEqual(orderProviders([]), []);
 });
+
+test('W4-13: the page has its own copy of orderProviders (the browser can only import from src/ui) and it behaves the same', async () => {
+  const ui = await import('../src/ui/provider-order.js');
+  const server = await import('../src/providers/providerOrder.js');
+  const cases = [
+    [['a', 'b', 'c'], {}],
+    [['a', 'b', 'c'], { free: { b: 'daily', c: 'free' } }],
+    [['a', 'b', 'c'], { personOrder: ['c', 'a'], free: { b: 'free' } }],
+    [['a', 'b', 'c'], { modelOrder: ['b'], personOrder: ['c'], out: { b: true } }],
+    [['a', 'b', 'c'], { out: new Set(['a']) }],
+  ];
+  for (const [list, opts] of cases) assert.deepEqual(ui.orderProviders(list, opts), server.orderProviders(list, opts), JSON.stringify(opts));
+});
