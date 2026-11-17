@@ -26,7 +26,7 @@ test('the file on disk never contains the plain secret', { skip: !windows }, asy
   const secret = 'sk-should-never-appear-in-ciphertext-9999';
 
   await store.set('provider:openai', secret);
-  const files = await readdir(dir);
+  const files = (await readdir(dir)).filter((f) => f.endsWith('.secret'));
   assert.equal(files.length, 1);
   const raw = await readFile(join(dir, files[0]), 'utf8');
   assert.equal(raw.includes(secret), false);
@@ -56,7 +56,7 @@ test('keys with path separators cannot escape the directory', { skip: !windows }
   const dir = await mkdtemp(join(tmpdir(), 'bunny-secrets-'));
   const store = dpapiSecretStore({ dir });
   await store.set('../../evil', 'sk-traversal-123456');
-  const files = await readdir(dir);
+  const files = (await readdir(dir)).filter((f) => f.endsWith('.secret'));
   assert.equal(files.length, 1);
   assert.match(files[0], /^[a-f0-9]{32}\.secret$/);
   await rm(dir, { recursive: true, force: true });
@@ -89,10 +89,39 @@ test('S-6 (v0.1.10): a saved cipher that is not plain base64 is never put into a
   try {
     const store = dpapiSecretStore({ dir });
     await store.set('provider:x', 'sk-real-0000');
-    const [file] = await list(dir);
+    const [file] = (await list(dir)).filter((f) => f.endsWith('.secret'));
     await writeFile(join(dir, file), JSON.stringify({ name: 'provider:x', cipher: "AAAA'; Set-Content $env:TEMP\s6-proof.txt 'ran'; '" }));
     assert.equal(await store.get('provider:x'), null, 'the planted file reads as no secret');
     await writeFile(join(dir, file), 'not json');
     assert.equal(await store.get('provider:x'), null);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('S-3 (v0.1.10): secrets are protected with a per-install entropy value: a bare Unprotect of a copied file fails, and a secret saved by an older build still reads and is re-saved with it', { skip: !windows }, async () => {
+  const { writeFile, readFile: read } = await import('node:fs/promises');
+  const { spawnSync } = await import('node:child_process');
+  const { PS } = await import('../src/providers/secretStore.js');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-secrets-'));
+  try {
+    const store = dpapiSecretStore({ dir });
+    await store.set('provider:e', 'sk-entropy-0000');
+    const file = (await readdir(dir)).find((f) => f.endsWith('.secret'));
+    const saved = JSON.parse(await read(join(dir, file), 'utf8'));
+    assert.equal(saved.v, 2);
+    assert.ok((await readdir(dir)).includes('entropy.key'));
+    assert.doesNotMatch(await read(join(dir, file), 'utf8'), /entropy/i, 'the entropy is not in the secret file');
+    const bare = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; $e=[Convert]::FromBase64String('${saved.cipher}'); [Security.Cryptography.ProtectedData]::Unprotect($e,$null,'CurrentUser') | Out-Null; 'READ'`;
+    const r = spawnSync(PS, ['-NoProfile', '-NonInteractive', '-Command', bare], { encoding: 'utf8' });
+    assert.doesNotMatch(r.stdout, /READ/, 'the two calls a generic stealer would make do not read it');
+    assert.equal(await store.get('provider:e'), 'sk-entropy-0000');
+    // an older build's file: no entropy, version 1
+    const legacy = `Add-Type -AssemblyName System.Security; $p=[Text.Encoding]::UTF8.GetBytes('sk-legacy-1111'); [Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($p,$null,'CurrentUser'))`;
+    const old = spawnSync(PS, ['-NoProfile', '-NonInteractive', '-Command', legacy], { encoding: 'utf8' }).stdout.trim();
+    const { createHash } = await import('node:crypto');
+    const legacyFile = join(dir, `${createHash('sha256').update('provider:old').digest('hex').slice(0, 32)}.secret`);
+    await writeFile(legacyFile, JSON.stringify({ name: 'provider:old', cipher: old }));
+    assert.equal(await store.get('provider:old'), 'sk-legacy-1111', 'an older secret still reads');
+    assert.equal(JSON.parse(await read(legacyFile, 'utf8')).v, 2, 'and is re-saved with the entropy');
+    assert.equal(await store.get('provider:old'), 'sk-legacy-1111');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

@@ -11,6 +11,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { gitPath, powershellPath, safeEnv, taskkillPath } from './safeExec.js';
 import { clip } from './clip.js';
+import { realpathSync } from 'node:fs';
 import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -226,16 +227,30 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
+export function createWorkspace(rootFolder, { protect = [], envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
+
+  // S-3 (Security baseline 0.1.4): Bunny's own secrets (the provider keys and sign-in tokens, the account file) are never reachable by the agent's tools, whatever folder the chat works in:
+  // read, write, list, search and shell, by REAL path (so a junction or symlink to them is no way in). `protect` is a list of absolute paths, each a folder or a file.
+  const lower = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const protectedPaths = [...new Set(protect.flatMap((p) => { const out = [lower(resolve(p))]; try { out.push(lower(realpathSync(p))); } catch { /* not made yet */ } return out; }))];
+  const isProtected = (abs) => { const t = lower(abs); return protectedPaths.some((p) => t === p || t.startsWith(`${p}/`)); };
+  const PROTECTED = 'That is where Bunny keeps its own secrets (provider keys and sign-in tokens). They are not available to Bunny\'s tools.';
+  /** A command that names a protected path in any spelling it can be typed in (slashes either way, quotes or backticks inside, 8.3 style folder names are caught by the real-path test above for the file tools). */
+  const namesProtected = (command) => {
+    const text = String(command ?? '').replace(/[`'"^]/g, '').replace(/\\/g, '/').toLowerCase();
+    return protectedPaths.some((p) => text.includes(p)) || (protectedPaths.length > 0 && (/[.]secret\b/.test(text) || /bunnyai\/(secrets|account[.]json)/.test(text) || /\/secrets\/[0-9a-f]{16,}/.test(text)));
+  };
 
   async function inside(path = '.', { mustExist = true } = {}) {
     const target = resolve(root, String(path || '.'));
+    if (isProtected(target)) throw new Error(PROTECTED);
     const rel = relative(root, target);
     if (rel.startsWith('..') || isAbsolute(rel)) throw new Error(`${path} is outside the workspace folder`);
     if (mustExist) {
       const real = await realpath(target);
       const realRoot = await realpath(root);
+      if (isProtected(real)) throw new Error(PROTECTED); // a link or junction that leads to them
       if (real !== realRoot && !real.startsWith(realRoot + sep)) throw new Error(`${path} points outside the workspace folder`);
     } else {
       // A new file: its nearest existing parent must still be inside.
@@ -324,7 +339,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
         if (lines.length >= MAX_LIST) { lines.push('… (more not shown)'); return; }
         if (e.isDirectory() && SKIP_DIRS.has(e.name)) continue;
         const abs = join(dir, e.name);
-        if (hidden?.(show(abs))) continue; // a path the person's rules do not let Bunny read
+        if (isProtected(abs) || hidden?.(show(abs))) continue; // a path the person's rules do not let Bunny read
         lines.push(`${'  '.repeat(level)}${show(abs)}${e.isDirectory() ? '/' : ''}`);
         if (e.isDirectory() && level + 1 < max) await walk(abs, level + 1);
       }
@@ -452,7 +467,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       entries.sort((a, b) => a.name.localeCompare(b.name));
       for (const e of entries) {
         const abs = join(dir, e.name);
-        if (hidden?.(show(abs))) continue;
+        if (isProtected(abs) || hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
         if (e.isFile() && isFile(show(abs))) candidates.push(abs);
       }
@@ -487,7 +502,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
         const abs = join(dir, e.name);
-        if (hidden?.(show(abs))) continue;
+        if (isProtected(abs) || hidden?.(show(abs))) continue;
         if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(abs); continue; }
         if (!e.isFile() || !matches(relative(start, abs).split(sep).join('/'))) continue;
         seen += 1;
@@ -586,6 +601,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     }
     const cmd = translateChains(String(command ?? '').trim());
     if (!cmd) throw new Error('run_command needs a command');
+    if (namesProtected(cmd)) throw new Error(PROTECTED);
     const where = cwd ? await inside(cwd) : root;
     return new Promise((done) => {
       const child = spawn(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],

@@ -2002,7 +2002,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [join(dataDir, 'secrets'), join(dataDir, 'account.json')], beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // W6-12: a Code chat carries its task list from one message to the next. The newest saved list that still has an open step
       // is the starting list of this reply (and is told to the model); a finished list is not carried. Not in Chat mode (no workspace).
@@ -2349,7 +2349,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
           const fresh = await sessions.get(id);
           const checked = await effectiveRoot(fresh);
           if (!checked?.ok) return checked?.gone ? checked.reason : 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
+          workspace = createWorkspace(checked.folder, { protect: [join(dataDir, 'secrets'), join(dataDir, 'account.json')], beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.
