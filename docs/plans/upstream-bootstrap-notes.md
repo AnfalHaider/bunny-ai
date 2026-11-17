@@ -2,7 +2,7 @@
 title: Upstream report for the bootstrap-environment plugin
 author: tech-lead
 date: 2026-11-16
-for: the owner, via the Chief of Staff (the plugin source is AnfalHaider/Bootstrap-environment, local checkout D:\Projects\Bootstrap-environment)
+for: the owner, via the Chief of Staff (the plugin source is AnfalHaider/Bootstrap-environment)
 status: report only. Nothing was written to the plugin or to its checkout. Line numbers are from the installed copy, version 0.4.0, in the plugin cache.
 related: docs/plans/guard-gaps-spec.md (the repo-side fixes, for Builder)
 ---
