@@ -163,6 +163,18 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     }, null);
   }
 
+  /** P-5: switch a plugin's skills and connectors on or off together. A part that is already gone is skipped. */
+  function setEnabled(id, on) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, changed: 0 };
+      let changed = 0;
+      for (const sid of record.skills ?? []) { if (await skills.update(sid, { enabled: Boolean(on) }).then(() => true, () => false)) changed += 1; }
+      for (const cid of record.connectors ?? []) { if (await mcp.update(cid, { enabled: Boolean(on) }).then(() => true, () => false)) changed += 1; }
+      return { ok: true, changed };
+    });
+  }
+
   /** Remove a plugin and what it added, from the server's own list. A part that is already gone does not stop the rest. */
   function uninstall(id) {
     return serial(async () => {
@@ -226,6 +238,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     uninstall,
     takePending,
     switchOn,
+    setEnabled,
     previewPlugin,
   };
 }
