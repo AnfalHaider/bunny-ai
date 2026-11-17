@@ -3,7 +3,7 @@
  *   read  - web_search, read_url, search_plugins, read_skill
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
-import { readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
+import { parseGithubUrl, readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
 import { inScope } from './scope.js';
 
@@ -89,7 +89,9 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   let queue = Promise.resolve();
   const serial = (job) => { const next = queue.then(job, job); queue = next.catch(() => {}); return next; };
 
-  const findInstalled = (name, source) => (getSettings().plugins ?? []).find((p) => (source ? p.source === source : !p.source && p.name === name));
+  // The same repository is the same plugin however its address was spelled: letters in any case, www, http, .git, a trailing slash, a /tree/branch address.
+  const repoKey = (source) => { const g = parseGithubUrl(source); return g ? `${g.owner}/${g.repo}`.toLowerCase() : String(source ?? '').trim().toLowerCase().replace(/\/+$/, ''); };
+  const findInstalled = (name, source) => (getSettings().plugins ?? []).find((p) => (source ? p.source && repoKey(p.source) === repoKey(source) : !p.source && String(p.name).trim().toLowerCase() === String(name).trim().toLowerCase()));
 
   /** G11: is this connector still named by another installed plugin? Then it stays. */
   const usedByAnother = (connectorId, pluginId) => (getSettings().plugins ?? []).some((p) => p.id !== pluginId && ((p.connectors ?? []).includes(connectorId) || (p.uses ?? []).includes(connectorId)));

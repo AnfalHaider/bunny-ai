@@ -57,10 +57,27 @@ export function isWindowOnlyRoute(method, path, body = null) {
   return false;
 }
 
+/**
+ * The desktop bridge (window.bunnyDesktop) as THIS page can reach it. Electron's preload exposes it to the main frame only, and the Settings pages (customize,
+ * providers, automation, settings) run in an iframe of that frame, so there it is the parent's. The parent is used only when it is the SAME origin (Bunny's own page);
+ * a frame from anywhere else, or a parent that cannot be read, gets no bridge and its writes go over plain HTTP, where the server refuses window-only ones.
+ * Main-side checks (the sender frame must be a Bunny page, the route must be window-only) are untouched.
+ */
+export function desktopBridge(win = typeof window !== 'undefined' ? window : null) {
+  if (!win) return null;
+  if (win.bunnyDesktop) return win.bunnyDesktop;
+  try {
+    const parent = win.parent;
+    if (parent && parent !== win && parent.location.origin === win.location.origin) return parent.bunnyDesktop ?? null;
+  } catch { /* a parent from another origin cannot be read: no bridge */ }
+  return null;
+}
+
 export async function sendJSON(path, method, body) {
   // In the desktop app those writes go to the main process (preload and IPC), which makes the request; in a plain browser they go over HTTP.
-  if (typeof window !== 'undefined' && window.bunnyDesktop?.secureWrite && isWindowOnlyRoute(method, path, body)) {
-    const r = await window.bunnyDesktop.secureWrite(method, path, body ?? {});
+  const desk = desktopBridge();
+  if (desk?.secureWrite && isWindowOnlyRoute(method, path, body)) {
+    const r = await desk.secureWrite(method, path, body ?? {});
     if (r.status >= 400) throw Object.assign(new Error(r.data?.message ?? `HTTP ${r.status}`), r.data);
     return r.data;
   }
