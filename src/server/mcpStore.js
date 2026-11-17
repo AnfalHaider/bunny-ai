@@ -103,14 +103,24 @@ export function createMcpStore({ file, secrets = null }) {
     return out;
   }
 
-  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [] }) {
+  /** W6-6: where an installed tool came from: the repository, the commit and the one folder name inside Bunny AI's tools folder. Nothing else is kept. */
+  function cleanSource(source) {
+    if (!source || typeof source !== 'object') return {};
+    const repo = String(source.repo ?? '');
+    const sha = String(source.sha ?? '');
+    const folder = String(source.folder ?? '');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^[0-9a-f]{40}$/.test(sha) || !/^[\w.-]{1,200}$/.test(folder)) return {};
+    return { source: { repo, sha, folder } };
+  }
+
+  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null }) {
     await load();
     const clean = String(name ?? '').trim();
     const address = String(url ?? '').trim();
     if (!clean) throw Object.assign(new Error('A server needs a name'), { code: 'mcp.nameRequired' });
     if (String(command ?? '').trim()) {
       const local = cleanLocal({ command, args, env, cwd });
-      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
+      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), ...cleanSource(source), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
       if (secrets && Object.keys(local.env).length) {
         try {
           for (const [k, v] of Object.entries(local.env)) await putSecret(server.id, k, v);
