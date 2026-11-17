@@ -610,7 +610,7 @@
 </main>
 
 <script type="module">
-  import { getJSON, sendJSON, applyTheme, applyAppearance, CODE_THEMES, codeThemeVars } from './api.js';
+  import { getJSON, sendJSON, applyTheme, applyAppearance, CODE_THEMES, codeThemeVars, desktopBridge } from './api.js';
   import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
   const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
@@ -1131,7 +1131,7 @@
   }
 
   // In the desktop app the updater downloads and installs; in a browser this only says what is out.
-  const updates = window.bunnyDesktop?.updates ?? window.parent?.bunnyDesktop?.updates ?? null;
+  const updates = desktopBridge()?.updates ?? null;
   const showUpdate = (s) => {
     const note = $('update-note');
     if (!s) return;
@@ -1160,7 +1160,7 @@
   // ---- desktop app (only inside the Electron shell, which exposes window.bunnyDesktop) ----
   async function bootDesktop() {
     // The Settings window shows this page in an iframe; the bridge lives on the parent.
-    const desk = window.bunnyDesktop ?? window.parent?.bunnyDesktop;
+    const desk = desktopBridge();
     if (!desk) return;
     $('desktop-section').hidden = false;
     const prefs = await desk.getPrefs();

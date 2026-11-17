@@ -84,7 +84,7 @@
 </main>
 
 <script type="module">
-  import { getJSON, sendJSON, applyTheme, applyAppearance } from './api.js';
+  import { getJSON, sendJSON, applyTheme, applyAppearance, desktopBridge } from './api.js';
   import { applyEmbed } from './embed.js';
   import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
   applyEmbed();
@@ -192,7 +192,8 @@
       await load();
     };
     const pick = async () => {
-      const picked = window.bunnyDesktop?.pickFolder ? await window.bunnyDesktop.pickFolder() : window.prompt('The full path of a folder');
+      const desk = desktopBridge(); // the Settings pages run in an iframe: the bridge is the parent's
+      const picked = desk?.pickFolder ? await desk.pickFolder() : window.prompt('The full path of a folder');
       if (!picked) return;
       await sendJSON('/api/folder/check', 'POST', { folder: picked }).catch(() => {}); // in the browser a typed path is a chosen path; in the app the picker already did this
       await change([...folders, picked]);
