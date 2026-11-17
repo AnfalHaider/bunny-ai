@@ -1770,7 +1770,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // An incognito chat leaves nothing behind: no longer copy, no note file.
         if (!saveable || secretish || session.incognito) return out;
         out.modelResult = clip(full, 8000);
-        // Only the results of the workspace's own file and command tools are saved there (never connector, mail or memory
+        // Only the results of the workspace's own file and command tools and (D-3) of connectors are saved there (never mail or memory
         // output), never in Plan mode (read-only), and never through a link: .bunny and .bunny/notes must be real folders
         // inside the workspace. A .bunny/.gitignore keeps the notes out of the person's repository.
         if (full.length > 8000 && workspace && permissionMode !== 'plan') {
@@ -2767,7 +2767,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace, ...(signIn ?? {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
         send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}) });
         return signIn ? `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.` : result;
       };
