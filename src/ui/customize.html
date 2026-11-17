@@ -210,7 +210,7 @@
             st.canSignIn ? act(st.signInLabel, () => startSignIn(s)) : null,
             signedIn ? act('Sign out', () => signOut(s)) : null,
             act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); }),
-            act(s.trustReadOnly ? 'Read-only labels trusted' : 'Trust read-only labels', async () => { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { trustReadOnly: !s.trustReadOnly }); await load(); }),
+            act(s.trustReadOnly ? 'Read-only labels trusted' : 'Trust read-only labels', async () => { try { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { trustReadOnly: !s.trustReadOnly }); notice = ''; } catch (err) { notice = err.message; } await load(); }),
             toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on })),
             plugin ? null : act('Remove', async () => { await sendJSON(`/api/mcp/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
           ],
