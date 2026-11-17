@@ -236,7 +236,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const pendingBrowser = new Map();
   const screensDir = join(dataDir, 'screens');
   const memory = createMemoryStore({ file: join(dataDir, 'memory.json') });
-  const mcp = createMcpStore({ file: join(dataDir, 'mcp.json') });
+  const mcp = createMcpStore({ file: join(dataDir, 'mcp.json'), secrets });
   const schedules = createScheduleStore({ file: join(dataDir, 'schedules.json') });
   const hooks = createHookStore({ file: join(dataDir, 'hooks.json') });
   const skills = createSkillStore({ file: join(dataDir, 'skills.json') });
@@ -253,8 +253,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
   const localMcp = createLocalMcp();
   // W3-6: signing in to a connector that needs it; its tokens live only in the secret store. The engine is made on first use (it needs the real port).
   const connectorSignIn = createConnectorSignIn({ secrets, mcp, getBase: () => `http://127.0.0.1:${server.address().port}` });
-  const mcpListTools = (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(server, extra) : httpListTools(server, { auth: connectorSignIn.authFor(server) }));
-  const mcpCallTool = (server, call) => (server.type === 'local' ? localMcp.callTool(server, call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
+  // L-4: a local connector's settings come back from the secret store only to start it
+  const withEnv = async (server) => ({ ...server, env: await mcp.resolveEnv(server.id) });
+  const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server) }));
+  const mcpCallTool = async (server, call) => (server.type === 'local' ? localMcp.callTool(await withEnv(server), call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
   const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
@@ -1965,6 +1967,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
               continue;
             }
             if (server.type === 'local') send('tool', { tool: `Start ${server.name}`, status: 'failed', result: err.message });
+            server.status = 'error'; server.lastError = err.message; // this copy of the connector is what the rest of the reply reads
             await mcp.setStatus(server.id, { status: 'error', error: err.message }).catch(() => {});
           }
         }

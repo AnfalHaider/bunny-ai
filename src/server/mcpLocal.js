@@ -14,6 +14,7 @@
  * server first) and reports progress; later starts and calls keep the short limits.
  */
 import { spawn, execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cleanSchema } from './mcp.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -64,7 +65,8 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
   const everReady = new Set(); // keys (id + command + arguments + settings) that have started once in this run
 
   function key(server) {
-    return JSON.stringify([server.id, server.command, server.args ?? [], server.env ?? {}]);
+    // L-4: the settings' values are hashed, so the key that tells whether a value changed (and the program must restart) never holds them
+    return createHash('sha256').update(JSON.stringify([server.id, server.command, server.args ?? [], server.env ?? {}])).digest('hex');
   }
 
   function start(server) {
