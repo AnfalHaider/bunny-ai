@@ -103,19 +103,28 @@ test('the gate reads the COMMITTED file: a working copy that differs, or a file 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('the signed entry in docs/security/audit-exceptions.json excuses exactly the picomatch finding, until its review date, and never the same advisory somewhere else', () => {
+test('each signed entry in docs/security/audit-exceptions.json excuses exactly its own advisory at its own path, until its review date, and nothing else', () => {
   const file = new URL('../docs/security/audit-exceptions.json', import.meta.url);
   const { exceptions } = JSON.parse(readFileSync(file, 'utf8'));
-  assert.equal(exceptions.length, 1);
-  const e = exceptions[0];
-  assert.equal(e.advisory, 'GHSA-fc5q-39xc-vjpf');
-  assert.equal(e.package_path, 'node_modules/picomatch');
-  for (const k of ['accepted_by', 'owner_words', 'said_at']) assert.doesNotMatch(String(e[k]), /^PENDING/i, k);
+  assert.deepEqual(exceptions.map((e) => `${e.advisory}|${e.package_path}`).sort(), [
+    'GHSA-fc5q-39xc-vjpf|node_modules/picomatch',
+    'GHSA-g3hv-75wg-m249|node_modules/@electron/universal/node_modules/minimatch',
+    'GHSA-g3hv-75wg-m249|node_modules/minimatch',
+  ].sort(), 'the three signed entries and no other');
   const day = new Date('2026-11-20T00:00:00Z');
-  assert.equal(judgeAudit(audit, exceptions, day).ok, true, 'it excuses the finding while it is current');
-  assert.equal(checkExceptions(exceptions, day).problems.length, 0);
-  assert.equal(judgeAudit(audit, exceptions, new Date(`${e.review_by}T23:00:00Z`)).ok, true, 'still on its review day');
-  assert.equal(judgeAudit(audit, exceptions, new Date('2027-01-01T00:00:00Z')).ok, false, 'and it stops excusing anything after the review date');
-  const nested = { vulnerabilities: { picomatch: { name: 'picomatch', severity: 'high', via: [advisory], nodes: ['node_modules/other/node_modules/picomatch'] } } };
-  assert.equal(judgeAudit(nested, exceptions, day).ok, false, 'a copy at another path is not excused');
+  assert.equal(checkExceptions(exceptions, day).problems.length, 0, 'every entry is signed, unexpired and well formed (the moderate ones too)');
+  const finding = (adv, path, severity = 'high') => ({ vulnerabilities: { pkg: { name: 'pkg', severity, via: [{ source: 1, name: 'pkg', title: 't', url: `https://github.com/advisories/${adv}`, severity, range: '*' }], nodes: [path] } } });
+  for (const e of exceptions) {
+    for (const k of ['accepted_by', 'owner_words', 'said_at']) assert.doesNotMatch(String(e[k]), /^PENDING/i, `${e.advisory} ${k}`);
+    const own = finding(e.advisory, e.package_path);
+    assert.equal(judgeAudit(own, exceptions, day).ok, true, `${e.advisory} at ${e.package_path} is excused while current`);
+    assert.equal(judgeAudit(own, exceptions, new Date(`${e.review_by}T23:00:00Z`)).ok, true, 'still on its review day');
+    assert.equal(judgeAudit(own, exceptions, new Date('2027-01-01T00:00:00Z')).ok, false, 'and it stops excusing anything after the review date');
+    assert.equal(judgeAudit(finding(e.advisory, 'node_modules/other/node_modules/pkg'), exceptions, day).ok, false, 'the same advisory at another path is not excused');
+    assert.equal(judgeAudit(finding('GHSA-zzzz-zzzz-zzzz', e.package_path), exceptions, day).ok, false, 'another advisory at the same path is not excused');
+  }
+  // an entry only excuses the pair it names: the picomatch entry does not excuse minimatch's advisory at minimatch's path, and the reverse
+  const only = (adv) => exceptions.filter((e) => e.advisory === adv);
+  assert.equal(judgeAudit(finding('GHSA-g3hv-75wg-m249', 'node_modules/minimatch'), only('GHSA-fc5q-39xc-vjpf'), day).ok, false);
+  assert.equal(judgeAudit(finding('GHSA-fc5q-39xc-vjpf', 'node_modules/picomatch'), only('GHSA-g3hv-75wg-m249'), day).ok, false);
 });
