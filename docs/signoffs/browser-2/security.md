@@ -1,7 +1,7 @@
 ---
 piece: browser-2
 role: security
-sha: 4d2a894
+sha: 564b28b
 verdict: PASS
 date: 2026-11-17
 ---
@@ -126,3 +126,10 @@ None of them decides tools, folders, mode or unattended running.
 - **`DEVICE_CAPABILITIES`** (`browser-mode.js:111`) is `['code_mode', 'leave_plan_mode']`, equal to the server's `REMOTE_CAPABILITIES` (`remoteAccess.js:119`), which is R1. A browser tab on this PC locks every card. A device locks only the capability cards it may not answer.
 - **Tests** from a copy of 4d2a894, with the variable unset: `browser-mode` 5 of 5, `remote-access` 30 of 30.
 - **For the release check:** `browser_compare` (W6-11) is not on `REMOTE_TOOLS_DENIED` in this branch; it lives on Builder C's branch. When the branches meet, the classification test will fail until it is added there, as the Chief of Staff has asked of Builder B. I'll check that in the release candidate.
+
+## Re-stamp at 564b28b: PASS (supersedes 4d2a894)
+
+- **Page side only.** `git diff 4d2a894 564b28b` touches `src/ui/browser-mode.js`, `src/ui/chat.js`, the e2e spec and `test/remote-access.test.js`. Nothing under `src/server` changed.
+- **The model chip on a device** now PATCHes the chat's own `setting/providerId` and `setting/model`, both already on the device write list (`remoteAccess.js`, 568f8d5), instead of writing the app's default. A device's `PUT /api/settings` is still refused (new test).
+- **The escaped-dot fix** turns `(customize|providers|automation).html$` into `\.html$` in the page-name tests that choose which controls to lock. That is UI-only, and stricter.
+- **Tests,** from a copy of 564b28b with the variable unset: `remote-access` 31 of 31, `browser-mode` 5 of 5.
