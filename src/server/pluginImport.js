@@ -80,7 +80,10 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
 
   // skills: skills/<name>/SKILL.md, or a single SKILL.md at the root
   // P-1: also under a nested plugin (plugins/<name>/skills/<skill>/SKILL.md) and under .claude/skills
-  const skillFiles = files.filter((p) => /(^|\/)SKILL\.md$/i.test(p) && (p.startsWith('skills/') || p === 'SKILL.md' || p.split('/').length === 2 || /(^|\/)skills\/[^/]+\/SKILL\.md$/i.test(p)));
+  const NOT_A_SKILL = /(^|\/)(node_modules|tests?|__tests__|fixtures?|examples?|samples?|vendor)\//i; // QA: never imported from there
+  const MAX_SKILLS = 40;
+  const allSkillFiles = files.filter((p) => !NOT_A_SKILL.test(p) && /(^|\/)SKILL\.md$/i.test(p) && (p.startsWith('skills/') || p === 'SKILL.md' || p.split('/').length === 2 || /(^|\/)skills\/[^/]+\/SKILL\.md$/i.test(p)));
+  const skillFiles = allSkillFiles.slice(0, MAX_SKILLS);
   const skills = [];
   for (const path of skillFiles) {
     const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
@@ -102,6 +105,7 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
   // listed for add_connector, where the person confirms the exact command.
   const connectors = [];
   const skipped = [];
+  if (allSkillFiles.length > skillFiles.length) skipped.push(`${allSkillFiles.length - skillFiles.length} more skills were not imported (at most ${MAX_SKILLS} are taken from one repository)`);
   if (files.includes('.mcp.json')) {
     try {
       const mcp = JSON.parse(await raw('.mcp.json'));

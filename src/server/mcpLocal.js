@@ -15,7 +15,7 @@
  */
 import { spawn, execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cleanSchema } from './mcp.js';
+import { cleanSchema, MAX_PAGES, MAX_TOOLS } from './mcp.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 const START_TIMEOUT_MS = 60_000; // a start of a program that has already started once in this run
@@ -197,19 +197,23 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     // R-5: follow nextCursor (at most 20 pages)
     const all = [];
     let cursor = null;
-    for (let page = 0; page < 20; page += 1) {
+    let truncated = false;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
       const result = await conn.request('tools/list', cursor ? { cursor } : {}, timeoutMs);
       all.push(...(result?.tools ?? []));
       cursor = result?.nextCursor || null;
       if (!cursor) break;
+      if (all.length >= MAX_TOOLS || page === MAX_PAGES - 1) { truncated = true; break; }
     }
-    return all.map((t) => ({
+    const cleaned = all.slice(0, MAX_TOOLS).map((t) => ({
       name: t.name,
       description: String(t.description ?? '').slice(0, 1000),
       inputSchema: cleanSchema(t.inputSchema),
       readOnlyHint: t.annotations?.readOnlyHint === true, // what the connector SAYS: a suggestion only (RO-1)
       readOnly: false,
     }));
+    if (truncated) Object.defineProperty(cleaned, 'truncated', { value: true });
+    return cleaned;
   }
 
   async function callTool(server, { name, arguments: args = {}, timeoutMs = 120_000, onProgress = null, signal = null }) {

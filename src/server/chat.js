@@ -523,7 +523,10 @@ function collectToolCall(into, fragments) {
 export function refusesTools(err) {
   if (!err || err.code !== 'chat.http') return false;
   const m = String(err.message ?? '');
-  return /answered (400|404|405|415|422)\b/.test(m) && /\btools?\b|function[ _-]?call/i.test(m.split(':').slice(1).join(':'));
+  const detail = m.split(':').slice(1).join(':');
+  // the refusal is ABOUT tools ("tools is not supported", "does not support function calling"), not a message that merely holds the word
+  const about = /\b(tools?|function[ _-]?call(ing|s)?)\b[^.]{0,60}\b(not|n't|unsupported|invalid|unknown|cannot|can't|no support)\b|\b(not|n't|unsupported|no support for|does not support|doesn't support|cannot use|can't use)\b[^.]{0,40}\b(tools?|function[ _-]?call(ing|s)?)\b/i;
+  return /answered (400|404|405|415|422)\b/.test(m) && about.test(detail) && !/max_tokens|context|too (large|long)|rate/i.test(detail);
 }
 
 const lastUserText = (messages) => {

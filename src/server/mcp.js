@@ -156,7 +156,8 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
     // R-5: a server with a long list sends it in pages; follow nextCursor (at most 20 pages)
     const tools = [];
     let cursor = null;
-    for (let page = 0; page < 20; page += 1) {
+    let truncated = false;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
       const list = { jsonrpc: '2.0', id: 1 + page, method: 'tools/list', params: cursor ? { cursor } : {} };
       let res = await send(url, server, list, opts);
       if (page === 0 && res.status === 404 && sessions.get(sessionKey(server, url))?.id) { forgetSession(server); await ensureSession(url, server, opts); res = await send(url, server, list, opts); }
@@ -166,14 +167,17 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
       tools.push(...(payload?.result?.tools ?? []));
       cursor = payload?.result?.nextCursor || null;
       if (!cursor) break;
+      if (tools.length >= MAX_TOOLS || page === MAX_PAGES - 1) { truncated = true; break; }
     }
-    return tools.map((t) => ({
+    const cleaned = tools.slice(0, MAX_TOOLS).map((t) => ({
       name: t.name,
       description: String(t.description ?? '').slice(0, 1000),
       inputSchema: cleanSchema(t.inputSchema),
       readOnlyHint: t.annotations?.readOnlyHint === true, // what the server SAYS: a suggestion only (RO-1)
       readOnly: false,
     }));
+    if (truncated) Object.defineProperty(cleaned, 'truncated', { value: true });
+    return cleaned;
   } catch (err) {
     if (err instanceof McpError) throw err;
     if (err?.name === 'AbortError') throw new McpError('The server did not answer in time', 'mcp.timeout');
@@ -190,6 +194,9 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
  * server-sent event; both are handled.
  */
 export const MAX_ANSWER_BYTES = 5 * 1024 * 1024;
+/** R-5: a tool list is followed for at most this many pages and tools; past that the answer says it is cut (truncated). */
+export const MAX_PAGES = 100;
+export const MAX_TOOLS = 1000;
 
 /** The body of a connector's answer as text, refusing more than about 5 MB (up to 20 pages of a tool list could otherwise fill the memory). */
 async function readCapped(res, limit = MAX_ANSWER_BYTES) {
