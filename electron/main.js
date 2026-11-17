@@ -2,7 +2,7 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
+import { app, BrowserWindow, WebContentsView, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
 import { buildContextMenuTemplate } from './context-menu.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
+import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { createUpdater } from './updater.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
@@ -79,7 +80,13 @@ function contextMenu(contents) {
   });
 }
 
+// W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
+// A view may only be put in a Bunny window, by the page of that window; and never shows Bunny's own server (its port).
+const windowOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.webContents === sender ? w : null; };
+const browserViews = createBrowserViews({ WebContentsView, session, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
+
 function guard(contents) {
+  if (browserViews.ownsSession(contents.session)) return;
   contextMenu(contents);
   try { contents.session.setSpellCheckerLanguages(['en-US']); } catch { /* dictionary unavailable: spell check stays off */ }
   // Bunny's own pages may open in new Bunny windows (pop-out chat); everything
@@ -210,12 +217,21 @@ ipcMain.handle('dialog:pickFolder', async (event) => {
 // The model working a page in the browser panel (see browserAgent.js). Only Bunny's
 // own pages may ask, and only for frames inside the page that asked.
 ipcMain.handle('browser:act', async (event, name, action, args) => {
-  if (!isOwn(event.senderFrame?.url ?? '')) return { error: 'Not allowed' };
+  if (!senderAllowed(event, isOwn, windowOf)) return { error: 'Not allowed' };
   try {
+    // a tab that is a view (W6-24) is worked in its own page; otherwise it is a frame in the panel
+    const worked = await browserViews.control(event.sender, name, action, args ?? {});
+    if (worked) return worked;
     return await controlFrame(event.sender, name, action, args ?? {});
   } catch (err) {
     return { error: String(err?.message ?? err) };
   }
+});
+
+// The panel's tabs as views (W6-24): only Bunny's own page, and only the views that page opened.
+ipcMain.handle('browser:view', (event, msg) => {
+  if (!senderAllowed(event, isOwn, windowOf)) return { ok: false, error: 'Not allowed' };
+  try { return browserViews.handle(event.sender, msg); } catch (err) { return { ok: false, error: String(err?.message ?? err) }; }
 });
 
 // ---- updates from GitHub Releases ----
@@ -255,21 +271,8 @@ app.on('web-contents-created', (_event, contents) => guard(contents));
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
-  // The browser panel shows sites in frames. Many sites forbid being framed; for
-  // frames only, drop that one rule (X-Frame-Options and CSP frame-ancestors) so
-  // the panel works like a browser tab. Top-level pages keep every header.
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    if (details.resourceType !== 'subFrame') return callback({});
-    const headers = { ...details.responseHeaders };
-    for (const key of Object.keys(headers)) {
-      const lower = key.toLowerCase();
-      if (lower === 'x-frame-options') delete headers[key];
-      if (lower === 'content-security-policy') {
-        headers[key] = headers[key].map((v) => v.split(';').filter((d) => !/^\s*frame-ancestors\b/i.test(d)).join(';'));
-      }
-    }
-    callback({ responseHeaders: headers });
-  });
+  // W6-24: the browser panel's tabs are views with a session of their own (browserViews.js), so Bunny's own session no longer drops any frame header:
+  // Bunny's own pages keep X-Frame-Options and CSP frame-ancestors like any other page.
   try {
     await startServer();
   } catch (err) {
