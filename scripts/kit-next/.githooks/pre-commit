@@ -1,0 +1,11 @@
+#!/bin/sh
+# A1: role scope check on the staged paths (protected files, the role's write_globs).
+# Runs for every tool and every human, because git runs it. Never bypass it.
+# The checker fails open, loudly, on its own errors; a missing Node is reported and not blocking.
+# K-2: the checks come from the MAIN checkout of this repository (git's common directory), never from the folder being committed in,
+# and a project whose checks are missing refuses.
+common="$(git rev-parse --git-common-dir)" || exit 1
+main="$(cd "$common/.." 2>/dev/null && pwd)" || { echo "pre-commit: cannot find the project (the main checkout of this repository): commit refused." >&2; exit 1; }
+[ -f "$main/.bootstrap/bin/precommit.mjs" ] || { echo "pre-commit: the project's checks ($main/.bootstrap/bin/precommit.mjs) are missing: commit refused." >&2; exit 1; }
+command -v node >/dev/null 2>&1 || { echo "pre-commit: node not found; the scope check did not run" >&2; exit 0; }
+exec node "$main/.bootstrap/bin/precommit.mjs" "$@"

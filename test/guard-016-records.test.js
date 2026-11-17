@@ -155,7 +155,7 @@ test('item 4 push: completeSignoffs does not count a sign-off whose file name an
   });
   commitAll(root, 'p');
   const forged = [];
-  const done = prepush.completeSignoffs(root, git(root, 'rev-parse', 'HEAD'), policy, forged);
+  const done = prepush.completeSignoffs(root, git(root, 'rev-parse', 'HEAD'), policy, process.env.KIT_NEXT ? { forged } : forged);
   assert.deepEqual(done, [], 'security did not really sign');
   assert.deepEqual(forged, ['docs/signoffs/p/security.md']);
 });

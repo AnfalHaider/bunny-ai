@@ -7,11 +7,11 @@ import assert from 'node:assert/strict';
 
 import { join } from 'node:path';
 
-import { guard, makeRepo, NEXT, HERE } from './guard-helpers.js';
+import { guard, makeRepo, NEXT, HERE, NEW_KIT } from './guard-helpers.js';
 
 // The live guard (landed 237f3e1) also applies the strict hook-skip patterns to commands it CAN parse, because ANSI-C quoting
 // ($'...') can hide a flag from a tokenizer: prose that mentions a flag is refused there. The staged copy read words only.
-const LIVE_STRICT = NEXT === join(HERE, '..');
+const LIVE_STRICT = NEXT === join(HERE, '..') && !NEW_KIT; // K-4: the installed 0.6.0 kit reads words only, like the staged one
 
 // Flag texts are assembled so this file never contains them as one literal.
 const SKIP = `--no-${'verify'}`;
@@ -166,7 +166,7 @@ test('C malformed: unbalanced quotes fall back to the strict patterns; empty and
   assert.equal(verdict(t, 'git commit -m "unclosed').allow, true, 'an unclosed quote with no flag');
   assert.equal(verdict(t, 'git commit -n -m "unclosed').allow, false, 'an unclosed quote does not hide a skip: strict fallback');
   const t0 = Date.now();
-  assert.equal(verdict(t, `git commit -m "${'x '.repeat(500_000)}"`).allow, true);
+  assert.equal(verdict(t, `git commit -m "${'x '.repeat(500_000)}"`).allow, !NEW_KIT); // kit-next (K-1): over 256 KB is refused unread
   assert.ok(Date.now() - t0 < 4000, 'a 1 MB command finishes inside the 10 s hook limit');
 });
 

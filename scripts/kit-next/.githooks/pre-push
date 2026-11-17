@@ -1,0 +1,10 @@
+#!/bin/sh
+# bootstrap-environment: sign-off, release-record and conflict-marker checks (AGENTS.md O10, O11, 7E, 7F).
+# Runs for every tool and every human, because git runs it. Never bypass with --no-verify.
+# If Node is missing this fails, and so does the push: a guard that cannot run must not pass.
+# K-2: the checks come from the MAIN checkout of this repository (git's common directory), never from the folder being pushed:
+# a folder with a planted copy of the checks runs the project's, and a project without them refuses.
+common="$(git rev-parse --git-common-dir)" || exit 1
+main="$(cd "$common/.." 2>/dev/null && pwd)" || { echo "pre-push: cannot find the project (the main checkout of this repository): push refused." >&2; exit 1; }
+[ -f "$main/.bootstrap/bin/prepush.mjs" ] || { echo "pre-push: the project's checks ($main/.bootstrap/bin/prepush.mjs) are missing: push refused." >&2; exit 1; }
+exec node "$main/.bootstrap/bin/prepush.mjs" "$@"

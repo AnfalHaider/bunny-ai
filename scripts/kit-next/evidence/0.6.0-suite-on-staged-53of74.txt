@@ -1,0 +1,1060 @@
+warning: in the working copy of 'src/orders.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/orders.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/adapt.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/bootstrap.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/detect-stack.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/flow-ui.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/flow.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/fm.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/ops.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/policy.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/mem.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/prepush.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/defaults.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/rules.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/hotfix.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/platform.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/project-lane.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/researcher.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/support.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/ui/flow-editor.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/MEMORY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/BOARD.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/pending-register.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/extra.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/totals/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/totals/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/orders.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/orders.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/totals/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/adapt.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/bootstrap.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/detect-stack.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/flow-ui.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/flow.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/fm.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/ops.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/policy.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/mem.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/prepush.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/defaults.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/rules.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/hotfix.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/platform.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/project-lane.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/researcher.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/support.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/ui/flow-editor.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/MEMORY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/BOARD.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/pending-register.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app.py', LF will be replaced by CRLF the next time Git touches it
+▶ end to end on a sample project
+  ✔ detect-stack names server frameworks and gate candidates (4.5503ms)
+  ✖ adopting the kit: a kit-only push lands; a push with project code in it is refused (2183.356ms)
+  ✖ after adoption, changing a kit file goes through the flow like any code (1296.7701ms)
+  ✖ a flow change lands with the owner's recorded yes; without it, or after a later edit, it is refused (1538.3645ms)
+  ✖ kit upgrade: refused without the owner's yes; lands with `kit apply`; a later edit or mixed code is refused (2060.1802ms)
+  ✔ helpers: at most 2 per session, cheapest model only (1345.549ms)
+  ✔ a routed piece with no sign-offs yet is named in the refusal, with who must sign (2175.1262ms)
+  ✔ signoff signs the newest code commit, not a docs commit on top of it (2599.6242ms)
+  ✔ guard: a Git Bash style cwd still finds the project (never silently allows) (465.735ms)
+  ✔ a project with only "master" and no dev branch: detected, and sign-offs are checked on master (4794.6024ms)
+  ✔ mem new writes a lesson that passes mem check (85.8813ms)
+✖ end to end on a sample project (20758.4391ms)
+warning: in the working copy of '.bootstrap/bin/adapt.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/bootstrap.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/detect-stack.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/flow-ui.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/flow.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/fm.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/ops.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/policy.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/mem.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/prepush.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/defaults.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/rules.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/hotfix.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/platform.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/project-lane.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/researcher.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/support.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/ui/flow-editor.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/MEMORY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/BOARD.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/pending-register.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/logs/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/logs/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R1/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R1/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R1/_required.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R1/_required.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/2026-11-11-r1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/2026-11-11-r1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/releases/2026-11-11-hf.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/b.js', LF will be replaced by CRLF the next time Git touches it
+▶ guard (pre-tool hook)
+  ✔ not bootstrapped -> allow (238.4967ms)
+  ✔ force push denied for every role (222.2983ms)
+  ✔ --no-verify and hooksPath tampering denied (418.4195ms)
+  ✔ live push: builder denied, release-ops allowed (record checked later by pre-push) (1184.7444ms)
+  ✔ server commands denied (215.8861ms)
+  ✔ docs-only role cannot write code; can write docs (453.4334ms)
+  ✔ QA may write tests, not app code (448.8315ms)
+  ✔ protected config: only chief-of-staff (571.3169ms)
+  ✔ malformed payload blocks (fail closed) (68.9886ms)
+  ✔ CLI exit codes: allow 0, deny 2 with reason (548.0849ms)
+✔ guard (pre-tool hook) (4373.9687ms)
+▶ pre-push (git hook)
+  ✔ docs-only push to dev needs no sign-off (964.0134ms)
+  ✔ unsigned code to dev is refused (1437.3214ms)
+  ✖ partial sign-off still refused; complete sign-off + docs on top accepted (2466.5005ms)
+  ✖ code added after sign-off is refused (3212.1977ms)
+  ✖ _required.md can add security (2885.2279ms)
+  ✖ live: wrong role and missing record refused; full record accepted (5409.694ms)
+  ✔ live: record without pasted check refused (1431.8744ms)
+  ✔ hotfix exempt from sign-offs on live, not from the record (1187.4289ms)
+  ✖ deleting dev refused; feature branches free (1256.1755ms)
+  ✔ conflict markers refused on any branch (1600.0857ms)
+✖ pre-push (git hook) (21921.8498ms)
+▶ memory CLI
+  ✔ check catches a lesson naming a missing file, then passes when fixed (59.7428ms)
+  ✔ check catches malformed frontmatter and conflict markers in docs (9.8902ms)
+✔ memory CLI (69.8733ms)
+▶ detect-stack
+  ✔ finds lockfiles, frameworks and language servers (20.0017ms)
+✔ detect-stack (20.161ms)
+warning: in the working copy of '.bootstrap/bin/adapt.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/bootstrap.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/detect-stack.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/flow-ui.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/flow.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/fm.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/ops.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/policy.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/mem.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/prepush.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/defaults.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/rules.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/hotfix.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/platform.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/project-lane.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/researcher.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/support.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/ui/flow-editor.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/MEMORY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/BOARD.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/pending-register.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/auth/login.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/qa.md', LF will be replaced by CRLF the next time Git touches it
+▶ flow layers and company locks
+  ✔ init writes a starter flow; built-in lanes load (12.5003ms)
+  ✔ a project cannot loosen a company floor: effective keeps it AND the check reports an error (5.7936ms)
+  ✔ a project can tighten: adding a sign-off is fine (4.4447ms)
+  ✔ company: required sources, blocked sources, forbidden relays (7.6066ms)
+  ✔ checks catch: no reviewer, self-review, unknown session, live without a word (13.2068ms)
+  ✔ presets change lanes (10.213ms)
+  ✔ conditions add roles by file path; pasted links parse (8.323ms)
+✔ flow layers and company locks (64.5003ms)
+▶ pre-push follows the flow
+  ✔ setup: commit a flow with a custom light lane and push it (it becomes the accepted flow) (268.5104ms)
+  ✖ a piece on the light lane needs only its lane sign-offs (2797.3973ms)
+  ✖ a condition adds Security when the piece touches auth files (4109.6387ms)
+  ✖ a push that loosens the flow is judged by the flow already accepted (6304.5332ms)
+  ✖ only Hotfix may use an exempt lane (6349.3049ms)
+✖ pre-push follows the flow (19830.3918ms)
+▶ guard knows custom sessions from the flow
+  ✔ a custom session gets its write scope from flow.json (290.1405ms)
+✔ guard knows custom sessions from the flow (290.423ms)
+▶ editor server
+  ✖ page needs the token; API needs the token header (188.5482ms)
+  ✔ a foreign Host header is refused (DNS rebinding), even with the token (16.6167ms)
+  ✔ /api/simulate answers with the same logic, for the flow being edited (30.5353ms)
+  ✔ save refuses a flow with errors, accepts a valid one and writes flow.md (78.6454ms)
+✖ editor server (346.8317ms)
+▶ canvas: side-by-side steps and the simulator
+  ✔ with_previous groups session steps into one column; gates and words stay alone (4.3322ms)
+  ✔ docs/flow.md fans side-by-side steps out and back in (5.0111ms)
+  ✔ simulate: auth + screen → HIGH, Design added, words include go and approve; docs-only skips (3.5388ms)
+  ✔ simulate agrees with requiredFor (the push check) for the same lane and files (3.6097ms)
+✔ canvas: side-by-side steps and the simulator (16.9189ms)
+▶ company defaults folder
+  ✔ company init + a project extending it by path (103.4019ms)
+✔ company defaults folder (103.5758ms)
+warning: in the working copy of '.bootstrap/bin/adapt.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/bootstrap.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/detect-stack.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/flow-ui.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/flow.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/fm.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/ops.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/policy.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/mem.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/prepush.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/defaults.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/rules.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/hotfix.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/platform.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/project-lane.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/researcher.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/support.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/ui/flow-editor.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/MEMORY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/BOARD.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/pending-register.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R2/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R2/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R2/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/R2/qa.md', LF will be replaced by CRLF the next time Git touches it
+▶ brief: each session gets only its own rules
+  ✔ QA gets testing rules, not release rules; the Chief of Staff gets routing rules (48.994ms)
+  ✔ a brief is far smaller than reading the whole rulebook (189.7266ms)
+✔ brief: each session gets only its own rules (241.0797ms)
+▶ next, sign-off evidence, and the push check
+  ✔ signoff CLI: a PASS needs evidence (1183.736ms)
+  ✔ next: not routed → says so; routed → lists what is missing and who acts next; weak PASS flagged (1395.9495ms)
+  ✖ the push check ignores a PASS without evidence and says why (2786.8182ms)
+✖ next, sign-off evidence, and the push check (5367.3503ms)
+▶ suggest a lane from the changed files
+  ✔ auth → high, screen → normal, plain → no-screen (279.7966ms)
+✔ suggest a lane from the changed files (280.2656ms)
+▶ board: read only your rows; archive old DONE rows
+  ✔ --mine shows only this session's open rows (88.7819ms)
+  ✔ archive keeps the newest 10 DONE rows (7.4786ms)
+✔ board: read only your rows; archive old DONE rows (96.7599ms)
+▶ init --size and cost
+  ✔ a prototype starts with the Solo preset; a bad size is refused (4640.4644ms)
+  ✔ cost lists every session and warns when the board grows (1396.6124ms)
+✔ init --size and cost (6037.3918ms)
+warning: in the working copy of '.bootstrap/bin/adapt.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/bootstrap.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/detect-stack.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/flow-ui.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/guard.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/flow.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/fm.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/ops.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/lib/policy.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/mem.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/bin/prepush.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/defaults.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow/rules.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/builder.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/hotfix.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/platform.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/project-lane.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/release-ops.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/researcher.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/support.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/roles/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/ui/flow-editor.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/memory/MEMORY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/BOARD.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/plans/pending-register.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/flow.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/kit.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.bootstrap/policy.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P1/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/invoice.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P2/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/security.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P3/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/other.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/other.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/_approve.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/_piece.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/chief-of-staff.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/librarian.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/qa.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/signoffs/P4/tech-lead.md', LF will be replaced by CRLF the next time Git touches it
+▶ fix 1: a session signs only as itself
+  ✖ file writes: own sign-off yes, another role's no (222.9492ms)
+  ✖ routing and owner-word records: Chief of Staff only (Security may add required roles) (919.5256ms)
+  ✔ shell: no signing as someone else, no raw writes, no role spoofing (1902.8816ms)
+  ✔ the CLI refuses too (for tools without a guard hook) (1244.9739ms)
+✖ fix 1: a session signs only as itself (4292.2222ms)
+▶ fix 2: code needs a routed piece; screens need approval; HIGH needs go
+  ✖ all sign-offs but no lane set → refused, and the message says why (2763.1162ms)
+  ✖ a screen change needs Design AND the owner's recorded approval with the artifact (5401.0818ms)
+  ✖ HIGH work needs a recorded "go" (and Security) (5925.3638ms)
+  ✖ a relayed approval is refused when the flow turns relays off for it (3681.5922ms)
+✖ fix 2: code needs a routed piece; screens need approval; HIGH needs go (17771.8974ms)
+ℹ tests 74
+ℹ suites 18
+ℹ pass 53
+ℹ fail 21
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 29992.9019
+
+✖ failing tests:
+
+test at tests\e2e.test.mjs:48:3
+✖ adopting the kit: a kit-only push lands; a push with project code in it is refused (2183.356ms)
+  AssertionError [ERR_ASSERTION]: pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/adapt.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/bootstrap.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/detect-stack.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/flow-ui.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/guard.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/flow.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/fm.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/ops.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/policy.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/records.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellblank.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellextra.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellgit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellparse.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellrules.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellwrites.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/mem.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/precommit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/prepush.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/defaults.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/rules.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/kit.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/builder.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/chief-of-staff.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/design.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/hotfix.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/librarian.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/platform.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/project-lane.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/qa.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/release-ops.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/researcher.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/security.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/support.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/tech-lead.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/ui/flow-editor.html is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: .githooks/pre-push is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: AGENTS.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: CLAUDE.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.
+  pre-push: refs/heads/dev: commit 5990e13f9: docs/releases/.gitkeep: release records are the Chief of Staff's (role "unassigned" may not write them).
+  pre-push: refs/heads/dev: commit 5990e13f9: docs/signoffs/.gitkeep: only the Chief of Staff writes other files in the sign-off folder.
+  pre-push: push refused. Fix the above; never bypass with --no-verify.
+  error: failed to push some refs to 'C:\Users\anfal\AppData\Local\Temp\bs-e2e-F7cy4C\remote.git'
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/e2e.test.mjs:58:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\e2e.test.mjs:62:3
+✖ after adoption, changing a kit file goes through the flow like any code (1296.7701ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /no complete sign-off/. Input:
+  
+  "pre-push: refs/heads/dev: commit 5b2d3f62f: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/adapt.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/bootstrap.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/detect-stack.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/flow-ui.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/guard.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/flow.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/fm.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/ops.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/policy.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/records.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellblank.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellextra.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellgit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellparse.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellrules.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellwrites.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/mem.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/precommit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/prepush.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/defaults.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/rules.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/kit.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/builder.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/chief-of-staff.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/design.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/hotfix.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/librarian.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/platform.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/project-lane.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/qa.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/release-ops.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/researcher.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/security.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/support.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/tech-lead.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/ui/flow-editor.html is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .githooks/pre-push is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: AGENTS.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: CLAUDE.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\n" +
+    `pre-push: refs/heads/dev: commit 5990e13f9: docs/releases/.gitkeep: release records are the Chief of Staff's (role "unassigned" may not write them).\n` +
+    'pre-push: refs/heads/dev: commit 5990e13f9: docs/signoffs/.gitkeep: only the Chief of Staff writes other files in the sign-off folder.\n' +
+    'pre-push: push refused. Fix the above; never bypass with --no-verify.\n' +
+    "error: failed to push some refs to 'C:\\Users\\anfal\\AppData\\Local\\Temp\\bs-e2e-F7cy4C\\remote.git'\n"
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/e2e.test.mjs:67:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `pre-push: refs/heads/dev: commit 5b2d3f62f: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/adapt.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/bootstrap.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/detect-stack.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/flow-ui.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/guard.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/flow.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/fm.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/ops.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/policy.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/records.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellblank.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellextra.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellgit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellparse.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellrules.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellwrites.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/mem.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/precommit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/prepush.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/defaults.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/rules.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/kit.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/builder.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/chief-of-staff.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/design.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/hotfix.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/librarian.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/platform.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/project-lane.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/qa.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/release-ops.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/researcher.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/security.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/support.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/tech-lead.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/ui/flow-editor.html is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .githooks/pre-push is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: AGENTS.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: CLAUDE.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: docs/releases/.gitkeep: release records are the Chief of Staff's (role "unassigned" may not write them).\npre-push: refs/heads/dev: commit 5990e13f9: docs/signoffs/.gitkeep: only the Chief of Staff writes other files in the sign-off folder.\npre-push: push refused. Fix the above; never bypass with --no-verify.\nerror: failed to push some refs to 'C:\\Users\\anfal\\AppData\\Local\\Temp\\bs-e2e-F7cy4C\\remote.git'\n`,
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\e2e.test.mjs:71:3
+✖ a flow change lands with the owner's recorded yes; without it, or after a later edit, it is refused (1538.3645ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /change the flow .* no record of the owner's yes/. Input:
+  
+  "pre-push: refs/heads/dev: commit cbaebf8d2: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5b2d3f62f: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/adapt.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/bootstrap.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/detect-stack.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/flow-ui.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/guard.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/flow.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/fm.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/ops.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/policy.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/records.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellblank.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellextra.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellgit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellparse.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellrules.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellwrites.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/mem.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/precommit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/prepush.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/defaults.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/rules.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/kit.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/builder.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/chief-of-staff.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/design.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/hotfix.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/librarian.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/platform.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/project-lane.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/qa.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/release-ops.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/researcher.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/security.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/support.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/tech-lead.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/ui/flow-editor.html is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: .githooks/pre-push is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: AGENTS.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\n" +
+    "pre-push: refs/heads/dev: commit 5990e13f9: CLAUDE.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\n" +
+    `pre-push: refs/heads/dev: commit 5990e13f9: docs/releases/.gitkeep: release records are the Chief of Staff's (role "unassigned" may not write them).\n` +
+    'pre-push: refs/heads/dev: commit 5990e13f9: docs/signoffs/.gitkeep: only the Chief of Staff writes other files in the sign-off folder.\n' +
+    'pre-push: push refused. Fix the above; never bypass with --no-verify.\n' +
+    "error: failed to push some refs to 'C:\\Users\\anfal\\AppData\\Local\\Temp\\bs-e2e-F7cy4C\\remote.git'\n"
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/e2e.test.mjs:78:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `pre-push: refs/heads/dev: commit cbaebf8d2: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5b2d3f62f: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/adapt.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/bootstrap.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/detect-stack.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/flow-ui.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/guard.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/flow.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/fm.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/ops.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/policy.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/records.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellblank.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellextra.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellgit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellparse.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellrules.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/lib/shellwrites.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/mem.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/precommit.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/bin/prepush.mjs is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/defaults.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/flow/rules.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/kit.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/policy.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/builder.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/chief-of-staff.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/design.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/hotfix.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/librarian.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/platform.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/project-lane.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/qa.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/release-ops.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/researcher.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/security.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/support.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/roles/tech-lead.md is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .bootstrap/ui/flow-editor.html is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: .githooks/pre-push is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: AGENTS.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: CLAUDE.md is, or contains, protected toolkit config (the hooks, the policy, the rules). Removing or moving it is the Chief of Staff's, on the owner's typed word.\npre-push: refs/heads/dev: commit 5990e13f9: docs/releases/.gitkeep: release records are the Chief of Staff's (role "unassigned" may not write them).\npre-push: refs/heads/dev: commit 5990e13f9: docs/signoffs/.gitkeep: only the Chief of Staff writes other files in the sign-off folder.\npre-push: push refused. Fix the above; never bypass with --no-verify.\nerror: failed to push some refs to 'C:\\Users\\anfal\\AppData\\Local\\Temp\\bs-e2e-F7cy4C\\remote.git'\n`,
+    expected: /change the flow .* no record of the owner's yes/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\e2e.test.mjs:98:3
+✖ kit upgrade: refused without the owner's yes; lands with `kit apply`; a later edit or mixed code is refused (2060.1802ms)
+  AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly unequal to: 0
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/e2e.test.mjs:105:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\enforcement.test.mjs:117:3
+✖ partial sign-off still refused; complete sign-off + docs on top accepted (2466.5005ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /no complete sign-off/. Input:
+  
+  'commit 16a666cdd: docs/signoffs/R1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/enforcement.test.mjs:122:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 16a666cdd: docs/signoffs/R1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\enforcement.test.mjs:127:3
+✖ code added after sign-off is refused (3212.1977ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /1 code commit/. Input:
+  
+  'commit 16a666cdd: docs/signoffs/R1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/enforcement.test.mjs:130:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 16a666cdd: docs/signoffs/R1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /1 code commit/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\enforcement.test.mjs:133:3
+✖ _required.md can add security (2885.2279ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /no complete sign-off/. Input:
+  
+  'commit 67c5db679: docs/signoffs/R1/_required.md: only the Chief of Staff (or Security, to add a required role) writes _required.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/enforcement.test.mjs:136:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 67c5db679: docs/signoffs/R1/_required.md: only the Chief of Staff (or Security, to add a required role) writes _required.md.',
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\enforcement.test.mjs:146:3
+✖ live: wrong role and missing record refused; full record accepted (5409.694ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "2 code commit(s) have no complete sign-off: 9e6cfd992, 15abe523f (need a piece with a lane set by the Chief of Staff, its lane's sign-offs plus any its files' conditions add, and any owner's word they need, all on one sha — O10, 7F). Pieces: R1 @ 15abe523f: missing sign-off from chief-of-staff, librarian, security, tech-lead"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/enforcement.test.mjs:153:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "2 code commit(s) have no complete sign-off: 9e6cfd992, 15abe523f (need a piece with a lane set by the Chief of Staff, its lane's sign-offs plus any its files' conditions add, and any owner's word they need, all on one sha — O10, 7F). Pieces: R1 @ 15abe523f: missing sign-off from chief-of-staff, librarian, security, tech-lead" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\enforcement.test.mjs:170:3
+✖ deleting dev refused; feature branches free (1256.1755ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   `commit 8b50938fc: docs/releases/2026-11-11-r1.md: release records are the Chief of Staff's (role "builder" may not write them).`,
+  +   `commit d79206349: docs/releases/2026-11-11-r1.md: release records are the Chief of Staff's (role "builder" may not write them).`,
+  +   'commit 67c5db679: docs/signoffs/R1/_required.md: only the Chief of Staff (or Security, to add a required role) writes _required.md.',
+  +   'commit 16a666cdd: docs/signoffs/R1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+  +   'commit 16a666cdd: docs/signoffs/R1/qa.md: a sign-off is written by its own role: you are "builder", the file is "qa" and says role "qa".'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/enforcement.test.mjs:172:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `commit 8b50938fc: docs/releases/2026-11-11-r1.md: release records are the Chief of Staff's (role "builder" may not write them).`, `commit d79206349: docs/releases/2026-11-11-r1.md: release records are the Chief of Staff's (role "builder" may not write them).`, 'commit 67c5db679: docs/signoffs/R1/_required.md: only the Chief of Staff (or Security, to add a required role) writes _required.md.', 'commit 16a666cdd: docs/signoffs/R1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.', 'commit 16a666cdd: docs/signoffs/R1/qa.md: a sign-off is written by its own role: you are "builder", the file is "qa" and says role "qa".' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\flow.test.mjs:106:3
+✖ a piece on the light lane needs only its lane sign-offs (2797.3973ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /no complete sign-off/. Input:
+  
+  'commit 7ec779505: docs/signoffs/P1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/flow.test.mjs:112:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 7ec779505: docs/signoffs/P1/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\flow.test.mjs:118:3
+✖ a condition adds Security when the piece touches auth files (4109.6387ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /no complete sign-off/. Input:
+  
+  'commit 9e0eb6336: docs/signoffs/P2/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/flow.test.mjs:124:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 9e0eb6336: docs/signoffs/P2/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\flow.test.mjs:130:3
+✖ a push that loosens the flow is judged by the flow already accepted (6304.5332ms)
+  AssertionError [ERR_ASSERTION]: the remote flow still requires Tech Lead
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/flow.test.mjs:137:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "commit 9226c0b55: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.",
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\flow.test.mjs:140:3
+✖ only Hotfix may use an exempt lane (6349.3049ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /no complete sign-off/. Input:
+  
+  "commit 9226c0b55: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word."
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/flow.test.mjs:146:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "commit 9226c0b55: .bootstrap/flow.json is protected toolkit config. Only the Chief of Staff changes it, on the owner's typed word.",
+    expected: /no complete sign-off/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\flow.test.mjs:176:3
+✖ page needs the token; API needs the token header (188.5482ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - 'project'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/flow.test.mjs:183:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'project',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\ops.test.mjs:71:3
+✖ the push check ignores a PASS without evidence and says why (2786.8182ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /librarian \(PASS without evidence\)/. Input:
+  
+  'commit d18c5e3e9: docs/signoffs/R2/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/ops.test.mjs:77:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit d18c5e3e9: docs/signoffs/R2/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /librarian \(PASS without evidence\)/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\trust.test.mjs:41:3
+✖ file writes: own sign-off yes, another role's no (222.9492ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/trust.test.mjs:42:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at node:internal/test_runner/test:1903:71
+      at node:internal/per_context/primordials:505:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:479:3)
+      at node:internal/per_context/primordials:505:9
+      at Array.map (<anonymous>) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\trust.test.mjs:46:3
+✖ routing and owner-word records: Chief of Staff only (Security may add required roles) (919.5256ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/trust.test.mjs:51:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\trust.test.mjs:80:3
+✖ all sign-offs but no lane set → refused, and the message says why (2763.1162ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  5 !== 1
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/trust.test.mjs:86:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at node:internal/test_runner/test:1903:71
+      at node:internal/per_context/primordials:505:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:479:3)
+      at node:internal/per_context/primordials:505:9
+      at Array.map (<anonymous>) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 5,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\trust.test.mjs:92:3
+✖ a screen change needs Design AND the owner's recorded approval with the artifact (5401.0818ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /owner's word approve: no _approve\.md record/. Input:
+  
+  'commit 33054c8cc: docs/signoffs/P2/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/trust.test.mjs:98:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 33054c8cc: docs/signoffs/P2/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /owner's word approve: no _approve\.md record/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\trust.test.mjs:107:3
+✖ HIGH work needs a recorded "go" (and Security) (5925.3638ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /owner's word go/. Input:
+  
+  'commit 379875696: docs/signoffs/P3/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/trust.test.mjs:113:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 379875696: docs/signoffs/P3/_piece.md: only the Chief of Staff (or Security, to add a required role) writes _piece.md.',
+    expected: /owner's word go/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\trust.test.mjs:119:3
+✖ a relayed approval is refused when the flow turns relays off for it (3681.5922ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /relay not allowed/. Input:
+  
+  'commit 7a6294173: docs/signoffs/P4/_approve.md: a sign-off is written by its own role: you are "builder", the file is "_approve" and says role "".'
+  
+      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-test/tests/trust.test.mjs:129:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'commit 7a6294173: docs/signoffs/P4/_approve.md: a sign-off is written by its own role: you are "builder", the file is "_approve" and says role "".',
+    expected: /relay not allowed/,
+    operator: 'match',
+    diff: 'simple'
+  }
