@@ -56,8 +56,8 @@ test('Filters: Free only, and Provider, combine with AND; the count says how man
 
 test('choosing a model uses its first provider (the order Bunny tries them)', async ({ page }) => {
   await page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().click();
-  await expect(page.locator('#picker-button')).toContainText('falcon-flash');
-  await expect(page.locator('#picker-button')).toContainText('Harbor');
+  await expect(page.locator('#picker-button')).toContainText('Falcon Flash'); // v0.1.10: the chip shows the short name; the provider is in its tooltip and label
+  await expect(page.locator('#picker-button')).toHaveAttribute('title', /Harbor/);
 });
 
 // slice 2b: the details of one model, its provider order with arrows, favourites and recent, and the Can do filter
@@ -76,7 +76,7 @@ test('details: the providers in the order Bunny tries them; the arrows change th
   await page.getByRole('button', { name: '‹ Back' }).click();
   await expect(page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().locator('.picker-tag').first()).toContainText('Meadow');
   await page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().click();
-  await expect(page.locator('#picker-button')).toContainText('Meadow');
+  await expect(page.locator('#picker-button')).toHaveAttribute('title', /Meadow/);
 });
 
 test('favourites and recent: a favourite is starred and listed first; a chosen model is listed under Recent', async ({ page }) => {
@@ -127,12 +127,13 @@ test('Best for Chat: one row per model with the same provider tags, and the arro
   const model = await second.getAttribute('data-model');
   const allRow = page.locator('.picker-panel .picker-model:not([data-section])[data-model="' + model + '"]');
   expect(await second.locator('.picker-tag').allTextContents()).toEqual(await allRow.locator('.picker-tag').allTextContents());
+  const shownName = ((await second.locator('.model-name').first().textContent()) ?? '').replace('★', '').trim();
   const firstProvider = await second.locator('.picker-tag').first().evaluate((t) => t.firstChild.textContent);
   await page.keyboard.press('ArrowDown'); // Auto -> first Best for row
   await page.keyboard.press('ArrowDown'); // second Best for row
   await page.keyboard.press('Enter');
-  await expect(page.locator('#picker-button')).toContainText(model);
-  await expect(page.locator('#picker-button')).toContainText(firstProvider);
+  await expect(page.locator('#picker-button')).toContainText(shownName);
+  await expect(page.locator('#picker-button')).toHaveAttribute('title', new RegExp(firstProvider));
 });
 
 test('Sort: Name, and Context size (largest first); Recommended keeps the order', async ({ page }) => {

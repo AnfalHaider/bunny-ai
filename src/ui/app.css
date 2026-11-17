@@ -1207,12 +1207,21 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
   color: var(--text-dim); font-size: var(--fs-sm); max-width: 320px;
 }
 .picker-trigger:hover, .picker-trigger[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+/* v0.1.10 model chip: it sits in the composer's button row, between the spacer and Send */
+.composer-row .picker { flex: 0 1 auto; min-width: 0; }
+.composer-row .picker-trigger { height: 32px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); padding: 0 var(--sp-5); max-width: 280px; }
+.composer-row .picker-trigger:hover, .composer-row .picker-trigger[aria-expanded="true"] { background: var(--hover); border-color: var(--line-strong, var(--line)); }
+.composer-row .picker-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.picker-trigger .chip-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: hsl(var(--chip-hue, 200) 60% 50%); }
+.picker-trigger .chip-free { flex: none; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: var(--fw-medium); }
+.picker-trigger .meta { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.picker-handle, .picker-scrim { display: none; }
 .picker-trigger .label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .picker-trigger .meta { color: var(--text-faint); white-space: nowrap; }
 .picker-trigger svg { width: 12px; height: 12px; opacity: .6; }
 .picker-panel {
-  position: absolute; bottom: calc(100% + 6px); left: 0; z-index: var(--z-menu);
-  width: 360px; max-height: 60vh; display: flex; flex-direction: column;
+  position: absolute; bottom: calc(100% + 10px); right: 0; z-index: var(--z-menu);
+  width: 420px; max-width: calc(100vw - 32px); max-height: 60vh; display: flex; flex-direction: column;
   padding: var(--sp-3); background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-xl); box-shadow: var(--shadow-pop);
   animation: bunny-pop var(--t-base) var(--ease);
@@ -2147,3 +2156,17 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .picker-move { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; width: 28px; height: 28px; color: var(--text-dim); cursor: pointer; }
 .picker-move:disabled { opacity: .35; cursor: default; }
 .picker-details[hidden], .picker-row[hidden] { display: none; }
+
+/* v0.1.10 phone: the model selector is a bottom sheet with a grab handle over a dimmed page */
+@media (max-width: 600px) {
+  .composer-row .picker-trigger { max-width: 150px; padding: 0 var(--sp-4); }
+  .composer-row .picker-trigger .label { max-width: 10ch; }
+  .composer-row .picker-trigger .chip-free { display: none; }
+  .picker-scrim { display: block; position: fixed; inset: 0; z-index: calc(var(--z-menu) - 1); background: rgba(0, 0, 0, .4); }
+  .picker-panel {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-width: none;
+    max-height: 80vh; max-height: 80dvh; border-radius: var(--r-xl) var(--r-xl) 0 0;
+    padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  }
+  .picker-handle { display: block; flex: none; width: 40px; height: 5px; margin: 2px auto var(--sp-4); border: 0; border-radius: 999px; background: var(--line-strong, var(--line)); padding: 0; cursor: pointer; }
+}
