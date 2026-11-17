@@ -1,9 +1,9 @@
 ---
 piece: w6-14
 role: security
-sha: e037514
-verdict: FAIL
+sha: e7b664a
+verdict: PASS
 date: 2026-11-17
 ---
 
-Command list (npx node uvx python python3 docker), one-line normalised spelling, array args only, env refused, confirm card in every mode incl. Auto and under an allow rule all hold (24 spellings probed, 44 tests pass). FAIL W614-1: the card text is cut at 2,000 characters with no marker (app.js:1963) while a proposed connector may carry 40 args of 1,000 characters (mcpStore cleanLocal), so a node -e or python -c argument padded past 2,000 characters runs code the person never saw, in Auto where the card is the only guard. Fix: refuse a proposal whose card text exceeds 2,000 characters, or show every character.
+Supersedes my FAIL at e037514. W614-1 closed: a card for a local connector, run_command, start_process, create_tool, computer_type or a custom tool over 2,000 characters is refused with a plain message and never shown or run; the length is checked before the rule suffix is added, so the program text is always whole on the card; content-only cards are cut with a visible note. 35 related tests pass. Auto shows no card for run_command by the person's own mode choice, so nothing is hidden there; a rule set to ask still shows a card and is covered.
