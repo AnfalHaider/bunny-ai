@@ -2,6 +2,10 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - e037514: W6-14 FAIL, W3-6 final PASS, W3-6b PASS
+
+W6-14 holds on command list, spellings, no env, confirm in every mode, but the confirm card is cut at 2,000 characters with no marker while a connector may carry 40 arguments of 1,000 characters, so a padded `node -e` argument runs unseen in Auto (W614-1, `app.js:1963`). W3-6 final and W3-6b server side PASS; the `.git` regex fix holds. Review `docs/security/2026-11-17-w6-14-e037514-review.md`. Lesson: a confirmation is only as good as what it shows; cap what can be proposed to what fits on the card.
+
 ## 2026-11-17 - K-2 `k2-guard` PASS at `1d3a77c`; K-1 landing checks pending
 
 K2-1 to K2-4 (the project's policy judges every folder, hooks fail closed, `.git` internals and trust anchors protected), K1-5 (6 s deadline on every git spawn, a git that cannot answer is a refusal) and W5-1d (credential printing, notes/for/releases refs) hold; the K-1 lists are no worse than at 4a0fa01. I first stamped FAIL at ec605fd and bec112e on a K1-5 timing that measured the repository's own 0.6.0 guard, because I ran the helper without `KIT_NEXT=1`; both are superseded. Also stamped: w3-6 and w4-10 at 9209d78, w6-13 and w6-9 at 55e3f20. Review `docs/security/2026-11-17-k1-k2-guard-review.md`, probes in `docs/security/k2-probe/`. Lesson: print which `guard.mjs` ran in every probe before believing a timing.
