@@ -318,6 +318,8 @@ test('the kit works from a worktree nested inside the main checkout: its own rol
   const wt = join(main, '.claude', 'worktrees', 'b1');
   sh(['worktree', 'add', '-q', '-b', 'claude/b1', wt], main);
   writeFileSync(join(wt, '.bootstrap', 'session.json'), JSON.stringify({ role: 'builder' }));
+  // a permissive policy.json planted in the worktree changes nothing: the project's policy judges
+  writeFileSync(join(wt, '.bootstrap', 'policy.json'), JSON.stringify({ version: 1, branches: { live: 'zzz' }, deny_all: [] }));
   const here = process.cwd();
   const savedEnv = process.env.CLAUDE_PROJECT_DIR;
   try {

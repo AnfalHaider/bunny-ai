@@ -103,8 +103,16 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   // A worktree of the same repository (our sessions run in worktrees inside the main checkout) is its own project with its own role: only an
   // independent repository nested in the project (git init sub) is judged by the project.
   const commonDir = (dir) => { const c = git(['rev-parse', '--git-common-dir'], dir); return c ? resolvePath(dir, c).toLowerCase() : null; };
-  if (project && project !== resolvePath(root) && withinDir(root, project) && commonDir(root) !== commonDir(project)) root = project;
-  const policy = loadPolicy(root);
+  const nested = project && project !== resolvePath(root) && withinDir(root, project);
+  const sameRepo = nested && commonDir(root) === commonDir(project);
+  if (nested && !sameRepo) root = project;
+  // A linked worktree keeps its own role (its own role file) but is judged by the policy of the MAIN checkout of its repository, never by a
+  // policy.json it carries itself (one could be planted there), and not by whichever folder the host names as the project.
+  const realCommon = (dir) => { const c = git(['rev-parse', '--git-common-dir'], dir); return c ? resolvePath(dir, c) : null; };
+  const ownGit = git(['rev-parse', '--absolute-git-dir'], root);
+  const common = realCommon(root);
+  const mainRoot = common && ownGit && resolvePath(ownGit).toLowerCase() !== common.toLowerCase() ? dirname(common) : null; // a linked worktree: the main checkout is above the shared .git
+  const policy = loadPolicy(mainRoot && loadPolicy(mainRoot) ? mainRoot : sameRepo ? project : root);
   if (!policy) return { allow: true };
   const role = currentRole(root);
   // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
