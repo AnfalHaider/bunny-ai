@@ -11,6 +11,7 @@ async function openBar(page, { submit }) {
   await page.addInitScript(({ pixel, mode }) => {
     window.quickAsk = {
       captureScreenshot: async () => ({ ok: true, data: pixel }),
+      pickFile: async () => (mode === 'cancel' ? { ok: false, cancelled: true } : mode === 'refuse' ? { ok: false, message: 'That file is over 8 MB.' } : { ok: true, name: 'report.pdf', mime: 'application/pdf', kind: 'pdf', data: 'data:application/pdf;base64,JVBERi0=' }),
       submit: () => (mode === 'wait' ? new Promise(() => {}) : Promise.resolve({ ok: false })),
     };
   }, { pixel: PIXEL, mode: submit });
@@ -53,4 +54,27 @@ test('a real problem stays amber and has no spinner', async ({ page }) => {
   const [msgColour, textColour] = await page.evaluate(() => [getComputedStyle(document.getElementById('msg')).color, getComputedStyle(document.body).color]);
   expect(msgColour).not.toBe(textColour);
   expect(msgColour).toBe('rgb(180, 83, 9)');
+});
+
+test('W4-8b: the + menu offers a screenshot and a file; a chosen file shows as a chip with its name that can be removed', async ({ page }) => {
+  await openBar(page, { submit: 'wait' });
+  await page.locator('#plus').click();
+  await expect(page.locator('#shot-item')).toBeVisible();
+  await expect(page.locator('#file-item')).toContainText('Add a file…');
+  const box = await page.locator('#menu').boundingBox();
+  expect(box.y + box.height).toBeLessThanOrEqual(300); // both items fit in the window
+  await page.locator('#file-item').click();
+  const chip = page.locator('#chips .chip');
+  await expect(chip).toContainText('report.pdf');
+  await expect(chip.locator('img')).toHaveCount(0); // a PDF has no picture
+  await chip.getByRole('button', { name: 'Remove the file' }).click();
+  await expect(page.locator('#chips')).toBeHidden();
+});
+
+test('W4-8b: a refused file says why in amber and adds nothing; cancelling the dialog says nothing', async ({ page }) => {
+  await openBar(page, { submit: 'refuse' });
+  await page.locator('#plus').click();
+  await page.locator('#file-item').click();
+  await expect(page.locator('#msg')).toHaveText('That file is over 8 MB.');
+  await expect(page.locator('#chips')).toBeHidden();
 });
