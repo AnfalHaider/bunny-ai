@@ -1,9 +1,9 @@
 ---
 piece: kit-land
 role: tech-lead
-sha: 88bbd53
+sha: ba091a6
 verdict: PASS
 date: 2026-11-17
 ---
 
-Landing commit over 1d3a77c. I checked in a checkout of 88bbd53: .bootstrap/bin, .githooks, .bootstrap/policy.json, flow and ui are byte-identical to scripts/kit-next (diff -rq clean); kit.json 0.6.0; record has the owner's words and question. The 7 failures without KIT_NEXT are tests that expect the OLD guard (they branch on KIT_NEXT/LIVE_STRICT): huge command allowed to docs, flag/prose in quoted text refused, CoS may sign for another role. Each shows the new, designed K-1 behaviour (too-long refused, quoted text is data, nobody signs for another role); the same suites are 149/149 with KIT_NEXT=1 (also my own run on 4a0fa01 and 1d3a77c). Follow-ups: make the suites default to the installed guard and drop the old-guard branches; the 8th (landing test on old policy) is expected to flip. The kit record lists .gitignore@hash though .gitignore was not landed (cosmetic). Not run by me: e2e; the landing itself.
+Supersedes 88bbd53. K-3 delta (1d3a77c..d6e620a) read: legacy_deny_all raw check now also runs for interpreter, shell-pipe and xargs commands; any bootstrap flow command and flow-ui.mjs are the Chief's; docs/flow-changes and docs/kit-changes are Chief-only in the record check; an unassigned session may not take chief-of-staff, release-ops or hotfix. Checked in a checkout of ba091a6: bin, .githooks, policy, flow and ui byte-identical to scripts/kit-next (diff -rq clean); staged guard equals d6e620a. My probes: the hook-skip flag or the git hooks-path setting through sh, bash, xargs, node -e, a pipe into git commit are refused; the same text in a quoted commit message or echo prose is allowed; unassigned role chief-of-staff refused, role builder allowed. Tests k2+k1 46/46 on the staged kit. Installed-kit run: 2 failures the CoS README explains (landing policy check; K2-1 timing under load, passes alone) and 8 old-baseline expectations. Not run by me: e2e, the landing itself. Still open: git -C main commit follow-up.
