@@ -1,0 +1,20 @@
+lightd rows: ["Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›","Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›"]
+lightd trigger: offline/bunny-code Harbor
+lightd live: status-line="Harbor is busy. Trying Falcon Flash on Meadow…" hint="Harbor is busy. Trying Falcon Flash on Meadow…"
+lightd note: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). | color=rgb(192, 122, 18)
+lightd answer: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). / Here is the answer from Meadow. / Copy / Retry / Save as artifact / Read aloud / Branch
+lightm rows: ["Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›","Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›"]
+lightm trigger: offline/bunny-code Harbor
+lightm live: status-line="Harbor is busy. Trying Falcon Flash on Meadow…" hint="Harbor is busy. Trying Falcon Flash on Meadow…"
+lightm note: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). | color=rgb(192, 122, 18)
+lightm answer: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). / Here is the answer from Meadow. / Copy / Retry / Save as artifact / Read aloud / Branch
+darkd rows: ["Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›","Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›"]
+darkd trigger: offline/bunny-code Harbor
+darkd live: status-line="Harbor is busy. Trying Falcon Flash on Meadow…" hint="Harbor is busy. Trying Falcon Flash on Meadow…"
+darkd note: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). | color=rgb(233, 173, 82)
+darkd answer: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). / Here is the answer from Meadow. / Copy / Retry / Save as artifact / Read aloud / Branch
+darkm rows: ["Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›","Falcon Flash / offline/bunny-code · Code / Harbor / Meadow / 200K / Details ›","Otter 3 Coder / offline/bunny-large · Code / Harbor / Meadow / 200K / Details ›","Heron Mini / offline/bunny-small / Harbor / Meadow / 128K / Details ›"]
+darkm trigger: offline/bunny-code Harbor
+darkm live: status-line="Harbor is busy. Trying Falcon Flash on Meadow…" hint="Harbor is busy. Trying Falcon Flash on Meadow…"
+darkm note: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). | color=rgb(233, 173, 82)
+darkm answer: ↪ Switched to Falcon Flash on Meadow: Harbor was busy (rate limit or overloaded). / Here is the answer from Meadow. / Copy / Retry / Save as artifact / Read aloud / Branch
