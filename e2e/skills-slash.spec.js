@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resetProfile } from './helpers.js';
+import { resetProfile, connectAnthropic, pickFirstModel } from './helpers.js';
 
 // W4-11 S-4: the skills that are on appear in the slash menu as /name, and a message that starts with one carries useSkill.
 test.beforeEach(async ({ request }) => {
@@ -8,6 +8,9 @@ test.beforeEach(async ({ request }) => {
   await request.post('/api/skills', { data: { name: 'Pear Tips', description: 'About pears', instructions: 'Ripe pears give a little.', enabled: true } });
   await request.post('/api/skills', { data: { name: 'Quiet One', description: 'Switched off', instructions: 'x', enabled: false } });
 });
+
+// leave the shared profile as it was found: later specs expect no skills
+test.afterEach(async ({ request }) => { await resetProfile(request); });
 
 test('typing / lists the commands and the skills that are on, and a skill fills the box', async ({ page }) => {
   await page.goto('/');
@@ -27,9 +30,9 @@ test('typing / lists the commands and the skills that are on, and a skill fills 
 test('a message that starts with a skill name is sent with useSkill, and Enter does not swallow the request', async ({ page }) => {
   const sent = [];
   await page.route('**/api/sessions/*/messages', async (route) => { sent.push(route.request().postDataJSON()); await route.continue(); });
+  await connectAnthropic(page);
   await page.goto('/');
-  await page.locator('#picker-button').click();
-  await page.locator('.picker-panel [role="option"][data-model]:not([data-section])').first().click();
+  await pickFirstModel(page);
   await page.locator('#input').fill('/pear-tips');
   await page.locator('#input').pressSequentially(' what about ripe ones');
   await page.locator('#input').press('Enter');
