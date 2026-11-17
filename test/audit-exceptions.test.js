@@ -103,13 +103,19 @@ test('the gate reads the COMMITTED file: a working copy that differs, or a file 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('the proposed entry in docs/security/audit-exceptions.json is waiting for the owner, so it cannot pass anything yet', () => {
+test('the signed entry in docs/security/audit-exceptions.json excuses exactly the picomatch finding, until its review date, and never the same advisory somewhere else', () => {
   const file = new URL('../docs/security/audit-exceptions.json', import.meta.url);
   const { exceptions } = JSON.parse(readFileSync(file, 'utf8'));
   assert.equal(exceptions.length, 1);
-  assert.equal(exceptions[0].advisory, 'GHSA-fc5q-39xc-vjpf');
-  assert.equal(exceptions[0].accepted_by, 'PENDING OWNER');
-  assert.match(exceptions[0].owner_words, /^PENDING/);
-  assert.equal(exceptions[0].said_at, 'PENDING');
-  assert.equal(judgeAudit(audit, exceptions, new Date('2026-11-20T00:00:00Z')).ok, false);
+  const e = exceptions[0];
+  assert.equal(e.advisory, 'GHSA-fc5q-39xc-vjpf');
+  assert.equal(e.package_path, 'node_modules/picomatch');
+  for (const k of ['accepted_by', 'owner_words', 'said_at']) assert.doesNotMatch(String(e[k]), /^PENDING/i, k);
+  const day = new Date('2026-11-20T00:00:00Z');
+  assert.equal(judgeAudit(audit, exceptions, day).ok, true, 'it excuses the finding while it is current');
+  assert.equal(checkExceptions(exceptions, day).problems.length, 0);
+  assert.equal(judgeAudit(audit, exceptions, new Date(`${e.review_by}T23:00:00Z`)).ok, true, 'still on its review day');
+  assert.equal(judgeAudit(audit, exceptions, new Date('2027-01-01T00:00:00Z')).ok, false, 'and it stops excusing anything after the review date');
+  const nested = { vulnerabilities: { picomatch: { name: 'picomatch', severity: 'high', via: [advisory], nodes: ['node_modules/other/node_modules/picomatch'] } } };
+  assert.equal(judgeAudit(nested, exceptions, day).ok, false, 'a copy at another path is not excused');
 });
