@@ -21,8 +21,10 @@ test('the folder chip opens a card; the switch makes the chat its own copy, Fini
   git(repo, 'commit', '-q', '-m', 'first');
   await request.post('/api/folder/check', { data: { folder: repo } });
   const made = await (await request.post('/api/sessions', { data: { title: 'Tidy the greeter', folder: repo } })).json();
+  await page.addInitScript(() => localStorage.setItem('bunny.workMode', 'code')); // the folder chip is shown in Code mode only
   await page.goto('/');
   await page.getByText('Tidy the greeter').first().click();
+  await expect(page.locator('#folder-chip')).toBeVisible();
   await page.locator('#folder-chip').click();
   const card = page.getByRole('dialog', { name: 'Working folder' });
   await expect(card).toBeVisible();
@@ -44,8 +46,10 @@ test('a folder that is not a git project has the switch dimmed, with the reason'
   const plain = mkdtempSync(join(tmpdir(), 'bunny-e2e-plain-'));
   await request.post('/api/folder/check', { data: { folder: plain } });
   await request.post('/api/sessions', { data: { title: 'Plain folder chat', folder: plain } });
+  await page.addInitScript(() => localStorage.setItem('bunny.workMode', 'code'));
   await page.goto('/');
   await page.getByText('Plain folder chat').first().click();
+  await expect(page.locator('#folder-chip')).toBeVisible();
   await page.locator('#folder-chip').click();
   const card = page.getByRole('dialog', { name: 'Working folder' });
   await expect(card.getByLabel('Give this chat its own copy of the project')).toBeDisabled();
