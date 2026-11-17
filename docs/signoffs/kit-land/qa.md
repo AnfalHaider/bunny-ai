@@ -1,0 +1,9 @@
+---
+piece: kit-land
+role: qa
+sha: ba091a6
+verdict: PASS
+date: 2026-11-17
+---
+
+Kit landing K-3 at ba091a6 (supersedes 88bbd53), checked in a checkout of that sha against the INSTALLED .bootstrap/bin (no KIT_NEXT), invented repos only. Installed bin matches scripts/kit-next except adapt.mjs and lib/fm.mjs, which I did not review. My 29 everyday cases 29/29. My 24 extra cases 21/24, the same three as before (quoted forced-push note blocked, a Claude trailer allowed by the guard and refused by the commit-msg hook, git worktree add refused for QA by design). Real hook timing, idle: 21000 and 2001 parts and 64 KB+1 refused unread 0.6-0.7 s; 1999 parts and 12 KB note allowed 0.7 and 0.6 s; chained push-all refused by rule 0.6-0.7 s; 30, 40, 50 chained pushes allowed 4.5, 5.5, 5.2 s; 150, 300, 1999 pushes refused at the 6.2 s deadline; everyday commands 0.55 s. Under 8 busy loops: refusals unread 0.8-1.0 s; 30 pushes allowed 4.4 s, 40 allowed 6.0 s, 50 refused at the deadline; everyday commands and the 12 KB note 2.0-3.6 s in four repeats (the machine was also busy with other sessions: the same git status took 1.3 s idle a few minutes later, 0.55 s earlier). DEADLINE MARGIN: it fails closed, so it is not unsafe, and every everyday command stays allowed with 40 percent or more of the 6.2 s left even with the CPU saturated. In my view it does not block landing; it is a usability follow-up: on a busy PC a command with 40 or more chained pushes, or a K-2 test that makes many git calls, can be refused for time, and a person gets a refusal that says the guard did not finish. Follow-up: cache or batch the git lookups per decision (one branch read per command, not one per push part), and either raise the deadline a little or report time-outs differently from policy blocks. Not run: guard suites without KIT_NEXT (Tech Lead), the K-2 and K-3 kit tests, a live session with the real hooks.
