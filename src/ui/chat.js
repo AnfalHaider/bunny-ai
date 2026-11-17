@@ -2558,6 +2558,14 @@ function startNewChat({ incognito = false } = {}) {
 /** A message from the quick-ask bar: a NEW chat in Chat mode with no folder, the text and the optional screenshot sent as the first message. */
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
+  // QA-ANSWERS: Open in Bunny carries a chat that began in the bar over to this window (and a later refresh when its answer finished).
+  if (request && typeof request.openChat === 'string' && /^[a-f0-9-]{36}$/.test(request.openChat)) {
+    if (request.refresh) { if (state.sessionId === request.openChat && !state.streaming) await openSession(request.openChat); await loadSessions(); return; }
+    if (state.streaming) { $('error').textContent = 'Bunny is busy. Your quick ask is in the chat list, tagged Quick ask.'; await loadSessions(); return; }
+    await loadSessions();
+    await openSession(request.openChat);
+    return;
+  }
   if (!request || typeof request.text !== 'string') return;
   if (state.streaming) { // keep what was typed: it waits in the message box instead of being lost
     $('input').value = request.text;

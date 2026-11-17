@@ -1,10 +1,12 @@
-// W4-8: the quick-ask bar. A global shortcut opens a small frameless prompt bar over any app.
-// The bar only starts a new chat and brings Bunny's window forward; it never runs tools or shows answers.
+// W4-8 / QA-ANSWERS: the quick-ask bar. A global shortcut opens a small frameless prompt bar over any app.
+// The bar answers a question in place, as TEXT ONLY (no tool is offered, no permission is ever asked here: anything that needs one is handed to Bunny's window,
+// which asks there under the person's own rules). The reply is untrusted text, shown through the sanitised markdown and a strict CSP. "Open in Bunny" carries the chat over.
 // A screenshot is taken only when the person chooses "Add a screenshot" in the bar, and lives only in the message it is sent with.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { lstat, open } from 'node:fs/promises';
+import { createAnswerer } from './quick-ask-answer.js';
 import { FILE_DIALOG_FILTERS, MAX_IMAGE_BYTES, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, checkPath, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,18 +34,29 @@ export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
   };
 }
 
-export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open } }) {
+export const MIN_BAR_HEIGHT = 300;
+export const MAX_BAR_HEIGHT = 560; // a long answer grows the bar to about this and then scrolls inside it
+
+export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open }, adminFetch = null, onOpenChat = () => {}, onAnswerFinished = () => {} }) {
   let bar = null;
   let registered = null; // the accelerator currently held
   let keepTimer = null;
+  let barHeight = MIN_BAR_HEIGHT;
+  const answerer = adminFetch ? createAnswerer({
+    adminFetch,
+    emit: (event) => { if (alive()) bar.webContents.send('quickask:answer', event); },
+    onFinishedDetached: (sessionId) => onAnswerFinished(sessionId),
+  }) : null;
   let held = null; // W4-8b: the one file the person picked, { id, file }: the checked bytes live only here until sent, removed or the bar closes
 
   const alive = () => bar && !bar.isDestroyed();
   const fromBar = (event) => alive() && event.sender === bar.webContents && /^file:\/\/.*\/quick-ask\/bar\.html$/.test(event.senderFrame?.url ?? '');
 
-  function destroyBar() {
+  function destroyBar({ keepAnswer = false } = {}) {
     clearTimeout(keepTimer);
     held = null;
+    if (answerer && !keepAnswer) { answerer.stop(); answerer.reset(); } // Esc and closing stop a running answer; what arrived is kept in the chat
+    barHeight = MIN_BAR_HEIGHT;
     if (alive()) bar.destroy();
     bar = null;
   }
@@ -52,7 +65,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { x, y, width, height } = display.workArea;
     const w = Math.min(700, Math.floor(width * 0.95));
-    bar.setBounds({ x: Math.round(x + (width - w) / 2), y: Math.round(y + Math.max(0, height * 0.2 - 8)), width: w, height: 300 });
+    bar.setBounds({ x: Math.round(x + (width - w) / 2), y: Math.round(y + Math.max(0, height * 0.2 - 8)), width: w, height: barHeight });
   }
 
   function open() {
@@ -174,6 +187,40 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   ipcMain.handle('quickask:pickFile', async (event) => (fromBar(event) ? pickFile() : { ok: false, message: 'Not allowed' }));
   ipcMain.handle('quickask:dropFile', (event) => { if (fromBar(event)) held = null; return { ok: true }; });
   ipcMain.handle('quickask:capture', async (event) => (fromBar(event) ? capture() : { ok: false, message: 'Not allowed' }));
+  // QA-ANSWERS: the question is answered in the bar. Same checks as a submission (one screenshot or one held file, the text limits), then text only.
+  ipcMain.handle('quickask:ask', async (event, text, attachments) => {
+    if (!fromBar(event)) return { ok: false, message: 'Not allowed' };
+    if (!answerer) return { ok: false, message: 'Bunny could not answer here.' };
+    if (answerer.answering) return { ok: false, message: 'Bunny is still answering.' };
+    const checked = validateSubmission(text, attachments, held);
+    if (!checked.ok) return checked;
+    const request = buildNewChatRequest(checked.text, checked.shot, checked.file);
+    held = null; // the file or screenshot lives only in this message
+    answerer.ask({ text: request.text, files: request.files }); // events come back through quickask:answer
+    return { ok: true };
+  });
+  ipcMain.handle('quickask:stop', (event) => { if (fromBar(event) && answerer) answerer.stop(); return { ok: true }; });
+  // Open in Bunny: the chat (and an answer still coming) is carried over to the main window; the bar closes.
+  ipcMain.handle('quickask:open', (event) => {
+    if (!fromBar(event) || !answerer) return { ok: false, message: 'Not allowed' };
+    const id = answerer.sessionId;
+    if (!id) return { ok: false, message: 'There is no chat to open yet.' };
+    answerer.detach();
+    onOpenChat(id);
+    destroyBar({ keepAnswer: true });
+    return { ok: true };
+  });
+  // The page tells how tall its content is; the bar grows to fit, never past MAX_BAR_HEIGHT or the screen.
+  ipcMain.handle('quickask:resize', (event, height) => {
+    if (!fromBar(event) || !alive()) return { ok: false };
+    const wanted = Math.round(Number(height));
+    if (!Number.isFinite(wanted)) return { ok: false };
+    const display = screen.getDisplayNearestPoint({ x: bar.getBounds().x, y: bar.getBounds().y });
+    barHeight = Math.max(MIN_BAR_HEIGHT, Math.min(MAX_BAR_HEIGHT, wanted, display.workArea.height - 40));
+    const b = bar.getBounds();
+    bar.setBounds({ x: b.x, y: b.y, width: b.width, height: barHeight });
+    return { ok: true, height: barHeight };
+  });
   ipcMain.handle('quickask:submit', async (event, text, attachments) => {
     if (!fromBar(event)) return { ok: false, message: 'Not allowed' };
     const checked = validateSubmission(text, attachments, held);

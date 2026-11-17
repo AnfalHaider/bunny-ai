@@ -192,7 +192,7 @@ ipcMain.handle('quickask:take', (event) => {
 function startQuickChat(request) {
   pendingQuick = request;
   const existing = win && !win.isDestroyed() && !win.webContents.isLoading();
-  showWindow();
+  if (!request?.quiet) showWindow(); // an answer that finished after Open in Bunny only refreshes the chat; it does not pull the window forward again
   if (existing) win.webContents.send('quickask:new-chat'); // a window that is still loading takes the request when its page starts
   return true;
 }
@@ -284,7 +284,13 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
-  quickAsk = createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat });
+  quickAsk = createQuickAsk({
+    BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat,
+    // QA-ANSWERS: the bar answers through Bunny's own server (text only); Open in Bunny and a finished answer tell the window which chat
+    adminFetch: (path, init) => bunnyApp.adminFetch(path, init),
+    onOpenChat: (sessionId) => startQuickChat({ openChat: sessionId }),
+    onAnswerFinished: (sessionId) => startQuickChat({ openChat: sessionId, refresh: true, quiet: true }),
+  });
   createWindow();
   applyQuickAsk();
   // Only the installed app updates itself (or a test pointing at its own feed).
