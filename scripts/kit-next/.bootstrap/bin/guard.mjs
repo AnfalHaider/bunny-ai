@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadFlow } from './lib/flow.mjs';
-import { currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, recordViolation, repoRoot, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, otherRootsViolation, recordViolation, repoRoot, resolveContext, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { baseName, commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 import { simpleCommandTexts } from './lib/shellblank.mjs';
@@ -87,38 +87,20 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   // MSYS-style "/c/Users/..." from Git Bash means C:\Users\... on Windows.
   if (process.platform === 'win32') cwd = cwd.replace(/^\/([a-zA-Z])\//, '$1:/');
   // A cwd we cannot place must not switch the guard off: fall back to where the hook runs.
-  let root = repoRoot(cwd);
-  if (!root && cwd !== process.cwd()) { root = repoRoot(process.cwd()); if (root) cwd = process.cwd(); }
-  if (!root) return { allow: true };
-  // K-1 (Security B7, K1-2): a repository inside the project (git init sub; cd sub) is judged by the project, whatever policy.json it carries itself
-  // (an agent could plant a permissive one there) and wherever the hook's cwd is. The project is CLAUDE_PROJECT_DIR when set, else the nearest
-  // folder above the cwd (or above where the hook runs) that has a .bootstrap/policy.json.
-  const withinDir = (child, dir) => { const c = resolvePath(child).toLowerCase(); const d = resolvePath(dir).toLowerCase(); return c === d || c.startsWith(d + sep); };
-  const walkUp = (start) => { let d = resolvePath(start); for (;;) { if (existsSync(join(d, '.bootstrap', 'policy.json'))) return d; const up = dirname(d); if (up === d) return null; d = up; } };
-  const envDir = process.env.CLAUDE_PROJECT_DIR;
-  // Order of trust: the variable, then where the hook itself runs, and only last the cwd the agent named (a planted nested policy sits nearest to it).
-  const fromHook = walkUp(process.cwd());
-  const project = (envDir && existsSync(join(envDir, '.bootstrap', 'policy.json')) && withinDir(root, envDir) ? resolvePath(envDir) : null)
-    || (fromHook && withinDir(root, fromHook) ? fromHook : null) || walkUp(cwd);
-  // A worktree of the same repository (our sessions run in worktrees inside the main checkout) is its own project with its own role: only an
-  // independent repository nested in the project (git init sub) is judged by the project.
-  const commonDir = (dir) => { const c = git(['rev-parse', '--git-common-dir'], dir); return c ? resolvePath(dir, c).toLowerCase() : null; };
-  const nested = project && project !== resolvePath(root) && withinDir(root, project);
-  const sameRepo = nested && commonDir(root) === commonDir(project);
-  if (nested && !sameRepo) root = project;
-  // A linked worktree keeps its own role (its own role file) but is judged by the policy of the MAIN checkout of its repository, never by a
-  // policy.json it carries itself (one could be planted there), and not by whichever folder the host names as the project.
-  const realCommon = (dir) => { const c = git(['rev-parse', '--git-common-dir'], dir); return c ? resolvePath(dir, c) : null; };
-  const ownGit = git(['rev-parse', '--absolute-git-dir'], root);
-  const common = realCommon(root);
-  const mainRoot = common && ownGit && resolvePath(ownGit).toLowerCase() !== common.toLowerCase() ? dirname(common) : null; // a linked worktree: the main checkout is above the shared .git
-  const policy = loadPolicy(mainRoot && loadPolicy(mainRoot) ? mainRoot : sameRepo ? project : root);
+  let ctx = resolveContext(cwd);
+  if (!ctx && cwd !== process.cwd()) { ctx = resolveContext(process.cwd()); if (ctx) cwd = process.cwd(); }
+  if (!ctx) return { allow: true };
+  // K-2: the project's policy judges everything; a folder git has not registered as a worktree of the project (a nested repository, a planted
+  // .git file) has no role of its own: "unassigned", the strictest, never the project's role.
+  const root = ctx.top;
+  const policy = loadPolicy(ctx.project);
   if (!policy) return { allow: true };
-  const role = currentRole(root);
+  const role = ctx.registered ? currentRole(root) : 'unassigned';
+  const roleRoot = ctx.registered ? root : ctx.project;
   // The merged flow role (brief + company + project overrides, incl. custom sessions) wins when a flow exists.
-  let brief = loadRole(root, role) || {};
-  if (existsSync(join(root, '.bootstrap', 'flow.json'))) {
-    try { const r = loadFlow(root).flow.roles[role]; if (r) brief = { ...brief, ...r, deny_commands: r.deny_commands || brief.deny_commands }; } catch { /* keep the brief */ }
+  let brief = loadRole(roleRoot, role) || {};
+  if (existsSync(join(roleRoot, '.bootstrap', 'flow.json'))) {
+    try { const r = loadFlow(roleRoot).flow.roles[role]; if (r) brief = { ...brief, ...r, deny_commands: r.deny_commands || brief.deny_commands }; } catch { /* keep the brief */ }
   }
 
   if (AGENT_TOOLS.has(tool)) {
@@ -176,11 +158,11 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
       return { allow: false, reason: `Blocked for role "${role}": command matches a rule in .bootstrap/policy.json or roles/${role}.md (${patterns[0]}). If the owner wants this, they run it themselves, or the Chief of Staff records their word first.` };
     }
     if (parsed) {
-      const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers, cwd, root, liveBranch: policy.branches.live });
+      const why = checkShell(parsed, { role, livePushers: policy.releases.live_pushers, cwd, root, liveBranch: policy.branches.live, ctx });
       if (why) return { allow: false, reason: `Blocked for role "${role}": ${why}` };
       // A2 and E: a seatbelt over the files a command writes (A1 is the authoritative check, at commit).
       if (policy.shell_write_check !== false) {
-        const wrote = checkWrites(parsed, { root, cwd, policy, brief, role });
+        const wrote = checkWrites(parsed, { root, cwd, policy, brief, role, ctx });
         if (wrote) return { allow: false, reason: `Blocked for role "${role}": ${wrote}` };
       }
     }
@@ -203,8 +185,11 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
     if (role !== 'chief-of-staff' && isRoleFile(filePath, cwd)) return { allow: false, reason: 'Blocked: that is the worktree\'s role file; the role is assigned by the Chief of Staff (bootstrap role).' };
     const rel = toRepoPath(root, filePath, cwd);
     if (isRefusedPath(rel)) return { allow: false, reason: `Blocked: that path could not be read safely (${rel.refused}).` };
-    if (rel === null) return { allow: true }; // outside the project: not ours to police
-    const why = scopeViolation(rel, policy, brief, role) ?? recordViolation(rel, policy, role);
+    if (rel === null) { // outside this folder: it may still be another worktree of the project (the main checkout by absolute path)
+      const why = otherRootsViolation(filePath, cwd, ctx, policy, role);
+      return why ? { allow: false, reason: `Blocked: ${why}` } : { allow: true };
+    }
+    const why = scopeViolation(rel, policy, brief, role) ?? recordViolation(rel, policy, role) ?? otherRootsViolation(filePath, cwd, ctx, policy, role);
     if (why) return { allow: false, reason: `Blocked: ${why}` };
   }
   return { allow: true };

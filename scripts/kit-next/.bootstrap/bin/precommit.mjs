@@ -11,7 +11,7 @@
 // fails CLOSED only on a definite violation.
 import { pathToFileURL } from 'node:url';
 import { recordChecks } from './lib/records.mjs';
-import { DEFAULT_POLICY, currentRole, git, loadPolicy, loadRole, repoRoot, scopeViolations } from './lib/policy.mjs';
+import { DEFAULT_POLICY, currentRole, git, loadPolicy, loadRole, repoRoot, resolveContext, scopeViolations } from './lib/policy.mjs';
 
 /** Staged paths, renames reported as both sides (so moving a file out of scope is caught). */
 export function stagedPaths(root) {
@@ -34,11 +34,13 @@ function main() {
   let root = null;
   let role = 'unassigned';
   try {
-    root = repoRoot(process.cwd());
+    const ctx = resolveContext(process.cwd());
+    root = ctx ? ctx.top : null;
     let policy;
     let degraded = false;
     try {
-      policy = root && loadPolicy(root);
+      policy = ctx && loadPolicy(ctx.project);
+      if (ctx && !policy) { process.stderr.write('pre-commit: the project has no .bootstrap/policy.json: refused.\n'); return process.exit(1); } // K-2: no policy means refuse
     } catch (err) {
       // The policy file exists but cannot be read: say so loudly, and still hold the built-in
       // protected paths (never the role scopes, which come from that same policy).
@@ -47,7 +49,7 @@ function main() {
       degraded = true;
     }
     if (!policy || policy.scope_check?.commit === false) return process.exit(0);
-    role = currentRole(root);
+    role = ctx.registered ? currentRole(root) : 'unassigned';
     const brief = degraded ? {} : loadRole(root, role) || {};
     const bad = scopeViolations(stagedPaths(root), policy, brief, role);
     if (policy.records_check !== false && !degraded) {

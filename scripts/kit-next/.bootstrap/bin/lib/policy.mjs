@@ -68,6 +68,76 @@ export function loadPolicy(root) {
   };
 }
 
+const norm = (p) => path.resolve(String(p)).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+export const insideDir = (child, dir) => { const c = norm(child); const d = norm(dir); return c === d || c.startsWith(d + '/'); };
+
+/** The work tree folders git has registered for the repository whose main checkout is `main`: [main, ...linked worktrees]. */
+export function worktreeRoots(main) {
+  const out = git(['worktree', 'list', '--porcelain'], main) || '';
+  const roots = out.split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice('worktree '.length).trim()).filter(Boolean);
+  return roots.length ? roots : [main];
+}
+
+/**
+ * K-2: where is the project, and what is this folder to it?
+ *   top        the work tree folder git sees for `cwd` (it can be a planted one)
+ *   project    the main checkout of the repository: its policy.json judges everything below it
+ *   registered the folder IS the project or a worktree git has registered for it: it may use its own role file. Anything else (a nested
+ *              repository, a folder with a planted .git file) is judged by the project's policy with the role "unassigned"
+ *   roots      every registered work tree folder, for the protected-path checks
+ * `hint` is where the host runs the hook, or the project it names: it finds the project of an INDEPENDENT repository nested inside it (git init sub).
+ * Returns null when cwd is not in a repository at all.
+ */
+export function resolveContext(cwd, hints = [process.env.CLAUDE_PROJECT_DIR, process.cwd()]) {
+  const top = repoRoot(cwd);
+  if (!top) return null;
+  const common = (dir) => { const c = git(['rev-parse', '--git-common-dir'], dir); return c ? path.resolve(dir, c) : null; };
+  const mainOf = (dir) => {
+    const c = common(dir);
+    const g = git(['rev-parse', '--absolute-git-dir'], dir);
+    if (!c || !g) return null;
+    return norm(g) !== norm(c) ? path.dirname(c) : (repoRoot(dir) || dir); // a linked worktree: the main checkout is above the shared .git
+  };
+  let project = mainOf(top) || top;
+  const hasPolicy = (dir) => existsSync(join(dir, '.bootstrap', 'policy.json')); // only whether the file is there: an unreadable one is the caller's to report
+  if (!hasPolicy(project)) { // a nested repository with no policy of its own: the nearest folder above it that has one is the project
+    for (let d = path.dirname(path.resolve(project)); ; d = path.dirname(d)) { if (existsSync(join(d, '.bootstrap', 'policy.json'))) { project = mainOf(d) || d; break; } if (path.dirname(d) === d) break; }
+  }
+  for (const h of hints) {
+    if (!h) continue;
+    const hp = repoRoot(h) ? mainOf(h) : null;
+    if (hp && norm(hp) !== norm(project) && insideDir(project, hp) && norm(common(project) ?? '') !== norm(common(hp) ?? '') && hasPolicy(hp)) { project = hp; break; }
+  }
+  const roots = worktreeRoots(project);
+  if (!roots.some((r) => norm(r) === norm(project))) roots.unshift(project);
+  const registered = roots.some((r) => norm(r) === norm(top));
+  return { top, project, registered, roots };
+}
+
+/** A path that decides what git or the guard believes: a .git file, a planted git directory's commondir or role file, a policy.json under .bootstrap. */
+export function plantedGitPath(rel) {
+  const p = String(rel).replace(/\\/g, '/').replace(/^\.\//, '');
+  return /(^|\/)\.git$/i.test(p) || /(^|\/)(commondir|bootstrap-role|gitdir)$/i.test(p) || /(^|\/)\.bootstrap\/policy\.json$/i.test(p);
+}
+
+/**
+ * K-2 (K2-3): the file may belong to ANOTHER worktree of the repository (the main checkout's .githooks, .bootstrap/bin, policy, AGENTS.md by absolute path).
+ * Protected globs and record folders are matched against every registered root the path is inside of, not only the current one.
+ */
+export function otherRootsViolation(filePath, cwd, ctx, policy, role) {
+  if (!ctx || role === 'chief-of-staff') return null;
+  for (const r of ctx.roots) {
+    const rel = toRepoPath(r, filePath, cwd);
+    if (rel === null || (typeof rel === 'object' && rel?.refused)) continue;
+    const why = scopeViolation(rel, policy, {}, role) ?? recordViolation(rel, policy, role);
+    if (why) return why;
+  }
+  // a planted git file or role file anywhere inside the project
+  const rel = toRepoPath(ctx.project, filePath, cwd);
+  if (typeof rel === 'string' && plantedGitPath(rel)) return `${rel} decides what git or the guard believes (a .git file, commondir, bootstrap-role, policy.json under .bootstrap). Only the Chief of Staff writes it.`;
+  return null;
+}
+
 /** The role file the bootstrap command writes into this worktree's private git directory (outside the files a role edits). */
 export function roleFile(root) {
   const dir = git(['rev-parse', '--absolute-git-dir'], root);

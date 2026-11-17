@@ -11,7 +11,7 @@
 // path or a record folder outright. Behind policy.shell_write_check (default on).
 import path from 'node:path';
 import { baseName, commandStarts, isCmd } from './shellparse.mjs';
-import { isRefusedPath, isRoleFile, recordViolation, scopeViolation, toRepoPath } from './policy.mjs';
+import { isRefusedPath, isRoleFile, otherRootsViolation, recordViolation, scopeViolation, toRepoPath } from './policy.mjs';
 import { gitCall, innerParsed } from './shellrules.mjs';
 
 const NULLISH = new Set(['/dev/null', 'nul', 'con', '/dev/stdout', '/dev/stderr', '/dev/stdin', '-']);
@@ -128,6 +128,9 @@ function judge(word, ctx, cwd) {
   if (ctx.role !== 'chief-of-staff' && isRoleFile(text, cwd ?? ctx.cwd)) return `${text} is the worktree's role file; the role is assigned by the Chief of Staff (bootstrap role).`;
   const rel = toRepoPath(ctx.root, text, cwd ?? ctx.cwd);
   if (isRefusedPath(rel)) return `${text}: that path could not be read safely (${rel.refused}).`;
+  // K-2: the file may belong to another worktree of the repository, or be a planted git file
+  const other = otherRootsViolation(text, cwd ?? ctx.cwd, ctx.ctx, ctx.policy, ctx.role);
+  if (other) return `${text}: ${other}`;
   if (rel === null) return null;
   return scopeViolation(rel, ctx.policy, ctx.brief, ctx.role) ?? recordViolation(rel, ctx.policy, ctx.role);
 }

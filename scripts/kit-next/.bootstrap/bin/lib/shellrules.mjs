@@ -250,6 +250,8 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if (sub === 'remote') { const why4 = refuseRemote(call.args); if (why4) return why4; }
   if (sub === 'symbolic-ref') { const why6 = refuseSymbolicRef(call.args); if (why6) return why6; }
   if (sub === 'branch' || sub === 'checkout' || sub === 'switch' || sub === 'worktree') { const why5 = refuseLabelMove(sub, call.args, ctx.liveBranch); if (why5) return why5; }
+  // K-2 (K2-1): a worktree of an old commit has no policy and no role of its own; only the live pushers add one (they never reach these rules)
+  if (sub === 'worktree' && call.args.some((a) => a === 'add')) return '"git worktree add" makes a folder with its own history and no role; the Chief of Staff and Release Ops add worktrees, other roles do not.';
   if (!sub || GIT_BUILTINS.has(sub)) return null;
   // the alias is looked up where git will run: every -C moves the folder, in order
   let where = ctx.cwd ?? process.cwd();

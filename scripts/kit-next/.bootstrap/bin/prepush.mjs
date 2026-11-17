@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseFrontmatter } from './lib/fm.mjs';
-import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, scopeViolations } from './lib/policy.mjs';
+import { currentRole, git, loadPolicy, loadRole, matchesAny, repoRoot, resolveContext, scopeViolations } from './lib/policy.mjs';
 import { recordChecks } from './lib/records.mjs';
 import { laneOf, loadFlow, requiredFor, wordRecordProblems, wordsFor } from './lib/flow.mjs';
 import { hasEvidence } from './lib/ops.mjs';
@@ -345,10 +345,13 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
 }
 
 function main() {
-  const root = repoRoot(process.cwd());
-  const policy = root && loadPolicy(root);
-  if (!policy) process.exit(0);
-  const role = currentRole(root);
+  // K-2 (K2-2): the project comes from git's own common directory, never from the folder the push runs in; no policy means refuse
+  const ctx = resolveContext(process.cwd());
+  if (!ctx) process.exit(0); // not a repository: not ours
+  const root = ctx.top;
+  const policy = loadPolicy(ctx.project);
+  if (!policy) { process.stderr.write('pre-push: the project has no .bootstrap/policy.json, so there is nothing to judge this push by: refused.\n'); process.exit(1); }
+  const role = ctx.registered ? currentRole(root) : 'unassigned';
   const lines = readFileSync(0, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean);
   let failed = false;
   for (const line of lines) {

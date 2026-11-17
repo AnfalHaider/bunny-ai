@@ -175,8 +175,11 @@ test('W5B-2: git symbolic-ref with a target (or -d) is refused for a builder; re
 
 test('W5B-3: git worktree add -B (or --force) with the live branch is refused', (t) => {
   for (const c of ['git worktree add -B main ../w', 'git worktree add ../w -B main', 'git worktree add -B Main ../w origin/main', 'git worktree add --force ../w main']) denied(t, c);
-  allowed(t, 'git worktree add ../w claude/x');
-  allowed(t, 'git worktree add -b claude/new ../w');
+  // K-2: on the kit only the Chief of Staff and Release Ops add a worktree at all; the rest of the cases are unchanged
+  if (process.env.KIT_NEXT) { denied(t, 'git worktree add ../w claude/x'); denied(t, 'git worktree add -b claude/new ../w'); allowed(t, 'git worktree add ../w claude/x', 'chief-of-staff'); allowed(t, 'git worktree add ../w claude/x', 'release-ops'); } else {
+    allowed(t, 'git worktree add ../w claude/x');
+    allowed(t, 'git worktree add -b claude/new ../w');
+  }
   allowed(t, 'git worktree list');
   allowed(t, 'git worktree remove ../w');
 });
@@ -204,7 +207,7 @@ test('W5B-5: the pre-push hook refuses tag pushes and deletions for a role that 
 
 test('W5-1c review: attached branch names, Windows spellings of a download target, and the folder the command runs in', (t) => {
   for (const c of ['git worktree add -Bmain ../w', 'git worktree add -B=main ../w', 'git checkout -Bmain', 'git switch -Cmain', 'git switch --force-create=main']) denied(t, c);
-  allowed(t, 'git worktree add -Bclaude/x ../w');
+  if (process.env.KIT_NEXT) denied(t, 'git worktree add -Bclaude/x ../w'); else allowed(t, 'git worktree add -Bclaude/x ../w'); // K-2: only the Chief of Staff and Release Ops add worktrees
   for (const c of ['gh run download 5 -D .BOOTSTRAP', 'gh run download 5 -D .bootstrap.', 'gh run download 5 -D ".githooks "', 'gh run download 5 -D docs/../.bootstrap', 'gh run download 5 -D ./.git/hooks', 'gh release download v1 -D Docs/Signoffs', 'gh release download v1 -D docs/releases.', 'gh release download v1 -O .bootstrap/policy.json', 'gh release download v1 -D .bootstrap::$DATA']) denied(t, c);
   allowed(t, 'gh run download 5 -D docs/design');
   // run from inside a protected folder with no -D: it would write there
