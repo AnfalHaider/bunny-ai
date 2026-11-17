@@ -2593,6 +2593,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // Why the first model was left (timeout, rate-limit, unavailable, empty, refused, unreachable, key) and how many failed.
         fellBackReason: typeof body.fellBackReason === 'string' ? body.fellBackReason.slice(0, 30) : undefined,
         fellBackTries: Number.isInteger(body.fellBackTries) && body.fellBackTries > 0 ? Math.min(body.fellBackTries, 9) : undefined,
+        // W4-13 slice 3: 'provider' = the same model on the next provider; 'model' = no provider had the model left. fellBackProvider names the provider that failed.
+        fellBackKind: body.fellBackKind === 'provider' || body.fellBackKind === 'model' ? body.fellBackKind : undefined,
+        fellBackProvider: typeof body.fellBackProvider === 'string' ? body.fellBackProvider.slice(0, 100) : undefined,
       };
 
       // When the person presses Stop, the browser closes the connection. What

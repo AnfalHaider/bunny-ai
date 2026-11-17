@@ -371,6 +371,17 @@ function readProviderOrder() {
   } catch { return { person: [], models: {} }; }
 }
 
+/** The rows of one model (one per provider) in the order Bunny tries them: Free first, then the person's own order. */
+function providerRowsInOrder(group) {
+  const saved = readProviderOrder();
+  const order = orderProviders(group.map((m) => m.providerId), {
+    free: Object.fromEntries(group.map((m) => [m.providerId, m.freeKind ?? null])),
+    personOrder: saved.person, modelOrder: saved.models[group[0].id] ?? [],
+    out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
+  });
+  return order.map((id) => group.find((m) => m.providerId === id));
+}
+
 /** A short list of model ids kept on this computer (favourites, recent). */
 function readList(key) {
   try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
@@ -532,15 +543,7 @@ function openPicker(host, trigger) {
   };
 
   // One row per model: its name, its context size, and every provider as a tag in the order Bunny tries them (Free first, then Free daily).
-  const rowsInOrderOf = (group) => {
-    const saved = readProviderOrder();
-    const order = orderProviders(group.map((m) => m.providerId), {
-      free: Object.fromEntries(group.map((m) => [m.providerId, m.freeKind ?? null])),
-      personOrder: saved.person, modelOrder: saved.models[group[0].id] ?? [],
-      out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
-    });
-    return order.map((id) => group.find((m) => m.providerId === id));
-  };
+  const rowsInOrderOf = providerRowsInOrder;
 
   function modelItem(group, section = '') {
     const first = group[0];
@@ -1391,7 +1394,16 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
   }
 
   // Which model answered, when Auto chose it (and what it fell back from).
-  if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
+  if (m.role === 'assistant' && m.model && (m.fellBackKind === 'provider' || m.fellBackKind === 'model')) {
+    // W4-13 slice 3: one calm amber line, never an error
+    const row = state.models?.find((x) => x.id === m.model && x.providerId === m.providerId) ?? state.models?.find((x) => x.id === m.model);
+    const reason = reasonPhrase(m.fellBackReason);
+    const text = m.fellBackKind === 'provider'
+      ? say('model.switchedProvider', { model: row?.displayName ?? m.model, provider: row?.providerName ?? m.providerId ?? '', from: m.fellBackFrom, reason })
+        + (m.fellBackTries > 1 ? ` (${m.fellBackTries - 1} other provider${m.fellBackTries - 1 === 1 ? '' : 's'} also failed)` : '')
+      : say('model.switchedModel', { model: row?.displayName ?? m.model, from: m.fellBackFrom, provider: m.fellBackProvider ?? '', reason });
+    wrap.append(element('div', { className: 'msg-meta switch-note', textContent: `↪ ${text}.` }));
+  } else if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
     const job = JOBS[m.job]?.label ?? 'Chat';
     wrap.append(element('div', { className: 'msg-meta auto-meta',
       textContent: m.auto
@@ -2600,22 +2612,28 @@ async function send() {
 
   const job = jobFor(text, files);
   state.lastJob = job;
-  const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
+  const fixed = state.selected ? [{ providerId: state.selected.providerId, providerName: state.selected.providerName, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
   const fallbackOn = !state.modelAuto && !offlineLocal && state.settings?.fallbackWhenBusy !== false;
+  // W4-13 slice 3: the same model on its other providers (the person's order) comes before any other model
+  let sameModel = [];
+  if (fallbackOn && state.selected) {
+    const group = state.models.filter((m) => m.id === state.selected.model);
+    sameModel = group.length ? providerRowsInOrder(group).filter((m) => m.providerId !== state.selected.providerId && !m.unavailable) : [];
+    candidates.push(...sameModel);
+  }
   if (fallbackOn) {
-    const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
-    candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
+    candidates.push(...rankModels(state.models, job).filter((m) => m.id !== state.selected?.model).slice(0, 2));
   }
   // Errors that are not the model's fault: another model would not help.
   const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
   let result = { meter: null, aborted: false };
   // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
   // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = Math.min(6, 3 + sameModel.length);
   const queue = [...candidates];
   const failures = []; // { name, providerId, reason }
   const badProviders = new Set();
@@ -2627,7 +2645,11 @@ async function send() {
     const i = attempt;
     attempt += 1;
     const stillToTry = () => queue.filter((q) => !badProviders.has(q.providerId)).length;
-    const failed = failures[0]?.name ?? null;
+    const f0 = failures[0];
+    // the same model on the next provider ('provider'), or another model once no provider had it left ('model')
+    const switchKind = !f0 || !state.selected || f0.modelId !== state.selected.model ? undefined
+      : (pick.id === f0.modelId ? 'provider' : (sameModel.length ? 'model' : undefined));
+    const failed = switchKind === 'provider' ? f0.providerName : (f0?.name ?? null);
     $('error').textContent = '';
     result = await streamInto(bodyEl, {
       quietError: true,
@@ -2646,6 +2668,8 @@ async function send() {
         fellBackFrom: failed ?? undefined,
         fellBackReason: failures[0]?.reason,
         fellBackTries: failures.length || undefined,
+        fellBackKind: switchKind,
+        fellBackProvider: switchKind ? f0.providerName : undefined,
         attemptsLeft: Math.min(MAX_ATTEMPTS - attempt, stillToTry()),
       },
       mood: failed ? 'fallback' : 'waiting',
@@ -2655,13 +2679,16 @@ async function send() {
     const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode) && result.errorInfo?.scope !== 'other';
     if (!errored || result.aborted) break;
     const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
-    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
+    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, providerName: pick.providerName ?? pick.providerId, modelId: pick.id, reason });
     if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);
     const next = queue.find((q) => !badProviders.has(q.providerId));
     if (!next || attempt >= MAX_ATTEMPTS) break;
     // A calm line while the next model starts: what happened, and who is trying now.
     const live = say(`model.live.${reason}`) !== `model.live.${reason}` ? say(`model.live.${reason}`) : reasonPhrase(reason);
-    state.tryingNote = say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
+    const sameAgain = next.id === pick.id;
+    state.tryingNote = say('model.trying', sameAgain
+      ? { from: failures.at(-1).providerName, state: live, to: `${next.displayName ?? next.id} on ${next.providerName ?? next.providerId}` }
+      : { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
     flashStatus(state.tryingNote, 30000);
   }
   const { meter, aborted } = result;
