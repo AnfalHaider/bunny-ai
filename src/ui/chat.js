@@ -955,6 +955,7 @@ function renderSessionRow(s, depth) {
   if (depth) a.append(element('span', { className: 'branch-mark', textContent: '↳', 'aria-hidden': 'true' }));
   if (s.pinned) a.append(element('span', { className: 'pin', textContent: '★', 'aria-label': 'Pinned', role: 'img' }));
   if (s.incognito) a.append(element('span', { className: 'tag', textContent: 'incognito' }));
+  if (s.origin === 'quick-ask') a.append(element('span', { className: 'tag', textContent: 'Quick ask' })); // QA-ANSWERS: it began in the Quick ask bar
   if (s.agent) {
     const label = s.agent === 'helper' ? say('agent.helper') : say('agent.background');
     a.append(element('span', { className: `tag agent-tag${s.agentStatus === 'working' ? ' is-working' : ''}`, textContent: s.agentStatus === 'working' ? `${label} · ${say('agent.working')}` : label }));
