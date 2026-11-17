@@ -125,20 +125,40 @@ function sendJson(res, status, value) {
   res.end(body);
 }
 
+// Memory guard (Security, QA batch): a body over 1 MB is read by ONE request at a time across the app; a second one is answered 429.
+let largeBodyBusy = false;
+
 function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0;
-    let tooLarge = false;
+    let failure = null;
+    let holds = false;
     const chunks = [];
+    const tooBig = () => new ConnectError('request.tooLarge', `That is too large (over ${Math.round(max / 1024 / 1024)} MB).`);
+    const busy = () => new ConnectError('request.busy', 'Another large message is being sent; try again in a moment.');
+    const give = () => { if (holds) { holds = false; largeBodyBusy = false; } };
+    const take = () => { if (holds) return true; if (largeBodyBusy) return false; largeBodyBusy = true; holds = true; return true; };
+    // What is not wanted is still read and dropped (so the answer reaches the window; cutting the connection showed only "Failed to fetch"), but only up to twice the cap:
+    // past that the connection is closed.
+    const drain = () => {
+      req.on('data', (chunk) => { size += chunk.length; if (size > max * 2) req.destroy(); });
+      req.on('error', () => {});
+    };
+    const declared = Number(req.headers?.['content-length']);
+    if (Number.isFinite(declared) && declared > max) { drain(); return reject(tooBig()); } // refused before a byte is kept
+    if (Number.isFinite(declared) && declared > MAX_BODY && !take()) { drain(); return reject(busy()); }
     req.on('data', (chunk) => {
       size += chunk.length;
-      // Too large: the rest is read and dropped, so the answer still reaches the window
-      // (cutting the connection showed only "Failed to fetch").
-      if (size > max) { tooLarge = true; chunks.length = 0; return; }
+      if (size > max * 2) { give(); chunks.length = 0; failure = failure ?? tooBig(); req.destroy(); return; }
+      if (failure) return;
+      if (size > max) { failure = tooBig(); chunks.length = 0; give(); return; }
+      if (size > MAX_BODY && !take()) { failure = busy(); chunks.length = 0; return; }
       chunks.push(chunk);
     });
+    req.on('close', give);
     req.on('end', () => {
-      if (tooLarge) return reject(new ConnectError('request.tooLarge', `That is too large (over ${Math.round(max / 1024 / 1024)} MB).`));
+      give();
+      if (failure) return reject(failure);
       const raw = Buffer.concat(chunks).toString('utf8');
       if (!raw) return resolve({});
       try {
@@ -147,7 +167,7 @@ function readBody(req, max = MAX_BODY) {
         reject(new ConnectError('request.invalidJson', 'Body must be JSON'));
       }
     });
-    req.on('error', reject);
+    req.on('error', (err) => { give(); reject(err); });
   });
 }
 
@@ -1446,7 +1466,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       try { answer = await readBody(req, MAX_BROWSER_ANSWER); } catch (err) {
         // Too large (or not JSON): the chat that is waiting is told at once, so it does not wait for the 90 seconds to run out.
         pending.resolve({ error: err.code === 'request.tooLarge' ? `The picture from the browser panel is too large (over ${MAX_BROWSER_ANSWER / 1024 / 1024} MB) to send. Take a smaller capture.` : 'The browser panel sent an answer Bunny could not read.' });
-        return sendJson(res, err.code === 'request.tooLarge' ? 413 : 400, { code: err.code ?? 'request.invalid', message: err.message });
+        return sendJson(res, err.code === 'request.tooLarge' ? 413 : err.code === 'request.busy' ? 429 : 400, { code: err.code ?? 'request.invalid', message: err.message });
       }
       pending.resolve(answer);
       return sendJson(res, 200, { ok: true });
@@ -3254,7 +3274,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   const server = createServer((req, res) => {
     route(req, res).catch((err) => {
       if (!res.headersSent) {
-        const status = err?.code === 'request.tooLarge' ? 413 : err instanceof ConnectError ? 400 : 500;
+        const status = err?.code === 'request.tooLarge' ? 413 : err?.code === 'request.busy' ? 429 : err instanceof ConnectError ? 400 : 500;
         sendJson(res, status, { code: err?.code ?? 'server.error', message: err.message });
         return;
       }
