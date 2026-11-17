@@ -348,7 +348,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
         sandbox.lines = lines;
         const began = clock();
         try { return [...script.runInContext(sandbox, { timeout: Math.max(50, Math.min(REGEX_TIMEOUT_MS, REGEX_BUDGET_MS - regexSpent)) })]; } catch (err) {
-          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('That pattern is too slow; simplify it.');
+          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('Search stopped after 5 s; narrow the folder or the pattern.');
           throw err;
         } finally { regexSpent += Math.max(0, clock() - began); }
       };

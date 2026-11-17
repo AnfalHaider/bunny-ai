@@ -233,7 +233,7 @@ test('find_files searches a 5,000-file folder in under 2 seconds', async (t) => 
 test('LA-2: a catastrophic regular expression is stopped with a clear message, quickly', async (t) => {
   const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n`, 'b.txt': 'fine\n' });
   const t0 = process.cpuUsage();
-  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /That pattern is too slow; simplify it\./);
+  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /Search stopped after 5 s; narrow the folder or the pattern\./);
   assert.ok(cpuSince(t0) < 5000, `took ${cpuSince(t0)} ms`);
   // the next search still works (the stopped one left nothing behind), and an ordinary regex is unaffected
   assert.match(await ws.run('search_files', { query: '^f(i|j)ne$', regex: true }), /b\.txt:1: fine/);
