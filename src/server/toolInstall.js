@@ -11,8 +11,9 @@
  * Only public repositories, only Node.js servers. A Python or other server is added by the person in Settings, Customize.
  */
 import { execFile } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { lstat, mkdir, readdir, rm, rmdir, stat, unlink } from 'node:fs/promises';
-import { join, resolve, relative, isAbsolute, sep } from 'node:path';
+import { basename, delimiter, dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
 
 export const TOOLS_DIR = 'tools';
 const API = 'https://api.github.com';
@@ -53,13 +54,59 @@ function installEnv() {
   const keep = ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'ComSpec', 'TEMP', 'TMP', 'USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA', 'ProgramFiles', 'ProgramData', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'];
   const env = {};
   for (const k of keep) if (process.env[k] !== undefined) env[k] = process.env[k];
-  return { ...env, GIT_TERMINAL_PROMPT: '0', npm_config_ignore_scripts: 'true', npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' };
+  // NoDefaultCurrentDirectoryInExePath: Windows does not look in the current folder (the clone) for a program first
+  return { ...env, NoDefaultCurrentDirectoryInExePath: '1', GIT_TERMINAL_PROMPT: '0', npm_config_ignore_scripts: 'true', npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' };
 }
 
-/** Run one fixed program with fixed arguments. (npm is a .cmd on Windows, which needs a shell; the arguments are constants of this file.) */
+/**
+ * Where a program really is: the first ABSOLUTE entry of PATH that holds it. A relative entry (".", "") is skipped, so the folder the
+ * program runs in (the clone: it may hold an npm.cmd, an npm.bat or a git.exe of its own) is never searched. Found once, then kept.
+ */
+function findOnPath(names) {
+  const raw = process.env.PATH ?? process.env.Path ?? '';
+  for (const dir of raw.split(delimiter)) {
+    if (!dir || !isAbsolute(dir)) continue;
+    for (const name of names) {
+      const candidate = join(dir, name);
+      try { if (statSync(candidate).isFile()) return candidate; } catch { /* not here */ }
+    }
+  }
+  return null;
+}
+
+let located = null;
+/** git, node and npm's own script, as absolute paths. */
+export function locatePrograms() {
+  if (located) return located;
+  const windows = process.platform === 'win32';
+  const git = findOnPath(windows ? ['git.exe'] : ['git']);
+  let node = findOnPath(windows ? ['node.exe'] : ['node']);
+  if (!node && /^node(\.exe)?$/i.test(basename(process.execPath))) node = process.execPath;
+  // npm's script sits beside node (Windows) or one folder up under lib (Unix); else beside an npm shim found on PATH
+  const shim = findOnPath(windows ? ['npm.cmd', 'npm'] : ['npm']);
+  const options = [];
+  if (node) options.push(join(dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dirname(node), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+  if (shim) options.push(join(dirname(shim), 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dirname(shim), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+  const npmCli = options.find((p) => { try { return statSync(p).isFile(); } catch { return false; } }) ?? null;
+  located = { git, node, npmCli };
+  return located;
+}
+
+/** Run one fixed program with fixed arguments: 'git' and 'npm' are looked up ONCE as absolute paths (see findOnPath), npm runs as `node npm-cli.js`, no shell anywhere. */
 export function runCommand(file, args, { cwd }) {
   return new Promise((resolveRun, reject) => {
-    execFile(file, args, { cwd, env: installEnv(), timeout: STEP_TIMEOUT_MS, windowsHide: true, maxBuffer: 8 << 20, shell: process.platform === 'win32' && file === 'npm' }, (err, stdout, stderr) => {
+    const where = locatePrograms();
+    let program = file;
+    let argv = args;
+    if (file === 'git') {
+      if (!where.git) { reject(new Error('git was not found on this computer, so a tool cannot be installed from GitHub. Install Git for Windows and try again.')); return; }
+      program = where.git;
+    } else if (file === 'npm') {
+      if (!where.node || !where.npmCli) { reject(new Error('Node.js and npm were not found on this computer, so a tool cannot be installed. Install Node.js and try again.')); return; }
+      program = where.node;
+      argv = [where.npmCli, ...args];
+    }
+    execFile(program, argv, { cwd, env: installEnv(), timeout: STEP_TIMEOUT_MS, windowsHide: true, maxBuffer: 8 << 20, shell: false }, (err, stdout, stderr) => {
       if (err) reject(new Error(String(stderr || err.message).replace(/\s+/g, ' ').trim().slice(0, 400)));
       else resolveRun(String(stdout));
     });
@@ -143,7 +190,7 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
       const added = await mcp.add({ name: plan.name, command: 'node', args: [entryPath], enabled: true, source: { repo: plan.repo, sha: plan.sha, folder: plan.folder } });
       return `Installed ${plan.repo} (commit ${plan.sha.slice(0, 7)}) as the connector ${added.name}. Its install scripts were not run. It is switched on; its tools are offered from the next message. Removing the connector removes its files.`;
     } catch (err) {
-      await rm(target, { recursive: true, force: true }).catch(() => {}); // a half install is not kept
+      await removeTreeImpl(target).catch(() => {}); // a half install is not kept (and a link in it is never followed: one rule)
       throw err;
     }
   }

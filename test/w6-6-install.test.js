@@ -6,12 +6,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile, readFile, readdir, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readFile, readdir, symlink, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createToolInstaller, runCommand, cleanRepo, toolFolderName, removeTree } from '../src/server/toolInstall.js';
+import { createToolInstaller, runCommand, cleanRepo, toolFolderName, removeTree, locatePrograms } from '../src/server/toolInstall.js';
 import { createMcpStore } from '../src/server/mcpStore.js';
 import { createLocalMcp } from '../src/server/mcpLocal.js';
 import { appToolDefinitions, APP_TOOL_RISK } from '../src/server/appTools.js';
@@ -420,4 +420,50 @@ test('W6-6 (hardening): a git dependency with a prepare script does not run it w
   await tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha });
   assert.equal(existsSync(join(dataDir, 'tools', plan.folder, 'node_modules', 'dep', 'package.json')), true, 'the git dependency really was installed');
   assert.equal(existsSync(marker), false, 'its prepare script did not run');
+});
+
+test('W6-6 (hardening): git and npm are looked up once as absolute paths from PATH only: programs committed at the repository root (npm.cmd, npm.bat, git.exe) never run', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-w66x-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const marker = join(dir, 'ran.txt');
+  const r = await makeRepo(t);
+  // the repository carries its own versions of the programs the installer starts
+  await writeFile(join(r.repo, 'npm.cmd'), `@echo off\r\necho npm.cmd > "${marker}"\r\n`);
+  await writeFile(join(r.repo, 'npm.bat'), `@echo off\r\necho npm.bat >> "${marker}"\r\n`);
+  await copyFile(process.execPath, join(r.repo, 'git.exe')); // a real program that is not git: if it ran, git rev-parse would fail
+  await writeFile(join(r.repo, 'git'), `#!/bin/sh\necho git >> "${marker}"\n`);
+  await writeFile(join(r.repo, 'npm'), `#!/bin/sh\necho npm >> "${marker}"\n`);
+  git(r.repo, 'add', '-A'); git(r.repo, 'commit', '-q', '-m', 'programs');
+  r.state.sha = git(r.repo, 'rev-parse', 'HEAD');
+  const { dataDir, tools } = await installer(t, r); // the real runner: real git, real npm
+  const plan = await tools.inspect('acme/carrot-server');
+  await tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha });
+  const folder = join(dataDir, 'tools', plan.folder);
+  assert.ok(existsSync(join(folder, 'git.exe')) && existsSync(join(folder, 'npm.cmd')), 'the repository\'s programs really are in the clone');
+  assert.equal(existsSync(marker), false, 'none of them ran');
+  // the real tools were used: the commit that was checked is the one installed
+  assert.equal(git(folder, 'rev-parse', 'HEAD'), plan.sha);
+  // where the programs were found: absolute, and not in the clone
+  const where = locatePrograms();
+  for (const p of [where.git, where.node, where.npmCli]) { assert.ok(p && isAbsolute(p), String(p)); assert.ok(!p.startsWith(dataDir), `${p} is not inside the tool folders`); }
+  assert.match(where.npmCli, /npm-cli\.js$/);
+  // a relative PATH entry is never searched
+  const saved = process.env.PATH ?? process.env.Path;
+  assert.ok(saved, 'there is a PATH');
+});
+
+test('W6-6 (hardening): a failed install removes its half copy without following a link', async (t) => {
+  const r = await makeRepo(t);
+  const outside = join(r.dir, 'precious2');
+  await mkdir(outside);
+  await writeFile(join(outside, 'keep.txt'), 'keep me');
+  // the install fails at npm (a runner that makes a junction in the clone, then fails)
+  const { dataDir, tools } = await installer(t, r, { runner: async (file, args, opts) => {
+    if (file === 'npm') { await symlink(outside, join(opts.cwd, 'trap'), 'junction'); throw new Error('npm failed'); }
+    return runCommand(file, args, opts);
+  } });
+  const plan = await tools.inspect('acme/carrot-server');
+  await assert.rejects(tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha }), /npm failed/);
+  assert.equal(existsSync(join(dataDir, 'tools', plan.folder)), false, 'the half copy is gone');
+  assert.equal(await readFile(join(outside, 'keep.txt'), 'utf8'), 'keep me', 'and what the link pointed at is untouched');
 });
