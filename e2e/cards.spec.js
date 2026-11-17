@@ -29,6 +29,8 @@ function script(body) {
     const told = body.messages.filter((m) => m.role === 'tool').at(-1)?.content;
     return told ? frame({ content: `Painting it. (${told})` }) : call('ask_user', { question: 'Which colour?', choices: [{ label: 'Blue', reason: 'Calm, like the current header' }, { label: 'Green', reason: 'Matches the carrot leaves in the logo', recommended: true }] });
   }
+  // W4-12: the same step again and again; once the person said keep going (a fourth step was run) it finishes
+  if (/go round in circles/.test(JSON.stringify(body.messages))) return tools >= 4 ? frame({ content: /skip the tests/.test(JSON.stringify(body.messages)) ? 'Finished without the tests.' : 'Finished after all.' }) : call('update_tasks', { tasks: [{ text: 'Look again' }] });
   if (/use a helper/.test(asked)) return tools === 0 ? call('run_subagent', { title: 'Carrot counter', task: 'Count carrots' }) : frame({ content: 'The helper reported.' });
   if (/long code/.test(asked)) return frame({ content: `Here:\n\n\`\`\`python\n${LONG}\n\`\`\`\n` });
   return frame({ content: 'hello' });
@@ -191,4 +193,86 @@ test('a question can be answered in your own words', async ({ page }) => {
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
   await expect(page.locator('.msg.assistant .body').last()).toContainText('The person answered: Sunset orange');
   await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Sunset orange');
+});
+
+// W4-12: a "Bunny asked" card from a limit check ("the same step three times in a row") can be answered while the run waits
+const circles = async (page) => {
+  await page.locator('#input').fill('go round in circles');
+  await page.locator('#send').click();
+  const card = page.locator('.question-card:not(.is-answered)');
+  await expect(card.locator('h4')).toContainText('three times in a row', { timeout: 20_000 });
+  return card;
+};
+
+test('W4-12: the repeated-step card: "Stop here" is clickable and ends the work, the card then shows the answer', async ({ page }) => {
+  const card = await circles(page);
+  await expect(card.getByRole('button', { name: /Stop here/ })).toBeEnabled();
+  await card.getByRole('button', { name: /Stop here/ }).click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Stop here');
+  await expect(page.locator('.question-card.is-answered')).not.toContainText('Not answered');
+});
+
+test('W4-12: the repeated-step card: "Keep going" carries on', async ({ page }) => {
+  const card = await circles(page);
+  await card.getByRole('button', { name: /Keep going/ }).click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Keep going');
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Finished after all.');
+});
+
+test('W4-12: typing the answer in the message box ("stop here") answers the waiting card', async ({ page }) => {
+  await circles(page);
+  await page.locator('#input').fill('stop here.');
+  await page.locator('#send').click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: Stop here');
+});
+
+test('W4-12: a card nobody answered (the window was reloaded while it waited) says so and offers no dead buttons', async ({ page }) => {
+  await circles(page);
+  await page.reload();
+  const card = page.locator('.question-card.is-answered');
+  await expect(card).toContainText('Not answered', { timeout: 20_000 });
+  await expect(card).toContainText('can no longer be answered');
+  await expect(card.getByRole('button')).toHaveCount(0); // the choices are a record, not buttons
+});
+
+test('W4-12: typing "keep going please" in the message box carries on', async ({ page }) => {
+  await circles(page);
+  await page.locator('#input').fill('keep going please');
+  await page.locator('#send').click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: keep going please');
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Finished after all.');
+});
+
+test('W4-12: "yes, but skip the tests" carries on AND the model gets those words', async ({ page }) => {
+  await circles(page);
+  await page.locator('#input').fill('yes, but skip the tests');
+  await page.locator('#send').click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: yes, but skip the tests');
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Finished without the tests.');
+});
+
+test('W4-12: after Skip the saved card says "You skipped this question." and not that it was never answered', async ({ page }) => {
+  const card = await circles(page);
+  await card.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  const saved = page.locator('.question-card.is-answered');
+  await expect(saved).toContainText('You skipped this question.');
+  await expect(saved).not.toContainText('Not answered');
+  await page.reload();
+  await expect(page.locator('.question-card.is-answered')).toContainText('You skipped this question.', { timeout: 20_000 });
+  await expect(page.locator('.question-answer-note')).toHaveCount(0);
+});
+
+test('W4-12: "yes, stop" is a stop, not a go-ahead', async ({ page }) => {
+  await circles(page);
+  await page.locator('#input').fill('yes, stop');
+  await page.locator('#send').click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: yes, stop');
+  await expect(page.locator('.msg.assistant .body').last()).not.toContainText('Finished after all.');
 });

@@ -2038,11 +2038,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       });
       // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
       const askQuestion = (q) => new Promise((resolveAnswer) => {
-        if (res.writableEnded || res.destroyed) { resolveAnswer({ skipped: true }); return; }
+        if (res.writableEnded || res.destroyed) { resolveAnswer({ skipped: true, gone: true }); return; }
         const qid = randomUUID();
-        const timer = setTimeout(() => pendingQuestions.get(qid)?.resolve({ skipped: true }), 30 * 60_000);
+        const timer = setTimeout(() => pendingQuestions.get(qid)?.resolve({ skipped: true, gone: true }), 30 * 60_000);
         pendingQuestions.set(qid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingQuestions.delete(qid); resolveAnswer(a ?? {}); } });
-        res.once('close', () => pendingQuestions.get(qid)?.resolve({ skipped: true }));
+        res.once('close', () => pendingQuestions.get(qid)?.resolve({ skipped: true, gone: true }));
         replyStatus.set(id, 'needs-you');
         send('question', { id: qid, ...q });
       });
@@ -2412,13 +2412,13 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
               const said = [picked.join(', '), typed].filter(Boolean).join(' | ');
               if (answer.skipped || !said) {
                 result = 'The person did not answer. Carry on with your best judgement and say what you assumed.';
-                shown = 'No answer';
+                shown = answer.skipped && !answer.gone ? 'Skipped' : 'No answer';
               } else {
                 result = `The person answered: ${said}`;
                 shown = `You answered: ${said}`;
               }
               // Kept with the step, so the question and the answer stay in the chat.
-              asked = { question: q.question, choices: q.choices, answer: answer.skipped || !said ? null : said };
+              asked = { question: q.question, choices: q.choices, answer: answer.skipped && !answer.gone ? 'Skipped' : (!said ? null : said) };
               break;
             }
             case 'list_models':
@@ -2802,9 +2802,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                   : 'I have made no new progress in 25 steps. Keep going, or stop here?';
               const q = cleanQuestion({ question, choices: [{ label: 'Keep going', recommended: kind === 'tokens' }, { label: 'Stop here', recommended: kind !== 'tokens' }] });
               const answer = await askQuestion(q);
-              const said = (Array.isArray(answer.choices) ? answer.choices : []).join('');
-              await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: said || 'No answer', question: { question: q.question, choices: q.choices, answer: said || null } });
-              return said === 'Keep going';
+              // W4-12: a click on a choice, or the person's own words (typed in the card or in the message box): "keep going" and its plain synonyms carry on, anything else stops
+              const typedSaid = String(answer.text ?? '').trim().slice(0, 200);
+              const said = ((Array.isArray(answer.choices) ? answer.choices : []).join('') || typedSaid).trim();
+              await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: answer.skipped && !answer.gone ? 'Skipped' : (said || 'No answer'), question: { question: q.question, choices: q.choices, answer: answer.skipped && !answer.gone ? 'Skipped' : (said || null) } });
+              // a go-ahead word that is followed by stop, don't, no or wait ("yes, stop") is a stop
+              const GO = /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b/i;
+              const goesThenStops = /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b[\s,.;:!-]*(stop|don'?t|do not|no|not|wait|hold)\b/i.test(typedSaid);
+              const goOn = said === 'Keep going' || (!answer.skipped && GO.test(typedSaid) && !goesThenStops && !(Array.isArray(answer.choices) && answer.choices.length));
+              // "yes, but skip X": carrying on is not the whole answer, the model gets the person's words too
+              if (goOn && typedSaid && typedSaid.toLowerCase().replace(/[^a-z ]+/g, '').trim() !== 'keep going') return { go: true, answer: `The person answered your question ("${q.question.slice(0, 200)}"): ${typedSaid}` };
+              return goOn;
             },
             // W6-3: a Code reply that ends by asking permission for the job it was given carries on instead (up to 3 times).
             onReplyEnd: ({ text }) => {

@@ -692,6 +692,8 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .picker-group-all { border-top: 1px solid var(--line); margin-top: var(--sp-3); }
 .auto-meta { color: var(--text-faint); }
 .switch-note { color: var(--warn); }
+.question-card.is-unanswered .question-choice.is-static { opacity: .55; }
+.question-answer-note { margin: var(--sp-2) 0 0; font-size: var(--fs-xs); color: var(--text-dim); }
 .md-image { display: block; max-width: 100%; max-height: 520px; margin: var(--sp-5) 0; border-radius: var(--r-lg); border: 1px solid var(--line); }
 /* Customize: select several and act on them */
 .cz-name input[type="checkbox"] { flex: none; margin: 0; }

@@ -43,6 +43,7 @@ const state = {
   artifact: null,
   artifactOpen: false,
   streaming: null,         // AbortController
+  openQuestion: null,      // W4-12: the live question card the reply is waiting on: { answer(text) }
   incognito: false,
   archivedView: false,
   query: '',
@@ -1771,7 +1772,7 @@ function renderRailDetails() {
 // streaming
 
 function setStreaming(on) {
-  $('send').disabled = on;
+  $('send').disabled = on && !state.openQuestion; // a waiting question card takes the typed reply
   $('stop').hidden = !on;
   // While the next model starts after a failure, the calm "X is slow. Trying Y…" line stays instead of "Streaming…".
   $('status').textContent = on ? (state.tryingNote || 'Streaming…') : '';
@@ -1918,6 +1919,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     settleThinking(); // thinking that was still open when the reply ended is kept as its row
     working.stop();
     state.streaming = null;
+    state.openQuestion = null;
     setStreaming(false);
     bodyEl.classList.remove('is-streaming');
   }
@@ -1996,6 +1998,8 @@ function showLiveQuestion(bodyEl, info) {
   const text = element('textarea', { className: 'question-text', rows: 2, placeholder: info.placeholder || (info.choices?.length ? 'Or type your own answer…' : 'Type your answer…'), 'aria-label': 'Your answer' });
   const actions = element('div', { className: 'permission-actions' });
   const send = async (answer) => {
+    state.openQuestion = null;
+    $('send').disabled = Boolean(state.streaming);
     actions.replaceChildren(element('span', { className: 'hint', textContent: 'Sending…' }));
     for (const el of card.querySelectorAll('button, textarea, input')) el.disabled = true;
     try {
@@ -2042,6 +2046,16 @@ function showLiveQuestion(bodyEl, info) {
   });
   // Enter sends the typed answer; Shift+Enter makes a new line.
   text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); card.requestSubmit(); } });
+  // W4-12: the message box answers it too: "stop here" typed there is the choice with that name, anything else is the answer in words
+  const norm = (x) => String(x).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  state.openQuestion = {
+    card,
+    answer: (typed) => {
+      const hit = (info.choices ?? []).map((c) => (typeof c === 'string' ? c : c.label)).find((l) => norm(l) === norm(typed));
+      send(hit ? { choices: [hit] } : { text: typed });
+    },
+  };
+  $('send').disabled = false;
   msg.before(card);
   card.scrollIntoView({ block: 'end' });
   (info.choices?.length && !info.multiple ? card.querySelector('.question-choice') : text)?.focus();
@@ -2063,7 +2077,12 @@ function answeredQuestionCard(q) {
     }
     card.append(list);
   }
-  card.append(element('p', { className: 'question-answer', textContent: q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
+  card.append(element('p', { className: 'question-answer', textContent: q.answer === 'Skipped' ? 'You skipped this question.' : q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
+  // W4-12: the choices above are only a record. Say so, and why nothing could be clicked, instead of leaving them looking like dead buttons.
+  if (!q.answer) {
+    card.classList.add('is-unanswered');
+    card.append(element('p', { className: 'question-answer-note', textContent: 'Bunny stopped waiting (the window was closed or reloaded, or nobody answered in time), so this card can no longer be answered. Tell Bunny what you want in the message box.' }));
+  }
   return card;
 }
 
@@ -2617,6 +2636,8 @@ async function send() {
   const input = $('input');
   const text = input.value.trim();
   $('error').textContent = '';
+  // W4-12: while the reply waits on a question card, what is typed in the message box is the answer
+  if (state.openQuestion && text && !text.startsWith('/')) { input.value = ''; state.openQuestion.answer(text); return; }
   if (!text && !state.pendingFiles.length) return;
   // Typing something new while a message waits for the network: the waiting one is cancelled, not sent later.
   if (state.queued) cancelQueued(); // the waiting message is cancelled, not sent later (and the person is told)
