@@ -325,3 +325,16 @@ test('W6-24 (Security 9): Bunny\'s own session no longer drops any frame header,
   assert.match(views, /partition: PARTITION/);
   assert.equal((main.match(/senderAllowed\(event, isOwn, windowOf\)/g) ?? []).length, 2, 'both commands check the sender');
 });
+
+test('W6-24 (QA b): a refused address says why: Bunny itself, or not a web address', () => {
+  const { views, page } = setup();
+  views.handle(page, { op: 'open', tab: 'bunny-tab-1' });
+  const own = views.handle(page, { op: 'navigate', tab: 'bunny-tab-1', url: `http://127.0.0.1:${OWN_PORT}/` });
+  assert.deepEqual([own.ok, own.reason], [false, 'own']);
+  const odd = views.handle(page, { op: 'navigate', tab: 'bunny-tab-1', url: 'file:///C:/x' });
+  assert.deepEqual([odd.ok, odd.reason], [false, 'scheme']);
+  const open = views.handle(page, { op: 'open', tab: 'bunny-tab-2', url: `http://localhost:${OWN_PORT}/` });
+  assert.deepEqual([open.ok, open.reason], [false, 'own']);
+  const fine = views.handle(page, { op: 'navigate', tab: 'bunny-tab-1', url: 'https://example.com/' });
+  assert.equal(fine.ok, true);
+});

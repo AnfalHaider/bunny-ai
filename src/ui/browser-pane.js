@@ -167,7 +167,17 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
     tab.frame.hidden = !url || tab.id !== active;
     if (bridge) {
       // a view loads the address only when it is a new one (selecting a tab again must not reload it)
-      if (url && tab.shown !== url) { tab.shown = url; bridge.send({ op: 'navigate', tab: tab.frame.name, url }); }
+      if (url && tab.shown !== url) {
+        tab.shown = url;
+        // an address the panel will not open (Bunny itself, or not a web address) says so, instead of leaving an empty tab
+        Promise.resolve(bridge.send({ op: 'navigate', tab: tab.frame.name, url })).then((answer) => {
+          if (!answer || answer.ok !== false || tab.id !== active) return;
+          const note = unreachableNote();
+          note.hidden = false;
+          note.firstChild.textContent = answer.reason === 'own' ? 'This address is Bunny itself, so it is not opened here.' : 'Only web addresses (http or https) can be opened here.';
+          tab.frame.hidden = true;
+        }).catch(() => {});
+      }
     } else if (url) tab.frame.src = url;
     unreachableNote().hidden = true;
     paintTabs();
@@ -259,7 +269,17 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
     } catch { /* no folder access: no card */ }
   }
 
-  function closeMenu() { $('browser-menu').hidden = true; $('browser-more').setAttribute('aria-expanded', 'false'); }
+  function closeMenu() { const menu = $('browser-menu'); menu.hidden = true; menu.style.translate = ''; $('browser-more').setAttribute('aria-expanded', 'false'); }
+  /** Keep the open menu inside the window: at a narrow width it would reach past the edge. */
+  function keepMenuInside() {
+    const menu = $('browser-menu');
+    menu.style.translate = '';
+    const box = menu.getBoundingClientRect();
+    const margin = 8;
+    if (box.left < margin) menu.style.translate = `${Math.round(margin - box.left)}px 0`;
+    else if (box.right > window.innerWidth - margin) menu.style.translate = `${Math.round(window.innerWidth - margin - box.right)}px 0`;
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('browser-menu').hidden) { closeMenu(); $('browser-more').focus(); } });
 
   // ---- controls ----
   $('browser-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') navigate(e.target.value); });
@@ -278,6 +298,7 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
     const menu = $('browser-menu');
     menu.hidden = !menu.hidden;
     $('browser-more').setAttribute('aria-expanded', String(!menu.hidden));
+    if (!menu.hidden) keepMenuInside(); else menu.style.translate = '';
     const url = current()?.history[current().index] ?? '';
     for (const item of menu.querySelectorAll('[data-needs-url]')) item.classList.toggle('is-disabled', !url || url.startsWith('blob:'));
   });

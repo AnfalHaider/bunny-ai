@@ -173,7 +173,7 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     if (op === 'open') {
       if (views.has(tab)) return own(sender, tab) ? { ok: true } : { ok: false, error: 'That tab belongs to another page.' };
       if (views.size >= MAX_VIEWS) return { ok: false, error: 'Too many tabs are open.' };
-      if (msg.url !== undefined && !loadable(msg.url, ownPort())) return { ok: false, error: 'Only http and https pages can be opened, and not Bunny AI itself.' };
+      if (msg.url !== undefined && !loadable(msg.url, ownPort())) return { ok: false, reason: isBunnyOwn(msg.url, ownPort()) ? 'own' : 'scheme', error: 'Only http and https pages can be opened, and not Bunny AI itself.' };
       prepareSession();
       const view = new WebContentsView({
         webPreferences: {
@@ -202,7 +202,7 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     const contents = entry.view.webContents;
 
     if (op === 'navigate') {
-      if (!loadable(msg.url, ownPort())) return { ok: false, error: 'Only http and https pages can be opened, and not Bunny AI itself.' };
+      if (!loadable(msg.url, ownPort())) return { ok: false, reason: isBunnyOwn(msg.url, ownPort()) ? 'own' : 'scheme', error: 'Only http and https pages can be opened, and not Bunny AI itself.' };
       contents.loadURL(String(msg.url)).catch(() => {});
       return { ok: true };
     }
