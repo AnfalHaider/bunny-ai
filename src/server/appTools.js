@@ -183,10 +183,15 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const next = { skills: [], connectors: [] };
       const done = { skillsUpdated: 0, skillsAdded: 0, skillsRemoved: 0, connectorsKept: 0, connectorsAdded: 0, connectorsRemoved: 0 };
       const keepSkill = new Set();
+      const switchedOff = [];
       for (const s of plugin.skills ?? []) {
         const same = ownedSkills.find((o) => norm(o.name) === norm(s.name) && !keepSkill.has(o.id));
         if (same) {
-          await skills.update(same.id, { description: s.description ?? '', instructions: s.instructions });
+          // P4-1: a skill that is ON and whose instructions changed does not stay on silently: new words from the source are the person's to look at first
+          const changed = norm(same.instructions) !== norm(s.instructions);
+          const patch = { description: s.description ?? '', instructions: s.instructions };
+          if (changed && same.enabled !== false) { patch.enabled = false; switchedOff.push(same.name); }
+          await skills.update(same.id, patch);
           keepSkill.add(same.id); next.skills.push(same.id); done.skillsUpdated += 1;
         } else {
           const added = await skills.add({ ...s, enabled: wasOn });
@@ -215,7 +220,8 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const plugins = (getSettings().plugins ?? []).map((p) => (p.id === id
         ? { ...p, name: plugin.name, description: plugin.description, skills: next.skills, connectors: next.connectors, updatedAt: new Date().toISOString() } : p));
       await saveSettings({ plugins });
-      return { ok: true, ...done, skipped: plugin.skipped ?? [] };
+      const message = switchedOff.length ? `${switchedOff.length} skill${switchedOff.length === 1 ? '' : 's'} changed and ${switchedOff.length === 1 ? 'was' : 'were'} switched off (${switchedOff.join(', ')}); switch ${switchedOff.length === 1 ? 'it' : 'them'} back on in Customize.` : '';
+      return { ok: true, ...done, skillsSwitchedOff: switchedOff, message, skipped: plugin.skipped ?? [] };
     });
   }
 
