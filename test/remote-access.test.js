@@ -399,6 +399,8 @@ async function scriptedProvider(t) {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const call = /WRITE/.test(said) ? { name: 'write_file', arguments: JSON.stringify({ path: 'note.txt', content: 'hello from a device' }) }
         : /SKILL/.test(said) ? { name: 'add_skill', arguments: JSON.stringify({ name: 'tidy', description: 'd', instructions: 'Keep it tidy.' }) }
+        : /SCHED/.test(said) ? { name: 'schedule_task', arguments: JSON.stringify({ name: 'nightly', prompt: 'do something every night', every_minutes: 60 }) }
+        : /REMEMBER/.test(said) ? { name: 'remember', arguments: JSON.stringify({ text: 'a fact from a device' }) }
         : /CAP/.test(said) ? { name: 'request_capability', arguments: JSON.stringify({ capability: 'computer_use', reason: 'to click' }) } : null;
       const delta = told || !call ? { content: 'got: ' + String(told?.content ?? 'nothing').slice(0, 160) } : { tool_calls: [{ index: 0, id: 'c1', function: call }] };
       res.end('data: ' + JSON.stringify({ choices: [{ delta }] }) + '\n\ndata: [DONE]\n\n');
@@ -462,6 +464,27 @@ test('R2: a device chat, even in Auto, is never offered computer, build, install
   const before = d.provider.offered.length;
   await fetch(d.base + '/api/sessions/' + own.id + '/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(modelBody('hello')) }).then((r) => r.text());
   assert.ok(d.provider.offered.slice(before).flat().includes('add_skill'), 'the window\'s chat still offers add_skill');
+});
+
+test('R9: a device chat\'s scripted schedule_task and remember calls (even in Auto) create no schedule and save no memory; the window\'s chat can', async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone', permissionMode: 'auto' } })).json();
+  const schedules = async () => (await (await fetch(d.base + '/api/schedules')).json());
+  const memories = async () => JSON.stringify(await (await fetch(d.base + '/api/memory')).json());
+  const before = [(await schedules()).length, await memories()];
+  for (const word of ['SCHED', 'REMEMBER']) {
+    const reply = await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please ' + word + ' now') }, async () => {});
+    assert.match(reply.text, /not available in a chat from another device/, word + ': ' + reply.text.slice(0, 200));
+  }
+  assert.deepEqual([(await schedules()).length, await memories()], before, 'no schedule was created and nothing was remembered');
+  const offered = d.provider.offered.flat();
+  for (const name of ['schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat']) assert.equal(offered.includes(name), false, name + ' is not offered to a device chat');
+  // the window's own chat is offered them
+  const own = await (await fetch(d.base + '/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Window', permissionMode: 'ask' }) })).json();
+  const mark = d.provider.offered.length;
+  await fetch(d.base + '/api/sessions/' + own.id + '/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(modelBody('hello')) }).then((r) => r.text());
+  const ownOffered = d.provider.offered.slice(mark).flat();
+  assert.ok(ownOffered.includes('schedule_task') || ownOffered.includes('remember') || ownOffered.includes('start_session'), 'the window chat still has these tools: ' + ownOffered.slice(0, 40).join(','));
 });
 
 test('R1: a device answers code_mode and leave_plan_mode cards but never computer_use, custom_tools or switch_on_added: the window still can', async (t) => {
@@ -564,7 +587,7 @@ test('R7: a device that is idle for two hours is signed out', async () => {
 
 test('R2 (more): a device chat cannot schedule a task, start another chat or move the request to a new one either', async () => {
   const { remoteToolBlocked } = await import('../src/server/remoteAccess.js');
-  for (const name of ['schedule_task', 'start_session', 'message_session', 'move_to_new_chat', 'computer_click', 'create_tool', 'my_thing', 'add_skill']) assert.equal(remoteToolBlocked(name), true, name);
+  for (const name of ['schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat', 'computer_click', 'create_tool', 'my_thing', 'add_skill']) assert.equal(remoteToolBlocked(name), true, name);
   for (const name of ['web_search', 'read_url', 'write_file', 'run_command', 'ask_user', 'create_artifact', 'request_capability']) assert.equal(remoteToolBlocked(name), false, name);
 });
 

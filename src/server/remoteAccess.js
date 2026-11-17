@@ -119,7 +119,7 @@ export function remoteException(method, path, body = null) {
 export const REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
 
 /** R2: tools a chat from a device never has, whatever its mode: driving the computer, building or installing anything, adding a connector or a skill, and the tools the model built. */
-export const remoteToolBlocked = (name) => /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|schedule_task$|start_session$|message_session$|move_to_new_chat$|my_)/.test(String(name ?? '')); // also what would outlive the device's chat: a schedule, another chat
+export const remoteToolBlocked = (name) => /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|schedule_task$|list_scheduled_tasks$|remember$|start_session$|message_session$|move_to_new_chat$|my_)/.test(String(name ?? '')); // also what would outlive the device's chat: a schedule, another chat
 
 /**
  * R3: allow-lists. A new chat: its title, work mode, mode, effort, model and provider (no folder, and no project: a project can carry a folder).
