@@ -142,6 +142,13 @@
   async function startSignIn(s) { notice = ''; await flows.start(s); }
   async function signOut(s) { notice = await flows.signOut(s); await load(); }
 
+  // P-5: a plugin is on when everything it added that is still here is on; off when none is; otherwise partly
+  function pluginState(p) {
+    const parts = [...(p.skills ?? []).map((id) => data.skills.find((x) => x.id === id)), ...(p.connectors ?? []).map((id) => data.connectors.find((x) => x.id === id))].filter(Boolean);
+    const on = parts.filter((x) => x.enabled).length;
+    if (!parts.length || on === parts.length) return { on: true, label: 'Installed' };
+    return { on: false, label: on ? 'Partly on' : 'Off' };
+  }
   const pluginOf = (kind, id) => data.plugins.find((p) => (p[kind] ?? []).includes(id));
   const initial = (name) => (String(name).match(/\p{L}|\p{N}/u)?.[0] ?? '?').toUpperCase();
   const matches = (...fields) => !view.q || fields.join(' ').toLowerCase().includes(view.q);
@@ -229,8 +236,8 @@
         list.append(row({
           id: p.id,
           name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
-          status: 'Installed', statusClass: 'text-ok',
-          actions: [act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
+          status: pluginState(p).label, statusClass: pluginState(p).on ? 'text-ok' : '',
+          actions: [toggle(pluginState(p).on, `Use ${p.name}`, (on) => sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on })), act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
         }));
       }
     }

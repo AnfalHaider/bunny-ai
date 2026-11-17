@@ -1102,6 +1102,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       }
     }
     const pluginMatch = path.match(/^\/api\/plugins\/([a-f0-9-]{36})$/);
+    if (pluginMatch && method === 'PATCH') {
+      const patch = await readBody(req);
+      if (typeof patch.enabled !== 'boolean') return sendJson(res, 400, { code: 'plugin.enabledRequired', message: 'Say whether to switch it on or off' });
+      const done = await appTools.setEnabled(pluginMatch[1], patch.enabled);
+      return sendJson(res, done.ok ? 200 : 404, done.ok ? done : { code: 'plugin.notFound', message: 'No such plugin' });
+    }
     if (pluginMatch && method === 'DELETE') {
       try {
         return sendJson(res, 200, await appTools.uninstall(pluginMatch[1]));
@@ -1903,7 +1909,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       history.unshift({ role: 'system', content: [honesty, modeText, folderText, scheduledText, interrupted ? CONTINUE_NOTE : ''].filter(Boolean).join('\n') });
 
-      // Tools from the MCP servers the person has switched on (not in Chat mode).
+      // Tools from the MCP servers the person has switched on, in Chat and in Code (M-2: the person wants Bunny to use them; Plan mode hides the ones that may write).
       const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
       const builtTools = buildOn ? await customTools.list() : [];
       const githubToken = await accounts.githubToken().catch(() => null);
@@ -2184,6 +2190,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             + 'That report is all the other assistant will see. You cannot ask the person anything; if something is missing, say what in your report.'
             + (workspace ? ` Workspace folder: ${workspace.root}; paths are relative to it.` : '')
             + (lookOnly ? ' You may only look and read, not change anything.' : '') },
+          // S-5: a helper cannot discover skill names on its own (read_skill needs one), so it gets the same skills index and the person's standing instructions
+          ...(skillText ? [{ role: 'system', content: skillText }] : []),
+          ...(standing ? [{ role: 'system', content: `The person's instructions for every chat:\n${standing.slice(0, 20_000)}` }] : []),
           { role: 'user', content: String(task) },
         ];
         let text = '';
