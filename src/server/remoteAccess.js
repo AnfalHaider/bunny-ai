@@ -118,9 +118,31 @@ export function remoteException(method, path, body = null) {
 /** R1: the capability cards a device may answer. The others switch a global window-only setting or install something, and stay with the window. */
 export const REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
 
-/** R2: tools a chat from a device never has, whatever its mode: driving the computer, building or installing anything, adding a connector or a skill, and the tools the model built. */
-export const remoteToolBlocked = (name) => /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|schedule_task$|list_scheduled_tasks$|remember$|start_session$|message_session$|move_to_new_chat$|my_)/.test(String(name ?? '')); // also what would outlive the device's chat: a schedule, another chat
-
+/**
+ * R2: the tools a chat from another device may use. An ALLOW-list: a tool that is not named here (a new one, a connector's, a custom one the model built) is denied.
+ * Allowed: reading and searching, working in the chat's own folder (files, commands, programs), artifacts, questions, asking for the chat's own capabilities, helpers
+ * (they use the same checks) and the person's Google and GitHub tools that a card guards. Denied: driving the computer or the window's browser panel, building or installing
+ * anything, connectors, skills, schedules, memory, and starting or messaging other chats (all of which change what Bunny may do, or outlive the device's chat).
+ * test/remote-access.test.js checks that every tool Bunny has is on exactly one of the two lists, so a new tool cannot be added without a decision.
+ */
+export const REMOTE_TOOLS_ALLOWED = Object.freeze([
+  'web_search', 'read_url', 'search_plugins', 'read_skill', 'ask_user', 'request_capability', 'update_tasks', 'check_environment', 'run_subagent',
+  'create_artifact', 'update_artifact',
+  'list_files', 'read_file', 'find_files', 'search_files', 'edit_file', 'multi_edit', 'write_file', 'download_file',
+  'run_command', 'start_process', 'read_process', 'list_processes', 'stop_process',
+  'list_models', 'list_sessions', 'read_session', 'search_chats',
+  'github_api_get', 'github_clone', 'github_comment', 'github_create_issue', 'github_create_pull_request', 'github_issue', 'github_list_issues', 'github_list_pull_requests', 'github_my_repos', 'github_pull_request', 'github_read_file', 'github_repo', 'github_search', 'github_update_issue',
+  'gmail_draft', 'gmail_read', 'gmail_search', 'gmail_send', 'calendar_create_event', 'calendar_events', 'drive_read', 'drive_search',
+]);
+export const REMOTE_TOOLS_DENIED = Object.freeze([
+  'computer_click', 'computer_key', 'computer_screenshot', 'computer_scroll', 'computer_type',
+  'browser_back', 'browser_capture', 'browser_click', 'browser_inspect', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll', 'browser_type',
+  'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill',
+  'schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat',
+  'call_connector_tool', 'list_connector_tools',
+]);
+const allowedTools = new Set(REMOTE_TOOLS_ALLOWED);
+export const remoteToolBlocked = (name) => !allowedTools.has(String(name ?? ''));
 /**
  * R3: allow-lists. A new chat: its title, work mode, mode, effort, model and provider (no folder, and no project: a project can carry a folder).
  * A change to a chat (PATCH): the same, nothing else (never a folder, branch, project, pin or archive from a device).

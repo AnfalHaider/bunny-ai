@@ -456,7 +456,8 @@ test('R2: a device chat, even in Auto, is never offered computer, build, install
   const reply = await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please SKILL add one') }, async () => {});
   const offered = d.provider.offered.flat();
   assert.ok(offered.length > 0, 'the chat had tools');
-  for (const name of offered) assert.doesNotMatch(name, /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|my_)/, name);
+  const { REMOTE_TOOLS_ALLOWED } = await import('../src/server/remoteAccess.js');
+  for (const name of offered) assert.ok(REMOTE_TOOLS_ALLOWED.includes(name), name + ' is not on the device allow-list');
   assert.match(reply.text, /not available in a chat from another device|no tool called/i, 'a call anyway is refused: ' + reply.text.slice(0, 300));
   assert.equal((await (await fetch(d.base + '/api/skills')).json()).some((x) => x.name === 'tidy'), false, 'no skill was added to this computer');
   // the window's own chat does have that tool
@@ -585,10 +586,34 @@ test('R7: a device that is idle for two hours is signed out', async () => {
   assert.equal(ended.length, 3);
 });
 
-test('R2 (more): a device chat cannot schedule a task, start another chat or move the request to a new one either', async () => {
-  const { remoteToolBlocked } = await import('../src/server/remoteAccess.js');
-  for (const name of ['schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat', 'computer_click', 'create_tool', 'my_thing', 'add_skill']) assert.equal(remoteToolBlocked(name), true, name);
-  for (const name of ['web_search', 'read_url', 'write_file', 'run_command', 'ask_user', 'create_artifact', 'request_capability']) assert.equal(remoteToolBlocked(name), false, name);
+test('R2 (allow-list): every tool Bunny has is classified for devices (allowed or denied) so a new tool cannot be added without a decision; what was denied stays denied; unknown tools are denied', async () => {
+  const { REMOTE_TOOLS_ALLOWED, REMOTE_TOOLS_DENIED, remoteToolBlocked } = await import('../src/server/remoteAccess.js');
+  const at = await import('../src/server/agentTools.js');
+  const ap = await import('../src/server/appTools.js');
+  const { browserToolDefinitions } = await import('../src/server/browserTools.js');
+  const { githubToolDefinitions } = await import('../src/server/github.js');
+  const { googleToolDefinitions } = await import('../src/server/google.js');
+  const { workspaceToolDefinitions } = await import('../src/server/workspace.js');
+  const all = ['read', 'edit', 'run', 'build', 'send'];
+  const names = new Set();
+  const add = (defs) => defs.forEach((d) => names.add(d.function.name));
+  add(at.artifactToolDefinitions()); add(at.processToolDefinitions(all)); add(at.computerToolDefinitions(all)); add(at.teamToolDefinitions({ canDelegate: true })); add(at.memoryToolDefinitions({ memory: true }));
+  add(ap.appToolDefinitions(all)); add(browserToolDefinitions(all)); add(githubToolDefinitions(all, { canClone: true })); add(googleToolDefinitions(all)); add(workspaceToolDefinitions(all));
+  // every single-definition export of the agent tools too (a new "...ToolDefinition" function is picked up by this loop)
+  for (const [key, fn] of Object.entries(at)) if (/ToolDefinition$/.test(key) && typeof fn === 'function') add([fn()]);
+  assert.ok(names.size > 50, 'the registry was read: ' + names.size + ' tools');
+  const allowed = new Set(REMOTE_TOOLS_ALLOWED);
+  const denied = new Set(REMOTE_TOOLS_DENIED);
+  assert.deepEqual([...allowed].filter((n) => denied.has(n)), [], 'no tool is on both lists');
+  const undecided = [...names].filter((n) => !allowed.has(n) && !denied.has(n));
+  assert.deepEqual(undecided, [], 'a tool was added without a decision for devices: add it to REMOTE_TOOLS_ALLOWED or REMOTE_TOOLS_DENIED in src/server/remoteAccess.js');
+  for (const n of names) assert.equal(remoteToolBlocked(n), !allowed.has(n), n);
+  // what was denied before stays denied
+  for (const n of ['computer_click', 'computer_key', 'computer_type', 'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill', 'schedule_task', 'list_scheduled_tasks', 'start_session', 'message_session', 'move_to_new_chat', 'remember']) assert.equal(remoteToolBlocked(n), true, n);
+  // anything not named (a connector's tool, a tool the model built, a future tool) is denied by default
+  for (const n of ['my_tool', 'notes__search', 'some_future_tool', 'call_connector_tool', 'list_connector_tools', '', null, undefined]) assert.equal(remoteToolBlocked(n), true, String(n));
+  // and the ordinary work tools are allowed
+  for (const n of ['web_search', 'read_url', 'read_file', 'write_file', 'run_command', 'ask_user', 'create_artifact', 'request_capability', 'run_subagent']) assert.equal(remoteToolBlocked(n), false, n);
 });
 
 test('R5: the turn-on warning says plainly that this is plain HTTP, home networks only, and Private networks only at the firewall', async () => {
