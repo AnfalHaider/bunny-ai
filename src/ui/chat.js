@@ -955,6 +955,7 @@ function renderSessionRow(s, depth) {
   if (depth) a.append(element('span', { className: 'branch-mark', textContent: '↳', 'aria-hidden': 'true' }));
   if (s.pinned) a.append(element('span', { className: 'pin', textContent: '★', 'aria-label': 'Pinned', role: 'img' }));
   if (s.incognito) a.append(element('span', { className: 'tag', textContent: 'incognito' }));
+  if (s.remoteAuto) a.append(element('span', { className: 'tag', textContent: 'Auto from a device', title: 'A device on your network set this chat to Auto. It goes back to Ask when that device signs out.' })); // R6
   if (s.origin === 'quick-ask') a.append(element('span', { className: 'tag', textContent: 'Quick ask' })); // QA-ANSWERS: it began in the Quick ask bar
   if (s.agent) {
     const label = s.agent === 'helper' ? say('agent.helper') : say('agent.background');
@@ -2570,7 +2571,8 @@ function watchRemote() {
     }
     bar.replaceChildren();
     const text = document.createElement('span');
-    text.textContent = `Open to other devices · ${s.signedIn} signed in · `;
+    const auto = s.autoChats?.length ?? 0;
+    text.textContent = `Open to other devices · ${s.signedIn} signed in${auto ? ` · ${auto} chat${auto === 1 ? '' : 's'} on Auto from a device` : ''} · `;
     const off = document.createElement('button');
     off.type = 'button';
     off.textContent = 'Turn off';

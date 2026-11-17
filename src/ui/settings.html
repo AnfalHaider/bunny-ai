@@ -611,7 +611,7 @@
         </div>
       </div>
       <div class="row stack" id="remote-setup" hidden>
-        <div class="desc"><b>Before you turn this on.</b> Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. They get ordinary chats, with their tools, and can answer a chat's own permission questions there. They cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, not Public.</div>
+        <div class="desc"><b>Before you turn this on.</b> This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. They get ordinary chats, with their tools, and can answer a chat's own permission questions there. They cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, never Public.</div>
         <input type="password" id="remote-pass" autocomplete="new-password" placeholder="Choose a passcode (12 or more characters)" aria-label="Passcode, 12 or more characters" style="max-width:420px" />
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="remote-generate" class="btn">Make one for me</button><button type="button" id="remote-turn-on" class="btn">Turn on</button><button type="button" id="remote-cancel" class="btn">Cancel</button></div>
         <div class="desc" id="remote-error" role="alert" style="color:var(--bad,#cf3f55)" hidden></div>
@@ -1214,7 +1214,7 @@
       $('remote-setup').hidden = s.enabled || !$('remote-setup').dataset.open;
       $('remote-open').hidden = !s.enabled;
       $('remote-status').hidden = !s.enabled;
-      $('remote-status').textContent = s.enabled ? `Open to other devices · ${s.signedIn} signed in` : '';
+      $('remote-status').textContent = s.enabled ? `Open to other devices · ${s.signedIn} signed in${s.autoChats?.length ? ` · ${s.autoChats.length} chat${s.autoChats.length === 1 ? '' : 's'} on Auto from a device (back to Ask when it signs out)` : ''}` : '';
       if (!s.enabled) { generated = ''; return; }
       $('remote-address').textContent = `On your network, open ${s.url} in a browser and sign in with the passcode. Bunny has to stay running on this computer.`;
       const g = $('remote-generated');

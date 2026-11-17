@@ -84,7 +84,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePolicy, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -705,7 +705,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
-    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, { ...settings, systemUserName: systemUserName() });
+    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName() }); // R4: a device reads display settings only
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
@@ -861,7 +861,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
         body.folder = stored;
       }
-      const session = await sessions.create(body);
+      const session = await noteRemoteMode(req, await sessions.create(body));
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
     }
@@ -1457,6 +1457,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (!pending || pending.sessionId !== capabilityMatch[1]) {
         return sendJson(res, 404, { code: 'capability.gone', message: 'That question is no longer waiting' });
       }
+      // R1: a device answers only the cards that stay inside its own chat; computer use, building tools and switching things on change what Bunny may do, and stay with the window
+      if (req.bunnyRemote && !REMOTE_CAPABILITIES.includes(pending.capability)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
       pending.resolve(await readBody(req));
       return sendJson(res, 200, { ok: true });
     }
@@ -1546,7 +1548,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
           const session = await sessions.update(sessionSettingMatch[1], { folder: stored });
           return sendJson(res, 200, { ...session, context: sessions.context(session) });
         }
-        const session = await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value });
+        const session = await noteRemoteMode(req, await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value }));
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
         return sendJson(res, 404, { code: 'session.failed', message: err.message });
@@ -1625,14 +1627,14 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
     if (sessionMatch && method === 'PATCH') {
       try {
-        const patch = await readBody(req);
+        const patch = req.bunnyRemote ? remotePatch(await readBody(req)) : await readBody(req); // from a device: only the chat's own title, modes, effort, model and provider
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
           patch.folder = stored;
         }
-        const session = await sessions.update(sessionMatch[1], patch);
+        const session = await noteRemoteMode(req, await sessions.update(sessionMatch[1], patch));
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'session.failed', message: err.message });
@@ -2246,7 +2248,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
         const cid = randomUUID();
         const timer = setTimeout(() => send('waiting', { kind: 'capability', title: CAPABILITIES[capability] }), waitNudgeMs); // W6-25: waits, then nudges
-        pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
+        pendingCapabilities.set(cid, { sessionId: id, capability, resolve: (a) => { clearTimeout(timer); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
         send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
       });
@@ -2371,7 +2373,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
           for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
             baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake: fake && !use.provider.custom,
             signal: background ? undefined : controller.signal,
-            tools: toolDefinitions.filter(allowed), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
+            tools: toolDefinitions.filter(allowed).filter((d) => !(req.bunnyRemote && remoteToolBlocked(d.function.name))), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
             // OpenRouter's reasoning setting belongs to this chat's provider only.
             extraBody: use.providerId === providerId ? extraBody : null, auth: use.provider.auth ?? null, parallel: (n) => n === 'run_subagent',
           })) text += delta;
@@ -2792,6 +2794,8 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
 
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
+        // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
+        if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         let parsed = {};
         const viaMeta = name === 'call_connector_tool' && deferredTools.size > 0;
         try {
@@ -3033,7 +3037,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // The stand-in upstream (tests) answers for built-in providers; a custom one is reached for real.
             fake: fake && !provider.custom,
             signal: controller.signal,
-            tools: textOnly || toolsRefused.has(`${id}|${providerId}|${model}`) ? null : toolDefinitions,
+            tools: textOnly || toolsRefused.has(`${id}|${providerId}|${model}`) ? null : (req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions),
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
@@ -3317,7 +3321,24 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   // ===== BROWSER step 2: open to other devices on the local network =====
   // A SECOND server, bound to the PC's local-network address only while the setting is on. The first server (127.0.0.1) and its rules are not touched.
   // Everything a device sends is judged here first (remoteRoute); only an allowed request, from a signed-in device, reaches route(), marked req.bunnyRemote.
-  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json') });
+  // R6: a chat a device sets to Auto is marked with that device; when the device signs out (or the setting is turned off or Bunny restarts) it goes back to Ask.
+  const resetRemoteAuto = async (deviceIds = null) => {
+    try {
+      for (const s of await sessions.list()) {
+        if (s.remoteAuto && (!deviceIds || deviceIds.includes(s.remoteAuto))) await sessions.update(s.id, { permissionMode: 'ask', remoteAuto: null });
+      }
+    } catch { /* a chat that is gone needs nothing */ }
+  };
+  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
+  resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
+  /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */
+  async function noteRemoteMode(req, session) {
+    if (!req.bunnyRemote || !session) return session;
+    const auto = session.permissionMode === 'auto';
+    if (auto && session.remoteAuto !== req.bunnyRemote.deviceId) return sessions.update(session.id, { remoteAuto: req.bunnyRemote.deviceId });
+    if (!auto && session.remoteAuto) return sessions.update(session.id, { remoteAuto: null });
+    return session;
+  }
   let lanServer = null;
   const NOT_BUNNY_REMOTE = 'That request did not come from a device signed in to Bunny AI.';
 
@@ -3331,6 +3352,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       hasPasscode: await remote.hasPasscode(),
       networkAddress: lanAddressOverride ?? findLanAddress(),
       minPasscode: 12,
+      autoChats: (await sessions.list()).filter((s) => s.remoteAuto).map((s) => ({ id: s.id, title: s.title })), // R6: chats a device has put on Auto
     };
   }
   async function stopRemote() {

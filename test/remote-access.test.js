@@ -383,64 +383,182 @@ function lanStream(url, { path, headers, body }, onEvent) {
   });
 }
 
-test('a signed-in device runs a tool call in its chat, answers the permission and capability cards itself, and chooses the mode of its chat', async (t) => {
+/** A model stand-in: scripted by what the person's message says (WRITE: write a file; SKILL: add a skill; CAP: ask for computer use). Records the tools it was offered. */
+async function scriptedProvider(t) {
+  const offered = [];
   const provider = createProvider((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
     req.on('end', () => {
       if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
       const body = JSON.parse(raw);
-      const told = body.messages.find((m) => m.role === 'tool');
+      offered.push((body.tools ?? []).map((d) => d.function.name));
+      const last = [...body.messages].reverse().find((m) => m.role === 'user');
+      const said = typeof last?.content === 'string' ? last.content : JSON.stringify(last?.content);
+      const told = [...body.messages].reverse().find((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const delta = told ? { content: `got: ${String(told.content).slice(0, 120)}` } : { tool_calls: [{ index: 0, id: 'c1', function: { name: 'add_skill', arguments: JSON.stringify({ name: 'tidy', description: 'd', instructions: 'Keep it tidy.' }) } }] };
-      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
+      const call = /WRITE/.test(said) ? { name: 'write_file', arguments: JSON.stringify({ path: 'note.txt', content: 'hello from a device' }) }
+        : /SKILL/.test(said) ? { name: 'add_skill', arguments: JSON.stringify({ name: 'tidy', description: 'd', instructions: 'Keep it tidy.' }) }
+        : /CAP/.test(said) ? { name: 'request_capability', arguments: JSON.stringify({ capability: 'computer_use', reason: 'to click' }) } : null;
+      const delta = told || !call ? { content: 'got: ' + String(told?.content ?? 'nothing').slice(0, 160) } : { tool_calls: [{ index: 0, id: 'c1', function: call }] };
+      res.end('data: ' + JSON.stringify({ choices: [{ delta }] }) + '\n\ndata: [DONE]\n\n');
     });
   });
   await new Promise((r) => provider.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
-  const { url, host, base, app } = await opened(t, { fake: false });
-  t.after(() => app.remote.disable());
-  await fetch(`${base}/api/providers/openai/connect`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` }) });
-  const ok = await signIn(url, host);
-  const cookie = cookieOf(ok);
+  return { port: provider.address().port, offered };
+}
+
+async function deviceSetup(t) {
+  const { mkdtemp } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-remote-folder-'));
+  const provider = await scriptedProvider(t);
+  const opened_ = await opened(t, { fake: false });
+  t.after(() => opened_.app.remote.disable());
+  await fetch(opened_.base + '/api/providers/openai/connect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey: 'sk-test-000000000000', baseUrl: 'http://127.0.0.1:' + provider.port + '/v1' }) });
+  const { url, host } = opened_;
+  const cookie = cookieOf(await signIn(url, host));
   const page = await lan(url, { path: '/src/ui/index.html', headers: { host, cookie } });
   const csrf = /name="bunny-csrf" content="([a-f0-9]+)"/.exec(page.text)[1];
-  const w = { host, cookie, origin: `http://${host}`, 'x-bunny-csrf': csrf };
-  // it starts a chat in Ask mode, then switches the mode of that chat (a per-chat choice a device may make)
-  const made = await lan(url, { method: 'POST', path: '/api/sessions', headers: w, body: { title: 'Phone chat', permissionMode: 'ask' } });
-  const id = made.json().id;
-  const mode = await lan(url, { method: 'PATCH', path: `/api/sessions/${id}/setting/permissionMode`, headers: w, body: { value: 'ask' } });
-  assert.equal(mode.status, 200, mode.text);
-  // it sends a message; the reply asks for permission; the device itself answers the card
-  const seen = [];
-  const reply = await lanStream(url, { path: `/api/sessions/${id}/messages`, headers: w, body: { content: 'add a skill called tidy', providerId: 'openai', model: 'gpt-4o', workMode: 'chat' } }, async (name, data) => {
-    seen.push(name);
+  const w = { host, cookie, origin: 'http://' + host, 'x-bunny-csrf': csrf };
+  return { ...opened_, folder, provider, cookie, w };
+}
+const modelBody = (content) => ({ content, providerId: 'openai', model: 'gpt-4o' });
+
+test('a signed-in device works in a chat of the window\'s (its folder and tools), answers its permission card itself, and the file really is written', async (t) => {
+  const d = await deviceSetup(t);
+  // a chat made in the window, in Code mode in a folder, asking before it writes
+  const made = await (await fetch(d.base + '/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Window chat', workMode: 'code', folder: d.folder, permissionMode: 'ask' }) })).json();
+  const cards = [];
+  const reply = await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please WRITE a note') }, async (name, data) => {
+    cards.push(name);
     if (name === 'permission') {
-      const answered = await lan(url, { method: 'POST', path: `/api/sessions/${id}/permission/${data.id}`, headers: w, body: { allowed: true } });
-      assert.equal(answered.status, 200, answered.text);
-    }
-    if (name === 'capability') {
-      const answered = await lan(url, { method: 'POST', path: `/api/sessions/${id}/capability/${data.id}`, headers: w, body: { granted: false } });
+      const answered = await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/permission/' + data.id, headers: d.w, body: { allowed: true } });
       assert.equal(answered.status, 200, answered.text);
     }
   });
-  assert.ok(seen.includes('permission'), `a permission card was shown to the device: ${seen.join(',')}`);
-  assert.match(reply.text, /got: /, 'the tool ran after the device allowed it');
-  assert.equal((await fetch(`${base}/api/skills`).then((r) => r.json())).some((s) => s.name === 'tidy'), true, 'the tool really ran on this computer');
-  // a card for a chat that does not exist, or one that is not waiting, is not answered
-  const none = await lan(url, { method: 'POST', path: `/api/sessions/${id}/permission/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f`, headers: w, body: { allowed: true } });
-  assert.equal(none.status, 404);
-  // and it cannot change what Bunny may do: the default mode, rules and connectors stay the window's
-  for (const [method, path, body] of [['PUT', '/api/settings', { defaultPermissionMode: 'auto' }], ['PUT', '/api/permission-rules', { global: { allow: ['run_command'] } }], ['POST', '/api/mcp', { name: 'x', url: 'https://x.test/mcp' }]]) {
-    const r = await lan(url, { method, path, headers: w, body });
-    assert.equal(r.status, 403, `${method} ${path}`);
-    assert.equal(r.json().message, "Change this in Bunny's window.");
+  assert.ok(cards.includes('permission'), 'the permission card reached the device: ' + cards.join(','));
+  assert.match(reply.text, /got: /);
+  assert.equal(await readFile(join(d.folder, 'note.txt'), 'utf8'), 'hello from a device', 'the tool really ran on this computer, after the device allowed it');
+  // a card for another or unknown id is not answered; no cookie 401; no CSRF 403
+  const unknown = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+  assert.equal((await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/permission/' + unknown, headers: d.w, body: { allowed: true } })).status, 404);
+  assert.equal((await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/permission/' + unknown, headers: { host: d.host, origin: 'http://' + d.host }, body: {} })).status, 401);
+  assert.equal((await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/permission/' + unknown, headers: { host: d.host, cookie: d.cookie, origin: 'http://' + d.host }, body: {} })).status, 403);
+});
+
+test('R2: a device chat, even in Auto, is never offered computer, build, install, connector or skill tools, and cannot call them', async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone', permissionMode: 'auto' } })).json();
+  const reply = await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please SKILL add one') }, async () => {});
+  const offered = d.provider.offered.flat();
+  assert.ok(offered.length > 0, 'the chat had tools');
+  for (const name of offered) assert.doesNotMatch(name, /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|my_)/, name);
+  assert.match(reply.text, /not available in a chat from another device|no tool called/i, 'a call anyway is refused: ' + reply.text.slice(0, 300));
+  assert.equal((await (await fetch(d.base + '/api/skills')).json()).some((x) => x.name === 'tidy'), false, 'no skill was added to this computer');
+  // the window's own chat does have that tool
+  const own = await (await fetch(d.base + '/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Window', permissionMode: 'ask' }) })).json();
+  const before = d.provider.offered.length;
+  await fetch(d.base + '/api/sessions/' + own.id + '/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(modelBody('hello')) }).then((r) => r.text());
+  assert.ok(d.provider.offered.slice(before).flat().includes('add_skill'), 'the window\'s chat still offers add_skill');
+});
+
+test('R1: a device answers code_mode and leave_plan_mode cards but never computer_use, custom_tools or switch_on_added: the window still can', async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone', permissionMode: 'ask' } })).json();
+  let refused = null;
+  await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please CAP now') }, async (name, data) => {
+    if (name !== 'capability') return;
+    assert.equal(data.capability, 'computer_use');
+    refused = await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/capability/' + data.id, headers: d.w, body: { granted: true } });
+    // the window itself may answer it
+    const ok = await fetch(d.base + '/api/sessions/' + made.id + '/capability/' + data.id, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ granted: false }) });
+    assert.equal(ok.status, 200);
+  });
+  assert.equal(refused.status, 403);
+  assert.equal(refused.json().message, "Change this in Bunny's window.");
+  const { REMOTE_CAPABILITIES } = await import('../src/server/remoteAccess.js');
+  assert.deepEqual([...REMOTE_CAPABILITIES], ['code_mode', 'leave_plan_mode']);
+});
+
+test('R3: a device cannot attach a folder, project or anything else to a chat; only the chat\'s own title, modes, effort, model and provider change', async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone', folder: d.folder, projectId: 'p', branch: 'x', pinned: true, agent: 'helper' } })).json();
+  assert.deepEqual([made.folder, made.projectId, made.branch, made.pinned, made.agent], [null, null, null, false, undefined]);
+  const patched = await lan(d.url, { method: 'PATCH', path: '/api/sessions/' + made.id, headers: d.w, body: { title: 'Renamed', folder: d.folder, projectId: 'p', branch: 'x', pinned: true, archived: true, permissionMode: 'plan', effort: 'high' } });
+  assert.equal(patched.status, 200, patched.text);
+  const after = await (await fetch(d.base + '/api/sessions/' + made.id)).json();
+  assert.deepEqual([after.title, after.permissionMode, after.effort], ['Renamed', 'plan', 'high']);
+  assert.deepEqual([after.folder, after.projectId, after.branch, after.pinned, after.archived], [null, null, null, false, false], 'nothing else was changed');
+  for (const key of ['folder', 'branch', 'projectId', 'pinned']) {
+    const r = await lan(d.url, { method: 'PATCH', path: '/api/sessions/' + made.id + '/setting/' + key, headers: d.w, body: { value: d.folder } });
+    assert.equal(r.status, 403, key);
   }
-  // with no cookie none of this is possible
-  const stranger = await lan(url, { method: 'POST', path: `/api/sessions/${id}/permission/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f`, headers: { host, origin: `http://${host}` }, body: { allowed: true } });
-  assert.equal(stranger.status, 401);
-  const noCsrf = await lan(url, { method: 'POST', path: `/api/sessions/${id}/permission/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f`, headers: { host, cookie, origin: `http://${host}` }, body: { allowed: true } });
-  assert.equal(noCsrf.status, 403);
+  const mode = await lan(d.url, { method: 'PATCH', path: '/api/sessions/' + made.id + '/setting/permissionMode', headers: d.w, body: { value: 'ask' } });
+  assert.equal(mode.status, 200);
+  // a message body is an allow-list too: a folder or a scheduled-task switch in it changes nothing
+  const { remoteBody } = await import('../src/server/remoteAccess.js');
+  assert.deepEqual(Object.keys(remoteBody('/api/sessions/x/messages', { content: 'hi', folder: 'C:\\', scheduledTask: 'x', textOnly: true, browserControl: true, vision: false, useSkill: 'a', model: 'm', providerId: 'p', workMode: 'chat', retry: true, attachments: [] })).sort(), ['attachments', 'content', 'model', 'providerId', 'retry', 'useSkill', 'vision', 'workMode']);
+});
+
+test('R4: a device reads display settings only: no instructions, no keys or secrets, no memory, no skills', async (t) => {
+  const d = await deviceSetup(t);
+  await fetch(d.base + '/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ theme: 'dark', instructions: 'private standing instructions', branchPrefix: 'secretprefix', defaultPermissionMode: 'auto' }) });
+  const seen = await lan(d.url, { path: '/api/settings', headers: { host: d.host, cookie: d.cookie } });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.json().theme, 'dark');
+  assert.doesNotMatch(seen.text, /private standing|secretprefix|googleClientSecret|clientSecret|defaultPermissionMode|permissionRules|apiKey|token/i);
+  for (const path of ['/api/memory', '/api/skills', '/api/mcp', '/api/hooks', '/api/schedules']) assert.equal((await lan(d.url, { path, headers: { host: d.host, cookie: d.cookie } })).status, 403, path);
+});
+
+test('R6: a chat a device puts on Auto is marked in the window and goes back to Ask when that device signs out, when the setting is turned off, and when Bunny starts again', async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone Auto', permissionMode: 'auto' } })).json();
+  const fetchJson = async (path) => (await fetch(d.base + path)).json();
+  assert.equal((await fetchJson('/api/sessions/' + made.id)).permissionMode, 'auto');
+  const status = await fetchJson('/api/remote');
+  assert.deepEqual(status.autoChats.map((c) => c.id), [made.id], 'the window\'s status shows it');
+  assert.ok((await fetchJson('/api/sessions')).find((s) => s.id === made.id).remoteAuto, 'and the chat list marks it');
+  // an Auto chat made in the window is not touched
+  const mine = await (await fetch(d.base + '/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Mine', permissionMode: 'auto' }) })).json();
+  // sign out the device
+  const device = status.devices[0];
+  await fetch(d.base + '/api/remote/devices/' + device.id + '/signout', { method: 'POST' });
+  await new Promise((r) => setTimeout(r, 100));
+  const back = await fetchJson('/api/sessions/' + made.id);
+  assert.equal(back.permissionMode, 'ask');
+  assert.equal(back.remoteAuto, undefined);
+  assert.equal((await fetchJson('/api/sessions/' + mine.id)).permissionMode, 'auto', 'the window\'s own Auto chat stays');
+  // switching it back to Ask from the device clears the mark; turning the setting off puts a new Auto chat back too
+  const cookie2 = cookieOf(await signIn(d.url, d.host));
+  const page2 = await lan(d.url, { path: '/src/ui/index.html', headers: { host: d.host, cookie: cookie2 } });
+  const w2 = { host: d.host, cookie: cookie2, origin: 'http://' + d.host, 'x-bunny-csrf': /name="bunny-csrf" content="([a-f0-9]+)"/.exec(page2.text)[1] };
+  const second = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: w2, body: { title: 'Again', permissionMode: 'auto' } })).json();
+  await fetch(d.base + '/api/remote', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal((await fetchJson('/api/sessions/' + second.id)).permissionMode, 'ask', 'turning it off puts it back');
+});
+
+test('R7: a device that is idle for two hours is signed out', async () => {
+  let t = 1;
+  const ended = [];
+  const r = createRemoteAccess({ now: () => t, onEnd: (ids) => ended.push(ids) });
+  await r.enable({ lanHost: '10.0.0.5:5555', lanAddress: '10.0.0.5', passcode: PASS });
+  const a = await r.signIn('10.0.0.2', PASS);
+  t += 119 * 60 * 1000;
+  assert.ok(r.sessionFor(COOKIE + '=' + a.secret), 'still in after 119 minutes (and this use renews it)');
+  t += 121 * 60 * 1000;
+  assert.equal(r.sessionFor(COOKIE + '=' + a.secret), null, 'out after 2 hours without use');
+  assert.equal(ended.length, 1, 'the app is told, so the device\'s Auto chats go back to Ask');
+});
+
+test('R5: the turn-on warning says plainly that this is plain HTTP, home networks only, and Private networks only at the firewall', async () => {
+  const page = await readFile(new URL('../src/ui/settings.html', import.meta.url), 'utf8');
+  assert.match(page, /plain HTTP/);
+  assert.match(page, /could take over a signed-in device and run programs on this computer/);
+  assert.match(page, /only on your own home network, never on public or shared Wi-Fi/);
+  assert.match(page, /Private networks only<\/b>, never Public/);
 });
 
 test('a signed-in device can answer a question card of a chat too (the route is not refused for it)', async (t) => {

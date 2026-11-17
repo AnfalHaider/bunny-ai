@@ -17,7 +17,7 @@ import { networkInterfaces } from 'node:os';
 
 export const MIN_PASSCODE = 12;
 export const COOKIE = 'bunny_remote';
-export const SESSION_IDLE_MS = 12 * 60 * 60 * 1000;
+export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // R7: two hours without use ends a session
 export const FAILS_BEFORE_WAIT = 5;
 const KDF = { N: 16384, r: 8, p: 1, keylen: 32 };
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I: readable aloud
@@ -75,7 +75,7 @@ export function findLanAddress(interfaces = networkInterfaces()) {
 import { isWindowOnlyRoute } from './windowOnly.js';
 const UUID = '[a-f0-9-]{36}';
 const READ = [
-  /^\/api\/(health|version|models|providers|abilities|usage|search|projects|artifacts|profile\/photo|speech\/voices|skills|memory|settings|processes)$/,
+  /^\/api\/(health|version|models|providers|abilities|usage|search|projects|artifacts|profile\/photo|speech\/voices|settings|processes)$/,
   new RegExp(`^/api/sessions(/${UUID}(/.*)?)?$`),
   new RegExp(`^/api/artifacts/${UUID}(/raw)?$`),
   /^\/api\/remote\/me$/,
@@ -84,7 +84,8 @@ const WRITE = [
   ['POST', /^\/api\/sessions$/],
   ['POST', new RegExp(`^/api/sessions/${UUID}/(messages|stop|undo|compact|branch|summary|title)$`)],
   ['POST', new RegExp(`^/api/sessions/${UUID}/(permission|question|capability)/${UUID}$`)],
-  ['PATCH', new RegExp(`^/api/sessions/${UUID}(/setting/[A-Za-z-]+)?$`)],
+  ['PATCH', new RegExp(`^/api/sessions/${UUID}$`)],
+  ['PATCH', new RegExp(`^/api/sessions/${UUID}/setting/(permissionMode|workMode|effort|model|providerId)$`)], // never folder, branch, project or anything else
   ['DELETE', new RegExp(`^/api/sessions/${UUID}$`)],
   ['POST', /^\/api\/artifacts$/],
   ['PATCH', new RegExp(`^/api/artifacts/${UUID}$`)],
@@ -114,17 +115,35 @@ export function remoteException(method, path, body = null) {
   return false;
 }
 
+/** R1: the capability cards a device may answer. The others switch a global window-only setting or install something, and stay with the window. */
+export const REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
+
+/** R2: tools a chat from a device never has, whatever its mode: driving the computer, building or installing anything, adding a connector or a skill, and the tools the model built. */
+export const remoteToolBlocked = (name) => /^(computer_|create_tool$|install_plugin$|install_from_github$|add_connector$|add_skill$|my_)/.test(String(name ?? ''));
+
 /**
- * The body a device may send. A new chat: its title, mode, work mode, effort, project, model and whether it is incognito (never a folder: only the window picks one).
- * A message: whatever the app's own page sends, minus what only the window or the scheduler may say (scheduledTask, browserControl, a folder).
+ * R3: allow-lists. A new chat: its title, work mode, mode, effort, model and provider (no folder, and no project: a project can carry a folder).
+ * A change to a chat (PATCH): the same, nothing else (never a folder, branch, project, pin or archive from a device).
+ * A message: what the app's own page sends to talk to the model, nothing that decides where it works or how unattended it runs.
  */
-const SESSION_KEYS = ['title', 'workMode', 'permissionMode', 'effort', 'projectId', 'providerId', 'model', 'incognito'];
-const MESSAGE_DENY = ['scheduledTask', 'browserControl', 'folder', 'textOnly'];
+const SESSION_KEYS = ['title', 'workMode', 'permissionMode', 'effort', 'providerId', 'model'];
+const MESSAGE_KEYS = ['content', 'attachments', 'providerId', 'model', 'retry', 'vision', 'workMode', 'useSkill', 'thinking', 'job', 'auto', 'attemptsLeft', 'fellBackFrom', 'fellBackKind', 'fellBackProvider', 'fellBackReason', 'fellBackTries'];
+const pick = (b, keys) => Object.fromEntries(keys.filter((k) => Object.hasOwn(b, k)).map((k) => [k, b[k]]));
 export function remoteBody(path, body) {
   const b = body && typeof body === 'object' ? body : {};
-  if (path === '/api/sessions') return Object.fromEntries(SESSION_KEYS.filter((k) => Object.hasOwn(b, k)).map((k) => [k, k === 'title' && typeof b[k] === 'string' ? b[k].slice(0, 80) : b[k]]));
-  return Object.fromEntries(Object.entries(b).filter(([k]) => !MESSAGE_DENY.includes(k)));
+  if (path === '/api/sessions') { const out = pick(b, SESSION_KEYS); if (typeof out.title === 'string') out.title = out.title.slice(0, 80); return out; }
+  return pick(b, MESSAGE_KEYS);
 }
+export function remotePatch(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const out = pick(b, SESSION_KEYS);
+  if (typeof out.title === 'string') out.title = out.title.slice(0, 80);
+  return out;
+}
+
+/** R4: the settings a device may read: how things look and which model is chosen. No keys, no secrets, no instructions, no connectors. */
+const DISPLAY_SETTINGS = ['theme', 'language', 'displayName', 'callName', 'codeFont', 'codeFontSize', 'codeThemeDark', 'codeThemeLight', 'interfaceFont', 'responseFont', 'motion', 'transcriptSize', 'transcriptWidth', 'uiZoom', 'transcriptView', 'statusLabels', 'promptSuggestions', 'providerId', 'model', 'defaultEffort', 'artifactsEnabled', 'chartsEnabled', 'summaryNextSteps', 'unrelatedTask', 'firstReplyWaitSeconds'];
+export const remoteSettings = (settings) => pick(settings && typeof settings === 'object' ? settings : {}, DISPLAY_SETTINGS);
 /** A short plain name for a device from its browser's own words. */
 export function deviceLabel(userAgent = '') {
   const ua = String(userAgent);
@@ -141,12 +160,13 @@ export function readCookie(header, name = COOKIE) {
   return '';
 }
 
-export function createRemoteAccess({ file = null, now = () => Date.now() } = {}) {
+export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd = () => {} } = {}) {
   let record = null;       // the scrypt record of the saved passcode
   let loaded = false;
   let on = false;          // never read back from a file: OFF after every restart
   let host = '';           // exactly "<lan address>:<port>" while on
   let address = null;
+  const ended = (deviceIds) => { try { onEnd(deviceIds); } catch { /* the sessions are gone either way */ } }; // R6: lets the app put a device's Auto chats back to Ask
   const sessions = new Map(); // secret cookie value -> { deviceId, label, ip, csrf, signedInAt, lastSeen }
   const failures = new Map(); // ip -> { count, until }
   let recent = [];            // times of recent failures from anyone
@@ -200,7 +220,7 @@ export function createRemoteAccess({ file = null, now = () => Date.now() } = {})
     if (!secret || !on) return null;
     const s = sessions.get(secret);
     if (!s) return null;
-    if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); return null; }
+    if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); ended([s.deviceId]); return null; }
     s.lastSeen = now();
     return s;
   }
@@ -222,15 +242,15 @@ export function createRemoteAccess({ file = null, now = () => Date.now() } = {})
       return { ok: true };
     },
     /** Turn off: every session ends at once. */
-    disable() { on = false; host = ''; address = null; sessions.clear(); failures.clear(); recent = []; },
+    disable() { const ids = [...sessions.values()].map((s) => s.deviceId); on = false; host = ''; address = null; sessions.clear(); failures.clear(); recent = []; ended(ids.length ? ids : null); },
     signIn,
     sessionFor,
     /** The person's own browser sessions, for the list in the window (never the secrets). */
     list() { return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString() })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
     count() { return sessions.size; },
-    signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); return true; } return false; },
-    signOutSecret(secret) { return sessions.delete(secret); },
-    signOutAll() { const n = sessions.size; sessions.clear(); return n; },
+    signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); ended([deviceId]); return true; } return false; },
+    signOutSecret(secret) { const s = sessions.get(secret); const gone = sessions.delete(secret); if (gone && s) ended([s.deviceId]); return gone; },
+    signOutAll() { const ids = [...sessions.values()].map((s) => s.deviceId); const n = sessions.size; sessions.clear(); if (ids.length) ended(ids); return n; },
     cookieFor(secret) { return `${COOKIE}=${secret}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_IDLE_MS / 1000)}`; },
     clearCookie() { return `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`; },
   };

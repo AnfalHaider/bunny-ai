@@ -144,6 +144,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       agent: session.agent ?? null,
       agentStatus: session.agentStatus ?? null,
       origin: session.origin ?? null,
+      remoteAuto: session.remoteAuto ?? null,
       messageCount: session.messages?.length ?? 0,
       preview: String(last?.content ?? '').replace(/\s+/g, ' ').slice(0, 90),
       context: context(session),
@@ -282,6 +283,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.permissionMode !== undefined) session.permissionMode = patch.permissionMode;
     if (patch.effort !== undefined) session.effort = patch.effort ?? null;
     if (patch.incognito !== undefined) session.incognito = Boolean(patch.incognito);
+    if (patch.remoteAuto !== undefined) { if (patch.remoteAuto) session.remoteAuto = String(patch.remoteAuto); else delete session.remoteAuto; } // R6: set to Auto by another device (its id)
     if (patch.agentStatus !== undefined) session.agentStatus = patch.agentStatus;
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
