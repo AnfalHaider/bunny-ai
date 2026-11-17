@@ -177,9 +177,9 @@ test('Thinking: shown for a known provider (Default, Low, Medium, High), kept pe
   await expect(group.getByRole('button', { name: 'Default' })).toHaveAttribute('aria-pressed', 'true');
   await group.getByRole('button', { name: 'High' }).click();
   await expect(group.getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.thinking'))['think-a'])).toBe('high');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.thinking'))['openai/think-a'])).toBe('high');
   await group.getByRole('button', { name: 'Default' }).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.thinking'))['think-a'])).toBeUndefined();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bunny.thinking'))['openai/think-a'])).toBe('default');
   await page.getByRole('button', { name: '‹ Back' }).click();
   await page.getByRole('button', { name: 'Details for Quiet B' }).last().click();
   await expect(page.getByRole('group', { name: 'Thinking' })).toHaveCount(0);

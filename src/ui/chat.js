@@ -385,17 +385,22 @@ function providerRowsInOrder(group) {
   return order.map((id) => group.find((m) => m.providerId === id));
 }
 
-/** W4-13b: the Thinking level the person chose for a model (kept on this computer), or null for Default and for a provider whose field is not known. */
+/** W4-13b: the Thinking level the person chose for a model on one provider (kept on this computer), or null for Default and for a provider whose field is not known.
+ * v0.1.10 (QA 4c-3): kept per provider AND model ("groq/llama-x"), so the same open model on two providers has two choices. A choice saved by an older build under the bare model id still counts until the person sets one for that provider. */
+const thinkingKey = (providerId, modelId) => `${providerId}/${modelId}`;
 function chosenThinking(providerId, modelId) {
   try {
-    const level = JSON.parse(localStorage.getItem('bunny.thinking') || '{}')[modelId];
+    const all = JSON.parse(localStorage.getItem('bunny.thinking') || '{}');
+    const own = all[thinkingKey(providerId, modelId)];
+    const level = own !== undefined ? own : all[modelId];
     return thinkingLevels(providerId).includes(level) ? level : null;
   } catch { return null; }
 }
-function writeThinking(modelId, level) {
+function writeThinking(providerId, modelId, level) {
   try {
     const all = JSON.parse(localStorage.getItem('bunny.thinking') || '{}');
-    if (level) all[modelId] = level; else delete all[modelId];
+    // Default is written as "default" (not deleted) so it also overrides an older bare-id choice
+    all[thinkingKey(providerId, modelId)] = level || 'default';
     localStorage.setItem('bunny.thinking', JSON.stringify(all));
   } catch { /* private window: the choice lasts until the page closes */ }
 }
@@ -648,7 +653,7 @@ function openPicker(host, trigger) {
         element('div', { className: 'picker-seg', role: 'group', 'aria-label': 'Thinking' }, ...['default', ...levels].map((lv) => {
           const on = (lv === 'default' && !nowLevel) || lv === nowLevel;
           const b = button(lv[0].toUpperCase() + lv.slice(1), { className: 'picker-chip', 'aria-pressed': String(on) });
-          b.addEventListener('click', () => { writeThinking(first.id, lv === 'default' ? null : lv); draw(); });
+          b.addEventListener('click', () => { writeThinking(rows[0].providerId, first.id, lv === 'default' ? null : lv); draw(); });
           return b;
         }))) : null;
       det.replaceChildren(

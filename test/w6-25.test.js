@@ -8,7 +8,7 @@ import { startApp, post } from './helpers.js';
 const jsonH = { 'content-type': 'application/json' };
 const sse = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`;
 
-async function run(t, toolCall, answerWith) {
+async function run(t, toolCall, answerWith, { nudgeMs = 120, holdMs = 300 } = {}) {
   const provider = createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
@@ -22,7 +22,7 @@ async function run(t, toolCall, answerWith) {
   });
   await new Promise((r) => provider.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
-  const { base } = await startApp(t, { fake: false, waitNudgeMs: 120 });
+  const { base } = await startApp(t, { fake: false, waitNudgeMs: nudgeMs });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   const { body: session } = await post(base, '/api/sessions', { title: 'W625' });
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: 'ask' }) });
@@ -43,7 +43,7 @@ async function run(t, toolCall, answerWith) {
     if (cap) { lateCap = true; await post(base, `/api/sessions/${session.id}/capability/${JSON.parse(cap[1]).id}`, { granted: false }); }
     if (card && !nudged && /event: waiting\n/.test(text)) {
       nudged = true;
-      await new Promise((r) => setTimeout(r, 300)); // well past the nudge: the old timers would have answered by now only in minutes, so this checks the nudge, not the wait
+      await new Promise((r) => setTimeout(r, holdMs)); // well past the nudge: the old timers would have answered by now only in minutes, so this checks the nudge, not the wait
       await post(base, `/api/sessions/${session.id}/${card.kind}/${card.id}`, answerWith);
     }
   }
@@ -65,4 +65,12 @@ test('W6-25: a permission prompt left waiting sends a nudge, is not denied, and 
   assert.match(r.text, /event: waiting\ndata: .*"kind":"permission"/);
   assert.doesNotMatch(r.text, /did not allow/, 'it was not denied while it waited');
   assert.match(r.text, /got: /);
+});
+
+test('W6-25 (v0.1.10): a card left waiting is nudged again, not only once', async (t) => {
+  // first nudge at 40 ms, then every 200 ms: holding for 700 ms after the first must show at least two more
+  const r = await run(t, { name: 'ask_user', arguments: JSON.stringify({ question: 'Which colour?', choices: [{ label: 'Blue' }] }) }, { choices: ['Blue'] }, { nudgeMs: 40, holdMs: 700 });
+  const count = (r.text.match(/event: waiting\n/g) ?? []).length;
+  assert.ok(count >= 3, `expected the nudge to repeat, saw ${count}`);
+  assert.match(r.text, /got: The person answered: Blue/);
 });

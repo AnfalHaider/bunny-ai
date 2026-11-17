@@ -601,7 +601,8 @@
       </div>
       <div class="row">
         <div class="right"><button id="check-update" class="primary">Check for updates</button> <button id="restart-update" class="ghost" hidden>Restart to update</button></div>
-        <div class="meta-col"><div class="desc" id="update-note"></div></div>
+        <div class="meta-col"><div class="desc" id="update-note"></div>
+          <details id="update-notes" hidden><summary>What is in this version</summary><pre id="update-notes-text" style="white-space:pre-wrap;overflow:auto;max-height:320px;margin:8px 0 0;font:inherit"></pre></details></div>
       </div>
     </div>
   </section>
@@ -1139,6 +1140,13 @@
       : s.state === 'checking' ? 'Checking…' : (s.message ?? '');
     const restart = $('restart-update');
     if (restart) restart.hidden = s.state !== 'ready';
+    // v0.1.10 (QA 4c-14): the whole of the new version's notes, as published (no cut), once there is a newer version
+    const notes = $('update-notes');
+    if (notes) {
+      const text = ['downloading', 'ready'].includes(s.state) ? String(s.notes ?? '').trim() : '';
+      notes.hidden = !text;
+      $('update-notes-text').textContent = text;
+    }
   };
   updates?.onStatus(showUpdate);
   updates?.get().then(showUpdate).catch(() => {});

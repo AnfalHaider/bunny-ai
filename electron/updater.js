@@ -51,6 +51,9 @@ export function compareVersions(a, b) {
   return 0;
 }
 
+/** v0.1.10 (QA 4c-14): GitHub caps a release body at 125,000 characters; the app keeps the whole of it (it used to cut at 4,000). */
+const MAX_NOTES = 130_000;
+
 /** The installer and its published SHA-512, from a GitHub release. */
 export async function readRelease(release, fetchImpl = globalThis.fetch) {
   const version = String(release?.tag_name ?? '').replace(/^v/i, '');
@@ -62,10 +65,11 @@ export async function readRelease(release, fetchImpl = globalThis.fetch) {
   if (manifest) {
     const yml = await (await fetchImpl(manifest.browser_download_url)).text();
     // SUPD-1: on the same line only (an empty "sha512:" must not take the next key), and the value must look like a SHA-512 digest in base64 (88 characters)
-    const found = /^sha512:[ \t]*(\S+)[ \t]*$/m.exec(yml)?.[1] ?? null;
+    // v0.1.10 (QA 4c-7): a value in double or single quotes is the same value, so it is accepted; hex and next-line values still are not
+    const found = /^sha512:[ \t]*(["']?)([^\s"']+)\1[ \t]*$/m.exec(yml)?.[2] ?? null;
     sha512 = found && /^[A-Za-z0-9+/]{86}==$/.test(found) ? found : null;
   }
-  return { version, notes: String(release.body ?? '').slice(0, 4000), url: installer.browser_download_url, size: installer.size, name: installer.name, sha512 };
+  return { version, notes: String(release.body ?? '').slice(0, MAX_NOTES), url: installer.browser_download_url, size: installer.size, name: installer.name, sha512 };
 }
 
 export function createUpdater({ currentVersion, feed = process.env.BUNNY_UPDATE_FEED || RELEASES_FEED, enabled = () => true, onStatus = () => {}, fetchImpl = globalThis.fetch, downloadDir = join(tmpdir(), 'bunny-ai-update') }) {

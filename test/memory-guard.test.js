@@ -88,3 +88,29 @@ test('a sender that never stops is cut off at about twice the cap instead of bei
   assert.equal(result.how, 'closed');
   assert.ok(result.sent < 12 * 1024 * 1024, `cut off after ${result.sent} bytes`);
 });
+
+test('v0.1.10 (QA 4c-8): the slot is per request type: a slow large message does not make a large import wait, a second large message still does', async (t) => {
+  const { base } = await startApp(t);
+  const url = new URL(base);
+  const { body: session } = await post(base, '/api/sessions', { title: 'types' });
+  const open = (path, declared) => {
+    const out = { status: null, text: '' };
+    const req = http.request({ host: url.hostname, port: url.port, path, method: 'POST', headers: { 'content-type': 'application/json', 'content-length': declared } }, (res) => {
+      out.status = res.statusCode;
+      res.on('data', (c) => { out.text += c; });
+    });
+    req.on('error', () => {});
+    req.write('x'.repeat(10));
+    out.req = req;
+    return out;
+  };
+  const message = open(`/api/sessions/${session.id}/messages`, 3 * 1024 * 1024); // holds the message slot
+  await settle(300);
+  const importing = open('/api/import', 2 * 1024 * 1024); // a different type: not told to wait
+  const secondMessage = open(`/api/sessions/${session.id}/messages`, 2 * 1024 * 1024);
+  await settle(400);
+  assert.equal(secondMessage.status, 429, 'the same type waits');
+  assert.notEqual(importing.status, 429, 'a different type is not blocked by it');
+  assert.doesNotMatch(importing.text, /request\.busy/);
+  for (const o of [message, importing, secondMessage]) o.req.destroy();
+});

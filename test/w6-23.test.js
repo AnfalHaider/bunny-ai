@@ -50,3 +50,13 @@ test('W6-23: if the retry fails too, the chat holds one note (the latest), never
   assert.equal(errors.length, 1);
   assert.match(errors[0].content, /broken could not finish/);
 });
+
+test('v0.1.10 (QA 4c-6): a new message that is not a retry clears the old failure note', async (t) => {
+  const c = await chat(t);
+  await c.say('limited');
+  assert.equal((await c.saved()).filter((m) => m.kind === 'error').length, 1);
+  await c.say('tooler'); // a plain new send, not a retry
+  const messages = await c.saved();
+  assert.equal(messages.filter((m) => m.kind === 'error').length, 0, JSON.stringify(messages.map((m) => m.kind ?? m.role)));
+  assert.equal(messages.at(-1).content, 'all done');
+});

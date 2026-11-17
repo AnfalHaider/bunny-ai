@@ -125,8 +125,10 @@ function sendJson(res, status, value) {
   res.end(body);
 }
 
-// Memory guard (Security, QA batch): a body over 1 MB is read by ONE request at a time across the app; a second one is answered 429.
-let largeBodyBusy = false;
+// Memory guard (Security, QA batch): a body over 1 MB is read by ONE request at a time per request type; a second of the same type is answered 429.
+// v0.1.10 (QA 4c-8): "type" is the route's size cap (messages, photos, imports, ... each have their own), so a slow import no longer blocks a chat message.
+// The most memory held at once is one body per cap, a handful of routes in all, instead of one for the whole app.
+const largeBodyBusy = new Set();
 
 function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
@@ -136,8 +138,8 @@ function readBody(req, max = MAX_BODY) {
     const chunks = [];
     const tooBig = () => new ConnectError('request.tooLarge', `That is too large (over ${Math.round(max / 1024 / 1024)} MB).`);
     const busy = () => new ConnectError('request.busy', 'Another large message is being sent; try again in a moment.');
-    const give = () => { if (holds) { holds = false; largeBodyBusy = false; } };
-    const take = () => { if (holds) return true; if (largeBodyBusy) return false; largeBodyBusy = true; holds = true; return true; };
+    const give = () => { if (holds) { holds = false; largeBodyBusy.delete(max); } };
+    const take = () => { if (holds) return true; if (largeBodyBusy.has(max)) return false; largeBodyBusy.add(max); holds = true; return true; };
     // What is not wanted is still read and dropped (so the answer reaches the window; cutting the connection showed only "Failed to fetch"), but only up to twice the cap:
     // past that the connection is closed.
     const drain = () => {
@@ -1733,7 +1735,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
 
       // W6-23: a retry (the next model after a fallback) starts by clearing the failed attempts' notes. Dropping them only when the retry ENDS left the red
       // "could not finish" group in the chat whenever the retry ran steps in between, because then it was no longer the last thing there.
-      if (retry) { await sessions.dropTrailingErrors(id).catch(() => {}); session = (await sessions.get(id)) ?? session; }
+      // v0.1.10 (QA 4c-6): a new message (not a retry) also clears an old failure note, so a red note from an earlier try does not stay above the new reply.
+      { await sessions.dropTrailingErrors(id).catch(() => {}); session = (await sessions.get(id)) ?? session; }
 
       let attachments = [];
       try {
@@ -2164,14 +2167,22 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const cardTooLong = (detail, counted = detail) => String(counted ?? '').length > CARD_LIMIT
         ? `This is too long to show in full on the confirmation card (more than ${CARD_LIMIT} characters), so it was not run. Use a shorter one, or put the work in a file.`
         : null;
+      // W6-25 (v0.1.10, QA 4c-5): a card left waiting is nudged after waitNudgeMs, then again every 5x that (15 minutes by default), at most 8 more times, so one left for an hour is not nudged only once.
+      const waitNudges = (info) => {
+        let timer = null;
+        let more = 0;
+        const fire = () => { send('waiting', info); if (++more <= 8) timer = setTimeout(fire, waitNudgeMs * 5); };
+        timer = setTimeout(fire, waitNudgeMs);
+        return { stop: () => clearTimeout(timer) };
+      };
       // Ask the person, and wait for the answer (or for them to leave).
       const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
         if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
-        const timer = setTimeout(() => send('waiting', { kind: 'permission', title: summary }), waitNudgeMs);
-        pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { clearTimeout(timer); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        const timer = waitNudges({ kind: 'permission', title: summary });
+        pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
         send('permission', { id: pid, title: summary, detail: cardText(detail) });
       });
@@ -2219,8 +2230,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const origin = `http://${req.headers.host ?? '127.0.0.1'}`;
       const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
         const cid = randomUUID();
-        const timer = setTimeout(() => send('waiting', { kind: 'capability', title: CAPABILITIES[capability] }), waitNudgeMs); // W6-25: waits, then nudges
-        pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
+        const timer = waitNudges({ kind: 'capability', title: CAPABILITIES[capability] }); // W6-25: waits, then nudges
+        pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
         send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
       });
@@ -2228,8 +2239,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const askQuestion = (q) => new Promise((resolveAnswer) => {
         if (res.writableEnded || res.destroyed) { resolveAnswer({ skipped: true, gone: true }); return; }
         const qid = randomUUID();
-        const timer = setTimeout(() => send('waiting', { kind: 'question', title: String(q.question ?? '').slice(0, 140) }), waitNudgeMs); // W6-25: never skipped by itself; waits, then nudges
-        pendingQuestions.set(qid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingQuestions.delete(qid); resolveAnswer(a ?? {}); } });
+        const timer = waitNudges({ kind: 'question', title: String(q.question ?? '').slice(0, 140) }); // W6-25: never skipped by itself; waits, then nudges
+        pendingQuestions.set(qid, { sessionId: id, resolve: (a) => { timer.stop(); pendingQuestions.delete(qid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingQuestions.get(qid)?.resolve({ skipped: true, gone: true }));
         replyStatus.set(id, 'needs-you');
         send('question', { id: qid, ...q });

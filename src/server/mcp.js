@@ -155,7 +155,7 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
   try {
     const opts = { signal: controller.signal, auth, fetchImpl };
     await ensureSession(url, server, opts);
-    // R-5: a server with a long list sends it in pages; follow nextCursor (at most 20 pages)
+    // R-5: a server with a long list sends it in pages; follow nextCursor (at most MAX_PAGES = 100 pages)
     const tools = [];
     let cursor = null;
     let truncated = false;
@@ -200,7 +200,7 @@ export const MAX_ANSWER_BYTES = 5 * 1024 * 1024;
 export const MAX_PAGES = 100;
 export const MAX_TOOLS = 1000;
 
-/** The body of a connector's answer as text, refusing more than about 5 MB (up to 20 pages of a tool list could otherwise fill the memory). */
+/** The body of a connector's answer as text, refusing more than about 5 MB (up to 100 pages of a tool list could otherwise fill the memory). */
 async function readCapped(res, limit = MAX_ANSWER_BYTES) {
   const tooBig = () => new McpError('The connector answered with more than 5 MB, which is too much to read.', 'mcp.tooLarge');
   if (Number(res.headers.get('content-length')) > limit) { await res.body?.cancel?.().catch(() => {}); throw tooBig(); }

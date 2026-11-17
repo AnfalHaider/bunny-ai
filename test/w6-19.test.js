@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { detectJob, rankModels, noEyesWarning, modelAbilities } from '../src/ui/model-abilities.js';
 
 // W6-19: picture jobs (copy a site, compare pages) are "see" jobs: Auto picks a model that can see, and a model chosen by hand that cannot is warned about.
+test('v0.1.10: words that only mention a page in a text or code job are not picture jobs', () => {
+  for (const text of ['match the regex on the page', 'copy the page title into the readme', 'clone the website repository', 'compare the page source with the template', 'copy the site url to my notes']) {
+    assert.notEqual(detectJob(text), 'see', text);
+    assert.notEqual(detectJob(text, { workMode: 'code' }), 'see', `${text} (Code mode)`);
+  }
+});
+
 test('copying or comparing how a site, a page or a design looks is a see job, in chat and in Code mode', () => {
   for (const text of ['Copy this website exactly', 'clone the landing page of that site', 'Recreate this design in HTML', 'compare these two pages and tell me what differs', 'make my page match the layout of the screenshot', 'replicate the look of their site']) {
     assert.equal(detectJob(text), 'see', text);
