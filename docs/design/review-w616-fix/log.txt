@@ -1,0 +1,14 @@
+seed Connectors ["Only in: client-site, my-long-project-folder-name-for-wrapping"]
+seed Skills ["Only in: client-site, my-long-project-folder-name-for-wrapping"]
+d light Connectors {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":650,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"734px","docOverflow":false}
+d light Skills {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":650,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"734px","docOverflow":false}
+d dark Connectors {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":650,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"734px","docOverflow":false}
+d dark Skills {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":650,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"734px","docOverflow":false}
+m light Connectors {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":357,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"324px","docOverflow":false}
+m light Skills {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":357,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"324px","docOverflow":false}
+m dark Connectors {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":357,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"324px","docOverflow":false}
+m dark Skills {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":357,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"324px","docOverflow":false}
+w light Connectors {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":649,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"632px 112px 176px 260px","docOverflow":false}
+w light Skills {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":649,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"632px 112px 176px 260px","docOverflow":false}
+w dark Connectors {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":649,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"632px 112px 176px 260px","docOverflow":false}
+w dark Skills {"labelText":"Only in: client-site, my-long-project-folder-name-for-wrapping","labelClipped":false,"scopeRight":649,"scopeInsideRow":true,"overlapsTypeCell":false,"cols":"632px 112px 176px 260px","docOverflow":false}
