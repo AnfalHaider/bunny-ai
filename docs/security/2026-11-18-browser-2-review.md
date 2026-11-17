@@ -44,3 +44,32 @@ Today `remoteException` allows every `/capability/<id>` answer.
 - **"A device chooses Auto for its chat and runs tools with no card, as the window does":** acceptable as the owner's decision only with R1 to R5 in place, and with R6 recommended.
 - **"Can remoteException be widened with permissionMode plus another window-only key?"** No, see "What holds". But `folder` is not window-only and gets through: R3.
 - **"Can a device attach a folder to an existing chat?"** Yes, today: R3.
+
+## Re-review at 568f8d5 (R1-R7): FAIL, one gap left (R9)
+
+Tests from a copy of 568f8d5, with the variable unset: `remote-access` 28 of 28, `window-only` 16 of 16.
+
+**R1 to R7: all fixed.**
+
+| Requirement | Fix | Where |
+|---|---|---|
+| R1 | `REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode']`; any other capability answer from a device gets 403 | `app.js:1461` |
+| R2 | `remoteToolBlocked` (computer_*, create_tool, install_plugin, install_from_github, add_connector, add_skill, my_*) is filtered out of the tools offered, in the reply and in helper chats, and refused when called | `app.js:2376`, `:3040`, `:2798` |
+| R3 | `remotePatch` and `remoteBody` are allow-lists: no folder, project, branch or pin | |
+| R4 | `remoteSettings` returns display keys only; memory and skills are off the read list | |
+| R5 | the warning text | |
+| R6 | a chat a device sets to Auto is marked, and goes back to Ask when the device ends | |
+| R7 | 2-hour idle timeout | |
+
+**Builder A's routing hints: acceptable.**
+- `job` adds only a fixed `JOB_NOTES` entry, and image output only for OpenRouter.
+- `thinking` is one of low, medium or high.
+- `auto`, `attemptsLeft` and the `fellBack*` fields are trimmed labels for the "answered by" line.
+
+None of them decides tools, folders, mode or unattended running.
+
+**R9 (HIGH, required): `schedule_task` gets round R2.** A device's chat can call `schedule_task`. With `may_change: true` it creates a schedule that runs **in Auto** in that chat's folder (`app.js:2653`). Its runs are not device turns, so they have every tool the window has switched on, computer control and installs included, with nobody watching. Schedules are on the owner's window-only list.
+- **Fix:** add `schedule_task` to `remoteToolBlocked`, and add a test.
+- **Also:** confirm that `message_session` does not run another chat's turn inside the server, outside the device flag. If it does, block it for devices too. (`start_session` goes through `runHelper`, which keeps the filter.)
+
+**Recommended:** `remember` lets a device's chat add standing memory that every later chat in the window reads. Memory is now off the device's read list, so writing it is out of balance. Block it for devices, or make it ask.
