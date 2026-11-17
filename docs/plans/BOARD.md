@@ -22,7 +22,6 @@
 
 | Id | Title | Risk | Owner session | Claimed (session, date) | State | Links |
 |---|---|---|---|---|---|---|
-| S-2b | Updater: signing decision (the installer is not code-signed yet) | MEDIUM | Builder + owner | Security, 2026-11-16 | STILL OPEN: owner decision. The fail-closed part is DONE (see DONE). Installer notes say "Not code-signed yet" (v0.1.9 notes, bf163a4). | `docs/security/2026-11-16-baseline-0.1.4.md` |
 | S-3 | Secret store: entropy; agent tools refuse secrets folder | MEDIUM | Builder | Security, 2026-11-16 | STILL OPEN: no built-in refusal of a secrets folder found for agent tools (`src/server/permissionRules.js` only has the user's own "never edit secrets/**" rule). No entropy change found in `src/providers/secretStore.js`. | same |
 | S-5 | `move_to_new_chat` and memory import need a confirm | LOW | Builder | Security, 2026-11-16 | STILL OPEN: `move_to_new_chat` is refused in Plan mode (`src/server/app.js:1946`) and rated `own` (`src/server/agentTools.js:267`), but no separate confirm found. `POST /api/memory/import` (`src/server/app.js:960`) has no confirm step. | same |
 | S-6 | secretStore: cipher read-back check and a pinned PowerShell path | LOW | Builder | Security, 2026-11-16 | STILL OPEN: `src/providers/secretStore.js:15` runs `powershell.exe` by bare name, not a pinned System32 path. No cipher read-back check found in the `set` path (`src/providers/secretStore.js:60-70`). | same |
@@ -81,6 +80,7 @@
 | B-1 | `bootstrap.mjs` spawn quote-safe: shell only for `.cmd` | 332f44a | 2026-11-18: `scripts/bootstrap.mjs:15`; ancestor of main. Tech Lead PASS at 332f44a (242ef8c). Drop of unused imports not checked. |
 | D1-design | 0.1.4 screens design review, built | 2cfeec5 | 2026-11-18: ancestor of main. Sign-offs are tracked in D1 (OPEN). |
 | S-1 (filed) | Duplicate of S-1 | ca01243 | see S-1 |
+| S-2b | Updater: code-signing decision. Owner, typed in the Chief of Staff's chat, 2026-11-18: "We are not signing the code." The installer stays unsigned and the release notes keep the SmartScreen line. Recorded in `docs/plans/2026-11-18-v0.1.10-plan.md:61` (origin/main). Closed. | none (decision, no code) | 2026-11-18, owner's words above |
 
 ## RESOLVED ROWS REMOVED
 

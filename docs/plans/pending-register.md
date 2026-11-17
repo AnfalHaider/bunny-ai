@@ -24,6 +24,8 @@
 - **Design D-2 decisions** — taken by the Chief of Staff. Owner's words not held by the Librarian; the Chief of Staff supplies them.
 - **Audit exception picomatch (GHSA-fc5q-39xc-vjpf)** — signed by the owner, 2026-11-18 ("Sign the exception"), recorded in `docs/security/audit-exceptions.json` (1dad4ac). Review by 2026-12-17. Covers one advisory only; see BOARD S-8.
 
+- **Code signing (S-2b, 2026-11-18)** — Owner, typed in the Chief of Staff's chat on 2026-11-18: "We are not signing the code." The installer stays unsigned, and the release notes keep the SmartScreen line. Recorded in `docs/plans/2026-11-18-v0.1.10-plan.md:61` (origin/main). Closed; no code change.
+
 ## Promised and not delivered
 
 <!-- Nothing recorded yet. -->
