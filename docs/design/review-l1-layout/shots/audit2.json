@@ -1,0 +1,156 @@
+{
+ "profile-d-light": [],
+ "usage-d-light": [],
+ "appearance-d-light": [],
+ "bunny-d-light": [],
+ "language-d-light": [],
+ "notifications-d-light": [],
+ "privacy-d-light": [
+  "EDGE div#storage > span.k \"Sessions\" l=1 r=659",
+  "EDGE div#storage > span.v \"one JSON file per chat\" l=628 r=1"
+ ],
+ "capabilities-d-light": [
+  "EDGE div.group > div.row.desc \"No tools built yet.\" l=1 r=1"
+ ],
+ "providers-d-light": [],
+ "models-d-light": [],
+ "connection-d-light": [],
+ "customize-d-light": [],
+ "automation-d-light": [],
+ "code-d-light": [
+  "EDGE div.group > h3 \"Permission rules\" l=1 r=1",
+  "EDGE div.group > b \"Only from Bunny's window.\" l=1 r=589",
+  "EDGE div.group > button#rules-tab-all \"All folders\" l=4 r=665",
+  "EDGE div.group > div.rr.empty \"No rules.\" l=2 r=2",
+  "EDGE div.rl.deny > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.ask > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.allow > div.rr.empty \"No rules.\" l=1 r=1"
+ ],
+ "desktop-d-light": [],
+ "about-d-light": [],
+ "profile-d-dark": [],
+ "usage-d-dark": [],
+ "appearance-d-dark": [],
+ "bunny-d-dark": [],
+ "language-d-dark": [],
+ "notifications-d-dark": [],
+ "privacy-d-dark": [
+  "EDGE div#storage > span.k \"Sessions\" l=1 r=659",
+  "EDGE div#storage > span.v \"one JSON file per chat\" l=628 r=1"
+ ],
+ "capabilities-d-dark": [
+  "EDGE div.group > div.row.desc \"No tools built yet.\" l=1 r=1"
+ ],
+ "providers-d-dark": [],
+ "models-d-dark": [],
+ "connection-d-dark": [],
+ "customize-d-dark": [],
+ "automation-d-dark": [],
+ "code-d-dark": [
+  "EDGE div.group > h3 \"Permission rules\" l=1 r=1",
+  "EDGE div.group > b \"Only from Bunny's window.\" l=1 r=589",
+  "EDGE div.group > button#rules-tab-all \"All folders\" l=4 r=665",
+  "EDGE div.group > div.rr.empty \"No rules.\" l=2 r=2",
+  "EDGE div.rl.deny > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.ask > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.allow > div.rr.empty \"No rules.\" l=1 r=1"
+ ],
+ "desktop-d-dark": [],
+ "about-d-dark": [],
+ "profile-m-light": [
+  "EDGE div.group > span \"GitHub OAuth app client ID\" l=186 r=-7",
+  "OUTSIDE div.group > span l=186 r=-7",
+  "CTRL-EDGE div.group > input#github-client-id l=186 r=-64",
+  "OUTSIDE div.group > input#github-client-id l=186 r=-64",
+  "CTRL-EDGE div.group > input#google-client-id l=186 r=-64",
+  "OUTSIDE div.group > input#google-client-id l=186 r=-64",
+  "EDGE div.group > span.opt \"(Desktop apps get one; Googl\" l=186 r=-48",
+  "OUTSIDE div.group > span.opt l=186 r=-48",
+  "CTRL-EDGE div.group > input#google-client-secret l=186 r=-64",
+  "OUTSIDE div.group > input#google-client-secret l=186 r=-64",
+  "BEYOND label.field right=430 W=390",
+  "BEYOND input#github-client-id right=430 W=390",
+  "BEYOND label.field right=430 W=390",
+  "BEYOND input#google-client-id right=430 W=390",
+  "BEYOND label.field right=430 W=390",
+  "BEYOND span right=414 W=390",
+  "BEYOND span.opt right=414 W=390",
+  "BEYOND input#google-client-secret right=430 W=390"
+ ],
+ "usage-m-light": [],
+ "appearance-m-light": [],
+ "bunny-m-light": [],
+ "language-m-light": [],
+ "notifications-m-light": [],
+ "privacy-m-light": [
+  "EDGE div#storage > span.k \"Sessions\" l=1 r=249",
+  "EDGE div#storage > span.v \"one JSON file per chat\" l=218 r=1"
+ ],
+ "capabilities-m-light": [
+  "EDGE div.group > div.row.desc \"No tools built yet.\" l=1 r=1"
+ ],
+ "providers-m-light": [],
+ "models-m-light": [],
+ "connection-m-light": [],
+ "customize-m-light": [],
+ "automation-m-light": [],
+ "code-m-light": [
+  "EDGE div.group > h3 \"Permission rules\" l=1 r=1",
+  "EDGE div.group > b \"Only from Bunny's window.\" l=1 r=179",
+  "EDGE div.group > button#rules-tab-all \"All folders\" l=4 r=255",
+  "EDGE div.group > div.rr.empty \"No rules.\" l=2 r=2",
+  "EDGE div.rl.deny > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.ask > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.allow > div.rr.empty \"No rules.\" l=1 r=1"
+ ],
+ "desktop-m-light": [],
+ "about-m-light": [],
+ "profile-m-dark": [
+  "EDGE div.group > span \"GitHub OAuth app client ID\" l=186 r=-7",
+  "OUTSIDE div.group > span l=186 r=-7",
+  "CTRL-EDGE div.group > input#github-client-id l=186 r=-64",
+  "OUTSIDE div.group > input#github-client-id l=186 r=-64",
+  "CTRL-EDGE div.group > input#google-client-id l=186 r=-64",
+  "OUTSIDE div.group > input#google-client-id l=186 r=-64",
+  "EDGE div.group > span.opt \"(Desktop apps get one; Googl\" l=186 r=-48",
+  "OUTSIDE div.group > span.opt l=186 r=-48",
+  "CTRL-EDGE div.group > input#google-client-secret l=186 r=-64",
+  "OUTSIDE div.group > input#google-client-secret l=186 r=-64",
+  "BEYOND label.field right=430 W=390",
+  "BEYOND input#github-client-id right=430 W=390",
+  "BEYOND label.field right=430 W=390",
+  "BEYOND input#google-client-id right=430 W=390",
+  "BEYOND label.field right=430 W=390",
+  "BEYOND span right=414 W=390",
+  "BEYOND span.opt right=414 W=390",
+  "BEYOND input#google-client-secret right=430 W=390"
+ ],
+ "usage-m-dark": [],
+ "appearance-m-dark": [],
+ "bunny-m-dark": [],
+ "language-m-dark": [],
+ "notifications-m-dark": [],
+ "privacy-m-dark": [
+  "EDGE div#storage > span.k \"Sessions\" l=1 r=249",
+  "EDGE div#storage > span.v \"one JSON file per chat\" l=218 r=1"
+ ],
+ "capabilities-m-dark": [
+  "EDGE div.group > div.row.desc \"No tools built yet.\" l=1 r=1"
+ ],
+ "providers-m-dark": [],
+ "models-m-dark": [],
+ "connection-m-dark": [],
+ "customize-m-dark": [],
+ "automation-m-dark": [],
+ "code-m-dark": [
+  "EDGE div.group > h3 \"Permission rules\" l=1 r=1",
+  "EDGE div.group > b \"Only from Bunny's window.\" l=1 r=179",
+  "EDGE div.group > button#rules-tab-all \"All folders\" l=4 r=255",
+  "EDGE div.group > div.rr.empty \"No rules.\" l=2 r=2",
+  "EDGE div.rl.deny > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.ask > div.rr.empty \"No rules.\" l=1 r=1",
+  "EDGE div.rl.allow > div.rr.empty \"No rules.\" l=1 r=1"
+ ],
+ "desktop-m-dark": [],
+ "about-m-dark": []
+}
