@@ -90,7 +90,7 @@ test('the risk table: sending an email asks in every mode; computer use and tool
 test('a project file cannot grant a permission: the mode comes only from the chat and the person\'s settings', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
-  const mode = /const permissionMode = ([^\n]*)/.exec(src)?.[1] ?? '';
+  const mode = /(?:const|let) permissionMode = ([^\n]*)/.exec(src)?.[1] ?? '';
   assert.match(mode, /session\.permissionMode[\s\S]*settings\.defaultPermissionMode/);
   assert.ok(!/AGENTS\.md|CLAUDE\.md|\.cursor/.test(mode));
 });
