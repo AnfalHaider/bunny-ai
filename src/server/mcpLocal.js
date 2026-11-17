@@ -118,9 +118,10 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     const limit = conn.first ? firstStartMs : startMs;
     conn.ready = (async () => {
       try {
-        await conn.request('initialize', {
+        const init = await conn.request('initialize', {
           protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'Bunny AI', version: clientVersion },
         }, limit);
+        conn.instructions = String(init?.instructions ?? '').slice(0, 2000); // L-1: what the connector says about itself, for the model
       } catch (err) {
         if (err.code !== 'mcp.timeout') throw err;
         const said = conn.lastLine ? ` The last thing it said: ${conn.lastLine}` : '';
@@ -193,6 +194,9 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     return conn.request('tools/call', { name, arguments: args }, timeoutMs);
   }
 
+  /** The instructions the connector gave when it started (empty if none, or if it is not running). */
+  const instructions = (id) => running.get(id)?.instructions ?? '';
+
   function stop(id) {
     const conn = running.get(id);
     running.delete(id);
@@ -210,5 +214,5 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
 
   const stopAll = () => Promise.all([...running.keys()].map(stop));
 
-  return { listTools, callTool, stop, stopAll, running: () => [...running.keys()] };
+  return { listTools, callTool, instructions, stop, stopAll, running: () => [...running.keys()] };
 }

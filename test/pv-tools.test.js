@@ -73,7 +73,7 @@ async function bigConnector(t) {
       const r = JSON.parse(raw || '{}');
       const result = r.method === 'tools/list'
         ? { tools: Array.from({ length: 150 }, (_, i) => ({ name: `t${i}`, description: i === 149 ? 'finds the needle' : 'ordinary', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } })) }
-        : (calls.push(r.params), { content: [{ type: 'text', text: `ran ${r.params?.name}` }] });
+        : r.method === 'tools/call' ? (calls.push(r.params), { content: [{ type: 'text', text: `ran ${r.params?.name}` }] }) : {};
       res.writeHead(200, json);
       res.end(JSON.stringify({ jsonrpc: '2.0', id: r.id, result }));
     });
