@@ -126,3 +126,23 @@ test('Open in Bunny while answering: the bar hears nothing more, and the window 
   assert.deepEqual(finished, [ID]);
   assert.equal(c.got.filter((e) => e.type === 'delta').length, 0);
 });
+
+// structure: what the bar page and the main process promise (read from the files)
+import { readFile } from 'node:fs/promises';
+test('structure: the bar shows replies only through the sanitising markdown with inert links, has no Allow button, and every new call checks the sender', async () => {
+  const js = await readFile(new URL('../electron/quick-ask/bar.js', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../electron/quick-ask/bar.html', import.meta.url), 'utf8');
+  const main = await readFile(new URL('../electron/quick-ask.js', import.meta.url), 'utf8');
+  assert.match(js, /import \{ renderMarkdown \} from '\.\.\/\.\.\/src\/ui\/markdown\.js'/);
+  assert.match(js, /querySelectorAll\('a'\)[\s\S]{0,200}replaceWith/, 'links are made inert');
+  assert.match(js, /img, iframe, object, embed, script/, 'pictures and anything active are removed');
+  assert.doesNotMatch(html, /allow|permission/i, 'no Allow button or permission prompt in the bar page');
+  assert.match(html, /Content-Security-Policy[^>]*default-src 'none'[^>]*script-src 'self'/);
+  for (const name of ['quickask:ask', 'quickask:stop', 'quickask:open', 'quickask:resize']) {
+    const at = main.indexOf(`'${name}'`);
+    assert.ok(at > 0, name);
+    assert.match(main.slice(at, at + 220), /fromBar\(event\)/, `${name} checks the sender is the bar`);
+  }
+  assert.match(main, /MAX_BAR_HEIGHT = 560/);
+  assert.doesNotMatch(main.slice(0, 700), /never runs tools or shows answers/, 'the old purpose comment is gone');
+});
