@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - Published v0.1.8
+
+**Word:** the Chief of Staff's 7E relay: the owner's words "I am thinking we push the update done ao far, including the release and installer. as 0.1.8 and the rest we will do in 0.1.9" (2026-11-17), the question as asked, shas, pasted gate 8/8 at 685b93d, all five sign-offs PASS at a6afcf5. I accepted it because the words name 0.1.8 and the release. Then held at the Chief's request while Security ruled on an OAuth finding (verdict SHIP; a 0.1.9 fix row; P-6, L-4 and RO-1 ship open as in 0.1.7). The Chief then sent "publish".
+
+**Commands (PST)**
+
+- Fresh worktree outside the project (scratchpad `release-0.1.8`), detached at 7d19eee; `npm ci`, `npm run dist` (clean).
+- Dry run refused: "No release record for v0.1.8 in docs/releases..." because the record said `scope: 0.1.8`, not `scope: v0.1.8`. I stopped; the Chief fixed the record on main (af77b62, docs only).
+- Same folder detached at af77b62; `npm run dist` -> build-sha af77b62, latest.yml 0.1.8, tree clean; `npm run release -- --dry-run --notes-file docs/releases/v0.1.8-notes.md` clean.
+- `npm run release -- --notes-file docs/releases/v0.1.8-notes.md` ran 19:18 to about 19:27 -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.8
+- Checks: not draft, not prerelease; .exe 122275508, .blockmap 128477, latest.yml 345; tag v0.1.8 -> af77b62 (the built commit); latest feed serves `version: 0.1.8`.
+
+**Not checked:** an update on an invented profile; the sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.9) with the last good code; pulling the release is owner-only.
+
+**Lesson:** the record's `scope:` line must read `v<version>` exactly; `release.mjs` greps for it. Run the dry run right after the record lands, before the owner is waiting on the build.
+
 ## 2026-11-17 - Published v0.1.7
 
 **Word:** the owner typed "release v0.1.7" in my chat (2026-11-16, after the Chief of Staff's relay of "push to main" and "PUSH THE UPDATED INSTALLER ALSO", which I did not take as the release word). First attempt at 41d7ac1 was refused by `release.mjs`: `npm run dist` dirtied `src/ui/app.css` (CRLF) and wrote no `latest.yml`. The owner said "Fix it now"; Builder's fix 6b06ed9 landed in main 9be14d7.
