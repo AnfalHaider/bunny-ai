@@ -17,3 +17,6 @@ How shot: build `e061ce6` extracted with `git archive`; the bar page `electron/q
 Colours in `bar.html` are hard-coded hex copies of the tokens (own page, `prefers-color-scheme`); fine for a separate window, but they must be kept in step by hand.
 
 Sign-off: FAIL until items 1 and 2 are fixed; send the new sha.
+
+## Re-check at 304e71a (2026-11-17)
+`git diff --stat e061ce6 304e71a -- electron/quick-ask*` is empty: the bar files are unchanged, so both items are still open. Measured again on the extracted build at the window's size (700 x 300): menu open, body 0 to 115, menu 71 to 138, `overflow: hidden` (menu still cut off by 23 px); "Opening Bunny…" colour rgb(180, 83, 9) (warning amber), no spinner. Verdict stays FAIL at 304e71a. Fix for Builder B: `html, body { height: 100% }` (or open the menu upward) and a normal-colour "Opening Bunny…" with a small accent spinner; keep amber for "Bunny could not open." or "could not take a screenshot".
