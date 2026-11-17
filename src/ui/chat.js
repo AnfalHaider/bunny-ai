@@ -1881,7 +1881,7 @@ function answeredQuestionCard(q) {
     }
     card.append(list);
   }
-  card.append(element('p', { className: 'question-answer', textContent: q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
+  card.append(element('p', { className: 'question-answer', textContent: q.answer === 'Skipped' ? 'You skipped this question.' : q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
   // W4-12: the choices above are only a record. Say so, and why nothing could be clicked, instead of leaving them looking like dead buttons.
   if (!q.answer) {
     card.classList.add('is-unanswered');

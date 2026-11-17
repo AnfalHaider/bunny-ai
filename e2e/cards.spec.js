@@ -255,3 +255,24 @@ test('W4-12: "yes, but skip the tests" carries on AND the model gets those words
   await expect(page.locator('.question-card.is-answered')).toContainText('You answered: yes, but skip the tests');
   await expect(page.locator('.msg.assistant .body').last()).toContainText('Finished without the tests.');
 });
+
+test('W4-12: after Skip the saved card says "You skipped this question." and not that it was never answered', async ({ page }) => {
+  const card = await circles(page);
+  await card.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  const saved = page.locator('.question-card.is-answered');
+  await expect(saved).toContainText('You skipped this question.');
+  await expect(saved).not.toContainText('Not answered');
+  await page.reload();
+  await expect(page.locator('.question-card.is-answered')).toContainText('You skipped this question.', { timeout: 20_000 });
+  await expect(page.locator('.question-answer-note')).toHaveCount(0);
+});
+
+test('W4-12: "yes, stop" is a stop, not a go-ahead', async ({ page }) => {
+  await circles(page);
+  await page.locator('#input').fill('yes, stop');
+  await page.locator('#send').click();
+  await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('.question-card.is-answered')).toContainText('You answered: yes, stop');
+  await expect(page.locator('.msg.assistant .body').last()).not.toContainText('Finished after all.');
+});
