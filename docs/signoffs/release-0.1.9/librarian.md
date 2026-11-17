@@ -1,9 +1,9 @@
 ---
 piece: release-0.1.9
 role: librarian
-sha: 9d5167a
+sha: b9bdd7a
 verdict: PASS
 date: 2026-11-17
 ---
 
-Re-check after the FAIL (eab4ae1). Notes head bf163a4 on claude/release-0.1.9: docs only, one file, one line changed from 8d38c12 (git diff --numstat 8d38c12 bf163a4: 1 1). The changed line now says 64-bit Windows; package.json build target nsis, arch x64 (line 50-52) supports it. Every other line was checked against code at 9d5167a in the earlier pass (sign-off FAIL eab4ae1 lists the sources). Layout and polish lines rest on the L-1 and POLISH sign-offs, cited not re-checked. Gate result for 9d5167a not seen by me; the Chief of Staff holds it.
+Re-stamp of the PASS at 9d5167a (ea8a3d8) to the release candidate's final sha. Changes from 9d5167a to b9bdd7a (git diff --numstat): the notes file (+55 at 8d38c12, one line at bf163a4, checked), test/audit-exceptions.test.js (12+,6-), test/kit-next-landing.test.js (8+,1-). No src/, electron/ or scripts/ change, so every code line checked at 9d5167a stands. The final gate was reported 9 of 9 on b9bdd7a by the Chief of Staff; I have not seen its output.
