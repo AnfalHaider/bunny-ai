@@ -1,6 +1,7 @@
 // G1-3: git configuration, aliases and subcommands that are not git's own, for roles that may not push live.
 // Read through the tokenizer's words (lib/shellparse.mjs); used by lib/shellrules.mjs.
 import { execFileSync } from 'node:child_process';
+import { spawnTimeout, checkDeadline } from './policy.mjs';
 
 /** git's own subcommands (from `git help -a`, plus the ones Git for Windows ships). Anything else is an alias or an external program. */
 export const GIT_BUILTINS = new Set(`add am annotate apply archive bisect blame branch bundle cat-file check-attr check-ignore check-ref-format checkout checkout-index cherry cherry-pick
@@ -77,8 +78,9 @@ export function refuseGitConfigs(call) {
 /** An alias's expansion (a git command line without the word "git"), or null when `word` is not an alias in that folder. */
 export function aliasValue(word, ctx = {}) {
   if (typeof ctx.aliasOf === 'function') return ctx.aliasOf(word) ?? null;
+  const timeout = spawnTimeout();
   try {
-    const out = execFileSync('git', ['config', '--get', `alias.${word}`], { cwd: ctx.cwd ?? process.cwd(), encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const out = execFileSync('git', ['config', '--get', `alias.${word}`], { cwd: ctx.cwd ?? process.cwd(), encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] });
     return out.trim() || null;
-  } catch { return null; }
+  } catch { checkDeadline(); return null; }
 }

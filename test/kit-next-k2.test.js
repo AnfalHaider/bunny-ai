@@ -292,3 +292,36 @@ test('K1-5: the guard has a deadline: a line of 1,999 pushes answers BLOCK in ti
   const ok = spawnSync(process.execPath, [join(BIN, 'guard.mjs')], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git status' }, cwd: W }), encoding: 'utf8', cwd: P, env: { ...process.env, CLAUDE_PROJECT_DIR: P, BOOTSTRAP_ROLE: '' }, timeout: 20000 });
   assert.equal(ok.status, 0, ok.stderr);
 });
+
+// a slow git: a copy of node.exe named git.exe on PATH that sleeps 1 s and then runs the real git (mode "pass") or fails (mode "fail")
+function slowGit(t, mode) {
+  const shim = mkdtempSync(join(tmpdir(), 'bunny-slowgit-'));
+  t.after(() => rmSync(shim, { recursive: true, force: true }));
+  const win = process.platform === 'win32';
+  cpSync(process.execPath, join(shim, win ? 'git.exe' : 'git'));
+  const real = execFileSync(win ? 'where' : 'which', ['git'], { encoding: 'utf8' }).split(String.fromCharCode(10))[0].trim();
+  writeFileSync(join(shim, 'slow.cjs'), [
+    "const p = require('path');",
+    "if (/^git(\.exe)?$/i.test(p.basename(process.execPath))) {",
+    "  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);",
+    mode === 'pass' ? "  const r = require('child_process').spawnSync(process.env.REAL_GIT, process.argv.slice(1), { stdio: 'inherit' }); process.exit(r.status ?? 1);" : "  process.exit(3);",
+    "}",
+  ].join(String.fromCharCode(10)));
+  return { PATH: shim + (win ? ';' : ':') + process.env.PATH, NODE_OPTIONS: '--require ' + fwd(join(shim, 'slow.cjs')), REAL_GIT: real };
+}
+
+for (const mode of ['pass', 'fail']) {
+  test(`K1-5: with every git call slow (1 s each, git ${mode === 'pass' ? 'works' : 'fails'}), 40 chained pushes answer BLOCK with "did not finish" inside 9 s, through the hook entry`, (t) => {
+    const { P, W } = setup(t);
+    const env = { ...process.env, ...slowGit(t, mode), CLAUDE_PROJECT_DIR: P, BOOTSTRAP_ROLE: '' };
+    for (const part of ['git push --all', 'git push origin x']) {
+      const shape = Array(40).fill(part).join('; ');
+      const t0 = Date.now();
+      const r = spawnSync(process.execPath, [join(BIN, 'guard.mjs')], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: shape }, cwd: W }), encoding: 'utf8', cwd: P, env, timeout: 30000 });
+      const took = Date.now() - t0;
+      assert.equal(r.status, 2, `${part}: ${r.stderr}`);
+      assert.ok(took < 9000, `${part}: answered in ${took} ms`);
+      assert.match(r.stderr, /did not finish/, `${part}: ${r.stderr}`);
+    }
+  });
+}

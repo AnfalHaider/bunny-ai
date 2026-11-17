@@ -1,0 +1,22 @@
+== k1+k2+landing
+ℹ tests 45
+ℹ pass 45
+ℹ fail 0
+== guard suites KIT_NEXT=1
+ℹ tests 149
+ℹ pass 149
+ℹ fail 0
+== guard suites live
+ℹ tests 149
+ℹ pass 149
+ℹ fail 0
+== QA
+
+29 of 29 as expected
+== probes
+1
+     ALLOWED git init a nested repository
+     ALLOWED git worktree repair
+     ALLOWED git worktree prune
+     ALLOWED git init a repository elsewhere
+done

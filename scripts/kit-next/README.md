@@ -108,3 +108,11 @@ node --test test/kit-next-k1.test.js
 - K1-5: one guard decision has a 6 s deadline and the hook decides in a child with an 8 s timeout; running out of time is a refusal.
 - W5-1d: `git credential`, `gh auth token`, `gh config get ... token`, `gh auth status` with a variable or `--show-token` are refused for every role; the pre-push check refuses `refs/notes|for|releases` and the live branch in another case for non-live roles.
 - Evidence: `evidence/kit-next-k2-final.txt`, `evidence/k1wt-probe-final.txt`, `evidence/k2more-probe-after.txt`. Known open: `git init` of a nested repository is allowed (judged by the project); the role file is not tamper-evident against hard links.
+
+### K1-5 follow-up (Security FAIL at ec605fd)
+
+- Every git spawn now honours the decision deadline: `spawnTimeout()` in `lib/policy.mjs` is used by the three spawns that skipped it (`shellextra.mjs` twice, `shellgit.mjs` alias lookup).
+- Found while testing: when git itself could not answer, the guard read "not in a repository" and allowed. It now refuses when the host names a project with a policy and git is broken (`gitBroken`: anything but exit 0 or 128).
+- Tests: with a git that sleeps 1 s per call (works, or fails), 40 chained pushes exit 2 with "did not finish" in under 9 s through the hook entry. A git that hangs 30 s is refused at about 6.2 s by the deadline.
+- The 8 s belt is a second line for a CPU-bound hang; the deadline fires first when git is the slow part, so the belt was not what cut in. Not tested: that the belt kills grandchild processes on Windows.
+- Evidence: `evidence/kit-next-k2-deadline.txt`.

@@ -34,6 +34,16 @@ let deadlineAt = Infinity;
 export class GuardDeadline extends Error {}
 export function setDeadline(ms) { deadlineAt = ms === null || ms === undefined ? Infinity : Date.now() + ms; }
 export function checkDeadline() { if (Date.now() > deadlineAt) throw new GuardDeadline('the decision took too long'); }
+/** K1-5: true when git itself cannot answer (missing, failing or too slow): then "not in a repository" cannot be told from "git is broken", and the guard must not read silence as a pass. */
+export function gitBroken(cwd) {
+  const timeout = spawnTimeout(3000);
+  try { execFileSync('git', ['rev-parse', '--git-dir'], { cwd, stdio: 'ignore', timeout }); return false; } catch (err) { checkDeadline(); return err?.status !== 128; } // 128 is git saying "not a repository": an answer
+}
+/** K1-5: every git spawn outside git() asks this first: it throws when the time is up, and caps the spawn's own timeout at what is left. */
+export function spawnTimeout(max = 2000) {
+  checkDeadline();
+  return Number.isFinite(deadlineAt) ? Math.max(50, Math.min(max, deadlineAt - Date.now())) : max;
+}
 
 export function git(args, cwd, opts = {}) {
   checkDeadline();

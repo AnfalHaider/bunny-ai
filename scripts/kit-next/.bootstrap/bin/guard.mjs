@@ -14,7 +14,7 @@ import { dirname, join, resolve as resolvePath, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadFlow } from './lib/flow.mjs';
-import { GuardDeadline, checkDeadline, setDeadline, currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, otherRootsViolation, recordViolation, repoRoot, resolveContext, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { GuardDeadline, gitBroken, checkDeadline, setDeadline, currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, otherRootsViolation, recordViolation, repoRoot, resolveContext, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { baseName, commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 import { simpleCommandTexts } from './lib/shellblank.mjs';
@@ -107,7 +107,12 @@ function decideInner({ tool, command = '', filePath = '', cwd = process.cwd(), s
   // A cwd we cannot place must not switch the guard off: fall back to where the hook runs.
   let ctx = resolveContext(cwd);
   if (!ctx && cwd !== process.cwd()) { ctx = resolveContext(process.cwd()); if (ctx) cwd = process.cwd(); }
-  if (!ctx) return { allow: true };
+  if (!ctx) {
+    // not in a repository: not ours to judge. But when git itself cannot answer and the host names a project that has a policy, silence is not a pass.
+    const named = process.env.CLAUDE_PROJECT_DIR;
+    if (named && existsSync(join(named, '.bootstrap', 'policy.json')) && gitBroken(cwd)) return { allow: false, reason: 'Blocked: git did not answer in time, so the guard cannot tell which project this is and did not finish deciding; the call is refused. Try again.' };
+    return { allow: true };
+  }
   // K-2: the project's policy judges everything; a folder git has not registered as a worktree of the project (a nested repository, a planted
   // .git file) has no role of its own: "unassigned", the strictest, never the project's role.
   const root = ctx.top;

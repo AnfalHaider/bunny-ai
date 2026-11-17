@@ -2,6 +2,7 @@
 // Used by lib/shellrules.mjs: tags and bare-URL pushes, remote URLs, moving the live branch label, and the gh allowlist.
 import { execFileSync } from 'node:child_process';
 import { isAbsolute, relative, resolve } from 'node:path';
+import { spawnTimeout, checkDeadline } from './policy.mjs';
 
 /** A long option, or any unique prefix git accepts of it: isLong("--ta", "--tags") with a minimum length. */
 export function isLong(arg, full, min = 4) {
@@ -29,7 +30,8 @@ export function pushShape(args) {
 }
 
 const refExists = (ref, cwd) => {
-  try { execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd: cwd ?? process.cwd(), timeout: 2000, stdio: 'ignore' }); return true; } catch { return false; }
+  const timeout = spawnTimeout();
+  try { execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd: cwd ?? process.cwd(), timeout, stdio: 'ignore' }); return true; } catch { checkDeadline(); return false; }
 };
 
 /** Why this `git push` is refused (tags, a bare URL), or null. `cwd` is where git will run, to look short names up. */
@@ -125,7 +127,8 @@ const GH_READ_SUBS = new Set(['view', 'list', 'status', 'diff', 'checks', 'downl
 const GH_CLAUDE_BRANCH = /^claude\//;
 
 function currentBranch(cwd) {
-  try { return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: cwd ?? process.cwd(), encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; }
+  const timeout = spawnTimeout();
+  try { return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: cwd ?? process.cwd(), encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { checkDeadline(); return ''; }
 }
 
 /** Is this `gh pr create` for a claude/* branch (--head, else the current branch)? */
