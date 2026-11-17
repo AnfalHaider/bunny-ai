@@ -1,9 +1,9 @@
 ---
 piece: l-1
 role: design
-sha: 88b6082
+sha: 795a8a2
 verdict: PASS
 date: 2026-11-17
 ---
 
-Re-checked on release candidate: five items hold; phone inset 4 px note remains; see docs/design/review-l1-layout/README.md
+Re-checked on candidate head; phone 4 px inset note open; see docs/design/review-head-795a8a2/README.md

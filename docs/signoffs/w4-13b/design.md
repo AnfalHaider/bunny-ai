@@ -1,9 +1,9 @@
 ---
 piece: w4-13b
 role: design
-sha: 88b6082
+sha: 795a8a2
 verdict: PASS
 date: 2026-11-17
 ---
 
-Thinking chips re-checked on release candidate; see docs/design/review-w413b-build/README.md
+Thinking chips on candidate head; see docs/design/review-head-795a8a2/README.md

@@ -1,0 +1,56 @@
+l1-code-d-light {"rulesH3":41,"tabs":41,"list":41,"add":41,"tryBox":41,"rowName":41,"docOverflow":false}
+l1-privacy-d-light {"labelInset":17}
+l1-providers-d-light note gap 12
+l1-code-d-dark {"rulesH3":41,"tabs":41,"list":41,"add":41,"tryBox":41,"rowName":41,"docOverflow":false}
+l1-privacy-d-dark {"labelInset":17}
+l1-providers-d-dark note gap 12
+l1-code-m-light {"rulesH3":37,"tabs":37,"list":37,"add":37,"tryBox":37,"rowName":41,"docOverflow":false}
+l1-privacy-m-light {"labelInset":17}
+l1-providers-m-light note gap 12
+l1-code-m-dark {"rulesH3":37,"tabs":37,"list":37,"add":37,"tryBox":37,"rowName":41,"docOverflow":false}
+l1-privacy-m-dark {"labelInset":17}
+l1-providers-m-dark note gap 12
+dlight openai ["Default:true","Low:false","Medium:false","High:false"]
+dlight after High ["Default:false","Low:false","Medium:false","High:true"]
+dlight cerebras ["Default","Low","High"]
+dlight unknown seg count 0
+ddark openai ["Default:true","Low:false","Medium:false","High:false"]
+ddark after High ["Default:false","Low:false","Medium:false","High:true"]
+ddark cerebras ["Default","Low","High"]
+ddark unknown seg count 0
+mlight openai ["Default:true","Low:false","Medium:false","High:false"]
+mlight after High ["Default:false","Low:false","Medium:false","High:true"]
+mlight cerebras ["Default","Low","High"]
+mlight unknown seg count 0
+mdark openai ["Default:true","Low:false","Medium:false","High:false"]
+mdark after High ["Default:false","Low:false","Medium:false","High:true"]
+mdark cerebras ["Default","Low","High"]
+mdark unknown seg count 0
+bar light image {"chip":"error-screen.png\n×","msg":null,"overflow":false}
+bar light pdf {"chip":"quarterly-report-final-version-2-with-a-very-long-file-name.pdf\n×","msg":null,"overflow":false}
+bar light toobig {"chip":null,"msg":"That file is over 8 MB, so Bunny left it out.","overflow":false}
+bar dark image {"chip":"error-screen.png\n×","msg":null,"overflow":false}
+bar dark pdf {"chip":"quarterly-report-final-version-2-with-a-very-long-file-name.pdf\n×","msg":null,"overflow":false}
+bar dark toobig {"chip":null,"msg":"That file is over 8 MB, so Bunny left it out.","overflow":false}
+w616 dlight connector buttons: 1
+w616 dlight labels ["Only in: client-site"]
+w616 dlight skills labels ["Only in: client-site"] overflow false
+w616 ddark connector buttons: 0
+w616 ddark labels ["Only in: client-site"]
+w616 ddark skills labels ["Only in: client-site"] overflow false
+w616 mlight connector buttons: 0
+w616 mlight labels ["Only in: client-site"]
+w616 mlight skills labels ["Only in: client-site"] overflow false
+w616 mdark connector buttons: 0
+w616 mdark labels ["Only in: client-site"]
+w616 mdark skills labels ["Only in: client-site"] overflow false
+w624 1280 {"left":1032,"right":1272,"top":125,"bottom":299,"W":1280,"H":800,"hidden":false} inside true
+w624 1280 after Esc menuHidden true focusOnMore browser-more
+w624 700 {"left":452,"right":692,"top":125,"bottom":299,"W":700,"H":800,"hidden":false} inside true
+w624 700 after Esc menuHidden true focusOnMore browser-more
+w624 500 {"left":252,"right":492,"top":125,"bottom":299,"W":500,"H":800,"hidden":false} inside true
+w624 500 after Esc menuHidden true focusOnMore browser-more
+w624 390 {"left":142,"right":382,"top":125,"bottom":299,"W":390,"H":800,"hidden":false} inside true
+w624 390 after Esc menuHidden true focusOnMore browser-more
+w624 320 {"left":72,"right":312,"top":125,"bottom":299,"W":320,"H":800,"hidden":false} inside true
+w624 320 after Esc menuHidden true focusOnMore browser-more
