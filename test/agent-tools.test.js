@@ -220,7 +220,7 @@ test('a "no" to a capability is final for that reply', async (t) => {
   assert.notEqual(settings.aiComputerUse, true);
 });
 
-test('building a tool asks in Manual and runs without asking in Auto, and the tool is usable at once', { skip: !windows && 'PowerShell only' }, async (t) => {
+test('building a tool asks even in Auto (W3-3), the tool is usable at once, and using it then asks nothing more', { skip: !windows && 'PowerShell only' }, async (t) => {
   const { base } = await startApp(t, { fake: false });
   await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ customToolsEnabled: true }) });
   const provider = await scriptedProvider(t, [
@@ -238,7 +238,8 @@ test('building a tool asks in Manual and runs without asking in Auto, and the to
     asked.push(data);
     await post(base, `/api/sessions/${session.id}/permission/${data.id}`, { allowed: true });
   });
-  assert.equal(asked.length, 0, 'in Auto nothing asked: what the person allowed applies in full');
+  assert.equal(asked.length, 1, 'in Auto only the building asks (W3-3); using the new tool asks nothing more');
+  assert.match(asked[0].title, /shout|tool/i);
   assert.ok(toolNames(provider.seen[1]).includes('my_shout'));
   assert.equal(provider.seen[2].messages.filter((m) => m.role === 'tool').at(-1).content, 'BUNNY');
   const { body: tools } = await json(base, '/api/tools');

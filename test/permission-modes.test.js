@@ -68,9 +68,9 @@ for (const mode of ['ask', 'accept']) {
   });
 }
 
-test('Auto: a schedule that may change things runs without asking', async (t) => {
+test('Auto (W3-3): a schedule that may change things still asks first, then runs', async (t) => {
   const { asked, tasks } = await runIn(t, 'auto');
-  assert.deepEqual(asked, []);
+  assert.equal(asked.length, 1);
   assert.equal(tasks.length, 1);
 });
 
