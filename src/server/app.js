@@ -58,7 +58,7 @@ import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResu
 import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
 import { asksInAuto } from './autoAsks.js';
-import { createWorktrees, runGit } from './worktrees.js';
+import { createWorktrees } from './worktrees.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
@@ -1658,7 +1658,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
           const state = await worktrees.status(doomed.worktree).catch(() => null);
           const discard = url.searchParams.get('worktree') === 'discard';
           await worktrees.finish(doomed.worktree, { action: discard ? 'discard' : 'keep' });
-          if (!discard && state && state.dirty === 0 && state.ahead === 0) await runGit(['branch', '-d', doomed.worktree.branch], { cwd: doomed.worktree.repo }).catch(() => {});
+          if (!discard && state && state.dirty === 0 && state.ahead === 0) await worktrees.git(['branch', '-d', doomed.worktree.branch], { cwd: doomed.worktree.repo }).catch(() => {});
           else if (!discard) kept = doomed.worktree.branch;
         } catch { kept = doomed.worktree.branch; /* the copy could not be removed: it is listed in Settings as a leftover, never deleted by itself */ }
       }

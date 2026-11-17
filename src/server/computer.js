@@ -12,6 +12,7 @@ import { writeFile, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
+import { powershellPath } from './safeExec.js';
 
 /** A live computer-use session: tracks the last screenshot and state. */
 export function createComputerStore() {
@@ -214,7 +215,7 @@ async function runPowerShellOut(script) {
   await writeFile(file, `﻿${script}`, 'utf8');
   try {
     return await new Promise((resolve, reject) => {
-      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file],
+      execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file],
         { timeout: 30_000, maxBuffer: 1024 * 1024, windowsHide: true },
         (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
     });

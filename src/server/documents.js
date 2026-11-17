@@ -19,6 +19,7 @@ import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
+import { powershellPath } from './safeExec.js';
 
 export const MAX_TEXT = 150_000;
 const MAX_PICTURES = 8;
@@ -330,7 +331,7 @@ function readEpub(zip) {
 
 function powershell(script, timeoutMs) {
   return new Promise((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: timeoutMs, windowsHide: true, maxBuffer: 1 << 20 },
+    execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: timeoutMs, windowsHide: true, maxBuffer: 1 << 20 },
       (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).trim().slice(0, 300))) : resolve(String(stdout))));
   });
 }

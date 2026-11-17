@@ -8,7 +8,8 @@
  *   edit  - write_file, edit_file, multi_edit
  *   run   - run_command
  */
-import { exec, execFile, spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { gitPath, powershellPath, safeEnv, taskkillPath } from './safeExec.js';
 import { clip } from './clip.js';
 import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -215,7 +216,10 @@ export async function checkFolder(folder) {
 /** The git branch the folder is on, or null. */
 export function gitBranch(folder) {
   return new Promise((done) => {
-    exec('git rev-parse --abbrev-ref HEAD', { cwd: folder, timeout: 5000, windowsHide: true }, (err, stdout) => {
+    // W29-1: git by its absolute path, never a bare name looked up in the project folder first; the project's fsmonitor never runs
+    const program = gitPath();
+    if (!program) { done(null); return; }
+    execFile(program, ['-c', 'core.fsmonitor=false', 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd: folder, timeout: 5000, windowsHide: true, shell: false, env: safeEnv() }, (err, stdout) => {
       done(err ? null : String(stdout).trim() || null);
     });
   });
@@ -584,8 +588,8 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
     if (!cmd) throw new Error('run_command needs a command');
     const where = cwd ? await inside(cwd) : root;
     return new Promise((done) => {
-      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
-        { cwd: where, windowsHide: true, env: { ...process.env, ...NON_INTERACTIVE } });
+      const child = spawn(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
+        { cwd: where, windowsHide: true, env: safeEnv(NON_INTERACTIVE) }); // W29-1: PowerShell by its full path; the project folder is never searched for programs
       const outBufs = [];
       const errBufs = [];
       let size = 0;
@@ -597,7 +601,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       const killTree = (why) => {
         if (killedFor || finished) return;
         killedFor = why;
-        execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+        execFile(taskkillPath() ?? 'taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
       };
       const timer = setTimeout(() => killTree('timeout'), limitMs);
       // A visible countdown: the step line shows how long it has run and how long it may.
