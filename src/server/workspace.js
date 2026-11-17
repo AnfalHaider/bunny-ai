@@ -638,8 +638,9 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   }
 
   async function readFileUrl(url) {
-    let path;
-    try { path = fileURLToPath(String(url)); } catch { throw new Error('That file address is not valid.'); }
+    // The same reading of the address the person's rules were checked against: an address that reading refuses is never read.
+    const path = fileUrlPath(url);
+    if (path === null) throw new Error('That file address is not valid, or it names another computer. read_url can only read files inside the workspace folder.');
     const abs = await inside(path).catch(() => { throw new Error('read_url can only read files inside the workspace folder.'); });
     return read_file({ path: abs });
   }

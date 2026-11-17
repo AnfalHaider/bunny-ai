@@ -79,3 +79,10 @@ test('W69-1 review: a file address with a host, a UNC path or a device path is n
   assert.equal(await ws.canon('../outside.txt'), null);
   assert.equal(await ws.canon('ok.txt'), 'ok.txt');
 });
+
+test('W69-1 review: read_url refuses, and never reads, an address the rule check could not read the same way', async (t) => {
+  const { ws } = await folder(t);
+  for (const url of ['file://evil.example/share/x.txt', 'file:////evil.example/share/x.txt', 'file://localhost.evil.example/x', 'nonsense']) {
+    await assert.rejects(() => ws.readFileUrl(url), /not valid|inside the workspace/, url);
+  }
+});
