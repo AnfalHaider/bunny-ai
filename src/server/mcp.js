@@ -9,6 +9,8 @@
  * with a name, so a configuration cannot become arbitrary code execution.
  */
 
+import { appVersion } from './updates.js'; // the app's own version, read from package.json (it used to be typed here and went stale)
+
 const PROTOCOL_VERSION = '2025-06-18';
 
 export class McpError extends Error {
@@ -71,7 +73,7 @@ async function ensureSession(url, server, { signal, auth, fetchImpl }) {
   const state = { id: null, version: null, instructions: '' };
   let clean = false; // true only when the server plainly does not take the handshake (so it is not asked again)
   try {
-    const res = await send(url, server, { jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'Bunny AI', version: '0.1.8' } } }, { signal, auth, fetchImpl });
+    const res = await send(url, server, { jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'Bunny AI', version: await appVersion() } } }, { signal, auth, fetchImpl });
     if (res.ok) {
       const payload = await readPayload(res);
       if (payload?.result?.protocolVersion) {
