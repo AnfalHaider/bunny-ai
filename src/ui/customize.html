@@ -183,6 +183,26 @@
       el('span', { className: 'cz-actions', role: 'cell' }, ...actions));
   }
 
+  // W6-16: where a skill, connector or plugin applies: everywhere, or only in some folders. The server accepts only a folder picked in this launch.
+  const folderName = (f) => String(f).split(/[\\/]/).filter(Boolean).pop() ?? String(f);
+  function scopeNode(path, item) {
+    const folders = item.folders ?? [];
+    const change = async (next, picked) => {
+      try { notice = ''; await sendJSON(path, 'PATCH', { folders: next }); } catch (err) { notice = err.message; }
+      await load();
+    };
+    const pick = async () => {
+      const picked = window.bunnyDesktop?.pickFolder ? await window.bunnyDesktop.pickFolder() : window.prompt('The full path of a folder');
+      if (!picked) return;
+      await sendJSON('/api/folder/check', 'POST', { folder: picked }).catch(() => {}); // in the browser a typed path is a chosen path; in the app the picker already did this
+      await change([...folders, picked]);
+    };
+    return el('span', { className: 'cz-scope' },
+      el('small', { className: 'cz-scope-label', text: folders.length ? `Only in: ${folders.map(folderName).join(', ')}` : 'Everywhere', title: folders.join('\n') }),
+      act(folders.length ? 'Add a folder' : 'Only in a folder…', pick),
+      folders.length ? act('Everywhere', () => change([])) : null);
+  }
+
   function toggle(on, label, change) {
     return el('button', { className: 'toggle', role: 'switch', 'aria-checked': String(on), 'aria-label': label,
       onclick: async (e) => { e.currentTarget.disabled = true; await change(!on); await load(); } });
@@ -204,7 +224,7 @@
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.url,
           type: 'Remote', typeTag: plugin ? 'Plugin' : 'Custom',
           statusNode,
-          extra: flows.clientIdBox(s),
+          extra: el('span', { className: 'cz-extra' }, plugin ? null : scopeNode(`/api/mcp/${s.id}`, s), flows.clientIdBox(s)),
           actions: [
             st.wait ? act('Cancel', () => { flows.clear(s.id); paint(); }) : null,
             st.canSignIn ? act(st.signInLabel, () => startSignIn(s)) : null,
@@ -224,6 +244,7 @@
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.description,
           type: 'Skill', typeTag: plugin ? 'Plugin' : 'Custom',
           status: s.enabled ? 'On' : 'Off', statusClass: s.enabled ? 'text-ok' : '',
+          extra: plugin ? null : scopeNode(`/api/skills/${s.id}`, s),
           actions: [
             toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/skills/${s.id}`, 'PATCH', { enabled: on })),
             plugin ? null : act('Remove', async () => { await sendJSON(`/api/skills/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
@@ -237,6 +258,7 @@
           id: p.id,
           name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
           status: pluginState(p).label, statusClass: pluginState(p).on ? 'text-ok' : '',
+          extra: scopeNode(`/api/plugins/${p.id}`, p),
           actions: [p.source ? act('Update', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Updating…'; try { const r = await sendJSON(`/api/plugins/${p.id}/update`, 'POST'); notice = `Updated ${p.name}: ${r.skillsUpdated} skill(s) refreshed, ${r.skillsAdded} added, ${r.skillsRemoved} removed; ${r.connectorsAdded} new connector(s) added switched off.${r.message ? ` ${r.message}` : ''}`; } catch (err) { notice = err.message; } await load(); }) : null, toggle(pluginState(p).on, `Use ${p.name}`, (on) => sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on })), act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
         }));
       }

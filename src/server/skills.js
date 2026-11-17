@@ -11,6 +11,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { cleanFolders, inScope } from './scope.js';
 
 // Long skills (imported plugins with reference files) are kept whole and loaded on demand.
 const MAX_LENGTH = 120_000;
@@ -42,7 +43,7 @@ export function createSkillStore({ file }) {
     return [...rows].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }
 
-  async function add({ name, description = '', instructions = '', enabled = false }) {
+  async function add({ name, description = '', instructions = '', enabled = false, folders = [] }) {
     await load();
     const clean = String(name ?? '').trim();
     if (!clean) throw Object.assign(new Error('A skill needs a name'), { code: 'skill.nameRequired' });
@@ -55,6 +56,7 @@ export function createSkillStore({ file }) {
       description: String(description).trim().slice(0, 200),
       instructions: String(instructions).trim().slice(0, MAX_LENGTH),
       enabled: Boolean(enabled),
+      folders: cleanFolders(folders), // W6-16: [] = everywhere
       createdAt: new Date().toISOString(),
     };
     skills.push(skill);
@@ -74,6 +76,7 @@ export function createSkillStore({ file }) {
       skill.instructions = text;
     }
     if (patch.enabled !== undefined) skill.enabled = Boolean(patch.enabled);
+    if (patch.folders !== undefined) skill.folders = cleanFolders(patch.folders); // W6-16: the route has already checked each folder
     await persist();
     return skill;
   }
@@ -92,8 +95,9 @@ export function createSkillStore({ file }) {
    * whole; a long one is named and summarised, and the model loads it with the
    * read_skill tool when the task needs it.
    */
-  async function context() {
-    const rows = await list({ enabledOnly: true });
+  async function context({ folder = null } = {}) {
+    // W6-16: a skill limited to some folders is only for chats in them; a chat with no folder gets the skills for everywhere
+    const rows = (await list({ enabledOnly: true })).filter((s) => inScope(s.folders, folder));
     if (!rows.length) return null;
     // Many skills: a compact index only, so every message stays small.
     if (rows.length > 12) {

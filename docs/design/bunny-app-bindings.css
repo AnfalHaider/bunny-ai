@@ -518,6 +518,9 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-type { display: flex; align-items: center; gap: var(--sp-4); color: var(--text-dim); }
 .cz-status { display: flex; flex-direction: column; gap: 1px; min-width: 0; color: var(--text-dim); font-size: var(--fs-md); }
 .cz-status-word { font-weight: var(--fw-medium); }
+.cz-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
+.cz-scope-label { color: var(--text-dim); overflow-wrap: anywhere; }
+.cz-extra { display: flex; flex-direction: column; align-items: flex-start; }
 .cz-status-detail { color: var(--text-dim); font-weight: 400; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
 .cz-note { margin-top: var(--sp-6); }

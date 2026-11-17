@@ -9,6 +9,7 @@
 import { readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { trustSnapshot } from './mcp.js';
 import { randomUUID } from 'node:crypto';
+import { cleanFolders } from './scope.js';
 
 /**
  * L-4: with a secret store, the values of a local connector's settings (often API keys) live there, keyed by connector id and variable name,
@@ -102,14 +103,14 @@ export function createMcpStore({ file, secrets = null }) {
     return out;
   }
 
-  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true }) {
+  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [] }) {
     await load();
     const clean = String(name ?? '').trim();
     const address = String(url ?? '').trim();
     if (!clean) throw Object.assign(new Error('A server needs a name'), { code: 'mcp.nameRequired' });
     if (String(command ?? '').trim()) {
       const local = cleanLocal({ command, args, env, cwd });
-      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
+      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
       if (secrets && Object.keys(local.env).length) {
         try {
           for (const [k, v] of Object.entries(local.env)) await putSecret(server.id, k, v);
@@ -135,6 +136,7 @@ export function createMcpStore({ file, secrets = null }) {
       name: clean.slice(0, 60),
       url: address.slice(0, 500),
       enabled: Boolean(enabled),
+      folders: cleanFolders(folders), // W6-16: [] = everywhere
       status: 'unknown',
       tools: [],
       lastError: null,
@@ -160,6 +162,7 @@ export function createMcpStore({ file, secrets = null }) {
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
+    if (patch.folders !== undefined) server.folders = cleanFolders(patch.folders); // W6-16: the route has already checked each folder
     // L-5: the command of a local connector can be changed (the route asks for the same confirmation as adding); trust given to the old program is gone
     if (server.type === 'local' && (patch.command !== undefined || patch.args !== undefined || patch.cwd !== undefined)) {
       const next = cleanLocal({ command: patch.command ?? server.command, args: patch.args ?? server.args, env: {}, cwd: patch.cwd !== undefined ? patch.cwd : server.cwd });

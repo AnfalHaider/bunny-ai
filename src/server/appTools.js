@@ -5,6 +5,7 @@
  */
 import { readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
+import { inScope } from './scope.js';
 
 export const APP_TOOL_RISK = {
   web_search: 'read', read_url: 'read', search_plugins: 'read', read_skill: 'read',
@@ -191,13 +192,13 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
           // exact words, not folded: a change of case ("do NOT" to "do not") or of the description (which also reaches the model) is a change; only line endings and the ends are ignored
           const exact = (x) => String(x ?? '').replace(/\r\n/g, '\n').trim();
           const changed = exact(same.instructions) !== exact(s.instructions) || exact(same.description) !== exact(s.description);
-          const patch = { description: s.description ?? '', instructions: s.instructions };
+          const patch = { description: s.description ?? '', instructions: s.instructions, folders: record.folders ?? [] }; // W616-1: the plugin's folders stay on its parts
           if (changed && same.enabled !== false) { patch.enabled = false; switchedOff.push(same.name); }
           await skills.update(same.id, patch);
           keepSkill.add(same.id); next.skills.push(same.id); done.skillsUpdated += 1;
         } else {
           // P4-1: new words from the source are the person's to look at first, so a NEW skill arrives OFF too, whatever the plugin's state, and is listed
-          const added = await skills.add({ ...s, enabled: false });
+          const added = await skills.add({ ...s, enabled: false, folders: record.folders ?? [] }); // W616-1: a new part is limited like the rest of the plugin
           switchedOff.push(s.name);
           next.skills.push(added.id); done.skillsAdded += 1;
         }
@@ -208,9 +209,9 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const keepConnector = new Set();
       for (const c of plugin.connectors ?? []) {
         const same = ownedConnectors.find((o) => norm(o.url).replace(/\/+$/, '') === norm(c.url).replace(/\/+$/, ''));
-        if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; continue; }
+        if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; if ((record.folders ?? []).length || (same.folders ?? []).length) await mcp.update(same.id, { folders: record.folders ?? [] }); continue; }
         try {
-          const added = await mcp.add({ ...c, enabled: false });
+          const added = await mcp.add({ ...c, enabled: false, folders: record.folders ?? [] }); // W616-1
           next.connectors.push(added.id); done.connectorsAdded += 1;
         } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector of the person's own: left as it is */ }
       }
@@ -241,6 +242,19 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     });
   }
 
+  /** W6-16: limit a plugin, and everything it added, to some folders (an empty list: everywhere). The route has already checked the folders. */
+  function setFolders(id, folders) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, changed: 0 };
+      let changed = 0;
+      for (const sid of record.skills ?? []) { if (await skills.update(sid, { folders }).then(() => true, () => false)) changed += 1; }
+      for (const cid of record.connectors ?? []) { if (await mcp.update(cid, { folders }).then(() => true, () => false)) changed += 1; }
+      await saveSettings({ plugins: (getSettings().plugins ?? []).map((p) => (p.id === id ? { ...p, folders } : p)) });
+      return { ok: true, changed };
+    });
+  }
+
   /** Remove a plugin and what it added, from the server's own list. A part that is already gone does not stop the rest. */
   function uninstall(id) {
     return serial(async () => {
@@ -256,10 +270,11 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
     search_plugins: ({ query }) => searchPlugins(query),
-    read_skill: async ({ name, part }) => {
+    read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
-      if (!skill || skill.enabled === false || getSettings().skillsEnabled === false) throw new Error(`There is no skill called ${name}`);
+      // W6-16: nor one limited to other folders than this chat's (a chat with no folder gets only the skills for everywhere)
+      if (!skill || skill.enabled === false || getSettings().skillsEnabled === false || !inScope(skill.folders, ctx?.folder ?? null)) throw new Error(`There is no skill called ${name}`);
       const text = String(skill.instructions ?? '');
       const SIZE = 8000;
       if (text.length <= SIZE) return text;
@@ -316,6 +331,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     takePending,
     switchOn,
     setEnabled,
+    setFolders,
     updatePlugin,
     previewPlugin,
   };

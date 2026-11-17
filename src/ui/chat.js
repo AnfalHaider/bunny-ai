@@ -1708,7 +1708,7 @@ function renderContext(meter) {
 
 async function loadMcpServers() {
   try {
-    state.mcpServers = await getJSON('/api/mcp');
+    state.mcpServers = (await getJSON('/api/mcp')).filter((s) => appliesHere(s.folders));
   } catch {
     state.mcpServers = [];
   }
@@ -3010,12 +3010,21 @@ const COMMANDS = [
 // S-4: the skills that are on, as /name entries after the commands (cached for a minute)
 let skillMenu = { at: 0, list: [] };
 const skillSlug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+/** W6-16: does a skill or connector with these folders apply to the chat's folder? (The server decides for real; this only keeps the menus honest.) */
+function appliesHere(folders) {
+  if (!Array.isArray(folders) || !folders.length) return true;
+  const here = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? '';
+  if (!here) return false;
+  const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const h = norm(here);
+  return folders.some((f) => { const n = norm(f); return h === n || h.startsWith(`${n}/`); });
+}
 async function loadSkillMenu() {
   if (Date.now() - skillMenu.at < 60_000) return false;
   skillMenu.at = Date.now();
   try {
     const all = await (await fetch('/api/skills')).json();
-    skillMenu.list = (Array.isArray(all) ? all : []).filter((s) => s.enabled !== false).map((s) => ({ name: s.name, slug: skillSlug(s.name), hint: s.description || 'A skill' })).filter((s) => s.slug);
+    skillMenu.list = (Array.isArray(all) ? all : []).filter((s) => s.enabled !== false && appliesHere(s.folders)).map((s) => ({ name: s.name, slug: skillSlug(s.name), hint: s.description || 'A skill' })).filter((s) => s.slug);
   } catch { skillMenu.list = []; }
   return true;
 }
