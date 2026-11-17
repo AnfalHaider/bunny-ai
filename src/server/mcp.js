@@ -354,6 +354,19 @@ export function mcpResultText(result) {
  */
 export const isReadOnlyTool = (server, tool) => server?.trustReadOnly === true && (tool?.readOnlyHint === true || tool?.readOnly === true);
 
+/**
+ * L-3: when to ask a connector for its tools again. Never listed: now (unless it is marked as failed). Listed more than an hour ago: again, in case it
+ * changed. A remote connector that failed is tried again, once per reply, with a short wait; a local one is not (starting a program can take minutes).
+ */
+export const TOOL_LIST_MAX_AGE_MS = 60 * 60 * 1000;
+export const RETRY_FAILED_MS = 4000;
+export function relistReason(server, now = Date.now()) {
+  if (!server?.tools?.length && server?.status !== 'error') return 'new';
+  if (server?.status === 'error' && server.type !== 'local') return 'retry';
+  if (server?.tools?.length && server.checkedAt && now - Date.parse(server.checkedAt) > TOOL_LIST_MAX_AGE_MS) return 'stale';
+  return null;
+}
+
 /** R-8: a tool's input schema in the form providers accept: an object with a type, without $schema. */
 export function cleanSchema(schema) {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return { type: 'object', properties: {} };
