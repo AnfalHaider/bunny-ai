@@ -1,0 +1,289 @@
+/**
+ * BROWSER, step 2: let a phone or another computer on the SAME local network open Bunny, behind a passcode.
+ *
+ * OFF by default and off again after every restart (nothing here is read back as "on"). While it is on:
+ *  - a second server listens on the PC's local-network address ONLY (127.0.0.1 keeps its own server and its own rules, untouched);
+ *  - nothing is served to a device that has not signed in except the sign-in page; no token is handed out, no API answers;
+ *  - a session is an HttpOnly, SameSite=Strict cookie, and every write also needs the session's own CSRF header;
+ *  - five wrong passcodes in a row make that device wait (longer each time); a flood from many devices makes everyone wait;
+ *  - the Host header must be exactly the LAN address and port, the Origin (when sent) exactly that origin: nothing wider;
+ *  - a remote device never gets a window-only route, and may only do the small allow-list in remotePolicy() below.
+ * Pure of sockets and files except the passcode record (a salt and a scrypt hash: the passcode itself is never stored).
+ */
+import { randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { networkInterfaces } from 'node:os';
+
+export const MIN_PASSCODE = 12;
+export const COOKIE = 'bunny_remote';
+export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // R7: two hours without use ends a session
+export const FAILS_BEFORE_WAIT = 5;
+const KDF = { N: 16384, r: 8, p: 1, keylen: 32 };
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I: readable aloud
+
+/** A passcode Bunny makes: 20 characters from a 32-letter alphabet (100 bits), in four groups. Shown once. */
+export function generatePasscode() {
+  const pick = () => ALPHABET[randomInt(ALPHABET.length)];
+  return Array.from({ length: 4 }, () => Array.from({ length: 5 }, pick).join('')).join('-');
+}
+
+/** What the person typed, checked: at least 12 characters (spaces at the ends do not count). */
+export function checkPasscodeChoice(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (text.length < MIN_PASSCODE) return { ok: false, message: `The passcode needs at least ${MIN_PASSCODE} characters.` };
+  if (text.length > 200) return { ok: false, message: 'That passcode is too long.' };
+  return { ok: true, passcode: text };
+}
+
+const scryptAsync = (secret, salt) => new Promise((resolve, reject) => scrypt(secret, salt, KDF.keylen, { N: KDF.N, r: KDF.r, p: KDF.p }, (err, key) => (err ? reject(err) : resolve(key))));
+
+/** A salted scrypt record of a passcode. The passcode itself is never kept. */
+export async function hashPasscode(passcode) {
+  const salt = randomBytes(16);
+  const hash = await scryptAsync(String(passcode), salt);
+  return { v: 1, kdf: 'scrypt', N: KDF.N, r: KDF.r, p: KDF.p, salt: salt.toString('hex'), hash: hash.toString('hex') };
+}
+
+export async function verifyPasscode(passcode, record) {
+  if (!record || record.kdf !== 'scrypt' || typeof record.salt !== 'string' || typeof record.hash !== 'string') return false;
+  try {
+    const salt = Buffer.from(record.salt, 'hex');
+    const want = Buffer.from(record.hash, 'hex');
+    const got = await scryptAsync(String(passcode ?? ''), salt);
+    return got.length === want.length && timingSafeEqual(got, want);
+  } catch { return false; }
+}
+
+/** The PC's local-network IPv4 address (a private range), or null. A test may pass its own. */
+export function findLanAddress(interfaces = networkInterfaces()) {
+  const private4 = (a) => /^10\./.test(a) || /^192\.168\./.test(a) || /^172\.(1[6-9]|2\d|3[01])\./.test(a);
+  for (const list of Object.values(interfaces)) {
+    for (const i of list ?? []) {
+      if ((i.family === 'IPv4' || i.family === 4) && !i.internal && private4(i.address)) return i.address;
+    }
+  }
+  return null;
+}
+
+/**
+ * What a signed-in remote device may do. Everything else is "Bunny's window only". Default deny.
+ * The owner's decision (2026-11-18): a device gets ORDINARY chats: a chat's own work mode, folder and tools, answering that chat's own permission, question and capability cards,
+ * and choosing the mode of a chat. Still the window's alone: the default permission mode, permission rules, connectors, installs and plugins, skills, schedules, hooks, providers,
+ * accounts, updates, the window-only settings, the terminal, driving the computer, picking folders, and /api/remote itself.
+ */
+import { isWindowOnlyRoute } from './windowOnly.js';
+const UUID = '[a-f0-9-]{36}';
+const READ = [
+  /^\/api\/(health|version|models|providers|abilities|usage|search|projects|artifacts|profile\/photo|speech\/voices|settings|processes)$/,
+  new RegExp(`^/api/sessions(/${UUID}(/.*)?)?$`),
+  new RegExp(`^/api/artifacts/${UUID}(/raw)?$`),
+  /^\/api\/remote\/me$/,
+];
+const WRITE = [
+  ['POST', /^\/api\/sessions$/],
+  ['POST', new RegExp(`^/api/sessions/${UUID}/(messages|stop|undo|compact|branch|summary|title)$`)],
+  ['POST', new RegExp(`^/api/sessions/${UUID}/(permission|question|capability)/${UUID}$`)],
+  ['PATCH', new RegExp(`^/api/sessions/${UUID}$`)],
+  ['PATCH', new RegExp(`^/api/sessions/${UUID}/setting/(permissionMode|workMode|effort|model|providerId)$`)], // never folder, branch, project or anything else
+  ['DELETE', new RegExp(`^/api/sessions/${UUID}$`)],
+  ['POST', /^\/api\/artifacts$/],
+  ['PATCH', new RegExp(`^/api/artifacts/${UUID}$`)],
+  ['DELETE', new RegExp(`^/api/artifacts/${UUID}$`)],
+  ['POST', /^\/api\/remote\/signout$/],
+];
+export function remotePolicy(method, path) {
+  const m = String(method).toUpperCase();
+  if (!path.startsWith('/api/')) return m === 'GET' || m === 'HEAD'; // the app's own page files (read only)
+  if (m === 'GET') return READ.some((re) => re.test(path));
+  return WRITE.some(([method2, re]) => method2 === m && re.test(path));
+}
+
+/**
+ * The few window-only routes a signed-in device MAY still use, for a chat it can see (the cookie and the CSRF token are required before this is asked):
+ * answering that chat's own permission, question and capability cards, and choosing the mode of a chat (new or opened). Nothing else that is window-only.
+ */
+export function remoteException(method, path, body = null) {
+  const m = String(method).toUpperCase();
+  if (m === 'POST' && new RegExp(`^/api/sessions/${UUID}/(permission|question|capability)/${UUID}$`).test(path)) return true;
+  if (m === 'PATCH' && new RegExp(`^/api/sessions/${UUID}/setting/permissionMode$`).test(path)) return true;
+  if ((m === 'POST' && path === '/api/sessions') || (m === 'PATCH' && new RegExp(`^/api/sessions/${UUID}$`).test(path))) {
+    if (!body || typeof body !== 'object' || !Object.hasOwn(body, 'permissionMode')) return false;
+    const { permissionMode: _mode, ...rest } = body;
+    return !isWindowOnlyRoute(m, path, rest); // the mode, and nothing else that is window-only, is in the body
+  }
+  return false;
+}
+
+/** R1: the capability cards a device may answer. The others switch a global window-only setting or install something, and stay with the window. */
+export const REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
+
+/**
+ * R2: the tools a chat from another device may use. An ALLOW-list: a tool that is not named here (a new one, a connector's, a custom one the model built) is denied.
+ * Allowed: reading and searching, working in the chat's own folder (files, commands, programs), artifacts, questions, asking for the chat's own capabilities, helpers
+ * (they use the same checks) and the person's Google and GitHub tools that a card guards. Denied: driving the computer or the window's browser panel, building or installing
+ * anything, connectors, skills, schedules, memory, and starting or messaging other chats (all of which change what Bunny may do, or outlive the device's chat).
+ * test/remote-access.test.js checks that every tool Bunny has is on exactly one of the two lists, so a new tool cannot be added without a decision.
+ */
+export const REMOTE_TOOLS_ALLOWED = Object.freeze([
+  'web_search', 'read_url', 'search_plugins', 'read_skill', 'ask_user', 'request_capability', 'update_tasks', 'check_environment', 'run_subagent',
+  'create_artifact', 'update_artifact',
+  'list_files', 'read_file', 'find_files', 'search_files', 'edit_file', 'multi_edit', 'write_file', 'download_file',
+  'run_command', 'start_process', 'read_process', 'list_processes', 'stop_process',
+  'list_models', 'list_sessions', 'read_session', 'search_chats',
+  'github_api_get', 'github_clone', 'github_comment', 'github_create_issue', 'github_create_pull_request', 'github_issue', 'github_list_issues', 'github_list_pull_requests', 'github_my_repos', 'github_pull_request', 'github_read_file', 'github_repo', 'github_search', 'github_update_issue',
+  'gmail_draft', 'gmail_read', 'gmail_search', 'gmail_send', 'calendar_create_event', 'calendar_events', 'drive_read', 'drive_search',
+]);
+export const REMOTE_TOOLS_DENIED = Object.freeze([
+  'computer_click', 'computer_key', 'computer_screenshot', 'computer_scroll', 'computer_type',
+  'browser_back', 'browser_capture', 'browser_click', 'browser_inspect', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll', 'browser_type',
+  'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill',
+  'schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat',
+  'call_connector_tool', 'list_connector_tools',
+]);
+const allowedTools = new Set(REMOTE_TOOLS_ALLOWED);
+export const remoteToolBlocked = (name) => !allowedTools.has(String(name ?? ''));
+/**
+ * R3: allow-lists. A new chat: its title, work mode, mode, effort, model and provider (no folder, and no project: a project can carry a folder).
+ * A change to a chat (PATCH): the same, nothing else (never a folder, branch, project, pin or archive from a device).
+ * A message: what the app's own page sends to talk to the model, nothing that decides where it works or how unattended it runs.
+ */
+const SESSION_KEYS = ['title', 'workMode', 'permissionMode', 'effort', 'providerId', 'model'];
+const MESSAGE_KEYS = ['content', 'attachments', 'providerId', 'model', 'retry', 'vision', 'workMode', 'useSkill', 'thinking', 'job', 'auto', 'attemptsLeft', 'fellBackFrom', 'fellBackKind', 'fellBackProvider', 'fellBackReason', 'fellBackTries'];
+const pick = (b, keys) => Object.fromEntries(keys.filter((k) => Object.hasOwn(b, k)).map((k) => [k, b[k]]));
+export function remoteBody(path, body) {
+  const b = body && typeof body === 'object' ? body : {};
+  if (path === '/api/sessions') { const out = pick(b, SESSION_KEYS); if (typeof out.title === 'string') out.title = out.title.slice(0, 80); return out; }
+  return pick(b, MESSAGE_KEYS);
+}
+export function remotePatch(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const out = pick(b, SESSION_KEYS);
+  if (typeof out.title === 'string') out.title = out.title.slice(0, 80);
+  return out;
+}
+
+/** R4: the settings a device may read: how things look and which model is chosen. No keys, no secrets, no instructions, no connectors. */
+const DISPLAY_SETTINGS = ['theme', 'language', 'displayName', 'callName', 'codeFont', 'codeFontSize', 'codeThemeDark', 'codeThemeLight', 'interfaceFont', 'responseFont', 'motion', 'transcriptSize', 'transcriptWidth', 'uiZoom', 'transcriptView', 'statusLabels', 'promptSuggestions', 'providerId', 'model', 'defaultEffort', 'artifactsEnabled', 'chartsEnabled', 'summaryNextSteps', 'unrelatedTask', 'firstReplyWaitSeconds'];
+export const remoteSettings = (settings) => pick(settings && typeof settings === 'object' ? settings : {}, DISPLAY_SETTINGS);
+/** A short plain name for a device from its browser's own words. */
+export function deviceLabel(userAgent = '') {
+  const ua = String(userAgent);
+  const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iOS/i.test(ua) ? 'iPhone or iPad' : /Windows/i.test(ua) ? 'Windows' : /Mac OS X|Macintosh/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : 'A device';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'a browser';
+  return `${os} · ${browser}`;
+}
+
+export function readCookie(header, name = COOKIE) {
+  for (const part of String(header ?? '').split(';')) {
+    const at = part.indexOf('=');
+    if (at > 0 && part.slice(0, at).trim() === name) return part.slice(at + 1).trim();
+  }
+  return '';
+}
+
+export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd = () => {} } = {}) {
+  let record = null;       // the scrypt record of the saved passcode
+  let loaded = false;
+  let on = false;          // never read back from a file: OFF after every restart
+  let host = '';           // exactly "<lan address>:<port>" while on
+  let address = null;
+  const ended = (deviceIds) => { try { onEnd(deviceIds); } catch { /* the sessions are gone either way */ } }; // R6: lets the app put a device's Auto chats back to Ask
+  const sessions = new Map(); // secret cookie value -> { deviceId, label, ip, csrf, signedInAt, lastSeen }
+  const failures = new Map(); // ip -> { count, until }
+  let recent = [];            // times of recent failures from anyone
+
+  async function load() {
+    if (loaded) return;
+    loaded = true;
+    if (!file) return;
+    try { record = JSON.parse(await readFile(file, 'utf8')); } catch { record = null; }
+  }
+  async function savePasscode(passcode) {
+    record = await hashPasscode(passcode);
+    loaded = true;
+    if (file) { await mkdir(dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(record)); }
+  }
+
+  const waitFor = (ip) => {
+    const t = now();
+    const own = failures.get(ip);
+    const ownWait = own && own.until > t ? Math.ceil((own.until - t) / 1000) : 0;
+    recent = recent.filter((x) => t - x < 10 * 60_000);
+    const floodWait = recent.length > 30 && recent.at(-1) + 60_000 > t ? Math.ceil((recent.at(-1) + 60_000 - t) / 1000) : 0;
+    return Math.max(ownWait, floodWait);
+  };
+
+  async function signIn(ip, passcode, userAgent = '') {
+    await load();
+    if (!on) return { ok: false, status: 403, message: 'Bunny is not open to other devices.' };
+    const wait = waitFor(ip);
+    if (wait > 0) return { ok: false, status: 429, waitSeconds: wait, message: `Too many tries. Wait ${wait} seconds and try again.` };
+    const good = await verifyPasscode(typeof passcode === 'string' ? passcode.trim() : '', record);
+    if (!good) {
+      const entry = failures.get(ip) ?? { count: 0, until: 0 };
+      entry.count += 1;
+      recent.push(now());
+      if (entry.count >= FAILS_BEFORE_WAIT) entry.until = now() + Math.min(15 * 60, 30 * 2 ** (entry.count - FAILS_BEFORE_WAIT)) * 1000; // 30 s, 60 s, 2 min ... at most 15 min
+      failures.set(ip, entry);
+      const w = waitFor(ip);
+      return { ok: false, status: 401, waitSeconds: w || undefined, message: w ? `That passcode is not right. Wait ${w} seconds before trying again.` : 'That passcode is not right.' };
+    }
+    failures.delete(ip);
+    const secret = randomBytes(32).toString('hex');
+    const session = { deviceId: randomBytes(8).toString('hex'), label: deviceLabel(userAgent), ip, csrf: randomBytes(24).toString('hex'), signedInAt: now(), lastSeen: now() };
+    sessions.set(secret, session);
+    return { ok: true, secret, session };
+  }
+
+  /** Drop every session idle for too long, and tell the app (so a device's Auto chats go back to Ask). Called on a timer and before any count or list. */
+  function sweep() {
+    const gone = [];
+    for (const [secret, s] of sessions) if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); gone.push(s.deviceId); }
+    if (gone.length) ended(gone);
+    return gone.length;
+  }
+
+  /** The session behind a Cookie header, or null (expired ones are dropped). */
+  function sessionFor(cookieHeader) {
+    const secret = readCookie(cookieHeader);
+    if (!secret || !on) return null;
+    const s = sessions.get(secret);
+    if (!s) return null;
+    if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); ended([s.deviceId]); return null; }
+    s.lastSeen = now();
+    return s;
+  }
+
+  return {
+    load,
+    get enabled() { return on; },
+    get host() { return host; },
+    get address() { return address; },
+    async hasPasscode() { await load(); return Boolean(record); },
+    /** Turn on at this host. `passcode` is set (and hashed) now; with none, the saved one is kept (if there is none, that is an error). */
+    async enable({ lanHost, lanAddress, passcode = null }) {
+      await load();
+      if (passcode !== null) await savePasscode(passcode);
+      else if (!record) return { ok: false, message: 'Choose a passcode first.' };
+      host = String(lanHost).toLowerCase();
+      address = lanAddress;
+      on = true;
+      return { ok: true };
+    },
+    /** Turn off: every session ends at once. */
+    disable() { const ids = [...sessions.values()].map((s) => s.deviceId); on = false; host = ''; address = null; sessions.clear(); failures.clear(); recent = []; ended(ids.length ? ids : null); },
+    signIn,
+    sessionFor,
+    /** The person's own browser sessions, for the list in the window (never the secrets). */
+    sweep,
+    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString() })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
+    count() { sweep(); return sessions.size; },
+    signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); ended([deviceId]); return true; } return false; },
+    signOutSecret(secret) { const s = sessions.get(secret); const gone = sessions.delete(secret); if (gone && s) ended([s.deviceId]); return gone; },
+    signOutAll() { const ids = [...sessions.values()].map((s) => s.deviceId); const n = sessions.size; sessions.clear(); if (ids.length) ended(ids); return n; },
+    cookieFor(secret) { return `${COOKIE}=${secret}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_IDLE_MS / 1000)}`; },
+    clearCookie() { return `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`; },
+  };
+}
+

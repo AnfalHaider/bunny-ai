@@ -981,6 +981,7 @@ function renderSessionRow(s, depth) {
   if (depth) a.append(element('span', { className: 'branch-mark', textContent: '↳', 'aria-hidden': 'true' }));
   if (s.pinned) a.append(element('span', { className: 'pin', textContent: '★', 'aria-label': 'Pinned', role: 'img' }));
   if (s.incognito) a.append(element('span', { className: 'tag', textContent: 'incognito' }));
+  if (s.remoteAuto) a.append(element('span', { className: 'tag', textContent: 'Auto from a device', title: 'A device on your network set this chat to Auto. It goes back to Ask when that device signs out.' })); // R6
   if (s.origin === 'quick-ask') a.append(element('span', { className: 'tag', textContent: 'Quick ask' })); // QA-ANSWERS: it began in the Quick ask bar
   if (s.agent) {
     const label = s.agent === 'helper' ? say('agent.helper') : say('agent.background');
@@ -2582,6 +2583,34 @@ function startNewChat({ incognito = false } = {}) {
 }
 
 /** A message from the quick-ask bar: a NEW chat in Chat mode with no folder, the text and the optional screenshot sent as the first message. */
+// BROWSER step 2: while Bunny is open to other devices, a line across the top of the window says so, with the off switch.
+function watchRemote() {
+  let bar = null;
+  const show = (s) => {
+    if (!s?.enabled) { bar?.remove(); bar = null; return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'remote-bar';
+      bar.setAttribute('role', 'status');
+      bar.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:center;padding:6px 12px;background:var(--warn-soft,rgba(192,122,18,.12));color:var(--warn,#c07a12);border-bottom:1px solid var(--warn,#c07a12);font-size:13px;font-weight:600';
+      document.body.prepend(bar);
+    }
+    bar.replaceChildren();
+    const text = document.createElement('span');
+    const auto = s.autoChats?.length ?? 0;
+    text.textContent = `Open to other devices · ${s.signedIn} signed in${auto ? ` · ${auto} chat${auto === 1 ? '' : 's'} on Auto from a device` : ''} · `;
+    const off = document.createElement('button');
+    off.type = 'button';
+    off.textContent = 'Turn off';
+    off.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:8px;padding:1px 10px;cursor:pointer';
+    off.addEventListener('click', async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } });
+    bar.append(text, off);
+  };
+  const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
+  tick();
+  setInterval(tick, 10000);
+}
+
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
   // QA-ANSWERS: Open in Bunny carries a chat that began in the bar over to this window (and a later refresh when its answer finished).
@@ -4330,6 +4359,7 @@ async function boot() {
   input.focus();
 
   // W4-8 quick ask: the bar over any app asks this window to start a new chat with its message.
+  if (window.bunnyDesktop) watchRemote();
   if (window.bunnyDesktop?.quickAsk) {
     window.bunnyDesktop.quickAsk.onNewChat(() => { runQuickAsk().catch((err) => { $('error').textContent = err.message; }); });
     runQuickAsk().catch((err) => { $('error').textContent = err.message; });

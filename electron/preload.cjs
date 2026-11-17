@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
   setPrefs: (patch) => ipcRenderer.invoke('prefs:set', patch),
   quit: () => ipcRenderer.invoke('app:quit'),
+  // BROWSER: open Bunny in the person's own browser (main opens its own address; nothing is taken from the page)
+  openInBrowser: () => ipcRenderer.invoke('app:open-browser'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   // Security-relevant writes (permission rules and mode) are made by the main process, not by the page.
   secureWrite: (method, path, body) => ipcRenderer.invoke('secure:write', method, path, body),

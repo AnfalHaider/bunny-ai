@@ -15,6 +15,7 @@ import { createUpdater } from './updater.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
+import { browserAddress, listenWithFallback, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -32,7 +33,7 @@ const dataDir = process.env.BUNNY_DATA_DIR
 
 // ---- desktop preferences (only the shell reads these) ----
 const prefsFile = join(app.getPath('userData'), 'desktop-prefs.json');
-let prefs = { launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: DEFAULT_SHORTCUT };
+let prefs = { launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: DEFAULT_SHORTCUT, keepAddress: false, fixedPort: null };
 try { prefs = { ...prefs, ...JSON.parse(readFileSync(prefsFile, 'utf8')) }; } catch { /* first run */ }
 function savePrefs(patch) {
   prefs = { ...prefs, ...patch };
@@ -47,15 +48,16 @@ let tray = null;
 let origin = '';
 let quitting = false;
 let bunnyApp = null;
+let addressNote = '';
 
 async function startServer() {
   const bunny = await createApp({ dataDir, folderPickerOnly: true });
   bunnyApp = bunny;
-  await new Promise((resolve, reject) => {
-    bunny.server.once('error', reject);
-    bunny.server.listen(0, '127.0.0.1', resolve);
-  });
-  origin = `http://127.0.0.1:${bunny.server.address().port}`;
+  // BROWSER: a free port, or the same one as last time when "Keep the same address after restart" is on (with a plain note when it is taken). Always 127.0.0.1.
+  const listening = await listenWithFallback(bunny.server, '127.0.0.1', wantedPort(prefs));
+  addressNote = listening.note;
+  if (prefs.keepAddress && listening.fixed && prefs.fixedPort !== listening.port) savePrefs({ fixedPort: listening.port });
+  origin = `http://127.0.0.1:${listening.port}`;
   // Scheduled tasks run while the app (or its tray icon) is alive.
   setInterval(() => { bunny.runDueSchedules().catch(() => {}); }, 60_000).unref();
   return bunny;
@@ -145,19 +147,29 @@ function createTray() {
   tray.setToolTip('Bunny AI');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Bunny AI', click: showWindow },
+    { label: 'Open in your browser', click: openInBrowser },
     { type: 'separator' },
     { label: 'Quit Bunny AI', click: () => { quitting = true; app.quit(); } },
   ]));
   tray.on('click', showWindow);
 }
 
-ipcMain.handle('prefs:get', () => prefs);
+// BROWSER: open Bunny in the person's own browser at this server's exact address (127.0.0.1, no token, no path). Only a Bunny page may ask, and nothing is taken from it.
+function openInBrowser() {
+  const url = browserAddress(origin);
+  if (!url) return false;
+  shell.openExternal(url);
+  return true;
+}
+ipcMain.handle('app:open-browser', (event) => (isOwn(event.senderFrame?.url ?? '') ? { ok: openInBrowser() } : { ok: false }));
+ipcMain.handle('prefs:get', () => ({ ...prefs, address: browserAddress(origin), addressNote }));
 ipcMain.handle('prefs:set', (_event, patch) => {
   const clean = {};
   if (typeof patch?.launchAtLogin === 'boolean') clean.launchAtLogin = patch.launchAtLogin;
   if (typeof patch?.closeToTray === 'boolean') clean.closeToTray = patch.closeToTray;
   if (typeof patch?.quickAskEnabled === 'boolean') clean.quickAskEnabled = patch.quickAskEnabled;
   if (typeof patch?.quickAskShortcut === 'string') clean.quickAskShortcut = patch.quickAskShortcut;
+  if (typeof patch?.keepAddress === 'boolean') clean.keepAddress = patch.keepAddress; // takes effect the next time Bunny starts
   // Quick ask (W4-8) keeps Bunny running in the tray; the two preferences move together.
   const ruled = applyTrayRule(prefs, clean);
   const saved = savePrefs(ruled.prefs);

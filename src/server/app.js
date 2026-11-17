@@ -84,6 +84,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
+import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -200,7 +201,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
+export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null } = {}) {
   await mkdir(dataDir, { recursive: true });
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
@@ -210,6 +211,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
   const adminSecret = randomBytes(32).toString('hex');
   const adminOk = (req) => { const h = Buffer.from(String(req.headers['x-bunny-admin'] ?? '')); const s = Buffer.from(adminSecret); return h.length === s.length && timingSafeEqual(h, s); };
   const windowOnly = (req, res) => {
+    // BROWSER step 2: a request from another device NEVER makes a window-only change, whatever the build and whatever it sends
+    if (req.bunnyRemote) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
     if (!folderPickerOnly || adminOk(req)) return false;
     sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
     return true;
@@ -538,14 +541,31 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
     // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
-    if (isWindowOnlyRoute(method, path) && windowOnly(req, res)) return;
+    if (isWindowOnlyRoute(method, path) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
 
-    if (localGuard !== false) {
+    if (localGuard !== false && !req.bunnyRemote) { // a request from another device was already checked by the LAN server (remoteRoute)
       const verdict = guard.check(req, path, method, url.searchParams);
       if (!verdict.ok) return sendJson(res, 403, { code: verdict.code, message: verdict.message });
     }
 
-    if (path === '/api/health') return sendJson(res, 200, { ok: true, fake });
+    // ---- BROWSER step 2: open to other devices on the local network (window only; see remoteAccess.js) ----
+    if (path === '/api/remote' && method === 'GET') return sendJson(res, 200, await remoteStatus());
+    if (path === '/api/remote' && method === 'PUT') {
+      if (windowOnly(req, res)) return;
+      return remoteSet(res, await readBody(req));
+    }
+    const remoteDevice = path.match(/^\/api\/remote\/devices\/([a-f0-9]{16})\/signout$/);
+    if (remoteDevice && method === 'POST') {
+      if (windowOnly(req, res)) return;
+      return sendJson(res, remote.signOutDevice(remoteDevice[1]) ? 200 : 404, await remoteStatus());
+    }
+    if (path === '/api/remote/signout-all' && method === 'POST') {
+      if (windowOnly(req, res)) return;
+      remote.signOutAll();
+      return sendJson(res, 200, await remoteStatus());
+    }
+
+    if (path === '/api/health') return sendJson(res, 200, { ok: true, fake, windowOnlyLock: Boolean(folderPickerOnly) }); // BROWSER: a page in a browser can say "Change this in Bunny's window." early
 
     if (path === '/api/providers' && method === 'GET') {
       return sendJson(res, 200, registry.list());
@@ -687,7 +707,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
-    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, { ...settings, systemUserName: systemUserName() });
+    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName() }); // R4: a device reads display settings only
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
@@ -835,15 +855,15 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       return sendJson(res, 200, rows.map((r) => (replyStatus.has(r.id) ? { ...r, replyStatus: replyStatus.get(r.id) } : r)));
     }
     if (path === '/api/sessions' && method === 'POST') {
-      const body = await readBody(req);
-      if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return; // a chat that starts in Auto
+      const body = req.bunnyRemote ? remoteBody(path, await readBody(req)) : await readBody(req); // another device may send only the few things remoteBody keeps
+      if (isWindowOnlyRoute(method, path, body) && !(req.bunnyRemote && remoteException(method, path, body)) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
         const stored = await folderToStore(body.folder);
         if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
         body.folder = stored;
       }
-      const session = await sessions.create(body);
+      const session = await noteRemoteMode(req, await sessions.create(body));
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
     }
@@ -860,7 +880,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (path === '/api/projects' && method === 'POST') {
       try {
         const body = await readBody(req);
-        if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return;
+        if (isWindowOnlyRoute(method, path, body) && !(req.bunnyRemote && remoteException(method, path, body)) && windowOnly(req, res)) return;
         if (body.folder) {
           const stored = await folderToStore(body.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -875,7 +895,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (projectMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
-        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return;
+        if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return;
         if (patch.folder) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -1423,7 +1443,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     // ---- a question card: the person's answer ----
     const questionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/question\/([a-f0-9-]{36})$/);
     if (questionMatch && method === 'POST') {
-      if (windowOnly(req, res)) return;
+      if (!(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return; // a device answers the questions of its own chat
       const pending = pendingQuestions.get(questionMatch[2]);
       if (!pending || pending.sessionId !== questionMatch[1]) {
         return sendJson(res, 404, { code: 'question.gone', message: 'That question is no longer waiting' });
@@ -1439,6 +1459,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (!pending || pending.sessionId !== capabilityMatch[1]) {
         return sendJson(res, 404, { code: 'capability.gone', message: 'That question is no longer waiting' });
       }
+      // R1: a device answers only the cards that stay inside its own chat; computer use, building tools and switching things on change what Bunny may do, and stay with the window
+      if (req.bunnyRemote && !REMOTE_CAPABILITIES.includes(pending.capability)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
       pending.resolve(await readBody(req));
       return sendJson(res, 200, { ok: true });
     }
@@ -1520,7 +1542,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     // ---- session settings (folder, branch, permission mode, effort) ----
     const sessionSettingMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/setting\/([A-Za-z-]+)$/);
     if (sessionSettingMatch && method === 'PATCH') {
-      if (WINDOW_ONLY_SESSION_SETTINGS.includes(sessionSettingMatch[2]) && windowOnly(req, res)) return;
+      if (WINDOW_ONLY_SESSION_SETTINGS.includes(sessionSettingMatch[2]) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return; // a device may choose the mode of ITS chat
       try {
         if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
           const stored = await folderToStore((await readBody(req)).value);
@@ -1528,7 +1550,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
           const session = await sessions.update(sessionSettingMatch[1], { folder: stored });
           return sendJson(res, 200, { ...session, context: sessions.context(session) });
         }
-        const session = await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value });
+        const session = await noteRemoteMode(req, await sessions.update(sessionSettingMatch[1], { [sessionSettingMatch[2]]: (await readBody(req)).value }));
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
         return sendJson(res, 404, { code: 'session.failed', message: err.message });
@@ -1607,14 +1629,14 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
     if (sessionMatch && method === 'PATCH') {
       try {
-        const patch = await readBody(req);
-        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return; // a chat switched to Auto
+        const patch = req.bunnyRemote ? remotePatch(await readBody(req)) : await readBody(req); // from a device: only the chat's own title, modes, effort, model and provider
+        if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
           patch.folder = stored;
         }
-        const session = await sessions.update(sessionMatch[1], patch);
+        const session = await noteRemoteMode(req, await sessions.update(sessionMatch[1], patch));
         return sendJson(res, 200, { ...session, context: sessions.context(session) });
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'session.failed', message: err.message });
@@ -1725,7 +1747,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       let session = await sessions.get(id);
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
 
-      const body = await readBody(req, MAX_MESSAGE_BODY);
+      const body = req.bunnyRemote ? remoteBody(path, await readBody(req, MAX_MESSAGE_BODY)) : await readBody(req, MAX_MESSAGE_BODY); // from another device: text only, Chat mode, nothing else
       const retry = body.retry === true;
       const content = String(body.content ?? '').trim();
       if (!retry && !content) return sendJson(res, 400, { code: 'message.empty', message: 'Message cannot be empty' });
@@ -2237,7 +2259,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
         const cid = randomUUID();
         const timer = waitNudges({ kind: 'capability', title: CAPABILITIES[capability] }); // W6-25: waits, then nudges
-        pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
+        pendingCapabilities.set(cid, { sessionId: id, capability, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
         send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
       });
@@ -2362,7 +2384,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
           for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
             baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake: fake && !use.provider.custom,
             signal: background ? undefined : controller.signal,
-            tools: toolDefinitions.filter(allowed), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
+            tools: toolDefinitions.filter(allowed).filter((d) => !(req.bunnyRemote && remoteToolBlocked(d.function.name))), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
             // OpenRouter's reasoning setting belongs to this chat's provider only.
             extraBody: use.providerId === providerId ? extraBody : null, auth: use.provider.auth ?? null, parallel: (n) => n === 'run_subagent',
           })) text += delta;
@@ -2783,6 +2805,8 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
 
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
+        // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
+        if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         let parsed = {};
         const viaMeta = name === 'call_connector_tool' && deferredTools.size > 0;
         try {
@@ -3024,7 +3048,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // The stand-in upstream (tests) answers for built-in providers; a custom one is reached for real.
             fake: fake && !provider.custom,
             signal: controller.signal,
-            tools: textOnly || toolsRefused.has(`${id}|${providerId}|${model}`) ? null : toolDefinitions,
+            tools: textOnly || toolsRefused.has(`${id}|${providerId}|${model}`) ? null : (req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions),
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
@@ -3274,9 +3298,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const type = TYPES[extname(target)] ?? 'application/octet-stream';
       if (extname(target) === '.html') {
         // Bunny's own pages are given the launch token, and are never cached with a stale one.
-        const page = body.toString('utf8').replace(/<head>/i, `<head>
-<meta name="bunny-token" content="${guard.token}">
-<script src="/src/ui/token.js"></script>`);
+        // Another device is NEVER handed the launch token: it gets its session's CSRF token (a header on every write) instead.
+        const inject = req.bunnyRemote
+          ? `<head>\n<meta name="bunny-csrf" content="${req.bunnyRemote.csrf}">\n<script src="/src/ui/remote.js"></script>`
+          : `<head>\n<meta name="bunny-token" content="${guard.token}">\n<script src="/src/ui/token.js"></script>`;
+        const page = body.toString('utf8').replace(/<head>/i, inject);
         res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', 'content-security-policy': "frame-ancestors 'self'" });
         res.end(page);
         return;
@@ -3303,6 +3329,135 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     });
   });
 
+  // ===== BROWSER step 2: open to other devices on the local network =====
+  // A SECOND server, bound to the PC's local-network address only while the setting is on. The first server (127.0.0.1) and its rules are not touched.
+  // Everything a device sends is judged here first (remoteRoute); only an allowed request, from a signed-in device, reaches route(), marked req.bunnyRemote.
+  // R6: a chat a device sets to Auto is marked with that device; when the device signs out (or the setting is turned off or Bunny restarts) it goes back to Ask.
+  const resetRemoteAuto = async (deviceIds = null) => {
+    try {
+      for (const s of await sessions.list()) {
+        if (s.remoteAuto && (!deviceIds || deviceIds.includes(s.remoteAuto))) await sessions.update(s.id, { permissionMode: 'ask', remoteAuto: null });
+      }
+    } catch { /* a chat that is gone needs nothing */ }
+  };
+  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
+  resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
+  const remoteSweep = setInterval(() => remote.sweep(), 60_000); // idle devices are signed out even if they never call again
+  remoteSweep.unref();
+  /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */
+  async function noteRemoteMode(req, session) {
+    if (!req.bunnyRemote || !session) return session;
+    const auto = session.permissionMode === 'auto';
+    if (auto && session.remoteAuto !== req.bunnyRemote.deviceId) return sessions.update(session.id, { remoteAuto: req.bunnyRemote.deviceId });
+    if (!auto && session.remoteAuto) return sessions.update(session.id, { remoteAuto: null });
+    return session;
+  }
+  let lanServer = null;
+  const NOT_BUNNY_REMOTE = 'That request did not come from a device signed in to Bunny AI.';
+
+  const lanUrl = () => (remote.enabled ? 'http://' + remote.host + '/' : null);
+  async function remoteStatus() {
+    return {
+      enabled: remote.enabled,
+      url: lanUrl(),
+      signedIn: remote.count(),
+      devices: remote.list(),
+      hasPasscode: await remote.hasPasscode(),
+      networkAddress: lanAddressOverride ?? findLanAddress(),
+      minPasscode: 12,
+      autoChats: (await sessions.list()).filter((s) => s.remoteAuto).map((s) => ({ id: s.id, title: s.title })), // R6: chats a device has put on Auto
+    };
+  }
+  async function stopRemote() {
+    remote.disable();
+    const old = lanServer;
+    lanServer = null;
+    if (old) { old.closeAllConnections?.(); await new Promise((r) => old.close(() => r())); }
+  }
+  async function remoteSet(res, body) {
+    if (body?.enabled === false) { await stopRemote(); return sendJson(res, 200, await remoteStatus()); }
+    if (body?.enabled !== true) return sendJson(res, 400, { code: 'remote.invalid', message: 'Say whether to turn it on or off.' });
+    const lan = lanAddressOverride ?? findLanAddress();
+    if (!lan) return sendJson(res, 400, { code: 'remote.noNetwork', message: "Bunny could not find this computer's address on your local network. Connect to your Wi-Fi or network and try again." });
+    let passcode = null;
+    let generated = null;
+    if (body.generate === true) { generated = generatePasscode(); passcode = generated; }
+    else if (typeof body.passcode === 'string') {
+      const checked = checkPasscodeChoice(body.passcode);
+      if (!checked.ok) return sendJson(res, 400, { code: 'remote.passcode', message: checked.message });
+      passcode = checked.passcode;
+    } else if (!(await remote.hasPasscode())) return sendJson(res, 400, { code: 'remote.passcode', message: 'Choose a passcode first.' });
+    await stopRemote(); // starting again ends any earlier session
+    const server2 = createServer((req, res2) => {
+      remoteRoute(req, res2).catch((err) => { if (!res2.headersSent) sendJson(res2, 500, { code: 'server.error', message: 'Something went wrong.' }); res2.end(); void err; });
+    });
+    const listenAt = (port) => new Promise((resolve, reject) => { const onError = (err) => reject(err); server2.once('error', onError); server2.listen(port, lan, () => { server2.off('error', onError); resolve(); }); });
+    try { await listenAt(server.address()?.port ?? 0); } catch { await listenAt(0).catch((err) => { throw Object.assign(new Error('Bunny could not open to other devices: ' + err.message), { code: 'remote.listen' }); }); }
+    lanServer = server2;
+    const started = await remote.enable({ lanHost: lan + ':' + server2.address().port, lanAddress: lan, passcode });
+    if (!started.ok) { await stopRemote(); return sendJson(res, 400, { code: 'remote.passcode', message: started.message }); }
+    return sendJson(res, 200, { ...(await remoteStatus()), ...(generated ? { generatedPasscode: generated } : {}) });
+  }
+
+  /** The sign-in page and its script: the ONLY files a device that has not signed in may get. */
+  const SIGNIN_FILES = new Map([['/', 'signin.html'], ['/src/ui/signin.html', 'signin.html'], ['/src/ui/signin.js', 'signin.js']]);
+
+  async function remoteRoute(req, res) {
+    const url = new URL(req.url, 'http://localhost');
+    let path;
+    try { path = decodeURIComponent(url.pathname); } catch { return sendJson(res, 400, { code: 'request.invalid', message: NOT_BUNNY_REMOTE }); }
+    const method = req.method ?? 'GET';
+    const headers = req.headers ?? {};
+    const security = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
+    const refuse = (status, code, message, extra = {}) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...security, ...extra }); res.end(JSON.stringify({ code, message })); };
+    // 1. Host: exactly the local-network address and port. Nothing wider (not localhost, not another address, not a name).
+    const host = typeof headers.host === 'string' ? headers.host.trim().toLowerCase() : '';
+    if (!remote.enabled || !host || host !== remote.host) return refuse(403, 'request.badHost', NOT_BUNNY_REMOTE);
+    // 2. Origin (when sent) exactly this origin, and fetch metadata only from this site or a typed address.
+    if (headers.origin !== undefined && headers.origin !== 'http://' + host) return refuse(403, 'request.badOrigin', NOT_BUNNY_REMOTE);
+    const site = headers['sec-fetch-site'];
+    if (site !== undefined && !['same-origin', 'none'].includes(site)) return refuse(403, 'request.badOrigin', NOT_BUNNY_REMOTE);
+    const ip = String(req.socket?.remoteAddress ?? 'unknown');
+    const secret = readCookie(headers.cookie, REMOTE_COOKIE);
+    const session = remote.sessionFor(headers.cookie);
+
+    // 3. Not signed in: the sign-in page, its script, and the sign-in itself. Nothing else; no token, no API.
+    if (!session) {
+      if (method === 'POST' && path === '/api/remote/signin') {
+        const body = await readBody(req, 4096).catch(() => ({}));
+        const result = await remote.signIn(ip, body?.passcode, String(headers['user-agent'] ?? ''));
+        if (!result.ok) return refuse(result.status, result.status === 429 ? 'remote.wait' : 'remote.passcode', result.message, result.waitSeconds ? { 'retry-after': String(result.waitSeconds) } : {});
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': remote.cookieFor(result.secret) });
+        return res.end(JSON.stringify({ ok: true }));
+      }
+      if ((method === 'GET' || method === 'HEAD') && SIGNIN_FILES.has(path)) {
+        const name = SIGNIN_FILES.get(path);
+        const file = await readFile(join(UI_ROOT, name));
+        res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8', ...security, 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'" });
+        return res.end(method === 'HEAD' ? undefined : file);
+      }
+      if (path.startsWith('/api/')) return refuse(401, 'remote.signin', 'Sign in first.');
+      res.writeHead(302, { location: '/', ...security });
+      return res.end();
+    }
+
+    // 4. Signed in. Writes also need this session's CSRF token.
+    const writes = !['GET', 'HEAD'].includes(method);
+    if (writes && !(typeof headers['x-bunny-csrf'] === 'string' && headers['x-bunny-csrf'] === session.csrf)) return refuse(403, 'request.csrf', NOT_BUNNY_REMOTE);
+    if (method === 'POST' && path === '/api/remote/signout') {
+      remote.signOutSecret(secret);
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': remote.clearCookie() });
+      return res.end(JSON.stringify({ ok: true }));
+    }
+    if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf });
+    // 5. What a device may do is a short allow-list; a window-only route is never one of them.
+    if (!remotePolicy(method, path) || (isWindowOnlyRoute(method, path) && !remoteException(method, path))) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
+    req.bunnyRemote = session;
+    return route(req, res);
+  }
+
+  server.on('close', () => { clearInterval(remoteSweep); stopRemote().catch(() => {}); });
+
   // W610-1: nothing the model or a page names may be fetched from this server (download_file, a page capture): its port is known to the fetcher
   server.on('listening', () => registerOwnPort(server.address().port));
 
@@ -3311,7 +3466,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
   return {
     server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
-    computer, terminals,
+    computer, terminals, remote,
     getSettings: () => settings,
     chooseFolder,
     dataDir,

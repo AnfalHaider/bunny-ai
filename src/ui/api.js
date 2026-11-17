@@ -1,7 +1,17 @@
 /** Thin client for the Bunny AI server. */
 
+import { LOCK_MESSAGE, showBrowserLockNote, showNotRunning, windowOnlyLocked } from './browser-mode.js';
+
+/** A request that fails to reach the server at all (a TypeError) in a browser means Bunny is not running: say so. */
+async function reach(request) {
+  try { return await request(); } catch (err) {
+    if (err instanceof TypeError && !desktopBridge() && typeof document !== 'undefined' && document.body) showNotRunning(document);
+    throw err;
+  }
+}
+
 export async function getJSON(path) {
-  const res = await fetch(path, { headers: { accept: 'application/json' } });
+  const res = await reach(() => fetch(path, { headers: { accept: 'application/json' } }));
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body.message ?? `HTTP ${res.status}`), body);
   return body;
@@ -38,6 +48,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], '^/api/providers/[a-z0-9-]+/(connect|disconnect)$'],
   [WRITES, '^/api/account/(github|google)(/.*)?$'],         // sign-ins and sign-outs
   [['POST'], '^/api/oauth/[a-z0-9-]+/(start|finish)$'],     // provider sign-in
+  [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];
 
 /** Is this request one only the window may make? `body` is the parsed JSON body (some writes are judged by what they change). */
@@ -76,19 +87,26 @@ export function desktopBridge(win = typeof window !== 'undefined' ? window : nul
 export async function sendJSON(path, method, body) {
   // In the desktop app those writes go to the main process (preload and IPC), which makes the request; in a plain browser they go over HTTP.
   const desk = desktopBridge();
+  // BROWSER: no bridge and the server keeps window-only changes to the window: say so at once, in the server's own words (the server would answer the same)
+  if (!desk && isWindowOnlyRoute(method, path, body) && (await windowOnlyLocked())) throw Object.assign(new Error(LOCK_MESSAGE), { code: 'window.only', message: LOCK_MESSAGE });
   if (desk?.secureWrite && isWindowOnlyRoute(method, path, body)) {
     const r = await desk.secureWrite(method, path, body ?? {});
     if (r.status >= 400) throw Object.assign(new Error(r.data?.message ?? `HTTP ${r.status}`), r.data);
     return r.data;
   }
-  const res = await fetch(path, {
+  const res = await reach(() => fetch(path, {
     method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body ?? {}),
-  });
+  }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data.message ?? `HTTP ${res.status}`), data);
   return data;
+}
+
+// BROWSER: a Settings page opened in a browser (no bridge) on a server that locks window-only changes says so at the top.
+if (typeof document !== 'undefined' && document.body && /\/src\/ui\/(settings|customize|providers|automation)\.html$/.test(globalThis.location?.pathname ?? '')) {
+  windowOnlyLocked().then((on) => { if (on && !desktopBridge()) showBrowserLockNote(document); }).catch(() => {});
 }
 
 /**
