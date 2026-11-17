@@ -2,6 +2,31 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - Kit 0.6.0 landed; v0.1.8 shipped as "what is done"; extra sessions retired
+
+**Owner's words (typed in this chat):** "apply the kit upgrade when ready ... proceed with building the complete 0.1.8"
+(overnight); then "I am thinking we push the update done ao far, including the release and installer. as 0.1.8 and
+the rest we will do in 0.1.9"; "Proceed with recommendation" (W4-11 out); "And wait for my go for 0.1.9".
+
+- Kit 0.6.0 with K-1..K-4 landed on main at 9c5ac84 (piece kit-land, five PASS at da999b0, gate 8/8). The first
+  landing attempt (half-landed, uncommitted in the main checkout) locked every nested session until the owner
+  restored the checkout; the second went through a separate landing folder, a rehearsal, and a re-land after
+  Security's K-3 FAIL (hook skip through interpreters, pipes and xargs).
+- v0.1.8 = 375d368 + W4-13, W4-12, W4-8 merges + Version 0.1.8 + the CSS restore (a6afcf5). QA caught that the
+  merges dropped 375d368's CSS (rules lived only in the generated app.css). Release record
+  docs/releases/2026-11-17-0-1-8.md; main 7d19eee then af77b62 (docs: scope label, OAuth notes line). Release Ops
+  published v0.1.8 at 2026-11-17T14:27:14Z, tag at af77b62, three assets; checked with gh.
+- Shipped open, told to the owner: P-6, L-4 (HIGH), RO-1 (MEDIUM), the OAuth DNS check (MEDIUM), QA gap 15 (the
+  updater skips the checksum when a release has no latest.yml). Full list: docs/plans/2026-11-17-qa-review-v0.1.8.md.
+- Retired with their logs on main: Tech Lead, Security, Release Ops, Builder B. Not retired: Builder A (W4-11 work on
+  claude/builder-a-w4-11-wip, cd13666), QA, Librarian, Design, Researcher.
+- My misses: release record scope written "0.1.8" not "v0.1.8" (release.mjs refused the dry run); the owner's
+  Windows user name reached public main in scripts/kit-next README and evidence and an app.js comment (row for v0.1.9);
+  my first kit test run set CLAUDE_PROJECT_DIR and gave 44 false failures.
+
+**Lesson:** a generated file (app.css) is never the only home of a rule; a merge that rebuilds it drops anything
+written there by hand. Check every file for lines lost from each parent before a release, not only the gate.
+
 ## 2026-11-16 - Owner's approval before sleeping
 
 **Owner's words (typed in this chat):** "i am going to sleep, handle everything yourself. in the morning i
