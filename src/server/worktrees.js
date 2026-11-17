@@ -66,6 +66,19 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
     return realpath(root);
   }
 
+  /**
+   * W2-9 (Security LOW): a repository can name a program in its own .git/config that git runs when it checks files out or looks at them (filter.<name>.smudge, .clean, .process).
+   * Bunny's own git calls cannot switch those off, so a project that defines one gets no copy of its own, with a plain reason.
+   * @returns {Promise<string|null>} the reason, or null
+   */
+  async function filterDrivers(folder) {
+    let found = '';
+    // only the project's OWN settings (--local): the person's own global and system settings (Git LFS is installed there) are theirs. Git LFS's own filter, set in the project by `git lfs install`, is let through.
+    try { found = await git(['config', '--local', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch { return null; } // git config exits 1 when there is none
+    const own = found.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !/^filter[.]lfs[.](smudge|clean|process)\s+git-lfs\s/i.test(l));
+    return own.length ? 'This project runs its own programs when git checks files out (a filter in its git settings), so Bunny will not make a copy of it.' : null;
+  }
+
   /** May this chat's folder get its own copy? Said plainly when not (the switch is then dimmed with the reason). */
   async function eligibility(folder) {
     let top;
@@ -73,6 +86,8 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
     let realTop;
     let realFolder;
     try { realTop = await realpath(resolve(top)); realFolder = await realpath(folder); } catch { return { ok: false, reason: 'That folder is not reachable.' }; }
+    const filter = await filterDrivers(realTop);
+    if (filter) return { ok: false, reason: filter };
     if (realTop.toLowerCase() !== realFolder.toLowerCase()) return { ok: false, reason: 'Choose the top folder of the project (the one that holds .git) to give a chat its own copy.' };
     try { if ((await git(['rev-parse', '--is-bare-repository'], { cwd: folder })) === 'true') return { ok: false, reason: 'A bare repository has no files to copy.' }; } catch { /* not bare */ }
     try { await access(join(realTop, '.gitmodules')); return { ok: false, reason: 'This project uses submodules, which do not work well with a separate copy.' }; } catch { /* none */ }
@@ -134,6 +149,8 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
   async function status(worktree) {
     const real = await usable(worktree);
     if (!real) throw refuse('worktree.gone', `This chat's copy is gone; the branch ${worktree?.branch ?? ''} still has the work.`);
+    const refused = await filterDrivers(worktree.repo);
+    if (refused) throw refuse('worktree.filter', refused);
     const dirty = (await git(['status', '--porcelain'], { cwd: real })).split(/\r?\n/).filter(Boolean).length;
     let ahead = 0;
     try { ahead = Number(await git(['rev-list', '--count', `${worktree.baseSha}..HEAD`], { cwd: real })) || 0; } catch { /* base not reachable */ }
@@ -173,6 +190,8 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
   async function finish(worktree, { action = 'keep' } = {}) {
     if (!['keep', 'merge', 'discard'].includes(action)) throw refuse('worktree.action', 'Choose keep, merge or discard.');
     return serial(worktree.repo, async () => {
+      const refused = await filterDrivers(worktree.repo);
+      if (refused && action !== 'discard') return { ok: false, action, reason: `${refused} Nothing was changed; keep the branch by hand.` };
       if (action === 'discard') {
         await removeCopy(worktree, { force: true });
         await git(['branch', '-D', worktree.branch], { cwd: worktree.repo }).catch(() => {});

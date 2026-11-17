@@ -16,8 +16,24 @@ import { pixelDifference, fitBitmap, sideBySide, describeScore } from './pageCom
 import { isBunnyOwn } from '../src/server/ownAddress.js';
 import { isLocalHost } from '../src/server/capture.js';
 import { randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isPrivateAddress } from '../src/server/download.js';
 
 /** A page on this computer or a private network (an address, localhost, or a name that only a network inside a building answers to). */
+/**
+ * W6-11 (Security LOW): the host TEXT is not enough (192.168.1.1.nip.io is a public name that answers with a private address). A name is resolved and every address it gives is checked,
+ * so the check is on what the window would connect to. (A name that changes its answer between this check and the connection is the one case left; the windows have no cookies
+ * and no storage, and see only what they fetch.)
+ */
+export async function isLanAddressResolved(url, resolve = (host) => lookup(host, { all: true })) {
+  if (isLanAddress(url)) return true;
+  try {
+    const host = new URL(String(url)).hostname.replace(/^\[|\]$/g, '');
+    if (/^[0-9.]+$/.test(host) || host.includes(':')) return false; // an address, already judged above
+    const answers = await resolve(host);
+    return answers.length === 0 || answers.some((a) => isPrivateAddress(a.address));
+  } catch { return true; } // a name that cannot be resolved is not fetched
+}
 export const isLanAddress = (url) => {
   try {
     const host = new URL(String(url)).hostname.toLowerCase().replace(/^\[|\]$/g, '');
@@ -76,7 +92,7 @@ export function senderAllowed(event, isOwn, windowOf) {
  * @param {(sender: object) => object | null} o.getWindow  the Bunny window of a page (has contentView, getContentBounds)
  * @param {() => string | number | null} o.getOwnPort  the port of Bunny's own server
  */
-export function createBrowserViews({ WebContentsView, session, getWindow, getOwnPort = () => null, BrowserWindow = null, nativeImage = null }) {
+export function createBrowserViews({ WebContentsView, session, getWindow, getOwnPort = () => null, BrowserWindow = null, nativeImage = null, resolveName = (host) => lookup(host, { all: true }) }) {
   const views = new Map(); // tab name -> { view, owner, window, visible }
   const watched = new WeakSet(); // pages already watched for leaving
   let partitionReady = false;
@@ -257,16 +273,18 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     // computer or a private network is refused unless the panel already has that very page open (the person has seen it).
     const openHosts = new Set([...views.values()].filter((e) => e.owner === sender).map((e) => { try { return new URL(e.view.webContents.getURL()).host.toLowerCase(); } catch { return ''; } }));
     for (const [label, url] of [['first', a], ['second', b]]) {
-      if (isLanAddress(url) && !openHosts.has(new URL(String(url)).host.toLowerCase())) return { error: `The ${label} address is on this computer or a private network. Open that page in the browser panel first (then it can be compared), or compare pages on the internet.` };
+      if ((await isLanAddressResolved(url, resolveName)) && !openHosts.has(new URL(String(url)).host.toLowerCase())) return { error: `The ${label} address is on this computer or a private network. Open that page in the browser panel first (then it can be compared), or compare pages on the internet.` };
     }
     const partition = `bunny-compare-${randomUUID()}`; // no "persist:" prefix: in memory only
     const ses = session.fromPartition(partition);
     ses.setPermissionRequestHandler((_c, _p, callback) => callback(false));
     ses.setPermissionCheckHandler(() => false);
-    ses.webRequest?.onBeforeRequest((details, callback) => {
+    ses.webRequest?.onBeforeRequest(async (details, callback) => {
       let host = '';
       try { host = new URL(details.url).host.toLowerCase(); } catch { /* refused below */ }
-      callback({ cancel: !requestAllowed(details, ownPort()) || (isLanAddress(details.url) && !openHosts.has(host)) });
+      if (!requestAllowed(details, ownPort())) { callback({ cancel: true }); return; }
+      const lan = isLanAddress(details.url) || (/^https?:/i.test(details.url) && (await isLanAddressResolved(details.url, resolveName)));
+      callback({ cancel: lan && !openHosts.has(host) });
     });
     const HEIGHT = 800;
     const shoot = async (url, width) => {

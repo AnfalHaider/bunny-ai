@@ -8,6 +8,7 @@
  * running after Bunny. Stopping the supervisor's tree from outside works too.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { safeEnv, taskkillPath } from './safeExec.js';
 
 const serverPid = Number(process.argv[2]);
 const [command, ...args] = JSON.parse(process.argv[3] ?? '[]');
@@ -18,7 +19,7 @@ const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { 
 function killOwnTree() {
   if (process.platform === 'win32') {
     // Kill the program's tree, not ours: taskkill is our own child, so killing us first would cut it short.
-    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 15_000 });
+    spawnSync(taskkillPath() ?? 'taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 15_000, shell: false, env: safeEnv() });
   } else {
     try { process.kill(-process.pid, 'SIGKILL'); } catch { /* not a group leader */ }
     try { child.kill('SIGKILL'); } catch { /* gone */ }

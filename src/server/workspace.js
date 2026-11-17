@@ -227,18 +227,22 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { protect = [], envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
+export function createWorkspace(rootFolder, { protect = [], allow = [], envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
 
   // S-3 (Security baseline 0.1.4): Bunny's own secrets (the provider keys and sign-in tokens, the account file) are never reachable by the agent's tools, whatever folder the chat works in:
   // read, write, list, search and shell, by REAL path (so a junction or symlink to them is no way in). `protect` is a list of absolute paths, each a folder or a file.
   const lower = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   const protectedPaths = [...new Set(protect.flatMap((p) => { const out = [lower(resolve(p))]; try { out.push(lower(realpathSync(p))); } catch { /* not made yet */ } return out; }))];
-  const isProtected = (abs) => { const t = lower(abs); return protectedPaths.some((p) => t === p || t.startsWith(`${p}/`)); };
+  // `allow`: folders inside a protected one that stay reachable: a chat's own working copy (W2-9) lives under the data folder, and only that chat may use it
+  const allowedPaths = [...new Set(allow.flatMap((p) => { const out = [lower(resolve(p))]; try { out.push(lower(realpathSync(p))); } catch { /* gone */ } return out; }))];
+  const within = (t, p) => t === p || t.startsWith(`${p}/`);
+  const isProtected = (abs) => { const t = lower(abs); return protectedPaths.some((p) => within(t, p)) && !allowedPaths.some((a) => within(t, a)); };
   const PROTECTED = 'That is where Bunny keeps its own secrets (provider keys and sign-in tokens). They are not available to Bunny\'s tools.';
-  /** A command that names a protected path in any spelling it can be typed in (slashes either way, quotes or backticks inside, 8.3 style folder names are caught by the real-path test above for the file tools). */
+  /** BEST EFFORT, not a wall: a command that names a protected path in the obvious spellings it can be typed in (a shell can still build a path from pieces; what stops that is the Windows account, not this check) (slashes either way, quotes or backticks inside, 8.3 style folder names are caught by the real-path test above for the file tools). */
   const namesProtected = (command) => {
-    const text = String(command ?? '').replace(/[`'"^]/g, '').replace(/\\/g, '/').toLowerCase();
+    let text = String(command ?? '').replace(/[`'"^]/g, '').replace(/\\/g, '/').toLowerCase();
+    for (const a of allowedPaths) text = text.split(a).join('/'); // the chat's own copy may be named
     return protectedPaths.some((p) => text.includes(p)) || (protectedPaths.length > 0 && (/[.]secret\b/.test(text) || /bunnyai\/(secrets|account[.]json)/.test(text) || /\/secrets\/[0-9a-f]{16,}/.test(text)));
   };
 

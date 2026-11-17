@@ -16,8 +16,8 @@ function setup(t) {
   writeFileSync(join(data, 'secrets', `${'ab'.repeat(16)}.secret`), '{"cipher":"TOPSECRET"}');
   writeFileSync(join(data, 'account.json'), '{"token":"TOPSECRET"}');
   writeFileSync(join(data, 'project', 'readme.txt'), 'plain TOPSECRET-FREE file\n');
-  const protect = [join(data, 'secrets'), join(data, 'account.json')];
-  return { data, protect, mine: (root) => createWorkspace(root, { protect }), plain: (root) => createWorkspace(root) };
+  const protect = [data]; // the whole data folder (Security LOW c); a chat's own working copy is let through with `allow`
+  return { data, protect, mine: (root, allow = []) => createWorkspace(root, { protect, allow }), plain: (root) => createWorkspace(root) };
 }
 
 test('S-3: with the chat\'s folder set to the data folder itself, reading, writing, listing and searching the secrets are refused; the rest of the folder still works', async (t) => {
@@ -30,13 +30,10 @@ test('S-3: with the chat\'s folder set to the data folder itself, reading, writi
   ]) {
     await assert.rejects(ws.run(tool, args), PROTECTED, `${tool} ${JSON.stringify(args).slice(0, 60)}`);
   }
-  // a walk from the folder never enters them or shows them
-  const listing = await ws.run('list_files', { path: '.', depth: 3 });
-  assert.doesNotMatch(listing, /secrets|account\.json|\.secret/);
-  const found = await ws.run('search_files', { query: 'TOPSECRET' });
-  assert.doesNotMatch(found, /\.secret|account\.json/);
-  assert.match(found, /readme\.txt|No matches/);
-  assert.match(await ws.run('read_file', { path: 'project/readme.txt' }), /plain/);
+  // the folder itself is the data folder: nothing in it is listed or searched
+  await assert.rejects(ws.run('list_files', { path: '.', depth: 3 }), PROTECTED);
+  await assert.rejects(ws.run('search_files', { query: 'TOPSECRET' }), PROTECTED);
+  await assert.rejects(ws.run('read_file', { path: 'project/readme.txt' }), PROTECTED, 'the whole data folder is fenced (LOW c), not only secrets');
 });
 
 test('S-3: a junction or symlink inside the project that leads to the secrets is no way in', async (t) => {
@@ -51,7 +48,7 @@ test('S-3: a junction or symlink inside the project that leads to the secrets is
   await assert.rejects(wide.run('read_file', { path: 'project/linked/' + 'ab'.repeat(16) + '.secret' }), PROTECTED);
 });
 
-test('S-3: a shell command that names the secrets folder or the account file is refused, in any spelling', async (t) => {
+test('S-3: a shell command that names the secrets folder or the account file is refused in the obvious spellings (best effort: a shell can build a path in ways text cannot show)', async (t) => {
   const { data, mine } = setup(t);
   const ws = mine(join(data, 'project'));
   const fwd = data.split('\\').join('/');
@@ -68,4 +65,37 @@ test('S-3: a shell command that names the secrets folder or the account file is 
 test('S-3: a workspace made without protected paths behaves as before (nothing else changed)', async (t) => {
   const { data, plain } = setup(t);
   assert.match(await plain(data).run('read_file', { path: 'project/readme.txt' }), /plain/);
+});
+
+test('S-3 (Security LOW c): the whole data folder is fenced from the file tools and the shell, except a chats own working copy under it', async (t) => {
+  const { data, mine } = setup(t);
+  mkdirSync(join(data, 'sessions'), { recursive: true });
+  writeFileSync(join(data, 'sessions', 'chat.json'), '{"messages":["private"]}');
+  writeFileSync(join(data, 'settings.json'), '{}');
+  const copy = join(data, 'worktrees', 'repo-abc123', 'aaaaaaaa');
+  mkdirSync(copy, { recursive: true });
+  writeFileSync(join(copy, 'code.js'), 'export const a = 1;');
+  mkdirSync(join(data, 'worktrees', 'repo-abc123', 'bbbbbbbb'), { recursive: true });
+  writeFileSync(join(data, 'worktrees', 'repo-abc123', 'bbbbbbbb', 'other.js'), 'another chat');
+  // a chat working in a normal folder cannot reach anything under the data folder, by path or by link
+  const elsewhere = realpathSync(mkdtempSync(join(tmpdir(), 'bunny-s3-project-')));
+  t.after(() => rmSync(elsewhere, { recursive: true, force: true }));
+  const outside = createWorkspace(elsewhere, { protect: [data] });
+  await assert.rejects(outside.run('read_file', { path: join(data, 'sessions', 'chat.json') }), /./);
+  // a chat working in its own copy reaches the copy, and only the copy
+  const own = mine(copy, [copy]);
+  assert.match(await own.run('read_file', { path: 'code.js' }), /export const a/);
+  await own.run('write_file', { path: 'new.js', content: 'x' });
+  assert.match(await own.run('list_files', { path: '.' }), /code\.js/);
+  await assert.rejects(own.run('read_file', { path: '../bbbbbbbb/other.js' }), /outside|secrets/, 'not another chats copy');
+  await assert.rejects(own.run('read_file', { path: '../../../sessions/chat.json' }), /outside|secrets/);
+  // a chat whose folder is the data folder itself sees none of it, the copies included
+  const wide = mine(data);
+  for (const path of ['sessions/chat.json', 'settings.json', 'worktrees/repo-abc123/aaaaaaaa/code.js']) await assert.rejects(wide.run('read_file', { path }), PROTECTED, path);
+  // the shell: the copy may be named, the rest of the data folder may not
+  const shell = mine(copy, [copy]);
+  if (process.platform === 'win32') {
+    assert.match(String(await shell.run('run_command', { command: `Get-Content "${join(copy, 'code.js')}"` })), /export const a/);
+    await assert.rejects(shell.run('run_command', { command: `Get-Content "${join(data, 'sessions', 'chat.json')}"` }), PROTECTED);
+  }
 });

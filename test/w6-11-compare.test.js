@@ -58,7 +58,7 @@ function fakes(pages, log = []) {
   const nativeImage = { createFromBitmap: (bitmap, size) => ({ size, resize: ({ width }) => ({ toDataURL: () => `data:image/png;base64,RESIZED${width}` }), toDataURL: () => `data:image/png;base64,PIC${size.width}x${size.height}` }) };
   return { FakeWindow, nativeImage };
 }
-const views = (BrowserWindow, nativeImage) => createBrowserViews({ WebContentsView: class {}, session: { fromPartition: () => ({ setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, on() {}, webRequest: { onBeforeRequest() {} } }) }, getWindow: () => null, getOwnPort: () => '5173', BrowserWindow, nativeImage });
+const views = (BrowserWindow, nativeImage) => createBrowserViews({ WebContentsView: class {}, session: { fromPartition: () => ({ setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, on() {}, webRequest: { onBeforeRequest() {} } }) }, getWindow: () => null, getOwnPort: () => '5173', BrowserWindow, nativeImage, resolveName: async () => [{ address: '93.184.216.34', family: 4 }] });
 
 test('W6-11: compare of a page with itself scores 0; with a page with one changed block, above 0 and below 1, at both widths', async () => {
   const log = [];
@@ -108,7 +108,7 @@ test('W6-11 (Security): the hidden windows use a fresh in-memory partition of th
   const log = [];
   const { FakeWindow, nativeImage } = fakes({ 'https://example.com/a': (w, h) => solid(w, h, WHITE) }, log);
   const parts = [];
-  const v = createBrowserViews({ WebContentsView: class {}, session: { fromPartition: (name) => { parts.push(name); return { setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, on() {}, webRequest: { onBeforeRequest() {} } }; } }, getWindow: () => null, getOwnPort: () => '5173', BrowserWindow: FakeWindow, nativeImage });
+  const v = createBrowserViews({ WebContentsView: class {}, session: { fromPartition: (name) => { parts.push(name); return { setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, on() {}, webRequest: { onBeforeRequest() {} } }; } }, getWindow: () => null, getOwnPort: () => '5173', BrowserWindow: FakeWindow, nativeImage, resolveName: async () => [{ address: '93.184.216.34', family: 4 }] });
   const lanTry = await v.compare({}, { a: 'https://example.com/a', b: 'http://192.168.1.5/admin' });
   assert.match(lanTry.error, /private network/);
   assert.equal(log.filter((l) => l[0] === 'load').length, 0, 'nothing was loaded');
