@@ -145,4 +145,19 @@ test('LOW 3 (automated review): a filter reached through an include, a worktree 
   const e = await failing.eligibility(repo);
   assert.equal(e.ok, false);
   assert.match(e.reason, /could not say whether/);
+  // every other way git can fail refuses too: another exit status, no exit status at all (git could not start, timed out), and the two statuses git config uses for a bad config file; only 1 ("not set") means none
+  for (const exit of [2, 3, 4, 5, 128, 129, undefined, null, 'ENOENT']) {
+    const broken = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error('git failed'), { exit }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+    const refusal = await broken.eligibility(repo);
+    assert.equal(refusal.ok, false, `exit ${String(exit)} refuses the copy`);
+    assert.match(refusal.reason, /could not say whether/);
+  }
+  const none = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error(''), { exit: 1 }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+  assert.equal((await none.eligibility(repo)).ok, true, 'exit 1 is the one answer that means "not set"');
+  // and the copy that already exists is not read or finished either when git cannot be asked
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'fail closed' });
+  const broken = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error('x'), { exit: 128 }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+  await assert.rejects(broken.status(made), /could not say whether/);
+  assert.equal((await broken.finish(made, { action: 'keep' })).ok, false);
+  assert.ok(statSync(made.path).isDirectory(), 'nothing was changed');
 });
