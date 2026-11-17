@@ -15,7 +15,7 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 const results = [];
-function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0 } = {}) {
+function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures = false } = {}) {
   const t0 = Date.now();
   // Only npm/npx (.cmd files on Windows) need a shell; a shell would mangle git patterns and paths with spaces.
   const shell = process.platform === 'win32' && /\.cmd$/.test(cmd);
@@ -25,6 +25,12 @@ function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0 } = {}) {
   results.push({ name, pass, secs: Math.round((Date.now() - t0) / 1000) });
   console.log(`\n== ${pass ? 'PASS' : 'FAIL'}  ${name}  (${Math.round((Date.now() - t0) / 1000)}s)`);
   console.log(out.slice(-tail).map((l) => `   ${l}`).join('\n'));
+  // GATE-NAMES: a failed test run names what failed (the last few lines hid it three times): every failing-test line, each failure's assertion line, and the totals.
+  if (failures && !pass) {
+    const marks = out.filter((l) => /^\s*(✖|not ok)\b|^ℹ (tests|suites|pass|fail|cancelled|skipped|todo)\b|AssertionError|\bError \[ERR_|^\s*(TypeError|ReferenceError|RangeError|Error):/.test(l));
+    console.log(`   -- what failed (${marks.length} marked lines${marks.length > 120 ? ', the first 120' : ''}) --`);
+    console.log(marks.slice(0, 120).map((l) => `   ${l.slice(0, 300)}`).join('\n'));
+  }
 }
 
 // A secret in the repository is a leak with a permanent history: tracked files only, values never printed.
@@ -75,7 +81,7 @@ console.log(`gate @ ${spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: 
 step('conflict markers', 'git', ['grep', '-nE', '^(<<<<<<<|>>>>>>>)( |$)', '--', '.', ':!node_modules'], { ok: (r) => r.status === 1, tail: 10 });
 // S-1: the request guard has one off switch, for tests. It must never be set in code that ships.
 step('request guard stays on', 'git', ['grep', '-nE', 'localGuard\\s*:\\s*false', '--', 'src', 'electron', 'scripts', 'e2e'], { ok: (r) => r.status === 1, tail: 4 });
-step('unit tests', npm, ['test', '--silent'], { tail: 8 });
+step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
 if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });
 step('dependency audit (high+)', npm, ['audit', '--audit-level=high'], { tail: 6 });
