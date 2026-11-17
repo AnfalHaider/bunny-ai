@@ -48,3 +48,25 @@ Severity stays LOW to MEDIUM, as before. It needs a project that brings its own 
 - Any value that holds a CR or LF is refused. So is a key with no value. Otherwise the value must equal the exact `git lfs install` value for that key, after trimming.
 - `w29-lows` passes 4 of 4 from a copy of 21c20bd with the variable unset, including a standard second line.
 - LOW: a `git config` that fails for a reason other than "no such setting" is read as "no filters". `worktree add` would then fail on a broken config anyway.
+
+## Re-review at 598ebc1: FAIL, one more setting from the project's own config
+
+Tests from a copy of 598ebc1, with the variable unset:
+
+| Test file | Pass | Fail |
+|---|---|---|
+| `w29-lows` | 5 | 0 |
+| `w2-9-worktree` | 12 | 0 |
+| `w29-safe-exec` | 4 | 0 |
+
+**What holds:**
+- The effective settings are read with `git config --show-scope -z --get-regexp`, so a project's `include.path`, `includeIf`, `config.worktree` and any `-c` all count. A file a project includes is reported with the `local` scope; only `global` and `system` are exempt.
+- Only exit 1 means "none found". Any other failure, or a record that doesn't pair up, refuses the copy. This closes my earlier LOW.
+
+**Trusting the global and system scopes: right.** Checking out or opening a project cannot write to `~/.gitconfig` or the system config. A tool the model runs could, but that already needs the person's permission to run commands.
+- LOW edge: if the person's own global config includes a file that lives inside a project (`includeIf ... path = <a file in the project>`), that file shows as `global` and is trusted. That is the person's own choice of config.
+
+**Still open (required, the same kind of route as the filters):** Bunny's work-in-progress commit (`finish`: `git -c user.name=Bunny -c user.email=... commit --no-verify`) honours commit signing from the project's own settings. With `commit.gpgSign=true` and `gpg.program` (or `gpg.format=ssh` with `gpg.ssh.program`) in a project's `.git/config`, or in a file it includes, that commit starts the program the project names. `--no-verify` skips hooks, not signing.
+- **Fix:** add `-c commit.gpgSign=false` to Bunny's own git calls in `runGit`, next to `core.fsmonitor=false` and `core.hooksPath`. That turns signing off whatever the format.
+- **Test:** a project with local `commit.gpgSign=true` and a signing program that leaves a marker file. After Finish (keep), the marker must not exist.
+- Nothing else Bunny's own git calls run (`status`, `add -A`, `commit`, `worktree add/remove`, `merge --ff-only`, `branch`, `rev-parse`, `rev-list`, `config`) starts a program from config, apart from filters (closed), fsmonitor and hooks (closed) and signing (this item). `merge --ff-only` uses no merge drivers. A project with `.gitmodules` gets no copy.
