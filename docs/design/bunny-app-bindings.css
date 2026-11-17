@@ -518,8 +518,9 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-type { display: flex; align-items: center; gap: var(--sp-4); color: var(--text-dim); }
 .cz-status { display: flex; flex-direction: column; gap: 1px; min-width: 0; color: var(--text-dim); font-size: var(--fs-md); }
 .cz-status-word { font-weight: var(--fw-medium); }
-.cz-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
+.cz-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); min-width: 0; max-width: 100%; }
 .cz-scope-label { color: var(--text-dim); overflow-wrap: anywhere; }
+.cz-text .cz-scope-label { white-space: normal; overflow: visible; text-overflow: clip; } /* a long folder name wraps: the whole name stays readable */
 .cz-extra { display: flex; flex-direction: column; align-items: flex-start; }
 .cz-status-detail { color: var(--text-dim); font-weight: 400; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
@@ -530,8 +531,8 @@ html.embedded .cz-bar { margin-top: 0; }
 main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px of a settings page */
 .cz-signin-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-md); color: var(--text-dim); }
 .cz-signin-note .input { flex: 1 1 200px; min-width: 0; }
-/* Phone: each item is a card, with its status under the name (the Type column is not drawn) */
-@media (max-width: 760px) {
+/* Narrow (the Settings pane is about 800 px wide) and phone: each item is a card, with its status under the name (the Type column is not drawn) */
+@media (max-width: 900px) {
   .cz-table { border-top: 0; }
   .cz-head { grid-template-columns: minmax(0, 1fr); border-bottom: 0; }
   .cz-head > :not(.cz-name) { display: none; }
