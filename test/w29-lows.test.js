@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWorktrees } from '../src/server/worktrees.js';
@@ -197,4 +197,36 @@ test('LOW 3 (automated review, conditional includes): any include or includeIf i
   assert.equal((await wt.finish(made, { action: 'keep' })).ok, false);
   git(repo, 'config', '--unset', 'includeIf.onbranch:never-this-one.path');
   assert.equal((await wt.status(made)).dirty, 0);
+});
+
+test('LOW (Security, signing): a project\'s own commit signing never starts its signing program when Bunny saves work on Finish', async (t) => {
+  const repo = tmp('sign');
+  const data = tmp('signdata');
+  const marks = tmp('signmarks');
+  clean(t, repo, data, marks);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const fwd = (p) => p.split(String.fromCharCode(92)).join('/');
+  const marker = join(marks, 'signer-ran.txt');
+  const signer = join(marks, 'signer.cjs');
+  writeFileSync(signer, `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran'); process.exit(1);\n`);
+  const wrapper = join(marks, process.platform === 'win32' ? 'signer.cmd' : 'signer.sh');
+  writeFileSync(wrapper, process.platform === 'win32' ? `@echo off\r\n"${process.execPath}" "${signer}" %*\r\n` : `#!/bin/sh\nexec "${process.execPath}" "${signer}" "$@"\n`, { mode: 0o755 });
+  // the project signs its commits with a program of its own, both the gpg way and the ssh way
+  git(repo, 'config', 'commit.gpgSign', 'true');
+  git(repo, 'config', 'tag.gpgSign', 'true');
+  git(repo, 'config', 'gpg.program', fwd(wrapper));
+  git(repo, 'config', 'gpg.format', 'ssh');
+  git(repo, 'config', 'gpg.ssh.program', fwd(wrapper));
+  const wt = createWorktrees({ dataDir: data });
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'signing' });
+  writeFileSync(join(made.path, 'work.txt'), 'work\n');
+  const done = await wt.finish(made, { action: 'keep' });
+  assert.equal(done.ok, true, JSON.stringify(done));
+  assert.equal(existsSync(marker), false, 'the project\'s signing program did not run');
+  assert.equal(git(repo, 'log', '-1', '--format=%s', made.branch), 'Bunny: work in progress', 'the work was saved, unsigned');
+  assert.equal(git(repo, 'show', `${made.branch}:work.txt`), 'work');
 });

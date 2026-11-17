@@ -38,7 +38,8 @@ export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS, hooksDir = null } 
   return new Promise((done, fail) => {
     const program = gitPath();
     if (!program) { fail(Object.assign(new Error('git was not found on this computer. Install Git for Windows to give a chat its own copy of a project.'), { code: 'git.missing' })); return; }
-    const safe = ['-c', 'core.fsmonitor=false', ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
+    // commit.gpgSign and tag.gpgSign off: a project's own signing setting would start the signing program it names (gpg.program, gpg.ssh.program), and skipping hooks does not skip signing
+    const safe = ['-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', '-c', 'rebase.gpgSign=false', ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
     execFile(program, [...safe, ...args], { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, shell: false, env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }) }, (err, stdout, stderr) => {
       if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed', exit: err.code }));
       else done(String(stdout).trim());
