@@ -84,7 +84,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remotePolicy, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePolicy, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -539,7 +539,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
     // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
-    if (isWindowOnlyRoute(method, path) && windowOnly(req, res)) return;
+    if (isWindowOnlyRoute(method, path) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
 
     if (localGuard !== false && !req.bunnyRemote) { // a request from another device was already checked by the LAN server (remoteRoute)
       const verdict = guard.check(req, path, method, url.searchParams);
@@ -854,7 +854,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
     if (path === '/api/sessions' && method === 'POST') {
       const body = req.bunnyRemote ? remoteBody(path, await readBody(req)) : await readBody(req); // another device may send only the few things remoteBody keeps
-      if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return; // a chat that starts in Auto
+      if (isWindowOnlyRoute(method, path, body) && !(req.bunnyRemote && remoteException(method, path, body)) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
         const stored = await folderToStore(body.folder);
@@ -878,7 +878,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (path === '/api/projects' && method === 'POST') {
       try {
         const body = await readBody(req);
-        if (isWindowOnlyRoute(method, path, body) && windowOnly(req, res)) return;
+        if (isWindowOnlyRoute(method, path, body) && !(req.bunnyRemote && remoteException(method, path, body)) && windowOnly(req, res)) return;
         if (body.folder) {
           const stored = await folderToStore(body.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -893,7 +893,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (projectMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
-        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return;
+        if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return;
         if (patch.folder) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -1441,7 +1441,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     // ---- a question card: the person's answer ----
     const questionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/question\/([a-f0-9-]{36})$/);
     if (questionMatch && method === 'POST') {
-      if (windowOnly(req, res)) return;
+      if (!(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return; // a device answers the questions of its own chat
       const pending = pendingQuestions.get(questionMatch[2]);
       if (!pending || pending.sessionId !== questionMatch[1]) {
         return sendJson(res, 404, { code: 'question.gone', message: 'That question is no longer waiting' });
@@ -1538,7 +1538,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     // ---- session settings (folder, branch, permission mode, effort) ----
     const sessionSettingMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/setting\/([A-Za-z-]+)$/);
     if (sessionSettingMatch && method === 'PATCH') {
-      if (WINDOW_ONLY_SESSION_SETTINGS.includes(sessionSettingMatch[2]) && windowOnly(req, res)) return;
+      if (WINDOW_ONLY_SESSION_SETTINGS.includes(sessionSettingMatch[2]) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return; // a device may choose the mode of ITS chat
       try {
         if (folderPickerOnly && sessionSettingMatch[2] === 'folder') {
           const stored = await folderToStore((await readBody(req)).value);
@@ -1626,7 +1626,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (sessionMatch && method === 'PATCH') {
       try {
         const patch = await readBody(req);
-        if (isWindowOnlyRoute(method, path, patch) && windowOnly(req, res)) return; // a chat switched to Auto
+        if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
           if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
@@ -3416,7 +3416,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     }
     if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf });
     // 5. What a device may do is a short allow-list; a window-only route is never one of them.
-    if (!remotePolicy(method, path) || isWindowOnlyRoute(method, path)) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
+    if (!remotePolicy(method, path) || (isWindowOnlyRoute(method, path) && !remoteException(method, path))) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
     req.bunnyRemote = session;
     return route(req, res);
   }

@@ -54,7 +54,7 @@ async function main() {
   const reads = await device.webContents.executeJavaScript(`fetch('/api/sessions').then((r) => r.status)`);
   check('it can read chats', reads === 200, reads);
   const made = await device.webContents.executeJavaScript(`fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'From the probe', folder: 'C:\\\\Windows', workMode: 'code' }) }).then(async (r) => ({ status: r.status, body: await r.json() }))`);
-  check('it can start a chat (the page adds the CSRF header itself), in Chat mode with no folder', made.status === 200 && made.body.workMode === 'chat' && made.body.folder === null, JSON.stringify(made));
+  check('it can start a chat of its own work mode (the page adds the CSRF header itself), but never with a folder', made.status === 200 && made.body.workMode === 'code' && made.body.folder === null, JSON.stringify(made));
   const refused = await device.webContents.executeJavaScript(`fetch('/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permissionRules: {} }) }).then(async (r) => ({ status: r.status, body: await r.json() }))`);
   check('a window-only change is refused with the window sentence', refused.status === 403 && refused.body.message === "Change this in Bunny's window.", JSON.stringify(refused));
   // the page's own fetch adds the right CSRF header; a request made another way (XHR, as a stray script or a forged form would) has none, or a wrong one

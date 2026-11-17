@@ -68,41 +68,63 @@ export function findLanAddress(interfaces = networkInterfaces()) {
 
 /**
  * What a signed-in remote device may do. Everything else is "Bunny's window only". Default deny.
- * Reading: the chat list and chats, the models and the providers' names, search, the page's own settings (read only), artifacts, the person's photo.
- * Writing: start a chat and send a message (the server forces such a message to be text only: no tool is ever offered to it).
+ * The owner's decision (2026-11-18): a device gets ORDINARY chats: a chat's own work mode, folder and tools, answering that chat's own permission, question and capability cards,
+ * and choosing the mode of a chat. Still the window's alone: the default permission mode, permission rules, connectors, installs and plugins, skills, schedules, hooks, providers,
+ * accounts, updates, the window-only settings, the terminal, driving the computer, picking folders, and /api/remote itself.
  */
+import { isWindowOnlyRoute } from './windowOnly.js';
 const UUID = '[a-f0-9-]{36}';
 const READ = [
-  /^\/api\/(health|version|models|providers|abilities|usage|search|projects|artifacts|profile\/photo|speech\/voices|skills|memory|settings)$/,
-  new RegExp(`^/api/sessions(/${UUID}(/messages)?)?$`),
+  /^\/api\/(health|version|models|providers|abilities|usage|search|projects|artifacts|profile\/photo|speech\/voices|skills|memory|settings|processes)$/,
+  new RegExp(`^/api/sessions(/${UUID}(/.*)?)?$`),
   new RegExp(`^/api/artifacts/${UUID}(/raw)?$`),
   /^\/api\/remote\/me$/,
+];
+const WRITE = [
+  ['POST', /^\/api\/sessions$/],
+  ['POST', new RegExp(`^/api/sessions/${UUID}/(messages|stop|undo|compact|branch|summary|title)$`)],
+  ['POST', new RegExp(`^/api/sessions/${UUID}/(permission|question|capability)/${UUID}$`)],
+  ['PATCH', new RegExp(`^/api/sessions/${UUID}(/setting/[A-Za-z-]+)?$`)],
+  ['DELETE', new RegExp(`^/api/sessions/${UUID}$`)],
+  ['POST', /^\/api\/artifacts$/],
+  ['PATCH', new RegExp(`^/api/artifacts/${UUID}$`)],
+  ['DELETE', new RegExp(`^/api/artifacts/${UUID}$`)],
+  ['POST', /^\/api\/remote\/signout$/],
 ];
 export function remotePolicy(method, path) {
   const m = String(method).toUpperCase();
   if (!path.startsWith('/api/')) return m === 'GET' || m === 'HEAD'; // the app's own page files (read only)
   if (m === 'GET') return READ.some((re) => re.test(path));
-  if (m === 'POST' && path === '/api/sessions') return true;
-  if (m === 'POST' && new RegExp(`^/api/sessions/${UUID}/messages$`).test(path)) return true;
-  if (m === 'POST' && path === '/api/remote/signout') return true;
+  return WRITE.some(([method2, re]) => method2 === m && re.test(path));
+}
+
+/**
+ * The few window-only routes a signed-in device MAY still use, for a chat it can see (the cookie and the CSRF token are required before this is asked):
+ * answering that chat's own permission, question and capability cards, and choosing the mode of a chat (new or opened). Nothing else that is window-only.
+ */
+export function remoteException(method, path, body = null) {
+  const m = String(method).toUpperCase();
+  if (m === 'POST' && new RegExp(`^/api/sessions/${UUID}/(permission|question|capability)/${UUID}$`).test(path)) return true;
+  if (m === 'PATCH' && new RegExp(`^/api/sessions/${UUID}/setting/permissionMode$`).test(path)) return true;
+  if ((m === 'POST' && path === '/api/sessions') || (m === 'PATCH' && new RegExp(`^/api/sessions/${UUID}$`).test(path))) {
+    if (!body || typeof body !== 'object' || !Object.hasOwn(body, 'permissionMode')) return false;
+    const { permissionMode: _mode, ...rest } = body;
+    return !isWindowOnlyRoute(m, path, rest); // the mode, and nothing else that is window-only, is in the body
+  }
   return false;
 }
 
-/** The bits of a body a remote device may send to start a chat or send a message. Nothing else gets through (no folder, no mode, no tools, no task). */
+/**
+ * The body a device may send. A new chat: its title, mode, work mode, effort, project, model and whether it is incognito (never a folder: only the window picks one).
+ * A message: whatever the app's own page sends, minus what only the window or the scheduler may say (scheduledTask, browserControl, a folder).
+ */
+const SESSION_KEYS = ['title', 'workMode', 'permissionMode', 'effort', 'projectId', 'providerId', 'model', 'incognito'];
+const MESSAGE_DENY = ['scheduledTask', 'browserControl', 'folder', 'textOnly'];
 export function remoteBody(path, body) {
   const b = body && typeof body === 'object' ? body : {};
-  if (path === '/api/sessions') return { title: typeof b.title === 'string' ? b.title.slice(0, 80) : undefined, workMode: 'chat' };
-  return {
-    content: typeof b.content === 'string' ? b.content : '',
-    attachments: Array.isArray(b.attachments) ? b.attachments.slice(0, 8) : undefined,
-    providerId: typeof b.providerId === 'string' ? b.providerId : undefined,
-    model: typeof b.model === 'string' ? b.model : undefined,
-    retry: b.retry === true ? true : undefined,
-    workMode: 'chat',
-    textOnly: true,
-  };
+  if (path === '/api/sessions') return Object.fromEntries(SESSION_KEYS.filter((k) => Object.hasOwn(b, k)).map((k) => [k, k === 'title' && typeof b[k] === 'string' ? b[k].slice(0, 80) : b[k]]));
+  return Object.fromEntries(Object.entries(b).filter(([k]) => !MESSAGE_DENY.includes(k)));
 }
-
 /** A short plain name for a device from its browser's own words. */
 export function deviceLabel(userAgent = '') {
   const ua = String(userAgent);
