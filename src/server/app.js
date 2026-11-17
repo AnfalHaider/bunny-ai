@@ -2744,6 +2744,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         let result;
         let status = 'done';
         let signIn = null; // a connector that needs the person to sign in: { needsSignIn: true, serverId }
+        let connectorPictures = []; // D-2: pictures from a connector, for a model that can see
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
@@ -2758,8 +2759,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             : isWorkspace
             ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) })
             : await (async () => { // D-1: the text the connector sent, not its raw JSON; an answer that says isError is a failed step
-              const shaped = mcpResultText(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed, signal: controller.signal, onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) }));
+              const shaped = mcpResultText(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed, signal: controller.signal, onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) }), { vision });
               if (shaped.isError) status = 'failed';
+              connectorPictures = shaped.images ?? [];
               return shaped.text;
             })();
         } catch (err) {
@@ -2782,7 +2784,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
         await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
         send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}) });
-        return signIn ? `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.` : result;
+        if (signIn) return `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.`;
+        return connectorPictures.length ? { content: result, images: connectorPictures } : result;
       };
       // Effort: how long a reply may be, how many tool steps it may take, and (where the
       // provider understands it) how hard the model reasons.

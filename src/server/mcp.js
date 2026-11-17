@@ -328,16 +328,23 @@ export function describeDeferred(deferred, match = '') {
  * D-1: a connector's answer as text for the model. Not the raw JSON-RPC (text inside JSON escapes), but the text parts joined, resources and
  * links as short lines, structuredContent as indented JSON when there is no text, and an error marked as one ({ text, isError }).
  */
-export function mcpResultText(result) {
-  if (result === null || result === undefined) return { text: '(the tool returned nothing)', isError: false };
-  if (typeof result !== 'object') return { text: String(result), isError: false };
+export function mcpResultText(result, { vision = false } = {}) {
+  if (result === null || result === undefined) return { text: '(the tool returned nothing)', isError: false, images: [] };
+  if (typeof result !== 'object') return { text: String(result), isError: false, images: [] };
   const parts = Array.isArray(result.content) ? result.content : [];
   const lines = [];
+  const images = []; // D-2: data addresses of pictures a model that can see is shown after the answer
+  const MAX_PICTURE_BYTES = 4 * 1024 * 1024;
   for (const p of parts) {
     if (p?.type === 'text' && typeof p.text === 'string') lines.push(p.text);
     else if (p?.type === 'resource' && p.resource) lines.push(typeof p.resource.text === 'string' ? p.resource.text : `[resource: ${p.resource.uri ?? 'no address'}${p.resource.mimeType ? `, ${p.resource.mimeType}` : ''}]`);
     else if (p?.type === 'resource_link') lines.push(`[link: ${p.name ?? ''} ${p.uri ?? ''}]`.replace(/\s+\]/, ']'));
-    else if (p?.type === 'image') lines.push(`[image${p.mimeType ? `: ${p.mimeType}` : ''}, ${Math.round(String(p.data ?? '').length * 0.75 / 1024)} KB, not shown here]`);
+    else if (p?.type === 'image') {
+      const bytes = Math.round(String(p.data ?? '').length * 0.75);
+      const ok = vision && images.length < 2 && /^image\/(png|jpe?g|gif|webp)$/i.test(String(p.mimeType ?? '')) && /^[A-Za-z0-9+/=]+$/.test(String(p.data ?? '')) && bytes > 0 && bytes <= MAX_PICTURE_BYTES;
+      if (ok) images.push(`data:${String(p.mimeType).toLowerCase()};base64,${p.data}`);
+      lines.push(`[image${p.mimeType ? `: ${p.mimeType}` : ''}, ${Math.round(bytes / 1024)} KB, ${ok ? 'shown after this answer' : 'not shown here'}]`);
+    }
     else if (p?.type === 'audio') lines.push('[audio, not shown here]');
     else if (p) lines.push(JSON.stringify(p));
   }
@@ -346,7 +353,7 @@ export function mcpResultText(result) {
   if (!text.trim() && !('content' in result) && !('isError' in result)) text = JSON.stringify(result, null, 2);
   if (!text.trim()) text = '(the tool returned no text)';
   const isError = result.isError === true;
-  return { text: isError ? `The tool reported an error: ${text}` : text, isError };
+  return { text: isError ? `The tool reported an error: ${text}` : text, isError, images };
 }
 
 /**
