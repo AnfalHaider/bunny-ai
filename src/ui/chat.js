@@ -24,7 +24,7 @@ import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
-import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked } from './model-abilities.js';
+import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1916,6 +1916,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
     onThinking: (info) => { working.alive(); working.addThinking(info.text ?? ''); },
     onQuestion: (info) => { settleThinking(); flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
+    onWaiting: (info) => notifyWaiting(info), // W6-25
     onNewChat: (info) => { state.pendingNewChat = info; },
   };
   function flushNote() {
@@ -2753,6 +2754,9 @@ async function send() {
   const job = jobFor(text, files);
   const skillCall = calledSkill(text); // S-4
   state.lastJob = job;
+  // W6-19: a picture job on a model chosen by hand that cannot see is said out loud, once, before it starts
+  const eyes = noEyesWarning({ job, modelAuto: Boolean(state.modelAuto), modelName: state.selected?.model, canSee: state.selected ? canSee(state.selected.providerId, state.selected.model) : true });
+  if (eyes) state.tryingNote = eyes; // the status line while the reply starts (cleared when it ends)
   const fixed = state.selected ? [{ providerId: state.selected.providerId, providerName: state.selected.providerName, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
@@ -2913,6 +2917,18 @@ function notifyReply() {
   } catch {
     // A browser that will not show notifications is not an error.
   }
+}
+
+/** W6-25: a question or a permission prompt has waited a while: say so in the status line, and as a notification when the window is hidden. */
+function notifyWaiting(info) {
+  const what = info?.kind === 'permission' ? 'a permission' : info?.kind === 'capability' ? 'a choice' : 'an answer';
+  const text = `Bunny is still waiting for ${what}${info?.title ? `: ${String(info.title).slice(0, 100)}` : ''}`;
+  flashStatus(text, 30000);
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !document.hidden) return;
+  try {
+    const note = new Notification(say('app.name'), { body: text, tag: `waiting-${state.sessionId ?? 'bunny'}` });
+    note.onclick = () => { window.focus(); note.close(); };
+  } catch { /* a browser that will not show notifications is not an error */ }
 }
 
 /** Files picked but not yet sent. */

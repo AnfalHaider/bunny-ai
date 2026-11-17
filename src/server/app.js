@@ -172,7 +172,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
+export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
   await mkdir(dataDir, { recursive: true });
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
@@ -1664,6 +1664,10 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         return sendJson(res, 400, { code: 'message.empty', message: 'There is nothing to retry yet' });
       }
 
+      // W6-23: a retry (the next model after a fallback) starts by clearing the failed attempts' notes. Dropping them only when the retry ENDS left the red
+      // "could not finish" group in the chat whenever the retry ran steps in between, because then it was no longer the last thing there.
+      if (retry) { await sessions.dropTrailingErrors(id).catch(() => {}); session = (await sessions.get(id)) ?? session; }
+
       let attachments = [];
       try {
         attachments = await prepareAttachments(normaliseAttachments(body.attachments));
@@ -2066,7 +2070,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
         if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
-        const timer = setTimeout(() => { pendingPermissions.delete(pid); resolveAnswer(false); }, 10 * 60_000);
+        // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
+        const timer = setTimeout(() => send('waiting', { kind: 'permission', title: summary }), waitNudgeMs);
         pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { clearTimeout(timer); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
         send('permission', { id: pid, title: summary, detail: cardText(detail) });
@@ -2102,7 +2107,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const origin = `http://${req.headers.host ?? '127.0.0.1'}`;
       const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
         const cid = randomUUID();
-        const timer = setTimeout(() => pendingCapabilities.get(cid)?.resolve({ granted: false }), 10 * 60_000);
+        const timer = setTimeout(() => send('waiting', { kind: 'capability', title: CAPABILITIES[capability] }), waitNudgeMs); // W6-25: waits, then nudges
         pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
         send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
@@ -2111,7 +2116,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const askQuestion = (q) => new Promise((resolveAnswer) => {
         if (res.writableEnded || res.destroyed) { resolveAnswer({ skipped: true, gone: true }); return; }
         const qid = randomUUID();
-        const timer = setTimeout(() => pendingQuestions.get(qid)?.resolve({ skipped: true, gone: true }), 30 * 60_000);
+        const timer = setTimeout(() => send('waiting', { kind: 'question', title: String(q.question ?? '').slice(0, 140) }), waitNudgeMs); // W6-25: never skipped by itself; waits, then nudges
         pendingQuestions.set(qid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingQuestions.delete(qid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingQuestions.get(qid)?.resolve({ skipped: true, gone: true }));
         replyStatus.set(id, 'needs-you');
