@@ -12,6 +12,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const fs_text = (p) => readFileSync(p, 'utf8').split('\r\n').join('\n');
 const KIT = join(ROOT, 'scripts', 'kit-next', '.bootstrap');
 const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const eol = (text) => text.replace(/\r\n/g, '\n');
@@ -89,6 +90,8 @@ test('the live policy.json needs the staged additions: with its own records.glob
   assert.deepEqual(wanted.filter((g) => !globs(stagedText).includes(g)), [], 'the staged policy has them');
   const liveMissing = wanted.filter((g) => !globs(liveText).includes(g));
   // the policy's own list replaces the default one (an object spread), so a live policy that lists only two folders leaves these two open
-  assert.deepEqual(liveMissing, wanted, 'the live policy.json does not list them: landing must also take the staged policy.json (or drop records.globs from it)');
+  // K-4: before landing the live policy lacks both; once landed it lists both (and the staged copy is what was taken)
+  if (liveMissing.length === 0) assert.equal(fs_text(liveText), fs_text(stagedText), 'after landing, the live policy.json is the staged one and lists the flow and kit record folders');
+  else assert.deepEqual(liveMissing, wanted, 'the live policy.json does not list them: landing must also take the staged policy.json (or drop records.globs from it)');
   assert.ok(policyLib.DEFAULT_POLICY.records.globs.includes('docs/kit-changes/**'), 'the default policy of the staged kit has them');
 });
