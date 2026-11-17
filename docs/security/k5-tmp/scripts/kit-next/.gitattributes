@@ -1,0 +1,2 @@
+# Lands at the repo root (G-1). Shell hooks keep LF even where core.autocrlf is true.
+.githooks/* text eol=lf

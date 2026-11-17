@@ -1,0 +1,39 @@
+# Landing rehearsal (throwaway clone <temp>/bunny-rehearsal/main)
+origin/main at 2400629; merging 1d3a77c
+step 1 merge 1d3a77c: ok, HEAD 1d3a77c
+step 2 staged upgrade (as chief-of-staff): exit 0
+step 3 staged policy.json copied over .bootstrap/policy.json
+landing commit d0eba0c (rollback target 2400629)
+
+## After landing (both guards wired as in real life)
+| case | expected | ours (.claude/settings.json) | plugin 0.6.0 hooks.json | match |
+|---|---|---|---|---|
+| chief-of-staff Bash `git status` | ALLOW | ALLOW  | ALLOW  | yes |
+| chief-of-staff Write docs/x.md | ALLOW | ALLOW  | ALLOW  | yes |
+| nested worktree (.claude/worktrees), role design, Write docs/x.md | ALLOW | ALLOW  | ALLOW  | yes |
+| external worktree, role builder, Write src/x.js | ALLOW | ALLOW  | ALLOW  | yes |
+| release-ops `git push origin main` at PreToolUse (release-ops is a live pusher, so the call may start; the pre-push hook below judges sign-offs) | ALLOW | ALLOW  | ALLOW  | yes |
+
+## The real pre-push hook (the refusal for release-ops lives here, not in the PreToolUse guard)
+release-ops (external worktree) git push origin main: exit 1 REFUSED | pre-push: refs/heads/main: no release record in docs/releases/ lists d0eba0c1d94f, the newest code commit (7E) / pre-push: refs/heads/main: 1 code commit(s) have no complete sign-off: d0eba0c1d (need qa, tech-lead, librarian, chief-of-staff or the piece's _required.md, all on one sha — O10, 7F). No piece covers them yet / pre-push: push refused. Fix the above; never bypass with --no-verify. || full: pre-pu h: ref /head /main: no relea e record in doc /relea e / li t  d0eba0c1d94f, the newe t code commit (7E)
+pre-pu h: ref /head /main: 1 code commit( ) have no complete  ign-off: d0eba0c1d (need qa, tech-lead, librarian, chief-of- taff or the piece'  _required.md, all on one  ha — O10, 7F). No piece cover  them yet
+pre-pu h: pu h refu ed. Fix the above; never bypa  with --no-verify.
+error: failed to pu h  ome ref  to 'C:\U er \<user>\AppData\Local\Temp\bunny-rehear al-vbh638\origin.git'
+
+
+## Rollback
+If any step locks out the chief-of-staff: run these two commands in a terminal OUTSIDE Claude Code (the guards run only inside Claude Code sessions, so they cannot block a plain terminal), in the main checkout:
+    git rm -r -q -f --ignore-unmatch .bootstrap .githooks
+    git checkout 2400629 -- .bootstrap .githooks .claude
+(the files are then exactly as before the landing; commit them or leave them. scripts/kit-next stays, it is only a folder of files.)
+proved in the clone: git diff 2400629 for .bootstrap .githooks .claude after the two commands: EMPTY (exactly the old kit)
+chief-of-staff git status through the rolled-back project guard: ALLOW 
+
+RESULT: after-landing rows ALL MATCH; real pre-push refused: true; rollback clean: true
+
+## What this rehearsal does not cover (stated plainly)
+- The payloads are fed to the two guards by a script (`landing-rehearsal.mjs`), not by the Claude Code host: the host-side order of the two hooks, the 10 s hook cut and how the host builds CLAUDE_PROJECT_DIR for a nested worktree session were not exercised. Both guards ran with CLAUDE_PROJECT_DIR set to the clone.
+- Roles were given both ways real sessions have them: the git-dir role file (ours) and the per-worktree session file in `.bootstrap/` (the plugin 0.6.0 reads that one; without it every non-chief session is "unassigned" to the plugin and its push rule refuses).
+- A call goes through only when BOTH guards allow it; the "match" column uses that.
+- Release Ops `git push origin main`: both PreToolUse guards allow it (release-ops is a live pusher); the refusal without sign-offs comes from the real pre-push hook, run for real against a local bare repository (message above).
+- Not run: the real main checkout, the real remote, a real nested Claude Code session.

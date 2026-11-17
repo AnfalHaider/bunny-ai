@@ -1,0 +1,11 @@
+{
+  "name": "bootstrap-environment",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "description": "Toolkit scripts for the bootstrap-environment agent plugin. No dependencies.",
+  "engines": { "node": ">=18" },
+  "bin": { "bootstrap": "bin/bootstrap.mjs", "bootstrap-adapt": "bin/adapt.mjs", "bootstrap-mem": "bin/mem.mjs", "detect-stack": "bin/detect-stack.mjs" },
+  "scripts": { "install-skill": "node scripts/install-skill.mjs", "test": "node --test tests/enforcement.test.mjs tests/flow.test.mjs tests/trust.test.mjs tests/ops.test.mjs tests/e2e.test.mjs" },
+  "license": "MIT"
+}

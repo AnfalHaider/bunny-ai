@@ -34,3 +34,10 @@ Any other value of a `filter.*` driver, including an `lfs` one with anything add
 **Tests:** add one with the standard values (a copy is made), and one where the standard value has more text after it (refused).
 
 Severity stays LOW to MEDIUM, as before. It needs a project that brings its own `.git` folder.
+
+## Re-stamp at 0fdf76c: PASS (supersedes FAIL at 30d0582)
+
+- `LFS_FILTERS` holds exactly the three values `git lfs install` writes (`git-lfs clean -- %f`, `git-lfs smudge -- %f`, `git-lfs filter-process`). Each line of `git config --local --get-regexp` must be one of those keys, lowercased, followed by exactly its value after trimming. Any other line refuses the copy.
+- A value with a newline in it comes out as a second line, which matches no key, so it is refused too.
+- `w29-lows` passes 4 of 4 from a copy of 0fdf76c with the variable unset. It covers separators, `$(…)`, backticks, a newline and extra text.
+- c7a3d51 changes only the e2e spec.
