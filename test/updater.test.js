@@ -52,7 +52,7 @@ test('a newer release is downloaded, checked against its fingerprint, and offere
 test('an installer that does not match its fingerprint is thrown away', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'bunny-update-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const gh = fakeGithub({ version: '0.2.0', sha512: 'not-the-real-hash' });
+  const gh = fakeGithub({ version: '0.2.0', sha512: `${'A'.repeat(86)}==` });
   const updater = createUpdater({ currentVersion: '0.1.0', feed: 'https://api/releases/latest', fetchImpl: gh.fetchImpl, downloadDir: dir });
   const status = await updater.check();
   assert.equal(status.state, 'error');
@@ -124,4 +124,38 @@ test('S-UPD: a release candidate is not offered to a copy that is already on the
   const updater = createUpdater({ currentVersion: '0.1.9', feed: 'https://api/releases/latest', fetchImpl: gh.fetchImpl });
   assert.equal((await updater.check()).state, 'none');
   assert.ok(!gh.asked.includes('https://dl/setup.exe'));
+});
+
+// SUPD-1 and SUPD-2 (Security, LOW)
+test('SUPD-1: an empty "sha512:" line does not take the next key as the checksum, and a value that is not a SHA-512 digest is refused', async () => {
+  const release = { tag_name: 'v0.2.0', assets: [{ name: 'Bunny-AI-Setup-0.2.0.exe', size: 1, browser_download_url: 'https://dl/setup.exe' }, { name: 'latest.yml', browser_download_url: 'https://dl/latest.yml' }] };
+  const yml = (text) => async () => new Response(text, { status: 200 });
+  assert.equal((await readRelease(release, yml('version: 0.2.0\nsha512:\nsize: 123\n'))).sha512, null, 'next line is not the value');
+  assert.equal((await readRelease(release, yml('sha512: size:\n'))).sha512, null);
+  assert.equal((await readRelease(release, yml('sha512: abc\n'))).sha512, null, 'too short to be a digest');
+  assert.equal((await readRelease(release, yml(`sha512: ${'A'.repeat(86)}== extra\n`))).sha512, null, 'nothing after the value');
+  const good = `${'B'.repeat(86)}==`;
+  assert.equal((await readRelease(release, yml(`version: 0.2.0\nsha512: ${good}\n`))).sha512, good);
+  assert.equal((await readRelease(release, yml(`sha512:\t${good}  \n`))).sha512, good, 'spaces and tabs on the same line are fine');
+});
+
+test('SUPD-2: the installer is saved by its file name only, whatever path the asset name carries', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-update-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const installer = Buffer.from('pretend installer bytes');
+  const digest = createHash('sha512').update(installer).digest('base64');
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/releases/latest')) {
+      return new Response(JSON.stringify({ tag_name: 'v0.2.0', assets: [
+        { name: '../../escape-Setup.exe', size: installer.length, browser_download_url: 'https://dl/setup.exe' },
+        { name: 'latest.yml', browser_download_url: 'https://dl/latest.yml' }] }), { status: 200 });
+    }
+    if (url === 'https://dl/latest.yml') return new Response(`sha512: ${digest}\n`, { status: 200 });
+    if (url === 'https://dl/setup.exe') return new Response(installer, { status: 200 });
+    return new Response('', { status: 404 });
+  };
+  const updater = createUpdater({ currentVersion: '0.1.0', feed: 'https://api/releases/latest', fetchImpl, downloadDir: join(dir, 'updates') });
+  assert.equal((await updater.check()).state, 'ready');
+  assert.deepEqual(await readFile(join(dir, 'updates', 'escape-Setup.exe')), installer);
+  await assert.rejects(readFile(join(dir, 'escape-Setup.exe')), 'nothing was written above the update folder');
 });

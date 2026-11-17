@@ -13,7 +13,7 @@
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdir, rm, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 
@@ -61,7 +61,9 @@ export async function readRelease(release, fetchImpl = globalThis.fetch) {
   let sha512 = null;
   if (manifest) {
     const yml = await (await fetchImpl(manifest.browser_download_url)).text();
-    sha512 = /^sha512:\s*(\S+)/m.exec(yml)?.[1] ?? null;
+    // SUPD-1: on the same line only (an empty "sha512:" must not take the next key), and the value must look like a SHA-512 digest in base64 (88 characters)
+    const found = /^sha512:[ \t]*(\S+)[ \t]*$/m.exec(yml)?.[1] ?? null;
+    sha512 = found && /^[A-Za-z0-9+/]{86}==$/.test(found) ? found : null;
   }
   return { version, notes: String(release.body ?? '').slice(0, 4000), url: installer.browser_download_url, size: installer.size, name: installer.name, sha512 };
 }
@@ -75,7 +77,7 @@ export function createUpdater({ currentVersion, feed = process.env.BUNNY_UPDATE_
 
   async function download(release) {
     await mkdir(downloadDir, { recursive: true });
-    const target = join(downloadDir, release.name);
+    const target = join(downloadDir, basename(String(release.name))); // SUPD-2: the asset's name is only a file name, never a path
     // Already downloaded and checked on an earlier run: use it.
     if (ready?.version === release.version) return ready.path;
     const res = await fetchImpl(release.url);
