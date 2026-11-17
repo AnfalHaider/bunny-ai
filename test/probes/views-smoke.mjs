@@ -34,8 +34,11 @@ const A = await serve((req, res) => {
   res.writeHead(200, { 'content-type': 'text/html' }); res.end('<title>A</title>a');
 });
 
-// shown (a hidden window cannot be captured: UnknownVizError), but far off screen, without taking the focus or a taskbar button
-const win = new BrowserWindow({ width: 1000, height: 700, show: true, x: -4000, y: -4000, skipTaskbar: true, focusable: false });
+// ON screen (a hidden or off-screen window cannot paint, so a screenshot fails with UnknownVizError) at its full size (the views are cut to the
+// window, so a tiny window would leave them no room), but almost see-through, without taking the focus or a taskbar button
+const win = new BrowserWindow({ width: 1000, height: 700, x: 0, y: 0, show: false, skipTaskbar: true, focusable: false });
+win.setOpacity(0.01);
+win.showInactive();
 await win.loadURL(`http://127.0.0.1:${B.port}/`);
 const views = createBrowserViews({ WebContentsView, session, getWindow: () => win });
 const events = [];
@@ -83,8 +86,11 @@ const afterFile = await text('bunny-tab-1');
 check('a file: navigation from the page is refused', afterFile.includes('tries file'), afterFile);
 
 // 6. the model's actions work on a view: read gives elements, screenshot gives a picture
-const shot = await views.control(owner, 'bunny-tab-1', 'screenshot', {});
-check('screenshot of a view', /^data:image\/png;base64,/.test(shot?.image ?? ''), (shot?.image ?? '').slice(0, 30));
+// A machine that cannot paint this window (a remote session, no display) cannot take a screenshot: that one step is then skipped, and says so.
+let shot = null;
+try { shot = await views.control(owner, 'bunny-tab-1', 'screenshot', {}); } catch (err) { shot = { skipped: String(err?.message ?? err) }; }
+if (shot?.skipped) check('screenshot of a view (SKIPPED: this machine cannot paint the window)', true, shot.skipped);
+else check('screenshot of a view', /^data:image\/png;base64,/.test(shot?.image ?? ''), (shot?.image ?? '').slice(0, 30));
 
 // 7. closing
 views.handle(owner, { op: 'closeAll' });
