@@ -793,8 +793,20 @@
   });
   $('run-memory-import').addEventListener('click', async () => {
     const text = $('import-answer').value.trim();
+    const run = $('run-memory-import');
     if (!text) { $('import-result').textContent = 'Paste the answer first.'; return; }
     try {
+      // S-5 (v0.1.10): first show what would be saved (it becomes standing instructions in later chats); the second click saves it
+      if (run.dataset.confirm !== text) {
+        const p = await sendJSON('/api/memory/import', 'POST', { text, preview: true });
+        if (!p.preview.length) { $('import-result').textContent = 'Nothing new to add.'; return; }
+        const box = $('import-result');
+        box.replaceChildren(Object.assign(document.createElement('div'), { textContent: `These ${p.preview.length} ${p.preview.length === 1 ? 'line becomes a memory' : 'lines become memories'}, and will be added to your chats' instructions. Press the button again to add them, or edit the text above.` }),
+          ...p.preview.slice(0, 50).map((l) => Object.assign(document.createElement('div'), { textContent: `• ${l}` })));
+        run.dataset.confirm = text;
+        return;
+      }
+      delete run.dataset.confirm;
       const r = await sendJSON('/api/memory/import', 'POST', { text });
       $('import-result').textContent = r.added ? `Added ${r.added} ${r.added === 1 ? 'memory' : 'memories'}.` : 'Nothing new to add.';
       if (r.added) $('import-answer').value = '';

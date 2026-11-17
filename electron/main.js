@@ -257,9 +257,9 @@ app.on('before-quit', (event) => {
   if (programsStopped || !bunnyApp) return;
   event.preventDefault();
   programsStopped = true;
-  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(() => {
-    // A downloaded update installs as the app closes (and reopens it after Restart to update).
-    if (updater?.hasUpdate()) updater.install({ relaunch: installOnQuit === 'relaunch' });
+  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(async () => {
+    // A downloaded update installs as the app closes (and reopens it after Restart to update). S-7: it is checked against its published fingerprint once more first.
+    if (updater?.hasUpdate()) await updater.install({ relaunch: installOnQuit === 'relaunch' }).catch(() => {});
     app.quit();
   });
 });
@@ -290,6 +290,7 @@ app.whenReady().then(async () => {
       currentVersion: app.getVersion(),
       enabled: () => bunnyApp?.getSettings().autoUpdate !== false,
       onStatus: sendUpdate,
+      downloadDir: join(dataDir, 'updates'), // S-7: a folder under Bunny's own data folder, not the shared temp folder
     });
     updater.start({ firstCheckMs: Number(process.env.BUNNY_UPDATE_FIRST_CHECK_MS) || 15_000 });
   }

@@ -12,7 +12,11 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
-const PS = 'powershell.exe';
+// S-6 (v0.1.10): the full path of Windows PowerShell, not a name looked up through PATH (a program earlier in PATH could answer instead)
+export const PS = join(process.env.SystemRoot ?? process.env.windir ?? 'C:/Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+
+/** S-6: the saved cipher goes into a script, so it must be plain base64 and nothing else. */
+export const isCipher = (value) => typeof value === 'string' && value.length > 0 && value.length <= 65536 && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 
 /** Run a PowerShell script and return trimmed stdout, or throw its stderr. */
 function powershell(script) {
@@ -73,7 +77,9 @@ $e = [Security.Cryptography.ProtectedData]::Protect($p, $null, 'CurrentUser')
       } catch {
         return null;
       }
-      const { cipher } = JSON.parse(raw);
+      let cipher;
+      try { ({ cipher } = JSON.parse(raw)); } catch { return null; }
+      if (!isCipher(cipher)) return null; // a file that is not what Bunny wrote is a secret that is not there
       const out = await powershell(`
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security

@@ -11,7 +11,7 @@
  * answers like GitHub's API).
  */
 import { createHash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rm, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -80,7 +80,7 @@ export function createUpdater({ currentVersion, feed = process.env.BUNNY_UPDATE_
   const set = (patch) => { status = { ...status, ...patch, current: currentVersion }; onStatus(status); };
 
   async function download(release) {
-    await mkdir(downloadDir, { recursive: true });
+    await mkdir(downloadDir, { recursive: true, mode: 0o700 });
     const target = join(downloadDir, basename(String(release.name))); // SUPD-2: the asset's name is only a file name, never a path
     // Already downloaded and checked on an earlier run: use it.
     if (ready?.version === release.version) return ready.path;
@@ -131,7 +131,7 @@ export function createUpdater({ currentVersion, feed = process.env.BUNNY_UPDATE_
         if (!release.sha512) throw new Error('Release ' + release.version + ' has no published checksum (latest.yml with a sha512), so it will not be installed.');
         set({ state: 'downloading', latest: release.version, notes: release.notes, progress: 0, message: null });
         const path = await download(release);
-        ready = { path, version: release.version };
+        ready = { path, version: release.version, sha512: release.sha512 };
         set({ state: 'ready', latest: release.version, progress: 100, message: `Bunny AI ${release.version} is ready. Restart to update.` });
       } catch (err) {
         set({ state: 'error', message: `The update check failed: ${err.message}` });
@@ -145,8 +145,17 @@ export function createUpdater({ currentVersion, feed = process.env.BUNNY_UPDATE_
    * Run the downloaded installer silently. relaunch: start the new version when it is done
    * (Restart to update); without it, the update simply waits for the next start (on quit).
    */
-  function install({ relaunch = true } = {}) {
+  async function install({ relaunch = true } = {}) {
     if (!ready) return false;
+    // S-7 (v0.1.10): the file is hashed again just before it runs, so one swapped after the check (a program with access to the folder) is thrown away, not run
+    const hash = createHash('sha512');
+    try { for await (const chunk of createReadStream(ready.path)) hash.update(chunk); } catch { hash.update('missing'); }
+    if (hash.digest('base64') !== ready.sha512) {
+      await rm(ready.path, { force: true });
+      ready = null;
+      set({ state: 'error', message: 'The downloaded installer changed after it was checked, so it was thrown away and will be downloaded again.' });
+      return false;
+    }
     const args = ['/S', '--updated', ...(relaunch ? ['--force-run'] : [])];
     const child = spawn(ready.path, args, { detached: true, stdio: 'ignore', windowsHide: true });
     child.unref();

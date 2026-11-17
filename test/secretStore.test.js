@@ -78,3 +78,21 @@ test('the registry writes through to DPAPI and lists only the masked key', { ski
   assert.equal(await secrets.get('provider:openai'), null);
   await rm(dir, { recursive: true, force: true });
 });
+
+test('S-6 (v0.1.10): a saved cipher that is not plain base64 is never put into a script, and PowerShell is called by its full path', { skip: !windows }, async () => {
+  const { writeFile, readdir: list } = await import('node:fs/promises');
+  const { isCipher, PS } = await import('../src/providers/secretStore.js');
+  assert.ok(/^[A-Za-z]:[\\/].*System32[\\/]WindowsPowerShell[\\/]v1\.0[\\/]powershell\.exe$/i.test(PS), PS);
+  assert.ok(isCipher('QUJD+/=='));
+  for (const bad of ["abc'; Start-Process calc; '", 'a b', '', 'abc$(x)', `${'A'.repeat(70000)}`, null, 12]) assert.equal(isCipher(bad), false, String(bad).slice(0, 30));
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-secrets-'));
+  try {
+    const store = dpapiSecretStore({ dir });
+    await store.set('provider:x', 'sk-real-0000');
+    const [file] = await list(dir);
+    await writeFile(join(dir, file), JSON.stringify({ name: 'provider:x', cipher: "AAAA'; Set-Content $env:TEMP\s6-proof.txt 'ran'; '" }));
+    assert.equal(await store.get('provider:x'), null, 'the planted file reads as no secret');
+    await writeFile(join(dir, file), 'not json');
+    assert.equal(await store.get('provider:x'), null);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

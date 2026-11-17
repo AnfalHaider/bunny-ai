@@ -104,7 +104,7 @@ for (const variant of ['no-file', 'no-sha', 'empty-sha']) {
     assert.match(status.message, /no published checksum/);
     assert.ok(!gh.asked.includes('https://dl/setup.exe'), 'the installer was never fetched');
     assert.equal(updater.hasUpdate(), false);
-    assert.equal(updater.install(), false, 'nothing to install');
+    assert.equal(await updater.install(), false, 'nothing to install');
   });
 }
 
@@ -175,4 +175,19 @@ test('v0.1.10 (QA 4c-14): the release notes are kept whole, beyond the old 4,000
   const release = { tag_name: 'v0.2.0', body, assets: [{ name: 'Bunny-AI-Setup-0.2.0.exe', size: 1, browser_download_url: 'https://dl/setup.exe' }] };
   const got = await readRelease(release, async () => new Response('', { status: 200 }));
   assert.equal(got.notes, body);
+});
+
+test('S-7 (v0.1.10): an installer swapped after the check is thrown away at install time, never run', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-update-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const gh = fakeGithub({ version: '0.2.0' });
+  const updater = createUpdater({ currentVersion: '0.1.0', feed: 'https://api/releases/latest', fetchImpl: gh.fetchImpl, downloadDir: dir });
+  assert.equal((await updater.check()).state, 'ready');
+  const { writeFile, readdir } = await import('node:fs/promises');
+  const [name] = await readdir(dir);
+  await writeFile(join(dir, name), 'not the installer that was checked');
+  assert.equal(await updater.install(), false, 'nothing was started');
+  assert.equal(updater.hasUpdate(), false);
+  assert.deepEqual(await readdir(dir), [], 'the swapped file was removed');
+  assert.match(updater.status().message, /changed after it was checked/);
 });

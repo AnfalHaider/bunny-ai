@@ -965,6 +965,12 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').replace(/^#+\s*/, '').trim())
         .filter((l) => l.length >= 4 && !/^(here (is|are)|memory|memories|sure|okay)\b.*:?$/i.test(l));
       const known = new Set((await memory.list()).map((m) => m.text.toLowerCase()));
+      // S-5 (v0.1.10): the person sees what would be saved before it is saved; the screen asks first with `preview: true`, then sends again to confirm
+      if (body.preview === true) {
+        const fresh = [];
+        for (const text of lines.slice(0, 150)) { const t = text.slice(0, 400); if (!known.has(t.toLowerCase()) && !fresh.includes(t)) fresh.push(t); }
+        return sendJson(res, 200, { preview: fresh, found: lines.length });
+      }
       let added = 0;
       for (const text of lines.slice(0, 150)) {
         if (known.has(text.toLowerCase())) continue;
@@ -2663,13 +2669,14 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
               const title = String(parsed.title ?? '').trim().slice(0, 80) || 'New chat';
               const message = String(parsed.message ?? '').trim();
               if (!message) throw new Error('move_to_new_chat needs the message to send in the new chat');
-              let go = unrelatedTask === 'new';
-              if (!go) {
-                const answer = await askQuestion({ question: `That looks like a separate task: "${title}". Start it in a new chat?`,
-                  choices: [{ label: 'Start a new chat', reason: 'Keeps this chat about its own work', recommended: true }, { label: 'Do it here', reason: 'Carry on in this chat' }] });
-                go = (answer.choices ?? [])[0] === 'Start a new chat';
-                replyStatus.set(id, 'working');
-              }
+              // S-5 (v0.1.10): always asks, in the "new chat" setting too, and shows the text that would be sent: it came from the model, and a page or file it read can shape it.
+              // The setting only decides which answer is recommended.
+              const answer = await askQuestion({ question: `That looks like a separate task: "${title}". Start it in a new chat with this message?
+
+${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
+                choices: [{ label: 'Start a new chat', reason: 'Keeps this chat about its own work', recommended: unrelatedTask === 'new' }, { label: 'Do it here', reason: 'Carry on in this chat', recommended: unrelatedTask !== 'new' }] });
+              const go = (answer.choices ?? [])[0] === 'Start a new chat';
+              replyStatus.set(id, 'working');
               if (go) {
                 send('newChat', { title, message });
                 result = 'A new chat was started for that request. Do not work on it here: say in one short line that it continues in the new chat.';
