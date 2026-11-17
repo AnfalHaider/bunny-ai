@@ -2,6 +2,16 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - v0.1.9: release sign-off PASS at b9bdd7a
+
+- Final gate: 9/9 at b9bdd7a. The AssertionError in the unit-test tail is the todo test Q2-26 (`test/q2-permissions.test.js:154`), not a failure.
+- Merges since 6528b8a: 8a163bb, 23e645c, f7ade13, 211065c, 6dd1748, ec2afa2, 7a17405, 06ade45. No lost lines. In 23e645c (W6-6 with the W6-16 folders), the conflicting lines kept both sides: `app.js` `appTools.run` has folder and expectSha; `mcpStore.add` has folders and source.
+- `app.css` equals the build at every merge, at 23185c5 and at b9bdd7a.
+- Direct commits read: 591bf83 (memory guard), c16918b, be1547a, 1dad4ac, 344610e, b9bdd7a, 795a8a2.
+- Signed this session: run, w6-12, roles, gate-names, w6-16, s-upd, s-oauth, priv, w6-24, w6-6, release-0.1.9.
+- Open rows for the next release: K-5, GATE-CSS, RUN-1, and the W6-6 failed-install cleanup (`toolInstall.js:146`, recursive rm, not the delete that never follows links).
+- Lesson: a gate's last lines can show an AssertionError on a PASS. Before calling it a failure, check whether it comes from a todo test.
+
 ## 2026-11-17 - v0.1.9: reviews after the candidate gate (in progress)
 
 **Merge check, release-0.1.9 at 327763e:** no lines lost in 9 merges; the two conflicts (deb53b8 chat.js refusals, fdae66e ui/chat.js import) keep both sides; app.css equals its design sources. Report: `tech-lead-release-0.1.9-merge-check.md` in the shared notes folder. RUN merged as 8f3f181 and reverted (fcddf99); the Chief keeps RUN out of 0.1.9 (23-minute gate, unexplained parallel failure).
