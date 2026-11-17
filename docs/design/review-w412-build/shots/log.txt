@@ -1,0 +1,16 @@
+lightd waiting: send disabled=false stop visible=true buttons=["Green\nRecommended\nMatches the carrot leaves in the logo","Blue\nCalm, like the current header","Send","Skip"]
+lightd answered-click: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Green
+lightd answered-typed: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Something warm, like orange
+lightd unanswered: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | Not answered | Bunny stopped waiting (the window was closed or reloaded, or nobody answered in time), so this card can no longer be answered. Tell Bunny what you want in the message box. | buttons=0 choice opacity=0.55
+lightm waiting: send disabled=false stop visible=true buttons=["Green\nRecommended\nMatches the carrot leaves in the logo","Blue\nCalm, like the current header","Send","Skip"]
+lightm answered-click: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Green
+lightm answered-typed: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Something warm, like orange
+lightm unanswered: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | Not answered | Bunny stopped waiting (the window was closed or reloaded, or nobody answered in time), so this card can no longer be answered. Tell Bunny what you want in the message box. | buttons=0 choice opacity=0.55
+darkd waiting: send disabled=false stop visible=true buttons=["Green\nRecommended\nMatches the carrot leaves in the logo","Blue\nCalm, like the current header","Send","Skip"]
+darkd answered-click: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Green
+darkd answered-typed: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Something warm, like orange
+darkd unanswered: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | Not answered | Bunny stopped waiting (the window was closed or reloaded, or nobody answered in time), so this card can no longer be answered. Tell Bunny what you want in the message box. | buttons=0 choice opacity=0.55
+darkm waiting: send disabled=false stop visible=true buttons=["Green\nRecommended\nMatches the carrot leaves in the logo","Blue\nCalm, like the current header","Send","Skip"]
+darkm answered-click: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Green
+darkm answered-typed: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | You answered: Something warm, like orange
+darkm unanswered: BUNNY ASKED | Which colour should the header be? | Green | Recommended | Blue | Not answered | Bunny stopped waiting (the window was closed or reloaded, or nobody answered in time), so this card can no longer be answered. Tell Bunny what you want in the message box. | buttons=0 choice opacity=0.55
