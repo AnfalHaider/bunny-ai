@@ -4,7 +4,21 @@ Stopped at the usage limit. **No sign-off has been given for either step.**
 
 ## Read so far
 
-**Step 1, 516aa43: looks sound; the probe is still to run.**
+**Step 1, 516aa43: PASS (signed as browser-1).**
+
+Tests, one file each, from a copy of 516aa43 with `NoDefaultCurrentDirectoryInExePath` unset:
+
+| Test file | Pass | Fail |
+|---|---|---|
+| `browser-access` | 5 | 0 |
+| `browser-mode` | 4 | 0 |
+| `window-only` | 16 | 0 |
+
+What holds:
+- `app:open-browser` takes no argument, checks `isOwn(senderFrame)`, and opens only `browserAddress(origin)`.
+- The window-only lock is still the server's own check. The browser page's early "Change this in Bunny's window." message is only a convenience.
+- `/api/health` adds only a true/false value.
+- A browser tab is another page on 127.0.0.1, so the S-1 rules apply to it unchanged (exact Host, Origin, Sec-Fetch-Site and the token).
 - The shell opens only `browserAddress(origin)`, which is `http://127.0.0.1:<port>/`, with no path, query or token, and nothing taken from the page.
 - The server listens on 127.0.0.1 only. A fixed port is stored, with a fallback when it is taken.
 - LOW: a fixed port makes Bunny easier for other local pages to find. That is acceptable, because the S-1 token, Host and Origin checks are unchanged.
