@@ -1,9 +1,9 @@
 ---
 piece: k2-guard
 role: tech-lead
-sha: ec605fd
+sha: bec112e
 verdict: PASS
 date: 2026-11-17
 ---
 
-Design: one resolveContext (project from git's common dir; only folders git lists as worktrees use their own role, all else 'unassigned'). Hooks run the main checkout's checks and fail closed; K1-5 deadline with 8 s child. Tests 43/43 (k2, k1, landing) and 149/149 guard suites with KIT_NEXT=1; e2e not run by me. My probe from a registered builder worktree: writes to main's hooks, guard, policy, AGENTS refused, worktree add refused, own src allowed. Follow-up (low): git -C main commit is allowed and is judged by main's role in the hook (can commit the CoS's staged work, adds no content). Lands with K-1.
+Supersedes ec605fd. Delta is 13 lines: Release Ops writes under .git limited to refs/heads, refs/tags, packed-refs, ORIG_HEAD, FETCH_HEAD; commondir, gitdir, bootstrap-role, config, hooks, worktrees/* refused for all but the Chief of Staff (paths are canonicalised so .. does not get round it; a branch named hooks/x is refused too, harmless). Tests k2+k1+landing 42/43 in the combined run: the one failure is the K1 timing check (answered in 1122 ms, limit 1000) under load; it passes 3 of 3 alone. e2e not run by me.
