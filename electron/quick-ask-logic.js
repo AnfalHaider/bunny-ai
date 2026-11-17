@@ -1,4 +1,5 @@
 // W4-8: the quick-ask bar's pure rules (no Electron here, so they can be tested).
+import { looksSecret } from '../src/server/secretLike.js';
 
 export const DEFAULT_SHORTCUT = 'Ctrl+Alt+Space';
 export const MAX_TEXT = 20_000;
@@ -71,7 +72,12 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
  * W4-8b: "Add a file…". The type is decided HERE from the extension, never by the page that sends it, and the bytes must agree with it:
  * png, jpeg, gif and webp by their first bytes, pdf by %PDF-, and plain text only when it is valid UTF-8 with no NUL byte. At most 8 MB.
  */
-const TEXT_EXTENSIONS = ['txt', 'md', 'json', 'csv', 'log', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'h', 'cpp', 'cs', 'css', 'html', 'xml', 'yaml', 'yml', 'toml', 'sh', 'ps1', 'sql'];
+// The source-code and plain-text extensions, written out in full (Security, W4-8b). Anything not in this list is refused.
+const TEXT_EXTENSIONS = ['txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'csv', 'tsv', 'log', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'mts', 'cts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'h', 'cc', 'cpp', 'cxx', 'hpp', 'cs', 'php', 'lua', 'r', 'dart', 'scala', 'css', 'scss', 'less', 'html', 'htm', 'xml', 'svg', 'yaml', 'yml', 'toml', 'ini', 'sh', 'bash', 'ps1', 'bat', 'sql', 'vue', 'svelte'];
+// Never attached whatever else is true: keys, certificates, password stores. (A file with no extension, or a name that starts with .env, is refused too.)
+const NEVER_EXTENSIONS = new Set(['env', 'pem', 'key', 'p12', 'pfx', 'ppk', 'kdbx', 'crt', 'cer', 'jks', 'keystore', 'gpg', 'asc']);
+const NEVER_NAMES = /^(\.env(\..*)?|id_(rsa|dsa|ecdsa|ed25519)(\..*)?|\.npmrc|\.netrc|credentials)$/i;
+export const SECRET_FILE_MESSAGE = 'This file looks like it holds a key or password, so it was not attached.';
 export const FILE_TYPES = new Map([
   ['png', { mime: 'image/png', kind: 'image' }], ['jpg', { mime: 'image/jpeg', kind: 'image' }], ['jpeg', { mime: 'image/jpeg', kind: 'image' }],
   ['gif', { mime: 'image/gif', kind: 'image' }], ['webp', { mime: 'image/webp', kind: 'image' }], ['pdf', { mime: 'application/pdf', kind: 'pdf' }],
@@ -83,7 +89,7 @@ export const FILE_DIALOG_FILTERS = [
 
 /** The file's own name: no folders, no control characters, at most 120 characters. */
 export function cleanFileName(name) {
-  const base = String(name ?? '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const base = String(name ?? '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f\p{Cf}]/gu, '').trim(); // \p{Cf} takes out look-alike tricks such as U+202E (right-to-left override)
   return (base || 'file').slice(0, 120);
 }
 
@@ -101,20 +107,31 @@ function bytesAgree(kind, ext, bytes) {
   try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); return true; } catch { return false; }
 }
 
+/** A path from the dialog: a local drive path only. A share (\\\\server\\x leaks the Windows sign-in) and device paths (\\\\.\\ and \\\\?\\) are refused. */
+export function checkPath(path) {
+  if (typeof path !== 'string' || !path || /^[\\/]{2}/.test(path) || path.includes('\u0000')) return { ok: false, message: 'Only a file on this computer can be added.' };
+  return { ok: true };
+}
+
 /** Check one file: { name, bytes (a Buffer) }. Returns { ok: true, file: { name, mime, kind, size, data } } or { ok: false, message }. */
 export function checkFile(name, bytes) {
   const clean = cleanFileName(name);
   const ext = clean.includes('.') ? clean.split('.').pop().toLowerCase() : '';
+  if (NEVER_EXTENSIONS.has(ext) || NEVER_NAMES.test(clean) || clean.toLowerCase().startsWith('.env')) return { ok: false, message: SECRET_FILE_MESSAGE };
   const type = FILE_TYPES.get(ext);
   if (!type) return { ok: false, message: 'That kind of file cannot be added. Pictures, PDFs and plain text can.' };
   if (!Buffer.isBuffer(bytes) || !bytes.length) return { ok: false, message: 'That file is empty.' };
   if (bytes.length > MAX_SHOT_BYTES) return { ok: false, message: 'The file is over 8 MB.' };
   if (!bytesAgree(type.kind, ext, bytes)) return { ok: false, message: 'That file is not what its name says.' };
+  if (type.kind === 'text' && looksSecret(bytes.toString('utf8'))) return { ok: false, message: SECRET_FILE_MESSAGE }; // W6-18's check, on the text
   return { ok: true, file: { name: clean, mime: type.mime, kind: type.kind, size: bytes.length, data: `data:${type.mime};base64,${bytes.toString('base64')}` } };
 }
 
-/** Check what the bar sends. Returns { ok: true, text, shot, file } (shot is a Buffer or null; file is a checked file or null) or { ok: false, message }. */
-export function validateSubmission(text, attachments) {
+/**
+ * Check what the bar sends. Returns { ok: true, text, shot, file } (shot is a Buffer or null; file is the file main is holding or null) or { ok: false, message }.
+ * A file is never sent back by the page: it names the id main gave it, and `held` ({ id, file }) is what main kept. An id main never gave out is refused.
+ */
+export function validateSubmission(text, attachments, held = null) {
   if (typeof text !== 'string') return { ok: false, message: 'Type something to ask.' };
   const trimmed = text.trim();
   if (!trimmed) return { ok: false, message: 'Type something to ask.' };
@@ -124,13 +141,9 @@ export function validateSubmission(text, attachments) {
   let shot = null;
   let file = null;
   if (list.length === 1 && list[0] && typeof list[0] === 'object' && list[0].kind === 'file') {
-    // a file: the page sends its name and its bytes as a data address; what it is is decided here again
-    const m = typeof list[0].data === 'string' ? /^data:[a-z]+\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/]+={0,2})$/i.exec(list[0].data) : null;
-    if (!m) return { ok: false, message: 'The file was not valid.' };
-    if (m[1].length > Math.ceil(MAX_SHOT_BYTES * 4 / 3) + 4) return { ok: false, message: 'The file is over 8 MB.' };
-    const checked = checkFile(list[0].name, Buffer.from(m[1], 'base64'));
-    if (!checked.ok) return checked;
-    file = checked.file;
+    // a file: only the id main gave it. What was read and checked at pick time is what is sent, whatever the file is by now.
+    if (!held || typeof list[0].id !== 'string' || list[0].id !== held.id) return { ok: false, message: 'The file was not valid.' };
+    file = held.file;
   } else if (list.length === 1) {
     const a = list[0];
     const m = a && typeof a === 'object' && typeof a.data === 'string' ? /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(a.data) : null;

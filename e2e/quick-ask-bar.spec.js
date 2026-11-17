@@ -11,7 +11,7 @@ async function openBar(page, { submit }) {
   await page.addInitScript(({ pixel, mode }) => {
     window.quickAsk = {
       captureScreenshot: async () => ({ ok: true, data: pixel }),
-      pickFile: async () => (mode === 'cancel' ? { ok: false, cancelled: true } : mode === 'refuse' ? { ok: false, message: 'That file is over 8 MB.' } : { ok: true, name: 'report.pdf', mime: 'application/pdf', kind: 'pdf', data: 'data:application/pdf;base64,JVBERi0=' }),
+      pickFile: async () => (mode === 'cancel' ? { ok: false, cancelled: true } : mode === 'refuse' ? { ok: false, message: 'That file is over 8 MB.' } : { ok: true, id: 'invented-id-1', name: 'report.pdf', kind: 'pdf', size: 5 }),
       submit: () => (mode === 'wait' ? new Promise(() => {}) : Promise.resolve({ ok: false })),
     };
   }, { pixel: PIXEL, mode: submit });

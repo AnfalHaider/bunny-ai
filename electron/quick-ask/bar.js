@@ -36,14 +36,15 @@ function renderChip() {
   const isFile = shot.kind === 'file';
   const img = document.createElement('img');
   img.alt = '';
-  if (!isFile || shot.mime?.startsWith('image/')) img.src = shot.data;
+  if (!isFile) img.src = shot.data;
+  else if (shot.preview) img.src = shot.preview;
   const label = document.createElement('span');
   label.textContent = isFile ? shot.name : 'Screenshot';
   const x = document.createElement('button');
   x.type = 'button';
   x.setAttribute('aria-label', isFile ? 'Remove the file' : 'Remove the screenshot');
   x.textContent = '×';
-  x.addEventListener('click', () => { shot = null; renderChip(); text.focus(); });
+  x.addEventListener('click', () => { if (shot?.kind === 'file') window.quickAsk.dropFile().catch(() => {}); shot = null; renderChip(); text.focus(); });
   if (img.src) chip.append(img);
   chip.append(label, x);
   host.append(chip);
@@ -78,7 +79,7 @@ $('file-item').addEventListener('click', async () => {
   message('');
   try {
     const result = await window.quickAsk.pickFile();
-    if (result && result.ok && typeof result.data === 'string') { shot = { kind: 'file', name: String(result.name), mime: String(result.mime), data: result.data }; renderChip(); }
+    if (result && result.ok && typeof result.id === 'string') { shot = { kind: 'file', id: result.id, name: String(result.name), preview: typeof result.preview === 'string' ? result.preview : undefined }; renderChip(); }
     else if (!(result && result.cancelled)) message((result && result.message) || 'Bunny could not add that file.');
   } catch {
     message('Bunny could not add that file.');
@@ -92,7 +93,7 @@ async function send() {
   refresh();
   message('Opening Bunny…', 'busy');
   try {
-    const result = await window.quickAsk.submit(text.value, shot ? [shot] : []);
+    const result = await window.quickAsk.submit(text.value, shot ? [shot.kind === 'file' ? { kind: 'file', id: shot.id } : shot] : []); // a file goes by its id only
     if (result && result.ok) return; // the bar is closed by the app
     message((result && result.message) || 'Bunny could not open.');
   } catch {

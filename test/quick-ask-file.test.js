@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkFile, cleanFileName, validateSubmission, buildNewChatRequest, MAX_SHOT_BYTES } from '../electron/quick-ask-logic.js';
+import { checkFile, checkPath, cleanFileName, validateSubmission, buildNewChatRequest, MAX_SHOT_BYTES } from '../electron/quick-ask-logic.js';
 import { createQuickAsk } from '../electron/quick-ask.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // W4-8b: "Add a file…" in the quick-ask bar. The type is decided in the main process from the extension, the bytes must agree, nothing comes from the page but the file itself.
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('invented picture bytes')]);
@@ -39,30 +42,29 @@ test('refused: an unknown kind, a program renamed as a picture, a binary renamed
   assert.equal(checkFile('noext', Buffer.from('x')).ok, false);
 });
 
-test('a submission takes at most one screenshot OR one file, and a file is checked again from its bytes', () => {
-  const ok = validateSubmission('read this', [{ kind: 'file', name: 'a.pdf', data: asData('application/pdf', PDF) }]);
-  assert.equal(ok.ok, true);
-  assert.equal(ok.shot, null);
-  assert.equal(ok.file.name, 'a.pdf');
-  assert.deepEqual(buildNewChatRequest(ok.text, ok.shot, ok.file).files, [{ name: 'a.pdf', mime: 'application/pdf', kind: 'pdf', data: asData('application/pdf', PDF), size: PDF.length }]);
-  assert.match(validateSubmission('x', [{ kind: 'file', name: 'a.pdf', data: asData('application/pdf', PDF) }, { kind: 'file', name: 'b.pdf', data: asData('application/pdf', PDF) }]).message, /Only one/);
-  // the page says it is a picture; the bytes say otherwise
-  assert.equal(validateSubmission('x', [{ kind: 'file', name: 'a.png', data: asData('image/png', Buffer.from('not a picture')) }]).ok, false);
-  // the page cannot choose the type: a .exe is refused whatever it claims
-  assert.equal(validateSubmission('x', [{ kind: 'file', name: 'a.exe', mime: 'image/png', data: asData('image/png', PNG) }]).ok, false);
-  assert.equal(validateSubmission('x', [{ kind: 'file', name: 'a.txt', data: 'not a data address' }]).ok, false);
-  // the screenshot path is unchanged
-  assert.equal(validateSubmission('x', [{ data: asData('image/png', PNG) }]).ok, true);
+test('Security W4-8b: no key or password files, a name cannot hide behind invisible characters, and a text file holding a key is refused', () => {
+  const secret = 'This file looks like it holds a key or password, so it was not attached.';
+  for (const name of ['.env', '.env.local', 'prod.env', 'server.pem', 'a.key', 'a.p12', 'a.pfx', 'a.ppk', 'vault.kdbx', 'id_rsa', 'a.PEM']) assert.equal(checkFile(name, Buffer.from('x')).message, secret, name);
+  assert.equal(checkFile('notes.txt', Buffer.from('my key is sk-abcdefghijklmnopqrstuvwx1234')).message, secret);
+  assert.equal(checkFile('notes.txt', Buffer.from('lunch at noon')).ok, true);
+  assert.equal(checkFile('Makefile', Buffer.from('all:')).ok, false, 'no extension');
+  assert.equal(cleanFileName('report\u202Egpj.txt'), 'reportgpj.txt', 'U+202E is removed');
 });
 
-/** The main process with a stand-in dialog and stand-in file operations. */
-function quickAsk({ chosen, info, bytes }) {
+test('Security W4-8b: only a local drive path; a share and a device path are refused', () => {
+  for (const p of ['\\\\server\\share\\a.txt', '//server/share/a.txt', '\\\\.\\C:\\a.txt', '\\\\?\\C:\\a.txt', '']) assert.equal(checkPath(p).ok, false, p);
+  assert.equal(checkPath('C:\\Users\\x\\a.txt').ok, true);
+});
+
+/** The main process with a stand-in dialog; files are real, in a temporary folder of invented data. */
+function quickAsk(chosenPath) {
   const handlers = new Map();
   const win = {
     isDestroyed: () => false, webContents: { sender: true, setWindowOpenHandler() {}, on() {}, session: { setPermissionRequestHandler() {} } },
     on() {}, once() {}, loadFile() {}, setAlwaysOnTop() {}, setBounds() {}, show() {}, focus() {}, hide() {}, destroy() {},
   };
   const sent = [];
+  const state = { path: chosenPath };
   const api = createQuickAsk({
     BrowserWindow: function Win() { return win; },
     globalShortcut: { register: () => true, unregister() {} },
@@ -70,40 +72,70 @@ function quickAsk({ chosen, info, bytes }) {
     desktopCapturer: {},
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
     onSubmit: async (request) => { sent.push(request); return true; },
-    dialog: { showOpenDialog: async (window, options) => { sent.push({ dialog: options }); return chosen; } },
-    fileOps: { lstat: async () => info, readFile: async () => bytes },
+    dialog: { showOpenDialog: async (window, options) => { sent.push({ dialog: options }); return state.path ? { canceled: false, filePaths: [state.path] } : { canceled: true, filePaths: [] }; } },
   });
   api.open();
   const event = { sender: win.webContents, senderFrame: { url: 'file:///x/quick-ask/bar.html' } };
-  return { call: (name, ...args) => handlers.get(name)(event, ...args), sent, handlers };
+  return { call: (name, ...args) => handlers.get(name)(event, ...args), sent, handlers, state };
 }
-const plainFile = (size) => ({ isSymbolicLink: () => false, isFile: () => true, size });
+const folder = mkdtempSync(join(tmpdir(), 'bunny-qa-file-'));
+const put = (name, bytes) => { const p = join(folder, name); writeFileSync(p, bytes); return p; };
+test.after(() => rmSync(folder, { recursive: true, force: true }));
 
-test('main: the dialog is the only source of a path; a plain file is read and returned with its checked type', async () => {
-  const q = quickAsk({ chosen: { canceled: false, filePaths: ['C:\\invented\\notes.txt'] }, info: plainFile(5), bytes: Buffer.from('hello') });
+test('main: the dialog is the only source of a path; the page gets an id, the name, the kind and the size, and never the bytes or a type', async () => {
+  const q = quickAsk(put('notes.txt', 'hello'));
   const r = await q.call('quickask:pickFile');
-  assert.deepEqual([r.ok, r.name, r.mime, r.kind], [true, 'notes.txt', 'text/plain', 'text']);
+  assert.deepEqual(Object.keys(r).sort(), ['id', 'kind', 'name', 'ok', 'size']);
+  assert.deepEqual([r.ok, r.name, r.kind, r.size], [true, 'notes.txt', 'text', 5]);
+  assert.match(r.id, /^[0-9a-f-]{36}$/);
   assert.deepEqual(q.sent[0].dialog.properties, ['openFile'], 'one file, no folders');
-  assert.ok(q.sent[0].dialog.filters[0].extensions.includes('pdf') && !q.sent[0].dialog.filters[0].extensions.includes('exe'));
+  assert.ok(q.sent[0].dialog.filters[0].extensions.includes('pdf') && !q.sent[0].dialog.filters[0].extensions.includes('exe') && !q.sent[0].dialog.filters[0].extensions.includes('env'));
+  const small = await quickAsk(put('a.png', PNG)).call('quickask:pickFile');
+  assert.match(small.preview, /^data:image\/png;base64,/, 'a small picture has a preview');
 });
 
-test('main: a link, a folder, an over-large file, a renamed program and a cancel are all refused or ignored plainly', async () => {
-  const symlink = quickAsk({ chosen: { canceled: false, filePaths: ['/x/link.txt'] }, info: { isSymbolicLink: () => true, isFile: () => false, size: 1 }, bytes: Buffer.from('x') });
-  assert.match((await symlink.call('quickask:pickFile')).message, /plain file/);
-  const big = quickAsk({ chosen: { canceled: false, filePaths: ['/x/big.txt'] }, info: plainFile(MAX_SHOT_BYTES + 1), bytes: Buffer.from('x') });
-  assert.match((await big.call('quickask:pickFile')).message, /over 8 MB/);
-  const trick = quickAsk({ chosen: { canceled: false, filePaths: ['/x/not-a.png'] }, info: plainFile(10), bytes: Buffer.from('MZ program') });
-  assert.match((await trick.call('quickask:pickFile')).message, /not what its name says/);
-  const cancel = quickAsk({ chosen: { canceled: true, filePaths: [] }, info: plainFile(1), bytes: Buffer.from('x') });
-  assert.deepEqual(await cancel.call('quickask:pickFile'), { ok: false, cancelled: true });
+test('main: a share, a folder, an over-large file, a renamed program, a key file and a cancel are refused or ignored plainly', async () => {
+  assert.match((await quickAsk('\\\\server\\share\\a.txt').call('quickask:pickFile')).message, /on this computer/);
+  assert.match((await quickAsk(folder).call('quickask:pickFile')).message, /plain file/);
+  assert.match((await quickAsk(put('big.txt', Buffer.alloc(MAX_SHOT_BYTES + 1, 0x61))).call('quickask:pickFile')).message, /over 8 MB/);
+  assert.match((await quickAsk(put('not-a.png', 'MZ program')).call('quickask:pickFile')).message, /not what its name says/);
+  assert.match((await quickAsk(put('.env', 'A=1')).call('quickask:pickFile')).message, /key or password/);
+  assert.match((await quickAsk(put('keys.txt', 'token = sk-abcdefghijklmnopqrstuvwx1234')).call('quickask:pickFile')).message, /key or password/);
+  assert.deepEqual(await quickAsk(null).call('quickask:pickFile'), { ok: false, cancelled: true });
 });
 
-test('main: a call from anywhere but the bar is refused, and a file sent with the message becomes an ordinary attachment of a new chat', async () => {
-  const q = quickAsk({ chosen: { canceled: true, filePaths: [] }, info: plainFile(1), bytes: Buffer.from('x') });
+test('main: the file is sent as it was when picked, by its id; an id the bar never received, a second attachment and a stranger are refused', async () => {
+  const path = put('plan.txt', 'the original words');
+  const q = quickAsk(path);
   const stranger = await q.handlers.get('quickask:pickFile')({ sender: {}, senderFrame: { url: 'https://example.test/' } });
   assert.deepEqual(stranger, { ok: false, message: 'Not allowed' });
-  const sent = await q.call('quickask:submit', 'read it', [{ kind: 'file', name: 'a.pdf', data: asData('application/pdf', PDF) }]);
+  const picked = await q.call('quickask:pickFile');
+  writeFileSync(path, 'CHANGED after the pick'); // the file changes between the pick and the send
+  assert.match((await q.call('quickask:submit', 'read it', [{ kind: 'file', id: 'not-an-id-the-bar-received' }])).message, /not valid/);
+  assert.match((await q.call('quickask:submit', 'read it', [{ kind: 'file', id: picked.id }, { kind: 'file', id: picked.id }])).message, /Only one/);
+  assert.match((await q.call('quickask:submit', 'read it', [{ kind: 'file', name: 'a.txt', data: asData('text/plain', Buffer.from('bytes from the page')) }])).message, /not valid/, 'bytes from the page are never taken');
+  const sent = await q.call('quickask:submit', 'read it', [{ kind: 'file', id: picked.id }]);
   assert.equal(sent.ok, true);
   const request = q.sent.find((x) => x.files);
-  assert.deepEqual([request.workMode, request.folder, request.files[0].name, request.files[0].kind], ['chat', null, 'a.pdf', 'pdf']);
+  assert.deepEqual([request.workMode, request.folder, request.files[0].name, request.files[0].kind], ['chat', null, 'plan.txt', 'text']);
+  assert.equal(request.files[0].data, asData('text/plain', Buffer.from('the original words')), 'the original bytes, not the changed file');
+  assert.match((await q.call('quickask:submit', 'again', [{ kind: 'file', id: picked.id }])).message, /not valid|Not allowed/, 'once sent, the bytes are dropped and the id works no more');
+});
+
+test('main: removing the file (x) drops the bytes, and a new pick replaces the old one', async () => {
+  const q = quickAsk(put('one.txt', 'one'));
+  const a = await q.call('quickask:pickFile');
+  await q.call('quickask:dropFile');
+  assert.match((await q.call('quickask:submit', 'x', [{ kind: 'file', id: a.id }])).message, /not valid/);
+  const b = await q.call('quickask:pickFile');
+  q.state.path = put('two.txt', 'two');
+  const c = await q.call('quickask:pickFile');
+  assert.match((await q.call('quickask:submit', 'x', [{ kind: 'file', id: b.id }])).message, /not valid/, 'the first id is gone');
+  assert.equal((await q.call('quickask:submit', 'x', [{ kind: 'file', id: c.id }])).ok, true);
+});
+
+test('a submission without a file still takes one screenshot, and a held file becomes an ordinary attachment of a new chat', () => {
+  assert.equal(validateSubmission('x', [{ data: asData('image/png', PNG) }]).ok, true);
+  const file = checkFile('a.pdf', PDF).file;
+  assert.deepEqual(buildNewChatRequest('t', null, file).files, [{ name: 'a.pdf', mime: 'application/pdf', kind: 'pdf', data: asData('application/pdf', PDF), size: PDF.length }]);
 });

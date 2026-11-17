@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('quickAsk', {
   submit: (text, attachments) => ipcRenderer.invoke('quickask:submit', text, attachments),
   captureScreenshot: () => ipcRenderer.invoke('quickask:capture'),
   pickFile: () => ipcRenderer.invoke('quickask:pickFile'),
+  dropFile: () => ipcRenderer.invoke('quickask:dropFile'),
 });

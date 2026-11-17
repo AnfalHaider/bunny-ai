@@ -3,8 +3,9 @@
 // A screenshot is taken only when the person chooses "Add a screenshot" in the bar, and lives only in the message it is sent with.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lstat, readFile } from 'node:fs/promises';
-import { FILE_DIALOG_FILTERS, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
+import { randomUUID } from 'node:crypto';
+import { lstat, open } from 'node:fs/promises';
+import { FILE_DIALOG_FILTERS, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, checkPath, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BAR_DIR = join(here, 'quick-ask');
@@ -31,16 +32,18 @@ export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
   };
 }
 
-export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, readFile } }) {
+export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open } }) {
   let bar = null;
   let registered = null; // the accelerator currently held
   let keepTimer = null;
+  let held = null; // W4-8b: the one file the person picked, { id, file }: the checked bytes live only here until sent, removed or the bar closes
 
   const alive = () => bar && !bar.isDestroyed();
   const fromBar = (event) => alive() && event.sender === bar.webContents && /^file:\/\/.*\/quick-ask\/bar\.html$/.test(event.senderFrame?.url ?? '');
 
   function destroyBar() {
     clearTimeout(keepTimer);
+    held = null;
     if (alive()) bar.destroy();
     bar = null;
   }
@@ -129,11 +132,37 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
       const chosen = await dialog.showOpenDialog(win, { title: 'Add a file', properties: ['openFile'], filters: FILE_DIALOG_FILTERS });
       if (chosen.canceled || !chosen.filePaths?.length) return { ok: false, cancelled: true };
       const path = chosen.filePaths[0];
-      const info = await fileOps.lstat(path);
+      const where = checkPath(path);
+      if (!where.ok) return where;
+      const info = await fileOps.lstat(path); // a link is refused (Windows has no O_NOFOLLOW, so this and the handle check below are both done)
       if (info.isSymbolicLink() || !info.isFile()) return { ok: false, message: 'That is not a plain file.' };
       if (info.size > MAX_SHOT_BYTES) return { ok: false, message: 'The file is over 8 MB.' };
-      const checked = checkFile(path, await fileOps.readFile(path));
-      return checked.ok ? { ok: true, ...checked.file } : checked;
+      // read ONCE from ONE handle: the handle's own size and kind are checked, and at most 8 MB + 1 is read
+      let bytes;
+      const handle = await fileOps.open(path, 'r');
+      try {
+        const hinfo = await handle.stat();
+        if (!hinfo.isFile()) return { ok: false, message: 'That is not a plain file.' };
+        if (hinfo.size > MAX_SHOT_BYTES) return { ok: false, message: 'The file is over 8 MB.' };
+        const buffer = Buffer.alloc(Math.min(hinfo.size, MAX_SHOT_BYTES) + 1);
+        let total = 0;
+        while (total < buffer.length) {
+          const { bytesRead } = await handle.read(buffer, total, buffer.length - total, total);
+          if (!bytesRead) break;
+          total += bytesRead;
+        }
+        if (total > MAX_SHOT_BYTES || total > hinfo.size) return { ok: false, message: 'The file is over 8 MB.' }; // it grew while it was being read
+        bytes = buffer.subarray(0, total);
+      } finally {
+        await handle.close().catch(() => {});
+      }
+      const checked = checkFile(path, bytes);
+      if (!checked.ok) return checked;
+      const { file } = checked;
+      held = { id: randomUUID(), file };
+      // the page gets the id, the name, the kind, the size and (a small picture only) a preview. Never the bytes, never the type.
+      const preview = file.kind === 'image' && file.size <= 200 * 1024 ? file.data : undefined;
+      return { ok: true, id: held.id, name: file.name, kind: file.kind, size: file.size, ...(preview ? { preview } : {}) };
     } catch {
       return { ok: false, message: 'Bunny could not read that file.' };
     } finally {
@@ -143,13 +172,15 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   }
 
   ipcMain.handle('quickask:pickFile', async (event) => (fromBar(event) ? pickFile() : { ok: false, message: 'Not allowed' }));
+  ipcMain.handle('quickask:dropFile', (event) => { if (fromBar(event)) held = null; return { ok: true }; });
   ipcMain.handle('quickask:capture', async (event) => (fromBar(event) ? capture() : { ok: false, message: 'Not allowed' }));
   ipcMain.handle('quickask:submit', async (event, text, attachments) => {
     if (!fromBar(event)) return { ok: false, message: 'Not allowed' };
-    const checked = validateSubmission(text, attachments);
+    const checked = validateSubmission(text, attachments, held);
     if (!checked.ok) return checked;
     const opened = await onSubmit(buildNewChatRequest(checked.text, checked.shot, checked.file));
     if (opened === false) return { ok: false, message: 'Bunny could not open.' };
+    held = null;
     destroyBar(); // the screenshot is gone with the bar; it now lives only in the new chat
     return { ok: true };
   });
