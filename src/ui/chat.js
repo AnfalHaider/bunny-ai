@@ -23,7 +23,7 @@ import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
-import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked } from './model-abilities.js';
+import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -2724,6 +2724,9 @@ async function send() {
 
   const job = jobFor(text, files);
   state.lastJob = job;
+  // W6-19: a picture job on a model chosen by hand that cannot see is said out loud, once, before it starts
+  const eyes = noEyesWarning({ job, modelAuto: Boolean(state.modelAuto), modelName: state.selected?.model, canSee: state.selected ? canSee(state.selected.providerId, state.selected.model) : true });
+  if (eyes) state.tryingNote = eyes; // the status line while the reply starts (cleared when it ends)
   const fixed = state.selected ? [{ providerId: state.selected.providerId, providerName: state.selected.providerName, id: state.selected.model, displayName: state.selected.model }] : [];
   const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);

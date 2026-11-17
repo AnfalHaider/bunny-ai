@@ -94,9 +94,17 @@ export function detectJob(text, { hasImage = false, workMode = 'chat' } = {}) {
   if (/\b(draw|sketch|paint|illustrat|logo|icon|poster|wallpaper|picture|image|photo|render|artwork)\b/.test(t)
     && /\b(make|create|generate|draw|design|paint|give me|produce|render)\b/.test(t)) return 'image';
   if (hasImage) return 'see';
+  // W6-19: copying or comparing how a site, a page or a design LOOKS needs eyes, even in Code mode
+  if (/\b(copy|clone|recreate|re-create|replicate|mimic|match|compare)\b[^.?!]{0,60}\b(site|website|web ?page|webpage|pages|page|landing page|design|layout|look|screenshots?|ui)\b/.test(t)) return 'see';
   if (workMode === 'code' || /```|\b(code|function|bug|error|stack trace|refactor|typescript|javascript|python|sql|regex|compile|api|class|repo)\b/.test(t)) return 'code';
   if (/\b(research|latest|news|today|current|sources?|compare|look up|search( the)? (web|internet)|find out)\b/.test(t)) return 'research';
   return 'chat';
+}
+
+/** W6-19: one plain line when a picture job goes to a model chosen by hand that cannot see, or null. Auto never needs it: it picks a model that can see. */
+export function noEyesWarning({ job, modelAuto, modelName, canSee }) {
+  if (job !== 'see' || modelAuto || canSee) return null;
+  return `${modelName ?? 'This model'} cannot look at pictures, and this looks like a job that needs that (a page or design to copy or compare). Pick a model that can see, or choose Auto.`;
 }
 
 /** Models ordered best-first for a job; only ones that can actually run it here. */
