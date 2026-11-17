@@ -18,7 +18,7 @@ landing commit d0eba0c (rollback target 2400629)
 release-ops (external worktree) git push origin main: exit 1 REFUSED | pre-push: refs/heads/main: no release record in docs/releases/ lists d0eba0c1d94f, the newest code commit (7E) / pre-push: refs/heads/main: 1 code commit(s) have no complete sign-off: d0eba0c1d (need qa, tech-lead, librarian, chief-of-staff or the piece's _required.md, all on one sha — O10, 7F). No piece covers them yet / pre-push: push refused. Fix the above; never bypass with --no-verify. || full: pre-pu h: ref /head /main: no relea e record in doc /relea e / li t  d0eba0c1d94f, the newe t code commit (7E)
 pre-pu h: ref /head /main: 1 code commit( ) have no complete  ign-off: d0eba0c1d (need qa, tech-lead, librarian, chief-of- taff or the piece'  _required.md, all on one  ha — O10, 7F). No piece cover  them yet
 pre-pu h: pu h refu ed. Fix the above; never bypa  with --no-verify.
-error: failed to pu h  ome ref  to 'C:\U er \anfal\AppData\Local\Temp\bunny-rehear al-vbh638\origin.git'
+error: failed to pu h  ome ref  to 'C:\U er \<user>\AppData\Local\Temp\bunny-rehear al-vbh638\origin.git'
 
 
 ## Rollback

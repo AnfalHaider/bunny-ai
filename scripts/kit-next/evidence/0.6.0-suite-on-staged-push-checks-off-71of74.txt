@@ -515,15 +515,15 @@ test at tests\e2e.test.mjs:98:3
   
   "pre-push: refs/heads/dev: 1 code commit(s) have no complete sign-off: 78122b694 (need a piece with a lane set by the Chief of Staff, its lane's sign-offs plus any its files' conditions add, and any owner's word they need, all on one sha — O10, 7F). No piece covers them yet\n" +
     'pre-push: push refused. Fix the above; never bypass with --no-verify.\n' +
-    "error: failed to push some refs to 'C:\\Users\\anfal\\AppData\\Local\\Temp\\bs-e2e-zLQPWZ\\remote.git'\n"
+    "error: failed to push some refs to 'C:\\Users\\<user>\\AppData\\Local\\Temp\\bs-e2e-zLQPWZ\\remote.git'\n"
   
-      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-compat/tests/e2e.test.mjs:106:12)
+      at TestContext.<anonymous> (file:///C:/Users/<user>/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-compat/tests/e2e.test.mjs:106:12)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
     generatedMessage: true,
     code: 'ERR_ASSERTION',
-    actual: "pre-push: refs/heads/dev: 1 code commit(s) have no complete sign-off: 78122b694 (need a piece with a lane set by the Chief of Staff, its lane's sign-offs plus any its files' conditions add, and any owner's word they need, all on one sha — O10, 7F). No piece covers them yet\npre-push: push refused. Fix the above; never bypass with --no-verify.\nerror: failed to push some refs to 'C:\\Users\\anfal\\AppData\\Local\\Temp\\bs-e2e-zLQPWZ\\remote.git'\n",
+    actual: "pre-push: refs/heads/dev: 1 code commit(s) have no complete sign-off: 78122b694 (need a piece with a lane set by the Chief of Staff, its lane's sign-offs plus any its files' conditions add, and any owner's word they need, all on one sha — O10, 7F). No piece covers them yet\npre-push: push refused. Fix the above; never bypass with --no-verify.\nerror: failed to push some refs to 'C:\\Users\\<user>\\AppData\\Local\\Temp\\bs-e2e-zLQPWZ\\remote.git'\n",
     expected: /kit file\(s\) changed .* no record of the owner's yes .*\.bootstrap\/bin\/guard\.mjs/,
     operator: 'match',
     diff: 'simple'
@@ -535,7 +535,7 @@ test at tests\trust.test.mjs:41:3
   
   false !== true
   
-      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-compat/tests/trust.test.mjs:42:12)
+      at TestContext.<anonymous> (file:///C:/Users/<user>/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-compat/tests/trust.test.mjs:42:12)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -559,7 +559,7 @@ test at tests\trust.test.mjs:46:3
   
   false !== true
   
-      at TestContext.<anonymous> (file:///C:/Users/anfal/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-compat/tests/trust.test.mjs:51:12)
+      at TestContext.<anonymous> (file:///C:/Users/<user>/AppData/Local/Temp/claude/0811002ee3d43acd/4d52ed35-8604-47be-a3a8-5b3bdbe24988/scratchpad/kit-compat/tests/trust.test.mjs:51:12)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
