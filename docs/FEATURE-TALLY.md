@@ -144,7 +144,7 @@ The agentic surfaces: memory, tools, schedules.
 | 6.7 | Computer use | enterprise | **D** | `screen text is given at the centre of each line, in the pixels of the shown picture` |
 | 6.8 | Skills | app | **D** | `a skill that is on reaches the model` |
 | 6.9 | Hooks | app | **D** | `a hook runs when a message is sent` |
-| 6.10 | Plugins and marketplaces | app | **D** | `installing a plugin adds and switches on its skills and connectors, and records the plugin` |
+| 6.10 | Plugins and marketplaces | app | **D** | `a plugin the model installs is added switched OFF (P-6), and recorded` |
 | 6.11 | Memories suggested from a chat | app | **D** | `a chat can suggest a memory, and it is kept only when accepted` |
 | 6.12 | The model asks for a capability it lacks | app | **D** | `asking for Code mode: the person picks a folder and the file tools arrive in the same reply` |
 | 6.13 | Programs that keep running | app | **D** | `a started program keeps running, is read in pieces, and stops` |
