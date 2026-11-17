@@ -1,0 +1,62 @@
+add provider: 200
+modelFilter: 200
+remote on: true
+light-d code page: {"permDisabled":true,"permValue":"ask","rowText":"Default permission mode | How careful a new chat starts out. You can change it per chat under the message box. | Manual | Accept edits | Plan | Auto | Change this in Bunny's window.","noteLeft":16,"noteTop":12,"noteW":768,"rulesControls":11,"rulesDisabled":9,"opacity":"0.5"}
+light-d selectOption refused: TimeoutError: locator.selectOption: Timeout 1500ms exceeded.
+Call log:
+[2m  - w
+light-d after trying: value=ask
+light-d about: disabled controls=33 note=26
+light-d privacy: disabled controls=33 note=26
+light-d models: disabled controls=33 note=26
+light-d customize: add disabled=[true] note=1
+light-d errors: []
+light-m code page: {"permDisabled":true,"permValue":"ask","rowText":"Default permission mode | How careful a new chat starts out. You can change it per chat under the message box. | Manual | Accept edits | Plan | Auto | Change this in Bunny's window.","noteLeft":16,"noteTop":12,"noteW":358,"rulesControls":11,"rulesDisabled":9,"opacity":"0.5"}
+light-m about: disabled controls=33 note=26
+light-m privacy: disabled controls=33 note=26
+light-m models: disabled controls=33 note=26
+light-m customize: add disabled=[true] note=1
+light-m errors: []
+dark-d code page: {"permDisabled":true,"permValue":"ask","rowText":"Default permission mode | How careful a new chat starts out. You can change it per chat under the message box. | Manual | Accept edits | Plan | Auto | Change this in Bunny's window.","noteLeft":16,"noteTop":12,"noteW":768,"rulesControls":11,"rulesDisabled":9,"opacity":"0.5"}
+dark-d selectOption refused: TimeoutError: locator.selectOption: Timeout 1500ms exceeded.
+Call log:
+[2m  - w
+dark-d after trying: value=ask
+dark-d about: disabled controls=33 note=26
+dark-d privacy: disabled controls=33 note=26
+dark-d models: disabled controls=33 note=26
+dark-d customize: add disabled=[true] note=1
+dark-d errors: []
+dark-m code page: {"permDisabled":true,"permValue":"ask","rowText":"Default permission mode | How careful a new chat starts out. You can change it per chat under the message box. | Manual | Accept edits | Plan | Auto | Change this in Bunny's window.","noteLeft":16,"noteTop":12,"noteW":358,"rulesControls":11,"rulesDisabled":9,"opacity":"0.5"}
+dark-m about: disabled controls=33 note=26
+dark-m privacy: disabled controls=33 note=26
+dark-m models: disabled controls=33 note=26
+dark-m customize: add disabled=[true] note=1
+dark-m errors: []
+passcode box: {"passW":420,"panelW":750}
+devices list: {"kids":[{"t":"Windows · Chrome\n127.0.0.1 · signed in 11/18/2026, 4:08:30 A","left":41,"right":671},{"t":"Sign out","left":683,"right":759}],"textAlign":"left","panelLeft":25}
+window errors: []
+device settings code: disabled select=true errors=["console: Failed to load resource: the server responded with a status of 403 (Forbidden)","console: Failed to load resource: the server responded with a status of 403 (Forbidden)","console: Failed to load resource: the server responded with a status of 403 (Forbidden)"]
+PC tab light question card: []
+PC tab light capability card: []
+PC tab light errors: []
+PC tab dark question card: []
+PC tab dark capability card: [{"cls":"permission-prompt live-permission capability-card","text":"BUNNY NEEDS A CAPABILITY |  | Code mode: read and change files in a folder, and run commands and programs there |  | To read your files |  | Choose a folder | Not now |  | Change this in Bunny's window.","buttons":["Choose a folder [disabled]","Not now [disabled]"],"locked":true}]
+PC tab dark errors: []
+device question card: []
+device could not click Blue: TimeoutError: locator.click: Timeout 2000ms exceeded.
+Call log:
+[2m  - waiting 
+device after answering: []
+device capability(code_mode) card: []
+device capability(computer_use) card: []
+PC tab picker: "Filters | Auto | Best available for chat, then the next if it fails | Best for Chat | Bunny Code (offline) | offline/bunny-code · Code | Scripted | 200K | Details › | Bunny Large (offline) | offline/bunny-large | Scripte"
+PC tab after "pick a colour": {"cards":[],"tail":"we making today, Anfal? | Type below. I'll do the hopping. |  | Pick a model, then type below. |  | Send | Manual | Change this in Bunny's window. | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | | | offline/bunny-code | Scripted | Enter sends · Shift+Enter new line · /compact frees context"}
+device picker: "no panel"
+device no model row: TimeoutError: locator.click: Timeout 4000ms exceeded.
+Call l
+device after "pick a colour": {"cards":[],"tail":"ate, friend. |  | Let's be quick and then sleep. |  | Pick a model, then tell me what you need. |  | Pick a model, then type below. |  | Send | Manual | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | | | offline/bunny-code | Scripted | Enter sends · Shift+Enter new line · /compact frees context"}
+device send enabled before typing: true
+device send enabled after typing: true
+no capability card within 15 s
+device code_mode card: []

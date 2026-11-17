@@ -1,9 +1,9 @@
 ---
 piece: browser
 role: design
-sha: 4bd9f64
-verdict: FAIL
+sha: 4d2a894
+verdict: PASS
 date: 2026-11-17
 ---
 
-Window-only controls stay clickable in browser mode (select shows an unsaved value); small layout items; rest matches. See docs/design/review-v0110-browser-access/build-4bd9f64/README.md
+Items 1-5 fixed; real locked capability card seen in a PC tab; question card and live device cards not seen (UNKNOWN); two small new differences; see docs/design/review-v0110-browser-access/build-4d2a894/README.md
