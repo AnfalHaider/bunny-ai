@@ -11,6 +11,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { cleanFolders, inScope } from './scope.js';
 
 // Long skills (imported plugins with reference files) are kept whole and loaded on demand.
 const MAX_LENGTH = 120_000;
@@ -74,6 +75,7 @@ export function createSkillStore({ file }) {
       skill.instructions = text;
     }
     if (patch.enabled !== undefined) skill.enabled = Boolean(patch.enabled);
+    if (patch.folders !== undefined) skill.folders = cleanFolders(patch.folders); // W6-16: the route has already checked each folder
     await persist();
     return skill;
   }
@@ -92,8 +94,9 @@ export function createSkillStore({ file }) {
    * whole; a long one is named and summarised, and the model loads it with the
    * read_skill tool when the task needs it.
    */
-  async function context() {
-    const rows = await list({ enabledOnly: true });
+  async function context({ folder = null } = {}) {
+    // W6-16: a skill limited to some folders is only for chats in them; a chat with no folder gets the skills for everywhere
+    const rows = (await list({ enabledOnly: true })).filter((s) => inScope(s.folders, folder));
     if (!rows.length) return null;
     // Many skills: a compact index only, so every message stays small.
     if (rows.length > 12) {

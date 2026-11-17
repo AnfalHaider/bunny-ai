@@ -231,6 +231,19 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     });
   }
 
+  /** W6-16: limit a plugin, and everything it added, to some folders (an empty list: everywhere). The route has already checked the folders. */
+  function setFolders(id, folders) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, changed: 0 };
+      let changed = 0;
+      for (const sid of record.skills ?? []) { if (await skills.update(sid, { folders }).then(() => true, () => false)) changed += 1; }
+      for (const cid of record.connectors ?? []) { if (await mcp.update(cid, { folders }).then(() => true, () => false)) changed += 1; }
+      await saveSettings({ plugins: (getSettings().plugins ?? []).map((p) => (p.id === id ? { ...p, folders } : p)) });
+      return { ok: true, changed };
+    });
+  }
+
   /** Remove a plugin and what it added, from the server's own list. A part that is already gone does not stop the rest. */
   function uninstall(id) {
     return serial(async () => {
@@ -306,6 +319,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     takePending,
     switchOn,
     setEnabled,
+    setFolders,
     updatePlugin,
     previewPlugin,
   };

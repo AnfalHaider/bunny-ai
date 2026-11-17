@@ -13,6 +13,7 @@ import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
+import { inScope, cleanFolders } from './scope.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -192,6 +193,21 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
   const chosenFolders = new Set(); // folders the person chose this launch (see /api/folder/check and chooseFolder)
   // Record a folder the person chose (the desktop app calls this with what its native picker returned). Never a drive root or Bunny's own data.
   const isChosen = async (folder) => { const r = await checkFolder(folder); return r.ok && chosenFolders.has(r.folder); };
+  // W6-16: the folders a skill, connector or plugin is limited to. A folder that is NEW in the list must be one the person chose in this launch
+  // (a page cannot limit something to a folder it made up); the real path is what is stored; taking a folder out needs no check.
+  // Returns { folders } or { refused }.
+  const checkedScope = async (wanted, current = []) => {
+    if (!Array.isArray(wanted)) return { refused: 'folders must be a list.' };
+    const have = new Set(cleanFolders(current));
+    const out = [];
+    for (const entry of cleanFolders(wanted)) {
+      if (have.has(entry)) { out.push(entry); continue; }
+      const r = await checkFolder(entry);
+      if (!r.ok || !(await isChosen(entry))) return { refused: 'Choose that folder with the folder picker first.' };
+      out.push(r.folder);
+    }
+    return { folders: out.slice(0, 20) };
+  };
   // Every path that writes a chat's folder goes through this: in the desktop app only a picked folder is accepted, and the
   // normalised real path is what is stored. Returns the value to store, or null when it is refused.
   const folderToStore = async (value) => {
@@ -972,6 +988,11 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
         const before = await mcp.get(mcpMatch[1]);
         const was = before ? { ...before } : null; // update may change the stored object itself
         const patch = await readBody(req);
+        if (patch.folders !== undefined) {
+          const scoped = await checkedScope(patch.folders, before?.folders ?? []);
+          if (scoped.refused) return sendJson(res, 403, { code: 'folder.notChosen', message: scoped.refused });
+          patch.folders = scoped.folders;
+        }
         // L-5: changing what program a local connector runs needs the same confirmation as adding one
         if (before?.type === 'local' && (patch.command !== undefined || patch.args !== undefined || patch.cwd !== undefined) && patch.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'Confirm the exact command to change it.' });
@@ -1110,6 +1131,14 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
     const pluginMatch = path.match(/^\/api\/plugins\/([a-f0-9-]{36})$/);
     if (pluginMatch && method === 'PATCH') {
       const patch = await readBody(req);
+      if (patch.folders !== undefined) { // W6-16: a plugin's skills and connectors take the plugin's folders
+        const record = (settings.plugins ?? []).find((p) => p.id === pluginMatch[1]);
+        if (!record) return sendJson(res, 404, { code: 'plugin.notFound', message: 'No such plugin' });
+        const scoped = await checkedScope(patch.folders, record.folders ?? []);
+        if (scoped.refused) return sendJson(res, 403, { code: 'folder.notChosen', message: scoped.refused });
+        const done = await appTools.setFolders(pluginMatch[1], scoped.folders);
+        return sendJson(res, done.ok ? 200 : 404, done.ok ? { ...done, folders: scoped.folders } : { code: 'plugin.notFound', message: 'No such plugin' });
+      }
       if (typeof patch.enabled !== 'boolean') return sendJson(res, 400, { code: 'plugin.enabledRequired', message: 'Say whether to switch it on or off' });
       const done = await appTools.setEnabled(pluginMatch[1], patch.enabled);
       return sendJson(res, done.ok ? 200 : 404, done.ok ? done : { code: 'plugin.notFound', message: 'No such plugin' });
@@ -1143,7 +1172,14 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
     const skillMatch = path.match(/^\/api\/skills\/([a-f0-9-]{36})$/);
     if (skillMatch && method === 'PATCH') {
       try {
-        return sendJson(res, 200, await skills.update(skillMatch[1], await readBody(req)));
+        const patch = await readBody(req);
+        if (patch.folders !== undefined) {
+          const current = (await skills.list()).find((s) => s.id === skillMatch[1])?.folders ?? [];
+          const scoped = await checkedScope(patch.folders, current);
+          if (scoped.refused) return sendJson(res, 403, { code: 'folder.notChosen', message: scoped.refused });
+          patch.folders = scoped.folders;
+        }
+        return sendJson(res, 200, await skills.update(skillMatch[1], patch));
       } catch (err) {
         return sendJson(res, 404, { code: err.code ?? 'skill.failed', message: err.message });
       }
@@ -1728,12 +1764,15 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
       const memoryText = settings.memoryEnabled === false ? null : await memory.context();
       if (memoryText) history.unshift({ role: 'system', content: memoryText });
       // Settings, Capabilities: skills and connectors can be switched off for every chat.
-      const skillText = settings.skillsEnabled === false ? null : await skills.context();
+      // W6-16: only the skills and connectors for everywhere, or for this chat's folder
+      const scopeCheck = session.folder ? await checkFolder(session.folder) : null;
+      const scopeFolder = scopeCheck?.ok ? scopeCheck.folder : null;
+      const skillText = settings.skillsEnabled === false ? null : await skills.context({ folder: scopeFolder });
       if (skillText) history.unshift({ role: 'system', content: skillText });
       // S-4: the person called a skill by name (/name in the message box): the model is told to load it first
       if (settings.skillsEnabled !== false && typeof body.useSkill === 'string' && body.useSkill) {
         const called = await skills.find(body.useSkill.slice(0, 80));
-        if (called && called.enabled !== false) history.unshift({ role: 'system', content: `The person asked for the skill "${called.name}": call read_skill with that name first, then follow it for this request.` });
+        if (called && called.enabled !== false && inScope(called.folders, scopeFolder)) history.unshift({ role: 'system', content: `The person asked for the skill "${called.name}": call read_skill with that name first, then follow it for this request.` });
       }
 
       res.writeHead(200, {
@@ -1934,7 +1973,7 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
       history.unshift({ role: 'system', content: [honesty, modeText, folderText, scheduledText, interrupted ? CONTINUE_NOTE : ''].filter(Boolean).join('\n') });
 
       // Tools from the MCP servers the person has switched on, in Chat and in Code (M-2: the person wants Bunny to use them; Plan mode hides the ones that may write).
-      const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
+      const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled && inScope(s.folders, scopeFolder));
       const builtTools = buildOn ? await customTools.list() : [];
       const githubToken = await accounts.githubToken().catch(() => null);
       const githubAccount = githubToken ? (await accounts.status()).github : null;

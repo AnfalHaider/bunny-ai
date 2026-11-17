@@ -9,6 +9,7 @@
 import { readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { trustSnapshot } from './mcp.js';
 import { randomUUID } from 'node:crypto';
+import { cleanFolders } from './scope.js';
 
 /**
  * L-4: with a secret store, the values of a local connector's settings (often API keys) live there, keyed by connector id and variable name,
@@ -160,6 +161,7 @@ export function createMcpStore({ file, secrets = null }) {
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
+    if (patch.folders !== undefined) server.folders = cleanFolders(patch.folders); // W6-16: the route has already checked each folder
     // L-5: the command of a local connector can be changed (the route asks for the same confirmation as adding); trust given to the old program is gone
     if (server.type === 'local' && (patch.command !== undefined || patch.args !== undefined || patch.cwd !== undefined)) {
       const next = cleanLocal({ command: patch.command ?? server.command, args: patch.args ?? server.args, env: {}, cwd: patch.cwd !== undefined ? patch.cwd : server.cwd });
