@@ -613,7 +613,9 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
           }
         }
         // W6-7: a command written for cmd or a POSIX shell that failed here: say how PowerShell writes it.
-        const hint = (spawnErr || code) ? shellHint(command) : null;
+        // Only when the error says the word is not known here: `cat missing.txt` fails because of the file, and cat works in PowerShell.
+        const notKnown = /is not recognized|is not recognised|CommandNotFoundException|not recognized as the name/i.test(body);
+        const hint = (spawnErr || code) && notKnown ? shellHint(command) : null;
         if (hint) status += `${status ? String.fromCharCode(10) : ''}[hint: ${hint}]`;
         // The status comes first, so it survives even when long output is cut.
         const out = [status, clip(body, KEEP_OUTPUT)].filter(Boolean).join('\n');

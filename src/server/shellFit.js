@@ -48,14 +48,14 @@ export function shellHint(command) {
 
 // Well-known commands that start a server or watcher and never return.
 const SERVER_PATTERNS = [
-  /^npm\s+(start|run\s+(dev|serve))\b/i,
-  /^npx\s+(vite|serve)\b/i,
-  /^node\s+server\.js\b/i,
-  /^(python3?|py)\s+-m\s+http\.server\b/i,
-  /^flask\s+run\b/i,
-  /^uvicorn\b/i,
-  /^next\s+dev\b/i,
-  /^nodemon\b/i,
+  /^npm\s+(start|run\s+(dev|serve))(\s|$)/i,
+  /^npx\s+(vite|serve)(\s|$)/i,
+  /^node\s+server\.js(\s|$)/i,
+  /^(python3?|py)\s+-m\s+http\.server(\s|$)/i,
+  /^flask\s+run(\s|$)/i,
+  /^uvicorn(\s|$)/i,
+  /^next\s+dev(\s|$)/i,
+  /^nodemon(\s|$)/i,
 ];
 
 /** Does this command start something that keeps running? A trailing unquoted "&" counts too: that is a background job. */

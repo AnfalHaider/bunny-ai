@@ -113,3 +113,12 @@ test('W33-1: a schedule prompt over 2,000 characters is refused, nothing is sche
     assert.match(text, /too long to show in full/, mode);
   }
 });
+
+test('W33-1 (QA): the schedule card holds 2,000 characters with its heading; a shorter prompt is shown whole and a longer one is refused with a message that says so', async (t) => {
+  const fits = await runIn(t, 'ask', 'x'.repeat(1900));
+  assert.equal(fits.asked.length, 1);
+  assert.ok(fits.asked[0].detail.endsWith('x'.repeat(1900)), 'the whole prompt is on the card');
+  const over = await runIn(t, 'ask', 'x'.repeat(2000));
+  assert.deepEqual(over.asked, []);
+  assert.match(over.text, /holds 2000 characters at most, with its heading/);
+});

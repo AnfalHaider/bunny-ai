@@ -52,3 +52,19 @@ test('W6-8: run_command refuses a server command and names start_process with th
   await assert.rejects(() => ws.run('run_command', { command: 'npm run dev' }), /start_process with command "npm run dev" instead/);
   await assert.rejects(() => ws.run('run_command', { command: 'npx serve -l 3001 &' }), /start_process with command "npx serve -l 3001" instead/);
 });
+
+test('W6-7 (QA): the hint appears only when the error says the word is not known, not when a working command fails for another reason', { skip: process.platform !== 'win32' && 'PowerShell only' }, async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-shellfit-'));
+  t.after(() => rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const ws = createWorkspace(folder);
+  const missing = await ws.run('run_command', { command: 'cat missing-file.txt' });
+  assert.match(missing, /\[exit code/);
+  assert.doesNotMatch(missing, /hint/, 'cat works in PowerShell; the file is what is missing');
+  const unknown = await ws.run('run_command', { command: 'export SHELLFIT_Y=1' });
+  assert.match(unknown, /\[hint: This runs in PowerShell\. export/);
+});
+
+test('W6-8 (QA): npm run dev:lint, dev-check and serve-docs are not servers; dev and serve with arguments are', () => {
+  for (const c of ['npm run dev:lint', 'npm run dev-check', 'npm run serve-docs', 'npx serve-docs', 'npm start-ci']) assert.equal(looksLikeServer(c), false, c);
+  for (const c of ['npm run dev', 'npm run dev -- --port 3000', 'npm run serve', 'npm start', 'npx serve -l 3001', 'npx vite --host']) assert.equal(looksLikeServer(c), true, c);
+});

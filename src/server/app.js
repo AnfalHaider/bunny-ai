@@ -1975,7 +1975,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 … ${text.length - CARD_LIMIT} more characters are not shown here` : text;
       };
       const cardTooLong = (detail) => String(detail ?? '').length > CARD_LIMIT
-        ? `This is too long to show in full on the confirmation card (more than ${CARD_LIMIT} characters), so it was not run. Use a shorter command, or put the work in a file and run that.`
+        ? `This is too long to show in full on the confirmation card (the card holds ${CARD_LIMIT} characters at most, with its heading), so it was not run. Use a shorter command, or put the work in a file and run that.`
         : null;
       // Ask the person, and wait for the answer (or for them to leave).
       const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
