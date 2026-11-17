@@ -196,7 +196,9 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
           await skills.update(same.id, patch);
           keepSkill.add(same.id); next.skills.push(same.id); done.skillsUpdated += 1;
         } else {
-          const added = await skills.add({ ...s, enabled: wasOn });
+          // P4-1: new words from the source are the person's to look at first, so a NEW skill arrives OFF too, whatever the plugin's state, and is listed
+          const added = await skills.add({ ...s, enabled: false });
+          switchedOff.push(s.name);
           next.skills.push(added.id); done.skillsAdded += 1;
         }
       }
@@ -222,7 +224,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const plugins = (getSettings().plugins ?? []).map((p) => (p.id === id
         ? { ...p, name: plugin.name, description: plugin.description, skills: next.skills, connectors: next.connectors, updatedAt: new Date().toISOString() } : p));
       await saveSettings({ plugins });
-      const message = switchedOff.length ? `${switchedOff.length} skill${switchedOff.length === 1 ? '' : 's'} changed and ${switchedOff.length === 1 ? 'was' : 'were'} switched off (${switchedOff.join(', ')}); switch ${switchedOff.length === 1 ? 'it' : 'them'} back on in Customize.` : '';
+      const message = switchedOff.length ? `${switchedOff.length} new or changed skill${switchedOff.length === 1 ? '' : 's'} ${switchedOff.length === 1 ? 'is' : 'are'} off (${switchedOff.join(', ')}); switch ${switchedOff.length === 1 ? 'it' : 'them'} on in Customize.` : '';
       return { ok: true, ...done, skillsSwitchedOff: switchedOff, message, skipped: plugin.skipped ?? [] };
     });
   }
