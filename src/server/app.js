@@ -37,7 +37,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -2681,7 +2681,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             : isApp ? await appTools.run(name, parsed)
             : isWorkspace
             ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) })
-            : JSON.stringify(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed, signal: controller.signal, onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) }) ?? null);
+            : await (async () => { // D-1: the text the connector sent, not its raw JSON; an answer that says isError is a failed step
+              const shaped = mcpResultText(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed, signal: controller.signal, onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) }));
+              if (shaped.isError) status = 'failed';
+              return shaped.text;
+            })();
         } catch (err) {
           status = 'failed';
           if (err?.code === 'mcp.needsSignIn' && entry) {

@@ -222,6 +222,31 @@ export function describeDeferred(deferred, match = '') {
   return rows.slice(0, 60).map((d) => `${d.function.name}: ${String(d.function.description ?? '').slice(0, 160)}`).join('\n') + (rows.length > 60 ? `\n… ${rows.length - 60} more: narrow it with match.` : '');
 }
 
+/**
+ * D-1: a connector's answer as text for the model. Not the raw JSON-RPC (text inside JSON escapes), but the text parts joined, resources and
+ * links as short lines, structuredContent as indented JSON when there is no text, and an error marked as one ({ text, isError }).
+ */
+export function mcpResultText(result) {
+  if (result === null || result === undefined) return { text: '(the tool returned nothing)', isError: false };
+  if (typeof result !== 'object') return { text: String(result), isError: false };
+  const parts = Array.isArray(result.content) ? result.content : [];
+  const lines = [];
+  for (const p of parts) {
+    if (p?.type === 'text' && typeof p.text === 'string') lines.push(p.text);
+    else if (p?.type === 'resource' && p.resource) lines.push(typeof p.resource.text === 'string' ? p.resource.text : `[resource: ${p.resource.uri ?? 'no address'}${p.resource.mimeType ? `, ${p.resource.mimeType}` : ''}]`);
+    else if (p?.type === 'resource_link') lines.push(`[link: ${p.name ?? ''} ${p.uri ?? ''}]`.replace(/\s+\]/, ']'));
+    else if (p?.type === 'image') lines.push(`[image${p.mimeType ? `: ${p.mimeType}` : ''}, ${Math.round(String(p.data ?? '').length * 0.75 / 1024)} KB, not shown here]`);
+    else if (p?.type === 'audio') lines.push('[audio, not shown here]');
+    else if (p) lines.push(JSON.stringify(p));
+  }
+  let text = lines.join('\n');
+  if (!text.trim() && result.structuredContent !== undefined) text = JSON.stringify(result.structuredContent, null, 2);
+  if (!text.trim() && !('content' in result) && !('isError' in result)) text = JSON.stringify(result, null, 2);
+  if (!text.trim()) text = '(the tool returned no text)';
+  const isError = result.isError === true;
+  return { text: isError ? `The tool reported an error: ${text}` : text, isError };
+}
+
 /** A tool name prefix that is safe to use in a function name. */
 export function toolPrefix(name) {
   return String(name ?? '')
