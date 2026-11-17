@@ -255,8 +255,9 @@ export function planToolDefinition() {
 }
 
 /** The list as stored: at most 20 short steps. */
+export const MAX_TASKS = 40; // W6-12: also the number sessions.js keeps
 export function cleanTasks(tasks) {
-  return (Array.isArray(tasks) ? tasks : []).slice(0, 20)
+  return (Array.isArray(tasks) ? tasks : []).slice(0, MAX_TASKS)
     .map((t) => ({ text: String(t?.text ?? t ?? '').replace(/\s+/g, ' ').trim().slice(0, 160), done: Boolean(t?.done) }))
     .filter((t) => t.text);
 }

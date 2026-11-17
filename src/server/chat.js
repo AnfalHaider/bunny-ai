@@ -632,6 +632,15 @@ export async function* fakeStream(model, messages, signal) {
  * W6-3: does this reply stop to ask permission for the work it was given ("Please confirm that you would like me to...")?
  * A real decision is asked with ask_user, which waits; a closing question like this one is a stop that should not happen.
  */
+/**
+ * W6-12: does the reply say plainly that the work is finished, or that it is blocked? Then it is left alone, even if the task list
+ * still has open steps (a model that says "I cannot go on without the API key" must not be pushed to carry on).
+ */
+export function statesDoneOrBlocked(text) {
+  const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
+  return /\b(all (the )?(steps|tasks|work|of it) (is |are )?(done|complete|finished)|(is|are|now|all) (done|finished|complete(d)?|built|ready|fixed|working)|(checks|tests) pass|finished|nothing (more|else|left)|(i('m| am)|i have been|it is) (blocked|stuck)|cannot (continue|proceed|go on)|can'?t (continue|proceed|go on)|unable to (continue|proceed)|blocked (on|by))\b/i.test(tail);
+}
+
 export function asksPermissionToContinue(text) {
   const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
   // Handing the turn back, as a question or as a statement.
