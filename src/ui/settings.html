@@ -615,13 +615,13 @@
           <label class="switch"><input type="checkbox" id="remote-on" aria-label="Allow other devices to open Bunny" /><span id="remote-state">off</span></label>
         </div>
       </div>
-      <div class="row stack" id="remote-setup" hidden>
+      <div class="row stack" id="remote-setup" style="align-items:stretch;text-align:left" hidden>
         <div class="desc"><b>Before you turn this on.</b> This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. They get ordinary chats, with their tools, and can answer a chat's own permission questions there. They cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, never Public.</div>
-        <input type="password" id="remote-pass" autocomplete="new-password" placeholder="Choose a passcode (12 or more characters)" aria-label="Passcode, 12 or more characters" style="max-width:420px" />
+        <input type="password" id="remote-pass" autocomplete="new-password" placeholder="Choose a passcode (12 or more characters)" aria-label="Passcode, 12 or more characters" style="width:100%;max-width:420px" />
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="remote-generate" class="btn">Make one for me</button><button type="button" id="remote-turn-on" class="btn">Turn on</button><button type="button" id="remote-cancel" class="btn">Cancel</button></div>
         <div class="desc" id="remote-error" role="alert" style="color:var(--bad,#cf3f55)" hidden></div>
       </div>
-      <div class="row stack" id="remote-open" hidden>
+      <div class="row stack" id="remote-open" style="align-items:stretch;text-align:left" hidden>
         <div class="desc" id="remote-address"></div>
         <div class="desc" id="remote-generated" hidden></div>
         <div id="remote-devices"></div>
@@ -1271,8 +1271,11 @@
       if (!s.devices.length) { const none = document.createElement('div'); none.className = 'desc'; none.textContent = 'No device is signed in.'; list.append(none); }
       for (const d of s.devices) {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:12px;align-items:center;padding:6px 0;border-top:1px solid var(--line)';
-        const label = document.createElement('div'); label.style.flex = '1'; label.textContent = `${d.label} · ${d.ip} · signed in ${when(d.signedInAt)}`;
+        row.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);text-align:left';
+        const label = document.createElement('div'); label.style.cssText = 'flex:1;text-align:left;min-width:0';
+        const name = document.createElement('div'); name.style.fontWeight = '600'; name.textContent = d.label;
+        const details = document.createElement('div'); details.className = 'desc'; details.textContent = `${d.ip} · signed in ${when(d.signedInAt)}`;
+        label.append(name, details);
         const out = document.createElement('button'); out.type = 'button'; out.className = 'btn'; out.textContent = 'Sign out';
         out.addEventListener('click', async () => { try { render(await sendJSON(`/api/remote/devices/${d.id}/signout`, 'POST')); } catch (e) { err(e.message); } });
         row.append(label, out);

@@ -2333,6 +2333,7 @@ function showLiveNotice(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const card = element('div', { className: 'permission-prompt live-permission capability-card' });
+  card.dataset.capability = info.capability; // lets a browser page tell which kind of card this is
   card.append(element('p', { className: 'capability-reason', textContent: String(info.text ?? '') }));
   if (info.folderPicker) {
     const actions = element('div', { className: 'permission-actions' });
