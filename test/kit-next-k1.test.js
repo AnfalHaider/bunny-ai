@@ -310,3 +310,47 @@ test('QA: a command over 64 KB, or with over 2,000 parts, is refused before anyt
   const some = guard.decide({ tool: 'Bash', command: 'git status; '.repeat(1500).trim(), cwd: root });
   assert.doesNotMatch(some.reason ?? '', reason, '1,500 commands are still read');
 });
+
+test('the kit works from a worktree nested inside the main checkout: its own role and policy, not the main checkout\'s', (t) => {
+  const main = makeRepo(t, 'chief-of-staff');
+  put(main, 'README.md', 'x\n');
+  commit(main, 'base');
+  const wt = join(main, '.claude', 'worktrees', 'b1');
+  sh(['worktree', 'add', '-q', '-b', 'claude/b1', wt], main);
+  writeFileSync(join(wt, '.bootstrap', 'session.json'), JSON.stringify({ role: 'builder' }));
+  const here = process.cwd();
+  const savedEnv = process.env.CLAUDE_PROJECT_DIR;
+  try {
+    for (const dir of [wt, main]) {
+      process.chdir(wt);
+      process.env.CLAUDE_PROJECT_DIR = dir; // the host may name the main checkout as the project
+      // the builder in its own worktree is the builder: a push to main is refused, and the reason names "builder"
+      const push = guard.decide({ tool: 'Bash', command: 'git push origin main', cwd: wt });
+      assert.equal(push.allow, false);
+      assert.match(push.reason, /builder/, push.reason);
+      // and an ordinary command is allowed
+      assert.equal(guard.decide({ tool: 'Bash', command: 'git status', cwd: wt }).allow, true);
+    }
+  } finally {
+    process.chdir(here);
+    if (savedEnv === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = savedEnv;
+  }
+});
+
+test('the plugin\'s own 0.6.0 guard (it runs beside ours) allows everyday commands against the staged policy and still blocks a force push', async (t) => {
+  // the plugin turns every deny_all entry into a regex: a non-string entry became /[object Object]/ and blocked every command
+  const policy = JSON.parse(readFileSync(join(KIT, '.bootstrap', 'policy.json'), 'utf8'));
+  for (const k of ['deny_all', 'legacy_deny_all', 'destructive_commands']) assert.ok((policy[k] || []).every((e) => typeof e === 'string'), `${k} is plain strings`);
+  const plugin = await import(pathToFileURL(join(ROOT, 'test', 'fixtures', 'plugin-guard-0.6.0', 'bin', 'guard.mjs')).href);
+  for (const role of ['builder', 'chief-of-staff', 'qa']) {
+    const root = makeRepo(t, role);
+    for (const c of ['echo hi', 'git status', 'node --test', 'git log --oneline -3', 'npm test']) {
+      const v = plugin.decide({ tool: 'Bash', command: c, cwd: root });
+      assert.equal(v.allow, true, `${role}: ${c}: ${v.reason ?? ''}`);
+    }
+    assert.equal(plugin.decide({ tool: 'Bash', command: 'git push --force origin claude/x', cwd: root }).allow, false, `${role}: a force push`);
+  }
+  // and ours reads the whole-line patterns from deny_all_whole
+  assert.ok(Array.isArray(policy.deny_all_whole) && policy.deny_all_whole.some((p) => /GIT_CONFIG/.test(p)));
+  blocked(t, 'GIT_CONFIG_COUNT=1 git status');
+});

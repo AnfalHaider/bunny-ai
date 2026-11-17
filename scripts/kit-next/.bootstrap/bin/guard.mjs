@@ -100,7 +100,10 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   const fromHook = walkUp(process.cwd());
   const project = (envDir && existsSync(join(envDir, '.bootstrap', 'policy.json')) && withinDir(root, envDir) ? resolvePath(envDir) : null)
     || (fromHook && withinDir(root, fromHook) ? fromHook : null) || walkUp(cwd);
-  if (project && project !== resolvePath(root) && withinDir(root, project)) root = project;
+  // A worktree of the same repository (our sessions run in worktrees inside the main checkout) is its own project with its own role: only an
+  // independent repository nested in the project (git init sub) is judged by the project.
+  const commonDir = (dir) => { const c = git(['rev-parse', '--git-common-dir'], dir); return c ? resolvePath(dir, c).toLowerCase() : null; };
+  if (project && project !== resolvePath(root) && withinDir(root, project) && commonDir(root) !== commonDir(project)) root = project;
   const policy = loadPolicy(root);
   if (!policy) return { allow: true };
   const role = currentRole(root);
@@ -142,7 +145,8 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
     // (legacy_deny_all) run over the raw text too.
     const ansi = command.includes("$'") || command.includes('$"');
     const texts = strict ? null : simpleCommandTexts(command);
-    const denyAll = policy.deny_all.map((e) => (typeof e === 'string' ? { pattern: e } : e));
+    // deny_all holds plain strings only (the plugin's own guard turns each one into a regex); whole-line patterns are in deny_all_whole, which only this guard reads
+    const denyAll = [...policy.deny_all.map((e) => (typeof e === 'string' ? { pattern: e } : e)), ...(policy.deny_all_whole || []).map((pattern) => ({ pattern, whole: true }))];
     // A command that hands text to an interpreter or another shell (node -e "...", python -c, bash -c, eval, xargs) keeps the raw-text check:
     // what is inside its quotes is code, not a message.
     // Read from the tokenizer's words (quotes resolved), not from the blanked text: python3, node22, a quoted command word, and git's own

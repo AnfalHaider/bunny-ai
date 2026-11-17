@@ -46,11 +46,7 @@
   "deny_all": [
     "\\bgit\\s+push\\b.*\\s(--force|-f|--force-with-lease)(\\s|=|$)",
     "\\bgit\\s+reset\\s+--hard\\b",
-    "^\\s*(ssh|scp)\\s",
-    {
-      "pattern": "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b",
-      "whole": true
-    }
+    "^\\s*(ssh|scp)\\s"
   ],
   "legacy_deny_all": [
     "--no-verify\\b",
@@ -66,5 +62,8 @@
       "hotfix",
       "chief-of-staff"
     ]
-  }
+  },
+  "deny_all_whole": [
+    "\\bGIT_CONFIG_(PARAMETERS|COUNT|KEY_\\d+|VALUE_\\d+)\\b"
+  ]
 }
