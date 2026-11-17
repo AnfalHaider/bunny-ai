@@ -121,7 +121,7 @@ test('LOW 3 (automated review): a filter reached through an include, a worktree 
   git(repo, 'config', 'include.path', included);
   const viaInclude = await wt.eligibility(repo);
   assert.equal(viaInclude.ok, false, 'a filter reached through include.path is refused');
-  assert.match(viaInclude.reason, /runs its own programs/);
+  assert.match(viaInclude.reason, /runs its own programs|include other settings files/);
   git(repo, 'config', '--unset', 'include.path');
   assert.equal((await wt.eligibility(repo)).ok, true);
   // 2. includeIf
@@ -160,4 +160,41 @@ test('LOW 3 (automated review): a filter reached through an include, a worktree 
   await assert.rejects(broken.status(made), /could not say whether/);
   assert.equal((await broken.finish(made, { action: 'keep' })).ok, false);
   assert.ok(statSync(made.path).isDirectory(), 'nothing was changed');
+});
+
+test('LOW 3 (automated review, conditional includes): any include or includeIf in the project\'s own settings refuses the copy, whether or not its condition matches here; the person\'s global includes do not; the copy itself is asked too', async (t) => {
+  const repo = tmp('cond');
+  const data = tmp('conddata');
+  const extra = tmp('condextra');
+  clean(t, repo, data, extra);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const wt = createWorktrees({ dataDir: data });
+  const harmless = join(extra, 'harmless.cfg').split(String.fromCharCode(92)).join('/');
+  writeFileSync(harmless, '[user]\n\tname = Somebody\n');
+  // a condition that does not match here (another branch name, another folder): the include is still refused, because it could match where git checks files out
+  for (const [key, value] of [['includeIf.onbranch:never-this-one.path', harmless], ['includeIf.gitdir:/nowhere/**.path', harmless], ['include.path', harmless], ['includeIf.hasconfig:remote.*.url:https://nowhere.example/**.path', harmless]]) {
+    git(repo, 'config', key, value);
+    const e = await wt.eligibility(repo);
+    assert.equal(e.ok, false, `${key} is refused although its condition does not match here`);
+    assert.match(e.reason, /include other settings files/);
+    git(repo, 'config', '--unset', key);
+  }
+  assert.equal((await wt.eligibility(repo)).ok, true, 'with no include it is eligible');
+  // the person's own global include is theirs
+  const globalCfg = join(extra, 'global.cfg');
+  writeFileSync(globalCfg, `[include]\n\tpath = ${harmless}\n`);
+  const saved = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = globalCfg;
+  try { assert.equal((await wt.eligibility(repo)).ok, true, 'a global include is not refused'); } finally { if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = saved; }
+  // a copy made earlier: an include added afterwards is seen from the project and from the copy
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'later' });
+  git(repo, 'config', 'includeIf.onbranch:never-this-one.path', harmless);
+  await assert.rejects(wt.status(made), /include other settings files/);
+  assert.equal((await wt.finish(made, { action: 'keep' })).ok, false);
+  git(repo, 'config', '--unset', 'includeIf.onbranch:never-this-one.path');
+  assert.equal((await wt.status(made)).dirty, 0);
 });

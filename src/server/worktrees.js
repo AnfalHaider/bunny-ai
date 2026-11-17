@@ -86,6 +86,16 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
       if (err?.exit === 1) return null;
       return 'Git could not say whether this project runs its own programs when files are checked out, so Bunny will not make a copy of it.';
     }
+    // An include whose CONDITION is not met here may be met where git checks the files out (a gitdir: or onbranch: condition is judged where git runs, and the copy is another folder): so any
+    // include.path or includeIf.*.path in the project's own settings refuses the copy, whether or not it matches now. (--no-includes: list the keys, do not follow them.)
+    let includes = '';
+    try { includes = await git(['config', '--show-scope', '--no-includes', '-z', '--get-regexp', '^include(if)?[.]'], { cwd: folder }); } catch (err) {
+      if (err?.exit !== 1) return 'Git could not say whether this project runs its own programs when files are checked out, so Bunny will not make a copy of it.';
+    }
+    const includeParts = includes.split(String.fromCharCode(0)).map((x) => x.trim()).filter(Boolean);
+    for (let k = 0; k + 1 < includeParts.length; k += 2) {
+      if (includeParts[k] !== 'global' && includeParts[k] !== 'system') return 'The git settings of this project include other settings files, which could name programs git runs when files are checked out, so Bunny will not make a copy of it.';
+    }
     // -z with --show-scope: for each setting, the scope, a NUL, then "<key><NEWLINE><value>", a NUL. A value that itself holds a line break is refused (a shell would run each line).
     const NL = String.fromCharCode(10);
     const parts = found.split(String.fromCharCode(0));
@@ -173,7 +183,7 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
   async function status(worktree) {
     const real = await usable(worktree);
     if (!real) throw refuse('worktree.gone', `This chat's copy is gone; the branch ${worktree?.branch ?? ''} still has the work.`);
-    const refused = await filterDrivers(worktree.repo);
+    const refused = (await filterDrivers(worktree.repo)) ?? (await filterDrivers(real)); // the project, and the copy (an include judged by where it sits)
     if (refused) throw refuse('worktree.filter', refused);
     const dirty = (await git(['status', '--porcelain'], { cwd: real })).split(/\r?\n/).filter(Boolean).length;
     let ahead = 0;
