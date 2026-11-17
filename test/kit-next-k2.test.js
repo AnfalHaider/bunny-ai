@@ -236,6 +236,11 @@ test('K-2: git clone is refused for a builder, allowed for the Chief of Staff an
   withHook(P, P, () => {
     // (what a role may write beyond git's internals is its own write_globs, not this check)
     assert.equal(guard.decide({ tool: 'Write', filePath: join(P, 'AGENTS.md'), cwd: rw }).allow, false, 'but not the protected files');
+    // only ref storage is theirs: the trust anchors stay protected for Release Ops too
+    for (const f of ['.git/config', '.git/hooks/pre-push', '.git/commondir', '.git/bootstrap-role', '.git/worktrees/ro/commondir', '.git/worktrees/ro/gitdir', '.git/worktrees/ro/bootstrap-role', '.git/HEAD']) {
+      assert.equal(guard.decide({ tool: 'Write', filePath: join(P, f), cwd: rw }).allow, false, `Release Ops may not write ${f}`);
+    }
+    assert.equal(guard.decide({ tool: 'Write', filePath: join(P, '.git', 'refs', 'tags', 'v1'), cwd: rw }).allow, true, 'tags');
   });
 });
 

@@ -150,7 +150,7 @@ export function otherRootsViolation(filePath, cwd, ctx, policy, role) {
   // a planted git file or role file, or anything inside a .git directory, in the project or any of its worktrees
   for (const r of [ctx.project, ...ctx.roots]) {
     const rel = toRepoPath(r, filePath, cwd);
-    if (typeof rel === 'string' && plantedGitPath(rel) && !(gitOnly && /(^|\/)\.git(\/|$)/i.test(rel))) return `${rel} decides what git or the guard believes (a .git file or directory, commondir, bootstrap-role, policy.json under .bootstrap). Only the Chief of Staff writes it.`;
+    if (typeof rel === 'string' && plantedGitPath(rel) && !(gitOnly && releaseOpsMayWrite(rel))) return `${rel} decides what git or the guard believes (a .git file or directory, commondir, bootstrap-role, policy.json under .bootstrap). Only the Chief of Staff writes it.`;
   }
   return null;
 }
@@ -385,4 +385,11 @@ export function scopeViolations(paths, policy, brief, role) {
     if (why) out.push(why);
   }
   return out;
+}
+
+// Release Ops moves branches and tags: only ref storage is theirs, never the trust anchors (commondir, gitdir, bootstrap-role, config, hooks, worktrees/*)
+const REF_STORAGE = /(^|\/)\.git\/(refs\/(heads|tags)\/|packed-refs$|ORIG_HEAD$|FETCH_HEAD$)/i;
+const TRUST_ANCHOR = /(^|\/)(commondir|bootstrap-role|gitdir|config|hooks(\/|$))/i;
+function releaseOpsMayWrite(rel) {
+  return REF_STORAGE.test(rel) && !TRUST_ANCHOR.test(rel.replace(/^.*?\.git\//i, ""));
 }
