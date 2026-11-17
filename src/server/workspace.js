@@ -19,6 +19,7 @@ import { globMatcher } from './glob.js';
 import { checkEnvironment } from './environment.js';
 import { createContext, Script } from 'node:vm';
 import { fetchLimited } from './download.js';
+import { shellHint, looksLikeServer } from './shellFit.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_LIST = 400;              // entries in one listing
@@ -556,9 +557,11 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   async function run_command({ command, cwd, timeout_seconds } = {}, { onProgress = null } = {}) {
     // W6-17: the model may ask for longer than the 2 minute default, up to 10 minutes.
     const limitMs = Math.round(Math.min(MAX_COMMAND_SECONDS, Math.max(1, Number(timeout_seconds) || COMMAND_TIMEOUT_MS / 1000)) * 1000);
-    if (endsInBackground(String(command ?? ''))) {
-      throw new Error('run_command waits for the command to finish, so a trailing & cannot start a background program here (Windows PowerShell 5.1 rejects it). '
-        + 'Use start_process for a server or watcher that should keep running, then browser_open the address once it is up.');
+    // W6-8: a server or watcher (or a trailing &) would hang here until the timeout: start_process runs it in the background.
+    if (looksLikeServer(String(command ?? ''))) {
+      const bare = String(command ?? '').trim().replace(/\s*&$/, '').trim();
+      throw new Error('run_command waits for the command to finish, and this one keeps running (a server or watcher), so it was not started here. '
+        + `Call start_process with command "${bare}" instead; it starts in the background. Then browser_open the address once it is up.`);
     }
     const cmd = translateChains(String(command ?? '').trim());
     if (!cmd) throw new Error('run_command needs a command');
@@ -609,6 +612,9 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
               : ' It printed nothing: run it again without redirecting its output to see why.';
           }
         }
+        // W6-7: a command written for cmd or a POSIX shell that failed here: say how PowerShell writes it.
+        const hint = (spawnErr || code) ? shellHint(command) : null;
+        if (hint) status += `${status ? String.fromCharCode(10) : ''}[hint: ${hint}]`;
         // The status comes first, so it survives even when long output is cut.
         const out = [status, clip(body, KEEP_OUTPUT)].filter(Boolean).join('\n');
         done(out || '(no output)');

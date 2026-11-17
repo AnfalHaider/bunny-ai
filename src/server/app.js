@@ -2284,6 +2284,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           try { checkedTool = customTools.check(parsed); } catch (err) { return `The tool was not built: ${err.message}`; }
           detail = `${checkedTool.description}\nArguments: ${Object.keys(checkedTool.parameters).join(', ') || 'none'}\n\n${checkedTool.script}`;
         } else if (name === 'start_process') detail = parsed.command;
+        else if (name === 'schedule_task') detail = `Runs by itself every ${Math.round(Number(parsed.every_minutes) || 60)} minutes${parsed.may_change === true ? ', and may change things' : ''}:
+
+${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         else if (name === 'computer_type') detail = parsed.text;
         else if (custom) detail = JSON.stringify(parsed, null, 2);
         else if (isGoogleTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
@@ -2295,7 +2298,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
         if (ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
-          const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || custom) ? cardTooLong(detail) : null;
+          const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || name === 'schedule_task' || custom) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
