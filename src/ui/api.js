@@ -1,6 +1,8 @@
 /** Thin client for the Bunny AI server. */
 
-import { LOCK_MESSAGE, showBrowserLockNote, showNotRunning, windowOnlyLocked } from './browser-mode.js';
+import { LOCK_MESSAGE, installRevert, lockPage, showBrowserLockNote, showNotRunning, windowOnlyLocked } from './browser-mode.js';
+
+const refused = () => { try { document.dispatchEvent(new CustomEvent('bunny:window-only-refused')); } catch { /* no page */ } };
 
 /** A request that fails to reach the server at all (a TypeError) in a browser means Bunny is not running: say so. */
 async function reach(request) {
@@ -88,7 +90,7 @@ export async function sendJSON(path, method, body) {
   // In the desktop app those writes go to the main process (preload and IPC), which makes the request; in a plain browser they go over HTTP.
   const desk = desktopBridge();
   // BROWSER: no bridge and the server keeps window-only changes to the window: say so at once, in the server's own words (the server would answer the same)
-  if (!desk && isWindowOnlyRoute(method, path, body) && (await windowOnlyLocked())) throw Object.assign(new Error(LOCK_MESSAGE), { code: 'window.only', message: LOCK_MESSAGE });
+  if (!desk && isWindowOnlyRoute(method, path, body) && (await windowOnlyLocked())) { refused(); throw Object.assign(new Error(LOCK_MESSAGE), { code: 'window.only', message: LOCK_MESSAGE }); }
   if (desk?.secureWrite && isWindowOnlyRoute(method, path, body)) {
     const r = await desk.secureWrite(method, path, body ?? {});
     if (r.status >= 400) throw Object.assign(new Error(r.data?.message ?? `HTTP ${r.status}`), r.data);
@@ -100,13 +102,18 @@ export async function sendJSON(path, method, body) {
     body: JSON.stringify(body ?? {}),
   }));
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.message ?? `HTTP ${res.status}`), data);
+  if (!res.ok) { if (data.code === 'request.windowOnly') refused(); throw Object.assign(new Error(data.message ?? `HTTP ${res.status}`), data); }
   return data;
 }
 
 // BROWSER: a Settings page opened in a browser (no bridge) on a server that locks window-only changes says so at the top.
-if (typeof document !== 'undefined' && document.body && /\/src\/ui\/(settings|customize|providers|automation)\.html$/.test(globalThis.location?.pathname ?? '')) {
-  windowOnlyLocked().then((on) => { if (on && !desktopBridge()) showBrowserLockNote(document); }).catch(() => {});
+if (typeof document !== 'undefined' && document.body && /\/src\/ui\/(settings|customize|providers|automation|index)\.html$/.test(globalThis.location?.pathname ?? '')) {
+  windowOnlyLocked().then((on) => {
+    if (!on || desktopBridge()) return;
+    if (!/index\.html$/.test(location.pathname)) showBrowserLockNote(document);
+    installRevert(document);
+    lockPage(document, location.pathname, WINDOW_ONLY_SETTING_KEYS);
+  }).catch(() => {});
 }
 
 /**
