@@ -1482,7 +1482,14 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     const text = m.fellBackKind === 'provider'
       ? say('model.switchedProvider', { model: row?.displayName ?? m.model, provider: row?.providerName ?? m.providerId ?? '', from: m.fellBackFrom, reason })
         + (m.fellBackTries > 1 ? ` (${m.fellBackTries - 1} other provider${m.fellBackTries - 1 === 1 ? '' : 's'} also failed)` : '')
-      : say('model.switchedModel', { model: row?.displayName ?? m.model, from: m.fellBackFrom, provider: m.fellBackProvider ?? '', reason });
+      // the model the person picked by its name (not its id), the provider that failed, and how many others also failed, with no brackets inside brackets
+      : say('model.switchedModel', {
+        model: row?.displayName ?? m.model,
+        from: state.models?.find((x) => x.id === m.fellBackFrom)?.displayName ?? m.fellBackFrom,
+        provider: m.fellBackProvider ?? '',
+        reason,
+        more: m.fellBackTries > 1 ? `; ${m.fellBackTries - 1} other provider${m.fellBackTries - 1 === 1 ? '' : 's'} also failed` : '',
+      });
     wrap.append(element('div', { className: 'msg-meta switch-note', textContent: `↪ ${text}.` }));
   } else if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
     const job = JOBS[m.job]?.label ?? 'Chat';

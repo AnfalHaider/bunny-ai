@@ -374,11 +374,16 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       const sandbox = createContext({ lines: [], at: [] });
       const script = new Script(`(() => { const re = new RegExp(${JSON.stringify(re.source)}, ${JSON.stringify(re.flags)}); const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; })()`);
       hitsOf = (lines) => {
-        if (regexSpent >= REGEX_BUDGET_MS) throw new Error('Search stopped after 5 s; narrow the folder or the pattern.');
+        if (regexSpent >= REGEX_BUDGET_MS) throw new Error('Search stopped after 5 s in all; narrow the folder or the pattern.');
         sandbox.lines = lines;
         const began = clock();
         try { return [...script.runInContext(sandbox, { timeout: Math.max(50, Math.min(REGEX_TIMEOUT_MS, REGEX_BUDGET_MS - regexSpent)) })]; } catch (err) {
-          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('Search stopped after 5 s; narrow the folder or the pattern.');
+          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
+            // either one file took more than a second, or this was the last of the 5 seconds of pattern time the whole search gets
+            throw new Error(regexSpent + Math.max(0, clock() - began) >= REGEX_BUDGET_MS - 100
+              ? 'Search stopped after 5 s in all; narrow the folder or the pattern.'
+              : 'Search stopped: one file took more than a second to match this pattern; simplify the pattern or narrow the folder.');
+          }
           throw err;
         } finally { regexSpent += Math.max(0, clock() - began); }
       };

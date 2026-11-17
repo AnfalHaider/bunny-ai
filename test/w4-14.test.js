@@ -85,6 +85,10 @@ test('W4-14: the question check catches "run these commands" and leaves real cho
   // QA and Security: a real decision about what Bunny will do is shown, whatever words it uses
   for (const q of ['Should I run the migration command now?', 'I will run the commands now. Do you agree with the plan?', 'Do you want me to run the commands now or review them first?', 'Is it OK if I run the install script?']) assert.equal(asksToRunCommands({ question: q }), false, q);
   for (const q of ['Please run npm install in your terminal and tell me the result', 'You can run these in PowerShell', 'Could you run the script for me?']) assert.equal(asksToRunCommands({ question: q }), true, q);
+  // QA gap 10 (polish): more ways to hand the work to the person, and a choice "I will run it myself"
+  for (const q of ['I need you to run npm install', 'Open a terminal and run npm start', 'You\'ll need to run it yourself', 'Kindly run the script', 'Let me know when you have run it', 'Run npm test on your machine', 'Would you mind running the installer?']) assert.equal(asksToRunCommands({ question: q }), true, q);
+  assert.equal(asksToRunCommands({ question: 'How do you want to proceed?', choices: ['I will run the commands myself', 'Let Bunny do it'] }), true, 'a choice that hands it to the person');
+  for (const q of ['Would you like me to type the command into the terminal?', 'Shall I run the build in the terminal?', 'Do you want me to execute the script on your machine?']) assert.equal(asksToRunCommands({ question: q }), false, q);
 });
 
 test('W4-14-a: in a Code chat in Plan mode the model is not promised run_command, is not given it, and is told how to leave Plan mode', async (t) => {

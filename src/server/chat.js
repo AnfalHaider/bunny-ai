@@ -646,3 +646,16 @@ export function asksPermissionToContinue(text) {
   // Handing the turn back, as a question or as a statement.
   return /\b(please confirm|would you like( me)? to|do you want me to|shall i|should i\b|want me to|ready for me to|can i (proceed|go ahead|continue)|may i (proceed|go ahead|continue)|let me know (if|when|whether|how|once)|tell me (if|when|whether|to)|say the word|just say|awaiting your|once you (confirm|say|approve)|when you('re| are) ready|whenever you('re| are) ready|if you('d| would) like|if you want me to)\b/i.test(tail);
 }
+
+/**
+ * A typed answer to "keep going?" that starts with a go-ahead word and then says to stop ("continue, stop", "yes, but don't"), as opposed to a
+ * go-ahead that only uses a stop-like word ("yes, no problem", "continue, don't stop", "carry on, not a problem").
+ */
+export function goesThenStops(text) {
+  const head = String(text ?? '').trim();
+  if (!/^(keep (going|trying)|carry on|go on|continue|yes)\b/i.test(head)) return false;
+  const rest = head.replace(/^(keep (going|trying)|carry on|go on|continue|yes)\b[\s,.;:!-]*/i, '');
+  if (/^(?:don'?t|do not|no need to|not)\s+(?:stop|wait|hold|pause|stopping|worry)\b/i.test(rest)) return false; // "don't stop", "no need to stop"
+  if (/^(?:no|not)\s+(?:problem|problems|worries|worry|rush|issue|issues|a problem|an issue|at all|doubt)\b/i.test(rest)) return false; // "no problem"
+  return /^(?:stop|don'?t|do not|no|not|wait|hold)\b/i.test(rest);
+}

@@ -43,7 +43,7 @@ import { listTools as httpListTools, callTool as httpCallTool, connectorTools, c
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat, stripToolMarkup, asksPermissionToContinue, statesDoneOrBlocked, fitResult } from './chat.js';
+import { streamChat, stripToolMarkup, asksPermissionToContinue, statesDoneOrBlocked, goesThenStops as typedStop, fitResult } from './chat.js';
 import { clip } from './clip.js';
 import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
@@ -2132,16 +2132,17 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
 
       // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,
       // never cut: the part the person cannot see could be the part that matters.
-      const CARD_LIMIT = 2000;
+      const CARD_LIMIT = 2000; // what a command, a connector or a tool script may be to be shown whole
+      const CARD_SHOWN = 2300; // what the card can hold: the same plus a heading line of its own (a schedule's prompt is limited, not its heading)
       // Anything that is code or an action is refused when too long (cardTooLong); text that is only content (a file being written, a mail body)
       // is cut with a visible note that says how much is not shown.
       const cardText = (detail) => {
         const text = String(detail ?? '');
-        return text.length > CARD_LIMIT ? `${text.slice(0, CARD_LIMIT)}
-… ${text.length - CARD_LIMIT} more characters are not shown here` : text;
+        return text.length > CARD_SHOWN ? `${text.slice(0, CARD_SHOWN)}
+… ${text.length - CARD_SHOWN} more characters are not shown here` : text;
       };
-      const cardTooLong = (detail) => String(detail ?? '').length > CARD_LIMIT
-        ? `This is too long to show in full on the confirmation card (the card holds ${CARD_LIMIT} characters at most, with its heading), so it was not run. Use a shorter command, or put the work in a file and run that.`
+      const cardTooLong = (detail, counted = detail) => String(counted ?? '').length > CARD_LIMIT
+        ? `This is too long to show in full on the confirmation card (more than ${CARD_LIMIT} characters), so it was not run. Use a shorter one, or put the work in a file.`
         : null;
       // Ask the person, and wait for the answer (or for them to leave).
       const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
@@ -2505,7 +2506,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
         if (ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
-          const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || name === 'schedule_task' || custom) ? cardTooLong(detail) : null;
+          const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || name === 'schedule_task' || custom) ? cardTooLong(detail, name === 'schedule_task' ? parsed.prompt : detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
@@ -3017,7 +3018,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               await logStep({ role: 'assistant', kind: 'tool_call', tool: 'Asked: limit check', status: 'done', content: '', result: answer.skipped && !answer.gone ? 'Skipped' : (said || 'No answer'), question: { question: q.question, choices: q.choices, answer: answer.skipped && !answer.gone ? 'Skipped' : (said || null) } });
               // a go-ahead word that is followed by stop, don't, no or wait ("yes, stop") is a stop
               const GO = /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b/i;
-              const goesThenStops = /^\s*(keep (going|trying)|carry on|go on|continue|yes)\b[\s,.;:!-]*(stop|don'?t|do not|no|not|wait|hold)\b/i.test(typedSaid);
+              const goesThenStops = typedStop(typedSaid); // W6-polish: "yes, no problem" and "continue, don't stop" go on
               const goOn = said === 'Keep going' || (!answer.skipped && GO.test(typedSaid) && !goesThenStops && !(Array.isArray(answer.choices) && answer.choices.length));
               // "yes, but skip X": carrying on is not the whole answer, the model gets the person's words too
               if (goOn && typedSaid && typedSaid.toLowerCase().replace(/[^a-z ]+/g, '').trim() !== 'keep going') return { go: true, answer: `The person answered your question ("${q.question.slice(0, 200)}"): ${typedSaid}` };
