@@ -106,3 +106,37 @@ test('cards in the plain web build (no lock) are untouched', async ({ page }) =>
   for (const c of await page.locator('#cards button, #cards textarea').all()) await expect(c).toBeEnabled();
   await expect(page.locator('#cards .window-only-note')).toHaveCount(0);
 });
+
+// ---- the composer: one short line beside the greyed mode control; a device picks the model of its own chat ----
+test('the lock note beside the chat mode control is one short line (the sentence is its tooltip), not a wrapped paragraph', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await locked(page);
+  await page.goto('/src/ui/index.html');
+  await expect(page.locator('#mode-button')).toBeDisabled();
+  const note = page.locator('.window-only-note').first();
+  await expect(note).toHaveText('Window only');
+  await expect(note).toHaveAttribute('title', SENTENCE);
+  const box = await note.boundingBox();
+  expect(box.height).toBeLessThan(26); // one line
+});
+
+test('a signed-in device that picks a model sets THAT chat\'s model through the chat\'s own routes: no settings write, no red sentence', async ({ page, request }) => {
+  const models = [{ providerId: 'harbor', providerName: 'Harbor', id: 'reef-image', displayName: 'Reef Image', freeKind: 'free', free: true, contextLength: 128000 }];
+  await request.put('/api/settings', { data: { modelFilter: 'all' } });
+  const made = await (await request.post('/api/sessions', { data: { title: 'Device chat' } })).json();
+  await locked(page);
+  await page.route('**/api/models*', (route) => route.fulfill({ json: models }));
+  await page.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const m = document.createElement('meta'); m.name = 'bunny-csrf'; m.content = 'a'.repeat(48); document.head.append(m); }); });
+  const writes = [];
+  page.on('request', (r) => { if (r.method() !== 'GET' && /\/api\/(settings|sessions\/)/.test(r.url())) writes.push(`${r.method()} ${new URL(r.url()).pathname}`); });
+  await page.goto('/src/ui/index.html?s=' + made.id);
+  await page.waitForTimeout(500);
+  await page.locator('#picker-button').click();
+  await page.locator('.picker-panel .picker-model:not([data-section])').first().click();
+  await expect(page.locator('#picker-button')).toContainText('reef-image');
+  await page.waitForTimeout(500);
+  expect(writes).toContain(`PATCH /api/sessions/${made.id}/setting/providerId`);
+  expect(writes).toContain(`PATCH /api/sessions/${made.id}/setting/model`);
+  expect(writes.filter((w) => w === 'PUT /api/settings'), 'no write of the default model').toEqual([]);
+  await expect(page.locator('#error')).not.toContainText(SENTENCE);
+});
