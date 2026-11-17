@@ -23,6 +23,7 @@ export const AGENT_TOOL_RISK = {
 
 export const CAPABILITIES = {
   code_mode: 'Code mode: read and change files in a folder, and run commands and programs there',
+  leave_plan_mode: 'Leave Plan mode: switch this chat to Ask mode, so Bunny can change files and run commands here (it asks before each)',
   computer_use: 'Control this computer: see the screen, click, type and press keys',
   custom_tools: 'Build new tools: write a small script that becomes a tool Bunny AI can use',
   new_tool: 'Something no current tool can do: find a plugin or connector for it, or build it',
@@ -300,6 +301,16 @@ export function askToolDefinition() {
  * The question as shown: trimmed, at most six choices, each { label, reason, recommended }
  * (plain strings are accepted too), the recommended one first.
  */
+/**
+ * W4-14c: does an ask_user question only ask the person to run commands (or paste output from a terminal) for Bunny?
+ * English only, and narrow on purpose: a run word followed by commands, or a terminal named as the place.
+ */
+export function asksToRunCommands(q = {}) {
+  const text = [q.question, ...(Array.isArray(q.choices) ? q.choices.map((c) => c?.label ?? c) : [])].join(' ');
+  return /\b(run|execute|paste|type|enter)\b[^.?!\n]{0,60}\b(commands?|scripts?)\b/i.test(text)
+    || /\b(run|execute|paste|type|enter)\b[^.?!\n]{0,80}\b(in|into|using|from)\s+(a\s+|the\s+|your\s+)?(terminal|powershell|command prompt|cmd|shell|console)\b/i.test(text);
+}
+
 export function cleanQuestion(a = {}) {
   const choices = (Array.isArray(a.choices) ? a.choices : []).map((c) => (typeof c === 'string'
     ? { label: c.trim().slice(0, 120), reason: '', recommended: false }

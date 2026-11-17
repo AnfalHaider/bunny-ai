@@ -1687,6 +1687,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onPermission: (info) => { settleThinking(); working.set('asking'); showLivePermission(bodyEl, info); },
     onBrowser: (info) => runBrowserAction(info),
     onCapability: (info) => { settleThinking(); working.set('asking'); showLiveCapability(bodyEl, info); },
+    onNotice: (info) => showLiveNotice(bodyEl, info),
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
     onThinking: (info) => { working.alive(); working.addThinking(info.text ?? ''); },
     onQuestion: (info) => { settleThinking(); flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
@@ -2033,11 +2034,26 @@ function setFolded(pre, folded) {
 }
 
 /** The model asked for something it does not have: the person chooses. */
+/** W4-14e: a plain note in the chat from Bunny's server, with the folder picker when a folder is what is missing. */
+function showLiveNotice(bodyEl, info) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  const card = element('div', { className: 'permission-prompt live-permission capability-card' });
+  card.append(element('p', { className: 'capability-reason', textContent: String(info.text ?? '') }));
+  if (info.folderPicker) {
+    const actions = element('div', { className: 'permission-actions' });
+    actions.append(button(say('cap.folder'), { className: 'primary', onclick: async () => { await chooseFolder(); applyWorkMode('code', { save: true }); } }));
+    card.append(actions);
+  }
+  msg.before(card);
+}
+
 function showLiveCapability(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const yesLabel = {
     code_mode: info.hasFolder ? say('cap.code') : say('cap.folder'),
+    leave_plan_mode: say('cap.leavePlan'),
     computer_use: say('cap.computer'),
     custom_tools: say('cap.build'),
     new_tool: say('cap.newTool'),
@@ -2059,6 +2075,12 @@ function showLiveCapability(bodyEl, info) {
       }
       actions.replaceChildren(element('span', { className: 'hint', textContent: granted ? say('cap.given') : say('cap.notNow') }));
       await sendJSON(`/api/sessions/${state.sessionId}/capability/${info.id}`, 'POST', { granted });
+      if (granted && info.capability === 'leave_plan_mode') { // the server moved this chat to Ask: show it
+        if (state.session) state.session.permissionMode = 'ask';
+        const picker = $('permission-mode');
+        if (picker) picker.value = 'ask';
+        syncModeMenu();
+      }
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
     }

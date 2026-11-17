@@ -54,7 +54,7 @@ import { asksInAuto } from './autoAsks.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
-  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, SENSITIVE, cleanQuestion, describeAnyAgentTool as describeAgentTool,
+  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, SENSITIVE, cleanQuestion, asksToRunCommands, describeAnyAgentTool as describeAgentTool,
 } from './agentTools.js';
 
 import { createAccounts } from './accounts.js';
@@ -1783,7 +1783,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // ---- the work mode decides what the model may do ----
       //   chat      conversation only, no tools
       //   code      works inside the chosen folder with file and command tools, plus connectors
-      const permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask';
+      let permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask'; // changes only when the person answers a leave_plan_mode card (W4-14b)
       const folder = session.folder ? await checkFolder(session.folder) : null;
       // Undo: the first time this reply changes a file, the file is copied as it was.
       let checkpoint = null;
@@ -1798,7 +1798,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
-      const risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
+      let risks = permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'];
       // Plan mode is read-only on the SERVER, not only in the list of tools the model is offered: a call for a
       // tool it was never offered (a hallucination, or text in a file it read) is refused here, whatever it is.
       // "own" tools (ask_user, create_artifact...) are fine in Plan mode; only moving a request to a new chat is refused, by name.
@@ -1831,16 +1831,24 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           + 'Before installing a project\'s packages, call check_environment once. '
           + 'For a job of several steps, keep a short progress file at .bunny/progress.md in the workspace (the goal, what is done, what is next) '
           + 'and update it as you go; when you continue a job, read it first. '
-          + 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command. '
-          + 'Bunny runs commands, installs packages and starts servers itself, for you: never say you are not able to run commands. '
-          + 'They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again. '
+          + '%RUN% '
           + 'Finish the whole task you were given. Never stop to ask permission for work the person already asked for ("Please confirm that you would like me to..." is wrong): just do it. '
           + 'Ask only a real decision, one that changes what you would build or that you cannot choose yourself, and ask it with ask_user (the card waits for the answer); then carry on. '
           + 'For a job of about ten steps or more (build a site, port a project, fix many files), start by writing a task list with update_tasks and keep it current as you finish each step. '
           + 'A reply with no question and no steps left is a finished job: end with what you did and how you checked it. '
           + `When you create a git branch, start its name with "${branchPrefix}/" (for example ${branchPrefix}/fix-login).`,
       };
-      const modeText = modeTexts[workMode];
+      // W4-14: what the model is told about running commands is decided by the tools it is really given, never by the mode name.
+      const RUN_TEXT = 'You run commands yourself with run_command (or start_process for anything that keeps running): never ask the person to run a command. '
+        + 'Bunny runs commands, installs packages and starts servers itself, for you: never say you are not able to run commands. '
+        + 'They run in Windows PowerShell 5.1. When a command fails, read its error, fix the cause and try again.';
+      const PLAN_TEXT = 'You are in Plan mode: you cannot run commands or change files in this chat. Write the commands you would run as part of your plan. '
+        + 'Never ask the person to run a command in a terminal, and never say Bunny is unable to run commands. '
+        + 'If they want it done now, call request_capability with leave_plan_mode: the card lets them switch to Ask mode with one click.';
+      const NO_FOLDER_TEXT = 'Mode: Code, but no workspace folder is usable yet, so you cannot read or change files or run commands. '
+        + 'Call request_capability with code_mode so the person can choose a folder. Never ask the person to run a command in a terminal.';
+      const codeTextFor = (canRun) => modeTexts.code.replace('%RUN%', canRun ? RUN_TEXT : PLAN_TEXT);
+      const modeText = workMode === 'code' ? (workspace ? codeTextFor(permissionMode !== 'plan') : NO_FOLDER_TEXT) : modeTexts[workMode];
       const folderText = workspace
         ? `Workspace folder: ${workspace.root}. All file paths are relative to it. Permission mode: ${permissionMode}`
           + (permissionMode === 'plan' ? ' (read-only: propose a plan, do not change anything).' : '.')
@@ -1886,6 +1894,8 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Gmail, Calendar and Drive, when the Google sign-in allowed them.
       const googleAccount = (await accounts.status()).google;
       const googleOn = Boolean(googleAccount?.workspace);
+      // W4-14e: a Code chat whose folder is missing says so to the person once, with the folder picker, instead of leaving it to the model.
+      if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit']),
         ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
@@ -2023,9 +2033,12 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         replyStatus.set(id, 'needs-you');
         send('question', { id: qid, ...q });
       });
+      let runAskRefusals = 0;
       const grantCapability = async (capability, reason) => {
         if (!CAPABILITIES[capability]) return `There is no such capability. Choose one of: ${Object.keys(CAPABILITIES).join(', ')}.`;
         if (capability === 'code_mode' && workspace) return `Code mode is already on in ${workspace.root}.`;
+        if (capability === 'leave_plan_mode' && permissionMode !== 'plan') return 'This chat is not in Plan mode.';
+        if (capability === 'leave_plan_mode' && !workspace) return 'No folder is chosen, so there is nothing to run commands in yet. Call request_capability with code_mode instead.';
         if (capability === 'computer_use' && computerOn) return 'You can already control this computer.';
         if (capability === 'custom_tools' && buildEnabled) return 'You can already build tools with create_tool.';
         if ((capability === 'computer_use' || capability === 'custom_tools') && process.platform !== 'win32') return 'That needs Bunny AI on Windows.';
@@ -2042,7 +2055,18 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           maxToolRounds = Math.max(maxToolRounds, EFFORT.code);
           return `Code mode is on. Workspace folder: ${workspace.root}; paths are relative to it. You now have: `
             + [...workspaceToolDefinitions(risks), ...processToolDefinitions(risks)].map((d) => d.function.name).join(', ') + '.\n'
-            + `Ignore what you were told about Chat mode. ${modeTexts.code}`;
+            + `Ignore what you were told about Chat mode. ${codeTextFor(permissionMode !== 'plan')}`;
+        }
+        if (capability === 'leave_plan_mode') {
+          // W4-14b: only the window can answer this card (the capability route is window-only). It goes to Ask, never Auto.
+          permissionMode = 'ask';
+          risks = ['read', 'edit', 'run'];
+          await sessions.update(id, { permissionMode: 'ask' });
+          const have = new Set(toolDefinitions.map((d) => d.function.name));
+          const added = [...workspaceToolDefinitions(risks), ...processToolDefinitions(risks)].filter((d) => !have.has(d.function.name));
+          toolDefinitions.push(...added);
+          return 'Plan mode is off for this chat: it is now in Ask mode, so every change and command asks the person first. You now also have: '
+            + added.map((d) => d.function.name).join(', ') + '. Go on with the work and run the commands yourself.';
         }
         if (capability === 'computer_use') {
           await saveSettings({ aiComputerUse: true });
@@ -2356,6 +2380,18 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             case 'ask_user': {
               const q = cleanQuestion(parsed);
               if (!q.question) throw new Error('Say what to ask.');
+              // W4-14c: a question that only asks the person to run commands for Bunny is not shown; the model is told what to do instead.
+              // After three of them in one reply the card is shown (a real choice may look like this).
+              if (asksToRunCommands(q) && runAskRefusals < 3) {
+                runAskRefusals += 1;
+                result = workspace
+                  ? (permissionMode === 'plan'
+                    ? 'Do not ask the person to run commands. This chat is in Plan mode: write the commands as part of your plan, and if they should be run now, call request_capability with leave_plan_mode.'
+                    : 'Do not ask the person to run commands: you have run_command and start_process, so run them yourself.')
+                  : 'Do not ask the person to run commands. You have no folder to run them in yet: call request_capability with code_mode.';
+                shown = 'Not asked';
+                break;
+              }
               const answer = await askQuestion(q);
               const labels = q.choices.map((c) => c.label);
               const picked = (Array.isArray(answer.choices) ? answer.choices : []).map(String).filter((c) => labels.includes(c));
