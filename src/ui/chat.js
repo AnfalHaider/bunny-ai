@@ -24,6 +24,7 @@ import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
+import { isDevicePage } from './browser-mode.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -741,6 +742,15 @@ async function selectModel(m) {
   state.selected = { providerId: m.providerId, providerName: m.providerName, model: m.id };
   closePicker();
   renderPicker();
+  // A signed-in device may not write the app's default model (that is a settings write, the window's): it sets THIS chat's model, through the chat's own routes.
+  // A chat that does not exist yet needs no write: its first message carries the model.
+  if (isDevicePage()) {
+    if (state.sessionId) {
+      await sendJSON(`/api/sessions/${state.sessionId}/setting/providerId`, 'PATCH', { value: m.providerId });
+      await sendJSON(`/api/sessions/${state.sessionId}/setting/model`, 'PATCH', { value: m.id });
+    }
+    return;
+  }
   await sendJSON('/api/settings', 'PUT', { providerId: m.providerId, model: m.id });
 }
 

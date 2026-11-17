@@ -63,7 +63,7 @@ export function lockSelectorsFor(pathname, keys = []) {
 }
 
 /** Switch one control off with the sentence beside it. A block (like the permission rules) gets the sentence once, at its top, and all its controls are switched off. */
-export function lockControl(el, doc = globalThis.document, { note: withNote = true } = {}) {
+export function lockControl(el, doc = globalThis.document, { note: withNote = true, short = false } = {}) {
   if (!el || el.dataset?.windowOnlyLocked) return;
   el.dataset.windowOnlyLocked = '1';
   const controls = el.matches?.('input, select, textarea, button') ? [el] : [...el.querySelectorAll('input, select, textarea, button')];
@@ -71,8 +71,10 @@ export function lockControl(el, doc = globalThis.document, { note: withNote = tr
   if (!withNote) return; // a whole page of window-only controls (Customize, Providers, Automation) has the one note at the top
   const note = doc.createElement('span');
   note.className = 'window-only-note';
-  note.textContent = LOCK_MESSAGE;
-  note.style.cssText = 'font-size:12px;color:var(--text-dim,#62666f);margin:0 8px;white-space:normal';
+  // in a crowded row (the composer's) the note is one short line and the whole sentence is its tooltip
+  note.textContent = short ? 'Window only' : LOCK_MESSAGE;
+  if (short) { note.title = LOCK_MESSAGE; note.setAttribute('aria-label', LOCK_MESSAGE); }
+  note.style.cssText = `font-size:12px;color:var(--text-dim,#62666f);margin:0 8px;white-space:${short ? 'nowrap' : 'normal'}`;
   if (controls.length === 1 && controls[0] === el) (el.closest?.('label') ?? el).after(note);
   else (el.querySelector?.('h3, h2') ?? el).after(note);
 }
@@ -81,8 +83,9 @@ export function lockControl(el, doc = globalThis.document, { note: withNote = tr
 export function lockPage(doc = globalThis.document, pathname = globalThis.location?.pathname, keys = []) {
   const selectors = lockSelectorsFor(pathname, keys);
   if (!doc || !selectors.length) return;
-  const wholePage = /(customize|providers|automation).html$/.test(String(pathname));
-  const run = () => { for (const sel of selectors) for (const el of doc.querySelectorAll(sel)) lockControl(el, doc, { note: !wholePage }); };
+  const wholePage = /(customize|providers|automation)\.html$/.test(String(pathname));
+  const short = /index\.html$/.test(String(pathname));
+  const run = () => { for (const sel of selectors) for (const el of doc.querySelectorAll(sel)) lockControl(el, doc, { note: !wholePage, short }); };
   run();
   let queued = false;
   new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; run(); }); }).observe(doc.body, { childList: true, subtree: true });

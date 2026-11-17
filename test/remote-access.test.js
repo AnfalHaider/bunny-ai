@@ -635,3 +635,18 @@ test('a signed-in device can answer a question card of a chat too (the route is 
   assert.equal(r.status, 404, 'answered by the route (nothing is waiting there), not refused as window-only');
   assert.notEqual(r.json()?.message, "Change this in Bunny's window.");
 });
+
+test('a device picks a model for ITS chat through the chat\'s own routes (PATCH setting/providerId and /model), and cannot write the app\'s default model', async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone' } })).json();
+  const a = await lan(d.url, { method: 'PATCH', path: '/api/sessions/' + made.id + '/setting/providerId', headers: d.w, body: { value: 'openai' } });
+  const b = await lan(d.url, { method: 'PATCH', path: '/api/sessions/' + made.id + '/setting/model', headers: d.w, body: { value: 'gpt-4o' } });
+  assert.deepEqual([a.status, b.status], [200, 200], a.text + b.text);
+  const after = await (await fetch(d.base + '/api/sessions/' + made.id)).json();
+  assert.deepEqual([after.providerId, after.model], ['openai', 'gpt-4o'], 'that chat now uses the model the device chose');
+  // the app's default model is a settings write: still the window's
+  const settingsBefore = await (await fetch(d.base + '/api/settings')).json();
+  const put = await lan(d.url, { method: 'PUT', path: '/api/settings', headers: d.w, body: { providerId: 'openai', model: 'other-model' } });
+  assert.equal(put.status, 403);
+  assert.equal((await (await fetch(d.base + '/api/settings')).json()).model, settingsBefore.model, 'the default model did not change');
+});
