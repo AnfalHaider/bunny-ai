@@ -27,6 +27,14 @@ export function isOwnPage(url, origin) {
 }
 
 /**
+ * May a window go to this address (will-navigate)? Anything on Bunny's own server may be LOADED (an artifact window's own first load is a navigation too);
+ * everything else goes to the person's browser. This is only about loading: what a page may DO is decided by isOwnPage (IPC checks) and by having no preload.
+ */
+export function navigationAllowed(url, origin) {
+  return isOwnOrigin(url, origin);
+}
+
+/**
  * What a window.open to this address becomes:
  *  'bunny'  Bunny's own page: a Bunny window, with the preload (pop-out chat)
  *  'plain'  a page from Bunny's own server that is not Bunny's own page (an artifact): a window with NO preload, so no bridge

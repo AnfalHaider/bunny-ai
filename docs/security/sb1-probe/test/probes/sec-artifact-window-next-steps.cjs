@@ -36,7 +36,7 @@ async function main() {
       if (kind === 'web') external.push(url);
       return { action: 'deny' };
     });
-    c.on('will-navigate', (event, url) => { if (!isOwn(url)) { event.preventDefault(); if (/^https?:\/\//i.test(url)) external.push(url); } });
+    c.on('will-navigate', (event, url) => { if (!rules.navigationAllowed(url, origin)) { event.preventDefault(); if (/^https?:\/\//i.test(url)) external.push(url); } });
 
   });
   app.on('browser-window-created', (_e, w) => created.push(w));
