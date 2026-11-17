@@ -33,7 +33,7 @@ The baseline (`2026-11-16-baseline-0.1.4.md`, S-8) accepted "6 moderate". That w
 - Re-check when `app-builder-lib` moves to minimatch 11.
 
 **B: force minimatch 11 with an npm override.**
-- A Builder adds `"overrides": { "minimatch": "^11.0.9" }`.
+- A Builder adds a scoped, exact override (superseded: not the blanket `^11.0.9` first written here). See the addendum.
 - Run the gate and a full `npm run dist`, and compare the installer's file list with v0.1.9's.
 - This removes the finding but risks a broken build, for a build-time-only moderate.
 
