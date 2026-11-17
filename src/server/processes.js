@@ -9,6 +9,7 @@
 import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { POWERSHELL_PRELUDE, NON_INTERACTIVE, translateChains } from './workspace.js';
+import { taskkillPath } from './safeExec.js';
 
 const GUARD = fileURLToPath(new URL('./procGuard.js', import.meta.url));
 const MAX_KEPT = 40_000;       // characters of output kept per process
@@ -112,7 +113,7 @@ function killTree(p) {
     const pid = p.child.pid;
     if (!pid) { resolve(); return; }
     if (process.platform === 'win32') {
-      execFile('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, timeout: 15_000 }, () => { if (p.exitCode === null) p.exitCode = -1; resolve(); });
+      execFile(taskkillPath() ?? 'taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, timeout: 15_000 }, () => { if (p.exitCode === null) p.exitCode = -1; resolve(); });
     } else {
       try { process.kill(-pid, 'SIGTERM'); } catch { try { p.child.kill('SIGTERM'); } catch { /* gone */ } }
       if (p.exitCode === null) p.exitCode = -1;

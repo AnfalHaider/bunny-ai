@@ -135,6 +135,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       projectId: session.projectId ?? null,
       folder: session.folder ?? null,
       branch: session.branch ?? null,
+      worktree: session.worktree ? { branch: session.worktree.branch } : null, // W2-9: the branch only, never the path
       permissionMode: session.permissionMode ?? 'ask',
       effort: session.effort ?? null,
       pinned: Boolean(session.pinned),
@@ -290,6 +291,16 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     return session;
   }
 
+  /** W2-9: the chat's own copy of its project. Only the worktree code calls this (create and finish); no patch, import, fork or route can set it. */
+  async function setWorktree(id, worktree) {
+    const session = await get(requireId(id));
+    if (!session) throw new Error('Session not found');
+    if (worktree) session.worktree = { path: String(worktree.path), branch: String(worktree.branch), base: worktree.base ?? null, baseSha: String(worktree.baseSha ?? ''), repo: String(worktree.repo) };
+    else delete session.worktree;
+    await save(session);
+    return session;
+  }
+
   async function remove(id) {
     await rm(fileFor(requireId(id)), { force: true });
   }
@@ -441,7 +452,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       lines.push(`## ${m.role === 'user' ? 'You' : 'Assistant'}`, '', m.content, '');
     }
     return {
-      session,
+      session: session.worktree ? { ...session, worktree: { branch: session.worktree.branch } } : session, // W2-9: an export carries the branch name, never the path
       markdown: lines.join('\n'),
       json: JSON.stringify({ title: session.title, messages: session.messages.map(({ role, content, at }) => ({ role, content, at })) }, null, 2),
     };
@@ -472,6 +483,6 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     list, get, create, remove, fork, children, exportSession, context, summary,
     append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
-    markCheckpointRestored: locked(markCheckpointRestored),
+    markCheckpointRestored: locked(markCheckpointRestored), setWorktree: locked(setWorktree),
   };
 }

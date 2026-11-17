@@ -375,6 +375,10 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
       if (!bridge) return { note: 'Went back.' };
       action = 'read';
     }
+    if (action === 'compare') { // W6-11: two pages photographed off screen; it needs no open tab
+      if (!bridge) return { error: 'Comparing pages needs the Bunny AI desktop app.' };
+      return await bridge.browserAct('bunny-compare', 'compare', args);
+    }
     const tab = current();
     if (!tab?.history[tab.index]) return { error: 'No page is open in the browser panel. Use browser_open first.' };
     if (!bridge) return { error: 'Working inside pages needs the Bunny AI desktop app.' };

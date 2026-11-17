@@ -53,9 +53,12 @@ async function readHead(path, length) {
 }
 
 /** A folder Bunny never browses for the Files pane: its own data, a parent of it, or a drive root. */
-export async function neverBrowse(folder, dataDir) {
+export async function neverBrowse(folder, dataDir, { allowed = null } = {}) {
   const real = await realpath(folder);
   if (parse(real).root === real) return 'That is a whole drive, not a project folder.';
+  // W2-9: the one exact exception: a chat's own copy of its project (inside <data folder>/worktrees) when `allowed` is that copy's real path.
+  // The caller passes it only after the worktree code has checked the recorded path; anything else in the data folder stays refused.
+  if (allowed && real.toLowerCase() === String(allowed).toLowerCase()) return null;
   if (dataDir) {
     let data;
     try { data = await realpath(dataDir); } catch { data = resolve(dataDir); }

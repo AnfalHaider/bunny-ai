@@ -9,6 +9,24 @@
       "owner_words": "Sign the exception",
       "said_at": "2026-11-18, typed in the Chief of Staff's chat, answering \"How should the build-tool advisory be handled?\" (choices: Sign the exception / Wait for a fix)",
       "review_by": "2026-12-17"
+    },
+    {
+      "advisory": "GHSA-g3hv-75wg-m249",
+      "package_path": "node_modules/minimatch",
+      "why": "minimatch (moderate, a slow-pattern DoS) is reached only through electron-builder's app-builder-lib, which asks for ^10.2.5 and uses it at BUILD time to match file names. The fix exists only in 11.x. npm's suggested fix downgrades electron-builder to 25.1.0, which the board's S-8 row forbids. `npm audit --omit=dev` finds 0, so it is not in the installed app (Security S-8 review, docs/security/2026-11-18-s-8-audit-review.md, ec8fc39). Re-check when app-builder-lib moves to minimatch 11.",
+      "accepted_by": "Anfal Haider (owner), recorded by the Chief of Staff",
+      "owner_words": "Proceed with recommendation.",
+      "said_at": "2026-11-18, typed in the Chief of Staff's chat, answering \"The build tool's minimatch advisory (moderate, build-time only, not in the app) has no safe fix. Record it like picomatch, or force a newer minimatch and re-test the build?\" (choices: Record it (Recommended) / Force minimatch 11)",
+      "review_by": "2026-12-17"
+    },
+    {
+      "advisory": "GHSA-g3hv-75wg-m249",
+      "package_path": "node_modules/@electron/universal/node_modules/minimatch",
+      "why": "The same minimatch advisory, in the copy nested under @electron/universal (electron-builder, BUILD time only). Same reasons and the same re-check as the entry above.",
+      "accepted_by": "Anfal Haider (owner), recorded by the Chief of Staff",
+      "owner_words": "Proceed with recommendation.",
+      "said_at": "2026-11-18, typed in the Chief of Staff's chat, answering \"The build tool's minimatch advisory (moderate, build-time only, not in the app) has no safe fix. Record it like picomatch, or force a newer minimatch and re-test the build?\" (choices: Record it (Recommended) / Force minimatch 11)",
+      "review_by": "2026-12-17"
     }
   ]
 }

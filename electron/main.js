@@ -88,7 +88,7 @@ function contextMenu(contents) {
 // W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
 // A view may only be put in a Bunny window, by the page of that window; and never shows Bunny's own server (its port).
 const windowOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.webContents === sender ? w : null; };
-const browserViews = createBrowserViews({ WebContentsView, session, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
+const browserViews = createBrowserViews({ WebContentsView, session, BrowserWindow, nativeImage, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
 
 function guard(contents) {
   if (browserViews.ownsSession(contents.session)) return;
@@ -235,6 +235,7 @@ ipcMain.handle('dialog:pickFolder', async (event) => {
 ipcMain.handle('browser:act', async (event, name, action, args) => {
   if (!senderAllowed(event, isOwn, windowOf)) return { error: 'Not allowed' };
   try {
+    if (action === 'compare') return await browserViews.compare(event.sender, args ?? {}); // W6-11: not tied to a tab
     // a tab that is a view (W6-24) is worked in its own page; otherwise it is a frame in the panel
     const worked = await browserViews.control(event.sender, name, action, args ?? {});
     if (worked) return worked;
@@ -273,9 +274,9 @@ app.on('before-quit', (event) => {
   if (programsStopped || !bunnyApp) return;
   event.preventDefault();
   programsStopped = true;
-  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(() => {
-    // A downloaded update installs as the app closes (and reopens it after Restart to update).
-    if (updater?.hasUpdate()) updater.install({ relaunch: installOnQuit === 'relaunch' });
+  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(async () => {
+    // A downloaded update installs as the app closes (and reopens it after Restart to update). S-7: it is checked against its published fingerprint once more first.
+    if (updater?.hasUpdate()) await updater.install({ relaunch: installOnQuit === 'relaunch' }).catch(() => {});
     app.quit();
   });
 });
@@ -312,6 +313,7 @@ app.whenReady().then(async () => {
       currentVersion: app.getVersion(),
       enabled: () => bunnyApp?.getSettings().autoUpdate !== false,
       onStatus: sendUpdate,
+      downloadDir: join(dataDir, 'updates'), // S-7: a folder under Bunny's own data folder, not the shared temp folder
     });
     updater.start({ firstCheckMs: Number(process.env.BUNNY_UPDATE_FIRST_CHECK_MS) || 15_000 });
   }

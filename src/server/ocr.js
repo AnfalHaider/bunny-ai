@@ -9,6 +9,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
+import { powershellPath } from './safeExec.js';
 
 const MAX_IMAGES = 12;
 const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/bmp': 'bmp', 'image/webp': 'webp' };
@@ -65,7 +66,7 @@ export async function readTextInPictures(dataUrls) {
     const scriptFile = join(dir, 'ocr.ps1');
     await writeFile(scriptFile, `﻿${SCRIPT}`, 'utf8');
     const out = await new Promise((resolve, reject) => {
-      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, listFile],
+      execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, listFile],
         { timeout: 90_000, windowsHide: true, maxBuffer: 8 << 20 },
         (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
     });
@@ -98,7 +99,7 @@ export async function readScreenLines(path) {
     const scriptFile = join(dir, 'ocr.ps1');
     await writeFile(scriptFile, `\uFEFF${BOX_SCRIPT}`, 'utf8');
     const out = await new Promise((resolve, reject) => {
-      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, listFile],
+      execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, listFile],
         { timeout: 90_000, windowsHide: true, maxBuffer: 8 << 20 },
         (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
     });

@@ -33,6 +33,8 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], `^/api/plugins/${UUID}/update$`],             // update a plugin from its source (W4-11 P-4)
   [['DELETE', 'PATCH'], `^/api/plugins/${UUID}$`],         // uninstall a plugin (W4-10), switch one on or off as a whole (W4-11 P-5)
   [['DELETE'], '^/api/tools/[a-z][a-z0-9_]{1,39}$'],        // custom tools
+  [['POST', 'DELETE'], `^/api/sessions/${UUID}/worktree(/finish)?$`], // a chat's own copy of its project (W2-9): it makes and removes folders and branches
+  [['POST'], '^/api/worktrees/remove$'],                    // removing a leftover copy (W2-9)
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
   [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)
   [['POST'], `^/api/sessions/${UUID}/question/${UUID}$`],   // answering a question card ("Keep going?")
