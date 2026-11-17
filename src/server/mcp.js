@@ -69,6 +69,7 @@ async function ensureSession(url, server, { signal, auth, fetchImpl }) {
   const key = sessionKey(server, url);
   if (sessions.has(key)) return sessions.get(key);
   const state = { id: null, version: null, instructions: '' };
+  let clean = false; // true only when the server plainly does not take the handshake (so it is not asked again)
   try {
     const res = await send(url, server, { jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'Bunny AI', version: '0.1.8' } } }, { signal, auth, fetchImpl });
     if (res.ok) {
@@ -82,13 +83,17 @@ async function ensureSession(url, server, { signal, auth, fetchImpl }) {
         await done?.body?.cancel?.().catch(() => {});
         return state;
       }
-    } else await res.body?.cancel?.().catch(() => {});
+      clean = true; // answered, but not with an initialize result
+    } else {
+      await res.body?.cancel?.().catch(() => {});
+      clean = [400, 404, 405, 415, 422, 501].includes(res.status); // a 500, a 429 or a timeout is a failure, not a "no"
+    }
   } catch (err) {
     if (err instanceof McpError && err.code === 'mcp.needsSignIn') throw err;
     if (err?.name === 'AbortError') throw err;
-    /* a server that does not take the handshake is used as before */
+    /* a server that cannot be reached for the handshake is used as before, and asked again next time */
   }
-  sessions.set(key, state);
+  if (clean) sessions.set(key, state);
   return state;
 }
 
@@ -184,10 +189,31 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
  * A streamable HTTP server may answer with plain JSON or with a single
  * server-sent event; both are handled.
  */
+export const MAX_ANSWER_BYTES = 5 * 1024 * 1024;
+
+/** The body of a connector's answer as text, refusing more than about 5 MB (up to 20 pages of a tool list could otherwise fill the memory). */
+async function readCapped(res, limit = MAX_ANSWER_BYTES) {
+  const tooBig = () => new McpError('The connector answered with more than 5 MB, which is too much to read.', 'mcp.tooLarge');
+  if (Number(res.headers.get('content-length')) > limit) { await res.body?.cancel?.().catch(() => {}); throw tooBig(); }
+  if (!res.body?.getReader) return res.text();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) { await reader.cancel().catch(() => {}); throw tooBig(); }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 async function readPayload(res, wantedId = null) {
   const type = res.headers.get('content-type') ?? '';
   if (type.includes('text/event-stream')) {
-    const text = await res.text();
+    const text = await readCapped(res);
     // R-6: progress and log notifications may come first; the answer is the message with our request id (or, with none, the first with a result or error)
     const messages = [];
     for (const part of text.split('\n\n')) {
@@ -200,7 +226,7 @@ async function readPayload(res, wantedId = null) {
     if (!answer) throw new McpError('The server sent no answer', 'mcp.empty');
     return answer;
   }
-  const text = await res.text();
+  const text = await readCapped(res);
   if (!text.trim()) throw new McpError('The server sent no answer', 'mcp.empty');
   try {
     return JSON.parse(text);
