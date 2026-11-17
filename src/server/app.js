@@ -1639,6 +1639,10 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
         return sendJson(res, 400, { code: 'message.empty', message: 'There is nothing to retry yet' });
       }
 
+      // W6-23: a retry (the next model after a fallback) starts by clearing the failed attempts' notes. Dropping them only when the retry ENDS left the red
+      // "could not finish" group in the chat whenever the retry ran steps in between, because then it was no longer the last thing there.
+      if (retry) { await sessions.dropTrailingErrors(id).catch(() => {}); session = (await sessions.get(id)) ?? session; }
+
       let attachments = [];
       try {
         attachments = await prepareAttachments(normaliseAttachments(body.attachments));
