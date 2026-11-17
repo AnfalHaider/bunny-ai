@@ -284,6 +284,9 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   async function canon(path = '.') {
     const rest = [];
     let cur = resolve(root, String(path || '.'));
+    // A path that leaves the folder is decided by its spelling alone: looking up a network share (two slashes and a host name) would reach out to that machine.
+    const spelled = relative(root, cur);
+    if (spelled.startsWith('..') || isAbsolute(spelled)) return null;
     for (let guard = 0; guard < 256; guard += 1) {
       try {
         const real = join(await realpath(cur), ...rest.reverse());
@@ -626,7 +629,12 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
   // read_url on a file:// address: read-only, only a real path inside this folder (links out are refused by inside()).
   /** The path a file: address names, or null when it is not a valid one (for the person's read rules). */
   function fileUrlPath(url) {
-    try { return fileURLToPath(String(url)); } catch { return null; }
+    try {
+      const u = new URL(String(url));
+      if (u.protocol !== 'file:' || (u.host && u.host.toLowerCase() !== 'localhost')) return null; // a file address with a host names a network share
+      const path = fileURLToPath(u);
+      return /^[\\/]{2}/.test(path) ? null : path; // UNC and device paths are never judged by looking them up
+    } catch { return null; }
   }
 
   async function readFileUrl(url) {

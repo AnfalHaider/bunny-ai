@@ -64,3 +64,18 @@ test('W6-21: only a result that can really be saved is said to be saved', () => 
   assert.match(huge, /too large to be saved/);
   assert.match(fitResult('read_file', 'x'.repeat(200_000)), /start_line and end_line/);
 });
+
+test('W69-1 review: a file address with a host, a UNC path or a device path is never looked up, so no network share is reached', async (t) => {
+  const { ws } = await folder(t);
+  assert.equal(ws.fileUrlPath('file://evil.example/share/x.txt'), null);
+  assert.equal(ws.fileUrlPath('file:////evil.example/share/x.txt'), null);
+  assert.equal(ws.fileUrlPath('http://x/y'), null);
+  assert.equal(ws.fileUrlPath('not a url'), null);
+  assert.ok(ws.fileUrlPath('file:///C:/Windows/win.ini') || ws.fileUrlPath('file:///etc/hosts'), 'a plain local file address still gives its path');
+  // canon decides by spelling when the path leaves the folder
+  const slash = String.fromCharCode(92);
+  const unc = slash + slash + 'evil.example' + slash + 'share' + slash + 'x.txt';
+  assert.equal(await ws.canon(unc), null);
+  assert.equal(await ws.canon('../outside.txt'), null);
+  assert.equal(await ws.canon('ok.txt'), 'ok.txt');
+});
