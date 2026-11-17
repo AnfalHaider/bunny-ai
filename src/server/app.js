@@ -47,6 +47,7 @@ import { clip } from './clip.js';
 import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
+import { createToolInstaller } from './toolInstall.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
@@ -172,7 +173,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
+export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false } = {}) {
   await mkdir(dataDir, { recursive: true });
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
@@ -258,7 +259,8 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
   const withEnv = async (server) => ({ ...server, env: await mcp.resolveEnv(server.id) });
   const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }));
   const mcpCallTool = async (server, call) => (server.type === 'local' ? localMcp.callTool(await withEnv(server), call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
-  const appTools = createAppTools({ skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
+  const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
+  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -988,6 +990,10 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
       await localMcp.stop(mcpMatch[1]);
       const leaving = await mcp.get(mcpMatch[1]);
       if (leaving && leaving.type !== 'local') await connectorSignIn.signOutQuietly(leaving); // its sign-in ends with it
+      // W6-6: an installed tool's files go with it (a saved folder that is not inside the tools folder is refused, and then nothing is removed)
+      if (leaving?.source) {
+        try { await toolInstaller.removeFiles(leaving); } catch (err) { return sendJson(res, 400, { code: 'tool.badFolder', message: err.message }); }
+      }
       return sendJson(res, 200, { ok: await mcp.remove(mcpMatch[1]) });
     }
     const mcpToolsMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/tools$/);
@@ -1944,7 +1950,7 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
       // W4-14e: a Code chat whose folder is missing says so to the person once, with the folder picker, instead of leaving it to the model.
       if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
       const toolDefinitions = [
-        ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit']),
+        ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']),
         ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
@@ -2186,7 +2192,7 @@ export async function createApp({ waitNudgeMs = 3 * 60_000, dataDir, fake = proc
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -2729,6 +2735,11 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         if (localConnector) { // a program outside the short list is refused before any card is shown
           try { checkProposedCommand(parsed.command, parsed.args); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; }
         }
+        // W6-6: a tool from GitHub: the card is made from one commit, and only that commit may be installed
+        let toolPlan = null;
+        if (name === 'install_from_github') {
+          try { toolPlan = await toolInstaller.inspect(parsed.repo); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; }
+        }
         const risk = localConnector ? 'build' : isApp ? APP_TOOL_RISK[name] : isWorkspace ? TOOL_RISK[name] : isReadOnlyTool(entry.server, entry.tool) ? 'read' : 'run';
         if (planRefuses(risk, name)) { send('tool', { tool: summary, status: 'denied' }); return planRefusal(name); }
         // W2-7: the person's own rules come before the mode (Plan mode, above, still wins). Deny stops the call and tells the model;
@@ -2745,13 +2756,14 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         }
         const detail = name === 'install_plugin' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
 Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
+          : toolPlan ? toolPlan.cardText
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(Array.isArray(parsed.args) ? parsed.args : [])].map((a) => (/\s|"/.test(String(a)) ? JSON.stringify(String(a)) : String(a))).join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
-        if (localConnector || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
-          const tooLong = (localConnector || name === 'run_command') ? cardTooLong(detail) : null;
+        if (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+          const tooLong = (localConnector || toolPlan || name === 'run_command') ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
@@ -2769,7 +2781,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id });
+              const said = await appTools.run(name, parsed, { chatId: id, expectSha: toolPlan?.sha });
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);
               if (!added) return said;

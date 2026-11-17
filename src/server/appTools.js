@@ -9,6 +9,7 @@ import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
 export const APP_TOOL_RISK = {
   web_search: 'read', read_url: 'read', search_plugins: 'read', read_skill: 'read',
   install_plugin: 'edit', add_skill: 'edit', add_connector: 'edit',
+  install_from_github: 'build', // W6-6: runs code from the internet, so it is asked in EVERY mode (Auto too); Plan mode refuses it
 };
 
 export function appToolDefinitions(risks = ['read', 'edit']) {
@@ -36,6 +37,8 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
         command: { type: 'string', description: 'For a local connector: the program to run' },
         args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
         env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' } }, ['name']),
+    fn('install_from_github', 'Install a tool from a PUBLIC GitHub repository: an MCP server written in Node.js. The person sees a card first with the repository, the exact commit, the install command and "This runs code from the internet on this computer", and must say yes. It is installed into Bunny AI\'s own tools folder at that commit, npm install scripts are NOT run, and it is added as a connector. Use add_connector instead for a server that npx can run, and install_plugin for skills.',
+      { repo: { type: 'string', description: 'owner/name or a github.com link' } }, ['repo']),
   ].filter((d) => risks.includes(APP_TOOL_RISK[d.function.name]));
 }
 
@@ -48,6 +51,7 @@ export function describeAppTool(name, args = {}) {
     case 'install_plugin': return `Install plugin ${args.url}`;
     case 'add_skill': return `Add skill ${args.name}`;
     case 'add_connector': return `Add connector ${args.name}`;
+    case 'install_from_github': return `Install tool ${String(args.repo ?? '').slice(0, 100)} from GitHub`;
     default: return name;
   }
 }
@@ -78,7 +82,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   let queue = Promise.resolve();
@@ -284,6 +288,11 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const added = await skills.add({ ...args, enabled: false });
       keep(ctx, { title: added.name, text: `${head}${text}${footer}`, skillIds: [added.id], connectorIds: [] });
       return `Added the skill ${added.name}. It is switched OFF until the person says to switch it on (they were just asked).`;
+    },
+    // W6-6: only with the commit the person was shown on the card (the route puts it in ctx); never without it
+    install_from_github: async (args, ctx) => {
+      if (!toolInstaller) throw new Error('Installing tools is not available.');
+      return toolInstaller.install({ repo: args.repo, expectSha: ctx?.expectSha });
     },
     add_connector: async (args, ctx) => {
       if (String(args.command ?? '').trim()) {

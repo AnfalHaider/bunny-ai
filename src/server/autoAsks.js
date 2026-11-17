@@ -10,5 +10,6 @@ export function asksInAuto(name, args) {
   if (name === 'create_tool') return true;
   if (name === 'schedule_task') return args?.may_change === true;
   if (name === 'add_connector') return String(args?.command ?? '').trim() !== '';
+  if (name === 'install_from_github') return true; // W6-6: code from the internet
   return false;
 }
