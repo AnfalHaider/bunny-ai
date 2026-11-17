@@ -54,4 +54,28 @@ const holder = join(tools, 'owner-repo-7654321'); mkdirSync(holder); symlinkSync
 await rm(holder, { recursive: true, force: true });
 console.log(`${'3 rm of a tool folder that HOLDS a junction'.padEnd(58)} victim file ${existsSync(join(victim, 'keep.txt')) ? 'kept' : 'DELETED <-- bypass'}`);
 
+// Case 4: Windows looks in the CURRENT folder first. npm runs through cmd.exe with the clone as its folder, and git rev-parse runs there too.
+const r4 = join(root, 'tool4'); mkdirSync(r4);
+writeFileSync(join(r4, 'npm.cmd'), `@echo off\r\nnode -e "${markJs('repo-npm-cmd').replace(/"/g, '\\"')}"\r\n`);
+writeFileSync(join(r4, 'npm.bat'), `@echo off\r\nnode -e "${markJs('repo-npm-bat').replace(/"/g, '\\"')}"\r\n`);
+try { await runCommand('npm', ['--version'], { cwd: r4 }); } catch { /* the mark is what counts */ }
+result('4 the repository\'s own npm.cmd run instead of npm', 'repo-npm-cmd');
+result('4 the repository\'s own npm.bat run instead of npm', 'repo-npm-bat');
+const r5 = join(root, 'tool5'); mkdirSync(r5);
+execFileSync('cmd', ['/c', 'copy', '/y', join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'whoami.exe'), join(r5, 'git.exe')], { stdio: 'ignore' });
+let said = '';
+try { said = String(await runCommand('git', ['--version'], { cwd: r5 })).trim(); } catch (e) { said = `error: ${e.message.slice(0, 80)}`; }
+console.log(`${'5 git in the clone\'s folder (a git.exe that is really whoami)'.padEnd(58)} ${/^git version/.test(said) ? 'real git ran' : `OTHER PROGRAM RAN <-- bypass (${said.split(/\\/).pop()})`}`);
+
+// Case 6: npm looks git up ITSELF for a git dependency (node-which searches the current folder first on Windows).
+// The clone holds a git.exe that is really node.exe: if npm runs it, node complains it cannot find a module named "clone"/"ls-remote".
+const r6 = join(root, 'tool6'); mkdirSync(r6);
+execFileSync('cmd', ['/c', 'copy', '/y', process.execPath, join(r6, 'git.exe')], { stdio: 'ignore' });
+writeFileSync(join(r6, 'package.json'), JSON.stringify({ name: 'tool6', version: '1.0.0', main: 'index.js', dependencies: { dep: `git+file:///${fwd(dep)}` } }));
+writeFileSync(join(r6, 'index.js'), '');
+let npmSaid = 'ok';
+try { await runCommand('npm', ['install', '--ignore-scripts'], { cwd: r6 }); } catch (e) { npmSaid = e.message; }
+const fake = /Cannot find module|MODULE_NOT_FOUND/.test(npmSaid);
+console.log(`${'6 npm\'s own git lookup for a git dependency'.padEnd(58)} ${fake ? 'the clone\'s git.exe RAN <-- bypass' : `real git (${npmSaid.slice(0, 60)})`}`);
+
 rmSync(root, { recursive: true, force: true });
