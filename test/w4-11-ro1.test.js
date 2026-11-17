@@ -89,3 +89,22 @@ test('RO-1: the same connector, trusted by the person, runs without the question
   assert.equal(r.asked, false);
   assert.deepEqual(r.calls, ['wipe']);
 });
+
+test('RO-1: a changed address is a different connector: the trust given at the old address is gone', async (t) => {
+  const { createMcpStore } = await import('../src/server/mcpStore.js');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-ro1-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const store = createMcpStore({ file: join(dir, 'mcp.json') });
+  const added = await store.add({ name: 'Notes', url: 'https://one.example.com/mcp' });
+  await store.update(added.id, { trustReadOnly: true });
+  assert.equal((await store.get(added.id)).trustReadOnly, true);
+  await store.update(added.id, { name: 'Notes renamed' });
+  assert.equal((await store.get(added.id)).trustReadOnly, true, 'a rename keeps it');
+  await store.update(added.id, { url: 'https://two.example.com/mcp' });
+  assert.notEqual((await store.get(added.id)).trustReadOnly, true, 'a new address does not');
+  await store.update(added.id, { url: 'https://three.example.com/mcp', trustReadOnly: true });
+  assert.equal((await store.get(added.id)).trustReadOnly, true, 'unless the person trusts it again in the same change');
+});
