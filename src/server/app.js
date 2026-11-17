@@ -49,6 +49,7 @@ import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
 import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
+import { asksInAuto } from './autoAsks.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
@@ -1792,8 +1793,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
       // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
       const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
-      const needsOk = (risk) => risk === 'send'
-        || (risk === 'build' && permissionMode !== 'auto')
+      // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
+      const needsOk = (risk, name, args) => risk === 'send'
+        || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
 
@@ -2251,7 +2253,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
-        if (ruledProcess?.effect === 'ask' || (needsOk(risk) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        if (ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
           const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -2508,7 +2510,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
             send('tool', { tool: summary, status: 'denied' });
             return planRefusal(name);
           }
-          if (needsOk(BROWSER_TOOL_RISK[name])) {
+          if (needsOk(BROWSER_TOOL_RISK[name], name, parsed)) {
             const allowed = await askPermission(summary, '');
             if (!allowed) {
               await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -2557,7 +2559,7 @@ Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${pars
 ${[parsed.command, ...(parsed.args ?? [])].join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
-        if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        if (ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
           const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
