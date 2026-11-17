@@ -2272,6 +2272,7 @@ function showLiveCapability(bodyEl, info) {
     computer_use: say('cap.computer'),
     custom_tools: say('cap.build'),
     new_tool: say('cap.newTool'),
+    switch_on_added: 'Switch on',
   }[info.capability] ?? 'Allow';
   const card = element('div', { className: 'permission-prompt live-permission capability-card' });
   card.append(

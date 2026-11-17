@@ -98,14 +98,14 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
   }
 
   /** Add the parts of a plugin and write down what was added. A plugin that is already installed is refused, never added twice. */
-  function installParts(plugin, source) {
+  function installParts(plugin, source, { off = false } = {}) {
     return serial(async () => {
       if (findInstalled(plugin.name, source)) throw Object.assign(new Error(`${plugin.name} is already installed. Uninstall it first to install it again.`), { code: 'plugin.installed' });
       const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), connectors: [], skills: [] };
       try {
-        for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: true })).id);
+        for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: !off })).id);
         for (const c of plugin.connectors ?? []) {
-          try { record.connectors.push((await mcp.add({ ...c, enabled: c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ }
+          try { record.connectors.push((await mcp.add({ ...c, enabled: off ? false : c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ }
         }
       } catch (err) { // half an install is undone, so nothing is left behind
         await removeParts(record);
@@ -116,11 +116,40 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     });
   }
 
-  async function installFromGithub(url) {
+  async function installFromGithub(url, { off = false } = {}) {
     const plugin = await readGithubPlugin(url, { fetchImpl });
-    const record = await installParts(plugin, plugin.source);
+    const record = await installParts(plugin, plugin.source, { off });
     return { record, plugin };
   }
+
+  /**
+   * P-6: what the MODEL adds (install_plugin, add_connector with an address) arrives switched OFF, in every permission mode: the skill text of a
+   * stranger's repository would otherwise ride in front of every later reply, and a remote address would start receiving the person's requests.
+   * What was added is remembered here so the chat can show one card; only the window answers it, and switchOn is what a yes does.
+   */
+  let pending = null;
+  const takePending = () => { const p = pending; pending = null; return p; };
+  async function switchOn(p) {
+    for (const id of p?.skillIds ?? []) await skills.update(id, { enabled: true }).catch(() => {});
+    for (const id of p?.connectorIds ?? []) await mcp.update(id, { enabled: true }).catch(() => {});
+  }
+
+  /** What install_plugin would add, in plain words, for the card shown before installing in Ask and Manual. */
+  async function previewPlugin(url) {
+    try {
+      const plugin = await readGithubPlugin(url, { fetchImpl });
+      return describePlugin(plugin);
+    } catch (err) {
+      return `Could not read that repository yet: ${String(err.message).slice(0, 200)}`;
+    }
+  }
+  const describePlugin = (plugin) => [
+    `Plugin ${plugin.name}${plugin.description ? `: ${plugin.description}` : ''}`,
+    ...(plugin.skills ?? []).map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${s.description || '(no description)'}`),
+    ...(plugin.connectors ?? []).map((c) => `Connector ${c.name}: ${c.url}`),
+    ...(plugin.skipped?.length ? [`Not imported: ${plugin.skipped.join('; ')}`] : []),
+    'It is added switched OFF. You decide afterwards whether to switch it on.',
+  ].join('\n').slice(0, 1800);
 
   /** A plugin from a file or the catalog: { name, description, connectors: [{name, url}], skills: [{name, description, instructions}] }. */
   async function installBundle(bundle) {
@@ -162,9 +191,10 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
     install_plugin: async ({ url }) => {
-      const { plugin } = await installFromGithub(url);
+      const { plugin, record } = await installFromGithub(url, { off: true });
+      pending = { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors };
       return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], `
-        + `${plugin.connectors.length} connector(s). They are switched on and appear in Settings, Customize.`
+        + `${plugin.connectors.length} connector(s). They are switched OFF until the person says to switch them on (they were just asked); they appear in Settings, Customize.`
         + (plugin.skipped.length ? ` Not imported: ${plugin.skipped.join('; ')}.` : '');
     },
     add_skill: async (args) => `Added skill ${(await skills.add({ ...args, enabled: true })).name}. It is switched on.`,
@@ -177,8 +207,14 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
         }
         args = { ...args, ...checked, env: {} };
       }
-      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: true });
-      return `Added the ${added.type === 'local' ? 'local' : 'remote'} connector ${added.name}. It is switched on; its tools are offered from the next message.`;
+      // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
+      const remote = !String(args.command ?? '').trim();
+      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote });
+      if (remote) {
+        pending = { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] };
+        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).`;
+      }
+      return `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
     },
   };
 
@@ -188,5 +224,8 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     installFromGithub,
     installBundle,
     uninstall,
+    takePending,
+    switchOn,
+    previewPlugin,
   };
 }

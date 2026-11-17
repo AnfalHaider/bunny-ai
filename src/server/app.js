@@ -2067,7 +2067,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const timer = setTimeout(() => pendingCapabilities.get(cid)?.resolve({ granted: false }), 10 * 60_000);
         pendingCapabilities.set(cid, { sessionId: id, resolve: (a) => { clearTimeout(timer); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
-        send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, 400), hasFolder: Boolean(folder?.ok) });
+        send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
       });
       // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
       const askQuestion = (q) => new Promise((resolveAnswer) => {
@@ -2697,7 +2697,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
           send('tool', { tool: summary, status: 'denied', result: why });
           return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
         }
-        const detail = name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
+        const detail = name === 'install_plugin' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
 Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : localConnector ? `This runs on your computer:
 ${[parsed.command, ...(Array.isArray(parsed.args) ? parsed.args : [])].map((a) => (/\s|"/.test(String(a)) ? JSON.stringify(String(a)) : String(a))).join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
@@ -2721,7 +2721,15 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         let signIn = null; // a connector that needs the person to sign in: { needsSignIn: true, serverId }
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
-            : isApp ? await appTools.run(name, parsed)
+            : isApp ? await (async () => {
+              const said = await appTools.run(name, parsed);
+              // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
+              const added = appTools.takePending?.();
+              if (!added) return said;
+              const answer = await askCapability('switch_on_added', `${added.title}\n${added.text}`);
+              if (answer.granted) { await appTools.switchOn(added); return `${said}\nThe person said yes: it is now switched on.`; }
+              return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
+            })()
             : isWorkspace
             ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) })
             : await (async () => { // D-1: the text the connector sent, not its raw JSON; an answer that says isError is a failed step

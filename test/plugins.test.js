@@ -34,7 +34,7 @@ test('a GitHub plugin is read: its skills with their references, remote connecto
   await assert.rejects(readGithubPlugin('https://github.com/bunny/empty', { fetchImpl: fakeGithub({ 'README.md': 'hi' }) }), /no skills/);
 });
 
-test('installing a plugin adds and switches on its skills and connectors, and records the plugin', async () => {
+test('a plugin the model installs is added switched OFF (P-6), and recorded', async () => {
   const added = { skills: [], connectors: [] };
   let settings = {};
   const tools = createAppTools({
@@ -47,8 +47,9 @@ test('installing a plugin adds and switches on its skills and connectors, and re
   const result = await tools.run('install_plugin', { url: 'https://github.com/bunny/carrot-helper' });
   assert.match(result, /Installed carrot-helper: 1 skill\(s\) \[grow\], 1 connector\(s\)/);
   assert.match(result, /add it with add_connector/);
-  assert.equal(added.skills[0].enabled, true);
-  assert.deepEqual(added.connectors[0], { name: 'weather', url: 'https://weather.example.com/mcp', enabled: true });
+  assert.match(result, /switched OFF/);
+  assert.equal(added.skills[0].enabled, false);
+  assert.deepEqual(added.connectors[0], { name: 'weather', url: 'https://weather.example.com/mcp', enabled: false });
   assert.equal(settings.plugins[0].name, 'carrot-helper');
   assert.deepEqual(settings.plugins[0].skills, ['s1']);
 });

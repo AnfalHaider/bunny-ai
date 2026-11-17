@@ -27,6 +27,7 @@ export const CAPABILITIES = {
   computer_use: 'Control this computer: see the screen, click, type and press keys',
   custom_tools: 'Build new tools: write a small script that becomes a tool Bunny AI can use',
   new_tool: 'Something no current tool can do: find a plugin or connector for it, or build it',
+  switch_on_added: 'Switch on what was just added? It stays off until you say yes',
 };
 
 const fn = (name, description, properties = {}, required = []) => ({
