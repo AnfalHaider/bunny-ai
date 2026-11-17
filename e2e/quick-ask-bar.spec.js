@@ -1,9 +1,27 @@
 import { test, expect } from '@playwright/test';
-import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 
 // W4-8: the quick-ask bar page, at the real window size (700 x 300), with a stand-in for the two bridge calls.
-const BAR = pathToFileURL(resolve('electron/quick-ask/bar.html')).href;
+// The bar page imports the app's own markdown module (../../src/ui/markdown.js). Electron loads it from a file; a plain browser cannot import a module from file://,
+// so this spec serves the project folder (read only, localhost) and opens the same page from there.
+const ROOT = resolve('.');
+let origin = '';
+let staticServer;
+test.beforeAll(async () => {
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+  staticServer = createServer(async (req, res) => {
+    const target = normalize(join(ROOT, decodeURIComponent(new URL(req.url, 'http://x').pathname)));
+    const rel = target.startsWith(ROOT + sep) ? target.slice(ROOT.length + 1).split(sep).join('/') : '';
+    if (!/^(electron\/quick-ask|src\/ui)\//.test(rel)) { res.writeHead(404).end(); return; } // only the bar and the app's own UI files
+    try { res.writeHead(200, { 'content-type': types[extname(target)] ?? 'application/octet-stream' }).end(await readFile(target)); } catch { res.writeHead(404).end(); }
+  });
+  await new Promise((r) => staticServer.listen(0, '127.0.0.1', r));
+  origin = `http://127.0.0.1:${staticServer.address().port}`;
+});
+test.afterAll(() => new Promise((r) => staticServer.close(r)));
+const barUrl = () => `${origin}/electron/quick-ask/bar.html`;
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 async function openBar(page, { submit }) {
@@ -14,9 +32,11 @@ async function openBar(page, { submit }) {
       pickFile: async () => (mode === 'cancel' ? { ok: false, cancelled: true } : mode === 'refuse' ? { ok: false, message: 'That file is over 8 MB.' } : { ok: true, id: 'invented-id-1', name: 'report.pdf', kind: 'pdf', size: 5 }),
       dropFile: async () => ({ ok: true }),
       submit: () => (mode === 'wait' ? new Promise(() => {}) : Promise.resolve({ ok: false })),
+      // QA-ANSWERS: the rest of the bridge the page uses
+      ask: () => (mode === 'wait' ? new Promise(() => {}) : mode === 'fail' ? Promise.resolve({ ok: false, message: 'Bunny could not start the answer.' }) : Promise.resolve({ ok: true })), stop: async () => ({ ok: true }), openInBunny: async () => ({ ok: true }), resize: async () => ({ ok: true }), onAnswer: () => () => {},
     };
   }, { pixel: PIXEL, mode: submit });
-  await page.goto(BAR);
+  await page.goto(barUrl());
 }
 
 for (const scheme of ['light', 'dark']) {
@@ -33,30 +53,34 @@ for (const scheme of ['light', 'dark']) {
   });
 }
 
-test('"Opening Bunny…" is normal text with a spinner, not a warning', async ({ page }) => {
+test('QA-ANSWERS: after Enter the question stays on top and "Bunny is thinking…" is normal text with a spinner, not a warning', async ({ page }) => {
   await openBar(page, { submit: 'wait' });
   await page.locator('#text').fill('hello');
   await page.locator('#go').click();
-  const msg = page.locator('#msg');
-  await expect(msg).toHaveText('Opening Bunny…');
-  await expect(msg.locator('.spin')).toBeVisible();
-  if (process.env.W48_SHOT) await page.screenshot({ path: process.env.W48_SHOT + '/opening.png' });
-  const [msgColour, textColour] = await page.evaluate(() => [getComputedStyle(document.getElementById('msg')).color, getComputedStyle(document.body).color]);
+  await expect(page.locator('#q')).toHaveText('hello');
+  const busy = page.locator('#busy');
+  await expect(busy).toHaveText('Bunny is thinking…');
+  await expect(busy.locator('.spin')).toBeVisible();
+  await expect(page.locator('#go')).toHaveAttribute('aria-label', 'Stop');
+  await expect(page.locator('#follow')).toBeDisabled();
+  if (process.env.W48_SHOT) await page.screenshot({ path: process.env.W48_SHOT + '/thinking.png' });
+  const [msgColour, textColour] = await page.evaluate(() => [getComputedStyle(document.getElementById('busy')).color, getComputedStyle(document.body).color]);
   expect(msgColour).toBe(textColour);
 });
 
-test('a real problem stays amber and has no spinner', async ({ page }) => {
+test('QA-ANSWERS: a real problem is a card in the warning colour with Try again and Open in Bunny, and no spinner', async ({ page }) => {
   await openBar(page, { submit: 'fail' });
   await page.locator('#text').fill('hello');
   await page.locator('#go').click();
-  const msg = page.locator('#msg');
-  await expect(msg).toHaveText('Bunny could not open.');
-  await expect(msg.locator('.spin')).toHaveCount(0);
-  const [msgColour, textColour] = await page.evaluate(() => [getComputedStyle(document.getElementById('msg')).color, getComputedStyle(document.body).color]);
-  expect(msgColour).not.toBe(textColour);
-  expect(msgColour).toBe('rgb(180, 83, 9)');
+  const card = page.locator('#card .cardx.bad');
+  await expect(card).toContainText('Bunny could not answer');
+  await expect(card).toContainText('Bunny could not start the answer.');
+  await expect(card.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Open in Bunny' })).toBeVisible();
+  await expect(page.locator('#busy')).toHaveCount(0);
+  const titleColour = await page.evaluate(() => getComputedStyle(document.querySelector('#card .cardx .t')).color);
+  expect(titleColour).toBe('rgb(207, 63, 85)');
 });
-
 test('W4-8b: the + menu offers a screenshot and a file; a chosen file shows as a chip with its name that can be removed', async ({ page }) => {
   await openBar(page, { submit: 'wait' });
   await page.locator('#plus').click();
