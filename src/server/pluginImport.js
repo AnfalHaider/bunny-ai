@@ -101,6 +101,30 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     });
   }
 
+  // P-2: commands/*.md are prompts the person invokes; agents/*.md are briefs for a helper. Both are kept as skills (read_skill / the /name menu),
+  // counted in the same limit as the skills, and never from node_modules, tests, fixtures or examples.
+  const pname = String(meta.name ?? repo);
+  const extra = files.filter((p) => !NOT_A_SKILL.test(p) && /(^|\/)(commands|agents)\/[^/]+\.md$/i.test(p));
+  let extraLeft = 0;
+  for (const path of extra) {
+    if (skills.length >= MAX_SKILLS) { extraLeft += 1; continue; }
+    const kind = /(^|\/)agents\//i.test(path) ? 'agent' : 'command';
+    const base = path.split('/').pop().replace(/\.md$/i, '');
+    const { data, body } = frontmatter(await raw(path));
+    const what = String(data.description || firstSentence(body));
+    skills.push(kind === 'command'
+      ? {
+        name: `${pname}:${base}`.slice(0, 60),
+        description: what.slice(0, 200),
+        instructions: `This is the command /${base} of the ${pname} plugin. Follow it when the person asks for it (or for what it describes).\n\n${body.trim()}`.slice(0, MAX_SKILL),
+      }
+      : {
+        name: `agent:${pname}:${base}`.slice(0, 60),
+        description: `Helper brief: ${what}`.slice(0, 200),
+        instructions: `This is a brief for a helper agent from the ${pname} plugin. To use it, call run_subagent with this brief, and what the person asked for, as the task.\n\n${body.trim()}`.slice(0, MAX_SKILL),
+      });
+  }
+
   // connectors: remote servers from .mcp.json are added; local ones run a program, so they are
   // listed for add_connector, where the person confirms the exact command.
   const connectors = [];
@@ -121,7 +145,8 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
       }
     } catch { skipped.push('.mcp.json (could not be read)'); }
   }
-  for (const [label, test] of [['hooks', /^hooks\//], ['commands', /^commands\//], ['agents', /^agents\//], ['scripts', /^(bin|scripts)\//]]) {
+  if (extraLeft) skipped.push(`${extraLeft} more commands or agents were not imported (the limit of ${MAX_SKILLS} is reached)`);
+  for (const [label, test] of [['hooks', /^hooks\//], ['scripts', /^(bin|scripts)\//]]) {
     const n = files.filter((p) => test.test(p)).length;
     if (n) skipped.push(`${n} ${label} file${n === 1 ? '' : 's'}`);
   }
