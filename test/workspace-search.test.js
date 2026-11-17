@@ -233,7 +233,7 @@ test('find_files searches a 5,000-file folder in under 2 seconds', async (t) => 
 test('LA-2: a catastrophic regular expression is stopped with a clear message, quickly', async (t) => {
   const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n`, 'b.txt': 'fine\n' });
   const t0 = process.cpuUsage();
-  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /Search stopped after 5 s; narrow the folder or the pattern\./);
+  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /Search stopped: one file took more than a second to match this pattern/);
   assert.ok(cpuSince(t0) < 5000, `took ${cpuSince(t0)} ms`);
   // the next search still works (the stopped one left nothing behind), and an ordinary regex is unaffected
   assert.match(await ws.run('search_files', { query: '^f(i|j)ne$', regex: true }), /b\.txt:1: fine/);
@@ -297,7 +297,7 @@ test('LA-4: a regex search has a total time budget of 5 s and answers that it st
   // a clock that says every file's regex took 1.5 s: the fourth file is past the 5 s budget
   let now = 0;
   const ws = createWorkspace(root, { clock: () => { now += 750; return now; } }); // two reads of the clock per file = 1.5 s
-  await assert.rejects(ws.run('search_files', { query: 'zzz', regex: true }), /Search stopped after 5 s; narrow the folder or the pattern\./);
+  await assert.rejects(ws.run('search_files', { query: 'zzz', regex: true }), /Search stopped after 5 s in all; narrow the folder or the pattern\./);
   // a normal clock: the same search finishes
   const fast = createWorkspace(root);
   assert.match(await fast.run('search_files', { query: 'zzz', regex: true }), /No matches in 20 files/);

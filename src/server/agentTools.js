@@ -308,16 +308,29 @@ export function askToolDefinition() {
  * English only, and narrow on purpose: a run word followed by commands, or a terminal named as the place.
  */
 export function asksToRunCommands(q = {}) {
-  const text = [q.question, ...(Array.isArray(q.choices) ? q.choices.map((c) => c?.label ?? c) : [])].join(' ');
+  const text = [q.question, ...(Array.isArray(q.choices) ? q.choices.map((c) => c?.label ?? c) : [])].join(' ').replace(/\s+/g, ' ');
   const verb = '(?:run|execute|paste|type|enter)';
-  const place = '(?:in|into|using|from|on)\\s+(?:a\\s+|the\\s+|your\\s+)?(?:terminal|powershell|command prompt|cmd|shell|console)';
-  // Only a hand-off to the person: "can you / please / you can / you need to" + a verb, "run this ... in your terminal", "paste the output".
-  // Not a decision about what Bunny itself does ("Should I run the migration command now?", "Do you want me to run the commands now?").
-  return new RegExp(`\\b(?:can|could|would|will) you (?:please )?${verb}\\b`, 'i').test(text)
-    || new RegExp(`\\bplease ${verb}\\b`, 'i').test(text)
-    || new RegExp(`\\byou (?:can|could|should|need to|must|have to|will need to) ${verb}\\b`, 'i').test(text)
-    || new RegExp(`\\b${verb}\\b[^.?!\\n]{0,80}\\b${place}\\b`, 'i').test(text) && !/\b(?:me|I) (?:to )?(?:run|execute)\b/i.test(text)
-    || /\bpaste\b[^.?!\n]{0,40}\b(?:output|results?|errors?)\b/i.test(text);
+  const ing = '(?:running|executing|pasting|typing|entering)';
+  const place = '(?:in|into|using|from|on)\\s+(?:a\\s+|the\\s+|your\\s+|this\\s+)?(?:terminal|powershell|command prompt|cmd|shell|console|machine|computer|pc)';
+  // Whatever Bunny itself asks permission for is a decision, not a hand-off: "Should I run ...", "Do you want me to run ...", "I will run ...".
+  const forMe = new RegExp('\\b(?:me|I|I\'ll|we|let me) (?:to |will |can |should |shall |want to )?' + verb + '\\b', 'i');
+  const hands = [
+    new RegExp('\\b(?:can|could|would|will) you (?:please )?' + verb + '\\b', 'i'), // can you run
+    new RegExp('\\b(?:please|kindly) ' + verb + '\\b', 'i'), // please run / kindly run
+    new RegExp('\\byou (?:can|could|should|need to|must|have to|will need to|\'ll need to|\'d need to) ' + verb + '\\b', 'i'), // you need to run
+    new RegExp('\\b(?:I|we) (?:need|want|would like|\'d like) you to ' + verb + '\\b', 'i'), // I need you to run
+    new RegExp('\\bwould you mind ' + ing + '\\b', 'i'), // would you mind running
+    new RegExp('\\bopen (?:a|the|your) (?:terminal|powershell|command prompt|cmd|shell|console)\\b[^.?!]{0,60}\\b' + verb + '\\b', 'i'), // open a terminal and run
+    new RegExp('\\blet me know (?:when|once|after) you(?: have|\'ve|\\s+are|\'re)? (?:run|ran|executed|pasted|done)', 'i'), // let me know when you have run
+    new RegExp('\\b' + verb + '\\b[^.?!]{0,60}\\b(?:yourself|by yourself)\\b', 'i'), // you'll need to run it yourself
+    new RegExp('\\bI\'?ll ' + verb + '\\b[^.?!]{0,60}\\b(?:myself|manually|by hand)\\b|\\bI will ' + verb + '\\b[^.?!]{0,60}\\b(?:myself|manually|by hand)\\b|\\b' + verb + '\\b[^.?!]{0,60}\\bmyself\\b', 'i'), // a choice: "I will run the commands myself"
+    /\bpaste\b[^.?!]{0,40}\b(?:output|results?|errors?)\b/i, // paste the output
+  ];
+  // "Run ... in your terminal" / "... on your machine" as an instruction to the person, unless it is Bunny asking about its own run
+  const instruction = new RegExp('\\b' + verb + '\\b[^.?!]{0,80}\\b' + place + '\\b', 'i');
+  const viaMe = new RegExp('\\bme to ' + verb + '\\b|\\b(?:should|shall|may|can|could) (?:I|we) ' + verb + '\\b|\\bif I ' + verb + '\\b|\\bI(?: will|\'ll|\'m going to) ' + verb + '\\b(?![^.?!]{0,60}\\b(?:myself|manually|by hand)\\b)', 'i');
+  if (hands.some((re) => re.test(text))) return true;
+  return instruction.test(text) && !viaMe.test(text) && !forMe.test(text);
 }
 
 export function cleanQuestion(a = {}) {

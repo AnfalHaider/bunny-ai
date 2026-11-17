@@ -15,7 +15,7 @@ export const AGENT_STRINGS = {
     'model.answeredInstead': 'Answered by {model} because {from} {reason}',
     'model.alsoFailed': '{n} other {models} also failed',
     'model.switchedProvider': 'Switched to {model} on {provider}: {from} {reason}',
-    'model.switchedModel': 'Switched to {model}: no provider has {from} left ({provider} {reason})',
+    'model.switchedModel': 'Switched to {model}: no provider has {from} left. {provider} {reason}{more}',
     'model.trying': '{from} {state}. Trying {to}…',
     'offline.line': 'You are offline. I will send this when the network is back.',
     'offline.local': 'You are offline. Using {m} on this computer.',

@@ -114,11 +114,12 @@ test('W33-1: a schedule prompt over 2,000 characters is refused, nothing is sche
   }
 });
 
-test('W33-1 (QA): the schedule card holds 2,000 characters with its heading; a shorter prompt is shown whole and a longer one is refused with a message that says so', async (t) => {
-  const fits = await runIn(t, 'ask', 'x'.repeat(1900));
-  assert.equal(fits.asked.length, 1);
-  assert.ok(fits.asked[0].detail.endsWith('x'.repeat(1900)), 'the whole prompt is on the card');
-  const over = await runIn(t, 'ask', 'x'.repeat(2000));
+test('W33-1 (QA, polish): a schedule prompt of up to 2,000 characters is shown whole (the heading is not counted); 2,001 is refused with a message that says "more than 2000"', async (t) => {
+  const fits = await runIn(t, 'ask', 'x'.repeat(2000));
+  assert.equal(fits.asked.length, 1, 'exactly 2,000 characters fits');
+  assert.ok(fits.asked[0].detail.endsWith('x'.repeat(2000)), 'the whole prompt is on the card, nothing cut');
+  assert.doesNotMatch(fits.asked[0].detail, /more characters are not shown/);
+  const over = await runIn(t, 'ask', 'x'.repeat(2001));
   assert.deepEqual(over.asked, []);
-  assert.match(over.text, /holds 2000 characters at most, with its heading/);
+  assert.match(over.text, /more than 2000 characters/);
 });
