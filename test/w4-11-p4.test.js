@@ -155,3 +155,19 @@ test('G11: uninstalling one plugin keeps a connector that another plugin counts 
   await s.tools.uninstall(other.id);
   assert.deepEqual(await names(), [], 'and it leaves with the second plugin');
 });
+
+test('the same repository is one plugin however its address is spelled: another case, www, http, .git, a trailing slash, a /tree/ address', async (t) => {
+  const s = await setup(t); // installed from https://github.com/bunny/carrot-helper
+  for (const again of [
+    'https://github.com/Bunny/Carrot-Helper', 'https://www.github.com/bunny/carrot-helper', 'http://github.com/bunny/carrot-helper',
+    'https://github.com/bunny/carrot-helper.git', 'https://github.com/bunny/carrot-helper/', 'https://github.com/bunny/carrot-helper/tree/main', 'bunny/carrot-helper',
+  ]) {
+    await assert.rejects(() => s.tools.installFromGithub(again), /already installed/, again);
+  }
+  assert.equal(s.settings().plugins.length, 1);
+  // a different repository is a different plugin
+  s.files.current = { ...V1 };
+  const other = await s.tools.installFromGithub('https://github.com/bunny/other-helper');
+  assert.equal(other.record.name, 'carrot-helper');
+  assert.equal(s.settings().plugins.length, 2);
+});
