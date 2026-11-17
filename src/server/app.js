@@ -972,7 +972,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         const was = before ? { ...before } : null; // update may change the stored object itself
         const patch = await readBody(req);
         // L-5: changing what program a local connector runs needs the same confirmation as adding one
-        if (before?.type === 'local' && (patch.command !== undefined || patch.args !== undefined) && patch.confirmLocal !== true) {
+        if (before?.type === 'local' && (patch.command !== undefined || patch.args !== undefined || patch.cwd !== undefined) && patch.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'Confirm the exact command to change it.' });
         }
         const updated = await mcp.update(mcpMatch[1], patch);
@@ -1980,11 +1980,18 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       for (const server of servers) {
         // A connector that was never checked has no tools on file yet: ask it once now.
         const relist = relistReason(server);
+        const knownBefore = new Set((server.tools ?? []).map((t) => t.name));
         if (relist) {
           try {
             // A local connector's first start can take minutes: the chat shows a step with the seconds so far.
             const startStep = `Start ${server.name}`;
             server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }), ...(relist === 'retry' ? { timeoutMs: RETRY_FAILED_MS } : {}) });
+            // L3-1: the person trusted this connector's read-only labels for the tools it had; tools that appear later were not part of that
+            if (server.trustReadOnly && knownBefore.size && server.tools.some((t) => !knownBefore.has(t.name))) {
+              await mcp.update(server.id, { trustReadOnly: false });
+              server.trustReadOnly = false;
+              send('tool', { tool: `${server.name}`, status: 'done', result: `${server.name} now offers tools it did not have before, so its read-only labels are no longer trusted. Trust them again in Customize if you want.` });
+            }
             if (server.tools.truncated) send('tool', { tool: `${server.name}`, status: 'done', result: `${server.name} has more tools than the ${server.tools.length} listed here; the rest are not offered.` });
             if (server.type === 'local') send('tool', { tool: startStep, status: 'done', result: `${server.tools.length} tool(s) ready` });
             await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
@@ -2757,9 +2764,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed);
+              const said = await appTools.run(name, parsed, { chatId: id });
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
-              const added = appTools.takePending?.();
+              const added = appTools.takePending?.(id);
               if (!added) return said;
               const answer = await askCapability('switch_on_added', `${added.title}\n${added.text}`);
               if (answer.granted) { await appTools.switchOn(added); return `${said}\nThe person said yes: it is now switched on.`; }

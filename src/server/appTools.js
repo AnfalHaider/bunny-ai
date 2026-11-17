@@ -25,11 +25,11 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
     fn('read_skill', 'Load the instructions of a switched-on skill by name. A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
-    fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI and switches them on.',
+    fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI switched OFF; the person is shown what was added and decides whether to switch them on.',
       { url: { type: 'string' } }, ['url']),
-    fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI and switch it on.',
+    fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI, switched OFF: the person is shown the whole text (at most about 1,500 characters) and decides whether to switch it on.',
       { name: { type: 'string' }, description: { type: 'string' }, instructions: { type: 'string' } }, ['name', 'instructions']),
-    fn('add_connector', 'Add an MCP server to Bunny AI as a connector and switch it on: a remote one by its https address, '
+    fn('add_connector', 'Add an MCP server to Bunny AI as a connector: a remote one by its https address (added switched OFF until the person says yes), '
       + `or a local one by the program that runs it (one of ${LOCAL_COMMANDS.join(', ')}; for example command "npx", args ["-y", "@modelcontextprotocol/server-filesystem", "C:\\notes"]). `
       + 'The person always sees the exact command line on a card and confirms it before anything runs. The first start can take a few minutes.',
       { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
@@ -127,8 +127,9 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
    * stranger's repository would otherwise ride in front of every later reply, and a remote address would start receiving the person's requests.
    * What was added is remembered here so the chat can show one card; only the window answers it, and switchOn is what a yes does.
    */
-  let pending = null;
-  const takePending = () => { const p = pending; pending = null; return p; };
+  const pendingByChat = new Map(); // P6-2: one chat's card is never shown in another chat
+  const keep = (ctx, p) => { pendingByChat.set(String(ctx?.chatId ?? ''), p); };
+  const takePending = (chatId = '') => { const key = String(chatId ?? ''); const p = pendingByChat.get(key) ?? null; pendingByChat.delete(key); return p; };
   async function switchOn(p) {
     for (const id of p?.skillIds ?? []) await skills.update(id, { enabled: true }).catch(() => {});
     for (const id of p?.connectorIds ?? []) await mcp.update(id, { enabled: true }).catch(() => {});
@@ -257,15 +258,24 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const slice = text.slice((at - 1) * SIZE, at * SIZE);
       return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
-    install_plugin: async ({ url }) => {
+    install_plugin: async ({ url }, ctx) => {
       const { plugin, record } = await installFromGithub(url, { off: true });
-      pending = { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors };
+      keep(ctx, { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors });
       return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], `
         + `${plugin.connectors.length} connector(s). They are switched OFF until the person says to switch them on (they were just asked); they appear in Settings, Customize.`
         + (plugin.skipped.length ? ` Not imported: ${plugin.skipped.join('; ')}.` : '');
     },
-    add_skill: async (args) => `Added skill ${(await skills.add({ ...args, enabled: true })).name}. It is switched on.`,
-    add_connector: async (args) => {
+    // P6-1: a skill the model writes is text that rides in front of every later reply: it arrives OFF in every mode, the card shows ALL of it,
+    // and one too long to show whole is refused.
+    add_skill: async (args, ctx) => {
+      const head = `Skill ${String(args.name ?? '').trim()}: ${String(args.description ?? '').trim()}\n\n`;
+      const text = String(args.instructions ?? '').trim();
+      if (head.length + text.length > 1800) throw new Error(`That skill is too long to show you whole (${head.length + text.length} characters; the limit is 1,800). Make it shorter.`);
+      const added = await skills.add({ ...args, enabled: false });
+      keep(ctx, { title: added.name, text: `${head}${text}\n\nIt is added switched OFF.`, skillIds: [added.id], connectorIds: [] });
+      return `Added the skill ${added.name}. It is switched OFF until the person says to switch it on (they were just asked).`;
+    },
+    add_connector: async (args, ctx) => {
       if (String(args.command ?? '').trim()) {
         // A local connector proposed by the model: a known program, separate arguments, and no secrets through the chat.
         const checked = checkProposedCommand(args.command, args.args);
@@ -278,7 +288,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       const remote = !String(args.command ?? '').trim();
       const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote });
       if (remote) {
-        pending = { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] };
+        keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
         return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).`;
       }
       return `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
@@ -287,7 +297,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
 
   return {
     has: (name) => Object.hasOwn(run, name),
-    run: (name, args) => run[name](args ?? {}),
+    run: (name, args, ctx) => run[name](args ?? {}, ctx),
     installFromGithub,
     installBundle,
     uninstall,
