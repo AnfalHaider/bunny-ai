@@ -92,3 +92,21 @@ None of them decides tools, folders, mode or unattended running.
 - The only code change is to `remoteAccess.js`: `remoteToolBlocked` also blocks `remember` and `list_scheduled_tasks`. That closes the `remember` recommendation.
 - The new test scripts `schedule_task` and `remember` calls from a device chat in Auto. They create no schedule and save no memory, the tools are not offered, and the window's own chat still has them.
 - `remote-access` 29 of 29 at da9a3a8 is now 30 of 30, from a copy of b1b8af5 with the variable unset.
+
+## Re-stamp at 4bd9f64, the device tool allow-list: PASS (supersedes b1b8af5)
+
+**The rule.** `remoteToolBlocked(name)` is now `!REMOTE_TOOLS_ALLOWED.has(name)`. A new tool, a connector's tool or a tool the model built is denied by default.
+
+**The test.** It reads the whole tool registry (more than 50 tools, 64 today). It fails when a tool is on neither list or on both, and it checks every earlier denial and the default deny for unnamed names. Tests from a copy of 4bd9f64, with the variable unset: `remote-access` 30 of 30, `window-only` 16 of 16.
+
+**Builder A's decisions:**
+- **Account tools allowed** (github_*, gmail_* including gmail_send, calendar_create_event, drive_*): **agreed**, as the owner's "full chats". Sending mail always shows a card, which the device answers. The owner should know that a signed-in device can approve sending mail as them.
+- **run_command and start_process allowed** (a Code chat, and in Auto without a card): this is the owner's decision. It is the reason for the plain-HTTP warning (R5), the 2-hour idle limit, and the Auto mark in the window (R6).
+- **list_sessions, read_session and search_chats allowed:** agreed. A device can already read every chat through the API.
+- **request_capability and run_subagent allowed:** agreed. R1 limits a device's answers to `code_mode` and `leave_plan_mode`, and helper chats keep the filter.
+- **browser_* denied:** agreed. A device has no panel, and the panel is the window's.
+- **Connector tools (call_connector_tool, list_connector_tools, and every connector tool name) denied: keep them denied.**
+  - A local connector is a program running on this PC. It can reach files and services outside the chat's folder fence and outside the rules Bunny applies to its own tools, such as a filesystem or database server.
+  - A remote connector acts on the person's accounts with tokens Bunny holds.
+  - Connectors are already window-only to add and to trust. Letting a device use them is the widest door left, and the least visible.
+  - This narrows "full chats" by one feature, so the owner should decide. My recommendation is to keep it denied for v0.1.10, and later allow only connectors the person marks "available from devices" in the window.
