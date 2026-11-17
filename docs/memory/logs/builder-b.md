@@ -2,6 +2,40 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - v0.1.9 second build lane (night 2): what was built and what is open
+
+**Task:** the Chief of Staff's v0.1.9 queue for Builder B. Every row is its own branch from main 4995d5f (or from `claude/release-0.1.9` for the later ones); nothing was gated by me except RUN (see below); reviews and the one candidate gate were Builder A's and the Chief's.
+
+**Built and pushed** (branch = sha at the time of writing; `git log` on the branch shows later fixes)
+- `claude/builder-b-supd` S-UPD: a release with no sha512 is refused before any download; semver ordering (rc before plain); SUPD-1 (same-line 88-character base64 value) and SUPD-2 (basename).
+- `claude/builder-b-soauth` S-OAUTH f929949: every sign-in request resolves its host, refuses a private address, connects to the checked address (`pinnedFetch`).
+- `claude/builder-b-w612` W6-12: the task list carries over to the next message (quoted notes in a user-role message after the system text), cap 40, one nudge per reply.
+- `claude/builder-b-w616` W6-16: skills, connectors and plugins limited to folders (read_skill and connector tools included; W616-1 plugin update keeps the scope; CSS rules live in the bindings file).
+- `claude/builder-b-w624` W6-24: browser panel tabs as views (partition `persist:bunny-browser`, Security's ten rules, ::ffff: forms, throwaway profile for the smoke probe). NOT proven in a real Electron window.
+- `claude/builder-b-w66` W6-6 (HIGH): `install_from_github` (Node.js MCP servers from public repos; card from one commit; `--ignore-scripts`; folder inside `<data>\tools`; card values from the repository are checked).
+- `claude/builder-b-w610` W6-10: `browser_inspect` and `browser_capture` (saved page copy in the chat folder). Not run in a real page.
+- `claude/builder-b-polish` POLISH (gaps 7 to 13): contrast, the model-switch line, the question guard, typed stops, the schedule prompt count, the two search-stop messages.
+- `claude/builder-b-priv` PRIV: the Windows user name is out of scripts/kit-next and the app.js comment.
+- `claude/builder-b-run` RUN (parked, OUT of v0.1.9 by the Chief): the unit-test runner in two steps (every `*.test.js` in parallel, the guard and kit files one at a time with CLAUDE_PROJECT_DIR unset), a 4-minute silence watchdog, a summary at the end. Its first gate failed only because an older version also ran helper and fixture scripts; a clean full run of the final version is still owed. The serial guard step took 21 minutes.
+
+**Not built, with the reason**
+- W6-11 (compare two pages): needs an off-screen view and pixel work that cannot be proven without a real window. Leave to a later release.
+- W2-9 (a git worktree per code chat, ADR-002): the largest row: effectiveRoot everywhere, create and finish and cleanup of copies, a delete dialog, a Settings list of leftover copies, the data-folder gate exception and its ten tests. It cannot be finished and reviewed in one night; shipping part of it would leave a switch without its cleanup. Leave it out (the Chief said so in advance).
+- W5-1d (guard work) was never mine. Gap 16 (release notes say "Pictures"/"Images") is in `docs/releases/`, which Builder may not touch: Librarian.
+
+**Open items for whoever continues**
+- A real Electron window walk for W6-24 and W6-10 (`npx electron test/probes/views-smoke.mjs <invented folder>`; the Electron binary is not installed in my worktree: a run starts a download, which I cancelled).
+- W6-6 follow-ups: Python and other kinds of server, an "Allow install scripts" tick (needs a card with a checkbox), a check for a newer commit.
+- "Clear browser data / sign out of all sites" button for the panel's partition (Security's note).
+- The sandbox `BUNNY_ALLOW_LOOPBACK_DOWNLOAD=1` test switch is still there.
+
+**Lessons**
+- `git add -A` swept an unrelated untracked file (W6-6's) into another branch's commit: add files by name when a worktree holds more than one piece of work.
+- Shell heredocs through the tool layer lose a backslash level: scripts with regexes or `\n` go in a file made with the Write tool (or the Edit tool), not into `node -e` or a heredoc. This cost about ten rounds tonight.
+- Only one full gate or suite at a time, and ask first; a flag a script does not have yet still runs the script.
+- A background run whose output goes into a pipe that the reader closes (`| head`) looks hung: write to a file.
+- Automated security notes on model-written or repository-written text that reaches a card or the system prompt were right every time (task steps, package.json values): quote or check that text before it is shown.
+
 ## 2026-11-17 - v0.1.8 second build lane: final entry (retired by the Chief of Staff)
 
 **Task:** second build lane for v0.1.8 under the Chief of Staff: the W6 line, then the queue the Chief set.
