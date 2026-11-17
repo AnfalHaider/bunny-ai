@@ -63,7 +63,7 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
  * speak it (the answer is not an initialize result) is used as before. The connector's own `instructions` are kept too (L-1).
  */
 const sessions = new Map();
-const sessionKey = (server, url) => String(server?.id ?? url);
+const sessionKey = (server, url) => `${server?.id ?? ''}|${String(url ?? '').trim().toLowerCase()}`;
 
 async function ensureSession(url, server, { signal, auth, fetchImpl }) {
   const key = sessionKey(server, url);
@@ -154,7 +154,8 @@ export async function listTools(server, { timeoutMs = 15_000, fetchImpl = global
       name: t.name,
       description: String(t.description ?? '').slice(0, 400),
       inputSchema: t.inputSchema ?? null,
-      readOnly: t.annotations?.readOnlyHint === true,
+      readOnlyHint: t.annotations?.readOnlyHint === true, // what the server SAYS: a suggestion only (RO-1)
+      readOnly: false,
     }));
   } catch (err) {
     if (err instanceof McpError) throw err;
@@ -232,7 +233,7 @@ export function connectorTools(servers, { planMode = false } = {}) {
     for (let n = 2; usedPrefixes.has(prefix); n += 1) prefix = `${base.slice(0, 20)}_${n}`;
     usedPrefixes.add(prefix);
     for (const tool of server.tools ?? []) {
-      if (planMode && !tool.readOnly) continue;
+      if (planMode && !isReadOnlyTool(server, tool)) continue;
       const definition = toToolDefinitions([tool], { prefix })[0];
       let name = definition.function.name;
       for (let n = 2; index.has(name); n += 1) name = `${definition.function.name.slice(0, 60)}_${n}`;
@@ -295,6 +296,12 @@ export function mcpResultText(result) {
   const isError = result.isError === true;
   return { text: isError ? `The tool reported an error: ${text}` : text, isError };
 }
+
+/**
+ * RO-1: does this tool only read? Not because the server says so (a hostile connector can label a write tool as reading, which would skip the
+ * question in Ask mode and offer it in Plan mode), but because the person marked the connector as one whose labels they trust.
+ */
+export const isReadOnlyTool = (server, tool) => server?.trustReadOnly === true && (tool?.readOnlyHint === true || tool?.readOnly === true);
 
 /** A tool name prefix that is safe to use in a function name. */
 export function toolPrefix(name) {

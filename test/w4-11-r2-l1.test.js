@@ -100,3 +100,13 @@ test('L-1: a local connector\'s instructions are kept while it runs', async (t) 
   await local.listTools(server);
   assert.equal(local.instructions('echo-i'), 'Always say please.');
 });
+
+test('R-2: a connector whose address changed never receives the session id of the old address', async (t) => {
+  const a = await strictServer(t);
+  const b = await strictServer(t);
+  await listTools({ id: 'moved-1', name: 'Moved', url: a.url });
+  await listTools({ id: 'moved-1', name: 'Moved', url: b.url }); // same connector id, new address
+  assert.ok(b.seen.length > 0);
+  assert.equal(b.seen[0].method, 'initialize', 'the new address starts with its own handshake');
+  assert.equal(b.seen[0].session, null, 'and no session id of the old address was sent to it');
+});
