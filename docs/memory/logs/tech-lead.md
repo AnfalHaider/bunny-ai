@@ -2,6 +2,17 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-17 - v0.1.9: reviews after the candidate gate (in progress)
+
+**Merge check, release-0.1.9 at 327763e:** no lines lost in 9 merges; the two conflicts (deb53b8 chat.js refusals, fdae66e ui/chat.js import) keep both sides; app.css equals its design sources. Report: `tech-lead-release-0.1.9-merge-check.md` in the shared notes folder. RUN merged as 8f3f181 and reverted (fcddf99); the Chief keeps RUN out of 0.1.9 (23-minute gate, unexplained parallel failure).
+**Signed:** w6-12 FAIL c83c6d9 and 292bead, then PASS at 424bb72 (12/12 alone); roles PASS at b57b606 (6/6 alone); gate-names PASS at 88b6082; w6-16 FAIL at 81fddb6 (11/11 alone, but .cz-scope, .cz-scope-label and .cz-extra are only in the generated app.css).
+**Candidate 88b6082:** gate 7 of 8, with the dependency audit failing on picomatch (no fix, build tooling). The Chief puts the choice to the owner; no push past a failed gate. K-5 is OUT of 0.1.9 (a guard change waits for the owner to be present). W6-12, W6-16 and W6-24 merge in the next batch, followed by a re-gate and my lost-lines check.
+**Lesson:** the generated-CSS loss came back within a day (W6-16). A rule in a plan is not a check: the gate should fail when `src/ui/app.css` differs from `npm run build:css` (row GATE-CSS below).
+
+| Row | What | Risk |
+|---|---|---|
+| GATE-CSS | Gate step: build the CSS into memory and fail when it differs from `src/ui/app.css` (ignoring line endings), naming the extra and missing lines | LOW |
+
 ## 2026-11-17 - v0.1.9: Builder B specs, RUN signed (in progress)
 
 **Specs:** `docs/plans/2026-11-17-v0.1.9-builder-b-specs.md` at ed0dcc5 (W6-12, W6-16, W6-24, W6-10/11, W2-9, W6-6), and ADR-002 (W2-9) brought to `docs/adr/` from 2817b76. Chief's ruling: W2-9 stays in, built last, ships only with its 10 tests and a passing review.
