@@ -26,3 +26,10 @@ Holds:
 - `CLAUDE_PROJECT_DIR` is removed only from the child environment of the guard and kit step, never from the gate's own.
 
 No findings.
+
+## S-UPD re-stamp at ab1d2fc (supersedes 6ac601a) — PASS
+
+- SUPD-1 fixed: `/^sha512:[ \t]*(\S+)[ \t]*$/m`, and the value must be `/^[A-Za-z0-9+/]{86}==$/`. Probe through `readRelease`: an empty `sha512:` line followed by another key gives null, a valid 88-character digest is accepted, `abc` gives null, and an indented sha512 followed by an empty top-level one gives null. Every null is refused before download.
+- The real v0.1.8 `latest.yml` (release asset 759341831, read to stdout with `gh api`) has LF line endings and its sha512 is accepted. Today's releases still update.
+- SUPD-2 fixed: `join(downloadDir, basename(String(release.name)))`.
+- `node --test test/updater.test.js` at ab1d2fc: 12 of 12.
