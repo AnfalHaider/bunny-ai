@@ -41,7 +41,7 @@ import { listTools as httpListTools, callTool as httpCallTool, toToolDefinitions
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat, stripToolMarkup, asksPermissionToContinue, fitResult } from './chat.js';
+import { streamChat, stripToolMarkup, asksPermissionToContinue, statesDoneOrBlocked, fitResult } from './chat.js';
 import { clip } from './clip.js';
 import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
@@ -1802,12 +1802,26 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       let checkpoint = null;
       // The plan the model shows as a checklist (update_tasks), kept with the reply.
       let currentTasks = [];
+      let askedThisReply = false; // W6-12: an ask_user card was shown in this reply
       const beforeWrite = async (abs) => {
         checkpoint ??= checkpoints.begin(id, workspace?.root ?? '');
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
       let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
+
+      // W6-12: a Code chat carries its task list from one message to the next. The newest saved list that still has an open step
+      // is the starting list of this reply (and is told to the model); a finished list is not carried. Not in Chat mode (no workspace).
+      let taskText = '';
+      if (workspace) {
+        const earlier = [...(session.messages ?? [])].reverse().find((m) => m.role === 'assistant' && Array.isArray(m.tasks) && m.tasks.length)?.tasks;
+        if (earlier?.some((t) => !t.done)) {
+          currentTasks = cleanTasks(earlier);
+          const done = currentTasks.filter((t) => t.done).length;
+          taskText = `Your task list from earlier (${done} of ${currentTasks.length} done):\n${currentTasks.map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}`).join('\n')}\n`
+            + (permissionMode === 'plan' ? 'You are in Plan mode, so you can only plan these steps. ' : 'Carry on from the first open step. ') + 'Keep the list current with update_tasks.';
+        }
+      }
 
       // Plan mode may only look. Otherwise every tool is offered and the
       // permission mode decides which ones wait for the person's OK.
@@ -1897,7 +1911,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const scheduledTask = typeof body.scheduledTask === 'string' ? body.scheduledTask.slice(0, 80) : '';
       const scheduledText = scheduledTask
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
-      history.unshift({ role: 'system', content: [honesty, modeText, folderText, scheduledText, interrupted ? CONTINUE_NOTE : ''].filter(Boolean).join('\n') });
+      history.unshift({ role: 'system', content: [honesty, modeText, folderText, taskText, scheduledText, interrupted ? CONTINUE_NOTE : ''].filter(Boolean).join('\n') });
 
       // Tools from the MCP servers the person has switched on (not in Chat mode).
       const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled);
@@ -2391,6 +2405,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
               break;
             }
             case 'ask_user': {
+              askedThisReply = true;
               const q = cleanQuestion(parsed);
               if (!q.question) throw new Error('Say what to ask.');
               // W4-14c: a question that only asks the person to run commands for Bunny is not shown; the model is told what to do instead.
@@ -2818,7 +2833,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             onReplyEnd: ({ text }) => {
               // Only while the plan still has open steps: an offer after a finished job ("want me to also...?") is not a permission question.
               const open = currentTasks.filter((t) => !t.done).length;
-              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3 || !asksPermissionToContinue(text)) return null;
+              if (!workspace || permissionMode === 'plan' || permissionNudges >= 3) return null;
+              // W6-12: the reply stops with open steps and no question to the person, and does not say it is finished or blocked: carry on.
+              if (open && !asksPermissionToContinue(text) && !askedThisReply && !/\?\s*$/.test(String(text ?? '').trim()) && !statesDoneOrBlocked(text)) {
+                permissionNudges += 1;
+                const names = currentTasks.filter((t) => !t.done).slice(0, 5).map((t) => t.text).join('; ');
+                return `Your task list still has ${open} open step${open === 1 ? '' : 's'} (${names}). Carry on and finish them; mark each done with update_tasks. If you are finished or blocked, say so plainly.`;
+              }
+              if (!asksPermissionToContinue(text)) return null;
               // No plan at all: a model that stops mid-job without one is asked to say whether it is finished (W6-3b).
               if (!currentTasks.length) {
                 permissionNudges += 1;

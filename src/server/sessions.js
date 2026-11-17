@@ -241,7 +241,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (entry.thinking && Number.isFinite(message.thinkingMs) && message.thinkingMs > 0) entry.thinkingMs = Math.min(Math.round(message.thinkingMs), 24 * 3600 * 1000);
     // The checklist the model kept while it worked (update_tasks).
     if (Array.isArray(message.tasks) && message.tasks.length) {
-      entry.tasks = message.tasks.slice(0, 20).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));
+      entry.tasks = message.tasks.slice(0, 40).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));
     }
     // The files this reply changed can be put back (see checkpoints.js).
     if (message.checkpoint && /^[a-f0-9-]{36}$/.test(String(message.checkpoint.id))) {
