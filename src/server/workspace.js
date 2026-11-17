@@ -19,6 +19,7 @@ import { globMatcher } from './glob.js';
 import { checkEnvironment } from './environment.js';
 import { createContext, Script } from 'node:vm';
 import { fetchLimited } from './download.js';
+import { fitShell, findGitBash } from './shellFit.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_LIST = 400;              // entries in one listing
@@ -170,8 +171,8 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       { path: { type: 'string' },
         edits: { type: 'array', description: 'The replacements, applied in order (at most 50)',
           items: { type: 'object', properties: { old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['old_text', 'new_text'] } } }, ['path', 'edits']),
-    fn('run_command', 'Run a command yourself and get its output (2 minute limit by default; pass timeout_seconds, up to 600, for a long build or install). It runs in Windows PowerShell 5.1: '
-      + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
+    fn('run_command', 'Run a command yourself and get its output (2 minute limit by default; pass timeout_seconds, up to 600, for a long build or install). It runs in Windows PowerShell 5.1 unless the line is written for cmd (dir, type, copy, set NAME=value: it runs in cmd) or POSIX-style (ls, cat, grep, export: it runs in Git Bash when installed): '
+      + 'in PowerShell, set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
       { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' }, timeout_seconds: { type: 'integer', description: 'How long it may run before it is stopped: 1 to 600 seconds. Default 120.' } }, ['command']),
   ];
@@ -531,12 +532,21 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
       throw new Error('run_command waits for the command to finish, so a trailing & cannot start a background program here (Windows PowerShell 5.1 rejects it). '
         + 'Use start_process for a server or watcher that should keep running, then browser_open the address once it is up.');
     }
-    const cmd = translateChains(String(command ?? '').trim());
-    if (!cmd) throw new Error('run_command needs a command');
+    const raw = String(command ?? '').trim();
+    if (!raw) throw new Error('run_command needs a command');
+    // W6-7: a cmd-written line runs in cmd, a POSIX-style one in Git Bash when it is installed (else PowerShell with a hint).
+    const gitBash = process.platform === 'win32' ? findGitBash() : null;
+    const fit = fitShell(raw, { platform: process.platform, hasGitBash: !!gitBash });
+    const cmd = fit.shell === 'powershell' ? translateChains(raw) : fit.command;
     const where = cwd ? await inside(cwd) : root;
+    const env = { ...process.env, ...NON_INTERACTIVE };
     return new Promise((done) => {
-      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
-        { cwd: where, windowsHide: true, env: { ...process.env, ...NON_INTERACTIVE } });
+      const child = fit.shell === 'cmd'
+        ? spawn('cmd.exe', ['/d', '/s', '/c', `"${cmd}"`], { cwd: where, windowsHide: true, windowsVerbatimArguments: true, env })
+        : fit.shell === 'bash'
+          ? spawn(gitBash, ['-c', cmd], { cwd: where, windowsHide: true, env })
+          : spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}\n${cmd}`],
+            { cwd: where, windowsHide: true, env });
       const outBufs = [];
       const errBufs = [];
       let size = 0;
@@ -580,6 +590,8 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
               : ' It printed nothing: run it again without redirecting its output to see why.';
           }
         }
+        // A POSIX command that failed here: say what the Windows command is.
+        if (fit.hint && (spawnErr || code)) status += `${status ? '\n' : ''}[hint: ${fit.hint}]`;
         // The status comes first, so it survives even when long output is cut.
         const out = [status, clip(body, KEEP_OUTPUT)].filter(Boolean).join('\n');
         done(out || '(no output)');
