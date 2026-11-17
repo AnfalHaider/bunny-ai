@@ -13,7 +13,9 @@
     ".git/config",
     ".git/hooks/**",
     ".git/bootstrap-role",
-    ".git/worktrees/*/bootstrap-role"
+    ".git/worktrees/*/bootstrap-role",
+    "docs/security/audit-exceptions.json",
+    "scripts/audit-exceptions.mjs"
   ],
   "shell_parse": true,
   "shell_write_check": true,
@@ -32,7 +34,8 @@
       "docs/signoffs/**",
       "docs/releases/**",
       "docs/flow-changes/**",
-      "docs/kit-changes/**"
+      "docs/kit-changes/**",
+      "docs/security/audit-exceptions.json"
     ],
     "writers": [
       "chief-of-staff"
