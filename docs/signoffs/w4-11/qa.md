@@ -1,0 +1,9 @@
+---
+piece: w4-11
+role: qa
+sha: ec2afa2
+verdict: PASS
+date: 2026-11-17
+---
+
+W4-11 (plugins, skills, connectors, trust) walked on the candidate head ec2afa2. New walk e2e/w019-w411.mjs 13/13 on a real server with invented local MCP servers: a plugin installed through the real route adds its skill and connector; the skill's words reach the model; connector tools are offered as packconn__ping/write_note/snap and a call comes back; a picture from a connector reaches a model that can see (one image part, 'shown after this answer') and a model that cannot see gets only the placeholder; switching the plugin OFF removes its skill and tools from new chats and ON returns them; Plan mode with an UNTRUSTED connector offers none of its tools, after the person trusts its labels it offers only ping and snap, not the unlabelled write_note; uninstall removes the skill and connector; a server whose list never ends is cut off at 100 requests (51 ms) with the list marked cut. My earlier walks re-run on the candidate: w411a 43/44, w411a-names 36/37, w411b-walk1 48/49, walk2 44/45, walk3 60/60 (including the read-only trust button on screen, desktop and phone, light and dark, and the refusal message before a connector has listed its tools). The four non-passes are deliberate changes, not defects: Plan mode now offers nothing from an untrusted connector (S4, U8); a connector picture now reaches a seeing model instead of a text note (D1e); the page bound is 100, not 20 (G2). G11, which failed in v0.1.8, now passes (shared connector survives an uninstall). Notes: the code comment in mcp.js still says 'at most 20 pages'; after switching a plugin off and on, its connector tools are back (the connector was on). Not walked: the plugin Update button from a real GitHub source (covered through the real update code in w019-roles-p41 and Builder's P-4 tests) and plugin commands/agents (P-2, Builder's tests).
