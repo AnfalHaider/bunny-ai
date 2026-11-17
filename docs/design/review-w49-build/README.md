@@ -15,3 +15,6 @@ Checked and matching the drawing:
 - Help picture `docs/images/settings-wait.png`: shows the row at the default, invented profile, no personal data.
 
 Nothing to change.
+
+## O7 check at release candidate e028d3b (2026-11-17)
+`docs/images/settings-wait.png` (last changed 13ba632) no longer matches the build. Shot e028d3b on an invented profile (`shots/rc-e028d3b-wait-light.png`): the "Wait for a first reply" row now has its select and the "Now: ..." line wrapped under the description, instead of the select on the right with the note stacked beneath it. Cause: `settings.html` still uses `right wait-right`, `wait-custom` and `wait-now`, but `src/ui/app.css` at e028d3b has no rules for them (they were in 13ba632 and are gone after the merges). The picture shows the intended design; the build drifted. Not re-shot, so the help picture is not made to show a regression. The phone rule and the Custom box styling are lost with it.
