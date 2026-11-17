@@ -559,7 +559,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .browser-address { flex: 1; min-width: 0; height: 30px; padding: 0 var(--sp-6); border: 1px solid transparent; border-radius: var(--r-pill); background: var(--surface); font-size: var(--fs-sm); color: var(--text); outline: none; }
 .browser-address:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .browser-more-wrap { position: relative; }
-.browser-menu { right: 0; left: auto; min-width: 240px; }
+.browser-menu { right: 0; left: auto; min-width: min(240px, calc(100vw - 16px)); max-width: calc(100vw - 16px); }
 #browser-tabs-content { position: relative; flex: 1; min-height: 0; display: flex; }
 #browser-tabs-content .browser-frame { flex: 1; width: 100%; height: 100%; border: 0; margin: 0; border-radius: 0; background: #fff; }
 .browser-empty, .browser-blocked { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-6); padding: var(--sp-12); text-align: center; font-size: var(--fs-md); }

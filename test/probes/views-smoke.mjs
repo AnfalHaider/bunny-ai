@@ -1,4 +1,5 @@
-// W6-24 smoke test in the REAL Electron (not run by the unit suite): `npx electron test/probes/views-smoke.mjs`
+// W6-24 smoke test in the REAL Electron (not run by the unit suite): `npx electron test/probes/views-smoke.cjs [folder for the throwaway profile]`
+// (the .cjs entry loads this file; Electron 45 does not start an ESM main that awaits at the top level)
 // Starts two local pages, opens the panel's views through electron/browserViews.js, and prints what really happened.
 // Uses throwaway sessions only (an invented userData folder); never touches the real Bunny profile.
 import { app, BrowserWindow, WebContentsView, session } from 'electron';
@@ -18,6 +19,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const serve = (handler) => new Promise((resolve) => { const s = createServer(handler); s.listen(0, '127.0.0.1', () => resolve({ s, port: s.address().port })); });
 
+async function main() {
 await app.whenReady();
 
 // B stands in for Bunny's own page (the default session); A for a website (the panel's session)
@@ -32,7 +34,8 @@ const A = await serve((req, res) => {
   res.writeHead(200, { 'content-type': 'text/html' }); res.end('<title>A</title>a');
 });
 
-const win = new BrowserWindow({ width: 1000, height: 700, show: false });
+// shown (a hidden window cannot be captured: UnknownVizError), but far off screen, without taking the focus or a taskbar button
+const win = new BrowserWindow({ width: 1000, height: 700, show: true, x: -4000, y: -4000, skipTaskbar: true, focusable: false });
 await win.loadURL(`http://127.0.0.1:${B.port}/`);
 const views = createBrowserViews({ WebContentsView, session, getWindow: () => win });
 const events = [];
@@ -91,3 +94,6 @@ console.log(JSON.stringify(results, null, 1));
 const failed = results.filter((r) => !r.ok);
 console.log(failed.length ? `FAILED ${failed.length} of ${results.length}` : `ALL ${results.length} PASSED`);
 app.exit(failed.length ? 1 : 0);
+}
+
+main().catch((e) => { console.error('probe failed', e?.stack ?? e); app.exit(3); });
