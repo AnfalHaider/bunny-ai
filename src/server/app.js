@@ -146,7 +146,7 @@ function readBody(req, max = MAX_BODY) {
   });
 }
 
-/** The signed-in Windows user's name, capitalised ("anfal" → "Anfal"); empty when unknown. */
+/** The signed-in Windows user's name, capitalised (a name such as "ada" becomes "Ada"); empty when unknown. */
 function systemUserName() {
   try {
     const raw = String(userInfo().username ?? '').replace(/[._-]+/g, ' ').trim().split(/\s+/)[0] ?? '';

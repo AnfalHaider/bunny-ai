@@ -7,7 +7,7 @@ Owner's go for K-1, typed in the Chief of Staff's chat on 2026-11-17: "go on K-1
 ## Where it comes from
 
 * Base for our side: `scripts/guard-next/` (what the v0.1.7 candidate ships: G-1 and W5-1 to W5-1c), **not** the live `.bootstrap/` (which is an older kit with only G-1 patches). My first attempt used the live files and missed Security's B2 and B3 rows.
-* Base for the kit side: the plugin's `bin/` of 0.6.0 (`C:/Users/anfal/.claude/plugins/cache/bootstrap-environment/bootstrap-environment/0.6.0/`). The plugin cache was not edited.
+* Base for the kit side: the plugin's `bin/` of 0.6.0 (`C:/Users/<user>/.claude/plugins/cache/bootstrap-environment/bootstrap-environment/0.6.0/`). The plugin cache was not edited.
 
 ## File map (0.6.0 file → what changed here, and why)
 
