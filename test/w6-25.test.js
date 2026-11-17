@@ -31,12 +31,16 @@ async function run(t, toolCall, answerWith) {
   let text = '';
   let card = null;
   let nudged = false;
+  let lateCap = false;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     text += new TextDecoder().decode(value);
     const m = !card && /event: (question|permission|capability)\ndata: (.*)\n/.exec(text);
     if (m) card = { kind: m[1], ...JSON.parse(m[2]) };
+    // a later capability card (add_skill asks whether to switch the new skill on) is answered at once: No
+    const cap = card && card.kind === 'permission' && nudged && !lateCap && /event: capability\ndata: (.*)\n/.exec(text);
+    if (cap) { lateCap = true; await post(base, `/api/sessions/${session.id}/capability/${JSON.parse(cap[1]).id}`, { granted: false }); }
     if (card && !nudged && /event: waiting\n/.test(text)) {
       nudged = true;
       await new Promise((r) => setTimeout(r, 300)); // well past the nudge: the old timers would have answered by now only in minutes, so this checks the nudge, not the wait
