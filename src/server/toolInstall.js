@@ -11,13 +11,29 @@
  * Only public repositories, only Node.js servers. A Python or other server is added by the person in Settings, Customize.
  */
 import { execFile } from 'node:child_process';
-import { mkdir, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, readdir, rm, rmdir, stat, unlink } from 'node:fs/promises';
 import { join, resolve, relative, isAbsolute, sep } from 'node:path';
 
 export const TOOLS_DIR = 'tools';
 const API = 'https://api.github.com';
 const RAW = 'https://raw.githubusercontent.com';
 const STEP_TIMEOUT_MS = 5 * 60_000;
+const REGISTRY = 'https://registry.npmjs.org/';
+// A repository's own npm settings can run its code even with --ignore-scripts (git=, script-shell=, a .pnpmfile): they are deleted before npm runs.
+const SETTINGS_FILES = ['.npmrc', '.yarnrc', '.yarnrc.yml', '.pnpmfile.cjs'];
+
+/** Remove a folder and everything in it WITHOUT ever following a link: a link (a symbolic link or a junction) is removed as a link, never its target. */
+export async function removeTree(path) {
+  const info = await lstat(path).catch(() => null);
+  if (!info) return;
+  if (info.isSymbolicLink()) { await rm(path, { force: true, recursive: false }).catch(async () => { await unlink(path).catch(() => rmdir(path)); }); return; }
+  if (!info.isDirectory()) { await unlink(path); return; }
+  for (const name of await readdir(path)) await removeTree(join(path, name));
+  await rmdir(path);
+}
+
+/** A file or folder still in use by a program: Windows says EBUSY or EPERM. */
+const isInUse = (err) => ['EBUSY', 'EPERM', 'ENOTEMPTY', 'EACCES'].includes(err?.code);
 
 /** "owner/repo" from a short name or a github.com link. */
 export function cleanRepo(value) {
@@ -50,7 +66,7 @@ export function runCommand(file, args, { cwd }) {
   });
 }
 
-export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch, cloneUrl = (full) => `https://github.com/${full}.git`, runner = runCommand }) {
+export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch, cloneUrl = (full) => `https://github.com/${full}.git`, runner = runCommand, removeTreeImpl = removeTree }) {
   const toolsRoot = () => resolve(dataDir, TOOLS_DIR);
 
   async function getJson(url, what) {
@@ -86,7 +102,7 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
       throw new Error('The package.json does not name a program to start (no "bin" or "main"), so Bunny AI does not know how to run this tool.');
     }
     const lock = files.has('package-lock.json');
-    const install = lock ? ['ci', '--ignore-scripts'] : ['install', '--ignore-scripts'];
+    const install = lock ? ['ci', '--ignore-scripts', `--registry=${REGISTRY}`] : ['install', '--ignore-scripts', `--registry=${REGISTRY}`];
     const name = String(full.split('/')[1]).slice(0, 60);
     const folder = toolFolderName(full, sha);
     const where = join(toolsRoot(), folder);
@@ -96,8 +112,10 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
       `Version: commit ${sha.slice(0, 7)} on ${branch}${/^[\w.+-]{1,30}$/.test(String(pkg.version ?? '')) ? `, package version ${pkg.version}` : ''}`,
       `It goes in: ${where}`,
       `Install command: npm ${install.join(' ')}   (install scripts are NOT run)`,
+      'The repository\'s own npm settings (.npmrc, .yarnrc, .pnpmfile.cjs) are deleted and ignored.',
       ...(lock ? [] : ['There is no package-lock.json, so npm install picks the newest versions of its dependencies.']),
       `It will start with: node ${entry}`,
+      'It is added switched ON, so its program starts when Bunny AI next needs its tools.',
       'This runs code from the internet on this computer.',
     ];
     return { repo: full, sha, branch, name, folder, entry, install, lock, stars: Number(meta.stargazers_count ?? 0), pushedAt: String(meta.pushed_at ?? ''), cardText: lines.join('\n') };
@@ -117,6 +135,7 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
       await runner('git', ['clone', '--depth', '1', '--no-tags', '--single-branch', cloneUrl(plan.repo), target], { cwd: root });
       const head = String(await runner('git', ['rev-parse', 'HEAD'], { cwd: target })).trim();
       if (head !== plan.sha) throw new Error('The repository changed after the card was shown (a newer commit), so nothing was installed. Ask again to see the new card.');
+      for (const name of SETTINGS_FILES) await rm(join(target, name), { force: true, recursive: false }).catch(() => {}); // a file or a link, never a target
       await runner('npm', plan.install, { cwd: target });
       const entryPath = resolve(target, plan.entry);
       const inside = relative(target, entryPath);
@@ -146,7 +165,18 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
   async function removeFiles(server) {
     const target = folderOf(server); // throws for a tampered path, before anything is removed
     if (!target) return false;
-    await rm(target, { recursive: true, force: true });
+    try {
+      // a few tries: Windows keeps a folder while a program runs in it
+      for (let attempt = 1; ; attempt += 1) {
+        try { await removeTreeImpl(target); break; } catch (err) {
+          if (!isInUse(err) || attempt >= 3) throw err;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+    } catch (err) {
+      if (isInUse(err)) throw Object.assign(new Error('The tool\'s folder is in use; close what uses it and try again.'), { code: 'tool.inUse' });
+      throw err;
+    }
     return true;
   }
 

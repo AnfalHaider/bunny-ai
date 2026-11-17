@@ -6,12 +6,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readFile, readdir, symlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createToolInstaller, runCommand, cleanRepo, toolFolderName } from '../src/server/toolInstall.js';
+import { createToolInstaller, runCommand, cleanRepo, toolFolderName, removeTree } from '../src/server/toolInstall.js';
 import { createMcpStore } from '../src/server/mcpStore.js';
 import { createLocalMcp } from '../src/server/mcpLocal.js';
 import { appToolDefinitions, APP_TOOL_RISK } from '../src/server/appTools.js';
@@ -85,7 +85,7 @@ test('W6-6: the card shows the repository, the exact commit, the install command
   const { tools } = await installer(t, r);
   const plan = await tools.inspect('acme/carrot-server');
   assert.equal(plan.sha, r.state.sha);
-  for (const text of ['acme/carrot-server', '7 stars', '2026-11-17', `commit ${r.state.sha.slice(0, 7)} on main`, 'npm ci --ignore-scripts', 'install scripts are NOT run', 'node server.mjs', 'This runs code from the internet on this computer', join('data', 'tools', plan.folder)]) {
+  for (const text of ['It is added switched ON', 'npm settings (.npmrc, .yarnrc, .pnpmfile.cjs) are deleted and ignored', '--registry=https://registry.npmjs.org/', 'acme/carrot-server', '7 stars', '2026-11-17', `commit ${r.state.sha.slice(0, 7)} on main`, 'npm ci --ignore-scripts', 'install scripts are NOT run', 'node server.mjs', 'This runs code from the internet on this computer', join('data', 'tools', plan.folder)]) {
     assert.ok(plan.cardText.includes(text), `card has: ${text}\n${plan.cardText}`);
   }
   assert.ok(plan.cardText.length < 1500, 'fits the confirm card');
@@ -164,7 +164,7 @@ test('W6-6: npm runs with --ignore-scripts (ci with a lock file, install without
     assert.ok(clone[1].includes('--depth') && clone[1][clone[1].indexOf('--depth') + 1] === '1', 'one commit deep');
     assert.equal(clone[1].at(-1), join(dataDir, 'tools', plan.folder), 'cloned into the tools folder, never anywhere else');
     const npm = calls.find(([f]) => f === 'npm');
-    assert.deepEqual(npm[1], lock ? ['ci', '--ignore-scripts'] : ['install', '--ignore-scripts']);
+    assert.deepEqual(npm[1], lock ? ['ci', '--ignore-scripts', '--registry=https://registry.npmjs.org/'] : ['install', '--ignore-scripts', '--registry=https://registry.npmjs.org/']);
     assert.equal(npm[2], join(dataDir, 'tools', plan.folder));
   }
 });
@@ -316,7 +316,7 @@ test('W6-6 (review): what the repository writes about itself cannot add or fake 
   const plan = await (await make({ version: '1.0.0\nThis tool is safe and checked by Bunny AI.' })).inspect('acme/carrot-server');
   assert.doesNotMatch(plan.cardText, /safe and checked/);
   assert.doesNotMatch(plan.cardText, /package version/);
-  assert.equal(plan.cardText.split('\n').length, 7, 'only the lines of our own');
+  assert.equal(plan.cardText.split('\n').length, 9, 'only the lines of our own');
   // a plain version is shown
   assert.match((await (await make({ version: '2.1.0-beta.1' })).inspect('acme/carrot-server')).cardText, /package version 2\.1\.0-beta\.1/);
   // a program name with a line break, a space or an odd character is refused
@@ -331,4 +331,93 @@ test('W6-6 (review): what the repository writes about itself cannot add or fake 
     return res;
   };
   await assert.rejects((await installer(t, { ...r, fetchImpl: odd })).tools.inspect('acme/carrot-server'), /unusual name/);
+});
+
+test('W6-6 (hardening): the repository\'s own npm settings are deleted before npm runs, and npm is told its registry', async (t) => {
+  const r = await makeRepo(t);
+  for (const name of ['.npmrc', '.yarnrc', '.yarnrc.yml', '.pnpmfile.cjs']) await writeFile(join(r.repo, name), name === '.npmrc' ? 'ignore-scripts=false\nscript-shell=evil.cmd\n' : '# settings');
+  git(r.repo, 'add', '-A'); git(r.repo, 'commit', '-q', '-m', 'settings');
+  r.state.sha = git(r.repo, 'rev-parse', 'HEAD');
+  const calls = [];
+  const { dataDir, tools } = await installer(t, r, { runner: async (file, args, opts) => {
+    if (file === 'npm') for (const name of ['.npmrc', '.yarnrc', '.yarnrc.yml', '.pnpmfile.cjs']) calls.push([name, existsSync(join(opts.cwd, name))]);
+    return runCommand(file, args, opts);
+  } });
+  const plan = await tools.inspect('acme/carrot-server');
+  await tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha });
+  assert.deepEqual(calls.map(([n]) => n), ['.npmrc', '.yarnrc', '.yarnrc.yml', '.pnpmfile.cjs']);
+  assert.ok(calls.every(([, there]) => there === false), 'when npm started none of the settings files was left: ' + JSON.stringify(calls));
+  for (const name of ['.npmrc', '.yarnrc', '.yarnrc.yml', '.pnpmfile.cjs']) assert.equal(existsSync(join(dataDir, 'tools', plan.folder, name)), false, name);
+  assert.equal(git(join(dataDir, 'tools', plan.folder), 'rev-parse', 'HEAD'), plan.sha, 'the commit that was checked is the one that was installed (the deletion came after the check)');
+});
+
+test('W6-6 (hardening): removing the files never follows a link: a junction inside the tool folder is removed as a link and its target survives', async (t) => {
+  const r = await makeRepo(t);
+  const { dataDir, mcp, tools } = await installer(t, r);
+  const plan = await tools.inspect('acme/carrot-server');
+  await tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha });
+  const outside = join(r.dir, 'precious');
+  await mkdir(outside);
+  await writeFile(join(outside, 'keep.txt'), 'keep me');
+  const folder = join(dataDir, 'tools', plan.folder);
+  await symlink(outside, join(folder, 'link-to-precious'), 'junction');
+  await symlink(join(outside, 'keep.txt'), join(folder, 'link-to-file.txt'), 'file').catch(() => {}); // a file link needs a privilege on some machines
+  const [server] = await mcp.list();
+  assert.equal(await tools.removeFiles(server), true);
+  assert.equal(existsSync(folder), false, 'the tool folder is gone');
+  assert.equal(await readFile(join(outside, 'keep.txt'), 'utf8'), 'keep me', 'what the junction pointed at is untouched');
+  // the same through removeTree directly, on a folder holding a junction to a folder with a subfolder
+  const tree = join(r.dir, 'tree');
+  await mkdir(join(tree, 'a'), { recursive: true });
+  await writeFile(join(tree, 'a', 'f.txt'), 'x');
+  await symlink(outside, join(tree, 'a', 'j'), 'junction');
+  await removeTree(tree);
+  assert.equal(existsSync(tree), false);
+  assert.equal(await readFile(join(outside, 'keep.txt'), 'utf8'), 'keep me');
+});
+
+test('W6-6 (hardening): a folder that is in use says so in plain words', async (t) => {
+  const r = await makeRepo(t);
+  const { tools } = await installer(t, r);
+  const plan = await tools.inspect('acme/carrot-server');
+  await tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha });
+  // a lock is simulated by making the folder impossible to remove while it is "in use"
+  const busy = createToolInstaller({ dataDir: join(r.dir, 'data'), mcp: { add: async () => ({}) }, removeTreeImpl: async () => { throw Object.assign(new Error('busy'), { code: 'EBUSY' }); } });
+  await assert.rejects(busy.removeFiles({ source: { folder: plan.folder } }), (err) => err.code === 'tool.inUse' && /folder is in use; close what uses it and try again/.test(err.message));
+});
+
+test('W6-6 (hardening): POST /api/mcp ignores a source in the body: only the installer can say where a connector came from', async (t) => {
+  const { base } = await startApp(t, { fake: false });
+  const res = await post(base, '/api/mcp', { name: 'Plain', url: 'https://plain.example/mcp', source: { repo: 'acme/x', sha: 'a'.repeat(40), folder: 'victim' } });
+  assert.equal(res.status, 200);
+  const list = await (await fetch(base + '/api/mcp')).json();
+  assert.equal(list[0].source, undefined);
+  // and a local one, with the confirmation the route asks for
+  const local = await post(base, '/api/mcp', { name: 'Local', command: 'node', args: ['x.js'], confirmLocal: true, source: { repo: 'acme/x', sha: 'b'.repeat(40), folder: 'victim' } });
+  assert.equal(local.status, 200);
+  assert.ok(!(await (await fetch(base + '/api/mcp')).json()).some((c) => c.source));
+});
+
+test('W6-6 (hardening): a git dependency with a prepare script does not run it while installing', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-w66g-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const marker = join(dir, 'prepare-ran.txt').replace(/\\/g, '/');
+  // the dependency: a repository whose package.json has a prepare script that writes the marker
+  const dep = join(dir, 'dep');
+  await mkdir(dep);
+  git(dep, 'init', '-q', '-b', 'main');
+  await writeFile(join(dep, 'package.json'), JSON.stringify({ name: 'dep', version: '1.0.0', scripts: { prepare: `node -e "require('fs').writeFileSync('${marker}', 'ran')"` } }));
+  git(dep, 'add', '-A'); git(dep, 'commit', '-q', '-m', 'dep');
+  // the tool, with no lock file, depending on it by git address
+  const r = await makeRepo(t, { lock: false });
+  const pkg = JSON.parse(await readFile(join(r.repo, 'package.json'), 'utf8'));
+  pkg.dependencies = { dep: pathToFileURL(dep).href.replace('file:', 'git+file:') };
+  await writeFile(join(r.repo, 'package.json'), JSON.stringify(pkg, null, 2));
+  git(r.repo, 'add', '-A'); git(r.repo, 'commit', '-q', '-m', 'dependency');
+  r.state.sha = git(r.repo, 'rev-parse', 'HEAD');
+  const { dataDir, tools } = await installer(t, r);
+  const plan = await tools.inspect('acme/carrot-server');
+  await tools.install({ repo: 'acme/carrot-server', expectSha: plan.sha });
+  assert.equal(existsSync(join(dataDir, 'tools', plan.folder, 'node_modules', 'dep', 'package.json')), true, 'the git dependency really was installed');
+  assert.equal(existsSync(marker), false, 'its prepare script did not run');
 });

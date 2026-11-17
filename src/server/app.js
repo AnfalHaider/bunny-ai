@@ -962,7 +962,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         if (String(body.command ?? '').trim() && body.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'A local connector runs a program on this computer. Confirm the command to add it.' });
         }
-        return sendJson(res, 200, await mcp.add(body));
+        const { source: _dropped, ...plain } = body; // W6-6: only the tool installer may say where a connector came from
+        return sendJson(res, 200, await mcp.add(plain));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });
       }
@@ -992,7 +993,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (leaving && leaving.type !== 'local') await connectorSignIn.signOutQuietly(leaving); // its sign-in ends with it
       // W6-6: an installed tool's files go with it (a saved folder that is not inside the tools folder is refused, and then nothing is removed)
       if (leaving?.source) {
-        try { await toolInstaller.removeFiles(leaving); } catch (err) { return sendJson(res, 400, { code: 'tool.badFolder', message: err.message }); }
+        try { await toolInstaller.removeFiles(leaving); } catch (err) { return sendJson(res, err.code === 'tool.inUse' ? 409 : 400, { code: err.code ?? 'tool.badFolder', message: err.message }); }
       }
       return sendJson(res, 200, { ok: await mcp.remove(mcpMatch[1]) });
     }
