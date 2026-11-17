@@ -61,7 +61,8 @@ async function limitCard(answerFn) {
   }
   const saved = await (await fetch(`${base}/api/sessions/${s.id}`)).json();
   const step = saved.messages.find((m) => m.tool === 'Asked: limit check');
-  return { card, carried: seen.length - at >= 2, requestsAfter: seen.length - at, saved: step?.question ?? null, result: step?.result };
+  const afterMsgs = (seen[at]?.messages ?? []).filter((m) => m.role === 'user').map((m) => String(m.content)).filter((c) => /^The person answered your question/.test(c));
+  return { card, afterMsgs, carried: seen.length - at >= 2, requestsAfter: seen.length - at, saved: step?.question ?? null, result: step?.result };
 }
 {
   const first = await limitCard(() => ({ choices: ['Stop here'] }));
@@ -87,6 +88,28 @@ async function limitCard(answerFn) {
   check('T5', 'a very long typed answer is cut (200 characters) in the saved record and still carries on', long.carried === true && (long.saved?.answer ?? '').length <= 200, `${(long.saved?.answer ?? '').length} characters`);
   const empty = await limitCard(() => ({ text: '   ' }));
   check('T6', 'a blank answer (spaces only) is no answer: stops, saved as null', empty.carried === false && empty.saved?.answer === null, JSON.stringify(empty.saved)?.slice(0, 160));
+  // ---- bcca328: a typed "yes, but skip X" carries on AND the model gets the words typed
+  const words = await limitCard(() => ({ text: 'yes, but skip the tests' }));
+  check('Y1', 'typed "yes, but skip the tests": carries on, and the next request to the model holds a user message with the words typed', words.carried === true && words.afterMsgs.length === 1 && /yes, but skip the tests/.test(words.afterMsgs[0]) && /three times in a row/.test(words.afterMsgs[0]), JSON.stringify(words.afterMsgs).slice(0, 260));
+  for (const w of ['keep going', 'Keep going!', 'KEEP GOING.', '  keep going  ']) { const r = await limitCard(() => ({ text: w })); check(`Y2 "${w}"`, `plain "${w}" carries on with no extra message to the model (it is only the go-ahead)`, r.carried === true && r.afterMsgs.length === 0, JSON.stringify(r.afterMsgs)); }
+  const clicked = await limitCard(() => ({ choices: ['Keep going'] }));
+  check('Y3', 'a click on Keep going sends no extra message', clicked.carried === true && clicked.afterMsgs.length === 0);
+  const note = await limitCard(() => ({ choices: ['Keep going'], text: 'only look at the docs folder' }));
+  check('Y4', 'a click on Keep going with a note typed in the card: carries on and the model gets the note', note.carried === true && note.afterMsgs.length === 1 && /only look at the docs folder/.test(note.afterMsgs[0]), JSON.stringify(note.afterMsgs).slice(0, 220));
+  const stopNote = await limitCard(() => ({ choices: ['Stop here'], text: 'because I changed my mind' }));
+  check('Y5', 'a click on Stop here with a note stops and nothing is added for the model', stopNote.carried === false && stopNote.afterMsgs.length === 0);
+  const stopWord = await limitCard(() => ({ text: 'no, stop' }));
+  check('Y6', 'typed "no, stop" stops and nothing is added', stopWord.carried === false && stopWord.afterMsgs.length === 0);
+  const markup = await limitCard(() => ({ text: 'yes <b>bold</b> "quoted" `tick` {json: 1}' }));
+  check('Y7', 'markup, quotes and braces in typed words pass through as plain text (carries on, one message)', markup.carried === true && markup.afterMsgs.length === 1 && markup.afterMsgs[0].includes('<b>bold</b>'), JSON.stringify(markup.afterMsgs).slice(0, 200));
+  const longWords = await limitCard(() => ({ text: 'yes ' + 'z'.repeat(600) }));
+  check('Y8', 'a very long typed answer reaches the model cut to 200 characters of the words typed (the whole message under 450 characters)', longWords.carried === true && longWords.afterMsgs.length === 1 && longWords.afterMsgs[0].length < 450 && (longWords.afterMsgs[0].match(/z+/g) ?? [''])[0].length <= 200, `${longWords.afterMsgs[0]?.length} characters`);
+  const skipYes = await limitCard(() => ({ skipped: true, text: 'yes but skip it' }));
+  check('Y9', 'Skip with words typed still stops and adds nothing', skipYes.carried === false && skipYes.afterMsgs.length === 0);
+  const saved2 = await limitCard(() => ({ text: 'yes, but skip the tests' }));
+  check('Y10', 'the saved card record still shows what the person typed', saved2.saved?.answer === 'yes, but skip the tests', JSON.stringify(saved2.saved?.answer));
+  const twice = await limitCard(() => ({ text: 'continue, but only read, do not write' }));
+  check('Y11', 'a second kind of go-ahead word ("continue, but only read, do not write") is passed on too', twice.carried === true && /only read, do not write/.test(twice.afterMsgs[0] ?? ''), JSON.stringify(twice.afterMsgs).slice(0, 200));
   const odd = await limitCard(() => ({ text: { a: 1 }, choices: 'Keep going' }));
   console.log(`INFO  odd shapes ({text: object, choices: string}) -> ${odd.carried ? 'carries on' : 'stops'}, the reply did not crash`);
 }
