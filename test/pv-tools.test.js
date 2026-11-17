@@ -215,3 +215,11 @@ test('PV-1 combined: a provider refuses tools, the retry without tools fails too
   assert.equal(bodies.length, 2, 'asked once with tools, once without, and no more');
   assert.equal(told, 1);
 });
+
+test('PV-2: the size limit counts the connectors\' tools only: big built-in tool sets (Code mode) do not hide a small connector', () => {
+  const builtin = Array.from({ length: 60 }, (_, i) => tool(`builtin_${i}`, 'd'.repeat(500)));
+  const conn = [tool('rows__dump')];
+  const capped = capTools([...builtin, ...conn], new Map([['rows__dump', {}]]));
+  assert.equal(capped.deferred.size, 0, 'the connector tool is offered directly');
+  assert.equal(capped.definitions.length, 61);
+});

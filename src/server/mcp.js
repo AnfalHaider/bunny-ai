@@ -303,7 +303,8 @@ export function connectorTools(servers, { planMode = false } = {}) {
  */
 export const META_TOOLS = ['list_connector_tools', 'call_connector_tool'];
 export function capTools(definitions, index, { maxTools = 100, maxChars = 20_000 } = {}) {
-  const chars = JSON.stringify(definitions).length;
+  // The size is the CONNECTORS' share: in Code mode the built-in tools alone are over 20,000 characters, and one small connector must not be hidden for that
+  const chars = JSON.stringify(definitions.filter((d) => index.has(d.function.name))).length;
   if (definitions.length <= maxTools && chars <= maxChars) return { definitions, deferred: new Map() };
   const offered = definitions.filter((d) => !index.has(d.function.name));
   const deferred = new Map();
