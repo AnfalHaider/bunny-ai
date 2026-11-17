@@ -88,6 +88,14 @@ test('W6-8: well-known long-running server commands are caught', () => {
   ]) assert.equal(looksLikeServer(c), true, c);
 });
 
+test('W6-8: run_command refuses a server command and names start_process with the command', async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-server-'));
+  t.after(() => rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const ws = createWorkspace(folder);
+  await assert.rejects(() => ws.run('run_command', { command: 'npm run dev' }), /start_process with command "npm run dev" instead/);
+  await assert.rejects(() => ws.run('run_command', { command: 'npx serve -l 3001 &' }), /start_process with command "npx serve -l 3001" instead/);
+});
+
 test('W6-8: one-shot commands are not servers', () => {
   for (const c of ['npm test', 'npm install', 'npm run build', 'node scripts/build.js', 'npx tsc --noEmit', 'npm run lint']) {
     assert.equal(looksLikeServer(c), false, c);
