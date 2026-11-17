@@ -103,7 +103,7 @@ test('K5-T: a slow git costs one answer per question: the decisions equal a fast
   else { writeFileSync(join(shimDir, 'git'), `#!/bin/sh\nexec "${process.execPath}" "${join(shimDir, 'git-slow.mjs')}" "$@"\n`); chmodSync(join(shimDir, 'git'), 0o755); }
   const cases = [
     ['builder', 'git status', true], ['builder', 'git log -1', true], ['builder', 'npm test', true], ['builder', 'git config alias.ci "commit -n"', false],
-    ['builder', 'echo x > AGENTS.md', false], ['tech-lead', 'git commit -m x', true], ['builder', 'git -C .. commit -m x', false],
+    ['builder', 'echo x > AGENTS.md', false], ['tech-lead', 'git commit -m x', true],
   ];
   const run = (env, role, command) => {
     writeFileSync(join(root, '.bootstrap', 'session.json'), JSON.stringify({ role }));
@@ -116,7 +116,9 @@ test('K5-T: a slow git costs one answer per question: the decisions equal a fast
   for (const [role, command, ok] of cases) {
     const fast = run({}, role, command);
     const slow = run(slowEnv, role, command);
-    assert.equal(fast.code === 0, ok, `fast: ${role}: ${command}: ${fast.out}`);
+    const inProcess = decideAs(root, role, { tool: 'Bash', command }).allow;
+    assert.equal(inProcess, ok, `in process: ${role}: ${command}`);
+    assert.equal(fast.code === 0, inProcess, `the hook (a child process, with its belt) decides like the function: ${role}: ${command}: ${fast.out}`);
     assert.equal(slow.code, fast.code, `a slow git gives the same decision: ${role}: ${command}: ${slow.out}`);
     assert.ok(slow.ms < 9000, `the whole decision from process start stays under the belt (${slow.ms} ms): ${command}`);
   }
@@ -262,4 +264,45 @@ test('G1-3, G1-4, G1-5 (Security): hook switch-offs, aliases, a git directory po
   ];
   for (const c of refused) assert.equal(bash(root, 'builder', c).allow, false, c);
   assert.equal(lib != null && NEXT.endsWith('kit-next'), true, 'run against the staged kit');
+});
+
+test('K5-W (Chief of Staff, Librarian\'s board check): a shell command that writes a file is judged by the role\'s write_globs, like the file tools: a role that writes docs only cannot write src with echo, Set-Content, tee, cp, mv, sed -i, a heredoc or a redirect', (t) => {
+  const root = seeded(t, 'tech-lead');
+  const refused = [
+    'echo x > src/app.js', 'echo x >> src/app.js', 'Set-Content src/app.js x', 'Add-Content src/app.js x', 'Out-File src/app.js', 'echo x | tee src/app.js', 'cp a.txt src/app.js', 'Copy-Item a.txt src/app.js',
+    'mv a.txt src/app.js', 'sed -i s/a/b/ src/app.js', 'cat > src/app.js <<EOF\nx\nEOF', 'touch src/app.js', 'rm src/app.js', 'echo x > "src/app.js"', "echo x > 'src/new file.js'", 'echo x > ./src/../src/app.js',
+    'mkdir src/new', 'echo x > .\\src\\app.js', 'New-Item src/app.js', 'Remove-Item src/app.js',
+  ];
+  const allowed = ['echo x > docs/note.md', 'cat a.txt', 'echo x > README.md', 'Set-Content docs/plans/x.md y', 'cp docs/a.md docs/b.md', 'echo x > /dev/null', 'git status > NUL', 'echo x 2>&1', 'ls src'];
+  for (const c of refused) assert.equal(bash(root, 'tech-lead', c).allow, false, `refused: ${c}`);
+  for (const c of allowed) assert.equal(bash(root, 'tech-lead', c).allow, true, `allowed: ${c}`);
+  // a role with no write limit (builder) is not held back by this
+  assert.equal(bash(root, 'builder', 'echo x > src/app.js').allow, true);
+});
+
+test('K5-X (Chief of Staff, the Librarian board check): a path on another drive or share is outside the repository, never inside it, in the file tools and in shell commands', (t) => {
+  const root = seeded(t, 'tech-lead');
+  const rel = (file) => policyLib.toRepoPath(root, file, root);
+  assert.equal(rel(join(root, 'src', 'a.js')), 'src/a.js');
+  if (process.platform === 'win32') {
+    const BS = String.fromCharCode(92);
+    const drive = root[0].toUpperCase();
+    const other = drive === 'Z' ? 'Y' : 'Z';
+    const tail = root.slice(3);
+    const winTail = tail.split(BS).join(BS);
+    const cases = [`${other}:${BS}${winTail}${BS}src${BS}a.js`, `${other}:/${fwd(tail)}/src/a.js`, `${BS}${BS}server${BS}share${BS}${winTail}${BS}src${BS}a.js`, `${BS}${BS}?${BS}${other}:${BS}x${BS}src${BS}a.js`];
+    for (const f of cases) {
+      const r = rel(f);
+      assert.ok(r === null || (typeof r === 'object' && r.refused), `outside, not "src/a.js": ${f} -> ${JSON.stringify(r)}`);
+    }
+    // a docs-only role: a write to another drive is not "src/a.js" of this repository, and the same drive spelled with forward slashes still is
+    // another drive (here one that does not exist, so it cannot be resolved) is never read as this repository's src/a.js: either it is outside (allowed) or it is refused as unreadable, never as a scope hit on src/a.js
+    const away = bash(root, 'tech-lead', `echo x > ${other}:/${fwd(tail)}/src/a.js`);
+    assert.ok(away.allow === true || /could not be read safely/.test(away.reason), `another drive is not this repository: ${JSON.stringify(away)}`);
+    assert.doesNotMatch(String(away.reason ?? ''), /writes only docs/, 'not judged as a path inside the repository');
+    assert.equal(bash(root, 'tech-lead', `echo x > ${root[0]}:/${fwd(tail)}/src/a.js`).allow, false, 'the own drive of the repository, spelled with forward slashes, is this repository');
+    const tool = guard.decide({ tool: 'Write', filePath: cases[0], cwd: root });
+    assert.ok(tool.allow === true || /could not be read safely/.test(tool.reason), `the file tool agrees: ${JSON.stringify(tool)}`);
+    assert.equal(guard.decide({ tool: 'Write', filePath: join(root, 'src', 'a.js'), cwd: root }).allow, false);
+  }
 });

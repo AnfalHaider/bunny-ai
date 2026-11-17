@@ -46,7 +46,7 @@ export function setDeadline(ms, { fromProcessStart = false } = {}) {
   memo = ms === null || ms === undefined ? null : new Map();
   spawned = 0;
   if (ms === null || ms === undefined) { deadlineAt = Infinity; return; }
-  deadlineAt = (fromProcessStart ? Date.now() - process.uptime() * 1000 : Date.now()) + ms;
+  deadlineAt = Math.floor((fromProcessStart ? Date.now() - process.uptime() * 1000 : Date.now()) + ms); // a whole number: spawn's timeout refuses a fraction, and a git that cannot start must never read as "not a repository"
 }
 export function checkDeadline() { if (Date.now() > deadlineAt) throw new GuardDeadline('the decision took too long'); }
 /** K1-5: true when git itself cannot answer (missing, failing or too slow): then "not in a repository" cannot be told from "git is broken", and the guard must not read silence as a pass. */
