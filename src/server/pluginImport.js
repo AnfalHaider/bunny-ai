@@ -79,7 +79,8 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
   }
 
   // skills: skills/<name>/SKILL.md, or a single SKILL.md at the root
-  const skillFiles = files.filter((p) => /(^|\/)SKILL\.md$/i.test(p) && (p.startsWith('skills/') || p === 'SKILL.md' || p.split('/').length === 2));
+  // P-1: also under a nested plugin (plugins/<name>/skills/<skill>/SKILL.md) and under .claude/skills
+  const skillFiles = files.filter((p) => /(^|\/)SKILL\.md$/i.test(p) && (p.startsWith('skills/') || p === 'SKILL.md' || p.split('/').length === 2 || /(^|\/)skills\/[^/]+\/SKILL\.md$/i.test(p)));
   const skills = [];
   for (const path of skillFiles) {
     const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
@@ -105,7 +106,12 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     try {
       const mcp = JSON.parse(await raw('.mcp.json'));
       for (const [name, def] of Object.entries(mcp.mcpServers ?? mcp)) {
-        if (def?.url && /^https?:\/\//.test(def.url)) connectors.push({ name, url: def.url });
+        // P-3: a legacy SSE server does not take the POSTs this client sends; one that needs headers (a key) is added SWITCHED OFF, and said so
+        if (def?.url && /^https?:\/\//.test(def.url) && String(def.type ?? '').toLowerCase() === 'sse') skipped.push(`connector "${name}" (an older SSE server, which Bunny cannot talk to yet)`);
+        else if (def?.url && /^https?:\/\//.test(def.url) && (def.headers && Object.keys(def.headers).length || def.env && Object.keys(def.env).length)) {
+          connectors.push({ name, url: def.url, enabled: false });
+          skipped.push(`connector "${name}" needs a key or sign-in: it was added switched off`);
+        } else if (def?.url && /^https?:\/\//.test(def.url)) connectors.push({ name, url: def.url });
         else if (def?.command) skipped.push(`local connector "${name}" (${[def.command, ...(def.args ?? [])].join(' ')}): add it with add_connector so the person can confirm the command`);
         else skipped.push(`connector "${name}" (no address or command)`);
       }

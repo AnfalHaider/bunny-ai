@@ -105,7 +105,7 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       try {
         for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: true })).id);
         for (const c of plugin.connectors ?? []) {
-          try { record.connectors.push((await mcp.add({ ...c, enabled: true })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ }
+          try { record.connectors.push((await mcp.add({ ...c, enabled: c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ }
         }
       } catch (err) { // half an install is undone, so nothing is left behind
         await removeParts(record);
