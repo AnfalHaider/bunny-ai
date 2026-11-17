@@ -15,6 +15,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { access, mkdir, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { gitPath, safeEnv } from './safeExec.js';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -34,12 +35,18 @@ const refuse = (code, message) => Object.assign(new Error(message), { code });
  * The real git: found once as an absolute path in the PATH folders (W29-1: never a bare name, which Windows would look up in the project folder first), arguments only (never a shell),
  * no prompts, the current folder never searched for programs, and (W29-2) the project's own hooks and fsmonitor never run: hooksDir is an empty folder of Bunny's.
  */
+/** The stand-in for every signing program: an ABSOLUTE path (under the data folder, beside the empty hooks folder) to a file that does not exist, so git never looks a bare name up on PATH. */
+export function noSignerPath(hooksDir = null) {
+  return join(hooksDir ? resolve(hooksDir, '..') : tmpdir(), 'bunny-no-such-signer').split(String.fromCharCode(92)).join('/');
+}
+
 export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS, hooksDir = null } = {}) {
   return new Promise((done, fail) => {
     const program = gitPath();
     if (!program) { fail(Object.assign(new Error('git was not found on this computer. Install Git for Windows to give a chat its own copy of a project.'), { code: 'git.missing' })); return; }
+    const noSigner = noSignerPath(hooksDir);
     // commit.gpgSign and tag.gpgSign off: a project's own signing setting would start the signing program it names (gpg.program, gpg.ssh.program), and skipping hooks does not skip signing
-    const safe = ['-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', '-c', 'rebase.gpgSign=false', '-c', 'merge.verifySignatures=false', '-c', 'log.showSignature=false', '-c', 'gpg.program=bunny-no-such-signer', '-c', 'gpg.ssh.program=bunny-no-such-signer', '-c', 'gpg.x509.program=bunny-no-such-signer',...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
+    const safe = ['-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', '-c', 'rebase.gpgSign=false', '-c', 'merge.verifySignatures=false', '-c', 'log.showSignature=false', '-c', `gpg.program=${noSigner}`, '-c', `gpg.ssh.program=${noSigner}`, '-c', `gpg.x509.program=${noSigner}`, ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
     execFile(program, [...safe, ...args], { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, shell: false, env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }) }, (err, stdout, stderr) => {
       if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed', exit: err.code }));
       else done(String(stdout).trim());

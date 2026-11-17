@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { createWorktrees } from '../src/server/worktrees.js';
 import { createBrowserViews, isLanAddressResolved } from '../electron/browserViews.js';
 
@@ -255,4 +255,13 @@ test('LOW (automated review, signature checks): merging a copy never starts the 
   assert.equal(done.ok, true, JSON.stringify(done));
   assert.equal(existsSync(marker), false, 'no signing or verifying program ran');
   assert.equal(readFileSync(join(repo, 'work.txt'), 'utf8').trim(), 'work', 'the work was merged');
+  // the stand-in for the signing programs is an absolute path under the data folder to a file that does not exist, never a bare name looked up on PATH
+  const { noSignerPath } = await import('../src/server/worktrees.js');
+  for (const stand of [noSignerPath(join(data, 'empty-hooks')), noSignerPath(null)]) {
+    assert.ok(isAbsolute(stand) || /^[A-Za-z]:\//.test(stand), `absolute: ${stand}`);
+    assert.ok(!existsSync(stand), 'and nothing is there');
+  }
+  assert.equal(noSignerPath(join(data, 'empty-hooks')), `${join(data, 'bunny-no-such-signer').split(String.fromCharCode(92)).join('/')}`, 'under the data folder');
+  assert.match(readFileSync(new URL('../src/server/worktrees.js', import.meta.url), 'utf8'), /gpg\.program=\$\{noSigner\}/);
+  assert.doesNotMatch(readFileSync(new URL('../src/server/worktrees.js', import.meta.url), 'utf8'), /gpg[.a-z0-9]*program=bunny-no-such-signer/);
 });
