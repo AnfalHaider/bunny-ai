@@ -24,7 +24,8 @@ test.beforeEach(async ({ page, request }) => {
   await page.locator('#picker-button').click();
 });
 
-const models = (page) => page.locator('.picker-panel .picker-model');
+// the rows of All models: the Best for / Favourites / Recent rows carry a data-section
+const models = (page) => page.locator('.picker-panel .picker-model:not([data-section])');
 
 test('one row per model, every provider a tag, Free first, then Free daily, then the rest', async ({ page }) => {
   await expect(models(page)).toHaveCount(5);
@@ -60,7 +61,7 @@ test('choosing a model uses its first provider (the order Bunny tries them)', as
 });
 
 // slice 2b: the details of one model, its provider order with arrows, favourites and recent, and the Can do filter
-const details = (page, name) => page.getByRole('button', { name: `Details for ${name}` });
+const details = (page, name) => page.getByRole('button', { name: `Details for ${name}` }).last(); // the All models row (the Best for row has one too)
 const orderNames = (page) => page.locator('.picker-details .picker-order li .picker-order-name');
 
 test('details: the providers in the order Bunny tries them; the arrows change the order, it is kept, and the model then uses the new first one', async ({ page }) => {
@@ -85,7 +86,7 @@ test('favourites and recent: a favourite is starred and listed first; a chosen m
   await expect(page.getByRole('button', { name: 'Remove from favourites' })).toBeVisible();
   await page.getByRole('button', { name: '‹ Back' }).click();
   await expect(page.locator('.picker-group', { hasText: 'Favourites' })).toBeVisible();
-  await expect(page.locator('.picker-panel .picker-star')).toHaveCount(2); // in Favourites and again in All models
+  await expect(page.locator('.picker-panel .picker-model:not([data-section="best"]) .picker-star')).toHaveCount(2); // in Favourites and again in All models
   await page.locator('.picker-panel .picker-model', { hasText: 'Otter 3 Coder' }).first().click();
   await page.locator('#picker-button').click();
   await expect(page.locator('.picker-group', { hasText: 'Recent' })).toBeVisible();
@@ -114,4 +115,51 @@ test('no horizontal scroll at 390 px', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await page.getByRole('button', { name: 'Filters' }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+// slice 2c: Best for is one row per model like All models, Sort, context size on the right, Speech only for models that make sound
+test('Best for Chat: one row per model with the same provider tags, and the arrow keys follow the Free-first order', async ({ page }) => {
+  const best = page.locator('.picker-panel .picker-model[data-section="best"]');
+  expect(await best.count()).toBeGreaterThan(0);
+  const ids = await best.evaluateAll((els) => els.map((e) => e.dataset.model));
+  expect(new Set(ids).size).toBe(ids.length); // no model twice
+  const second = best.nth(1);
+  const model = await second.getAttribute('data-model');
+  const allRow = page.locator('.picker-panel .picker-model:not([data-section])[data-model="' + model + '"]');
+  expect(await second.locator('.picker-tag').allTextContents()).toEqual(await allRow.locator('.picker-tag').allTextContents());
+  const firstProvider = await second.locator('.picker-tag').first().evaluate((t) => t.firstChild.textContent);
+  await page.keyboard.press('ArrowDown'); // Auto -> first Best for row
+  await page.keyboard.press('ArrowDown'); // second Best for row
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#picker-button')).toContainText(model);
+  await expect(page.locator('#picker-button')).toContainText(firstProvider);
+});
+
+test('Sort: Name, and Context size (largest first); Recommended keeps the order', async ({ page }) => {
+  await page.getByRole('button', { name: 'Filters' }).click();
+  const names = () => models(page).locator('.model-name').evaluateAll((els) => els.map((e) => e.firstChild.textContent));
+  const recommended = await names();
+  await page.locator('.picker-panel').getByRole('button', { name: 'Name', exact: true }).click();
+  expect(await names()).toEqual(['Birch Large', 'Falcon Flash', 'Otter 3 Coder', 'Reef Image', 'Willow 7B']);
+  await page.locator('.picker-panel').getByRole('button', { name: 'Context size', exact: true }).click();
+  expect((await names())[0]).toBe('Falcon Flash'); // 1M
+  expect((await names()).at(-1)).toBe('Reef Image'); // no context size
+  await page.locator('.picker-panel').getByRole('button', { name: 'Recommended', exact: true }).click();
+  expect(await names()).toEqual(recommended);
+});
+
+test('the context size is on the right beside Details, compact, and not repeated as a token count', async ({ page }) => {
+  const falcon = page.locator('.picker-panel .picker-row', { hasText: 'Falcon Flash' }).first();
+  await expect(falcon.locator('.picker-ctx')).toHaveText('1M');
+  await expect(page.locator('.picker-panel .picker-row', { hasText: 'Willow 7B' }).first().locator('.picker-ctx')).toHaveText('128K');
+  await expect(page.locator('.picker-panel .picker-row', { hasText: 'Otter 3 Coder' }).first().locator('.picker-ctx')).toHaveText('256K');
+  await expect(page.locator('.picker-panel')).not.toContainText('tokens ·');
+  await expect(page.locator('.picker-panel .picker-row', { hasText: 'Reef Image' }).first().locator('.picker-ctx')).toHaveCount(0);
+});
+
+test('Speech is shown only for models that make sound themselves, not for every chat model', async ({ page }) => {
+  await expect(page.locator('.picker-panel .picker-model', { hasText: 'Falcon Flash' }).first().locator('.model-desc')).not.toContainText('Speech');
+  await page.getByRole('button', { name: 'Filters' }).click();
+  await page.locator('.picker-panel').getByRole('button', { name: 'Speech', exact: true }).click();
+  await expect(page.locator('.picker-panel .picker-empty')).toBeVisible(); // none of the invented models makes sound
 });

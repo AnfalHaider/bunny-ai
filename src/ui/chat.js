@@ -398,6 +398,10 @@ function openPicker(host, trigger) {
   const filters = { providers: new Set(), abilities: new Set(), freeOnly: false };
   const filterCount = () => filters.providers.size + filters.abilities.size + (filters.freeOnly ? 1 : 0);
   const CAN_DO = ['code', 'see', 'image', 'video', 'speech'];
+  // Speech is shown and filtered only for models that make sound themselves; any chat model can be read out by a Windows voice
+  const has = (m, a) => (a === 'speech' ? modelAbilities(m).nativeSpeech : modelAbilities(m).abilities.has(a));
+  let sort = 'recommended';
+  const SORTS = [['recommended', 'Recommended'], ['name', 'Name'], ['context', 'Context size']];
   const filtersBtn = button('Filters', { className: 'picker-filters-btn', 'aria-expanded': 'false' });
   const bar = element('div', { className: 'picker-filters', hidden: true });
   const count = element('div', { className: 'picker-count', hidden: true });
@@ -414,6 +418,8 @@ function openPicker(host, trigger) {
       element('span', { className: 'picker-chip-label', textContent: 'Can do' }),
       ...CAN_DO.map((a) => chipFor(JOBS[a].label, filters.abilities.has(a), () => { if (!filters.abilities.delete(a)) filters.abilities.add(a); })),
       chipFor('Free only (Free and Free daily)', filters.freeOnly, () => { filters.freeOnly = !filters.freeOnly; }),
+      element('span', { className: 'picker-chip-label', textContent: 'Sort' }),
+      ...SORTS.map(([id, label]) => chipFor(label, sort === id, () => { sort = id; })),
     );
     if (filterCount()) {
       const clear = button('Clear filters', { className: 'picker-clear' });
@@ -467,7 +473,7 @@ function openPicker(host, trigger) {
     const rows = state.models.filter((m) =>
       (!q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q))
       && (!filters.providers.size || filters.providers.has(m.providerId))
-      && (!filters.abilities.size || [...filters.abilities].every((a) => modelAbilities(m).abilities.has(a)))
+      && (!filters.abilities.size || [...filters.abilities].every((a) => has(m, a)))
       && (!filters.freeOnly || m.freeKind));
     // one entry per model; every provider that serves it (and fits the filters) is a tag
     const byModel = new Map();
@@ -507,14 +513,19 @@ function openPicker(host, trigger) {
         list.append(element('div', { className: 'picker-group', textContent: label }));
         for (const g of groups) list.append(modelItem(g, key));
       }
-      const best = rankModels(state.models, job).slice(0, 5);
-      if (best.length) {
+      const bestIds = [...new Set(rankModels(state.models, job).map((m) => m.id))].slice(0, 5);
+      if (bestIds.length) {
         list.append(element('div', { className: 'picker-group', textContent: `Best for ${JOBS[job].label}` }));
-        for (const m of best) list.append(pickerItem(m, 'best'));
+        for (const id of bestIds) list.append(modelItem(state.models.filter((m) => m.id === id), 'best-'));
       }
       list.append(element('div', { className: 'picker-group picker-group-all', textContent: 'All models' }));
     }
-    for (const group of byModel.values()) list.append(modelItem(group));
+    const groups = [...byModel.values()];
+    const top = (g) => Math.max(0, ...g.map((m) => Number(m.contextLength) || 0));
+    const nameOf = (g) => String(g[0].displayName ?? g[0].id);
+    if (sort === 'name') groups.sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' }));
+    else if (sort === 'context') groups.sort((a, b) => top(b) - top(a) || nameOf(a).localeCompare(nameOf(b)));
+    for (const group of groups) list.append(modelItem(group));
     addShowAll();
     active = 0;
     highlight();
@@ -537,6 +548,7 @@ function openPicker(host, trigger) {
     const chosen = rowsInOrder[0];
     const item = pickerItem(chosen);
     item.classList.add('picker-model');
+    if (section) item.dataset.section = section.replace(/-$/, ''); // the same model again, under Best for / Favourites / Recent
     item.id = `model-${section}${first.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
     if (readList('bunny.favourites').includes(first.id)) item.querySelector('.model-name')?.append(element('span', { className: 'picker-star', textContent: '★', title: 'Favourite' }));
     const tags = element('span', { className: 'picker-tags' });
@@ -549,7 +561,8 @@ function openPicker(host, trigger) {
     // the details open from their own button beside the row (a button inside a button is not valid)
     const more = button('Details ›', { className: 'picker-details-link', 'aria-label': `Details for ${first.displayName ?? first.id}` });
     more.addEventListener('click', (e) => { e.stopPropagation(); openDetails(group); });
-    return element('div', { className: 'picker-row' }, item, more);
+    const ctx = compactContext(rowsInOrder.reduce((n, m) => Math.max(n, Number(m.contextLength) || 0), 0));
+    return element('div', { className: 'picker-row' }, item, ctx ? element('span', { className: 'picker-ctx', title: 'Context size', textContent: ctx }) : '', more);
   }
 
   // The details of one model: its providers in the order Bunny tries them (move with the arrows, saved on this computer per model) and a favourite.
@@ -577,7 +590,7 @@ function openPicker(host, trigger) {
     const draw = (focusId, by) => {
       const rows = rowsInOrderOf(group);
       const isFav = readList('bunny.favourites').includes(first.id);
-      const abilities = [...modelAbilities(first).abilities].filter((a) => a !== 'chat' && a !== 'research').map((a) => JOBS[a].label);
+      const abilities = [...modelAbilities(first).abilities].filter((a) => a !== 'chat' && a !== 'research' && (a !== 'speech' || modelAbilities(first).nativeSpeech)).map((a) => JOBS[a].label);
       const fav = button(isFav ? '★ Remove from favourites' : '☆ Add to favourites', { className: 'picker-fav', 'aria-pressed': String(isFav) });
       fav.addEventListener('click', () => {
         const now = readList('bunny.favourites');
@@ -632,7 +645,7 @@ function openPicker(host, trigger) {
         element('span', { className: 'model-name', textContent: m.displayName ?? m.id }),
         element('span', {
           className: 'model-desc',
-          textContent: m.contextLength ? `${Number(m.contextLength).toLocaleString()} tokens · ${m.id}` : m.id,
+          textContent: m.id,
         }),
       );
       if (m.unavailable) {
@@ -644,7 +657,7 @@ function openPicker(host, trigger) {
         item.querySelector('.model-name')?.append(
           element('span', { className: 'tag', textContent: 'unavailable' }));
       }
-      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research');
+      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research' && (a !== 'speech' || modelAbilities(m).nativeSpeech));
       if (abilities.length) item.querySelector('.model-desc')?.append(` · ${abilities.map((a) => JOBS[a].label).join(', ')}`);
       item.addEventListener('click', () => selectModel(m));
       return item;
@@ -671,6 +684,13 @@ function openPicker(host, trigger) {
     };
     document.addEventListener('click', outside);
   }, 0);
+}
+
+// 1048576 -> "1M", 262144 -> "256K", 128000 -> "128K"
+function compactContext(n) {
+  if (!n) return '';
+  if (n >= 900000) return `${Math.round(n / 1e5) / 10}M`.replace('.0M', 'M');
+  return `${Math.round(n % 1000 === 0 ? n / 1000 : n / 1024)}K`;
 }
 
 async function selectModel(m) {

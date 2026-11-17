@@ -2079,6 +2079,7 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 /* W4-13 slice 2b: favourites and recent, the details of one model (provider order with arrows), a favourite star */
 .picker-row { display: flex; align-items: stretch; gap: var(--sp-2); }
 .picker-row .picker-item { flex: 1; min-width: 0; }
+.picker-ctx { align-self: center; font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .picker-details-link { align-self: center; border: 0; background: none; color: var(--accent); font-size: var(--fs-xs); padding: 4px 8px; border-radius: var(--r-md); cursor: pointer; white-space: nowrap; }
 .picker-details-link:hover { background: var(--hover); }
 .picker-star { color: var(--accent); margin-left: 6px; font-size: var(--fs-xs); }

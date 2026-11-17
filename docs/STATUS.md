@@ -17,7 +17,6 @@ the interface. No build step.
 | Model discovery + offline cache | works | `test/discovery.test.js`, `test/api.test.js` |
 | Local model servers (Ollama, no key) | works | `test/local-models.test.js` |
 | Model picker: grouped, searchable, keyboard, aria | works | `e2e/features.spec.js` "the model picker is driven from the keyboard" |
-| Model picker (W4-13): one row per model, every provider a tag (Free, Free daily), Filters (provider, can do, Free only), Favourites and Recent, a Details panel to put the providers in your order (kept on this computer) | works; thinking choice and automatic switch to the next provider not built yet | `e2e/w4-13-picker.spec.js` |
 | Chat with token streaming (SSE), stop, retry, edit | works | `e2e/features.spec.js` |
 | Markdown, code blocks, syntax highlighting | works | `e2e/features.spec.js` "code in a reply is highlighted" |
 | File and image attachments | works | `e2e/features.spec.js` "a file can be attached to a message" |

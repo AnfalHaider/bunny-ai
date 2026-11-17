@@ -29,7 +29,7 @@ export function modelAbilities(m) {
 
   // Not chat models at all: embeddings, rerankers, safety classifiers, reward models.
   if (has(/embed|rerank|retriever|guard|safety|moderation|reward|nv-?clip|\bclip\b|parse|ocdr|detector|-pii|nemoretriever/, id)) {
-    return { abilities, utility: true, runs };
+    return { abilities, utility: true, runs, nativeSpeech: false };
   }
 
   const makesImage = out.has('image') || has(/flux|stable-diffusion|\bsdxl\b|\bsd3|sana|imagen|dall-?e|-image\b|image-gen|nano-banana/, id);
@@ -55,7 +55,8 @@ export function modelAbilities(m) {
       abilities.add('code'); runs.add('code');
     }
   }
-  return { abilities, utility: false, runs };
+  // nativeSpeech: the model itself makes sound; every other chat model only writes words a Windows voice reads out
+  return { abilities, utility: false, runs, nativeSpeech: makesSpeech };
 }
 
 /** How good a model is likely to be for a job (bigger is better). Heuristic, explainable. */
