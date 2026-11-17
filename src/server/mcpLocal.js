@@ -14,6 +14,8 @@
  * server first) and reports progress; later starts and calls keep the short limits.
  */
 import { spawn, execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { cleanSchema, MAX_PAGES, MAX_TOOLS } from './mcp.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 const START_TIMEOUT_MS = 60_000; // a start of a program that has already started once in this run
@@ -63,7 +65,8 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
   const everReady = new Set(); // keys (id + command + arguments + settings) that have started once in this run
 
   function key(server) {
-    return JSON.stringify([server.id, server.command, server.args ?? [], server.env ?? {}]);
+    // L-4: the settings' values are hashed, so the key that tells whether a value changed (and the program must restart) never holds them
+    return createHash('sha256').update(JSON.stringify([server.id, server.command, server.args ?? [], server.env ?? {}])).digest('hex');
   }
 
   function start(server) {
@@ -87,6 +90,12 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
         if (!line.startsWith('{')) continue; // a log line, not a message
         let msg;
         try { msg = JSON.parse(line); } catch { continue; }
+        // L-5: a message with an id AND a method is the connector asking us something: answer ping and roots/list, refuse the rest plainly
+        if (msg.id != null && typeof msg.method === 'string') {
+          const answer = msg.method === 'ping' ? { result: {} } : msg.method === 'roots/list' ? { result: { roots: [] } } : { error: { code: -32601, message: 'Bunny AI does not answer that' } };
+          try { child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, ...answer })}\n`); } catch { /* the program is gone */ }
+          continue;
+        }
         const waiting = msg.id != null && conn.pending.get(msg.id);
         if (waiting) { conn.pending.delete(msg.id); waiting(msg); }
       }
@@ -104,12 +113,23 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     };
     child.on('exit', (code) => fail(`The connector stopped (exit code ${code}).${conn.stderr ? ` It said: ${conn.say(conn.stderr.slice(-300))}` : ''}`));
     child.on('error', (err) => fail(`The connector could not start: ${err.message}`));
-    conn.request = (method, params, timeoutMs) => new Promise((resolve, reject) => {
+    conn.request = (method, params, timeoutMs, signal = null) => new Promise((resolve, reject) => {
       if (conn.exited) { reject(new LocalMcpError('The connector is not running')); return; }
+      if (signal?.aborted) { reject(new LocalMcpError('Stopped.', 'mcp.cancelled')); return; }
       const id = conn.nextId++;
-      const timer = setTimeout(() => { conn.pending.delete(id); reject(new LocalMcpError('The connector did not answer in time', 'mcp.timeout')); }, timeoutMs);
+      // R-7: Stop ends the wait now and tells the connector to give up on that request
+      const onAbort = () => {
+        if (!conn.pending.has(id)) return;
+        conn.pending.delete(id);
+        clearTimeout(timer);
+        try { child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id, reason: 'The person pressed Stop' } })}\n`); } catch { /* the program is gone */ }
+        reject(new LocalMcpError('Stopped.', 'mcp.cancelled'));
+      };
+      const timer = setTimeout(() => { conn.pending.delete(id); signal?.removeEventListener('abort', onAbort); reject(new LocalMcpError('The connector did not answer in time', 'mcp.timeout')); }, timeoutMs);
+      signal?.addEventListener('abort', onAbort, { once: true });
       conn.pending.set(id, (msg) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         if (msg.error) reject(new LocalMcpError(msg.error.message ?? 'The connector refused', 'mcp.refused'));
         else resolve(msg.result);
       });
@@ -118,9 +138,10 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
     const limit = conn.first ? firstStartMs : startMs;
     conn.ready = (async () => {
       try {
-        await conn.request('initialize', {
+        const init = await conn.request('initialize', {
           protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'Bunny AI', version: clientVersion },
         }, limit);
+        conn.instructions = String(init?.instructions ?? '').slice(0, 2000); // L-1: what the connector says about itself, for the model
       } catch (err) {
         if (err.code !== 'mcp.timeout') throw err;
         const said = conn.lastLine ? ` The last thing it said: ${conn.lastLine}` : '';
@@ -179,19 +200,35 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
 
   async function listTools(server, { timeoutMs = 30_000, onProgress = null, signal = null } = {}) {
     const conn = await connection(server, { onProgress, signal });
-    const result = await conn.request('tools/list', {}, timeoutMs);
-    return (result?.tools ?? []).map((t) => ({
+    // R-5: follow nextCursor (at most 20 pages)
+    const all = [];
+    let cursor = null;
+    let truncated = false;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const result = await conn.request('tools/list', cursor ? { cursor } : {}, timeoutMs);
+      all.push(...(result?.tools ?? []));
+      cursor = result?.nextCursor || null;
+      if (!cursor) break;
+      if (all.length >= MAX_TOOLS || page === MAX_PAGES - 1) { truncated = true; break; }
+    }
+    const cleaned = all.slice(0, MAX_TOOLS).map((t) => ({
       name: t.name,
-      description: String(t.description ?? '').slice(0, 400),
-      inputSchema: t.inputSchema ?? null,
-      readOnly: t.annotations?.readOnlyHint === true,
+      description: String(t.description ?? '').slice(0, 1000),
+      inputSchema: cleanSchema(t.inputSchema),
+      readOnlyHint: t.annotations?.readOnlyHint === true, // what the connector SAYS: a suggestion only (RO-1)
+      readOnly: false,
     }));
+    if (truncated) Object.defineProperty(cleaned, 'truncated', { value: true });
+    return cleaned;
   }
 
   async function callTool(server, { name, arguments: args = {}, timeoutMs = 120_000, onProgress = null, signal = null }) {
     const conn = await connection(server, { onProgress, signal });
-    return conn.request('tools/call', { name, arguments: args }, timeoutMs);
+    return conn.request('tools/call', { name, arguments: args }, timeoutMs, signal);
   }
+
+  /** The instructions the connector gave when it started (empty if none, or if it is not running). */
+  const instructions = (id) => running.get(id)?.instructions ?? '';
 
   function stop(id) {
     const conn = running.get(id);
@@ -210,5 +247,5 @@ export function createLocalMcp({ clientVersion = '0.1.0', firstStartMs = FIRST_S
 
   const stopAll = () => Promise.all([...running.keys()].map(stop));
 
-  return { listTools, callTool, stop, stopAll, running: () => [...running.keys()] };
+  return { listTools, callTool, instructions, stop, stopAll, running: () => [...running.keys()] };
 }

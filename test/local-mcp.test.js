@@ -11,7 +11,7 @@ test('a local connector starts, lists its tools, runs one, and stops', async (t)
   const local = createLocalMcp();
   t.after(() => local.stopAll());
   const tools = await local.listTools(echo());
-  assert.deepEqual(tools.map((x) => [x.name, x.readOnly]), [['echo', true]]);
+  assert.deepEqual(tools.map((x) => [x.name, x.readOnlyHint, x.readOnly]), [['echo', true, false]]);
   const result = await local.callTool(echo(), { name: 'echo', arguments: { text: 'carrots' } });
   assert.equal(result.content[0].text, 'you said: carrots', 'its settings reach the program');
   assert.deepEqual(local.running(), ['echo-1'], 'the program is kept for the next call');

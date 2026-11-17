@@ -23,13 +23,13 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { url: { type: 'string' } }, ['url']),
     fn('search_plugins', 'Find agent plugins and skills on GitHub, and connectors (MCP servers) in the official MCP registry.',
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
-    fn('read_skill', 'Load the full instructions of a switched-on skill by name.',
-      { name: { type: 'string' } }, ['name']),
-    fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI and switches them on.',
+    fn('read_skill', 'Load the instructions of a switched-on skill by name. A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
+      { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
+    fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI switched OFF; the person is shown what was added and decides whether to switch them on.',
       { url: { type: 'string' } }, ['url']),
-    fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI and switch it on.',
+    fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI, switched OFF: the person is shown the whole text (at most about 1,500 characters) and decides whether to switch it on.',
       { name: { type: 'string' }, description: { type: 'string' }, instructions: { type: 'string' } }, ['name', 'instructions']),
-    fn('add_connector', 'Add an MCP server to Bunny AI as a connector and switch it on: a remote one by its https address, '
+    fn('add_connector', 'Add an MCP server to Bunny AI as a connector: a remote one by its https address (added switched OFF until the person says yes), '
       + `or a local one by the program that runs it (one of ${LOCAL_COMMANDS.join(', ')}; for example command "npx", args ["-y", "@modelcontextprotocol/server-filesystem", "C:\\notes"]). `
       + 'The person always sees the exact command line on a card and confirms it before anything runs. The first start can take a few minutes.',
       { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
@@ -98,13 +98,15 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
   }
 
   /** Add the parts of a plugin and write down what was added. A plugin that is already installed is refused, never added twice. */
-  function installParts(plugin, source) {
+  function installParts(plugin, source, { off = false } = {}) {
     return serial(async () => {
       if (findInstalled(plugin.name, source)) throw Object.assign(new Error(`${plugin.name} is already installed. Uninstall it first to install it again.`), { code: 'plugin.installed' });
       const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), connectors: [], skills: [] };
       try {
-        for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: true })).id);
-        for (const c of plugin.connectors ?? []) record.connectors.push((await mcp.add({ ...c, enabled: true })).id);
+        for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: !off })).id);
+        for (const c of plugin.connectors ?? []) {
+          try { record.connectors.push((await mcp.add({ ...c, enabled: off ? false : c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ }
+        }
       } catch (err) { // half an install is undone, so nothing is left behind
         await removeParts(record);
         throw err;
@@ -114,11 +116,41 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     });
   }
 
-  async function installFromGithub(url) {
+  async function installFromGithub(url, { off = false } = {}) {
     const plugin = await readGithubPlugin(url, { fetchImpl });
-    const record = await installParts(plugin, plugin.source);
+    const record = await installParts(plugin, plugin.source, { off });
     return { record, plugin };
   }
+
+  /**
+   * P-6: what the MODEL adds (install_plugin, add_connector with an address) arrives switched OFF, in every permission mode: the skill text of a
+   * stranger's repository would otherwise ride in front of every later reply, and a remote address would start receiving the person's requests.
+   * What was added is remembered here so the chat can show one card; only the window answers it, and switchOn is what a yes does.
+   */
+  const pendingByChat = new Map(); // P6-2: one chat's card is never shown in another chat
+  const keep = (ctx, p) => { pendingByChat.set(String(ctx?.chatId ?? ''), p); };
+  const takePending = (chatId = '') => { const key = String(chatId ?? ''); const p = pendingByChat.get(key) ?? null; pendingByChat.delete(key); return p; };
+  async function switchOn(p) {
+    for (const id of p?.skillIds ?? []) await skills.update(id, { enabled: true }).catch(() => {});
+    for (const id of p?.connectorIds ?? []) await mcp.update(id, { enabled: true }).catch(() => {});
+  }
+
+  /** What install_plugin would add, in plain words, for the card shown before installing in Ask and Manual. */
+  async function previewPlugin(url) {
+    try {
+      const plugin = await readGithubPlugin(url, { fetchImpl });
+      return describePlugin(plugin);
+    } catch (err) {
+      return `Could not read that repository yet: ${String(err.message).slice(0, 200)}`;
+    }
+  }
+  const describePlugin = (plugin) => [
+    `Plugin ${plugin.name}${plugin.description ? `: ${plugin.description}` : ''}`,
+    ...(plugin.skills ?? []).map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${s.description || '(no description)'}`),
+    ...(plugin.connectors ?? []).map((c) => `Connector ${c.name}: ${c.url}`),
+    ...(plugin.skipped?.length ? [`Not imported: ${plugin.skipped.join('; ')}`] : []),
+    'It is added switched OFF. You decide afterwards whether to switch it on.',
+  ].join('\n').slice(0, 1800);
 
   /** A plugin from a file or the catalog: { name, description, connectors: [{name, url}], skills: [{name, description, instructions}] }. */
   async function installBundle(bundle) {
@@ -130,6 +162,73 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
       connectors: (bundle.connectors ?? []).map((c) => ({ name: c.name, url: c.url })),
       skills: (bundle.skills ?? []).map((s) => ({ name: s.name, description: s.description ?? '', instructions: s.instructions })),
     }, null);
+  }
+
+  /**
+   * P-4: read the plugin's source again and bring what it owns up to date. A skill with the same name is updated where it is (its on or off state stays);
+   * a new skill is added (on only if all the plugin's skills were on); a skill that is gone from the source is removed. A connector at the same address is
+   * kept as it is (its trust and sign-in stay); a new connector is added switched OFF, whatever the plugin's state (an update never switches a connector on);
+   * one that is gone from the source is removed. The person's own other skills and connectors are never touched.
+   */
+  function updatePlugin(id) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, code: 'plugin.notFound', message: 'No such plugin' };
+      if (!record.source) return { ok: false, code: 'plugin.noSource', message: 'This plugin came from a file, so there is nowhere to update it from.' };
+      const plugin = await readGithubPlugin(record.source, { fetchImpl });
+      const norm = (x) => String(x ?? '').trim().toLowerCase();
+      const allSkills = typeof skills.list === 'function' ? await skills.list() : [];
+      const ownedSkills = (record.skills ?? []).map((sid) => allSkills.find((s) => s.id === sid)).filter(Boolean);
+      const wasOn = ownedSkills.length > 0 && ownedSkills.every((s) => s.enabled !== false);
+      const next = { skills: [], connectors: [] };
+      const done = { skillsUpdated: 0, skillsAdded: 0, skillsRemoved: 0, connectorsKept: 0, connectorsAdded: 0, connectorsRemoved: 0 };
+      const keepSkill = new Set();
+      for (const s of plugin.skills ?? []) {
+        const same = ownedSkills.find((o) => norm(o.name) === norm(s.name) && !keepSkill.has(o.id));
+        if (same) {
+          await skills.update(same.id, { description: s.description ?? '', instructions: s.instructions });
+          keepSkill.add(same.id); next.skills.push(same.id); done.skillsUpdated += 1;
+        } else {
+          const added = await skills.add({ ...s, enabled: wasOn });
+          next.skills.push(added.id); done.skillsAdded += 1;
+        }
+      }
+      for (const o of ownedSkills) if (!keepSkill.has(o.id)) { await skills.remove(o.id); done.skillsRemoved += 1; }
+      const allConnectors = typeof mcp.list === 'function' ? await mcp.list() : [];
+      const ownedConnectors = (record.connectors ?? []).map((cid) => allConnectors.find((c) => c.id === cid)).filter(Boolean);
+      const keepConnector = new Set();
+      for (const c of plugin.connectors ?? []) {
+        const same = ownedConnectors.find((o) => norm(o.url).replace(/\/+$/, '') === norm(c.url).replace(/\/+$/, ''));
+        if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; continue; }
+        try {
+          const added = await mcp.add({ ...c, enabled: false });
+          next.connectors.push(added.id); done.connectorsAdded += 1;
+        } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector of the person's own: left as it is */ }
+      }
+      for (const o of ownedConnectors) {
+        if (keepConnector.has(o.id)) continue;
+        await stopConnector(o.id).catch(() => {});
+        if (o.type !== 'local') await signOutConnector(o).catch(() => {});
+        await mcp.remove(o.id);
+        done.connectorsRemoved += 1;
+      }
+      const plugins = (getSettings().plugins ?? []).map((p) => (p.id === id
+        ? { ...p, name: plugin.name, description: plugin.description, skills: next.skills, connectors: next.connectors, updatedAt: new Date().toISOString() } : p));
+      await saveSettings({ plugins });
+      return { ok: true, ...done, skipped: plugin.skipped ?? [] };
+    });
+  }
+
+  /** P-5: switch a plugin's skills and connectors on or off together. A part that is already gone is skipped. */
+  function setEnabled(id, on) {
+    return serial(async () => {
+      const record = (getSettings().plugins ?? []).find((p) => p.id === id);
+      if (!record) return { ok: false, changed: 0 };
+      let changed = 0;
+      for (const sid of record.skills ?? []) { if (await skills.update(sid, { enabled: Boolean(on) }).then(() => true, () => false)) changed += 1; }
+      for (const cid of record.connectors ?? []) { if (await mcp.update(cid, { enabled: Boolean(on) }).then(() => true, () => false)) changed += 1; }
+      return { ok: true, changed };
+    });
   }
 
   /** Remove a plugin and what it added, from the server's own list. A part that is already gone does not stop the rest. */
@@ -147,19 +246,38 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
     search_plugins: ({ query }) => searchPlugins(query),
-    read_skill: async ({ name }) => {
+    read_skill: async ({ name, part }) => {
       const skill = await skills.find(name);
-      if (!skill) throw new Error(`There is no skill called ${name}`);
-      return skill.instructions.slice(0, 60_000);
+      // S-6: a skill that is switched off, or all skills switched off, cannot be read either
+      if (!skill || skill.enabled === false || getSettings().skillsEnabled === false) throw new Error(`There is no skill called ${name}`);
+      const text = String(skill.instructions ?? '');
+      const SIZE = 8000;
+      if (text.length <= SIZE) return text;
+      const total = Math.ceil(text.length / SIZE);
+      const at = Math.min(Math.max(1, Math.floor(Number(part) || 1)), total);
+      const slice = text.slice((at - 1) * SIZE, at * SIZE);
+      return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
-    install_plugin: async ({ url }) => {
-      const { plugin } = await installFromGithub(url);
+    install_plugin: async ({ url }, ctx) => {
+      const { plugin, record } = await installFromGithub(url, { off: true });
+      keep(ctx, { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors });
       return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], `
-        + `${plugin.connectors.length} connector(s). They are switched on and appear in Settings, Customize.`
+        + `${plugin.connectors.length} connector(s). They are switched OFF until the person says to switch them on (they were just asked); they appear in Settings, Customize.`
         + (plugin.skipped.length ? ` Not imported: ${plugin.skipped.join('; ')}.` : '');
     },
-    add_skill: async (args) => `Added skill ${(await skills.add({ ...args, enabled: true })).name}. It is switched on.`,
-    add_connector: async (args) => {
+    // P6-1: a skill the model writes is text that rides in front of every later reply: it arrives OFF in every mode, the card shows ALL of it,
+    // and one too long to show whole is refused.
+    add_skill: async (args, ctx) => {
+      const head = `Skill ${String(args.name ?? '').trim()}: ${String(args.description ?? '').trim()}\n\n`;
+      const text = String(args.instructions ?? '').trim();
+      const footer = '\n\nIt is added switched OFF.';
+      const shownLength = String(args.name ?? '').trim().slice(0, 60).length + 1 + head.length + text.length + footer.length; // exactly what the card holds: title, a line break, the text and the footer
+      if (shownLength > 1800) throw new Error(`That skill is too long to show you whole (${shownLength} characters; the limit is 1,800). Make it shorter.`);
+      const added = await skills.add({ ...args, enabled: false });
+      keep(ctx, { title: added.name, text: `${head}${text}${footer}`, skillIds: [added.id], connectorIds: [] });
+      return `Added the skill ${added.name}. It is switched OFF until the person says to switch it on (they were just asked).`;
+    },
+    add_connector: async (args, ctx) => {
       if (String(args.command ?? '').trim()) {
         // A local connector proposed by the model: a known program, separate arguments, and no secrets through the chat.
         const checked = checkProposedCommand(args.command, args.args);
@@ -168,16 +286,27 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
         }
         args = { ...args, ...checked, env: {} };
       }
-      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: true });
-      return `Added the ${added.type === 'local' ? 'local' : 'remote'} connector ${added.name}. It is switched on; its tools are offered from the next message.`;
+      // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
+      const remote = !String(args.command ?? '').trim();
+      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote });
+      if (remote) {
+        keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
+        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).`;
+      }
+      return `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
     },
   };
 
   return {
     has: (name) => Object.hasOwn(run, name),
-    run: (name, args) => run[name](args ?? {}),
+    run: (name, args, ctx) => run[name](args ?? {}, ctx),
     installFromGithub,
     installBundle,
     uninstall,
+    takePending,
+    switchOn,
+    setEnabled,
+    updatePlugin,
+    previewPlugin,
   };
 }

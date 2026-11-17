@@ -6,7 +6,7 @@ process.stdout.write('a log line that is not JSON\n');
 createInterface({ input: process.stdin }).on('line', (line) => {
   let msg;
   try { msg = JSON.parse(line); } catch { return; }
-  if (msg.method === 'initialize') send({ id: msg.id, result: { protocolVersion: msg.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'echo', version: '1' } } });
+  if (msg.method === 'initialize') send({ id: msg.id, result: { protocolVersion: msg.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'echo', version: '1' }, ...(process.env.ECHO_INSTRUCTIONS ? { instructions: process.env.ECHO_INSTRUCTIONS } : {}) } });
   else if (msg.method === 'tools/list') send({ id: msg.id, result: { tools: [{ name: 'echo', description: 'Say it back', inputSchema: { type: 'object', properties: { text: { type: 'string' } } }, annotations: { readOnlyHint: true } }] } });
   else if (msg.method === 'tools/call') send({ id: msg.id, result: { content: [{ type: 'text', text: `${process.env.ECHO_PREFIX ?? ''}${msg.params.arguments.text}` }] } });
   else if (msg.id != null) send({ id: msg.id, error: { code: -32601, message: 'unknown method' } });

@@ -40,6 +40,7 @@ let server;
 let port;
 const busyModels = new Set();
 const brokenModels = new Set();
+const doubleModels = new Set(); // W4-11: refuses tools, and then fails without them too
 test.beforeAll(async () => {
   server = createServer((req, res) => {
     let raw = '';
@@ -55,16 +56,25 @@ test.beforeAll(async () => {
         res.end('{"error":{"message":"Rate limit exceeded"}}');
         return;
       }
+      // PV-1 combined: the first model asked "doubly broken" refuses tools, and the retry without tools fails as well; the next model answers
+      const doubleAsk = /doubly broken/.test(JSON.stringify(body.messages));
+      if (doubleAsk && (!doubleModels.size || doubleModels.has(body.model))) {
+        doubleModels.add(body.model);
+        res.writeHead(body.tools ? 400 : 500, { 'content-type': 'application/json' });
+        res.end(body.tools ? '{"error":{"message":"This model does not support tool use"}}' : '{"error":{"message":"upstream exploded"}}');
+        return;
+      }
       // The first model asked "are you broken" refuses with an error that is not about being busy.
       const brokenAsk = /are you broken/.test(JSON.stringify(body.messages));
       if (brokenAsk && !brokenModels.size) {
         brokenModels.add(body.model);
         res.writeHead(400, { 'content-type': 'application/json' });
-        res.end('{"error":{"message":"This model does not support tool use"}}');
+        // not about tools (PV-1 retries a refusal of tools on the same model without them): this model is simply gone
+        res.end('{"error":{"message":"This model has been retired"}}');
         return;
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const answer = brokenAsk ? frame({ content: `working: ${body.model}` }) : busyAsk ? frame({ content: `not busy: ${body.model}` }) : script(body);
+      const answer = brokenAsk || doubleAsk ? frame({ content: `working: ${body.model}` }) : busyAsk ? frame({ content: `not busy: ${body.model}` }) : script(body);
       res.end(`${answer}data: [DONE]\n\n`);
     });
   });
@@ -275,4 +285,13 @@ test('W4-12: "yes, stop" is a stop, not a go-ahead', async ({ page }) => {
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
   await expect(page.locator('.question-card.is-answered')).toContainText('You answered: yes, stop');
   await expect(page.locator('.msg.assistant .body').last()).not.toContainText('Finished after all.');
+});
+
+test('a model that refuses tools and then fails without them too: the next model answers', async ({ page }) => {
+  await send(page, 'are you doubly broken?');
+  const reply = page.locator('.msg.assistant .body').last();
+  await expect(reply).toContainText('working:');
+  const answeredBy = (await reply.textContent()).match(/working: (\S+)/)[1];
+  expect(doubleModels.size).toBe(1);
+  expect([...doubleModels]).not.toContain(answeredBy);
 });
