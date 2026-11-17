@@ -69,3 +69,37 @@ test('LOW 3: a project whose own git settings define a filter program gets no co
   assert.equal((await wt.eligibility(repo)).ok, true, 'with no filter it is eligible again');
   assert.equal((await wt.status(made)).dirty, 0);
 });
+
+test('LOW 3 (Security, w2-9-lows): only the exact values `git lfs install` writes are let through; a standard value with anything after it refuses the copy', async (t) => {
+  const repo = tmp('lfs');
+  const data = tmp('lfsdata');
+  clean(t, repo, data);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const wt = createWorktrees({ dataDir: data });
+  const standard = { 'filter.lfs.clean': 'git-lfs clean -- %f', 'filter.lfs.smudge': 'git-lfs smudge -- %f', 'filter.lfs.process': 'git-lfs filter-process' };
+  for (const [key, value] of Object.entries(standard)) git(repo, 'config', key, value);
+  assert.equal((await wt.eligibility(repo)).ok, true, 'the three standard values are let through');
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'lfs' });
+  assert.ok(statSync(made.path).isDirectory(), 'a copy is made');
+  assert.equal((await wt.status(made)).dirty, 0);
+  await wt.finish(made, { action: 'discard' });
+  for (const [key, value] of Object.entries(standard)) {
+    for (const tail of [' ; calc.exe', ' && echo x', ' | tee y', ' & start x', ' $(whoami)', ' `id`', '\nx', ' --extra']) {
+      git(repo, 'config', key, `${value}${tail}`);
+      const e = await wt.eligibility(repo);
+      assert.equal(e.ok, false, `${key} with "${tail.trim()}" after it`);
+      assert.match(e.reason, /runs its own programs/);
+      git(repo, 'config', key, value);
+    }
+  }
+  // a different program, or the same words with another command word, is refused
+  git(repo, 'config', 'filter.lfs.clean', 'git-lfs-evil clean -- %f');
+  assert.equal((await wt.eligibility(repo)).ok, false);
+  git(repo, 'config', 'filter.lfs.clean', standard['filter.lfs.clean']);
+  git(repo, 'config', 'filter.other.clean', standard['filter.lfs.clean']);
+  assert.equal((await wt.eligibility(repo)).ok, false, 'the standard value under another filter name is not LFS');
+});

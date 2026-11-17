@@ -22,6 +22,12 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 const GIT_TIMEOUT_MS = 120_000;
 const WIP_MESSAGE = 'Bunny: work in progress';
 
+/**
+ * The only filter settings let through: EXACTLY what `git lfs install` writes (Security, w2-9-lows). Git runs a filter command through a shell, so "starts with git-lfs" would let a
+ * project add a command separator and a command of its own. Any other value, or these with anything after them, refuses the copy.
+ */
+const LFS_FILTERS = { 'filter.lfs.clean': 'git-lfs clean -- %f', 'filter.lfs.smudge': 'git-lfs smudge -- %f', 'filter.lfs.process': 'git-lfs filter-process' };
+
 const refuse = (code, message) => Object.assign(new Error(message), { code });
 
 /**
@@ -75,7 +81,7 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
     let found = '';
     // only the project's OWN settings (--local): the person's own global and system settings (Git LFS is installed there) are theirs. Git LFS's own filter, set in the project by `git lfs install`, is let through.
     try { found = await git(['config', '--local', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch { return null; } // git config exits 1 when there is none
-    const own = found.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !/^filter[.]lfs[.](smudge|clean|process)\s+git-lfs\s/i.test(l));
+    const own = found.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => { const at = l.search(/\s/); return at < 0 || LFS_FILTERS[l.slice(0, at).toLowerCase()] !== l.slice(at).trim(); });
     return own.length ? 'This project runs its own programs when git checks files out (a filter in its git settings), so Bunny will not make a copy of it.' : null;
   }
 
