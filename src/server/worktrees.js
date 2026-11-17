@@ -22,6 +22,12 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 const GIT_TIMEOUT_MS = 120_000;
 const WIP_MESSAGE = 'Bunny: work in progress';
 
+/**
+ * The only filter settings let through: EXACTLY what `git lfs install` writes (Security, w2-9-lows). Git runs a filter command through a shell, so "starts with git-lfs" would let a
+ * project add a command separator and a command of its own. Any other value, or these with anything after them, refuses the copy.
+ */
+const LFS_FILTERS = { 'filter.lfs.clean': 'git-lfs clean -- %f', 'filter.lfs.smudge': 'git-lfs smudge -- %f', 'filter.lfs.process': 'git-lfs filter-process' };
+
 const refuse = (code, message) => Object.assign(new Error(message), { code });
 
 /**
@@ -32,9 +38,10 @@ export function runGit(args, { cwd, timeout = GIT_TIMEOUT_MS, hooksDir = null } 
   return new Promise((done, fail) => {
     const program = gitPath();
     if (!program) { fail(Object.assign(new Error('git was not found on this computer. Install Git for Windows to give a chat its own copy of a project.'), { code: 'git.missing' })); return; }
-    const safe = ['-c', 'core.fsmonitor=false', ...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
+    // commit.gpgSign and tag.gpgSign off: a project's own signing setting would start the signing program it names (gpg.program, gpg.ssh.program), and skipping hooks does not skip signing
+    const safe = ['-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', '-c', 'rebase.gpgSign=false', '-c', 'merge.verifySignatures=false', '-c', 'log.showSignature=false', '-c', 'gpg.program=bunny-no-such-signer', '-c', 'gpg.ssh.program=bunny-no-such-signer', '-c', 'gpg.x509.program=bunny-no-such-signer',...(hooksDir ? ['-c', `core.hooksPath=${hooksDir}`] : [])];
     execFile(program, [...safe, ...args], { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, shell: false, env: safeEnv({ GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }) }, (err, stdout, stderr) => {
-      if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed' }));
+      if (err) fail(Object.assign(new Error(String(stderr || err.message).trim().slice(0, 600)), { code: 'git.failed', exit: err.code }));
       else done(String(stdout).trim());
     });
   });
@@ -72,10 +79,38 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
    * @returns {Promise<string|null>} the reason, or null
    */
   async function filterDrivers(folder) {
+    // The settings as git will read them when it checks files out: the project's .git/config AND everything it includes (include.path, includeIf), its worktree config and a -c on the
+    // command line all count. --show-scope tells where each came from: only the person's own global and system settings (Git LFS is installed there) are theirs and are let through.
+    // Only "nothing found" (exit 1) is read as none: any other failure of git refuses the copy.
     let found = '';
-    // only the project's OWN settings (--local): the person's own global and system settings (Git LFS is installed there) are theirs. Git LFS's own filter, set in the project by `git lfs install`, is let through.
-    try { found = await git(['config', '--local', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch { return null; } // git config exits 1 when there is none
-    const own = found.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !/^filter[.]lfs[.](smudge|clean|process)\s+git-lfs\s/i.test(l));
+    try { found = await git(['config', '--show-scope', '-z', '--get-regexp', '^filter[.].*[.](smudge|clean|process)$'], { cwd: folder }); } catch (err) {
+      if (err?.exit === 1) return null;
+      return 'Git could not say whether this project runs its own programs when files are checked out, so Bunny will not make a copy of it.';
+    }
+    // An include whose CONDITION is not met here may be met where git checks the files out (a gitdir: or onbranch: condition is judged where git runs, and the copy is another folder): so any
+    // include.path or includeIf.*.path in the project's own settings refuses the copy, whether or not it matches now. (--no-includes: list the keys, do not follow them.)
+    let includes = '';
+    try { includes = await git(['config', '--show-scope', '--no-includes', '-z', '--get-regexp', '^include(if)?[.]'], { cwd: folder }); } catch (err) {
+      if (err?.exit !== 1) return 'Git could not say whether this project runs its own programs when files are checked out, so Bunny will not make a copy of it.';
+    }
+    const includeParts = includes.split(String.fromCharCode(0)).map((x) => x.trim()).filter(Boolean);
+    for (let k = 0; k + 1 < includeParts.length; k += 2) {
+      if (includeParts[k] !== 'global' && includeParts[k] !== 'system') return 'The git settings of this project include other settings files, which could name programs git runs when files are checked out, so Bunny will not make a copy of it.';
+    }
+    // -z with --show-scope: for each setting, the scope, a NUL, then "<key><NEWLINE><value>", a NUL. A value that itself holds a line break is refused (a shell would run each line).
+    const NL = String.fromCharCode(10);
+    const parts = found.split(String.fromCharCode(0));
+    const own = [];
+    for (let k = 0; k + 1 < parts.length; k += 2) {
+      const scope = parts[k].trim();
+      const record = parts[k + 1];
+      const at = record.indexOf(NL);
+      if (at < 0) { own.push(record); continue; }
+      if (scope === 'global' || scope === 'system') continue;
+      const value = record.slice(at + 1);
+      if (/[\r\n]/.test(value) || LFS_FILTERS[record.slice(0, at).toLowerCase()] !== value.trim()) own.push(record);
+    }
+    if (parts.filter((x) => x.trim().length > 0).length % 2 === 1) own.push('unreadable'); // a record that does not pair up is not understood: refuse
     return own.length ? 'This project runs its own programs when git checks files out (a filter in its git settings), so Bunny will not make a copy of it.' : null;
   }
 
@@ -149,7 +184,7 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
   async function status(worktree) {
     const real = await usable(worktree);
     if (!real) throw refuse('worktree.gone', `This chat's copy is gone; the branch ${worktree?.branch ?? ''} still has the work.`);
-    const refused = await filterDrivers(worktree.repo);
+    const refused = (await filterDrivers(worktree.repo)) ?? (await filterDrivers(real)); // the project, and the copy (an include judged by where it sits)
     if (refused) throw refuse('worktree.filter', refused);
     const dirty = (await git(['status', '--porcelain'], { cwd: real })).split(/\r?\n/).filter(Boolean).length;
     let ahead = 0;
@@ -211,7 +246,7 @@ export function createWorktrees({ dataDir, git: gitOverride = null, wait = (ms) 
         try { current = await git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: worktree.repo }); } catch { return { ok: false, action, reason: 'Your project folder is not reachable. Keep the branch.' }; }
         if (current !== worktree.base) return { ok: false, action, reason: `Your project folder is on ${current}, not ${worktree.base}. Keep the branch, or switch the folder back to ${worktree.base}.` };
         if (await git(['status', '--porcelain'], { cwd: worktree.repo })) return { ok: false, action, reason: 'Your project folder has changes of its own. Keep the branch and merge it yourself.' };
-        try { await git(['merge', '--ff-only', worktree.branch], { cwd: worktree.repo }); } catch (err) { return { ok: false, action, reason: `It cannot be merged cleanly (${err.message.split('\n')[0]}). Nothing was changed. Keep the branch and merge it yourself.` }; }
+        try { await git(['merge', '--ff-only', '--no-verify-signatures', worktree.branch], { cwd: worktree.repo }); } catch (err) { return { ok: false, action, reason: `It cannot be merged cleanly (${err.message.split('\n')[0]}). Nothing was changed. Keep the branch and merge it yourself.` }; }
         await removeCopy(worktree);
         await git(['branch', '-d', worktree.branch], { cwd: worktree.repo }).catch(() => {});
         return { ok: true, action };

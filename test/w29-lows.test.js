@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWorktrees } from '../src/server/worktrees.js';
@@ -68,4 +68,191 @@ test('LOW 3: a project whose own git settings define a filter program gets no co
   }
   assert.equal((await wt.eligibility(repo)).ok, true, 'with no filter it is eligible again');
   assert.equal((await wt.status(made)).dirty, 0);
+});
+
+test('LOW 3 (Security, w2-9-lows): only the exact values `git lfs install` writes are let through; a standard value with anything after it refuses the copy', async (t) => {
+  const repo = tmp('lfs');
+  const data = tmp('lfsdata');
+  clean(t, repo, data);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const wt = createWorktrees({ dataDir: data });
+  const standard = { 'filter.lfs.clean': 'git-lfs clean -- %f', 'filter.lfs.smudge': 'git-lfs smudge -- %f', 'filter.lfs.process': 'git-lfs filter-process' };
+  for (const [key, value] of Object.entries(standard)) git(repo, 'config', key, value);
+  assert.equal((await wt.eligibility(repo)).ok, true, 'the three standard values are let through');
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'lfs' });
+  assert.ok(statSync(made.path).isDirectory(), 'a copy is made');
+  assert.equal((await wt.status(made)).dirty, 0);
+  await wt.finish(made, { action: 'discard' });
+  for (const [key, value] of Object.entries(standard)) {
+    for (const tail of [' ; calc.exe', ' && echo x', ' | tee y', ' & start x', ' $(whoami)', ' `id`', '\nx', ' --extra', '\nfilter.lfs.clean git-lfs clean -- %f', '\r\ngit-lfs filter-process']) {
+      git(repo, 'config', key, `${value}${tail}`);
+      const e = await wt.eligibility(repo);
+      assert.equal(e.ok, false, `${key} with "${tail.trim()}" after it`);
+      assert.match(e.reason, /runs its own programs/);
+      git(repo, 'config', key, value);
+    }
+  }
+  // a different program, or the same words with another command word, is refused
+  git(repo, 'config', 'filter.lfs.clean', 'git-lfs-evil clean -- %f');
+  assert.equal((await wt.eligibility(repo)).ok, false);
+  git(repo, 'config', 'filter.lfs.clean', standard['filter.lfs.clean']);
+  git(repo, 'config', 'filter.other.clean', standard['filter.lfs.clean']);
+  assert.equal((await wt.eligibility(repo)).ok, false, 'the standard value under another filter name is not LFS');
+});
+
+test('LOW 3 (automated review): a filter reached through an include, a worktree config or a command-line setting is refused; the person\'s own global filter is not; a git that fails refuses', async (t) => {
+  const repo = tmp('inc');
+  const data = tmp('incdata');
+  const extra = tmp('incextra');
+  clean(t, repo, data, extra);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const wt = createWorktrees({ dataDir: data });
+  // 1. an include: the filter sits in a file the project's .git/config includes
+  const included = join(extra, 'filters.cfg').split(String.fromCharCode(92)).join('/');
+  writeFileSync(included, '[filter "evil"]\n\tsmudge = calc.exe\n');
+  git(repo, 'config', 'include.path', included);
+  const viaInclude = await wt.eligibility(repo);
+  assert.equal(viaInclude.ok, false, 'a filter reached through include.path is refused');
+  assert.match(viaInclude.reason, /runs its own programs|include other settings files/);
+  git(repo, 'config', '--unset', 'include.path');
+  assert.equal((await wt.eligibility(repo)).ok, true);
+  // 2. includeIf
+  git(repo, 'config', 'includeIf.gitdir:**.path', included);
+  assert.equal((await wt.eligibility(repo)).ok, false, 'includeIf too');
+  git(repo, 'config', '--unset', 'includeIf.gitdir:**.path');
+  // 3. the worktree config
+  git(repo, 'config', 'extensions.worktreeConfig', 'true');
+  git(repo, 'config', '--worktree', 'filter.evil.clean', 'calc.exe');
+  assert.equal((await wt.eligibility(repo)).ok, false, 'a filter in the worktree config is refused');
+  git(repo, 'config', '--worktree', '--unset', 'filter.evil.clean');
+  assert.equal((await wt.eligibility(repo)).ok, true);
+  // 4. the person's own GLOBAL filter (Git LFS in a normal install) does not refuse the copy
+  const globalCfg = join(extra, 'global.cfg');
+  writeFileSync(globalCfg, '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n[filter "mine"]\n\tsmudge = my-own-tool\n');
+  const saved = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = globalCfg;
+  try { assert.equal((await wt.eligibility(repo)).ok, true, 'the person\'s global settings are theirs'); } finally { if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = saved; }
+  // 5. any failure of git other than "nothing found" refuses
+  const failing = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error('fatal: bad config'), { exit: 128 }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+  const e = await failing.eligibility(repo);
+  assert.equal(e.ok, false);
+  assert.match(e.reason, /could not say whether/);
+  // every other way git can fail refuses too: another exit status, no exit status at all (git could not start, timed out), and the two statuses git config uses for a bad config file; only 1 ("not set") means none
+  for (const exit of [2, 3, 4, 5, 128, 129, undefined, null, 'ENOENT']) {
+    const broken = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error('git failed'), { exit }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+    const refusal = await broken.eligibility(repo);
+    assert.equal(refusal.ok, false, `exit ${String(exit)} refuses the copy`);
+    assert.match(refusal.reason, /could not say whether/);
+  }
+  const none = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error(''), { exit: 1 }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+  assert.equal((await none.eligibility(repo)).ok, true, 'exit 1 is the one answer that means "not set"');
+  // and the copy that already exists is not read or finished either when git cannot be asked
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'fail closed' });
+  const broken = createWorktrees({ dataDir: data, git: async (args, o) => { if (args[0] === 'config') throw Object.assign(new Error('x'), { exit: 128 }); return (await import('../src/server/worktrees.js')).runGit(args, o); } });
+  await assert.rejects(broken.status(made), /could not say whether/);
+  assert.equal((await broken.finish(made, { action: 'keep' })).ok, false);
+  assert.ok(statSync(made.path).isDirectory(), 'nothing was changed');
+});
+
+test('LOW 3 (automated review, conditional includes): any include or includeIf in the project\'s own settings refuses the copy, whether or not its condition matches here; the person\'s global includes do not; the copy itself is asked too', async (t) => {
+  const repo = tmp('cond');
+  const data = tmp('conddata');
+  const extra = tmp('condextra');
+  clean(t, repo, data, extra);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const wt = createWorktrees({ dataDir: data });
+  const harmless = join(extra, 'harmless.cfg').split(String.fromCharCode(92)).join('/');
+  writeFileSync(harmless, '[user]\n\tname = Somebody\n');
+  // a condition that does not match here (another branch name, another folder): the include is still refused, because it could match where git checks files out
+  for (const [key, value] of [['includeIf.onbranch:never-this-one.path', harmless], ['includeIf.gitdir:/nowhere/**.path', harmless], ['include.path', harmless], ['includeIf.hasconfig:remote.*.url:https://nowhere.example/**.path', harmless]]) {
+    git(repo, 'config', key, value);
+    const e = await wt.eligibility(repo);
+    assert.equal(e.ok, false, `${key} is refused although its condition does not match here`);
+    assert.match(e.reason, /include other settings files/);
+    git(repo, 'config', '--unset', key);
+  }
+  assert.equal((await wt.eligibility(repo)).ok, true, 'with no include it is eligible');
+  // the person's own global include is theirs
+  const globalCfg = join(extra, 'global.cfg');
+  writeFileSync(globalCfg, `[include]\n\tpath = ${harmless}\n`);
+  const saved = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = globalCfg;
+  try { assert.equal((await wt.eligibility(repo)).ok, true, 'a global include is not refused'); } finally { if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = saved; }
+  // a copy made earlier: an include added afterwards is seen from the project and from the copy
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'later' });
+  git(repo, 'config', 'includeIf.onbranch:never-this-one.path', harmless);
+  await assert.rejects(wt.status(made), /include other settings files/);
+  assert.equal((await wt.finish(made, { action: 'keep' })).ok, false);
+  git(repo, 'config', '--unset', 'includeIf.onbranch:never-this-one.path');
+  assert.equal((await wt.status(made)).dirty, 0);
+});
+
+test('LOW (Security, signing): a project\'s own commit signing never starts its signing program when Bunny saves work on Finish', async (t) => {
+  const repo = tmp('sign');
+  const data = tmp('signdata');
+  const marks = tmp('signmarks');
+  clean(t, repo, data, marks);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const fwd = (p) => p.split(String.fromCharCode(92)).join('/');
+  const marker = join(marks, 'signer-ran.txt');
+  const signer = join(marks, 'signer.cjs');
+  writeFileSync(signer, `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran'); process.exit(1);\n`);
+  const wrapper = join(marks, process.platform === 'win32' ? 'signer.cmd' : 'signer.sh');
+  writeFileSync(wrapper, process.platform === 'win32' ? `@echo off\r\n"${process.execPath}" "${signer}" %*\r\n` : `#!/bin/sh\nexec "${process.execPath}" "${signer}" "$@"\n`, { mode: 0o755 });
+  // the project signs its commits with a program of its own, both the gpg way and the ssh way
+  git(repo, 'config', 'commit.gpgSign', 'true');
+  git(repo, 'config', 'tag.gpgSign', 'true');
+  git(repo, 'config', 'gpg.program', fwd(wrapper));
+  git(repo, 'config', 'gpg.format', 'ssh');
+  git(repo, 'config', 'gpg.ssh.program', fwd(wrapper));
+  const wt = createWorktrees({ dataDir: data });
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'signing' });
+  writeFileSync(join(made.path, 'work.txt'), 'work\n');
+  const done = await wt.finish(made, { action: 'keep' });
+  assert.equal(done.ok, true, JSON.stringify(done));
+  assert.equal(existsSync(marker), false, 'the project\'s signing program did not run');
+  assert.equal(git(repo, 'log', '-1', '--format=%s', made.branch), 'Bunny: work in progress', 'the work was saved, unsigned');
+  assert.equal(git(repo, 'show', `${made.branch}:work.txt`), 'work');
+});
+
+test('LOW (automated review, signature checks): merging a copy never starts the project\'s signing program, even with merge.verifySignatures and log.showSignature on', async (t) => {
+  const repo = tmp('verify');
+  const data = tmp('verifydata');
+  const marks = tmp('verifymarks');
+  clean(t, repo, data, marks);
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'core.autocrlf', 'false');
+  writeFileSync(join(repo, 'a.txt'), 'a\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'first');
+  const fwd = (p) => p.split(String.fromCharCode(92)).join('/');
+  const marker = join(marks, 'verifier-ran.txt');
+  const signer = join(marks, 'verifier.cjs');
+  writeFileSync(signer, `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran'); process.exit(1);\n`);
+  const wrapper = join(marks, process.platform === 'win32' ? 'verifier.cmd' : 'verifier.sh');
+  writeFileSync(wrapper, process.platform === 'win32' ? `@echo off\r\n"${process.execPath}" "${signer}" %*\r\n` : `#!/bin/sh\nexec "${process.execPath}" "${signer}" "$@"\n`, { mode: 0o755 });
+  for (const [key, value] of [['merge.verifySignatures', 'true'], ['log.showSignature', 'true'], ['gpg.program', fwd(wrapper)], ['gpg.ssh.program', fwd(wrapper)], ['gpg.x509.program', fwd(wrapper)]]) git(repo, 'config', key, value);
+  const wt = createWorktrees({ dataDir: data });
+  const made = await wt.create({ sessionId: ID, folder: repo, prefix: 'bunny/', title: 'verify' });
+  writeFileSync(join(made.path, 'work.txt'), 'work\n');
+  const done = await wt.finish(made, { action: 'merge' });
+  assert.equal(done.ok, true, JSON.stringify(done));
+  assert.equal(existsSync(marker), false, 'no signing or verifying program ran');
+  assert.equal(readFileSync(join(repo, 'work.txt'), 'utf8').trim(), 'work', 'the work was merged');
 });
