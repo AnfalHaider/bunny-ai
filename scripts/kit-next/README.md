@@ -100,3 +100,11 @@ node --test test/kit-next-k1.test.js
 ```
 
 0.6.0's own suite against the staged files: copy the plugin folder, replace its `bin/` with `scripts/kit-next/.bootstrap/bin/`, and run `node --test tests/*.test.mjs` in the copy.
+
+## K-2 (on top of K-1)
+
+- K2-1..K2-4: the project is the main checkout of git's common dir (the host-named CLAUDE_PROJECT_DIR wins when it has a policy); a folder git does not list is judged by the project's policy as role `unassigned`; planted `.git` files, `commondir`, `gitdir`, role files and policies are refused in every root; `.git` internals are writable only by the Chief of Staff and Release Ops; `git clone` is refused for other roles.
+- Hook scripts (`.githooks/pre-push`, `pre-commit`) run the checks from the main checkout found with `git rev-parse --git-common-dir` and fail closed when the checks are missing.
+- K1-5: one guard decision has a 6 s deadline and the hook decides in a child with an 8 s timeout; running out of time is a refusal.
+- W5-1d: `git credential`, `gh auth token`, `gh config get ... token`, `gh auth status` with a variable or `--show-token` are refused for every role; the pre-push check refuses `refs/notes|for|releases` and the live branch in another case for non-live roles.
+- Evidence: `evidence/kit-next-k2-final.txt`, `evidence/k1wt-probe-final.txt`, `evidence/k2more-probe-after.txt`. Known open: `git init` of a nested repository is allowed (judged by the project); the role file is not tamper-evident against hard links.
