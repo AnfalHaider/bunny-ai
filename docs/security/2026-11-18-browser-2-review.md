@@ -110,3 +110,11 @@ None of them decides tools, folders, mode or unattended running.
   - A remote connector acts on the person's accounts with tokens Bunny holds.
   - Connectors are already window-only to add and to trust. Letting a device use them is the widest door left, and the least visible.
   - This narrows "full chats" by one feature, so the owner should decide. My recommendation is to keep it denied for v0.1.10, and later allow only connectors the person marks "available from devices" in the window.
+
+## Re-stamp at 4d2a894 (d072403, f50710f, 4d2a894: the page side only): PASS (supersedes 4bd9f64)
+
+- **Nothing on the server or in the shell changed.** `git diff 4bd9f64 4d2a894` touches only `src/ui/api.js`, `src/ui/browser-mode.js`, `src/ui/chat.js`, `src/ui/settings.html`, `e2e/browser-lock.spec.js` and `test/browser-mode.test.js`. Every refusal is still the server's.
+- **`api.js`** only adds a "refused" event, the locking of controls and the card watcher. How a write is sent, and when the desktop bridge is used, are unchanged.
+- **`DEVICE_CAPABILITIES`** (`browser-mode.js:111`) is `['code_mode', 'leave_plan_mode']`, equal to the server's `REMOTE_CAPABILITIES` (`remoteAccess.js:119`), which is R1. A browser tab on this PC locks every card. A device locks only the capability cards it may not answer.
+- **Tests** from a copy of 4d2a894, with the variable unset: `browser-mode` 5 of 5, `remote-access` 30 of 30.
+- **For the release check:** `browser_compare` (W6-11) is not on `REMOTE_TOOLS_DENIED` in this branch; it lives on Builder C's branch. When the branches meet, the classification test will fail until it is added there, as the Chief of Staff has asked of Builder B. I'll check that in the release candidate.
