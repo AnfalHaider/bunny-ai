@@ -31,7 +31,9 @@ export function isBunnyOwn(value, ownPort) {
     const u = new URL(String(value));
     const port = u.port || (u.protocol === 'https:' || u.protocol === 'wss:' ? '443' : '80');
     const host = u.hostname.toLowerCase().replace(/\.$/, '');
-    const loopback = OWN_HOSTS.has(host) || host.endsWith('.localhost') || /^127\.\d+\.\d+\.\d+$/.test(host);
+    // the URL parser writes an IPv4-mapped address in hex: http://[::ffff:127.0.0.1]/ is [::ffff:7f00:1] (and the compatible form [::7f00:1])
+    const mapped = /^\[::(?:ffff:)?(?:7f[0-9a-f]{2}|0):[0-9a-f]{1,4}\]$/.test(host);
+    const loopback = OWN_HOSTS.has(host) || host.endsWith('.localhost') || /^127\.\d+\.\d+\.\d+$/.test(host) || mapped;
     return loopback && port === String(ownPort);
   } catch { return false; }
 }

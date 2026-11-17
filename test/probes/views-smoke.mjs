@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBrowserViews, PARTITION } from '../../electron/browserViews.js';
 
-app.setPath('userData', mkdtempSync(join(tmpdir(), 'bunny-views-smoke-')));
+// The profile of this run: an invented folder given as the first argument or in BUNNY_SMOKE_USERDATA, else a new temp folder. Never Bunny's real profile.
+const given = process.argv.slice(1).find((a) => !a.startsWith('-') && !/views-smoke\.mjs$/.test(a)) ?? process.env.BUNNY_SMOKE_USERDATA;
+if (given && /BunnyAI/i.test(given)) { console.error('Refusing to use a folder that looks like the real Bunny profile.'); process.exit(2); }
+app.setPath('userData', given ? given : mkdtempSync(join(tmpdir(), 'bunny-views-smoke-')));
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: Boolean(ok), detail: String(detail).slice(0, 200) }); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

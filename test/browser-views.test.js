@@ -75,6 +75,12 @@ test('W6-24 (Security 1): Bunny\'s own server is never loaded in a view, in any 
     assert.equal(isBunnyOwn(own, OWN_PORT), true, own);
     assert.equal(loadable(own, OWN_PORT), false, own);
   }
+  // IPv4-mapped and compatible spellings of this PC (defence in depth: Bunny's own Host check stops them too)
+  for (const mapped of [`http://[::ffff:127.0.0.1]:${OWN_PORT}/`, `http://[::ffff:7f00:1]:${OWN_PORT}/`, `http://[::ffff:127.9.9.9]:${OWN_PORT}/`, `http://[::ffff:0.0.0.0]:${OWN_PORT}/`, `http://[::127.0.0.1]:${OWN_PORT}/`, `http://[0:0:0:0:0:ffff:7f00:1]:${OWN_PORT}/`]) {
+    assert.equal(isBunnyOwn(mapped, OWN_PORT), true, mapped);
+  }
+  assert.equal(isBunnyOwn('http://[::ffff:127.0.0.1]:3000/', OWN_PORT), false, 'another port is another server');
+  assert.equal(isBunnyOwn(`http://[::ffff:8.8.8.8]:${OWN_PORT}/`, OWN_PORT), false, 'a public address is not this PC');
   for (const fine of ['http://localhost:3000/', 'http://127.0.0.1:5173/', 'https://example.com/', `http://example.com:${OWN_PORT}/`, 'https://localhost:3000/']) assert.equal(loadable(fine, OWN_PORT), true, fine);
   assert.equal(isBunnyOwn('http://localhost:80/', ''), false, 'no port known: nothing is Bunny');
 });
