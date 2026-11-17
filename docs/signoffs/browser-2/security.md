@@ -1,8 +1,8 @@
 ---
 piece: browser-2
 role: security
-sha: 568f8d5
-verdict: FAIL
+sha: da9a3a8
+verdict: PASS
 date: 2026-11-17
 ---
 
@@ -81,3 +81,16 @@ None of them decides tools, folders, mode or unattended running.
 - **Also:** confirm that `message_session` does not run another chat's turn inside the server, outside the device flag. If it does, block it for devices too. (`start_session` goes through `runHelper`, which keeps the filter.)
 
 **Recommended:** `remember` lets a device's chat add standing memory that every later chat in the window reads. Memory is now off the device's read list, so writing it is out of balance. Block it for devices, or make it ask.
+
+## Re-review at da9a3a8: PASS (supersedes FAIL at 568f8d5)
+
+**R9 fixed.** `remoteToolBlocked` now also blocks `schedule_task`, `start_session`, `message_session` and `move_to_new_chat`. Those are the tools whose work outlives the device's turn or runs outside it. They are filtered out of the tools offered and refused when called. Helper chats (`run_subagent`) keep the filter through `runHelper`. The tests cover `schedule_task`.
+
+**Idle sessions** are swept every 60 s (the timer is `unref`'d and cleared on close) and before every count or list. A device's Auto chats go back to Ask without waiting for the device to call again.
+
+**Tests,** from a copy of da9a3a8 with the variable unset: `remote-access` 29 of 29, `window-only` 16 of 16.
+
+**Still open, recommended, not blocking:**
+- `remember` from a device's chat adds standing memory for every chat in the window. Make it ask, or block it, for devices.
+- The real-Electron probe `remote-access-smoke.cjs` was not re-run by Security. This verdict rests on the code reading and the HTTP tests.
+- Design's check of the screens against the drawing is still to come.
