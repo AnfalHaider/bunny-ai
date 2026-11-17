@@ -1,9 +1,9 @@
 ---
 piece: w4-11c
 role: security
-sha: cd13666
-verdict: FAIL
+sha: c5082f5
+verdict: PASS
 date: 2026-11-17
 ---
 
-P6-1: add_skill by the model saves a switched-on skill with no card in Accept and Auto; 5 LOW notes. Review docs/security/2026-11-17-w4-11c-cd13666-review.md
+Supersedes FAIL at cd13666. P6-1 and 5 LOWs fixed, trust snapshot holds, D-2/P-4/P-2 reviewed; 113/113 single-file. LOW P4-1 note. docs/security/2026-11-17-w4-11c-final-and-w4-8b-review.md
