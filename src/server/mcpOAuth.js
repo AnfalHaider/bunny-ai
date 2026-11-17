@@ -14,7 +14,12 @@
  *    answers are capped at 1 MB and each call times out.
  */
 import { createHash, randomBytes } from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
 import { McpError } from './mcp.js';
+import { isPrivateAddress } from './download.js';
 
 const FLOW_MS = 5 * 60_000;
 const MAX_PENDING = 8;
@@ -23,6 +28,27 @@ const REQUEST_MS = 15_000;
 const REFRESH_SKEW_MS = 60_000;
 const CALLBACK_PATH = '/api/connectors/oauth/callback';
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/**
+ * S-OAUTH: one request that connects only to the address that was checked. node's own http client is given a lookup that
+ * answers with exactly that address, so the name is never resolved a second time (no DNS rebinding between check and connect).
+ * Answers like fetch's Response for what this file uses: status, headers.get and an async-iterable body. A redirect is an error.
+ */
+export function pinnedFetch(u, { method = 'GET', headers = {}, body = undefined, signal = undefined } = {}, { address, family }) {
+  return new Promise((resolve, reject) => {
+    const lib = u.protocol === 'https:' ? https : http;
+    const lookup = (_host, opts, cb) => {
+      if (typeof opts === 'function') { cb = opts; opts = {}; }
+      if (opts?.all) cb(null, [{ address, family }]); else cb(null, address, family);
+    };
+    const req = lib.request(u, { method, headers, agent: false, signal, lookup }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400) { res.destroy(); reject(new Error('redirect refused')); return; }
+      resolve({ status: res.statusCode, headers: { get: (name) => { const v = res.headers[String(name).toLowerCase()]; return Array.isArray(v) ? v.join(', ') : v ?? null; } }, body: res });
+    });
+    req.on('error', reject);
+    req.end(body === undefined ? undefined : body);
+  });
+}
 
 /** An address on this computer or this network (not the internet): loopback in any spelling, 0.0.0.0, private and link-local ranges. */
 function isLocalHost(hostname) {
@@ -74,7 +100,7 @@ function decodeIdToken(idToken) {
  * @param {{get: Function, set: Function, delete: Function}} o.secrets
  * @param {string} o.redirectBase e.g. http://127.0.0.1:4545
  */
-export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), fetchImpl = globalThis.fetch, requestMs = REQUEST_MS, clientName = 'Bunny AI' }) {
+export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), fetchImpl = null, lookupImpl = null, requestMs = REQUEST_MS, clientName = 'Bunny AI' }) {
   const base = checkUrl(redirectBase, 'redirect address');
   if (!LOOPBACK.has(base.hostname)) throw fail('The sign-in return address must be on this PC.', 'mcp.oauth.badUrl');
   const redirectUri = `${base.origin}${CALLBACK_PATH}`;
@@ -90,9 +116,25 @@ export function createMcpOAuth({ secrets, redirectBase, now = () => Date.now(), 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), requestMs);
     try {
+      // S-OAUTH: every request resolves its host again and refuses a private address (the connector, the sign-in server, a registration,
+      // token, userinfo or revocation endpoint: whatever was discovered), then connects to the address it checked. This PC's own address
+      // (http on loopback) is how a local connector signs in and is not checked. A test may hand in its own fetch; it is then only
+      // checked when it also hands in a lookup.
+      const local = LOOPBACK.has(u.hostname);
+      let pinned = null;
+      if (!local && (lookupImpl || !fetchImpl)) {
+        const host = u.hostname.replace(/^\[|\]$/g, '');
+        let found;
+        try { found = isIP(host) ? [{ address: host, family: isIP(host) }] : await (lookupImpl ?? ((h, o) => dnsLookup(h, o)))(host, { all: true }); } catch { found = []; }
+        const list = Array.isArray(found) ? found : [found];
+        if (!list.length) throw fail(`Could not find ${u.host}.`, 'mcp.unreachable');
+        if (list.some((x) => isPrivateAddress(x.address))) throw fail(`${u.host} points to an address on this computer or a private network, so Bunny AI refuses to use it.`, 'mcp.oauth.badUrl');
+        pinned = { address: list[0].address, family: list[0].family || isIP(list[0].address) };
+      }
       let res;
       try {
-        res = await fetchImpl(u.href, { method, headers, body, redirect: 'error', signal: controller.signal });
+        const init = { method, headers, body, redirect: 'error', signal: controller.signal };
+        res = fetchImpl ? await fetchImpl(u.href, init) : pinned ? await pinnedFetch(u, init, pinned) : await globalThis.fetch(u.href, init);
       } catch (err) {
         if (err?.name === 'AbortError') throw fail(`${u.host} did not answer in time.`, 'mcp.timeout');
         throw fail(`Could not reach ${u.host}, or it tried to send Bunny AI somewhere else (which is refused).`, 'mcp.unreachable');
