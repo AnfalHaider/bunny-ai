@@ -43,6 +43,7 @@ import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
 import { streamChat, stripToolMarkup, asksPermissionToContinue, fitResult } from './chat.js';
 import { clip } from './clip.js';
+import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
 import { rankModels } from '../ui/model-abilities.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
@@ -379,7 +380,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         .map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 4000)}`)
         .join('\n\n').slice(-60_000);
       let out = '';
-      for await (const delta of streamChat({
+      for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
         baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, auth: provider.auth ?? null, maxTokens: 1500,
         messages: [
           { role: 'system', content: 'You write the memory of a conversation so it can go on after its earlier turns are removed. '
@@ -438,7 +439,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         ];
         const apiKey = await secrets.get(`provider:${providerId}`);
         let assembled = '';
-        for await (const delta of streamChat({
+        for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           // auth: providers that want the key in their own header (Anthropic, some custom ones).
           baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages: history, fake, auth: provider.auth ?? null,
         })) {
@@ -640,6 +641,9 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
       const unknown = Object.keys(patch).filter((k) => !WINDOW_ONLY_SETTING_KEYS.includes(k) && !ORDINARY_SETTING_KEYS.includes(k));
       if (unknown.length) return sendJson(res, 400, { code: 'settings.unknownKey', message: `Bunny AI has no setting called ${unknown.slice(0, 3).map((k) => JSON.stringify(k.slice(0, 40))).join(', ')}.` });
+      if (Object.hasOwn(patch, 'firstReplyWaitSeconds') && validWaitSeconds(patch.firstReplyWaitSeconds) === null) {
+        return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
+      }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
@@ -1541,7 +1545,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         .slice(-6).map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 2500)}`).join('\n\n');
       let out = '';
       try {
-        for await (const delta of streamChat({
+        for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model: body.model, auth: provider.auth ?? null, maxTokens: 300,
           messages: [
             { role: 'system', content: 'Suggest the three most useful next messages the person might send in this conversation, tailored to what is being worked on. '
@@ -2138,7 +2142,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
         let text = '';
         let fellBack = '';
         const once = () => (async () => {
-          for await (const delta of streamChat({
+          for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
             baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake: fake && !use.provider.custom,
             signal: background ? undefined : controller.signal,
             tools: toolDefinitions.filter(allowed), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
@@ -2279,7 +2283,7 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
           { role: 'user', content: incoming },
         ];
         let reply = '';
-        for await (const delta of streamChat({
+        for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           baseUrl: useProvider.baseUrl, apiKey: useKey ?? undefined, model: useModel, messages: history, fake: fake && !useProvider.custom,
           signal: controller.signal, maxTokens, extraBody: theirProvider ? null : extraBody, auth: useProvider.auth ?? null,
         })) reply += delta;
@@ -2756,7 +2760,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
           if (attempt === 1 && compacted) send('compacted', { before: compacted.before, after: compacted.after });
-          for await (const delta of streamChat({
+          for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
             baseUrl: provider.baseUrl,
             apiKey: apiKey ?? undefined,
             model,
@@ -2956,7 +2960,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let assembled = '';
       try {
         const apiKey = await secrets.get(`provider:${providerId}`);
-        for await (const delta of streamChat({
+        for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages, fake, auth: provider.auth ?? null,
         })) {
           assembled += delta;

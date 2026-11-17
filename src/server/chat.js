@@ -11,6 +11,7 @@
 
 import { ConnectError } from '../providers/errors.js';
 import { clip } from './clip.js';
+import { waitLimits } from './waitLimits.js';
 
 const MAX_TOOL_ROUNDS = 4;
 
@@ -38,7 +39,7 @@ export const SLOW_FIRST_BYTE_MS = 60_000;
 export const DEFAULT_GAP_MS = 60_000;
 // Reasoning models (o-series, gpt-5, r1, anything named reason or think) and image or video jobs wait longer for a first byte.
 const SLOW_MODEL = /reason|think|r1\b|image|video|dall-e|imagen|veo|sora|gpt-5|(^|[/:-])o[1-9](-|$)/i;
-export const firstByteLimit = (model) => (SLOW_MODEL.test(String(model ?? '')) ? SLOW_FIRST_BYTE_MS : DEFAULT_STALL_MS);
+export const firstByteLimit = (model, setting) => { const l = waitLimits(setting); return SLOW_MODEL.test(String(model ?? '')) ? l.slowFirstMs : l.firstMs; }; // W4-9: setting = the person's wait, in seconds
 
 /**
  * @param {{
@@ -56,7 +57,7 @@ export const firstByteLimit = (model) => (SLOW_MODEL.test(String(model ?? '')) ?
  */
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
-  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
+  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
   onReplyEnd = null,
@@ -113,7 +114,7 @@ export async function* streamChat({
     if (extraBody) Object.assign(body, extraBody);
 
     let { text, toolCalls, finish, aborted, shown } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools,
+      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
     });
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
@@ -121,7 +122,7 @@ export async function* streamChat({
     // nothing to show. Once, ask again with more room before giving up.
     if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length' && !signal?.aborted) {
       const roomier = { ...body, max_tokens: Math.min(32_000, (body.max_tokens || 4096) * 4) };
-      ({ text, toolCalls, finish, shown } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools }));
+      ({ text, toolCalls, finish, shown } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools }));
       if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
         throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
       }
@@ -235,7 +236,7 @@ export async function* streamChat({
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
-    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: true });
+    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: true });
   }
 }
 
