@@ -372,6 +372,11 @@ export function initBrowserPane({ getFolder, runInTerminal }) {
       if (e.event === 'navigated') { syncUrl(tab, e.url); if (tab.id === active) unreachableNote().hidden = true; }
       if (e.event === 'title') { tab.title = e.title; }
       if (e.event === 'loading' && e.loading === false) { const waiters = tab.waiting ?? []; tab.waiting = []; for (const w of waiters) w(); }
+      if (e.event === 'download-blocked' && tab.id === active) { // a page may not save files by itself: the panel says so
+        const note = unreachableNote();
+        note.hidden = false;
+        note.firstChild.textContent = `This page tried to download ${e.filename ? `"${e.filename}"` : 'a file'}. Downloads from the browser panel are stopped; ask Bunny to fetch it with download_file instead.`;
+      }
       if (e.event === 'failed' && tab.id === active) {
         const note = unreachableNote();
         note.hidden = false;
