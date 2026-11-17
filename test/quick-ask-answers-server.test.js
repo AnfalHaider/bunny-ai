@@ -33,10 +33,15 @@ test('a text-only question offers the model NO tools and says why; a normal one 
   await ask(base, a.id, { textOnly: true });
   assert.equal('tools' in seen.at(-1), false, 'no tools field at all');
   assert.match(JSON.stringify(seen.at(-1).messages), /\[\[NEEDS_BUNNY_WINDOW\]\]/);
+  // Security LOW: nothing in the text-only system text talks about tools, capabilities, helpers or plugins that are not there
+  const system = seen.at(-1).messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
+  assert.doesNotMatch(system, /request_capability|code_mode|computer_use|new_tool|run_subagent|search_plugins|ask_user|create_artifact|move_to_new_chat|create_tool/);
+  assert.match(system, /You are Bunny AI/);
   const { body: b } = await post(base, '/api/sessions', { title: 'q2', workMode: 'chat' });
   await ask(base, b.id, {});
   assert.ok(Array.isArray(seen.at(-1).tools) && seen.at(-1).tools.length > 0, 'an ordinary chat message still has its tools');
   assert.doesNotMatch(JSON.stringify(seen.at(-1).messages), /NEEDS_BUNNY_WINDOW/);
+  assert.match(seen.at(-1).messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), /request_capability/, 'an ordinary chat still has its capability text');
 });
 
 test('a chat that began in the bar carries the origin and the list shows it; nothing else can set it', async (t) => {

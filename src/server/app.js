@@ -2029,7 +2029,9 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         ? 'This is a quick answer shown in a small bar. You have no tools here and nobody can allow anything. Answer in plain text and simple Markdown. If the question needs a tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
       const scheduledText = scheduledTask
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
-      history.unshift({ role: 'system', content: [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : ''].filter(Boolean).join('\n') });
+      // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
+      const textOnlyBase = today + (callName ? `The person you are talking to likes to be called ${callName}. ` : '') + 'You are Bunny AI. Never claim you did something you did not do.';
+      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '']).filter(Boolean).join('\n') });
       if (taskNote) { // a user-role note after the app's own system text, before the conversation (the same way as a connector's own words)
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: taskNote });
