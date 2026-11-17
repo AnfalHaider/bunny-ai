@@ -42,7 +42,7 @@ export async function startApp(t, overrides = {}) {
       app.server.close(() => resolve());
       app.server.closeAllConnections?.();
     });
-    if (overrides.dataDir === undefined) await rm(dataDir, { recursive: true, force: true });
+    if (overrides.dataDir === undefined) await rm(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); // a late write by the app must not fail the test that already passed (ENOTEMPTY on Windows)
   });
 
   return { app, base, dataDir };
