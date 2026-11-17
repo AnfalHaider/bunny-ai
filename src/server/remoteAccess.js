@@ -136,7 +136,7 @@ export const REMOTE_TOOLS_ALLOWED = Object.freeze([
 ]);
 export const REMOTE_TOOLS_DENIED = Object.freeze([
   'computer_click', 'computer_key', 'computer_screenshot', 'computer_scroll', 'computer_type',
-  'browser_back', 'browser_capture', 'browser_click', 'browser_inspect', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll', 'browser_type',
+  'browser_back', 'browser_capture', 'browser_click', 'browser_compare', 'browser_inspect', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll', 'browser_type',
   'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill',
   'schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat',
   'call_connector_tool', 'list_connector_tools',
