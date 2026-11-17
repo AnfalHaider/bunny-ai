@@ -1,0 +1,54 @@
+---
+piece: browser-2
+role: security
+sha: 86848df
+verdict: FAIL
+date: 2026-11-17
+---
+
+# BROWSER step 2 (f741c89 + 86848df, full chats from devices): Security FAIL, with a list of required changes
+
+Reviewed by reading `remoteAccess.js`, `windowOnly.js` and the `app.js` routes at 86848df. Tests from a copy of 86848df, with `NoDefaultCurrentDirectoryInExePath` unset: `remote-access` 21 of 21, `window-only` 16 of 16. The real-Electron probe was not re-run. The failures below are about what the code allows, and those tests don't cover them.
+
+## What holds (from the f741c89 notes, still true at 86848df)
+
+- **Binding.** The server listens only on a private IPv4 address that isn't internal, never 0.0.0.0, and is off after every restart.
+- **Request checks.** The Host must be exactly `lan:port`, and the Origin and Sec-Fetch-Site must be same-origin. route() and remoteRoute parse the path the same way.
+- **Before sign-in.** A device gets only the sign-in page, under a strict CSP, with no token. The sign-in body is limited to 4 KB.
+- **Session.** The cookie is a 32-byte random value, HttpOnly and SameSite=Strict, and every write needs the session's CSRF header.
+- **Passcode.** It is stored with scrypt, with backoff for one device and a flood stop for all.
+- **Provider keys** are masked in `GET /api/providers` (`registry.list()`).
+- **Permission answers** carry only `allowed: true|false`, so a device cannot save a rule.
+- **`remoteException` can't be widened** by adding another window-only key next to `permissionMode`. The rest of the body is re-judged by `isWindowOnlyRoute`, and for a session the only window-only key is `permissionMode`. But `folder` is not a window-only key; see R3.
+
+## Required before PASS
+
+**R1. Capability cards a device must not answer.** A device may answer `code_mode` (the chat's own folder) and `leave_plan_mode` (goes to Ask). It must get "Change this in Bunny's window." for:
+- `computer_use`: granting it calls `saveSettings({ aiComputerUse: true })` (`app.js:2298`). That switches on driving this computer for the whole app, which the owner kept window-only.
+- `custom_tools`: `saveSettings({ customToolsEnabled: true })`, a window-only setting, for the whole app.
+- `switch_on_added`: switching on what the model installed (P-6). That is installing, which stays the window's.
+
+Today `remoteException` allows every `/capability/<id>` answer.
+
+**R2. The window's tools stay the window's in a device's turn.** Once the window has switched on computer use or tool building, a chat run from a device (above all in Auto, where no card is shown) would get `computer_*`, `create_tool`, custom tools and the install tools (`install_plugin`, `add_connector`, `add_skill`), and could drive the PC or install. A message sent from a device must offer none of these. The simplest way is to filter `toolDefinitions` when `req.bunnyRemote` is set.
+
+**R3. A device can attach a folder to an existing chat.** `PATCH /api/sessions/<id>` is on the device's write list and its body is not filtered. `patch.folder` goes through `folderToStore`, which accepts any folder the person has picked in the window during this run (`chosenFolders`). So a device can point any chat at, say, the person's project and work in it in Code mode.
+- **Fix:** give device PATCH bodies an allow-list (title, model, effort, `permissionMode` and the other plain fields), never `folder`.
+- Also turn the message body filter (`MESSAGE_DENY`, a deny-list) into an allow-list: `content`, `attachments`, `providerId`, `model`, `retry`, `vision`, `workMode`, `useSkill`. Then a field added later is closed by default.
+
+**R4. Settings reads leak a secret.** `GET /api/settings` returns `{ ...settings }`, which includes `googleClientSecret` (and the Google and GitHub client ids, and `systemUserName`). For a device, return an allow-list of display settings only (theme, language, names, the model and default choices the page needs), never any key that is a secret.
+- On the Chief's question about memory and skills: memory is the person's standing instructions and facts, so it is the most personal data in Bunny. A device can already read every chat, so memory is in proportion only behind a strong passcode. Keep memory reads if the page needs them, or drop them; I lean towards dropping both until a screen needs them.
+
+**R5. Plain HTTP on the LAN now means the whole PC.** With tools and Auto from a device, anyone who can see the traffic on the same Wi-Fi can copy the cookie (or the passcode as it is typed) and run programs on this PC. The window's warning must say that plainly, for example: "Anyone on this network who can see its traffic could take over a signed-in device and run programs on this PC. Use this only on your own home network, never on public or shared Wi-Fi." The firewall advice stays "Private networks only".
+
+## Recommended (not blocking)
+
+- **R6. Auto from a device, the condition Builder A asked about.** Yes, add it. When a device sets a chat to Auto, the window shows it in the status line ("Open to other devices · N signed in · 1 chat in Auto from a device") and on the chat itself. Signing a device out, or turning the setting off, puts its Auto chats back to Ask.
+- **R7.** Shorten the idle timeout from 12 hours to about 2, now that a session can run tools. Show the device and the time on the window's device list (already there).
+- **R8.** `GET /api/sessions/<id>/…` now opens every GET under a chat to a device, including the Files and Changes panes of a chat's folder. That fits "full chats", but it means a device can read any file in any chat's folder without a card. The owner should know this.
+
+## Answers to Builder A's questions
+
+- **"A device chooses Auto for its chat and runs tools with no card, as the window does":** acceptable as the owner's decision only with R1 to R5 in place, and with R6 recommended.
+- **"Can remoteException be widened with permissionMode plus another window-only key?"** No, see "What holds". But `folder` is not window-only and gets through: R3.
+- **"Can a device attach a folder to an existing chat?"** Yes, today: R3.
