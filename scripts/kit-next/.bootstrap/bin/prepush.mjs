@@ -217,6 +217,11 @@ export function checkPush({ root, policy, role, localSha, remoteRef, remoteSha }
     errors.push(`role "${role}" may not push or delete the tag "${remoteRef.replace(/^refs\/tags\//, '')}" (only ${policy.releases.live_pushers.join(' / ')})`);
   }
 
+  // W5-1d: notes, review and release refs, and the live branch under another case (Main), are for the live pushers only
+  if (!policy.releases.live_pushers.includes(role) && (/^refs\/(notes|for|releases)\//i.test(remoteRef) || (branch !== policy.branches.live && branch.toLowerCase() === String(policy.branches.live).toLowerCase()))) {
+    errors.push(`role "${role}" may not push "${remoteRef}" (only ${policy.releases.live_pushers.join(' / ')})`);
+  }
+
   if (ZERO.test(localSha)) {
     if (guarded) errors.push(`refusing to delete "${branch}"`);
     return errors;

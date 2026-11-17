@@ -28,10 +28,20 @@ export const DEFAULT_POLICY = {
   records: { globs: ['docs/signoffs/**', 'docs/releases/**', 'docs/flow-changes/**', 'docs/kit-changes/**'], writers: ['chief-of-staff'] },
 };
 
+// K1-5: one decision has a deadline (the host cuts a hook off at 10 s, and a cut-off hook must not become a pass). Every git spawn checks it first and is
+// given the time that is left; the guard turns the error into a refusal.
+let deadlineAt = Infinity;
+export class GuardDeadline extends Error {}
+export function setDeadline(ms) { deadlineAt = ms === null || ms === undefined ? Infinity : Date.now() + ms; }
+export function checkDeadline() { if (Date.now() > deadlineAt) throw new GuardDeadline('the decision took too long'); }
+
 export function git(args, cwd, opts = {}) {
+  checkDeadline();
+  const left = deadlineAt - Date.now();
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...opts }).trim();
+    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...(Number.isFinite(left) ? { timeout: Math.max(50, left) } : {}), ...opts }).trim();
   } catch {
+    checkDeadline();
     return null;
   }
 }
@@ -108,6 +118,10 @@ export function resolveContext(cwd, hints = [process.env.CLAUDE_PROJECT_DIR, pro
     const hp = repoRoot(h) ? mainOf(h) : null;
     if (hp && norm(hp) !== norm(project) && insideDir(project, hp) && norm(common(project) ?? '') !== norm(common(hp) ?? '') && hasPolicy(hp)) { project = hp; break; }
   }
+  // K2-4: when the host names the project (CLAUDE_PROJECT_DIR) and it has a policy, that project judges EVERY folder: one that is not a registered worktree of it
+  // (an independent repository outside it, a planted .git whose commondir points elsewhere) is "unassigned" with the project's policy, wherever it is.
+  const named = process.env.CLAUDE_PROJECT_DIR;
+  if (named && repoRoot(named) && existsSync(join(named, '.bootstrap', 'policy.json'))) { const np = mainOf(named); if (np) project = np; }
   const roots = worktreeRoots(project);
   if (!roots.some((r) => norm(r) === norm(project))) roots.unshift(project);
   const registered = roots.some((r) => norm(r) === norm(top));
@@ -117,7 +131,7 @@ export function resolveContext(cwd, hints = [process.env.CLAUDE_PROJECT_DIR, pro
 /** A path that decides what git or the guard believes: a .git file, a planted git directory's commondir or role file, a policy.json under .bootstrap. */
 export function plantedGitPath(rel) {
   const p = String(rel).replace(/\\/g, '/').replace(/^\.\//, '');
-  return /(^|\/)\.git$/i.test(p) || /(^|\/)(commondir|bootstrap-role|gitdir)$/i.test(p) || /(^|\/)\.bootstrap\/policy\.json$/i.test(p);
+  return /(^|\/)\.git(\/|$)/i.test(p) || /(^|\/)(commondir|bootstrap-role|gitdir)$/i.test(p) || /(^|\/)\.bootstrap\/policy\.json$/i.test(p);
 }
 
 /**
@@ -126,15 +140,18 @@ export function plantedGitPath(rel) {
  */
 export function otherRootsViolation(filePath, cwd, ctx, policy, role) {
   if (!ctx || role === 'chief-of-staff') return null;
+  const gitOnly = role === 'release-ops'; // Release Ops moves refs and tags: git's own folders are theirs too, nothing else of this check is
   for (const r of ctx.roots) {
     const rel = toRepoPath(r, filePath, cwd);
     if (rel === null || (typeof rel === 'object' && rel?.refused)) continue;
     const why = scopeViolation(rel, policy, {}, role) ?? recordViolation(rel, policy, role);
     if (why) return why;
   }
-  // a planted git file or role file anywhere inside the project
-  const rel = toRepoPath(ctx.project, filePath, cwd);
-  if (typeof rel === 'string' && plantedGitPath(rel)) return `${rel} decides what git or the guard believes (a .git file, commondir, bootstrap-role, policy.json under .bootstrap). Only the Chief of Staff writes it.`;
+  // a planted git file or role file, or anything inside a .git directory, in the project or any of its worktrees
+  for (const r of [ctx.project, ...ctx.roots]) {
+    const rel = toRepoPath(r, filePath, cwd);
+    if (typeof rel === 'string' && plantedGitPath(rel) && !(gitOnly && /(^|\/)\.git(\/|$)/i.test(rel))) return `${rel} decides what git or the guard believes (a .git file or directory, commondir, bootstrap-role, policy.json under .bootstrap). Only the Chief of Staff writes it.`;
+  }
   return null;
 }
 

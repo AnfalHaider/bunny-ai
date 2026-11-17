@@ -6,10 +6,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 process.env.KIT_NEXT = '1';
 const { makeRepo, stage, commitAll, guard, BIN } = await import('./guard-helpers.js');
@@ -135,4 +135,155 @@ test('K1-2 stays closed: a nested independent repository with a policy of its ow
   writeFileSync(join(sub, '.bootstrap', 'policy.json'), JSON.stringify({ version: 1, branches: { live: 'zzz' }, deny_all: [] }));
   withHook(P, P, () => assert.equal(guard.decide({ tool: 'Bash', command: 'git push origin main', cwd: sub }).allow, false));
   assert.ok(here && W);
+});
+
+// ---- the hook scripts themselves (K-2: they run the project's checks, not the folder's)
+const HOOKS = join(here, '..', 'scripts', 'kit-next', '.githooks');
+const hasSh = spawnSync('sh', ['-c', 'exit 0']).status === 0;
+const runHook = (name, cwd, { input = '', args = [] } = {}) => spawnSync('sh', [join(HOOKS, name), ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, BOOTSTRAP_ROLE: '' } });
+
+test('K-2 hooks: pre-push run from a folder with a planted permissive prepush.mjs runs the PROJECT\'s checks, and fails closed when the project has none', { skip: !hasSh }, (t) => {
+  const { P, W, EVIL } = setup(t);
+  cpSync(BIN, join(P, '.bootstrap', 'bin'), { recursive: true }); // the project's own copy of the checks
+  const sha = sh(P, 'rev-parse', 'HEAD');
+  const push = `refs/heads/x ${sha} refs/heads/main ${'0'.repeat(40)}\n`;
+  // a planted copy that would pass everything and leave a mark
+  mkdirSync(join(EVIL, '.bootstrap', 'bin'), { recursive: true });
+  writeFileSync(join(EVIL, '.bootstrap', 'bin', 'prepush.mjs'), "import { writeFileSync } from 'node:fs'; writeFileSync('PLANTED_RAN', 'x'); process.exit(0);\n");
+  const evil = runHook('pre-push', EVIL, { input: push });
+  assert.notEqual(evil.status, 0, evil.stderr);
+  assert.equal(existsSync(join(EVIL, 'PLANTED_RAN')), false, 'the planted copy did not run');
+  // the same push from the legitimate worktree is judged too (a builder pushing main is refused), by the same checks
+  assert.notEqual(runHook('pre-push', W, { input: push }).status, 0);
+  // the project's checks missing: refused, with the reason
+  rmSync(join(P, '.bootstrap', 'bin'), { recursive: true, force: true });
+  const gone = runHook('pre-push', W, { input: push });
+  assert.equal(gone.status, 1);
+  assert.match(gone.stderr, /checks .* are missing: push refused/);
+});
+
+test('K-2 hooks: pre-commit runs the project\'s checks and fails closed when they are missing', { skip: !hasSh }, (t) => {
+  const { P, W } = setup(t);
+  cpSync(BIN, join(P, '.bootstrap', 'bin'), { recursive: true });
+  assert.equal(runHook('pre-commit', W).status, 0, 'nothing staged: nothing to refuse');
+  rmSync(join(P, '.bootstrap', 'bin'), { recursive: true, force: true });
+  const gone = runHook('pre-commit', W);
+  assert.equal(gone.status, 1);
+  assert.match(gone.stderr, /are missing: commit refused/);
+});
+
+test('commit-msg: a message that credits Claude is refused, an ordinary one passes (the owner\'s rule survives)', { skip: !hasSh }, (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'bunny-msg-'));
+  const msg = (text) => { const f = join(dir, `m${Math.random().toString(36).slice(2)}`); writeFileSync(f, text); return f; };
+  for (const bad of ['fix\n\nCo-Authored-By: Claude Sonnet <noreply@anthropic.com>\n', 'fix\n\nco-authored-by: Anthropic\n', 'fix\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n', 'fix noreply@anthropic.com']) {
+    const r = runHook('commit-msg', dir, { args: [msg(bad)] });
+    assert.equal(r.status, 1, bad);
+    assert.match(r.stderr, /credits Claude/);
+  }
+  for (const ok of ['fix the settings loader\n', 'W4-9: a setting for the wait\n\nCo-authored-by: A Person <a@example.test>\n']) assert.equal(runHook('commit-msg', dir, { args: [msg(ok)] }).status, 0, ok);
+  assert.ok(t);
+});
+
+test('K2-4: an independent repository outside the project, and a planted .git inside it whose commondir points there, are judged by the project as "unassigned"', (t) => {
+  const { P, W } = setup(t);
+  const permissive = JSON.stringify({ version: 1, branches: { live: 'zzz', dev: null }, protected_globs: [], deny_all: [], releases: { dir: 'docs/r', live_pushers: ['builder', 'unassigned', 'chief-of-staff'] }, scope_check: { commit: false, push: false } });
+  const X = join(mkdtempSync(join(tmpdir(), 'bunny-k2x-')), 'x');
+  mkdirSync(join(X, '.bootstrap'), { recursive: true });
+  execFileSync('git', ['init', '-q'], { cwd: X });
+  writeFileSync(join(X, '.bootstrap', 'policy.json'), permissive);
+  writeFileSync(join(X, '.bootstrap', 'session.json'), JSON.stringify({ role: 'chief-of-staff' }));
+  execFileSync('git', ['-c', 'user.email=a@b.c', '-c', 'user.name=x', 'commit', '-q', '--allow-empty', '-m', 'x'], { cwd: X });
+  const EV2 = join(P, 'vendor', 'ev2');
+  const EG2 = join(P, 'vendor', 'ev2git');
+  mkdirSync(EV2, { recursive: true });
+  mkdirSync(EG2, { recursive: true });
+  writeFileSync(join(EV2, '.git'), `gitdir: ${fwd(EG2)}\n`);
+  writeFileSync(join(EG2, 'HEAD'), 'ref: refs/heads/master\n');
+  writeFileSync(join(EG2, 'commondir'), `${fwd(join(X, '.git'))}\n`);
+  writeFileSync(join(EG2, 'gitdir'), `${fwd(join(EV2, '.git'))}\n`);
+  withHook(P, P, () => {
+    for (const cwd of [X, EV2]) {
+      for (const a of [{ tool: 'Bash', command: 'git push origin main' }, { tool: 'Bash', command: 'echo x > AGENTS.md' }, { tool: 'Write', filePath: join(P, 'AGENTS.md') }]) {
+        const v = guard.decide({ ...a, cwd });
+        assert.equal(v.allow, false, `${cwd === X ? 'X' : 'EV2'}: ${a.command ?? a.filePath}`);
+        if (a.command === 'git push origin main') assert.match(v.reason, /"unassigned"/);
+      }
+    }
+    // writes inside the main checkout's .git, from a session worktree
+    for (const f of [['worktrees', 'evil', 'gitdir'], ['worktrees', 'evil', 'HEAD'], ['worktrees', 'evil', 'commondir'], ['refs', 'heads', 'main'], ['HEAD'], ['packed-refs'], ['info', 'attributes']]) {
+      assert.equal(guard.decide({ tool: 'Write', filePath: join(P, '.git', ...f), cwd: W }).allow, false, `.git/${f.join('/')}`);
+    }
+    assert.equal(guard.decide({ tool: 'Bash', command: `echo gitdir > ${fwd(join(P, '.git', 'worktrees', 'evil', 'gitdir'))}`, cwd: W }).allow, false);
+    // an ordinary file of the project is still writable, and `git worktree prune` / `repair` stay allowed (they register nothing without the files above)
+    assert.equal(guard.decide({ tool: 'Write', filePath: join(W, 'docs', 'plans', 'x.md'), cwd: W }).allow, true);
+    assert.equal(guard.decide({ tool: 'Bash', command: 'git worktree prune', cwd: W }).allow, true);
+  });
+});
+
+test('K-2: git clone is refused for a builder, allowed for the Chief of Staff and Release Ops; git internals are writable only by those two', (t) => {
+  const { P, W } = setup(t);
+  withHook(P, P, () => {
+    assert.equal(guard.decide({ tool: 'Bash', command: 'git clone . vendor/c2', cwd: W }).allow, false);
+    assert.equal(guard.decide({ tool: 'Bash', command: 'git clone . ../c3', cwd: P }).allow, true, 'the Chief of Staff');
+    const ro = join(sh(P, 'rev-parse', '--absolute-git-dir'), 'refs', 'heads', 'x');
+    assert.equal(guard.decide({ tool: 'Write', filePath: ro, cwd: W }).allow, false, 'a builder');
+  });
+  // Release Ops: its own worktree of the project with a role file release-ops
+  const rw = join(P, '.claude', 'worktrees', 'ro');
+  sh(P, 'branch', 'claude/ro');
+  sh(P, 'worktree', 'add', '-q', rw, 'claude/ro');
+  writeFileSync(join(sh(rw, 'rev-parse', '--absolute-git-dir'), 'bootstrap-role'), 'release-ops\n');
+  withHook(P, P, () => {
+    // (what a role may write beyond git's internals is its own write_globs, not this check)
+    assert.equal(guard.decide({ tool: 'Write', filePath: join(P, 'AGENTS.md'), cwd: rw }).allow, false, 'but not the protected files');
+  });
+});
+
+test('W5-1d: commands that print a sign-in token into the session are refused for EVERY role', (t) => {
+  for (const role of ['builder', 'qa', 'security', 'chief-of-staff', 'release-ops', 'hotfix']) {
+    const root = makeRepo(t, role);
+    for (const c of ['gh auth token', 'gh config get oauth_token', 'gh config get -h github.com oauth_token', 'git credential fill', 'git credential approve', 'gh auth status $FLAG', 'gh auth status --show-token']) {
+      assert.equal(guard.decide({ tool: 'Bash', command: c, cwd: root }).allow, false, `${role}: ${c}`);
+    }
+    assert.equal(guard.decide({ tool: 'Bash', command: 'gh auth status', cwd: root }).allow, true, `${role}: plain gh auth status`);
+  }
+});
+
+const prepushMod = await import(pathToFileURL(join(BIN, 'prepush.mjs')).href);
+const policyMod = await import(pathToFileURL(join(BIN, 'lib', 'policy.mjs')).href);
+test('W5-1d: the pre-push hook refuses notes, review and release refs and the live branch in another case from a non-live role', (t) => {
+  const { P, W } = setup(t);
+  const policy = policyMod.loadPolicy(P);
+  const tip = sh(P, 'rev-parse', 'HEAD');
+  const push = (role, ref) => prepushMod.checkPush({ root: W, policy, role, localSha: tip, remoteRef: ref, remoteSha: '0'.repeat(40) });
+  for (const ref of ['refs/notes/commits', 'refs/for/main', 'refs/releases/v1', 'refs/heads/Main', 'refs/heads/MAIN']) {
+    assert.ok(push('builder', ref).some((e) => /may not push/.test(e)), ref);
+    assert.ok(!push('release-ops', ref).some((e) => /may not push/.test(e)), );
+  }
+  assert.ok(!push('builder', 'refs/heads/claude/b1').some((e) => /may not push/.test(e)), 'a claude branch is fine');
+});
+
+test('K1-5: the guard has a deadline: a line of 1,999 pushes answers BLOCK in time, everyday commands are unchanged, and a decision that runs out of time is a refusal', (t) => {
+  const { P, W } = setup(t);
+  const shape = `${'git push origin x; '.repeat(1999)}git push origin main`;
+  withHook(P, P, () => {
+    const t0 = Date.now();
+    const v = guard.decide({ tool: 'Bash', command: shape, cwd: W });
+    assert.equal(v.allow, false);
+    assert.ok(Date.now() - t0 < 8000, `answered in ${Date.now() - t0} ms`);
+    // an expired deadline is a refusal, never a pass
+    const late = guard.decide({ tool: 'Bash', command: 'git status', cwd: W, deadlineMs: -1 });
+    assert.equal(late.allow, false);
+    assert.match(late.reason, /did not finish deciding in time/);
+    // everyday commands are unchanged
+    for (const c of ['git status', 'git log --oneline -3', 'node --test', 'npm test', 'echo hi']) assert.equal(guard.decide({ tool: 'Bash', command: c, cwd: W }).allow, true, c);
+  });
+  // the belt: the hook entry decides in a child with a timeout, and the answer for the 1,999-push shape is exit 2
+  const payload = JSON.stringify({ tool_name: 'Bash', tool_input: { command: shape }, cwd: W });
+  const t1 = Date.now();
+  const r = spawnSync(process.execPath, [join(BIN, 'guard.mjs')], { input: payload, encoding: 'utf8', cwd: P, env: { ...process.env, CLAUDE_PROJECT_DIR: P, BOOTSTRAP_ROLE: '' }, timeout: 20000 });
+  assert.equal(r.status, 2, r.stderr);
+  assert.ok(Date.now() - t1 < 10000, `the hook answered in ${Date.now() - t1} ms (the host cuts a hook off at 10 s)`);
+  const ok = spawnSync(process.execPath, [join(BIN, 'guard.mjs')], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git status' }, cwd: W }), encoding: 'utf8', cwd: P, env: { ...process.env, CLAUDE_PROJECT_DIR: P, BOOTSTRAP_ROLE: '' }, timeout: 20000 });
+  assert.equal(ok.status, 0, ok.stderr);
 });

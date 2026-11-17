@@ -6,7 +6,7 @@
 // role from a command), the live-branch push target parse, and force pushes. The write-target rules
 // (A2) and the record-folder rules (E) live in lib/shellwrites.mjs.
 import { baseName, commandStarts, commandWord, isCmd, parseShell } from './shellparse.mjs';
-import { isPlainId } from './policy.mjs';
+import { isPlainId, checkDeadline } from './policy.mjs';
 import { resolve as pathResolve } from 'node:path';
 import { ghNotAllowed, isLong, pushShape, refuseLabelMove, refusePush, refuseRemote, refuseSymbolicRef } from './shellextra.mjs';
 import { ALIAS_DEPTH, GIT_BUILTINS, GIT_DIR_ENV, aliasValue, refuseGitConfigs } from './shellgit.mjs';
@@ -200,6 +200,10 @@ function refuseGh(words, ctx) {
   const ownerOnly = 'changes or removes a published release that every installed copy updates from: only the owner runs it.';
   // Tech Lead 51562ee: gh auth status prints the sign-in token with --show-token (-t): refused for every role, live pushers too
   if (group === 'auth' && words.some((w) => /^--show-token(=|$)/.test(w.text) || /^-[A-Za-z]*t[A-Za-z]*$/.test(w.text))) return '"gh auth" with --show-token (-t) prints the sign-in token: it is refused for every role.';
+  // W5-1d: other ways to print the token, and a variable where gh auth status could get --show-token: refused for every role
+  if (group === 'auth' && sub === 'token') return '"gh auth token" prints the sign-in token into the session; it never leaves this machine. Refused for every role.';
+  if (group === 'config' && sub === 'get' && words.some((w) => /oauth_token|(^|_)token$/i.test(w.text))) return '"gh config get oauth_token" prints the sign-in token into the session; it never leaves this machine. Refused for every role.';
+  if (group === 'auth' && sub === 'status' && words.some((w) => w.dynamic)) return '"gh auth status" with an argument the guard cannot read (a variable) could print the token: spell it out. Refused for every role.';
   if (GH_OWNER_ONLY.some(([g, s]) => g === group && s === sub)) return `"gh ${group} ${sub}" ${ownerOnly}`;
   if (group === 'release' && sub === 'upload' && words.some((w) => /^--clobber(=|$)/.test(w.text))) return `"gh release upload --clobber" replaces a published file: it ${ownerOnly}`;
   if (group === 'api') {
@@ -234,6 +238,8 @@ function refuseGitMore(call, cmd, ctx, depth) {
   if (sub === 'checkout-index' && call.args.some((a) => isLong(a, '--prefix', 3) || isLong(a, '--all', 3) || isLong(a, '--stdin', 4) || /^-[A-Za-z]*a/.test(a))) return '"git checkout-index" with --prefix, --all or --stdin writes files the guard cannot see; name the files.';
   if (sub === 'push') { const why3 = refusePush(call.args, where0(call, ctx)); if (why3) return why3; }
   // K-1 (Security B6): `git hook run` runs a hook by hand, outside the commit
+  // K-2: a clone is a repository of its own with its own history; only the roles that never reach these rules make one
+  if (sub === 'clone') return '"git clone" makes a repository with its own history and no role; the Chief of Staff and Release Ops clone, other roles do not.';
   if (sub === 'hook') return '"git hook" runs hooks outside the commit; not allowed for this role.';
   // K-1 (Security B3): a fetch or pull whose refspec writes the live branch label (git fetch origin +main:main)
   if ((sub === 'fetch' || sub === 'pull') && ctx.liveBranch) {
@@ -332,6 +338,7 @@ export function innerParsed(words) {
  */
 export function checkShell(parsed, ctx, depth = 0) {
   for (const cmd of parsed.commands) {
+    checkDeadline(); // K1-5: between parts
     // G1-5: the name of an environment variable is never a variable ($R=BOOTSTRAP_ROLE, env $N=x): the role cannot be hidden that way.
     if (ctx.role !== 'chief-of-staff' && cmd.words.some((w) => (/^[^=]*[$`][^=]*=/.test(w.text) && !w.text.startsWith('-')) || /^\$\{?env:[^=]*[$`]/i.test(w.text))) {
       return 'the name of an environment variable cannot be a variable: the guard cannot see what it sets.';
@@ -353,6 +360,8 @@ export function checkShell(parsed, ctx, depth = 0) {
       }
       if (isCmd(head, 'git')) {
         const call = gitCall(words);
+        // W5-1d: git credential prints the sign-in tokens git has stored; they never go into a session's context, whoever asks
+        if (call.sub === 'credential' || /^credential-/i.test(call.sub ?? '')) return '"git credential" prints stored sign-in tokens into the session; they never leave this machine. Refused for every role.';
         const why = refuseGit(call, ctx) ?? refuseGitMore(call, cmd, ctx, depth);
         if (why) return why;
       }

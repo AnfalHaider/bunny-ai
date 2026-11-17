@@ -110,8 +110,14 @@ test('B4/B10: the role cannot be changed from a command, in any spelling', (t) =
 });
 
 test('B5: our commit hooks are staged unchanged (no Claude credit, record and scope checks at commit)', () => {
-  for (const f of ['pre-commit', 'commit-msg', 'pre-push']) {
-    assert.equal(readFileSync(join(KIT, '.githooks', f), 'utf8').replace(/\r\n/g, '\n'), readFileSync(join(ROOT, 'scripts', 'guard-next', '.githooks', f), 'utf8').replace(/\r\n/g, '\n'), f);
+  // K-2: commit-msg needs nothing from the repository and is byte-identical; pre-push and pre-commit now run the checks of the main checkout (test/kit-next-k2.test.js runs them)
+  const same = (f) => readFileSync(join(KIT, '.githooks', f), 'utf8').replace(/\r\n/g, '\n') === readFileSync(join(ROOT, 'scripts', 'guard-next', '.githooks', f), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(same('commit-msg'), true, 'commit-msg');
+  for (const f of ['pre-push', 'pre-commit']) {
+    const text = readFileSync(join(KIT, '.githooks', f), 'utf8');
+    assert.match(text, /--git-common-dir/, f);
+    assert.doesNotMatch(text, /--show-toplevel/, f);
+    assert.match(text, /refused\./, `${f} fails closed`);
   }
   assert.ok(existsSync(join(BIN, 'precommit.mjs')));
 });

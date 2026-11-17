@@ -11,9 +11,10 @@
 // Not bootstrapped (no .bootstrap/policy.json) = always allow, silently.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadFlow } from './lib/flow.mjs';
-import { currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, otherRootsViolation, recordViolation, repoRoot, resolveContext, scopeViolation, toRepoPath } from './lib/policy.mjs';
+import { GuardDeadline, checkDeadline, setDeadline, currentRole, git, loadPolicy, loadRole, isRefusedPath, isRoleFile, otherRootsViolation, recordViolation, repoRoot, resolveContext, scopeViolation, toRepoPath } from './lib/policy.mjs';
 import { baseName, commandStarts, isCmd, parseShell } from './lib/shellparse.mjs';
 import { checkShell, gitCall, pushDestinations } from './lib/shellrules.mjs';
 import { simpleCommandTexts } from './lib/shellblank.mjs';
@@ -30,21 +31,23 @@ const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'shell', 'run_shell_command',
 export function pushTargets(command, cwd) {
   // Returns destination branch names for every `git push` in the command.
   const out = [];
+  let branch;
   for (const seg of command.split(/&&|\|\||;|\n/)) {
+    checkDeadline();
     const toks = seg.trim().split(/\s+/);
     const gi = toks.indexOf('git');
     if (gi < 0 || toks[gi + 1] !== 'push') continue;
     const args = toks.slice(gi + 2).filter((t) => !t.startsWith('-'));
     const refspecs = args.slice(1); // args[0] is the remote
     if (refspecs.length === 0) {
-      const cur = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+      const cur = (branch ??= git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd));
       if (cur) out.push(cur);
       continue;
     }
     for (let r of refspecs) {
       r = r.replace(/^\+/, '');
       let dst = r.includes(':') ? r.split(':')[1] : r;
-      if (dst === 'HEAD') dst = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd) || dst;
+      if (dst === 'HEAD') dst = (branch ??= git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)) || dst;
       out.push(dst.replace(/^(refs\/)?heads\//, ''));
     }
   }
@@ -54,8 +57,10 @@ export function pushTargets(command, cwd) {
 /** Destination branches of every `git push` in a parsed command line (global options and quotes understood). */
 export function tokenPushTargets(parsed, cwd) {
   const out = [];
-  const current = () => git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  let head;
+  const current = () => (head ??= git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)); // once per decision
   for (const cmd of parsed.commands) {
+    checkDeadline();
     for (const start of commandStarts(cmd.words)) {
       const words = cmd.words.slice(start);
       if (!words.length || !isCmd(words[0].text, 'git')) continue;
@@ -83,7 +88,20 @@ function helperCheck(root, flow, { sessionId, model, subagentType }) {
   return null;
 }
 
-export function decide({ tool, command = '', filePath = '', cwd = process.cwd(), sessionId = null, model = null, subagentType = null }) {
+/** K1-5: one decision has a deadline of about 6 s (deadlineMs overrides it for tests); running out of time is a refusal, never a pass. */
+export function decide(input) {
+  setDeadline(input?.deadlineMs ?? 6000);
+  try {
+    return decideInner(input);
+  } catch (err) {
+    if (err instanceof GuardDeadline) return { allow: false, reason: 'Blocked: the guard did not finish deciding in time (the command is too long or has too many parts to read), so it is refused. Put the text in a file with the Write tool and run a short command.' };
+    throw err;
+  } finally {
+    setDeadline(null);
+  }
+}
+
+function decideInner({ tool, command = '', filePath = '', cwd = process.cwd(), sessionId = null, model = null, subagentType = null }) {
   // MSYS-style "/c/Users/..." from Git Bash means C:\Users\... on Windows.
   if (process.platform === 'win32') cwd = cwd.replace(/^\/([a-zA-Z])\//, '$1:/');
   // A cwd we cannot place must not switch the guard off: fall back to where the hook runs.
@@ -195,9 +213,9 @@ export function decide({ tool, command = '', filePath = '', cwd = process.cwd(),
   return { allow: true };
 }
 
-function main() {
+function runDecision(raw) {
   let payload = {};
-  try { payload = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch {
+  try { payload = JSON.parse(raw || '{}'); } catch {
     process.stderr.write('guard: malformed hook payload; blocking to be safe.\n');
     process.exit(2);
   }
@@ -214,6 +232,19 @@ function main() {
   if (res.allow) process.exit(0);
   process.stderr.write(res.reason + '\n');
   process.exit(2);
+}
+
+function main() {
+  const raw = readFileSync(0, 'utf8');
+  if (process.argv.includes('--decide')) return runDecision(raw); // the child below
+  // K1-5, the belt: decide in a child with a hard timeout under the host's 10 s; a child that does not answer in time is a refusal.
+  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--decide'], { input: raw, encoding: 'utf8', timeout: 8000, cwd: process.cwd(), env: process.env });
+  if (child.error || child.signal || child.status === null) {
+    process.stderr.write('guard: the decision did not finish within 8 s, so the call is refused.\n');
+    process.exit(2);
+  }
+  if (child.stderr) process.stderr.write(child.stderr);
+  process.exit(child.status);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main();

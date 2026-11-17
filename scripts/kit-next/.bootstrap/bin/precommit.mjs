@@ -50,7 +50,7 @@ function main() {
     }
     if (!policy || policy.scope_check?.commit === false) return process.exit(0);
     role = ctx.registered ? currentRole(root) : 'unassigned';
-    const brief = degraded ? {} : loadRole(root, role) || {};
+    const brief = degraded ? {} : loadRole(ctx.registered ? root : ctx.project, role) || {}; // an unregistered folder's briefs are the project's, not its own
     const bad = scopeViolations(stagedPaths(root), policy, brief, role);
     if (policy.records_check !== false && !degraded) {
       // G1-2: sign-off and release records are written by the role they name (see lib/records.mjs)
