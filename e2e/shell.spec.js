@@ -81,10 +81,12 @@ test('an artifact shows a thumbnail and can be printed', async ({ page, context 
   await expect(page.locator('#artifact-list .artifact-preview')).not.toHaveText('');
   await page.locator('#artifact-list .artifact-row').first().click();
 
-  // Printing opens the artifact on its own, so the page prints the document.
-  const popupPromise = context.waitForEvent('page');
+  // SB-2: printing draws the artifact in a hidden SANDBOXED frame of its own (no popup of Bunny's origin), so the page prints the document and nothing runs as Bunny.
+  const pagesBefore = context.pages().length;
   await page.locator('#artifact-view').getByRole('button', { name: 'Print' }).click();
-  const popup = await popupPromise;
-  await popup.waitForLoadState('domcontentloaded');
-  await expect(popup.locator('body')).toContainText('This is a local test reply');
+  const printFrame = page.locator('iframe[sandbox="allow-scripts allow-modals"]');
+  await expect(printFrame).toHaveCount(1);
+  await expect(printFrame).toHaveAttribute('srcdoc', /This is a local test reply/);
+  expect(await printFrame.getAttribute('sandbox')).not.toMatch(/same-origin/);
+  expect(context.pages().length).toBe(pagesBefore); // no popup opened
 });
