@@ -159,6 +159,16 @@ export function createMcpStore({ file, secrets = null }) {
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
+    // L-5: the command of a local connector can be changed (the route asks for the same confirmation as adding); trust given to the old program is gone
+    if (server.type === 'local' && (patch.command !== undefined || patch.args !== undefined || patch.cwd !== undefined)) {
+      const next = cleanLocal({ command: patch.command ?? server.command, args: patch.args ?? server.args, env: {}, cwd: patch.cwd !== undefined ? patch.cwd : server.cwd });
+      if (next.command !== server.command || JSON.stringify(next.args) !== JSON.stringify(server.args ?? [])) server.trustReadOnly = false;
+      server.command = next.command;
+      server.args = next.args;
+      server.cwd = next.cwd;
+      server.tools = [];
+      server.status = 'unknown';
+    }
     if (patch.trustReadOnly !== undefined) server.trustReadOnly = patch.trustReadOnly === true; // RO-1: trust this connector's own read-only labels
     // L-4: a setting named with a value is set; named with a blank value it is cleared; a name not mentioned keeps its stored value
     if (server.type === 'local' && patch.env && typeof patch.env === 'object') {
