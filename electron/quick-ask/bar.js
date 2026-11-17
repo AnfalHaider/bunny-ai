@@ -5,9 +5,19 @@ const go = $('go');
 let shot = null; // { data } a data:image/png URL, held only in this page until sent
 let busy = false;
 
-function message(s) {
-  $('msg').textContent = s || '';
-  $('msg').hidden = !s;
+// kind 'busy': the normal sending moment (text colour, a small spinner). Anything else is a problem (amber).
+function message(s, kind = 'problem') {
+  const box = $('msg');
+  box.replaceChildren();
+  box.classList.toggle('is-problem', Boolean(s) && kind !== 'busy');
+  if (s && kind === 'busy') {
+    const spin = document.createElement('span');
+    spin.className = 'spin';
+    spin.setAttribute('aria-hidden', 'true');
+    box.append(spin);
+  }
+  if (s) box.append(document.createTextNode(s));
+  box.hidden = !s;
 }
 
 function refresh() {
@@ -65,7 +75,7 @@ async function send() {
   if (busy || !text.value.trim()) return;
   busy = true;
   refresh();
-  message('Opening Bunny…');
+  message('Opening Bunny…', 'busy');
   try {
     const result = await window.quickAsk.submit(text.value, shot ? [shot] : []);
     if (result && result.ok) return; // the bar is closed by the app
