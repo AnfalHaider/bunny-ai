@@ -506,6 +506,11 @@
         <div class="right"><input class="pref" data-key="branchPrefix" data-default="bunny" maxlength="30" aria-label="Branch prefix" /></div>
       </div>
       <div class="row">
+        <div class="meta-col"><div class="name">Copies of projects</div><div class="desc" id="wt-size">Chats that have their own copy of a project keep it in Bunny's data folder.</div>
+          <div id="wt-leftovers"></div></div>
+        <div class="right"></div>
+      </div>
+      <div class="row">
         <div class="meta-col"><div class="name">Label chats by status</div><div class="desc">The sidebar marks each chat as working, needs you, ready or failed.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="statusLabels" data-default="true" aria-label="Label chats by status" /><span class="pref-state"></span></label></div>
       </div>
@@ -1162,6 +1167,21 @@
   };
   updates?.onStatus(showUpdate);
   updates?.get().then(showUpdate).catch(() => {});
+  // W2-9: copies that no saved chat names are listed here and removed only when the person presses Remove
+  async function showCopies() {
+    try {
+      const info = await getJSON('/api/worktrees');
+      $('wt-size').textContent = `Chats that have their own copy of a project keep it in Bunny's data folder (${(info.bytes / 1048576).toFixed(1)} MB used).`;
+      const host = $('wt-leftovers');
+      host.replaceChildren(...info.leftovers.map((l) => {
+        const line = document.createElement('div');
+        line.append(Object.assign(document.createElement('span'), { textContent: `Leftover copy: ${l.name} ` }));
+        line.append(Object.assign(document.createElement('button'), { type: 'button', className: 'ghost', textContent: 'Remove', onclick: async () => { try { await sendJSON('/api/worktrees/remove', 'POST', { path: l.path }); } catch (err) { line.textContent = err.message; return; } showCopies(); } }));
+        return line;
+      }));
+    } catch { /* the list is only a convenience */ }
+  }
+  showCopies();
   $('check-update').addEventListener('click', async () => {
     $('update-note').textContent = 'Checking…';
     showUpdate(updates ? await updates.check() : await sendJSON('/api/update/check', 'POST'));

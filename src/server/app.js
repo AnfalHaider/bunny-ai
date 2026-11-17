@@ -58,6 +58,7 @@ import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResu
 import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
 import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
 import { asksInAuto } from './autoAsks.js';
+import { createWorktrees, runGit } from './worktrees.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
@@ -293,6 +294,23 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  // W2-9: a chat's own copy of its project (ADR-002)
+  const worktrees = createWorktrees({ dataDir });
+  /**
+   * The folder a chat works in: its own copy when it has one that is still sound, else the folder the person picked. A chat whose copy has gone is NOT sent back to the picked
+   * folder by itself (that would write into the person's own files): it is told so. Always the one function: no caller reads session.folder for file access.
+   * @returns {Promise<{ok: boolean, folder?: string, reason?: string, copy?: boolean, gone?: boolean} | null>}
+   */
+  const effectiveRoot = async (session) => {
+    if (session?.worktree) {
+      const real = await worktrees.usable(session.worktree);
+      return real ? { ok: true, folder: real, copy: true } : { ok: false, copy: true, gone: true, reason: `This chat's copy is gone; the branch ${session.worktree.branch} still has the work.` };
+    }
+    return session?.folder ? checkFolder(session.folder) : null;
+  };
+  /** The processes a chat started stop before its copy is touched (Windows will not remove a folder something runs in). */
+  const stopChatProcesses = async (sessionId) => { for (const p of processes.list(sessionId)) await processes.stop(p.id, p.owner).catch(() => {}); };
+  const allWorktreePaths = async () => (await Promise.all((await sessions.list()).map((s) => sessions.get(s.id)))).map((s) => s?.worktree?.path).filter(Boolean);
   // Connectors: remote ones over http, local ones as a program on this computer.
   const localMcp = createLocalMcp();
   // W3-6: signing in to a connector that needs it; its tokens live only in the secret store. The engine is made on first use (it needs the real port).
@@ -1401,11 +1419,14 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (paneMatch && method === 'GET') {
       const session = await sessions.get(paneMatch[1]);
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
-      const folder = session.folder ? await checkFolder(session.folder) : null;
-      const never = folder?.ok ? await neverBrowse(folder.folder, dataDir) : null;
+      const folder = await effectiveRoot(session);
+      if (folder?.gone) return sendJson(res, 409, { code: 'worktree.gone', message: folder.reason });
+      const never = folder?.ok ? await neverBrowse(folder.folder, dataDir, { allowed: folder.copy ? folder.folder : null }) : null;
       if (never) return sendJson(res, 403, { code: 'folder.never', message: never });
       if (!folder?.ok) return sendJson(res, 200, paneMatch[2] === 'changes' ? { checkpoints: [], totals: { files: 0, added: 0, removed: 0 }, folder: null } : { folder: null, entries: [] });
       try {
+        // W2-9: git cannot be asked about a copy (the project folder moved, a drive is away): say so, never show an empty list
+        if (folder.copy && paneMatch[2] === 'changes') await worktrees.status(session.worktree).catch(() => { throw Object.assign(new Error('The project folder moved or is not reachable. Pick the project folder again; the branch of this chat still has the work.'), { code: 'worktree.unreachable' }); });
         if (paneMatch[2] === 'changes') return sendJson(res, 200, { ...(await changesFor(folder.folder, await checkpoints.list(session.id))), folder: folder.folder, git: Boolean(session.branch) });
         if (paneMatch[2] === 'files') return sendJson(res, 200, await listFolder(folder.folder, url.searchParams.get('path') ?? ''));
         return sendJson(res, 200, await readTextFile(folder.folder, url.searchParams.get('path') ?? ''));
@@ -1627,8 +1648,67 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       }
     }
     if (sessionMatch && method === 'DELETE') {
+      // W2-9: a chat with its own copy never loses work silently. Default: what is uncommitted becomes one commit, the copy goes, the branch stays.
+      // ?worktree=discard (asked twice by the screen) removes the copy and the branch too. A clean copy with nothing of its own goes with its branch.
+      const doomed = await sessions.get(sessionMatch[1]);
+      let kept = null;
+      if (doomed?.worktree) {
+        try {
+          await stopChatProcesses(doomed.id);
+          const state = await worktrees.status(doomed.worktree).catch(() => null);
+          const discard = url.searchParams.get('worktree') === 'discard';
+          await worktrees.finish(doomed.worktree, { action: discard ? 'discard' : 'keep' });
+          if (!discard && state && state.dirty === 0 && state.ahead === 0) await runGit(['branch', '-d', doomed.worktree.branch], { cwd: doomed.worktree.repo }).catch(() => {});
+          else if (!discard) kept = doomed.worktree.branch;
+        } catch { kept = doomed.worktree.branch; /* the copy could not be removed: it is listed in Settings as a leftover, never deleted by itself */ }
+      }
       await sessions.remove(sessionMatch[1]);
-      return sendJson(res, 200, { ok: true });
+      return sendJson(res, 200, { ok: true, ...(kept ? { keptBranch: kept } : {}) });
+    }
+
+    // ---- W2-9: a chat's own copy of its project ----
+    const worktreeMatch = path.match(/^[/]api[/]sessions[/]([a-f0-9-]{36})[/]worktree([/]finish)?$/);
+    if (worktreeMatch) {
+      const sid = worktreeMatch[1];
+      const session = await sessions.get(sid);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
+      try {
+        if (method === 'GET' && !worktreeMatch[2]) {
+          if (session.worktree) return sendJson(res, 200, { on: true, branch: session.worktree.branch, base: session.worktree.base, baseSha: session.worktree.baseSha, ...(await worktrees.status(session.worktree).then((s) => ({ dirty: s.dirty, ahead: s.ahead })).catch((err) => ({ gone: true, message: err.message }))) });
+          const info = session.folder ? await worktrees.eligibility(session.folder) : { ok: false, reason: 'Choose a folder for this chat first.' };
+          return sendJson(res, 200, { on: false, eligible: info.ok, ...(info.ok ? { base: info.base, baseSha: info.baseSha } : { reason: info.reason }) });
+        }
+        if (method === 'POST' && !worktreeMatch[2]) {
+          if (session.worktree) return sendJson(res, 200, { on: true, branch: session.worktree.branch });
+          if (session.incognito) return sendJson(res, 400, { code: 'worktree.incognito', message: 'A private chat does not get a copy.' });
+          // only a folder the person picked in this launch is copied (the server makes the copy; nothing the page sends names a path)
+          if (!session.folder || !(await isChosen(session.folder))) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
+          const made = await worktrees.create({ sessionId: sid, folder: session.folder, prefix: settings.branchPrefix, title: session.title });
+          await sessions.setWorktree(sid, made);
+          return sendJson(res, 200, { on: true, branch: made.branch, base: made.base, baseSha: made.baseSha });
+        }
+        if (method === 'POST' && worktreeMatch[2]) {
+          if (!session.worktree) return sendJson(res, 400, { code: 'worktree.none', message: 'This chat has no copy.' });
+          const body = await readBody(req);
+          await stopChatProcesses(sid);
+          const done = await worktrees.finish(session.worktree, { action: String(body.action ?? 'keep') });
+          if (done.ok) await sessions.setWorktree(sid, null); // the chat carries on in the folder itself
+          return sendJson(res, done.ok ? 200 : 409, done.ok ? { ok: true, action: done.action, branch: session.worktree.branch } : { code: 'worktree.refused', message: done.reason });
+        }
+      } catch (err) {
+        return sendJson(res, err.code === 'worktree.notEligible' ? 400 : 500, { code: err.code ?? 'worktree.failed', message: err.message });
+      }
+    }
+
+    // leftover copies: listed in Settings, removed only when the person says so
+    if (path === '/api/worktrees' && method === 'GET') {
+      const paths = await allWorktreePaths();
+      return sendJson(res, 200, { leftovers: (await worktrees.leftovers(paths)).map((l) => ({ name: `${l.repo}/${l.chat}`, path: l.path })), bytes: await worktrees.sizeBytes() });
+    }
+    if (path === '/api/worktrees/remove' && method === 'POST') {
+      try {
+        return sendJson(res, 200, await worktrees.removeLeftover(String((await readBody(req)).path ?? ''), await allWorktreePaths()));
+      } catch (err) { return sendJson(res, 400, { code: err.code ?? 'worktree.failed', message: err.message }); }
     }
 
     const forkMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/fork$/);
@@ -1910,7 +1990,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       //   chat      conversation only, no tools
       //   code      works inside the chosen folder with file and command tools, plus connectors
       let permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask'; // changes only when the person answers a leave_plan_mode card (W4-14b)
-      const folder = session.folder ? await checkFolder(session.folder) : null;
+      const folder = await effectiveRoot(session);
+      if (folder?.gone && workMode !== 'chat') return sendJson(res, 409, { code: 'worktree.gone', message: folder.reason });
       // Undo: the first time this reply changes a file, the file is copied as it was.
       let checkpoint = null;
       // The plan the model shows as a checklist (update_tasks), kept with the reply.
@@ -2266,8 +2347,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
         if (capability === 'code_mode') {
           const fresh = await sessions.get(id);
-          const checked = fresh?.folder ? await checkFolder(fresh.folder) : null;
-          if (!checked?.ok) return 'No folder was chosen, so Code mode is not on yet.';
+          const checked = await effectiveRoot(fresh);
+          if (!checked?.ok) return checked?.gone ? checked.reason : 'No folder was chosen, so Code mode is not on yet.';
           workspace = createWorkspace(checked.folder, { beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
@@ -2336,7 +2417,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         // The model best suited to the work, which may not be this chat's own.
         let use = await pickHelperModel({ job, wanted });
         const child = await sessions.create({
-          title: label, parentId: id, providerId: use.providerId, model: use.model, folder: session.folder, permissionMode, effort: session.effort,
+          title: label, parentId: id, providerId: use.providerId, model: use.model, folder: folder?.ok ? folder.folder : session.folder, permissionMode, effort: session.effort,
           agent: background ? 'chat' : 'helper', agentStatus: 'working', workMode: workspace ? 'code' : 'chat',
         });
         await sessions.append(child.id, { role: 'user', content: String(task) });

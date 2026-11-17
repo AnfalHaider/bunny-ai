@@ -261,7 +261,10 @@ function renderComposerHeader() {
   const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
   $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
-  if (branchText) branchText.textContent = branch ?? say('composer.noBranch');
+  // W2-9: a chat with its own copy shows the copy's branch in the accent colour, with "own copy"
+  const copyBranch = state.sessionId ? state.session?.worktree?.branch ?? null : null;
+  if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
+  $('branch-chip')?.classList.toggle('on', Boolean(copyBranch));
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
   if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
@@ -1031,7 +1034,11 @@ function renderSessionMenu(s) {
 
   menu.append(item('Delete', async () => {
     if (!window.confirm(`Delete “${s.title}”? This cannot be undone.`)) return;
-    await sendJSON(`/api/sessions/${s.id}`, 'DELETE');
+    // W2-9: a chat with its own copy: the copy goes, the branch stays with the work, unless the person says to discard it too (asked a second time)
+    let discard = false;
+    if (s.worktree?.branch) discard = window.confirm(`This chat has its own copy of the project on the branch ${s.worktree.branch}.\n\nOK: also delete that branch and everything on it (cannot be undone).\nCancel: keep the branch, with the work.`);
+    const gone = await sendJSON(`/api/sessions/${s.id}${discard ? '?worktree=discard' : ''}`, 'DELETE');
+    if (gone?.keptBranch) flashStatus(`The branch ${gone.keptBranch} is kept with the work.`, 8000);
     if (s.id === state.sessionId) startNewChat();
     await loadSessions();
   }, { className: 'danger' }));
@@ -3646,6 +3653,84 @@ async function useFolder(path) {
   }
 }
 
+/**
+ * W2-9: the Working folder card: the folder, a switch "Give this chat its own copy of the project", and once on, the branch, the base and Finish.
+ * The server makes and removes the copy; this only asks.
+ */
+async function openWorkingFolder() {
+  const sid = state.sessionId;
+  const backdrop = element('div', { className: 'modal-backdrop' });
+  const box = element('div', { className: 'modal', role: 'dialog', 'aria-label': 'Working folder' });
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  const paint = async () => {
+    let info;
+    try { info = await getJSON(`/api/sessions/${sid}/worktree`); } catch (err) { info = { on: false, eligible: false, reason: err.message }; }
+    const folder = state.session?.folder ?? '';
+    const note = element('p', { className: 'modal-sub' });
+    const status = element('div', { className: 'modal-sub', role: 'status' });
+    const sw = element('input', { type: 'checkbox', id: 'wt-switch', checked: Boolean(info.on), disabled: !info.on && !info.eligible });
+    const label = element('label', { htmlFor: 'wt-switch' }, element('b', { textContent: 'Give this chat its own copy of the project' }));
+    note.textContent = !info.on && !info.eligible ? (info.reason ?? 'This folder cannot have its own copy.')
+      : 'Bunny makes a separate working copy on a new branch, so two chats can edit this project at once without clashing. Files git does not track, such as node_modules, are not copied.';
+    const foot = element('div', { className: 'modal-foot' });
+    const body = element('div', { className: 'modal-body' },
+      element('div', { textContent: folder, className: 'modal-sub' }),
+      element('div', {}, sw, ' ', label), note, status);
+    if (info.on) {
+      status.textContent = info.gone ? (info.message ?? 'The copy is gone.') : `Branch ${info.branch} (new, from ${info.base ?? 'the current commit'} at ${String(info.baseSha ?? '').slice(0, 7)}). ${info.dirty ?? 0} file${info.dirty === 1 ? '' : 's'} changed, ${info.ahead ?? 0} commit${info.ahead === 1 ? '' : 's'} so far.`;
+      foot.append(button('Finish…', { className: 'btn btn-primary', onclick: () => finishCard(info) }));
+    }
+    foot.append(button('Change folder', { className: 'btn btn-ghost', onclick: async () => { close(); await chooseFolder(); } }), button('Close', { className: 'btn btn-ghost', onclick: close }));
+    sw.addEventListener('change', async () => {
+      if (!sw.checked) { sw.checked = true; finishCard(info); return; } // turning it off is Finish: nothing is lost silently
+      sw.disabled = true;
+      status.textContent = 'Making the copy…';
+      try {
+        await sendJSON(`/api/sessions/${sid}/worktree`, 'POST', {});
+        state.session = await getJSON(`/api/sessions/${sid}`);
+        renderComposerHeader();
+        state.browser?.refresh();
+      } catch (err) { status.textContent = err.message; sw.checked = false; sw.disabled = false; return; }
+      await paint();
+    });
+    box.replaceChildren(element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Working folder' })), body, foot);
+  };
+  const finishCard = (info) => {
+    const choice = { value: 'keep' };
+    const opts = [
+      ['merge', 'Merge into ' + (info.base ?? 'the base branch'), 'Fast-forward only, into your folder when it is clean and on that branch. Then the copy is removed.'],
+      ['keep', 'Keep the branch', `Leaves ${info.branch} in your repository for you to merge later. Uncommitted work is saved as one commit. The copy folder is removed.`],
+      ['discard', 'Discard the copy and its changes', 'Deletes the branch too. Asks once more before it does.'],
+    ];
+    const list = opts.map(([value, title, sub]) => {
+      const radio = element('input', { type: 'radio', name: 'wt-finish', value, checked: value === 'keep' });
+      radio.addEventListener('change', () => { choice.value = value; });
+      return element('label', { className: 'modal-sub' }, radio, ' ', element('b', { textContent: title }), element('div', { textContent: sub }));
+    });
+    const status = element('div', { className: 'modal-sub', role: 'status' });
+    const go = button('Finish', { className: 'btn btn-primary', onclick: async () => {
+      if (choice.value === 'discard' && !window.confirm(`Delete the branch ${info.branch} and everything on it? This cannot be undone.`)) return;
+      try {
+        await sendJSON(`/api/sessions/${sid}/worktree/finish`, 'POST', { action: choice.value });
+        state.session = await getJSON(`/api/sessions/${sid}`);
+        renderComposerHeader();
+        state.browser?.refresh();
+        close();
+        flashStatus(choice.value === 'keep' ? `The branch ${info.branch} is kept in your project.` : choice.value === 'merge' ? 'Merged. This chat now works in your own folder.' : 'The copy was discarded.', 8000);
+      } catch (err) { status.textContent = err.message; }
+    } });
+    box.replaceChildren(
+      element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Finish this copy?' }), element('p', { className: 'modal-sub', textContent: 'The chat keeps going in your own folder afterwards.' })),
+      element('div', { className: 'modal-body' }, ...list, status),
+      element('div', { className: 'modal-foot' }, button('Cancel', { className: 'btn btn-ghost', onclick: () => paint() }), go));
+  };
+  backdrop.append(box);
+  document.body.append(backdrop);
+  await paint();
+}
+
 /** A small in-page box for a folder path (the browser cannot open a folder dialog for the server). */
 function askForPath(current) {
   return new Promise((resolveValue) => {
@@ -4223,7 +4308,7 @@ async function boot() {
   }
 
   // ---- folder chip ----
-  $('folder-chip')?.addEventListener('click', () => chooseFolder());
+  $('folder-chip')?.addEventListener('click', () => (state.sessionId && !state.incognito && state.session?.folder ? openWorkingFolder() : chooseFolder()));
 
   // ---- branch chip ----
   // The branch is read from the folder's git repository; clicking reads it again.

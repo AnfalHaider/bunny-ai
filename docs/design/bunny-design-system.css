@@ -644,6 +644,7 @@ body:has(> .app) { overflow: hidden; }
   color: var(--text-dim); font-size: var(--fs-sm);
 }
 .ctx-chip:hover { background: var(--hover); color: var(--text); }
+.ctx-chip.on { color: var(--accent); }
 .ctx-chip svg { width: 14px; height: 14px; }
 
 /* -------------------------------------------------------------------------
