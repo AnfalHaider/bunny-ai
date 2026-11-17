@@ -63,7 +63,28 @@ export function createUnavailableStore({ file }) {
     return byProvider;
   }
 
-  return { mark, forProvider, clear, all };
+  // W6-5: a provider that said "too many requests" or "free usage limit reached" is left alone for a while, across messages.
+  // A provider-wide refusal (usage limit spent) rests every model of it; a busy model rests alone (key "provider::model").
+  const cooling = new Map();
+  /** Leave a provider (or one model of it) alone for `ms`; returns the time it is free again (ms since 1970). */
+  function cool(providerId, ms, model = null) {
+    if (!providerId || !(ms > 0)) return 0;
+    const key = model ? `${providerId}::${model}` : providerId;
+    const until = Math.max(cooling.get(key) ?? 0, Date.now() + ms);
+    cooling.set(key, until);
+    return until;
+  }
+  /** When the provider (or this model of it) is free again, or 0 when it is not cooling. */
+  function coolingUntil(providerId, model = null) {
+    let latest = 0;
+    for (const key of model ? [providerId, `${providerId}::${model}`] : [providerId]) {
+      const until = cooling.get(key) ?? 0;
+      if (until <= Date.now()) cooling.delete(key); else latest = Math.max(latest, until);
+    }
+    return latest;
+  }
+
+  return { mark, forProvider, clear, all, cool, coolingUntil };
 }
 
 /**
@@ -127,8 +148,19 @@ export function failureKind(err, unavailable = false) {
   if (code === 'chat.empty') return { scope: 'model', reason: 'empty' };
   if (code === 'chat.refused') return { scope: 'model', reason: 'refused' };
   if (unavailable) return { scope: 'model', reason: 'unavailable' };
-  if (/\b429\b|rate.?limit|overload|too many requests|busy|capacity/i.test(message)) return { scope: 'model', reason: 'rate-limit' };
+  if (/\b429\b|rate.?limit|overload|too many requests|busy|capacity|usage limit|quota/i.test(message)) return { scope: 'model', reason: 'rate-limit' };
   if (/\b5\d\d\b/.test(message)) return { scope: 'model', reason: 'unavailable' };
   if (/^(speech\.|model\.notSelected|provider\.notConnected|request\.)/.test(code)) return { scope: 'other', reason: 'other' };
   return { scope: 'model', reason: 'unavailable' };
+}
+
+/**
+ * How long to leave a provider alone after it refused for rate or usage reasons (W6-5).
+ * "Free usage limit reached" means the allowance is spent: an hour. A plain 429 or "busy" is a short breather.
+ */
+export function cooldownFor(message) {
+  const text = String(message ?? '');
+  if (/free (usage|tier)|usage limit|quota|exceeded your|credits? (have )?(run|ran) out/i.test(text)) return 60 * 60_000;
+  if (/\b429\b|rate.?limit|too many requests|overload|capacity|busy/i.test(text)) return 2 * 60_000;
+  return 0;
 }

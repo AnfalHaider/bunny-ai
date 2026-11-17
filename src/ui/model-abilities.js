@@ -29,7 +29,7 @@ export function modelAbilities(m) {
 
   // Not chat models at all: embeddings, rerankers, safety classifiers, reward models.
   if (has(/embed|rerank|retriever|guard|safety|moderation|reward|nv-?clip|\bclip\b|parse|ocdr|detector|-pii|nemoretriever/, id)) {
-    return { abilities, utility: true, runs };
+    return { abilities, utility: true, runs, nativeSpeech: false };
   }
 
   const makesImage = out.has('image') || has(/flux|stable-diffusion|\bsdxl\b|\bsd3|sana|imagen|dall-?e|-image\b|image-gen|nano-banana/, id);
@@ -55,8 +55,12 @@ export function modelAbilities(m) {
       abilities.add('code'); runs.add('code');
     }
   }
-  return { abilities, utility: false, runs };
+  // nativeSpeech: the model itself makes sound; every other chat model only writes words a Windows voice reads out
+  return { abilities, utility: false, runs, nativeSpeech: makesSpeech };
 }
+
+const STRONG_TOOLS = /gpt-5|gpt-4|claude|gemini-?[23].*pro|gemini-?3|deepseek-v[34]|kimi-k2|qwen-?3-?coder|qwen-?3-(235|480)|glm-?[45]|minimax|mistral-large|llama-?3\.[13]-(70|405)b|llama-?4|gpt-oss-120b|grok-?[34]|devstral/;
+const WEAK_TOOLS = /(^|[^a-z])(nano|mini|flash|lite|small|tiny)([^a-z]|$)|\b([1-9]|[1-3][0-9])b\b|-([1-9]|[1-3][0-9])b\b/;
 
 /** How good a model is likely to be for a job (bigger is better). Heuristic, explainable. */
 export function scoreModel(m, job) {
@@ -72,6 +76,9 @@ export function scoreModel(m, job) {
   ];
   for (const [re, bonus] of families) if (re.test(id)) { score += bonus; break; }
   if (job === 'code' && /cod(e|er|estral)|devstral|qwen.*coder/.test(id)) score += 15;
+  // Code work is a long run of tool calls: a model must be strong at them. Small, "nano", flash and sub-40B models lose the thread.
+  if (job === 'code' && STRONG_TOOLS.test(id)) score += 14;
+  if (job === 'code' && WEAK_TOOLS.test(id)) score -= 30;
   if (job === 'research' && /reason|think|r1|pro|ultra|super/.test(id)) score += 8;
   if (job === 'image' && /pro|gpt-5/.test(id)) score += 6;
   if (/mini|nano|lite|small|tiny|flash-lite|\b[1-8]b\b/.test(id)) score -= 8;
@@ -87,19 +94,37 @@ export function detectJob(text, { hasImage = false, workMode = 'chat' } = {}) {
   if (/\b(draw|sketch|paint|illustrat|logo|icon|poster|wallpaper|picture|image|photo|render|artwork)\b/.test(t)
     && /\b(make|create|generate|draw|design|paint|give me|produce|render)\b/.test(t)) return 'image';
   if (hasImage) return 'see';
+  // W6-19: copying or comparing how a site, a page or a design LOOKS needs eyes, even in Code mode
+  if (/\b(copy|clone|recreate|re-create|replicate|mimic|match|compare)\b[^.?!]{0,60}\b(site|website|web ?page|webpage|pages|page|landing page|design|layout|look|screenshots?|ui)\b/.test(t)) return 'see';
   if (workMode === 'code' || /```|\b(code|function|bug|error|stack trace|refactor|typescript|javascript|python|sql|regex|compile|api|class|repo)\b/.test(t)) return 'code';
   if (/\b(research|latest|news|today|current|sources?|compare|look up|search( the)? (web|internet)|find out)\b/.test(t)) return 'research';
   return 'chat';
+}
+
+/** W6-19: one plain line when a picture job goes to a model chosen by hand that cannot see, or null. Auto never needs it: it picks a model that can see. */
+export function noEyesWarning({ job, modelAuto, modelName, canSee }) {
+  if (job !== 'see' || modelAuto || canSee) return null;
+  return `${modelName ?? 'This model'} cannot look at pictures, and this looks like a job that needs that (a page or design to copy or compare). Pick a model that can see, or choose Auto.`;
 }
 
 /** Models ordered best-first for a job; only ones that can actually run it here. */
 export function rankModels(models, job) {
   return models
     .filter((m) => !m.unavailable)
+    // W6-5: a provider that just refused for rate or usage reasons is left alone until its cool-down ends.
+    .filter((m) => !(m.coolingUntil && m.coolingUntil > Date.now()))
     .filter((m) => modelAbilities(m).runs.has(job))
     .map((m) => ({ m, s: scoreModel(m, job) }))
     .sort((a, b) => b.s - a.s)
     .map((x) => x.m);
+}
+
+/** W3-8: Auto starts from the model that answered last, when it is still among those that can do the job; the rest keep their order. */
+export function preferLastAnswered(ranked, last) {
+  if (!last) return ranked;
+  const at = ranked.findIndex((m) => m.providerId === last.providerId && m.id === last.id);
+  if (at <= 0) return ranked;
+  return [ranked[at], ...ranked.slice(0, at), ...ranked.slice(at + 1)];
 }
 
 /** Which jobs have at least one model that can see it through here. */
@@ -111,4 +136,10 @@ export function jobAvailability(models) {
     out[job] = { capable: capable.length, runnable: runnable.length };
   }
   return out;
+}
+
+/** One plain line on why Auto picked a model for a job. */
+export function whyPicked(m, job) {
+  if (job === 'code') return STRONG_TOOLS.test(String(m?.id ?? '').toLowerCase()) ? 'strong at coding and tool use' : 'the best coding model available here';
+  return null;
 }

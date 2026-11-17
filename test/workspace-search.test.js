@@ -15,14 +15,14 @@ import { globMatcher } from '../src/server/glob.js';
 // Alone, these searches take well under a second of CPU.
 const cpuSince = (since) => { const u = process.cpuUsage(since); return (u.user + u.system) / 1000; };
 
-function folder(t, files) {
+function folder(t, files, options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'bunny-ws-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const [name, body] of Object.entries(files)) {
     mkdirSync(dirname(join(root, name)), { recursive: true });
     writeFileSync(join(root, name), body);
   }
-  return { root, ws: createWorkspace(root) };
+  return { root, ws: createWorkspace(root, options) };
 }
 
 const FILES = {
@@ -233,7 +233,7 @@ test('find_files searches a 5,000-file folder in under 2 seconds', async (t) => 
 test('LA-2: a catastrophic regular expression is stopped with a clear message, quickly', async (t) => {
   const { ws } = folder(t, { 'a.txt': `${'a'.repeat(40)}!\n`, 'b.txt': 'fine\n' });
   const t0 = process.cpuUsage();
-  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /That pattern is too slow; simplify it\./);
+  await assert.rejects(ws.run('search_files', { query: '(a+)+$', regex: true }), /Search stopped: one file took more than a second to match this pattern/);
   assert.ok(cpuSince(t0) < 5000, `took ${cpuSince(t0)} ms`);
   // the next search still works (the stopped one left nothing behind), and an ordinary regex is unaffected
   assert.match(await ws.run('search_files', { query: '^f(i|j)ne$', regex: true }), /b\.txt:1: fine/);
@@ -249,7 +249,10 @@ test('LA-2: a literal search of the same text is not run in the time-limited con
 test('LA-2: regex search across many files stays fast when the pattern is fine', async (t) => {
   const files = {};
   for (let i = 0; i < 2000; i += 1) files[`d${i % 20}/f${i}.js`] = `const v${i} = ${i};\n${i === 1500 ? 'needle99\n' : ''}`;
-  const { ws } = folder(t, files);
+  // the 5 s regex budget is wall-clock in the product; on a saturated machine 2000 tiny regex runs add up to more than that without any of them being slow,
+  // so this test gives the workspace a CPU-time clock (what the test is about is that a fine pattern is not stopped)
+  const cpuClock = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };
+  const { ws } = folder(t, files, { clock: cpuClock });
   const t0 = process.cpuUsage();
   assert.match(await ws.run('search_files', { query: 'needle\\d+', regex: true }), /f1500\.js:2: needle99/);
   assert.ok(cpuSince(t0) < 8000, `took ${cpuSince(t0)} ms`);
@@ -294,7 +297,7 @@ test('LA-4: a regex search has a total time budget of 5 s and answers that it st
   // a clock that says every file's regex took 1.5 s: the fourth file is past the 5 s budget
   let now = 0;
   const ws = createWorkspace(root, { clock: () => { now += 750; return now; } }); // two reads of the clock per file = 1.5 s
-  await assert.rejects(ws.run('search_files', { query: 'zzz', regex: true }), /Search stopped after 5 s; narrow the folder or the pattern\./);
+  await assert.rejects(ws.run('search_files', { query: 'zzz', regex: true }), /Search stopped after 5 s in all; narrow the folder or the pattern\./);
   // a normal clock: the same search finishes
   const fast = createWorkspace(root);
   assert.match(await fast.run('search_files', { query: 'zzz', regex: true }), /No matches in 20 files/);

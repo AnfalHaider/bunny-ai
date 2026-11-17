@@ -13,6 +13,8 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { orderProviders } from './provider-order.js';
+import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
 import { applyLanguage, t as tr } from './i18n.js';
@@ -22,7 +24,7 @@ import { initBrowserPane } from './browser-pane.js';
 import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
-import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities } from './model-abilities.js';
+import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -42,6 +44,7 @@ const state = {
   artifact: null,
   artifactOpen: false,
   streaming: null,         // AbortController
+  openQuestion: null,      // W4-12: the live question card the reply is waiting on: { answer(text) }
   incognito: false,
   archivedView: false,
   query: '',
@@ -166,8 +169,9 @@ function toggleSidePane() {
   openView(state.sidePaneOpen ? null : state.activePane);
 }
 
-async function terminalStart() {
-  if (state.terminalId) return;
+async function terminalStart({ fresh = false } = {}) {
+  if (state.terminalId && !fresh) return;
+  if (state.terminalId) terminalStop();
   try {
     // No folder set: the server starts the shell in its own working folder.
     const cwd = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? undefined;
@@ -362,6 +366,55 @@ function renderPicker() {
   });
 }
 
+/** The person's own provider order, on this computer: {person: [...ids], models: {modelId: [...ids]}}. */
+function readProviderOrder() {
+  try {
+    const o = JSON.parse(localStorage.getItem('bunny.providerOrder') || '{}');
+    return { person: Array.isArray(o.person) ? o.person : [], models: o.models && typeof o.models === 'object' ? o.models : {} };
+  } catch { return { person: [], models: {} }; }
+}
+
+/** The rows of one model (one per provider) in the order Bunny tries them: Free first, then the person's own order. */
+function providerRowsInOrder(group) {
+  const saved = readProviderOrder();
+  const order = orderProviders(group.map((m) => m.providerId), {
+    free: Object.fromEntries(group.map((m) => [m.providerId, m.freeKind ?? null])),
+    personOrder: saved.person, modelOrder: saved.models[group[0].id] ?? [],
+    out: Object.fromEntries(group.filter((m) => m.unavailable).map((m) => [m.providerId, true])),
+  });
+  return order.map((id) => group.find((m) => m.providerId === id));
+}
+
+/** W4-13b: the Thinking level the person chose for a model (kept on this computer), or null for Default and for a provider whose field is not known. */
+function chosenThinking(providerId, modelId) {
+  try {
+    const level = JSON.parse(localStorage.getItem('bunny.thinking') || '{}')[modelId];
+    return thinkingLevels(providerId).includes(level) ? level : null;
+  } catch { return null; }
+}
+function writeThinking(modelId, level) {
+  try {
+    const all = JSON.parse(localStorage.getItem('bunny.thinking') || '{}');
+    if (level) all[modelId] = level; else delete all[modelId];
+    localStorage.setItem('bunny.thinking', JSON.stringify(all));
+  } catch { /* private window: the choice lasts until the page closes */ }
+}
+
+/** W3-8: the model that answered last (kept on this computer), for Auto to start from. */
+function lastAnswered() {
+  try { const v = JSON.parse(localStorage.getItem('bunny.lastAnswered') || 'null'); return v && typeof v.id === 'string' ? v : null; } catch { return null; }
+}
+function rememberAnswered(m) {
+  try { localStorage.setItem('bunny.lastAnswered', JSON.stringify({ providerId: m.providerId, id: m.id })); } catch { /* private window */ }
+}
+
+/** A short list of model ids kept on this computer (favourites, recent). */
+function readList(key) {
+  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+}
+function writeList(key, list) { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* private window: the list lives only until the page closes */ } }
+function rememberRecent(modelId) { writeList('bunny.recent', [modelId, ...readList('bunny.recent').filter((id) => id !== modelId)].slice(0, 5)); }
+
 function closePicker() {
   document.querySelector('.picker-panel')?.remove();
   $('picker-button')?.setAttribute('aria-expanded', 'false');
@@ -378,7 +431,44 @@ function openPicker(host, trigger) {
   });
   const list = element('div', { className: 'picker-list', role: 'listbox' });
 
-  panel.append(search, list);
+  // W4-13: filters combine with AND; a model must have a provider that fits Provider and Free together
+  const filters = { providers: new Set(), abilities: new Set(), freeOnly: false };
+  const filterCount = () => filters.providers.size + filters.abilities.size + (filters.freeOnly ? 1 : 0);
+  const CAN_DO = ['code', 'see', 'image', 'video', 'speech'];
+  // Speech is shown and filtered only for models that make sound themselves; any chat model can be read out by a Windows voice
+  const has = (m, a) => (a === 'speech' ? modelAbilities(m).nativeSpeech : modelAbilities(m).abilities.has(a));
+  let sort = 'recommended';
+  const SORTS = [['recommended', 'Recommended'], ['name', 'Name'], ['context', 'Context size']];
+  const filtersBtn = button('Filters', { className: 'picker-filters-btn', 'aria-expanded': 'false' });
+  const bar = element('div', { className: 'picker-filters', hidden: true });
+  const count = element('div', { className: 'picker-count', hidden: true });
+  const providerNames = new Map(state.models.map((m) => [m.providerId, m.providerName]));
+  const chipFor = (label, on, toggle) => {
+    const c = button(label, { className: 'picker-chip', 'aria-pressed': String(on) });
+    c.addEventListener('click', () => { toggle(); paintBar(); paint(search.value); });
+    return c;
+  };
+  const paintBar = () => {
+    bar.replaceChildren(
+      element('span', { className: 'picker-chip-label', textContent: 'Provider' }),
+      ...[...providerNames].map(([id, name]) => chipFor(name, filters.providers.has(id), () => { if (!filters.providers.delete(id)) filters.providers.add(id); })),
+      element('span', { className: 'picker-chip-label', textContent: 'Can do' }),
+      ...CAN_DO.map((a) => chipFor(JOBS[a].label, filters.abilities.has(a), () => { if (!filters.abilities.delete(a)) filters.abilities.add(a); })),
+      chipFor('Free only (Free and Free daily)', filters.freeOnly, () => { filters.freeOnly = !filters.freeOnly; }),
+      element('span', { className: 'picker-chip-label', textContent: 'Sort' }),
+      ...SORTS.map(([id, label]) => chipFor(label, sort === id, () => { sort = id; })),
+    );
+    if (filterCount()) {
+      const clear = button('Clear filters', { className: 'picker-clear' });
+      clear.addEventListener('click', () => { filters.providers.clear(); filters.abilities.clear(); filters.freeOnly = false; paintBar(); paint(search.value); });
+      bar.append(clear);
+    }
+    filtersBtn.textContent = filterCount() ? `Filters · ${filterCount()}` : 'Filters';
+  };
+  filtersBtn.addEventListener('click', () => { bar.hidden = !bar.hidden; filtersBtn.setAttribute('aria-expanded', String(!bar.hidden)); });
+  paintBar();
+
+  panel.append(search, filtersBtn, bar, count, list);
   host.append(panel);
   search.focus();
 
@@ -416,8 +506,19 @@ function openPicker(host, trigger) {
   const paint = (query) => {
     const q = query.trim().toLowerCase();
     list.replaceChildren();
-    const matches = state.models.filter((m) =>
-      !q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q));
+    const filtered = filterCount() > 0;
+    const rows = state.models.filter((m) =>
+      (!q || m.id.toLowerCase().includes(q) || m.providerName.toLowerCase().includes(q))
+      && (!filters.providers.size || filters.providers.has(m.providerId))
+      && (!filters.abilities.size || [...filters.abilities].every((a) => has(m, a)))
+      && (!filters.freeOnly || m.freeKind));
+    // one entry per model; every provider that serves it (and fits the filters) is a tag
+    const byModel = new Map();
+    for (const m of rows) { if (!byModel.has(m.id)) byModel.set(m.id, []); byModel.get(m.id).push(m); }
+    const totalModels = new Set(state.models.map((m) => m.id)).size;
+    count.hidden = !filtered;
+    count.textContent = `${byModel.size} of ${totalModels} models`;
+    const matches = rows;
     if (!matches.length) {
       list.append(element('div', { className: 'picker-empty', textContent: say('chat.noModelMatches') }));
       addShowAll();
@@ -426,7 +527,7 @@ function openPicker(host, trigger) {
       return;
     }
     let currentProvider = null;
-    if (!q) {
+    if (!q && !filtered) { // filtering hides Auto and the suggestions, as drawn
       const job = state.resolvedJob ?? 'chat';
       const autoItem = button('', { className: 'picker-item picker-auto', role: 'option', 'aria-selected': String(Boolean(state.modelAuto)) });
       autoItem.id = 'model-auto';
@@ -441,24 +542,135 @@ function openPicker(host, trigger) {
         refreshAutoPreview();
       });
       list.append(autoItem);
-      const best = rankModels(state.models, job).slice(0, 5);
-      if (best.length) {
+      const favs = readList('bunny.favourites');
+      const groupOf = (id) => { const g = state.models.filter((m) => m.id === id); return g.length ? g : null; };
+      for (const [label, ids, key] of [['Favourites', favs, 'fav-'], ['Recent', readList('bunny.recent').filter((id) => !favs.includes(id)), 'recent-']]) {
+        const groups = ids.map(groupOf).filter(Boolean);
+        if (!groups.length) continue;
+        list.append(element('div', { className: 'picker-group', textContent: label }));
+        for (const g of groups) list.append(modelItem(g, key));
+      }
+      const bestIds = [...new Set(rankModels(state.models, job).map((m) => m.id))].slice(0, 5);
+      if (bestIds.length) {
         list.append(element('div', { className: 'picker-group', textContent: `Best for ${JOBS[job].label}` }));
-        for (const m of best) list.append(pickerItem(m, 'best'));
+        for (const id of bestIds) list.append(modelItem(state.models.filter((m) => m.id === id), 'best-'));
       }
       list.append(element('div', { className: 'picker-group picker-group-all', textContent: 'All models' }));
     }
-    for (const m of matches) {
-      if (m.providerId !== currentProvider) {
-        currentProvider = m.providerId;
-        list.append(element('div', { className: 'picker-group', textContent: m.providerName }));
-      }
-      list.append(pickerItem(m));
-    }
+    const groups = [...byModel.values()];
+    const top = (g) => Math.max(0, ...g.map((m) => Number(m.contextLength) || 0));
+    const nameOf = (g) => String(g[0].displayName ?? g[0].id);
+    if (sort === 'name') groups.sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' }));
+    else if (sort === 'context') groups.sort((a, b) => top(b) - top(a) || nameOf(a).localeCompare(nameOf(b)));
+    for (const group of groups) list.append(modelItem(group));
     addShowAll();
     active = 0;
     highlight();
   };
+
+  // One row per model: its name, its context size, and every provider as a tag in the order Bunny tries them (Free first, then Free daily).
+  const rowsInOrderOf = providerRowsInOrder;
+
+  function modelItem(group, section = '') {
+    const first = group[0];
+    const rowsInOrder = rowsInOrderOf(group);
+    const chosen = rowsInOrder[0];
+    const item = pickerItem(chosen);
+    item.classList.add('picker-model');
+    if (section) item.dataset.section = section.replace(/-$/, ''); // the same model again, under Best for / Favourites / Recent
+    item.id = `model-${section}${first.id}`.replace(/[^a-zA-Z0-9-]/g, '-');
+    if (readList('bunny.favourites').includes(first.id)) item.querySelector('.model-name')?.append(element('span', { className: 'picker-star', textContent: '★', title: 'Favourite' }));
+    const tags = element('span', { className: 'picker-tags' });
+    for (const m of rowsInOrder) {
+      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerName });
+      if (m.freeKind) tag.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+      tags.append(tag);
+    }
+    item.append(tags);
+    // the details open from their own button beside the row (a button inside a button is not valid)
+    const more = button('Details ›', { className: 'picker-details-link', 'aria-label': `Details for ${first.displayName ?? first.id}` });
+    more.addEventListener('click', (e) => { e.stopPropagation(); openDetails(group); });
+    const ctx = compactContext(rowsInOrder.reduce((n, m) => Math.max(n, Number(m.contextLength) || 0), 0));
+    return element('div', { className: 'picker-row' }, item, ctx ? element('span', { className: 'picker-ctx', title: 'Context size', textContent: ctx }) : '', more);
+  }
+
+  // The details of one model: its providers in the order Bunny tries them (move with the arrows, saved on this computer per model) and a favourite.
+  function openDetails(group) {
+    const first = group[0];
+    const parts = [search, filtersBtn, bar, count, list];
+    const wasHidden = parts.map((p) => p.hidden);
+    parts.forEach((p) => { p.hidden = true; });
+    const det = element('div', { className: 'picker-details', role: 'region', 'aria-label': `${first.displayName ?? first.id} details` });
+    const back = button('‹ Back', { className: 'picker-back' });
+    const leave = () => { det.remove(); parts.forEach((p, i) => { p.hidden = wasHidden[i]; }); paint(search.value); search.focus(); };
+    back.addEventListener('click', leave);
+    det.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); leave(); } });
+    const move = (id, by) => {
+      const ids = rowsInOrderOf(group).map((m) => m.providerId);
+      const at = ids.indexOf(id);
+      const to = at + by;
+      if (at < 0 || to < 0 || to >= ids.length) return;
+      [ids[at], ids[to]] = [ids[to], ids[at]];
+      const saved = readProviderOrder();
+      saved.models[first.id] = ids;
+      try { localStorage.setItem('bunny.providerOrder', JSON.stringify(saved)); } catch { /* kept for this page only */ }
+      draw(id, by);
+    };
+    const draw = (focusId, by) => {
+      const rows = rowsInOrderOf(group);
+      const isFav = readList('bunny.favourites').includes(first.id);
+      const abilities = [...modelAbilities(first).abilities].filter((a) => a !== 'chat' && a !== 'research' && (a !== 'speech' || modelAbilities(first).nativeSpeech)).map((a) => JOBS[a].label);
+      const fav = button(isFav ? '★ Remove from favourites' : '☆ Add to favourites', { className: 'picker-fav', 'aria-pressed': String(isFav) });
+      fav.addEventListener('click', () => {
+        const now = readList('bunny.favourites');
+        writeList('bunny.favourites', now.includes(first.id) ? now.filter((id) => id !== first.id) : [first.id, ...now]);
+        draw();
+      });
+      const order = element('ol', { className: 'picker-order' });
+      rows.forEach((m, i) => {
+        const up = button('↑', { className: 'picker-move', 'aria-label': `Move ${m.providerName} up` });
+        const down = button('↓', { className: 'picker-move', 'aria-label': `Move ${m.providerName} down` });
+        up.disabled = i === 0;
+        down.disabled = i === rows.length - 1;
+        up.addEventListener('click', () => move(m.providerId, -1));
+        down.addEventListener('click', () => move(m.providerId, 1));
+        const name = element('span', { className: 'picker-order-name', textContent: m.providerName });
+        if (m.freeKind) name.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+        order.append(element('li', { 'data-provider': m.providerId },
+          element('span', { className: 'picker-order-n', textContent: String(i + 1) }), name,
+          element('span', { className: 'picker-order-state' + (m.unavailable ? ' is-out' : ''), textContent: m.unavailable ? 'Unavailable' : 'Ready' }), up, down));
+      });
+      // W4-13b: Thinking, for a provider whose field is known; hidden for any other
+      const levels = thinkingLevels(rows[0].providerId);
+      const nowLevel = chosenThinking(rows[0].providerId, first.id);
+      const think = levels.length ? element('div', { className: 'picker-thinking' },
+        element('div', { className: 'picker-details-k', textContent: 'Thinking' }),
+        element('div', { className: 'picker-seg', role: 'group', 'aria-label': 'Thinking' }, ...['default', ...levels].map((lv) => {
+          const on = (lv === 'default' && !nowLevel) || lv === nowLevel;
+          const b = button(lv[0].toUpperCase() + lv.slice(1), { className: 'picker-chip', 'aria-pressed': String(on) });
+          b.addEventListener('click', () => { writeThinking(first.id, lv === 'default' ? null : lv); draw(); });
+          return b;
+        }))) : null;
+      det.replaceChildren(
+        back,
+        element('h3', { textContent: first.displayName ?? first.id }),
+        element('div', { className: 'picker-details-meta', textContent: [first.contextLength ? `${Number(first.contextLength).toLocaleString()} tokens of context` : '', ...abilities].filter(Boolean).join(' · ') || first.id }),
+        element('div', { className: 'picker-details-k', textContent: 'Providers, in the order Bunny tries them' }),
+        order,
+        element('div', { className: 'picker-details-note', textContent: rows.length > 1 ? 'The first one is used when you pick this model. The order is kept on this computer.' : 'Only one provider has this model.' }),
+        ...(think ? [think] : []),
+        fav,
+      );
+      if (focusId) {
+        const li = [...det.querySelectorAll('li')].find((x) => x.dataset.provider === focusId);
+        const target = li?.querySelectorAll('.picker-move')[by < 0 ? 0 : 1];
+        (target && !target.disabled ? target : det.querySelector('.picker-back')).focus();
+      }
+    };
+    draw();
+    panel.append(det);
+    det.querySelector('.picker-back').focus();
+  }
 
   function pickerItem(m, section = '') {
       const isCurrent = !state.modelAuto && state.selected
@@ -474,7 +686,7 @@ function openPicker(host, trigger) {
         element('span', { className: 'model-name', textContent: m.displayName ?? m.id }),
         element('span', {
           className: 'model-desc',
-          textContent: m.contextLength ? `${Number(m.contextLength).toLocaleString()} tokens · ${m.id}` : m.id,
+          textContent: m.id,
         }),
       );
       if (m.unavailable) {
@@ -486,7 +698,7 @@ function openPicker(host, trigger) {
         item.querySelector('.model-name')?.append(
           element('span', { className: 'tag', textContent: 'unavailable' }));
       }
-      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research');
+      const abilities = [...modelAbilities(m).abilities].filter((a) => a !== 'chat' && a !== 'research' && (a !== 'speech' || modelAbilities(m).nativeSpeech));
       if (abilities.length) item.querySelector('.model-desc')?.append(` · ${abilities.map((a) => JOBS[a].label).join(', ')}`);
       item.addEventListener('click', () => selectModel(m));
       return item;
@@ -506,11 +718,24 @@ function openPicker(host, trigger) {
   });
   panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
   setTimeout(() => {
-    document.addEventListener('click', (ev) => { if (!host.contains(ev.target)) closePicker(); }, { once: true });
+    // a click on something inside the picker that was rebuilt by that very click (the arrows in the details) is not outside
+    const outside = (ev) => {
+      if (!document.querySelector('.picker-panel')) { document.removeEventListener('click', outside); return; }
+      if (!host.contains(ev.target) && ev.target.isConnected) { document.removeEventListener('click', outside); closePicker(); }
+    };
+    document.addEventListener('click', outside);
   }, 0);
 }
 
+// 1048576 -> "1M", 262144 -> "256K", 128000 -> "128K"
+function compactContext(n) {
+  if (!n) return '';
+  if (n >= 900000) return `${Math.round(n / 1e5) / 10}M`.replace('.0M', 'M');
+  return `${Math.round(n % 1000 === 0 ? n / 1000 : n / 1024)}K`;
+}
+
 async function selectModel(m) {
+  rememberRecent(m.id);
   state.modelAuto = false;
   localStorage.setItem('bunny.modelAuto', '0');
   state.selected = { providerId: m.providerId, providerName: m.providerName, model: m.id };
@@ -931,7 +1156,7 @@ function paintMessages() {
   // D-2: consecutive tool steps between two pieces of narration are ONE group line, collapsed once finished.
   let run = [];
   const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
-  const groupable = (m) => m.kind === 'tool_call' && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  const groupable = (m) => m.kind === 'tool_call' && !m.needsSignIn && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
   // W4-5c: a reply saves ONE thinking text; when steps came before its answer, its "Thought for" row goes before the first of them
   // (thinking, then the step it led to), the same order the live line settles in.
   const thoughtAt = new Map();
@@ -1115,6 +1340,47 @@ function renderTitle() {
   el.textContent = state.session?.title || say('chat.new');
 }
 
+/**
+ * W3-6: a connector that needs the person to sign in. The step says "Needs sign-in" and offers Sign in (the person's own browser opens,
+ * and the chat carries on by itself once they are back) and Skip it (just dismisses; a later message works as usual once signed in).
+ */
+function signInStep(info) {
+  const box = element('div', { className: 'signin-step' });
+  const note = element('span', { className: 'hint' });
+  const clientBox = element('input', { className: 'input', placeholder: 'Client ID', hidden: true });
+  clientBox.setAttribute('aria-label', 'Client ID');
+  const signIn = button('Sign in', { className: 'primary small' });
+  const skip = button('Skip it', { className: 'ghost small', onclick: () => box.remove() });
+  const finish = async (account) => {
+    note.textContent = `Signed in as ${account ?? 'your account'}.`;
+    signIn.remove(); skip.remove(); clientBox.hidden = true;
+    if (!state.streaming && !$('input').value.trim()) { $('input').value = 'I have signed in. Please carry on.'; await send(); }
+  };
+  const begin = async () => {
+    note.textContent = '';
+    signIn.disabled = true;
+    try {
+      const out = await sendJSON(`/api/connectors/${info.serverId}/oauth/start`, 'POST', clientBox.value.trim() ? { clientId: clientBox.value.trim() } : {});
+      window.open(out.authUrl, '_blank', 'noopener'); // the desktop app hands the link to the person's own browser
+      note.textContent = 'Waiting for you to finish in your browser… (5 minutes)';
+      const until = Date.now() + 5 * 60_000;
+      while (box.isConnected && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const now = await getJSON(`/api/connectors/${info.serverId}/oauth`).catch(() => null);
+        if (now?.signedIn) return finish(now.account);
+        if (now?.error) { note.textContent = now.error; break; }
+      }
+      if (box.isConnected && note.textContent.startsWith('Waiting')) note.textContent = 'The sign-in was not finished in 5 minutes. Try again.';
+    } catch (e) {
+      if (e.code === 'mcp.oauth.needsClientId') { note.textContent = 'This service does not let apps register themselves. Paste the client ID from its developer settings.'; clientBox.hidden = false; } else note.textContent = e.message;
+    }
+    signIn.disabled = false;
+  };
+  signIn.addEventListener('click', begin);
+  box.append(signIn, skip, clientBox, note);
+  return box;
+}
+
 function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
@@ -1127,7 +1393,8 @@ function renderMessage(m, { skipThinking = false } = {}) {
     const header = element('div', { className: 'tool-call-header', role: 'button', tabindex: '0', 'aria-expanded': 'false' });
     header.append(chevron(), element('span', { textContent: m.tool ?? 'tool' }));
     const failedStep = m.status === 'failed' || m.status === 'denied';
-    if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
+    if (m.needsSignIn) header.append(element('span', { className: 'tag is-blocked', textContent: 'Needs sign-in' }));
+    else if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
     else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
     // A read step opens that file in the Files pane.
@@ -1155,6 +1422,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       tc.append(copy);
     }
     wrap.append(tc);
+    if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
     if (m.linked) wrap.append(linkedChatCard(m.linked));
@@ -1207,7 +1475,23 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
   }
 
   // Which model answered, when Auto chose it (and what it fell back from).
-  if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
+  if (m.role === 'assistant' && m.model && (m.fellBackKind === 'provider' || m.fellBackKind === 'model')) {
+    // W4-13 slice 3: one calm amber line, never an error
+    const row = state.models?.find((x) => x.id === m.model && x.providerId === m.providerId) ?? state.models?.find((x) => x.id === m.model);
+    const reason = reasonPhrase(m.fellBackReason);
+    const text = m.fellBackKind === 'provider'
+      ? say('model.switchedProvider', { model: row?.displayName ?? m.model, provider: row?.providerName ?? m.providerId ?? '', from: m.fellBackFrom, reason })
+        + (m.fellBackTries > 1 ? ` (${m.fellBackTries - 1} other provider${m.fellBackTries - 1 === 1 ? '' : 's'} also failed)` : '')
+      // the model the person picked by its name (not its id), the provider that failed, and how many others also failed, with no brackets inside brackets
+      : say('model.switchedModel', {
+        model: row?.displayName ?? m.model,
+        from: state.models?.find((x) => x.id === m.fellBackFrom)?.displayName ?? m.fellBackFrom,
+        provider: m.fellBackProvider ?? '',
+        reason,
+        more: m.fellBackTries > 1 ? `; ${m.fellBackTries - 1} other provider${m.fellBackTries - 1 === 1 ? '' : 's'} also failed` : '',
+      });
+    wrap.append(element('div', { className: 'msg-meta switch-note', textContent: `↪ ${text}.` }));
+  } else if (m.role === 'assistant' && (m.auto || m.fellBackFrom) && m.model) {
     const job = JOBS[m.job]?.label ?? 'Chat';
     wrap.append(element('div', { className: 'msg-meta auto-meta',
       textContent: m.auto
@@ -1431,7 +1715,7 @@ function renderContext(meter) {
 
 async function loadMcpServers() {
   try {
-    state.mcpServers = await getJSON('/api/mcp');
+    state.mcpServers = (await getJSON('/api/mcp')).filter((s) => appliesHere(s.folders));
   } catch {
     state.mcpServers = [];
   }
@@ -1503,7 +1787,7 @@ function renderRailDetails() {
   put('rail-model', picked ? picked.model : 'No model chosen');
   const autoPick = state.modelAuto && state.autoPick;
   const why = $('rail-why-row');
-  if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}`); }
+  if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}${whyPicked(autoPick, state.lastJob) ? `: ${whyPicked(autoPick, state.lastJob)}` : ''}`); }
   const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
   const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   put('rail-mode', modes[mode] ?? mode);
@@ -1531,7 +1815,7 @@ function renderRailDetails() {
 // streaming
 
 function setStreaming(on) {
-  $('send').disabled = on;
+  $('send').disabled = on && !state.openQuestion; // a waiting question card takes the typed reply
   $('stop').hidden = !on;
   // While the next model starts after a failure, the calm "X is slow. Trying Y…" line stays instead of "Streaming…".
   $('status').textContent = on ? (state.tryingNote || 'Streaming…') : '';
@@ -1630,7 +1914,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     },
     onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable }; showError(err.message ?? 'The request failed.'); },
+    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       settleThinking();
       flushNote();
@@ -1643,9 +1927,11 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onPermission: (info) => { settleThinking(); working.set('asking'); showLivePermission(bodyEl, info); },
     onBrowser: (info) => runBrowserAction(info),
     onCapability: (info) => { settleThinking(); working.set('asking'); showLiveCapability(bodyEl, info); },
+    onNotice: (info) => showLiveNotice(bodyEl, info),
     onTasks: (info) => showLiveTasks(bodyEl, info.tasks ?? []),
     onThinking: (info) => { working.alive(); working.addThinking(info.text ?? ''); },
     onQuestion: (info) => { settleThinking(); flushNote(); working.set('asking'); showLiveQuestion(bodyEl, info); },
+    onWaiting: (info) => notifyWaiting(info), // W6-25
     onNewChat: (info) => { state.pendingNewChat = info; },
   };
   function flushNote() {
@@ -1677,6 +1963,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     settleThinking(); // thinking that was still open when the reply ended is kept as its row
     working.stop();
     state.streaming = null;
+    state.openQuestion = null;
     setStreaming(false);
     bodyEl.classList.remove('is-streaming');
   }
@@ -1714,7 +2001,11 @@ function showLiveTool(bodyEl, info) {
     msg.before(line);
   }
   line.dataset.status = info.status;
-  line.querySelector('.tag')?.replaceChildren(info.status);
+  line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
+  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
+    line.querySelector('.tag')?.classList.add('is-blocked');
+    line.append(signInStep(info));
+  }
   if (info.result) {
     let res = line.querySelector('.tool-call-result');
     if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }
@@ -1751,6 +2042,8 @@ function showLiveQuestion(bodyEl, info) {
   const text = element('textarea', { className: 'question-text', rows: 2, placeholder: info.placeholder || (info.choices?.length ? 'Or type your own answer…' : 'Type your answer…'), 'aria-label': 'Your answer' });
   const actions = element('div', { className: 'permission-actions' });
   const send = async (answer) => {
+    state.openQuestion = null;
+    $('send').disabled = Boolean(state.streaming);
     actions.replaceChildren(element('span', { className: 'hint', textContent: 'Sending…' }));
     for (const el of card.querySelectorAll('button, textarea, input')) el.disabled = true;
     try {
@@ -1797,6 +2090,16 @@ function showLiveQuestion(bodyEl, info) {
   });
   // Enter sends the typed answer; Shift+Enter makes a new line.
   text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); card.requestSubmit(); } });
+  // W4-12: the message box answers it too: "stop here" typed there is the choice with that name, anything else is the answer in words
+  const norm = (x) => String(x).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  state.openQuestion = {
+    card,
+    answer: (typed) => {
+      const hit = (info.choices ?? []).map((c) => (typeof c === 'string' ? c : c.label)).find((l) => norm(l) === norm(typed));
+      send(hit ? { choices: [hit] } : { text: typed });
+    },
+  };
+  $('send').disabled = false;
   msg.before(card);
   card.scrollIntoView({ block: 'end' });
   (info.choices?.length && !info.multiple ? card.querySelector('.question-choice') : text)?.focus();
@@ -1818,7 +2121,12 @@ function answeredQuestionCard(q) {
     }
     card.append(list);
   }
-  card.append(element('p', { className: 'question-answer', textContent: q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
+  card.append(element('p', { className: 'question-answer', textContent: q.answer === 'Skipped' ? 'You skipped this question.' : q.answer ? `You answered: ${q.answer}` : 'Not answered' }));
+  // W4-12: the choices above are only a record. Say so, and why nothing could be clicked, instead of leaving them looking like dead buttons.
+  if (!q.answer) {
+    card.classList.add('is-unanswered');
+    card.append(element('p', { className: 'question-answer-note', textContent: 'Bunny stopped waiting (the window was closed or reloaded, or nobody answered in time), so this card can no longer be answered. Tell Bunny what you want in the message box.' }));
+  }
   return card;
 }
 
@@ -1985,14 +2293,30 @@ function setFolded(pre, folded) {
 }
 
 /** The model asked for something it does not have: the person chooses. */
+/** W4-14e: a plain note in the chat from Bunny's server, with the folder picker when a folder is what is missing. */
+function showLiveNotice(bodyEl, info) {
+  const msg = bodyEl.closest('.msg');
+  if (!msg) return;
+  const card = element('div', { className: 'permission-prompt live-permission capability-card' });
+  card.append(element('p', { className: 'capability-reason', textContent: String(info.text ?? '') }));
+  if (info.folderPicker) {
+    const actions = element('div', { className: 'permission-actions' });
+    actions.append(button(say('cap.folder'), { className: 'primary', onclick: async () => { await chooseFolder(); applyWorkMode('code', { save: true }); } }));
+    card.append(actions);
+  }
+  msg.before(card);
+}
+
 function showLiveCapability(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const yesLabel = {
     code_mode: info.hasFolder ? say('cap.code') : say('cap.folder'),
+    leave_plan_mode: say('cap.leavePlan'),
     computer_use: say('cap.computer'),
     custom_tools: say('cap.build'),
     new_tool: say('cap.newTool'),
+    switch_on_added: 'Switch on',
   }[info.capability] ?? 'Allow';
   const card = element('div', { className: 'permission-prompt live-permission capability-card' });
   card.append(
@@ -2011,6 +2335,12 @@ function showLiveCapability(bodyEl, info) {
       }
       actions.replaceChildren(element('span', { className: 'hint', textContent: granted ? say('cap.given') : say('cap.notNow') }));
       await sendJSON(`/api/sessions/${state.sessionId}/capability/${info.id}`, 'POST', { granted });
+      if (granted && info.capability === 'leave_plan_mode') { // the server moved this chat to Ask: show it
+        if (state.session) state.session.permissionMode = 'ask';
+        const picker = $('permission-mode');
+        if (picker) picker.value = 'ask';
+        syncModeMenu();
+      }
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
     }
@@ -2224,6 +2554,26 @@ function startNewChat({ incognito = false } = {}) {
   $('input').focus();
 }
 
+/** A message from the quick-ask bar: a NEW chat in Chat mode with no folder, the text and the optional screenshot sent as the first message. */
+async function runQuickAsk() {
+  const request = await window.bunnyDesktop.quickAsk.take();
+  if (!request || typeof request.text !== 'string') return;
+  if (state.streaming) { // keep what was typed: it waits in the message box instead of being lost
+    $('input').value = request.text;
+    $('error').textContent = 'Bunny is busy, so your quick ask is waiting in the message box. Send it when the answer finishes.';
+    return;
+  }
+  startNewChat();
+  state.projectId = null;
+  state.pendingFolder = null;
+  applyWorkMode('chat');
+  state.pendingFiles = Array.isArray(request.files) ? request.files.slice(0, 1) : [];
+  renderPendingFiles();
+  // A quick ask is always a message, never a slash command: a leading invisible word joiner stops "/..." from being run as one.
+  $('input').value = request.text.startsWith('/') ? `⁠${request.text}` : request.text;
+  await send();
+}
+
 function renderMode() {
   const host = $('mode');
   if (!host) return;
@@ -2331,6 +2681,8 @@ async function send() {
   const input = $('input');
   const text = input.value.trim();
   $('error').textContent = '';
+  // W4-12: while the reply waits on a question card, what is typed in the message box is the answer
+  if (state.openQuestion && text && !text.startsWith('/')) { input.value = ''; state.openQuestion.answer(text); return; }
   if (!text && !state.pendingFiles.length) return;
   // Typing something new while a message waits for the network: the waiting one is cancelled, not sent later.
   if (state.queued) cancelQueued(); // the waiting message is cancelled, not sent later (and the person is told)
@@ -2415,23 +2767,33 @@ async function send() {
   const bodyEl = $('messages').lastElementChild?.querySelector('.body');
 
   const job = jobFor(text, files);
+  const skillCall = calledSkill(text); // S-4
   state.lastJob = job;
-  const fixed = state.selected ? [{ providerId: state.selected.providerId, id: state.selected.model, displayName: state.selected.model }] : [];
-  const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? rankModels(state.models, job).slice(0, 4) : fixed);
+  // W6-19: a picture job on a model chosen by hand that cannot see is said out loud, once, before it starts
+  const eyes = noEyesWarning({ job, modelAuto: Boolean(state.modelAuto), modelName: state.selected?.model, canSee: state.selected ? canSee(state.selected.providerId, state.selected.model) : true });
+  if (eyes) state.tryingNote = eyes; // the status line while the reply starts (cleared when it ends)
+  const fixed = state.selected ? [{ providerId: state.selected.providerId, providerName: state.selected.providerName, id: state.selected.model, displayName: state.selected.model }] : [];
+  const candidates = offlineLocal ? [offlineLocal] : (state.modelAuto ? preferLastAnswered(rankModels(state.models, job), lastAnswered()).slice(0, 4) : fixed);
   if (!candidates.length) candidates.push(...fixed);
   // A model you picked yourself is used first. Only when it is busy (rate limit, overloaded,
   // not answering) does the reply go to the best other model for the job, and you are told.
   const fallbackOn = !state.modelAuto && !offlineLocal && state.settings?.fallbackWhenBusy !== false;
+  // W4-13 slice 3: the same model on its other providers (the person's order) comes before any other model
+  let sameModel = [];
+  if (fallbackOn && state.selected) {
+    const group = state.models.filter((m) => m.id === state.selected.model);
+    sameModel = group.length ? providerRowsInOrder(group).filter((m) => m.providerId !== state.selected.providerId && !m.unavailable) : [];
+    candidates.push(...sameModel);
+  }
   if (fallbackOn) {
-    const same = (m) => m.providerId === state.selected?.providerId && m.id === state.selected?.model;
-    candidates.push(...rankModels(state.models, job).filter((m) => !same(m)).slice(0, 2));
+    candidates.push(...rankModels(state.models, job).filter((m) => m.id !== state.selected?.model).slice(0, 2));
   }
   // Errors that are not the model's fault: another model would not help.
   const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
   let result = { meter: null, aborted: false };
   // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
   // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = Math.min(6, 3 + sameModel.length);
   const queue = [...candidates];
   const failures = []; // { name, providerId, reason }
   const badProviders = new Set();
@@ -2443,16 +2805,22 @@ async function send() {
     const i = attempt;
     attempt += 1;
     const stillToTry = () => queue.filter((q) => !badProviders.has(q.providerId)).length;
-    const failed = failures[0]?.name ?? null;
+    const f0 = failures[0];
+    // the same model on the next provider ('provider'), or another model once no provider had it left ('model')
+    const switchKind = !f0 || !state.selected || f0.modelId !== state.selected.model ? undefined
+      : (pick.id === f0.modelId ? 'provider' : (sameModel.length ? 'model' : undefined));
+    const failed = switchKind === 'provider' ? f0.providerName : (f0?.name ?? null);
     $('error').textContent = '';
     result = await streamInto(bodyEl, {
       quietError: true,
       path: `/api/sessions/${state.sessionId}/messages`,
       payload: {
         content: text,
+        ...(skillCall ? { useSkill: skillCall.name } : {}),
         retry: i > 0, // the user turn is already saved after the first try
         providerId: pick.providerId,
         model: pick.id,
+        ...(chosenThinking(pick.providerId, pick.id) ? { thinking: chosenThinking(pick.providerId, pick.id) } : {}),
         attachments: i > 0 ? [] : files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
         workMode: state.workMode ?? 'chat',
         browserControl: Boolean(window.bunnyDesktop?.browserAct),
@@ -2462,6 +2830,8 @@ async function send() {
         fellBackFrom: failed ?? undefined,
         fellBackReason: failures[0]?.reason,
         fellBackTries: failures.length || undefined,
+        fellBackKind: switchKind,
+        fellBackProvider: switchKind ? f0.providerName : undefined,
         attemptsLeft: Math.min(MAX_ATTEMPTS - attempt, stillToTry()),
       },
       mood: failed ? 'fallback' : 'waiting',
@@ -2470,17 +2840,24 @@ async function send() {
     // goes to the next model. What was already done is saved, so the next one carries on from there.
     const errored = Boolean(result.errorCode) && !notTheModel.has(result.errorCode) && result.errorInfo?.scope !== 'other';
     if (!errored || result.aborted) break;
+    // W6-5: what the server just learned is applied here at once, so Auto does not offer a dead model or a cooling provider again.
+    if (result.errorInfo?.unavailable) { const dead = state.models.find((m) => m.providerId === pick.providerId && m.id === pick.id); if (dead) dead.unavailable = result.errorInfo.message ?? 'not available for this account'; }
+    if (result.errorInfo?.coolingUntil) for (const m of state.models) if (m.providerId === pick.providerId && (result.errorInfo.coolingScope === 'provider' || m.id === pick.id)) m.coolingUntil = result.errorInfo.coolingUntil;
     const reason = result.errorInfo?.reason ?? (result.errorCode === 'network' ? 'unreachable' : 'other');
-    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, reason });
+    failures.push({ name: pick.displayName ?? pick.id, providerId: pick.providerId, providerName: pick.providerName ?? pick.providerId, modelId: pick.id, reason });
     if (result.errorInfo?.scope === 'provider') badProviders.add(pick.providerId);
     const next = queue.find((q) => !badProviders.has(q.providerId));
     if (!next || attempt >= MAX_ATTEMPTS) break;
     // A calm line while the next model starts: what happened, and who is trying now.
     const live = say(`model.live.${reason}`) !== `model.live.${reason}` ? say(`model.live.${reason}`) : reasonPhrase(reason);
-    state.tryingNote = say('model.trying', { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
+    const sameAgain = next.id === pick.id;
+    state.tryingNote = say('model.trying', sameAgain
+      ? { from: failures.at(-1).providerName, state: live, to: `${next.displayName ?? next.id} on ${next.providerName ?? next.providerId}` }
+      : { from: failures.at(-1).name, state: live, to: next.displayName ?? next.id });
     flashStatus(state.tryingNote, 30000);
   }
   const { meter, aborted } = result;
+  if (!result.errorCode && !aborted && pick && state.modelAuto) rememberAnswered(pick); // W3-8: Auto starts from here next time
   // The reply failed because the network is down (both signals agree): not a model fault. Say so calmly,
   // keep the turn, and send it once when the network is back. No red line.
   if (!aborted && result.errorCode && navigator.onLine === false && await networkDown()) {
@@ -2558,6 +2935,18 @@ function notifyReply() {
   }
 }
 
+/** W6-25: a question or a permission prompt has waited a while: say so in the status line, and as a notification when the window is hidden. */
+function notifyWaiting(info) {
+  const what = info?.kind === 'permission' ? 'a permission' : info?.kind === 'capability' ? 'a choice' : 'an answer';
+  const text = `Bunny is still waiting for ${what}${info?.title ? `: ${String(info.title).slice(0, 100)}` : ''}`;
+  flashStatus(text, 30000);
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !document.hidden) return;
+  try {
+    const note = new Notification(say('app.name'), { body: text, tag: `waiting-${state.sessionId ?? 'bunny'}` });
+    note.onclick = () => { window.focus(); note.close(); };
+  } catch { /* a browser that will not show notifications is not an error */ }
+}
+
 /** Files picked but not yet sent. */
 function renderPendingFiles() {
   const host = $('pending-files');
@@ -2625,19 +3014,49 @@ const COMMANDS = [
   { name: '/help', hint: 'Show what commands exist' },
 ];
 
+// S-4: the skills that are on, as /name entries after the commands (cached for a minute)
+let skillMenu = { at: 0, list: [] };
+const skillSlug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+/** W6-16: does a skill or connector with these folders apply to the chat's folder? (The server decides for real; this only keeps the menus honest.) */
+function appliesHere(folders) {
+  if (!Array.isArray(folders) || !folders.length) return true;
+  const here = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? '';
+  if (!here) return false;
+  const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const h = norm(here);
+  return folders.some((f) => { const n = norm(f); return h === n || h.startsWith(`${n}/`); });
+}
+async function loadSkillMenu() {
+  if (Date.now() - skillMenu.at < 60_000) return false;
+  skillMenu.at = Date.now();
+  try {
+    const all = await (await fetch('/api/skills')).json();
+    skillMenu.list = (Array.isArray(all) ? all : []).filter((s) => s.enabled !== false && appliesHere(s.folders)).map((s) => ({ name: s.name, slug: skillSlug(s.name), hint: s.description || 'A skill' })).filter((s) => s.slug);
+  } catch { skillMenu.list = []; }
+  return true;
+}
+/** The skill a message calls ("/my-skill do this"), or null. Commands come first. */
+function calledSkill(text) {
+  const m = /^\/([a-z0-9-]+)(\s|$)/.exec(String(text));
+  if (!m || COMMANDS.some((c) => c.name === `/${m[1]}`)) return null;
+  return skillMenu.list.find((s) => s.slug === m[1]) ?? null;
+}
+
 function renderSlashMenu() {
   const host = $('slash');
   const value = $('input').value;
-  if (!value.startsWith('/') || value.includes('\n')) { host.hidden = true; return; }
-  const matches = COMMANDS.filter((c) => c.name.startsWith(value.split(' ')[0]));
+  if (!value.startsWith('/') || /\s/.test(value)) { host.hidden = true; return; } // once there is a space the person is typing the request, not choosing
+  loadSkillMenu().then((fresh) => { if (fresh && $('input').value === value) renderSlashMenu(); }); // the list arrived after the menu was drawn
+  const word = value.split(' ')[0];
+  const matches = [...COMMANDS, ...skillMenu.list.map((s) => ({ name: `/${s.slug}`, hint: s.hint, skill: true }))].filter((c) => c.name.startsWith(word));
   host.replaceChildren();
   if (!matches.length) { host.hidden = true; return; }
   for (const c of matches) {
     const item = button('', { className: 'slash-item', role: 'option' });
     item.append(element('span', { className: 'slash-name', textContent: c.name }),
-      element('span', { className: 'slash-hint', textContent: say(c.hint) }));
+      element('span', { className: 'slash-hint', textContent: c.skill ? c.hint : say(c.hint) }));
     item.addEventListener('click', () => {
-      $('input').value = c.name;
+      $('input').value = c.skill ? `${c.name} ` : c.name;
       $('slash').hidden = true;
       $('input').focus();
     });
@@ -3134,7 +3553,7 @@ function jobFor(text, files = state.pendingFiles ?? []) {
 function refreshAutoPreview() {
   const job = jobFor($('input')?.value ?? '');
   state.resolvedJob = job;
-  state.autoPick = rankModels(state.models ?? [], job)[0] ?? null;
+  state.autoPick = preferLastAnswered(rankModels(state.models ?? [], job), lastAnswered())[0] ?? null;
   const label = $('job-label');
   if (label) label.textContent = state.jobChoice === 'auto' ? `Auto · ${JOBS[job].label}` : JOBS[job].label;
   $('job-button')?.classList.toggle('is-auto', state.jobChoice === 'auto');
@@ -3445,8 +3864,8 @@ const PALETTE_COMMANDS = [
   { name: 'Export this chat', hint: 'Download the transcript as Markdown', run: () => exportChat() },
   { name: 'Toggle artifacts', hint: 'Show or hide the artifact panel', run: () => toggleArtifacts() },
   { name: 'Import a chat', hint: 'Bring in a transcript from another tool', run: () => openImport() },
-  { name: 'Settings', hint: 'Open settings', run: () => { location.href = './settings.html'; } },
-  { name: 'Providers', hint: 'Open the providers screen', run: () => { location.href = './providers.html'; } },
+  { name: 'Settings', hint: 'Open settings', run: () => openSettings('profile') },
+  { name: 'Providers', hint: 'Open the providers screen', run: () => openSettings('providers') },
 ];
 
 function openPalette() {
@@ -3458,6 +3877,18 @@ function openPalette() {
 
 function closePalette() {
   $('palette-backdrop').hidden = true;
+}
+
+/** Keyboard use of the palette: Arrow keys move the highlight, Enter runs it (Q2-14). */
+function paletteKey(e) {
+  const items = [...$('palette-list').querySelectorAll('.palette-item')];
+  if (!items.length || !['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) return;
+  e.preventDefault();
+  let at = items.findIndex((i) => i.classList.contains('is-active'));
+  if (e.key === 'Enter') { items[Math.max(at, 0)].click(); return; }
+  at = e.key === 'ArrowDown' ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
+  items.forEach((i, n) => { i.classList.toggle('is-active', n === at); i.setAttribute('aria-selected', String(n === at)); });
+  items[at].scrollIntoView?.({ block: 'nearest' });
 }
 
 function renderPalette(query) {
@@ -3489,6 +3920,7 @@ function renderPalette(query) {
   if (!host.children.length) {
     host.append(element('div', { className: 'picker-empty', textContent: 'Nothing matches.' }));
   }
+  host.querySelector('.palette-item')?.classList.add('is-active');
 }
 
 // ---------------------------------------------------------------------------
@@ -3698,6 +4130,7 @@ async function boot() {
     if (e.key === 'Escape' && !$('import-backdrop').hidden) closeImport();
   });
   $('palette-input').addEventListener('input', (e) => renderPalette(e.target.value));
+  $('palette-input').addEventListener('keydown', paletteKey);
   $('palette-backdrop').addEventListener('click', (e) => {
     if (e.target === $('palette-backdrop')) closePalette();
   });
@@ -3768,7 +4201,7 @@ async function boot() {
   });
 
   // ---- terminal new ----
-  $('terminal-new')?.addEventListener('click', () => terminalStart());
+  $('terminal-new')?.addEventListener('click', () => terminalStart({ fresh: true }));
 
   // ---- terminal input ----
   const termInput = $('terminal-input');
@@ -3868,6 +4301,12 @@ async function boot() {
   renderRail();
   renderComposerHeader();
   input.focus();
+
+  // W4-8 quick ask: the bar over any app asks this window to start a new chat with its message.
+  if (window.bunnyDesktop?.quickAsk) {
+    window.bunnyDesktop.quickAsk.onNewChat(() => { runQuickAsk().catch((err) => { $('error').textContent = err.message; }); });
+    runQuickAsk().catch((err) => { $('error').textContent = err.message; });
+  }
 
   // The app can be installed as a desktop app, and opened in its own window.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

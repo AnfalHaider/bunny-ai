@@ -53,15 +53,52 @@ export function normalizeModels(payload) {
 }
 
 /**
- * A model costs nothing when the provider prices it at zero (OpenRouter publishes
- * prompt and completion prices) or names it as free (":free", "-free").
+ * A model costs nothing when the provider prices it at zero or names it as free.
+ *
+ * Price shapes seen in the wild:
+ *   - OpenRouter:  pricing.prompt / pricing.completion (strings such as "0")
+ *   - Vercel:      pricing.input / pricing.output
+ *   - OpenCode:    cost.text.input.price / cost.text.output.price
+ * A row with no price information at all is not free (unknown is not free).
+ * Only language models are chat models: a row whose type is anything else
+ * (image, rerank, embedding, music, ...) is never a free chat model.
+ *
+ * Exported for tests.
  */
-function isFree(row, id) {
+export function isFree(row, id) {
+  if (row && typeof row === 'object' && row.type !== undefined && row.type !== 'language') return false;
   if (/(?::|-)free$/i.test(id)) return true;
-  const price = row.pricing;
-  if (!price || typeof price !== 'object') return false;
-  const parts = ['prompt', 'completion'].filter((k) => price[k] !== undefined);
-  return parts.length > 0 && parts.every((k) => Number(price[k]) === 0);
+  if (!row || typeof row !== 'object') return false;
+
+  // Each shape is read only when it carries a price; the first one that does decides.
+  const pricing = row.pricing;
+  if (pricing && typeof pricing === 'object') {
+    const legacy = ['prompt', 'completion'].filter((k) => pricing[k] !== undefined);
+    if (legacy.length > 0) return legacy.every((k) => priceIsZero(pricing[k]));
+    if (pricing.input !== undefined || pricing.output !== undefined) {
+      return priceIsZero(pricing.input) === true && priceIsZero(pricing.output) === true;
+    }
+  }
+  const opencode = row.cost?.text;
+  if (opencode && typeof opencode === 'object') {
+    const inPrice = opencode.input?.price;
+    const outPrice = opencode.output?.price;
+    if (inPrice !== undefined || outPrice !== undefined) {
+      return priceIsZero(inPrice) === true && priceIsZero(outPrice) === true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when the price is exactly zero, false when it is a non-zero number,
+ * null when there is no usable number (missing, empty string, not numeric).
+ */
+function priceIsZero(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n === 0;
 }
 
 function numberOrNull(value) {

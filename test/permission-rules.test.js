@@ -75,6 +75,7 @@ test('checkToolCall: the right argument for each tool; unknown tools are not jud
   assert.equal(checkToolCall(rules, 'start_process', { command: 'rm x' })?.effect, 'deny');
   assert.equal(checkToolCall(rules, 'write_file', { path: 'secrets/a', content: 'x' })?.effect, 'deny');
   assert.equal(checkToolCall(rules, 'multi_edit', { path: 'secrets/a', edits: [] })?.effect, 'deny');
+  assert.equal(checkToolCall(rules, 'download_file', { url: 'http://x.invalid/a', path: 'secrets/a' })?.effect, 'deny'); // W613-1
   assert.equal(checkToolCall(rules, 'read_file', { path: 'prod/a' })?.effect, 'ask');
   assert.equal(checkToolCall(rules, 'list_files', {})?.effect ?? null, null, 'listing "." matches nothing here');
   assert.equal(checkToolCall(rules, 'browser_click', { selector: 'a' }), null);

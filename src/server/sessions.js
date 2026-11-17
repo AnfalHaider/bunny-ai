@@ -220,7 +220,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       at: new Date().toISOString(),
     };
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
-    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries']) {
+    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries', 'needsSignIn', 'serverId', 'fellBackKind', 'fellBackProvider']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
     // W6-18: the model's own, longer copy of a step's result, and where the whole of it was saved.
@@ -241,7 +241,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (entry.thinking && Number.isFinite(message.thinkingMs) && message.thinkingMs > 0) entry.thinkingMs = Math.min(Math.round(message.thinkingMs), 24 * 3600 * 1000);
     // The checklist the model kept while it worked (update_tasks).
     if (Array.isArray(message.tasks) && message.tasks.length) {
-      entry.tasks = message.tasks.slice(0, 20).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));
+      entry.tasks = message.tasks.slice(0, 40).map((t) => ({ text: String(t.text ?? '').slice(0, 160), done: Boolean(t.done) }));
     }
     // The files this reply changed can be put back (see checkpoints.js).
     if (message.checkpoint && /^[a-f0-9-]{36}$/.test(String(message.checkpoint.id))) {

@@ -11,8 +11,24 @@
 
 import { ConnectError } from '../providers/errors.js';
 import { clip } from './clip.js';
+import { waitLimits } from './waitLimits.js';
 
 const MAX_TOOL_ROUNDS = 4;
+
+// W6-21: the most characters of one tool result the model reads (it was 8,000 for workspace tools).
+export const RESULT_LIMIT = 50_000;
+
+/** A tool result fitted to the limit; what is left out is said, and how to get it. */
+export function fitResult(name, text) {
+  const s = String(text ?? '');
+  if (s.length <= RESULT_LIMIT) return s;
+  // W6-21: a result over 128 KB is never saved (the secret check cannot clear something that large), so do not say it is.
+  const how = name === 'read_file' ? ' Read the rest with start_line and end_line.'
+    : s.length > 128 * 1024 ? ' The whole output is too large to be saved: run the command again with a narrower filter (a path, a pattern, head or tail).'
+      : ' The whole output is saved in .bunny/notes (the step says where): read_file it in parts.';
+  return `${clip(s, RESULT_LIMIT)}
+[Cut to ${RESULT_LIMIT} characters.${how}]`;
+}
 
 // How long a provider may stay silent before the chat gives up on it (T-3). Two limits, because they mean
 // different things: waiting for the FIRST byte (30 s; 60 s for reasoning models and image or video jobs), and
@@ -23,7 +39,7 @@ export const SLOW_FIRST_BYTE_MS = 60_000;
 export const DEFAULT_GAP_MS = 60_000;
 // Reasoning models (o-series, gpt-5, r1, anything named reason or think) and image or video jobs wait longer for a first byte.
 const SLOW_MODEL = /reason|think|r1\b|image|video|dall-e|imagen|veo|sora|gpt-5|(^|[/:-])o[1-9](-|$)/i;
-export const firstByteLimit = (model) => (SLOW_MODEL.test(String(model ?? '')) ? SLOW_FIRST_BYTE_MS : DEFAULT_STALL_MS);
+export const firstByteLimit = (model, setting) => { const l = waitLimits(setting); return SLOW_MODEL.test(String(model ?? '')) ? l.slowFirstMs : l.firstMs; }; // W4-9: setting = the person's wait, in seconds
 
 /**
  * @param {{
@@ -41,14 +57,18 @@ export const firstByteLimit = (model) => (SLOW_MODEL.test(String(model ?? '')) ?
  */
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
-  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs,
+  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting, onThinkingRefused = null,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
-  onReplyEnd = null,
+  onReplyEnd = null, onToolsRefused = null,
 }) {
   if (fake) {
-    yield* fakeStream(model, messages, signal);
-    return;
+    // PV-3: with tools offered and a [[call tool {json}]] line in the person's message, the stand-in calls those tools through the real loop
+    if (!(Array.isArray(tools) && tools.length && typeof runTool === 'function' && /\[\[call [\w-]+ /.test(lastUserText(messages)))) {
+      yield* fakeStream(model, messages, signal);
+      return;
+    }
+    fetchImpl = scriptedFetch;
   }
 
   const headers = { 'content-type': 'application/json', accept: 'text/event-stream' };
@@ -61,7 +81,7 @@ export async function* streamChat({
   // The conversation grows as tools are used, so it is copied rather than
   // mutated in place.
   const conversation = messages.map((m) => ({ ...m }));
-  const offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
+  let offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
 
   // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
   const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
@@ -83,30 +103,63 @@ export async function* streamChat({
       const kind = tokenBudget && inputTokens >= tokenBudget ? 'tokens' : repeats >= 3 ? 'repeat' : sinceNew >= 25 ? 'stalled' : null;
       if (kind) {
         let go = false;
-        try { go = !signal?.aborted && Boolean(await onLimit({ kind, round, inputTokens, repeats, sinceNew, step: lastSig.split('|')[0] })); } catch { go = false; }
+        let said = '';
+        try {
+          const r = signal?.aborted ? false : await onLimit({ kind, round, inputTokens, repeats, sinceNew, step: lastSig.split('|')[0] });
+          go = Boolean(r);
+          if (r && typeof r === 'object' && typeof r.answer === 'string') said = r.answer; // the person's own words go on to the model
+        } catch { go = false; }
         if (!go) break;
+        if (said) conversation.push({ role: 'user', content: said });
         if (kind === 'tokens') inputTokens = 0;
         repeats = 0; sinceNew = 0; lastSig = '';
       }
     }
     inputTokens += Math.ceil(conversation.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0), 0) / 4);
-    const body = { model, messages: conversation, stream: true };
+    const body = { model, messages: mergeSameRole(conversation), stream: true };
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
     if (maxTokens) body.max_tokens = maxTokens;
     if (offerTools) body.tools = tools;
     if (extraBody) Object.assign(body, extraBody);
 
-    let { text, toolCalls, finish, aborted, shown } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools,
-    });
+    let first;
+    try {
+      first = yield* streamRound({
+        baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
+      });
+    } catch (err) {
+      // Two kinds of refusal can come back on the first request, each answered once: PV-1 (the tools) and W4-13b (the thinking field). Either, or both in turn.
+      let refused = err;
+      for (let again = 0; again < 2 && refused; again += 1) {
+        if (signal?.aborted) throw refused;
+        if (offerTools && refusesTools(refused)) {
+          // PV-1: a model or provider that refuses tools would fail every message while any tool is on. Ask again without them, once, and stay without them.
+          offerTools = false;
+          delete body.tools;
+          if (typeof onToolsRefused === 'function') { try { onToolsRefused(refused.message); } catch { /* a notice only */ } }
+        } else if (refusesThinking(refused, body)) {
+          // W4-13b: a model that refuses the thinking field is asked again without it, once
+          for (const key of THINKING_KEYS) delete body[key];
+          if (typeof onThinkingRefused === 'function') { try { onThinkingRefused(refused.message); } catch { /* a notice only */ } }
+        } else throw refused;
+        try {
+          first = yield* streamRound({
+            baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
+          });
+          refused = null;
+        } catch (next) { refused = next; }
+      }
+      if (refused) throw refused;
+    }
+    let { text, toolCalls, finish, aborted, shown } = first;
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
     // A thinking model can spend the whole reply limit thinking and stop with
     // nothing to show. Once, ask again with more room before giving up.
     if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length' && !signal?.aborted) {
       const roomier = { ...body, max_tokens: Math.min(32_000, (body.max_tokens || 4096) * 4) };
-      ({ text, toolCalls, finish, shown } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: offerTools }));
+      ({ text, toolCalls, finish, shown } = yield* streamRound({ baseUrl, headers, body: roomier, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools }));
       if (!String(text ?? '').trim() && !toolCalls.length && finish === 'length') {
         throw new ConnectError('chat.tooLong', 'The model used up its whole reply limit before answering. Raise the effort or Max tokens in Settings, or pick another model.');
       }
@@ -193,7 +246,7 @@ export async function* streamChat({
         for (const url of result.images ?? []) pictures.push({ name: call.function.name, url });
         result = result.content ?? '';
       }
-      conversation.push({ role: 'tool', tool_call_id: call.id, content: clip(result, 12000) });
+      conversation.push({ role: 'tool', tool_call_id: call.id, content: clip(result, RESULT_LIMIT) });
     }
     if (pictures.length) {
       conversation.push({
@@ -212,15 +265,15 @@ export async function* streamChat({
   async function* finalAnswer() {
     const body = {
       model, stream: true,
-      messages: [...conversation, {
+      messages: mergeSameRole([...conversation, {
         role: 'user',
         content: 'Stop using tools now and reply to me. Say briefly what you did and found, what is left to do (if anything), '
           + 'and what you need from me (if anything). If work remains, end by telling me to send "continue". Do not call any more tools.',
-      }],
+      }]),
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
-    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model), gapMs: stallMs ?? DEFAULT_GAP_MS, onThinking, hideMarkup: true });
+    yield* streamRound({ baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: true });
   }
 }
 
@@ -482,6 +535,74 @@ function collectToolCall(into, fragments) {
   }
 }
 
+/**
+ * ROLES: strict chat templates (some Mistral and local models) refuse two messages of the same role in a row. A note added in front of the person's
+ * message (a connector's instructions, a task note) or a screenshot sent as its own message would make two. Only the REQUEST changes, never the saved chat:
+ * plain user+user and assistant+assistant messages become one (two strings joined by a blank line; if either holds parts, one list of parts with the pictures in
+ * order). A tool message, an assistant message with tool_calls and system messages are never touched, so every tool_call_id stays next to its result.
+ */
+export function mergeSameRole(messages) {
+  const plain = (m) => m && (m.role === 'user' || m.role === 'assistant') && !m.tool_calls && (typeof m.content === 'string' || Array.isArray(m.content));
+  const parts = (c) => (Array.isArray(c) ? c : [{ type: 'text', text: c }]);
+  const out = [];
+  for (const m of messages) {
+    const last = out[out.length - 1];
+    if (last && plain(last) && plain(m) && last.role === m.role) {
+      out[out.length - 1] = { ...last, content: typeof last.content === 'string' && typeof m.content === 'string' ? `${last.content}
+
+${m.content}` : [...parts(last.content), ...parts(m.content)] };
+    } else out.push(m);
+  }
+  return out;
+}
+
+/** PV-1: did the provider answer 400 and say the trouble is the tools (\"does not support tools\", \"tools is not allowed\")? */
+export function refusesTools(err) {
+  if (!err || err.code !== 'chat.http') return false;
+  const m = String(err.message ?? '');
+  const detail = m.split(':').slice(1).join(':');
+  // the refusal is ABOUT tools ("tools is not supported", "does not support function calling"), not a message that merely holds the word
+  const about = /\b(tools?|function[ _-]?call(ing|s)?)\b[^.]{0,60}\b(not|n't|unsupported|invalid|unknown|cannot|can't|no support)\b|\b(not|n't|unsupported|no support for|does not support|doesn't support|cannot use|can't use)\b[^.]{0,40}\b(tools?|function[ _-]?call(ing|s)?)\b/i;
+  return /answered (400|404|405|415|422)\b/.test(m) && about.test(detail) && !/max_tokens|context|too (large|long)|rate/i.test(detail);
+}
+
+const lastUserText = (messages) => {
+  const last = [...(messages ?? [])].reverse().find((m) => m.role === 'user');
+  return Array.isArray(last?.content) ? last.content.map((p) => p.text ?? '').join(' ') : String(last?.content ?? '');
+};
+
+/**
+ * PV-3: the fake provider's tool calls. A person's message holding `[[call name {json}]]` lines makes this stand-in ask for those tools one after
+ * another (through the real tool loop), then answer `Scripted: <last result>`. It is the fetch the loop uses in fake mode, so a test reaches
+ * connectors, skills and the permission checks through a real chat without a real model.
+ */
+async function scriptedFetch(_url, init) {
+  const body = JSON.parse(init.body);
+  const msgs = body.messages ?? [];
+  const at = msgs.map((m) => m.role).lastIndexOf('user');
+  const markers = [...lastUserText(msgs.slice(0, at + 1)).matchAll(/\[\[call ([\w-]+) (\{[\s\S]*?\})\]\]/g)];
+  const results = msgs.slice(at + 1).filter((m) => m.role === 'tool');
+  const frame = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
+  const next = markers[results.length];
+  const sse = next
+    ? frame({ tool_calls: [{ index: 0, id: `call_${results.length}`, function: { name: next[1], arguments: next[2] } }] })
+    : frame({ content: `Scripted: ${String(results.at(-1)?.content ?? '').slice(0, 400)}` });
+  return new Response(`${sse}data: [DONE]\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+
+/** The request fields a Thinking choice adds (see src/providers/thinking.js). */
+const THINKING_KEYS = ['reasoning_effort', 'reasoning', 'thinking'];
+
+/** W4-13b: did the provider answer 400 and say the trouble is the reasoning or thinking field, which this request carries? */
+export function refusesThinking(err, body) {
+  if (!err || err.code !== 'chat.http' || !THINKING_KEYS.some((k) => body && k in body)) return false;
+  const m = String(err.message ?? '');
+  const detail = m.split(':').slice(1).join(':');
+  const about = /\b(reasoning|thinking)(_effort)?\b[^.]{0,60}\b(not|n't|unsupported|invalid|unknown|unrecognized|cannot|can't|no support)\b|\b(not|n't|unsupported|invalid|unknown|unrecognized|no support for|does not support|doesn't support)\b[^.]{0,40}\b(reasoning|thinking)(_effort)?\b/i;
+  return /answered (400|404|405|415|422)\b/.test(m) && about.test(detail) && !/max_tokens|context|too (large|long)|rate/i.test(detail);
+}
+
 /** Deterministic stand-in so the UI is fully exercisable offline. */
 export async function* fakeStream(model, messages, signal) {
   const last = [...messages].reverse().find((m) => m.role === 'user');
@@ -511,8 +632,30 @@ export async function* fakeStream(model, messages, signal) {
  * W6-3: does this reply stop to ask permission for the work it was given ("Please confirm that you would like me to...")?
  * A real decision is asked with ask_user, which waits; a closing question like this one is a stop that should not happen.
  */
+/**
+ * W6-12: does the reply say plainly that the work is finished, or that it is blocked? Then it is left alone, even if the task list
+ * still has open steps (a model that says "I cannot go on without the API key" must not be pushed to carry on).
+ */
+export function statesDoneOrBlocked(text) {
+  const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
+  return /\b(all (the )?(steps|tasks|work|of it) (is |are )?(done|complete|finished)|(is|are|now|all) (done|finished|complete(d)?|built|ready|fixed|working)|(checks|tests) pass|finished|nothing (more|else|left)|(i('m| am)|i have been|it is) (blocked|stuck)|cannot (continue|proceed|go on)|can'?t (continue|proceed|go on)|unable to (continue|proceed)|blocked (on|by))\b/i.test(tail);
+}
+
 export function asksPermissionToContinue(text) {
   const tail = String(text ?? '').trim().split(/\n{2,}/).pop().slice(-400);
   // Handing the turn back, as a question or as a statement.
   return /\b(please confirm|would you like( me)? to|do you want me to|shall i|should i\b|want me to|ready for me to|can i (proceed|go ahead|continue)|may i (proceed|go ahead|continue)|let me know (if|when|whether|how|once)|tell me (if|when|whether|to)|say the word|just say|awaiting your|once you (confirm|say|approve)|when you('re| are) ready|whenever you('re| are) ready|if you('d| would) like|if you want me to)\b/i.test(tail);
+}
+
+/**
+ * A typed answer to "keep going?" that starts with a go-ahead word and then says to stop ("continue, stop", "yes, but don't"), as opposed to a
+ * go-ahead that only uses a stop-like word ("yes, no problem", "continue, don't stop", "carry on, not a problem").
+ */
+export function goesThenStops(text) {
+  const head = String(text ?? '').trim();
+  if (!/^(keep (going|trying)|carry on|go on|continue|yes)\b/i.test(head)) return false;
+  const rest = head.replace(/^(keep (going|trying)|carry on|go on|continue|yes)\b[\s,.;:!-]*/i, '');
+  if (/^(?:don'?t|do not|no need to|not)\s+(?:stop|wait|hold|pause|stopping|worry)\b/i.test(rest)) return false; // "don't stop", "no need to stop"
+  if (/^(?:no|not)\s+(?:problem|problems|worries|worry|rush|issue|issues|a problem|an issue|at all|doubt)\b/i.test(rest)) return false; // "no problem"
+  return /^(?:stop|don'?t|do not|no|not|wait|hold)\b/i.test(rest);
 }

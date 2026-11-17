@@ -91,7 +91,14 @@ test('the live policy.json needs the staged additions: with its own records.glob
   const liveMissing = wanted.filter((g) => !globs(liveText).includes(g));
   // the policy's own list replaces the default one (an object spread), so a live policy that lists only two folders leaves these two open
   // K-4: before landing the live policy lacks both; once landed it lists both (and the staged copy is what was taken)
-  if (liveMissing.length === 0) assert.equal(fs_text(liveText), fs_text(stagedText), 'after landing, the live policy.json is the staged one and lists the flow and kit record folders');
+  // once landed, the live policy has EVERY records glob and EVERY protected glob the staged one has, and lists the flow and kit record folders.
+  // It may have more (the project adds its own locks, for example the Chief-only audit exceptions file), so this is a superset check, not equality.
+  const protectedGlobs = (p) => JSON.parse(readFileSync(p, 'utf8')).protected_globs ?? [];
+  if (liveMissing.length === 0) {
+    assert.deepEqual(globs(stagedText).filter((g) => !globs(liveText).includes(g)), [], 'after landing, the live policy lists every records glob the staged policy lists');
+    assert.deepEqual(protectedGlobs(stagedText).filter((g) => !protectedGlobs(liveText).includes(g)), [], 'after landing, the live policy lists every protected glob the staged policy lists');
+    assert.deepEqual(wanted.filter((g) => !globs(liveText).includes(g)), [], 'and the flow and kit record folders');
+  }
   else assert.deepEqual(liveMissing, wanted, 'the live policy.json does not list them: landing must also take the staged policy.json (or drop records.globs from it)');
   assert.ok(policyLib.DEFAULT_POLICY.records.globs.includes('docs/kit-changes/**'), 'the default policy of the staged kit has them');
 });

@@ -184,7 +184,7 @@
           <div class="desc">Tell me when a reply is ready and this window is in the background.</div>
         </div>
         <div class="right">
-          <label class="switch"><input type="checkbox" id="notifications" /><span id="notifications-state">off</span></label>
+          <label class="switch"><input type="checkbox" id="notifications" aria-label="Notifications" /><span id="notifications-state">off</span></label>
         </div>
       </div>
     </div>
@@ -249,35 +249,53 @@
           <div class="name">Artifacts</div>
           <div class="desc">Keep replies as artifacts and open them in their own panel next to your chat.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="artifactsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="artifactsEnabled" aria-label="Artifacts" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Draw charts in artifacts</div>
           <div class="desc">An artifact that holds chart data is drawn as a chart instead of shown as text.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="chartsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="chartsEnabled" aria-label="Charts" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Use skills</div>
           <div class="desc">Add the skills you switched on (Customize) to the model's instructions in every chat.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="skillsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="skillsEnabled" aria-label="Skills" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name">Use connectors</div>
           <div class="desc">Offer the tools of your switched-on connectors (Customize) to the model. Off keeps every chat offline from them.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" aria-label="Connectors" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name" data-i18n="settings.fallbackName">Try another model when yours is busy</div>
           <div class="desc" data-i18n="settings.fallbackDesc">When the model you picked hits a rate limit or does not answer, the reply goes to the best other model for the job, and the reply says which answered.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" aria-label="Switch model when busy" /><span>on</span></label></div>
+      </div>
+      <div class="row" id="wait-row">
+        <div class="meta-col">
+          <div class="name">Wait for a first reply</div>
+          <div class="desc">How long Bunny waits for the model you picked to start answering before it tries another. Reasoning, image and video models get twice as long, and so does a reply that goes quiet part-way. <span id="wait-off-note" hidden>Used only when "Try another model" is on.</span></div>
+        </div>
+        <div class="right wait-right">
+          <select id="wait-select" aria-label="Wait for a first reply">
+            <option value="15">15 seconds</option>
+            <option value="30">30 seconds (default)</option>
+            <option value="60">60 seconds</option>
+            <option value="90">90 seconds</option>
+            <option value="120">120 seconds</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <label class="wait-custom" id="wait-custom" hidden><input type="text" inputmode="numeric" id="wait-custom-input" aria-label="Seconds to wait for a first reply" autocomplete="off" /> seconds</label>
+          <div class="wait-now" id="wait-now" aria-live="polite"></div>
+        </div>
       </div>
     </div>
 
@@ -299,14 +317,14 @@
           <div class="name">Enable computer use</div>
           <div class="desc">Allow screenshots, clicks and typing on this computer through Bunny AI. Off refuses every such request.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="computerUseEnabled" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="computerUseEnabled" aria-label="Computer use" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="meta-col">
           <div class="name" data-i18n="settings.aiDesktopName">Let the AI control the desktop</div>
           <div class="desc" data-i18n="settings.aiDesktopDesc">The AI may look at the screen, click, type and press keys to do what you ask. Clicks and typing still ask first in Manual and Accept edits. The AI can also ask you to switch this on when it needs it.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="aiComputerUse" data-cap-default="off" /><span>off</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="aiComputerUse" aria-label="Let the AI use the desktop" data-cap-default="off" /><span>off</span></label></div>
       </div>
     </div>
 
@@ -317,7 +335,7 @@
           <div class="name" data-i18n="settings.buildName">Let the AI build its own tools</div>
           <div class="desc" data-i18n="settings.buildDesc">When nothing Bunny AI has can do a job, the AI may write a small PowerShell script that becomes a tool. You read and approve every one before it is saved, and each run follows your permission mode.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="customToolsEnabled" data-cap-default="off" /><span>off</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="customToolsEnabled" aria-label="Let the AI build its own tools" data-cap-default="off" /><span>off</span></label></div>
       </div>
       <div id="custom-tools"></div>
     </div>
@@ -534,11 +552,22 @@
     <div class="group">
       <div class="row">
         <div class="meta-col">
+          <div class="name">Quick ask</div>
+          <div class="desc">Press <span id="quick-keys">Ctrl+Alt+Space</span> anywhere to ask Bunny in a small bar. Needs Bunny to keep running in the tray.</div>
+          <div class="desc" id="quick-note" role="status" style="color:var(--warn,#b45309)" hidden></div>
+        </div>
+        <div class="right">
+          <button type="button" id="quick-change" class="btn">Change</button>
+          <label class="switch"><input type="checkbox" id="quick-ask" aria-label="Quick ask" /><span id="quick-state">off</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
           <div class="name">Start when I sign in</div>
           <div class="desc">Open Bunny AI when you sign in to Windows.</div>
         </div>
         <div class="right">
-          <label class="switch"><input type="checkbox" id="launch-at-login" /><span id="launch-state">off</span></label>
+          <label class="switch"><input type="checkbox" id="launch-at-login" aria-label="Open at login" /><span id="launch-state">off</span></label>
         </div>
       </div>
       <div class="row">
@@ -547,7 +576,7 @@
           <div class="desc">Closing the window keeps Bunny AI in the system tray, so schedules keep running.</div>
         </div>
         <div class="right">
-          <label class="switch"><input type="checkbox" id="close-to-tray" /><span id="tray-state">off</span></label>
+          <label class="switch"><input type="checkbox" id="close-to-tray" aria-label="Keep running in the tray" /><span id="tray-state">off</span></label>
         </div>
       </div>
     </div>
@@ -568,7 +597,7 @@
           <div class="name">Update automatically</div>
           <div class="desc">Bunny AI checks GitHub Releases for a new version, downloads it in the background, checks it against its published fingerprint, and installs it when you restart. In the desktop app this changes only from Bunny's window.</div>
         </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoUpdate" /><span>on</span></label></div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoUpdate" aria-label="Update automatically" /><span>on</span></label></div>
       </div>
       <div class="row">
         <div class="right"><button id="check-update" class="primary">Check for updates</button> <button id="restart-update" class="ghost" hidden>Restart to update</button></div>
@@ -905,6 +934,42 @@
   }
 
 
+  // ---- W4-9: wait for a first reply (seconds). Presets, or Custom: a whole number from 10 to 600, else a note and nothing saved ----
+  function bindWait(settings) {
+    const PRESETS = [15, 30, 60, 90, 120];
+    const sel = $('wait-select'), box = $('wait-custom-input'), customLabel = $('wait-custom'), now = $('wait-now');
+    const valid = (v) => Number.isInteger(v) && v >= 10 && v <= 600;
+    let saved = valid(settings.firstReplyWaitSeconds) ? settings.firstReplyWaitSeconds : 30;
+    const nowText = (s) => (s >= 600 ? 'Now: 600 seconds for every model' : `Now: ${s} seconds, or ${Math.min(s * 2, 600)} for reasoning, image and video models`);
+    const show = () => { customLabel.hidden = sel.value !== 'custom'; box.classList.remove('bad'); now.classList.remove('bad'); now.textContent = nowText(saved); };
+    sel.value = PRESETS.includes(saved) ? String(saved) : 'custom';
+    if (sel.value === 'custom') box.value = String(saved);
+    show();
+    const update = (final) => {
+      if (sel.value !== 'custom') return; // a preset is chosen: the Custom box (hidden now, its blur fires) must not save its old value back
+      const text = box.value.trim();
+      const n = /^\d+$/.test(text) ? Number(text) : NaN;
+      if (valid(n)) {
+        box.classList.remove('bad'); now.classList.remove('bad');
+        if (n !== saved) { saved = n; save({ firstReplyWaitSeconds: n }); }
+        now.textContent = nowText(n);
+      } else {
+        box.classList.add('bad'); now.classList.add('bad');
+        now.textContent = `Use a whole number of seconds from 10 to 600. Not saved: still waiting ${saved} seconds.`;
+        if (final && text === '') box.focus();
+      }
+    };
+    sel.addEventListener('change', () => {
+      if (sel.value === 'custom') { customLabel.hidden = false; box.value = box.value || String(saved); box.focus(); update(false); return; }
+      const n = Number(sel.value); saved = n; customLabel.hidden = true; save({ firstReplyWaitSeconds: n }); show();
+    });
+    box.addEventListener('input', () => update(false));
+    box.addEventListener('blur', () => update(true));
+    const fb = document.querySelector('[data-cap="fallbackWhenBusy"]');
+    const dim = () => { $('wait-row').style.opacity = fb.checked ? '' : '0.55'; $('wait-off-note').hidden = fb.checked; };
+    fb.addEventListener('change', dim); dim();
+  }
+
   // ---- permission rules (W2-7): Deny, then Ask, then Allow, checked before the permission mode ----
   const rulesUi = (() => {
     const lists = $('rules-lists');
@@ -1110,6 +1175,50 @@
     };
     bind('launch-at-login', 'launch-state', 'launchAtLogin');
     bind('close-to-tray', 'tray-state', 'closeToTray');
+
+    // Quick ask (W4-8): the shell checks the shortcut and keeps it in step with the tray setting; this page shows what it says.
+    const quickBox = $('quick-ask');
+    const quickNote = (text) => { $('quick-note').textContent = text || ''; $('quick-note').hidden = !text; };
+    const showQuick = (p) => {
+      quickBox.checked = Boolean(p.quickAskEnabled);
+      $('quick-state').textContent = quickBox.checked ? 'on' : 'off';
+      $('quick-keys').textContent = p.quickAskShortcut || 'Ctrl+Alt+Space';
+      $('quick-keys').style.opacity = quickBox.checked ? '' : '.5';
+      const tray = $('close-to-tray');
+      tray.checked = Boolean(p.closeToTray);
+      $('tray-state').textContent = tray.checked ? 'on' : 'off';
+    };
+    const saveQuick = async (patch) => {
+      const p = await desk.setPrefs(patch);
+      showQuick(p);
+      quickNote(p.quickAskError || p.quickAskNote || '');
+    };
+    showQuick(prefs);
+    quickBox.addEventListener('change', () => saveQuick({ quickAskEnabled: quickBox.checked }));
+    $('close-to-tray').addEventListener('change', async () => {
+      if ($('close-to-tray').checked) return;
+      const was = quickBox.checked;
+      showQuick(await desk.getPrefs()); // turning the tray off may have turned Quick ask off
+      if (was && !quickBox.checked) quickNote('Quick ask is off because it needs Bunny to keep running in the tray.');
+    });
+    const changeButton = $('quick-change');
+    const stopRecording = () => { document.removeEventListener('keydown', onKeys, true); changeButton.textContent = 'Change'; };
+    function onKeys(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') { stopRecording(); quickNote(''); return; }
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
+      const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key.replace('Arrow', '');
+      const combo = [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Win', key].filter(Boolean).join('+');
+      stopRecording();
+      saveQuick({ quickAskShortcut: combo, quickAskEnabled: true });
+    }
+    changeButton.addEventListener('click', () => {
+      if (changeButton.textContent === 'Cancel') { stopRecording(); quickNote(''); return; }
+      changeButton.textContent = 'Cancel';
+      quickNote('Press the new keys. Esc cancels.');
+      document.addEventListener('keydown', onKeys, true);
+    });
   }
 
   function kvRow(k, v) {
@@ -1169,6 +1278,7 @@
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);
+    bindWait(settings);
     renderCustomTools();
     bindSignInApps(settings);
     renderAccount();

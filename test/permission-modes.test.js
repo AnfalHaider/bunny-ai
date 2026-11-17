@@ -18,7 +18,7 @@ const j = { 'content-type': 'application/json' };
 const frame = (d) => `data: ${JSON.stringify({ choices: [{ delta: d }] })}\n\n`;
 
 /** A model that calls the tool its model id names ("call:schedule_task"), then says done. */
-async function caller(t) {
+async function caller(t, prompt = 'tidy up') {
   const server = createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
@@ -27,7 +27,7 @@ async function caller(t) {
       const body = JSON.parse(raw);
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       if (body.messages.some((m) => m.role === 'tool')) { res.end(frame({ content: 'done' }) + 'data: [DONE]\n\n'); return; }
-      const args = { name: 'nightly', prompt: 'tidy up', every_minutes: 60, may_change: true };
+      const args = { name: 'nightly', prompt, every_minutes: 60, may_change: true };
       res.end(frame({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'schedule_task', arguments: JSON.stringify(args) } }] }) + 'data: [DONE]\n\n');
     });
   });
@@ -37,9 +37,9 @@ async function caller(t) {
 }
 
 /** Run one reply in a mode, allowing whatever asks; report what asked and how it ended. */
-async function runIn(t, mode) {
+async function runIn(t, mode, prompt) {
   const { base } = await startApp(t, { fake: false });
-  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: await caller(t) });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: await caller(t, prompt) });
   const { body: s } = await post(base, '/api/sessions', { title: mode, providerId: 'openai', model: 'call:schedule_task' });
   await fetch(`${base}/api/sessions/${s.id}/setting/permissionMode`, { method: 'PATCH', headers: j, body: JSON.stringify({ value: mode }) });
   const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: 'schedule a tidy-up', providerId: 'openai', model: 'call:schedule_task', workMode: 'chat' }) });
@@ -68,9 +68,9 @@ for (const mode of ['ask', 'accept']) {
   });
 }
 
-test('Auto: a schedule that may change things runs without asking', async (t) => {
+test('Auto (W3-3): a schedule that may change things still asks first, then runs', async (t) => {
   const { asked, tasks } = await runIn(t, 'auto');
-  assert.deepEqual(asked, []);
+  assert.equal(asked.length, 1);
   assert.equal(tasks.length, 1);
 });
 
@@ -90,7 +90,36 @@ test('the risk table: sending an email asks in every mode; computer use and tool
 test('a project file cannot grant a permission: the mode comes only from the chat and the person\'s settings', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
-  const mode = /const permissionMode = ([^\n]*)/.exec(src)?.[1] ?? '';
+  const mode = /(?:const|let) permissionMode = ([^\n]*)/.exec(src)?.[1] ?? '';
   assert.match(mode, /session\.permissionMode[\s\S]*settings\.defaultPermissionMode/);
   assert.ok(!/AGENTS\.md|CLAUDE\.md|\.cursor/.test(mode));
+});
+
+// W33-1 (Security): the one question for a schedule shows the prompt it will run, and a prompt too long to show is refused.
+test('W33-1: the schedule card shows the prompt it will run, in every mode that asks', async (t) => {
+  for (const mode of ['ask', 'auto']) {
+    const { asked } = await runIn(t, mode, 'delete the build folder every night');
+    assert.equal(asked.length, 1, mode);
+    assert.match(asked[0].detail, /every 60 minutes, and may change things/, mode);
+    assert.match(asked[0].detail, /delete the build folder every night/, mode);
+  }
+});
+
+test('W33-1: a schedule prompt over 2,000 characters is refused, nothing is scheduled', async (t) => {
+  for (const mode of ['ask', 'auto']) {
+    const { asked, tasks, text } = await runIn(t, mode, `${'x'.repeat(2100)} then delete everything`);
+    assert.deepEqual(asked, [], mode);
+    assert.equal(tasks.length, 0, mode);
+    assert.match(text, /too long to show in full/, mode);
+  }
+});
+
+test('W33-1 (QA, polish): a schedule prompt of up to 2,000 characters is shown whole (the heading is not counted); 2,001 is refused with a message that says "more than 2000"', async (t) => {
+  const fits = await runIn(t, 'ask', 'x'.repeat(2000));
+  assert.equal(fits.asked.length, 1, 'exactly 2,000 characters fits');
+  assert.ok(fits.asked[0].detail.endsWith('x'.repeat(2000)), 'the whole prompt is on the card, nothing cut');
+  assert.doesNotMatch(fits.asked[0].detail, /more characters are not shown/);
+  const over = await runIn(t, 'ask', 'x'.repeat(2001));
+  assert.deepEqual(over.asked, []);
+  assert.match(over.text, /more than 2000 characters/);
 });

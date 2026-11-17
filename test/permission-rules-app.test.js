@@ -19,6 +19,10 @@ const ARGS = {
   list_files: { depth: 2 }, write_file: { path: 'note.txt', content: 'carrots\n' }, run_command: { command: 'echo hi' },
   read_file: { path: 'secrets/key.txt' }, search_files: { query: 'TOPSECRET' }, find_files: { pattern: '*.txt' },
   chained: { command: 'echo hi; echo there' },
+  long_command: { command: `echo ${'a'.repeat(2100)} & echo the-hidden-tail` },
+  write_long: { path: 'note.txt', content: 'x'.repeat(3000) },
+  fits_command: { command: `echo ${'a'.repeat(1900)}` },
+  download_file: { url: 'http://example.invalid/x', path: 'secrets/key.txt' },
 };
 
 async function setup(t) {
@@ -30,9 +34,10 @@ async function setup(t) {
       const body = JSON.parse(raw);
       const asked = String([...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '');
       const tool = /^call (\w+)/.exec(asked)?.[1];
+      const rest = /^call \w+ (.+)$/.exec(asked)?.[1]; // W69-1: read_url takes the address from the message
       const done = body.messages.some((m) => m.role === 'tool');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool === 'chained' ? 'run_command' : tool, arguments: JSON.stringify(ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
+      if (tool && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: tool === 'write_long' ? 'write_file' : tool === 'chained' || tool.endsWith('_command') && tool !== 'run_command' ? 'run_command' : tool, arguments: JSON.stringify(tool === 'read_url' ? { url: rest } : ARGS[tool] ?? {}) } }] }) + 'data: [DONE]\n\n');
       else res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n');
     });
   });
@@ -48,14 +53,14 @@ const edits = (effect, pattern) => ({ kind: 'path', effect, pattern, ops: 'edits
 const reads = (effect, pattern) => ({ kind: 'path', effect, pattern, ops: 'reads' });
 
 /** One reply that calls `tool` in `mode` in a fresh folder (seeded by `seed`); answers cards; reports what happened. */
-async function run(base, mode, tool, { answer = true, rules = null, seed = null, rulesFor = null } = {}) {
+async function run(base, mode, tool, { answer = true, rules = null, seed = null, rulesFor = null, say = null } = {}) {
   const folder = await mkdtemp(join(tmpdir(), 'bunny-rules-'));
   if (seed) await seed(folder);
   if (rules) assert.equal((await putRules(base, typeof rules === 'function' ? rules(folder) : rules)).status, 200);
   const { body: s } = await post(base, '/api/sessions', { title: 'rules', providerId: 'openai', model: 'gpt-4o' });
   const set = (name, value) => fetch(`${base}/api/sessions/${s.id}/setting/${name}`, { method: 'PATCH', headers: j, body: JSON.stringify({ value }) });
   await set('folder', folder); await set('workMode', 'code'); await set('permissionMode', mode);
-  const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: `call ${tool}`, providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) });
+  const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: typeof say === 'function' ? say(folder) : `call ${tool}`, providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) });
   const cards = []; let buf = ''; let all = '';
   const reader = res.body.getReader(); const dec = new TextDecoder();
   for (;;) {
@@ -260,4 +265,69 @@ test('Q-W27-1 (QA 995c8d4): a bad rules list answers 400 and leaves every saved 
     assert.equal((await putRules(base, body)).status, 400, JSON.stringify(body));
     assert.equal((await (await fetch(`${base}/api/permission-rules`)).json()).global[0]?.pattern, 'rm *', `still intact after ${JSON.stringify(body).slice(0, 40)}`);
   }
+});
+
+// W613-1 (Security): a download writes a file, so the person's edit rules judge it like write_file.
+test('W613-1: download_file under a Deny edit rule is blocked in Auto and never reaches the network', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'auto', 'download_file', { rules: { global: [edits('deny', 'secrets/**')] } });
+  assert.equal(r.status, 'denied');
+  assert.deepEqual(r.cards, []);
+  assert.match(r.stream, /Blocked by your permission rule/);
+});
+
+test('W613-1: download_file under an Ask edit rule asks even in Auto', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'auto', 'download_file', { answer: false, rules: { global: [edits('ask', 'secrets/**')] } });
+  assert.equal(r.cards.length, 1);
+});
+
+// W69-1 (Security): read_url on a file: address is a read, so Deny read rules apply to it.
+test('W69-1: read_url on a file: address inside a denied path is blocked', async (t) => {
+  const base = await setup(t);
+  const seed = async (folder) => { await mkdir(join(folder, 'secrets')); await writeFile(join(folder, 'secrets', 'k.txt'), 'KEY-SECRET'); await writeFile(join(folder, '.env'), 'ENV-SECRET'); };
+  for (const [name, rule] of [['secrets/k.txt', 'secrets/**'], ['.env', '.env']]) {
+    const r = await run(base, 'auto', 'read_url', {
+      seed, rules: { global: [reads('deny', rule)] },
+      say: (folder) => 'call read_url file:///' + join(folder, name).split(String.fromCharCode(92)).join('/'),
+    });
+    assert.equal(r.status, 'denied', name);
+    assert.match(r.stream, /Blocked by your permission rule/, name);
+    assert.doesNotMatch(r.stream, /KEY-SECRET|ENV-SECRET/, name);
+  }
+});
+
+test('W69-1: with no rule, a file: address inside the folder still reads', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'auto', 'read_url', {
+    seed: async (folder) => { await writeFile(join(folder, 'hello.txt'), 'HELLO-OK'); },
+    say: (folder) => 'call read_url file:///' + join(folder, 'hello.txt').split(String.fromCharCode(92)).join('/'),
+  });
+  assert.equal(r.status, 'done');
+});
+
+// W614-1 (Security): the confirm card shows at most 2,000 characters, so a longer command is refused, never cut.
+test('W614-1: a run_command whose card would be cut at 2,000 characters is refused in every mode that asks, and never runs', async (t) => {
+  const base = await setup(t);
+  for (const mode of ['ask', 'accept']) {
+    const r = await run(base, mode, 'long_command', {});
+    assert.deepEqual(r.cards, [], `${mode}: no card with a cut command`);
+    assert.equal(r.ran, false, mode);
+    assert.match(r.stream, /"status":"denied"/, mode);
+    assert.match(r.stream, /too long to show in full/, mode);
+  }
+});
+
+test('W614-1: a command that fits the card is shown whole', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'ask', 'fits_command', {});
+  assert.equal(r.cards.length, 1);
+  assert.equal(r.cards[0].detail, `echo ${'a'.repeat(1900)}`);
+});
+
+test('W614-1: a long file being written is shown cut with a note that says how much is not shown', async (t) => {
+  const base = await setup(t);
+  const r = await run(base, 'ask', 'write_long', {});
+  assert.equal(r.cards.length, 1);
+  assert.match(r.cards[0].detail, /… 700 more characters are not shown here$/);
 });

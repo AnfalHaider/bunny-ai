@@ -2,14 +2,18 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell, nativeImage, session } from 'electron';
+import { app, BrowserWindow, WebContentsView, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
+import { buildContextMenuTemplate } from './context-menu.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
+import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { createUpdater } from './updater.js';
+import { createQuickAsk } from './quick-ask.js';
+import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -27,7 +31,7 @@ const dataDir = process.env.BUNNY_DATA_DIR
 
 // ---- desktop preferences (only the shell reads these) ----
 const prefsFile = join(app.getPath('userData'), 'desktop-prefs.json');
-let prefs = { launchAtLogin: false, closeToTray: false };
+let prefs = { launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: DEFAULT_SHORTCUT };
 try { prefs = { ...prefs, ...JSON.parse(readFileSync(prefsFile, 'utf8')) }; } catch { /* first run */ }
 function savePrefs(patch) {
   prefs = { ...prefs, ...patch };
@@ -65,7 +69,26 @@ const webPreferences = () => ({
   spellcheck: true,
 });
 
+function contextMenu(contents) {
+  contents.on('context-menu', (_event, params) => {
+    const template = buildContextMenuTemplate(params, {
+      replaceMisspelling: (word) => contents.replaceMisspelling(word),
+      addToDictionary: (word) => contents.session.addWordToSpellCheckerDictionary(word),
+      copyLink: (url) => clipboard.writeText(url),
+    });
+    if (template.length) Menu.buildFromTemplate(template).popup();
+  });
+}
+
+// W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
+// A view may only be put in a Bunny window, by the page of that window; and never shows Bunny's own server (its port).
+const windowOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.webContents === sender ? w : null; };
+const browserViews = createBrowserViews({ WebContentsView, session, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
+
 function guard(contents) {
+  if (browserViews.ownsSession(contents.session)) return;
+  contextMenu(contents);
+  try { contents.session.setSpellCheckerLanguages(['en-US']); } catch { /* dictionary unavailable: spell check stays off */ }
   // Bunny's own pages may open in new Bunny windows (pop-out chat); everything
   // else opens in the person's normal browser.
   contents.setWindowOpenHandler(({ url }) => {
@@ -129,8 +152,47 @@ ipcMain.handle('prefs:set', (_event, patch) => {
   const clean = {};
   if (typeof patch?.launchAtLogin === 'boolean') clean.launchAtLogin = patch.launchAtLogin;
   if (typeof patch?.closeToTray === 'boolean') clean.closeToTray = patch.closeToTray;
-  return savePrefs(clean);
+  if (typeof patch?.quickAskEnabled === 'boolean') clean.quickAskEnabled = patch.quickAskEnabled;
+  if (typeof patch?.quickAskShortcut === 'string') clean.quickAskShortcut = patch.quickAskShortcut;
+  // Quick ask (W4-8) keeps Bunny running in the tray; the two preferences move together.
+  const ruled = applyTrayRule(prefs, clean);
+  const saved = savePrefs(ruled.prefs);
+  const quick = applyQuickAsk(patch);
+  return { ...saved, quickAskNote: ruled.note, quickAskError: quick.error ?? null };
 });
+
+// ---- Quick ask (W4-8): see quick-ask.js ----
+let quickAsk = null;
+let pendingQuick = null;
+// Make the global shortcut match the saved preferences. A shortcut that cannot be used is refused with a plain message.
+function applyQuickAsk(patch = {}) {
+  if (!quickAsk) return {};
+  if (!prefs.quickAskEnabled) { quickAsk.disable(); return {}; }
+  const checked = validateAccelerator(prefs.quickAskShortcut);
+  const result = quickAsk.enable(checked.ok ? checked.accelerator : '');
+  if (result.ok) {
+    if (prefs.quickAskShortcut !== result.accelerator) savePrefs({ quickAskShortcut: result.accelerator });
+    return {};
+  }
+  // Refused (invalid or taken): keep the last good shortcut if there is one; otherwise Quick ask stays off.
+  if (!quickAsk.isEnabled()) savePrefs({ quickAskEnabled: false });
+  else if (typeof patch?.quickAskShortcut === 'string') savePrefs({ quickAskShortcut: quickAsk.accelerator() });
+  return { error: result.message };
+}
+// The bar sends a new chat: Bunny's window comes forward and starts it (Chat mode, no folder). Only plain data crosses.
+ipcMain.handle('quickask:take', (event) => {
+  if (!isOwn(event.senderFrame?.url ?? '')) return null;
+  const request = pendingQuick;
+  pendingQuick = null;
+  return request;
+});
+function startQuickChat(request) {
+  pendingQuick = request;
+  const existing = win && !win.isDestroyed() && !win.webContents.isLoading();
+  showWindow();
+  if (existing) win.webContents.send('quickask:new-chat'); // a window that is still loading takes the request when its page starts
+  return true;
+}
 ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
 // The native "choose a folder" dialog, for the folder a chat works in.
 // W27-3 / W5-7: a security-relevant write (permission rules and mode...) goes through here, so only Bunny's own window can make it: main adds
@@ -155,12 +217,21 @@ ipcMain.handle('dialog:pickFolder', async (event) => {
 // The model working a page in the browser panel (see browserAgent.js). Only Bunny's
 // own pages may ask, and only for frames inside the page that asked.
 ipcMain.handle('browser:act', async (event, name, action, args) => {
-  if (!isOwn(event.senderFrame?.url ?? '')) return { error: 'Not allowed' };
+  if (!senderAllowed(event, isOwn, windowOf)) return { error: 'Not allowed' };
   try {
+    // a tab that is a view (W6-24) is worked in its own page; otherwise it is a frame in the panel
+    const worked = await browserViews.control(event.sender, name, action, args ?? {});
+    if (worked) return worked;
     return await controlFrame(event.sender, name, action, args ?? {});
   } catch (err) {
     return { error: String(err?.message ?? err) };
   }
+});
+
+// The panel's tabs as views (W6-24): only Bunny's own page, and only the views that page opened.
+ipcMain.handle('browser:view', (event, msg) => {
+  if (!senderAllowed(event, isOwn, windowOf)) return { ok: false, error: 'Not allowed' };
+  try { return browserViews.handle(event.sender, msg); } catch (err) { return { ok: false, error: String(err?.message ?? err) }; }
 });
 
 // ---- updates from GitHub Releases ----
@@ -192,6 +263,7 @@ app.on('before-quit', (event) => {
     app.quit();
   });
 });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); });
 app.on('window-all-closed', () => {
   if (!prefs.closeToTray) app.quit();
 });
@@ -199,21 +271,8 @@ app.on('web-contents-created', (_event, contents) => guard(contents));
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
-  // The browser panel shows sites in frames. Many sites forbid being framed; for
-  // frames only, drop that one rule (X-Frame-Options and CSP frame-ancestors) so
-  // the panel works like a browser tab. Top-level pages keep every header.
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    if (details.resourceType !== 'subFrame') return callback({});
-    const headers = { ...details.responseHeaders };
-    for (const key of Object.keys(headers)) {
-      const lower = key.toLowerCase();
-      if (lower === 'x-frame-options') delete headers[key];
-      if (lower === 'content-security-policy') {
-        headers[key] = headers[key].map((v) => v.split(';').filter((d) => !/^\s*frame-ancestors\b/i.test(d)).join(';'));
-      }
-    }
-    callback({ responseHeaders: headers });
-  });
+  // W6-24: the browser panel's tabs are views with a session of their own (browserViews.js), so Bunny's own session no longer drops any frame header:
+  // Bunny's own pages keep X-Frame-Options and CSP frame-ancestors like any other page.
   try {
     await startServer();
   } catch (err) {
@@ -222,7 +281,9 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
+  quickAsk = createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat });
   createWindow();
+  applyQuickAsk();
   // Only the installed app updates itself (or a test pointing at its own feed).
   if (app.isPackaged || process.env.BUNNY_UPDATE_FEED) {
     updater = createUpdater({

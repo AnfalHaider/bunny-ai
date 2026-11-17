@@ -14,6 +14,8 @@
 export const BROWSER_TOOL_RISK = {
   browser_open: 'read', browser_read: 'read', browser_scroll: 'read', browser_back: 'read', browser_screenshot: 'read',
   browser_click: 'edit', browser_type: 'edit',
+  browser_inspect: 'read', // W6-10: looks only
+  browser_capture: 'edit', // W6-10: writes files into the chat's folder, so Plan mode refuses it and the permission mode and the person's rules apply
 };
 
 export function browserToolDefinitions(risks = ['read', 'edit']) {
@@ -33,6 +35,9 @@ export function browserToolDefinitions(risks = ['read', 'edit']) {
       { direction: { type: 'string', enum: ['up', 'down'] } }, ['direction']),
     fn('browser_back', 'Go back to the previous page in the browser panel.'),
     fn('browser_screenshot', 'Take a picture of the browser panel and show it in the chat, so the person sees what you see.'),
+    fn('browser_inspect', 'Look at the page in the browser panel without changing it: what "html" is the page as it is now (after its scripts), "css" is the computed style of the element matching `selector`, "network" is the list of files the page loaded (address, kind, size, time), "fonts" is the fonts it uses.',
+      { what: { type: 'string', enum: ['html', 'css', 'network', 'fonts'] }, selector: { type: 'string', description: 'For what "css": a CSS selector' } }, ['what']),
+    fn('browser_capture', 'Save a copy of the page in the browser panel into the chat\'s folder, under captures/<site>-<date and time>/: its HTML as it is now, and its pictures, style sheets, fonts and scripts, with the links changed to the saved copies so it opens offline. At most 300 files and 50 MB. Needs a folder for the chat.'),
   ].filter((d) => risks.includes(BROWSER_TOOL_RISK[d.function.name]));
 }
 
@@ -45,6 +50,8 @@ export function describeBrowserTool(name, args = {}) {
     case 'browser_scroll': return `Scroll ${args.direction === 'up' ? 'up' : 'down'}`;
     case 'browser_back': return 'Go back';
     case 'browser_screenshot': return 'Take a screenshot of the page';
+    case 'browser_inspect': return `Inspect the page (${String(args.what ?? 'html').slice(0, 20)}${args.selector ? ` ${String(args.selector).slice(0, 60)}` : ''})`;
+    case 'browser_capture': return 'Save a copy of the page';
     default: return name;
   }
 }
@@ -55,6 +62,7 @@ export const isBrowserTool = (name) => Object.hasOwn(BROWSER_TOOL_RISK, name);
 export function browserResultText(answer) {
   if (!answer) return 'The browser panel did not answer.';
   if (answer.error) throw new Error(answer.error);
+  if (answer.inspected) return inspectedText(answer.inspected);
   const page = answer.page;
   if (!page) return String(answer.note ?? 'Done.');
   const lines = [];
@@ -67,4 +75,19 @@ export function browserResultText(answer) {
   }
   lines.push('Text:', page.text || '(no text)');
   return lines.join('\n');
+}
+
+/** The answer of browser_inspect as plain text for the model. */
+export function inspectedText(got) {
+  if (got?.error) throw new Error(got.error);
+  if (got.what === 'html') return String(got.text ?? '');
+  if (got.what === 'css') {
+    return [`Computed style of ${got.selector} (<${got.tag}>), values that are not the default:`, ...(got.props ?? []).map(([name, value]) => `${name}: ${value}`)].join('\n');
+  }
+  if (got.what === 'network') {
+    const rows = (got.entries ?? []).map((e) => `${e.type || 'other'}  ${e.size} bytes  ${e.ms} ms  ${e.url}`);
+    return [`${got.total ?? rows.length} requests${(got.total ?? 0) > rows.length ? ` (the first ${rows.length} are listed)` : ''}:`, ...rows].join('\n');
+  }
+  if (got.what === 'fonts') return (got.fonts ?? []).length ? ['Fonts in use:', ...got.fonts.map((f) => `${f.family} ${f.weight} ${f.style}`)].join('\n') : 'No web fonts are loaded on this page.';
+  return 'Nothing to show.';
 }

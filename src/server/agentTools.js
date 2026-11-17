@@ -23,9 +23,11 @@ export const AGENT_TOOL_RISK = {
 
 export const CAPABILITIES = {
   code_mode: 'Code mode: read and change files in a folder, and run commands and programs there',
+  leave_plan_mode: 'Leave Plan mode: switch this chat to Ask mode, so Bunny can change files and run commands here (it asks before each)',
   computer_use: 'Control this computer: see the screen, click, type and press keys',
   custom_tools: 'Build new tools: write a small script that becomes a tool Bunny AI can use',
   new_tool: 'Something no current tool can do: find a plugin or connector for it, or build it',
+  switch_on_added: 'Switch on what was just added? It stays off until you say yes',
 };
 
 const fn = (name, description, properties = {}, required = []) => ({
@@ -253,8 +255,9 @@ export function planToolDefinition() {
 }
 
 /** The list as stored: at most 20 short steps. */
+export const MAX_TASKS = 40; // W6-12: also the number sessions.js keeps
 export function cleanTasks(tasks) {
-  return (Array.isArray(tasks) ? tasks : []).slice(0, 20)
+  return (Array.isArray(tasks) ? tasks : []).slice(0, MAX_TASKS)
     .map((t) => ({ text: String(t?.text ?? t ?? '').replace(/\s+/g, ' ').trim().slice(0, 160), done: Boolean(t?.done) }))
     .filter((t) => t.text);
 }
@@ -300,6 +303,36 @@ export function askToolDefinition() {
  * The question as shown: trimmed, at most six choices, each { label, reason, recommended }
  * (plain strings are accepted too), the recommended one first.
  */
+/**
+ * W4-14c: does an ask_user question only ask the person to run commands (or paste output from a terminal) for Bunny?
+ * English only, and narrow on purpose: a run word followed by commands, or a terminal named as the place.
+ */
+export function asksToRunCommands(q = {}) {
+  const text = [q.question, ...(Array.isArray(q.choices) ? q.choices.map((c) => c?.label ?? c) : [])].join(' ').replace(/\s+/g, ' ');
+  const verb = '(?:run|execute|paste|type|enter)';
+  const ing = '(?:running|executing|pasting|typing|entering)';
+  const place = '(?:in|into|using|from|on)\\s+(?:a\\s+|the\\s+|your\\s+|this\\s+)?(?:terminal|powershell|command prompt|cmd|shell|console|machine|computer|pc)';
+  // Whatever Bunny itself asks permission for is a decision, not a hand-off: "Should I run ...", "Do you want me to run ...", "I will run ...".
+  const forMe = new RegExp('\\b(?:me|I|I\'ll|we|let me) (?:to |will |can |should |shall |want to )?' + verb + '\\b', 'i');
+  const hands = [
+    new RegExp('\\b(?:can|could|would|will) you (?:please )?' + verb + '\\b', 'i'), // can you run
+    new RegExp('\\b(?:please|kindly) ' + verb + '\\b', 'i'), // please run / kindly run
+    new RegExp('\\byou (?:can|could|should|need to|must|have to|will need to|\'ll need to|\'d need to) ' + verb + '\\b', 'i'), // you need to run
+    new RegExp('\\b(?:I|we) (?:need|want|would like|\'d like) you to ' + verb + '\\b', 'i'), // I need you to run
+    new RegExp('\\bwould you mind ' + ing + '\\b', 'i'), // would you mind running
+    new RegExp('\\bopen (?:a|the|your) (?:terminal|powershell|command prompt|cmd|shell|console)\\b[^.?!]{0,60}\\b' + verb + '\\b', 'i'), // open a terminal and run
+    new RegExp('\\blet me know (?:when|once|after) you(?: have|\'ve|\\s+are|\'re)? (?:run|ran|executed|pasted|done)', 'i'), // let me know when you have run
+    new RegExp('\\b' + verb + '\\b[^.?!]{0,60}\\b(?:yourself|by yourself)\\b', 'i'), // you'll need to run it yourself
+    new RegExp('\\bI\'?ll ' + verb + '\\b[^.?!]{0,60}\\b(?:myself|manually|by hand)\\b|\\bI will ' + verb + '\\b[^.?!]{0,60}\\b(?:myself|manually|by hand)\\b|\\b' + verb + '\\b[^.?!]{0,60}\\bmyself\\b', 'i'), // a choice: "I will run the commands myself"
+    /\bpaste\b[^.?!]{0,40}\b(?:output|results?|errors?)\b/i, // paste the output
+  ];
+  // "Run ... in your terminal" / "... on your machine" as an instruction to the person, unless it is Bunny asking about its own run
+  const instruction = new RegExp('\\b' + verb + '\\b[^.?!]{0,80}\\b' + place + '\\b', 'i');
+  const viaMe = new RegExp('\\bme to ' + verb + '\\b|\\b(?:should|shall|may|can|could) (?:I|we) ' + verb + '\\b|\\bif I ' + verb + '\\b|\\bI(?: will|\'ll|\'m going to) ' + verb + '\\b(?![^.?!]{0,60}\\b(?:myself|manually|by hand)\\b)', 'i');
+  if (hands.some((re) => re.test(text))) return true;
+  return instruction.test(text) && !viaMe.test(text) && !forMe.test(text);
+}
+
 export function cleanQuestion(a = {}) {
   const choices = (Array.isArray(a.choices) ? a.choices : []).map((c) => (typeof c === 'string'
     ? { label: c.trim().slice(0, 120), reason: '', recommended: false }

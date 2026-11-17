@@ -1,0 +1,14 @@
+{
+  "about": "Advisories the owner has looked at and accepted for now. The gate's dependency audit passes a HIGH finding only if it is listed here for that package path, signed (accepted_by is the owner's name, never PENDING OWNER; owner_words is what the owner typed; said_at is when) and not expired (review_by is today or later, and at most 30 days ahead). Only the owner signs an entry. What ships is checked separately, with no exceptions, by `npm audit --omit=dev` at moderate.",
+  "exceptions": [
+    {
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "package_path": "node_modules/picomatch",
+      "why": "picomatch is reached only through tinyglobby and fdir, which node-gyp and electron-builder use at BUILD time to match file names (node-gyp's two fixed patterns, build/*.sln and build/*.mk). No fix is published (docs/research/picomatch-ghsa.md, 4049ced). It is not in the app's production dependencies: `npm ls picomatch --omit=dev` shows (empty), checked 2026-11-18, so it is not in the installed app.",
+      "accepted_by": "Anfal Haider (owner), recorded by the Chief of Staff",
+      "owner_words": "Sign the exception",
+      "said_at": "2026-11-18, typed in the Chief of Staff's chat, answering \"How should the build-tool advisory be handled?\" (choices: Sign the exception / Wait for a fix)",
+      "review_by": "2026-12-17"
+    }
+  ]
+}

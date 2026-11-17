@@ -111,7 +111,7 @@ export const FEATURES = [
   { id: '6.7', area: 'Automation', name: 'Computer use', scope: 'enterprise', status: 'D', test: 'screen text is given at the centre of each line, in the pixels of the shown picture' },
   { id: '6.8', area: 'Automation', name: 'Skills', scope: 'app', status: 'D', test: 'a skill that is on reaches the model' },
   { id: '6.9', area: 'Automation', name: 'Hooks', scope: 'app', status: 'D', test: 'a hook runs when a message is sent' },
-  { id: '6.10', area: 'Automation', name: 'Plugins and marketplaces', scope: 'app', status: 'D', test: 'installing a plugin adds and switches on its skills and connectors, and records the plugin' },
+  { id: '6.10', area: 'Automation', name: 'Plugins and marketplaces', scope: 'app', status: 'D', test: 'a plugin the model installs is added switched OFF (P-6), and recorded' },
   { id: '6.11', area: 'Automation', name: 'Memories suggested from a chat', scope: 'app', status: 'D', test: 'a chat can suggest a memory, and it is kept only when accepted' },
   { id: '6.12', area: 'Automation', name: 'The model asks for a capability it lacks', scope: 'app', status: 'D', test: 'asking for Code mode: the person picks a folder and the file tools arrive in the same reply' },
   { id: '6.13', area: 'Automation', name: 'Programs that keep running', scope: 'app', status: 'D', test: 'a started program keeps running, is read in pieces, and stops' },

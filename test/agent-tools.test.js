@@ -238,7 +238,8 @@ test('building a tool asks in Manual and runs without asking in Auto, and the to
     asked.push(data);
     await post(base, `/api/sessions/${session.id}/permission/${data.id}`, { allowed: true });
   });
-  assert.equal(asked.length, 0, 'in Auto nothing asked: what the person allowed applies in full');
+  assert.equal(asked.length, 1, 'W3-3: in Auto only the building asks; using the new tool asks nothing more');
+  assert.match(asked[0].title, /shout|tool/i);
   assert.ok(toolNames(provider.seen[1]).includes('my_shout'));
   assert.equal(provider.seen[2].messages.filter((m) => m.role === 'tool').at(-1).content, 'BUNNY');
   const { body: tools } = await json(base, '/api/tools');

@@ -24,6 +24,9 @@ const HEADERLESS = [
 // Google's sign-in return is a navigation from the system browser: no Origin, no token, cross-site.
 // It is the ONE exception, GET only, and only for a `state` Bunny made for a sign-in still in flight.
 const GOOGLE_CALLBACK = '/api/account/google/callback';
+// W3-6: a connector's sign-in return is the same kind of navigation: the second and last exception, one exact path, GET only,
+// and only for a state of a connector sign-in that is still waiting.
+const CONNECTOR_CALLBACK = '/api/connectors/oauth/callback';
 
 const refuse = (code, message) => ({ ok: false, code, message });
 
@@ -38,7 +41,7 @@ export function makeToken() {
   return randomBytes(32).toString('hex');
 }
 
-export function createRequestGuard({ token = makeToken(), validCallbackState = () => false } = {}) {
+export function createRequestGuard({ token = makeToken(), validCallbackState = () => false, validConnectorState = () => false } = {}) {
   function check(req, path, method, query = null) {
     const headers = req.headers ?? {};
     const port = req.socket?.localPort;
@@ -51,6 +54,10 @@ export function createRequestGuard({ token = makeToken(), validCallbackState = (
 
     if (method === 'GET' && path === GOOGLE_CALLBACK) {
       return validCallbackState(query?.get('state') ?? '') ? { ok: true } : refuse('request.badState', 'This sign-in link has expired. Start again from Bunny AI.');
+    }
+
+    if (method === 'GET' && path === CONNECTOR_CALLBACK) {
+      return validConnectorState(query?.get('state') ?? '') ? { ok: true } : refuse('request.badState', 'This sign-in link has expired. Start again from Bunny AI.');
     }
 
     const isApi = path.startsWith('/api/');

@@ -11,10 +11,20 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   // Security-relevant writes (permission rules and mode) are made by the main process, not by the page.
   secureWrite: (method, path, body) => ipcRenderer.invoke('secure:write', method, path, body),
   browserAct: (frameName, action, args) => ipcRenderer.invoke('browser:act', frameName, action, args),
+  // The browser panel's tabs as views laid over the panel (W6-24): commands go to the main process, events come back.
+  browserView: {
+    send: (msg) => ipcRenderer.invoke('browser:view', msg),
+    onEvent: (fn) => { const h = (_e, event) => fn(event); ipcRenderer.on('browser:view-event', h); return () => ipcRenderer.removeListener('browser:view-event', h); },
+  },
   // Zoom for the whole window (Ctrl++ / Ctrl+- / Ctrl+0 and the account menu).
   zoom: {
     get: () => webFrame.getZoomFactor(),
     set: (factor) => webFrame.setZoomFactor(Math.min(3, Math.max(0.5, Number(factor) || 1))),
+  },
+  // Quick ask (W4-8): the bar asks Bunny's window to start a new chat; the window then takes the message.
+  quickAsk: {
+    take: () => ipcRenderer.invoke('quickask:take'),
+    onNewChat: (fn) => { const h = () => fn(); ipcRenderer.on('quickask:new-chat', h); return () => ipcRenderer.removeListener('quickask:new-chat', h); },
   },
   // Updates from GitHub Releases: the status, a check now, and Restart to update.
   updates: {

@@ -11,18 +11,23 @@
 import { exec, execFile, spawn } from 'node:child_process';
 import { clip } from './clip.js';
 import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { documentKind, readDocument } from './documents.js';
 import { readTextInPictures } from './ocr.js';
 import { globMatcher } from './glob.js';
+import { checkEnvironment } from './environment.js';
 import { createContext, Script } from 'node:vm';
+import { fetchLimited } from './download.js';
+import { shellHint, looksLikeServer } from './shellFit.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
-const MAX_OUTPUT = 8_000;          // characters of command output kept
 const MAX_LIST = 400;              // entries in one listing
 const MAX_MATCHES = 80;            // search hits
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out', 'coverage', '__pycache__', '.venv']);
 const COMMAND_TIMEOUT_MS = 120_000;
+const MAX_COMMAND_SECONDS = 600;   // the longest a run_command may be given (W6-17)
+const KEEP_OUTPUT = 2_000_000;     // characters of command output kept; the app saves the whole of it in .bunny/notes
 const REGEX_TIMEOUT_MS = 1000;     // one file's scan with a model-written regular expression
 const REGEX_BUDGET_MS = 5000;      // all of one search's regex time together (files just under the limit must not add up to minutes)
 const MAX_EDIT_BYTES = 20_000_000; // an edit may not grow a file past this
@@ -119,8 +124,8 @@ export function endsInBackground(command) {
 }
 
 export const TOOL_RISK = {
-  list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read',
-  write_file: 'edit', edit_file: 'edit', multi_edit: 'edit',
+  list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read', check_environment: 'read',
+  write_file: 'edit', edit_file: 'edit', multi_edit: 'edit', download_file: 'edit',
   run_command: 'run',
 };
 
@@ -153,8 +158,12 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       { pattern: { type: 'string', description: 'File pattern, comma-separated for several' },
         path: { type: 'string', description: 'Folder to search in, default "."' },
         limit: { type: 'integer', description: 'Most files to return, up to 1000. Default 100' } }, ['pattern']),
+    fn('check_environment', 'Check which of node, npm, git and python (and their versions) are installed, compare them with what the project asks for (package.json engines, .nvmrc, .python-version, pyproject.toml, runtime.txt, .tool-versions) and get plain advice. Read-only; installs nothing. Call it once before installing a project\'s packages.',
+      { path: { type: 'string', description: 'Folder inside the workspace to inspect. Default "."' } }, []),
     fn('write_file', 'Create or overwrite a whole text file in the workspace.',
       { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
+    fn('download_file', 'Download a file from an http or https address into the workspace (up to 50 MB, public addresses only). Returns the saved path, size and content type.',
+      { url: { type: 'string', description: 'http or https address' }, path: { type: 'string', description: 'Where to save it, relative to the workspace root' } }, ['url', 'path']),
     fn('edit_file', 'Replace an exact snippet in a file. old_text must appear exactly once, unless replace_all is true, which replaces every occurrence (renaming a variable, say).',
       { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' },
         replace_all: { type: 'boolean', description: 'Replace every occurrence of old_text. Default false' } }, ['path', 'old_text', 'new_text']),
@@ -162,10 +171,10 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       { path: { type: 'string' },
         edits: { type: 'array', description: 'The replacements, applied in order (at most 50)',
           items: { type: 'object', properties: { old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['old_text', 'new_text'] } } }, ['path', 'edits']),
-    fn('run_command', 'Run a command yourself and get its output (2 minute limit). It runs in Windows PowerShell 5.1: '
+    fn('run_command', 'Run a command yourself and get its output (2 minute limit by default; pass timeout_seconds, up to 600, for a long build or install). It runs in Windows PowerShell 5.1: '
       + 'set variables with $env:NAME = "value", and separate commands with ; (&& and || are translated for you; a trailing & is not allowed: use start_process for anything that keeps running). '
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
-      { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' } }, ['command']),
+      { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' }, timeout_seconds: { type: 'integer', description: 'How long it may run before it is stopped: 1 to 600 seconds. Default 120.' } }, ['command']),
   ];
   return all.filter((d) => risks.includes(TOOL_RISK[d.function.name]));
 }
@@ -180,10 +189,12 @@ export function describeToolCall(name, args = {}) {
       return `Search ${args.regex ? `/${q}/` : `"${q}"`}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}${args.include ? ` (${String(args.include).slice(0, 40)})` : ''}`;
     }
     case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
+    case 'check_environment': return `Check environment${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
+    case 'download_file': return `Download ${String(args.url ?? '').slice(0, 100)} to ${args.path}`;
     case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
     case 'multi_edit': return `Edit ${args.path} (${Array.isArray(args.edits) ? args.edits.length : 0} changes)`;
-    case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}`;
+    case 'run_command': return `Run ${String(args.command ?? '').slice(0, 120)}${Number(args.timeout_seconds) > 120 ? ` (up to ${Math.round(Math.min(600, Number(args.timeout_seconds)) / 60 * 10) / 10} min)` : ''}`;
     default: return name;
   }
 }
@@ -211,7 +222,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { beforeWrite = null, signal = null, hidden = null, clock = Date.now } = {}) {
+export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
 
   async function inside(path = '.', { mustExist = true } = {}) {
@@ -244,10 +255,39 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
 
   const show = (abs) => relative(root, abs).split(sep).join('/') || '.';
 
+  // W6-NEW-1: a file written inside .git (a hook, the config) runs the next time the person commits, so the edit tools refuse it.
+  // ".git", ".git." and ".git::$DATA" are all the same folder on NTFS, and so is its short name GIT~1.
+  const GIT_SEGMENT = /^(\.git|git~\d+)(?:[. ]*|:.*)$/i;
+  const inGit = (from, abs) => relative(from, abs).split(sep).some((part) => GIT_SEGMENT.test(part));
+  async function refuseGit(abs, path) {
+    let bad = inGit(root, abs);
+    if (!bad) { // where it really leads: the nearest folder that exists, with its links resolved
+      let cur = abs;
+      for (let guard = 0; guard < 256 && !bad; guard += 1) {
+        try {
+          const real = join(await realpath(cur), relative(cur, abs));
+          bad = inGit(await realpath(root), real);
+          break;
+        } catch {
+          const up = dirname(cur);
+          if (up === cur) break;
+          cur = up;
+        }
+      }
+    }
+    if (bad) throw new Error(`${path} is inside .git. Bunny does not write there: a file in .git (a hook, the config) runs the next time you commit. Change it yourself in a terminal if you mean to.`);
+    return abs;
+  }
+  /** inside(), for the tools that change a file. */
+  const insideEdit = async (path, opts) => refuseGit(await inside(path, opts), path);
+
   /** The path as the file system will see it (links resolved, ".." applied), relative to the folder; null when it leaves the folder; false when it cannot be worked out (a dangling link, no permission). For the person's rules. */
   async function canon(path = '.') {
     const rest = [];
     let cur = resolve(root, String(path || '.'));
+    // A path that leaves the folder is decided by its spelling alone: looking up a network share (two slashes and a host name) would reach out to that machine.
+    const spelled = relative(root, cur);
+    if (spelled.startsWith('..') || isAbsolute(spelled)) return null;
     for (let guard = 0; guard < 256; guard += 1) {
       try {
         const real = join(await realpath(cur), ...rest.reverse());
@@ -291,6 +331,10 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
 
   async function read_file({ path, start_line, end_line } = {}) {
     const abs = await inside(path);
+    if ((await stat(abs)).isDirectory()) {
+      const listing = (await list_files({ path })).split('\n').slice(0, 200).join('\n');
+      return `(that is a folder; its contents:)\n${listing}`;
+    }
     const kind = documentKind(abs);
     let text;
     if (kind && kind !== 'html') {
@@ -330,11 +374,16 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
       const sandbox = createContext({ lines: [], at: [] });
       const script = new Script(`(() => { const re = new RegExp(${JSON.stringify(re.source)}, ${JSON.stringify(re.flags)}); const at = []; for (let i = 0; i < lines.length; i += 1) if (re.test(lines[i])) at.push(i); return at; })()`);
       hitsOf = (lines) => {
-        if (regexSpent >= REGEX_BUDGET_MS) throw new Error('Search stopped after 5 s; narrow the folder or the pattern.');
+        if (regexSpent >= REGEX_BUDGET_MS) throw new Error('Search stopped after 5 s in all; narrow the folder or the pattern.');
         sandbox.lines = lines;
         const began = clock();
         try { return [...script.runInContext(sandbox, { timeout: Math.max(50, Math.min(REGEX_TIMEOUT_MS, REGEX_BUDGET_MS - regexSpent)) })]; } catch (err) {
-          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error('That pattern is too slow; simplify it.');
+          if (err?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
+            // either one file took more than a second, or this was the last of the 5 seconds of pattern time the whole search gets
+            throw new Error(regexSpent + Math.max(0, clock() - began) >= REGEX_BUDGET_MS - 100
+              ? 'Search stopped after 5 s in all; narrow the folder or the pattern.'
+              : 'Search stopped: one file took more than a second to match this pattern; simplify the pattern or narrow the folder.');
+          }
           throw err;
         } finally { regexSpent += Math.max(0, clock() - began); }
       };
@@ -452,11 +501,33 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
   }
 
   async function write_file({ path, content = '' } = {}) {
-    const abs = await inside(path, { mustExist: false });
+    const abs = await insideEdit(path, { mustExist: false });
     await beforeWrite?.(abs);
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, String(content), 'utf8');
     return `Wrote ${show(abs)} (${String(content).split('\n').length} lines)`;
+  }
+
+  async function download_file({ url, path } = {}) {
+    if (!String(path ?? '').trim()) throw new Error('download_file needs a path to save to');
+    const abs = await insideEdit(path, { mustExist: false });
+    const got = await fetchLimited(url, { signal: typeof signal === 'function' ? signal() : signal, allowLoopback });
+    await beforeWrite?.(abs);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, got.bytes);
+    return `Downloaded to ${show(abs)}\nSize: ${got.bytes.length} bytes\nContent type: ${got.type}\nFinal URL: ${got.url}`;
+  }
+
+  /** W6-10: write several files at once (bytes, not text) for a saved page copy: every path is checked first (inside the folder, never .git), the checkpoint is made once per file, and nothing is written if any path is refused. Not a tool the model calls. */
+  async function writeFiles(entries) {
+    const checked = [];
+    for (const e of entries) checked.push({ abs: await insideEdit(e.path, { mustExist: false }), bytes: e.bytes });
+    for (const { abs, bytes } of checked) {
+      await beforeWrite?.(abs);
+      await mkdir(dirname(abs), { recursive: true });
+      await writeFile(abs, bytes);
+    }
+    return checked.length;
   }
 
   // One replacement on text already in memory. Plain split/join, so "$&" and friends in new_text stay literal.
@@ -472,7 +543,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
   }
 
   async function edit_file({ path, old_text, new_text, replace_all = false } = {}) {
-    const abs = await inside(path);
+    const abs = await insideEdit(path);
     const text = await readFile(abs, 'utf8');
     const done = replaceIn(text, { old_text, new_text, replace_all: replace_all === true }, path);
     await beforeWrite?.(abs);
@@ -483,7 +554,7 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
   async function multi_edit({ path, edits } = {}) {
     if (!Array.isArray(edits) || !edits.length) throw new Error('multi_edit needs a list of edits');
     if (edits.length > 50) throw new Error('multi_edit takes at most 50 edits at a time; split it up');
-    const abs = await inside(path);
+    const abs = await insideEdit(path);
     let text = await readFile(abs, 'utf8');
     let total = 0;
     for (let i = 0; i < edits.length; i += 1) {
@@ -500,10 +571,14 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
     return `Edited ${show(abs)} (${edits.length} edits, ${total} replacements)`;
   }
 
-  async function run_command({ command, cwd } = {}) {
-    if (endsInBackground(String(command ?? ''))) {
-      throw new Error('run_command waits for the command to finish, so a trailing & cannot start a background program here (Windows PowerShell 5.1 rejects it). '
-        + 'Use start_process for a server or watcher that should keep running, then browser_open the address once it is up.');
+  async function run_command({ command, cwd, timeout_seconds } = {}, { onProgress = null } = {}) {
+    // W6-17: the model may ask for longer than the 2 minute default, up to 10 minutes.
+    const limitMs = Math.round(Math.min(MAX_COMMAND_SECONDS, Math.max(1, Number(timeout_seconds) || COMMAND_TIMEOUT_MS / 1000)) * 1000);
+    // W6-8: a server or watcher (or a trailing &) would hang here until the timeout: start_process runs it in the background.
+    if (looksLikeServer(String(command ?? ''))) {
+      const bare = String(command ?? '').trim().replace(/\s*&$/, '').trim();
+      throw new Error('run_command waits for the command to finish, and this one keeps running (a server or watcher), so it was not started here. '
+        + `Call start_process with command "${bare}" instead; it starts in the background. Then browser_open the address once it is up.`);
     }
     const cmd = translateChains(String(command ?? '').trim());
     if (!cmd) throw new Error('run_command needs a command');
@@ -524,7 +599,10 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
         killedFor = why;
         execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
       };
-      const timer = setTimeout(() => killTree('timeout'), COMMAND_TIMEOUT_MS);
+      const timer = setTimeout(() => killTree('timeout'), limitMs);
+      // A visible countdown: the step line shows how long it has run and how long it may.
+      const startedAt = Date.now();
+      const tick = onProgress && limitMs > 10_000 ? setInterval(() => onProgress(`Running… ${Math.round((Date.now() - startedAt) / 1000)} s of up to ${Math.round(limitMs / 1000)} s`), 5000) : null;
       const sig = typeof signal === 'function' ? signal() : signal;
       const onAbort = () => killTree('stopped');
       sig?.addEventListener?.('abort', onAbort, { once: true });
@@ -533,13 +611,14 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
         if (finished) return;
         finished = true;
         clearTimeout(timer);
+        if (tick) clearInterval(tick);
         sig?.removeEventListener?.('abort', onAbort);
         const stdout = decodeText(Buffer.concat(outBufs)).trim();
         const stderr = decodeText(Buffer.concat(errBufs)).trim();
         const body = `${stdout}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
         let status = '';
         if (spawnErr) status = `[could not start: ${spawnErr.message}]`;
-        else if (killedFor === 'timeout') status = '[stopped after 2 minutes: it may be waiting for input, or it keeps running. Use start_process for a program that keeps running, and non-interactive flags such as --yes]';
+        else if (killedFor === 'timeout') status = `[stopped after ${limitMs >= 120_000 && limitMs % 60_000 === 0 ? `${limitMs / 60_000} minutes` : `${Math.round(limitMs / 1000)} seconds`}: it may be waiting for input, or it keeps running. Give it more time with timeout_seconds (up to ${MAX_COMMAND_SECONDS}), use start_process for a program that keeps running, and non-interactive flags such as --yes]`;
         else if (killedFor === 'stopped') status = '[stopped by the person]';
         else if (code) {
           status = `[exit code ${code}]`;
@@ -550,8 +629,13 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
               : ' It printed nothing: run it again without redirecting its output to see why.';
           }
         }
+        // W6-7: a command written for cmd or a POSIX shell that failed here: say how PowerShell writes it.
+        // Only when the error says the word is not known here: `cat missing.txt` fails because of the file, and cat works in PowerShell.
+        const notKnown = /is not recognized|is not recognised|CommandNotFoundException|not recognized as the name/i.test(body);
+        const hint = (spawnErr || code) && notKnown ? shellHint(command) : null;
+        if (hint) status += `${status ? String.fromCharCode(10) : ''}[hint: ${hint}]`;
         // The status comes first, so it survives even when long output is cut.
-        const out = [status, clip(body, MAX_OUTPUT)].filter(Boolean).join('\n');
+        const out = [status, clip(body, KEEP_OUTPUT)].filter(Boolean).join('\n');
         done(out || '(no output)');
       };
       child.on('error', (err) => finish(null, err));
@@ -563,15 +647,56 @@ export function createWorkspace(rootFolder, { beforeWrite = null, signal = null,
     });
   }
 
-  const tools = { list_files, read_file, search_files, find_files, write_file, edit_file, multi_edit, run_command };
+  async function check_environment({ path } = {}) {
+    return checkEnvironment({ folder: await inside(path || '.'), root, run: envRunner });
+  }
+
+  // read_url on a file:// address: read-only, only a real path inside this folder (links out are refused by inside()).
+  /** The path a file: address names, or null when it is not a valid one (for the person's read rules). */
+  function fileUrlPath(url) {
+    try {
+      const u = new URL(String(url));
+      if (u.protocol !== 'file:' || (u.host && u.host.toLowerCase() !== 'localhost')) return null; // a file address with a host names a network share
+      const path = fileURLToPath(u);
+      return /^[\\/]{2}/.test(path) ? null : path; // UNC and device paths are never judged by looking them up
+    } catch { return null; }
+  }
+
+  async function readFileUrl(url) {
+    // The same reading of the address the person's rules were checked against: an address that reading refuses is never read.
+    const path = fileUrlPath(url);
+    if (path === null) throw new Error('That file address is not valid, or it names another computer. read_url can only read files inside the workspace folder.');
+    const abs = await inside(path).catch(() => { throw new Error('read_url can only read files inside the workspace folder.'); });
+    return read_file({ path: abs });
+  }
+
+  const tools = { list_files, read_file, search_files, find_files, check_environment, write_file, download_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),
     // A folder inside the workspace (checked), for programs started there.
     folder: (path) => inside(path),
+    readFileUrl,
+    writeFiles,
+    fileUrlPath,
     canon,
-    run: (name, args) => tools[name](args ?? {}),
+    run: (name, args, ctx) => tools[name](args ?? {}, ctx ?? {}),
   };
+}
+
+/**
+ * Is the server answering on the port this folder's own? Q2-21: another project's site on the same port
+ * must not show as "running". Own = the page names the package or the folder.
+ */
+async function probeDevServer(folder, pkg, port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) });
+    if (!(res.status > 0)) return { running: false };
+    const body = (await res.text().catch(() => '')).slice(0, 200_000).toLowerCase();
+    const names = [pkg.name, basename(String(folder).replace(/[\/]+$/, ''))].filter((n) => typeof n === 'string' && n.length >= 2).map((n) => n.toLowerCase().replace(/^@[^/]+\//, ''));
+    const own = names.some((n) => body.includes(n));
+    return own ? { running: true } : { running: false, otherSite: true };
+  } catch { return { running: false }; }
 }
 
 /**
@@ -592,10 +717,6 @@ export async function detectDevServer(folder) {
         : /\bng serve\b/.test(script) ? 4200
           : 3000;
   const port = Number(explicit ?? guess);
-  let running = false;
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) });
-    running = res.status > 0;
-  } catch { running = false; }
-  return { command: name === 'start' ? 'npm start' : `npm run ${name}`, script, port, running };
+  const { running, otherSite } = await probeDevServer(folder, pkg, port);
+  return { command: name === 'start' ? 'npm start' : `npm run ${name}`, script, port, running, ...(otherSite ? { otherSite: true } : {}) };
 }

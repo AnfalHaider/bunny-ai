@@ -78,6 +78,7 @@
     <div id="cz-list" role="rowgroup"></div>
   </div>
   <p class="hint cz-note" id="cz-note"></p>
+  <p class="hint text-bad" id="cz-error" role="alert" hidden></p>
 
   <p class="note page-links"><a href="./index.html">← Back to chat</a></p>
 </main>
@@ -85,6 +86,7 @@
 <script type="module">
   import { getJSON, sendJSON, applyTheme, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
+  import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);
@@ -125,10 +127,28 @@
       getJSON('/api/mcp'), getJSON('/api/skills'), getJSON('/api/settings'),
     ]);
     applyAppearance(settings);
+    // W3-6: who is signed in to each remote connector (never a token; a local connector has no sign-in and answers 404)
+    await Promise.all(connectors.map(async (c) => { c.oauth = c.type === 'local' ? null : await getJSON(`/api/connectors/${c.id}/oauth`).catch(() => null); }));
     data = { connectors, skills, plugins: settings.plugins ?? [] };
     paint();
   }
 
+  // ---- signing in to a connector (W3-6; the states and the flow are in connectorStatus.js, shared with Automation) ----
+  let notice = '';
+  const flows = createSignInFlows({
+    getJSON, sendJSON, onChange: () => paint(),
+    onSignedIn: async (s, now) => { notice = `Signed in to ${s.name} as ${now.account ?? 'your account'}.`; await load(); },
+  });
+  async function startSignIn(s) { notice = ''; await flows.start(s); }
+  async function signOut(s) { notice = await flows.signOut(s); await load(); }
+
+  // P-5: a plugin is on when everything it added that is still here is on; off when none is; otherwise partly
+  function pluginState(p) {
+    const parts = [...(p.skills ?? []).map((id) => data.skills.find((x) => x.id === id)), ...(p.connectors ?? []).map((id) => data.connectors.find((x) => x.id === id))].filter(Boolean);
+    const on = parts.filter((x) => x.enabled).length;
+    if (!parts.length || on === parts.length) return { on: true, label: 'Installed' };
+    return { on: false, label: on ? 'Partly on' : 'Off' };
+  }
   const pluginOf = (kind, id) => data.plugins.find((p) => (p[kind] ?? []).includes(id));
   const initial = (name) => (String(name).match(/\p{L}|\p{N}/u)?.[0] ?? '?').toUpperCase();
   const matches = (...fields) => !view.q || fields.join(' ').toLowerCase().includes(view.q);
@@ -145,7 +165,7 @@
     return n;
   }
 
-  function row({ id, name, sub, type, typeTag, status, statusClass, actions = [] }) {
+  function row({ id, name, sub, type, typeTag, status, statusClass, statusNode = null, actions = [], extra = null }) {
     let box = null;
     if (id && view.scope === 'yours') {
       shownIds.push(id);
@@ -157,10 +177,30 @@
       el('span', { className: 'cz-name', role: 'cell' },
         box,
         el('span', { className: 'cz-logo', 'aria-hidden': 'true', text: initial(name) }),
-        el('span', { className: 'cz-text' }, el('b', { text: name }), sub ? el('small', { text: sub }) : null)),
+        el('span', { className: 'cz-text' }, el('b', { text: name }), sub ? el('small', { text: sub }) : null, extra)),
       el('span', { className: 'cz-type', role: 'cell' }, document.createTextNode(type), typeTag ? el('span', { className: 'badge', text: typeTag }) : null),
-      el('span', { className: `cz-status ${statusClass ?? ''}`, role: 'cell', text: status }),
+      statusNode ?? el('span', { className: `cz-status ${statusClass ?? ''}`, role: 'cell', text: status }),
       el('span', { className: 'cz-actions', role: 'cell' }, ...actions));
+  }
+
+  // W6-16: where a skill, connector or plugin applies: everywhere, or only in some folders. The server accepts only a folder picked in this launch.
+  const folderName = (f) => String(f).split(/[\\/]/).filter(Boolean).pop() ?? String(f);
+  function scopeNode(path, item) {
+    const folders = item.folders ?? [];
+    const change = async (next, picked) => {
+      try { notice = ''; await sendJSON(path, 'PATCH', { folders: next }); } catch (err) { notice = err.message; }
+      await load();
+    };
+    const pick = async () => {
+      const picked = window.bunnyDesktop?.pickFolder ? await window.bunnyDesktop.pickFolder() : window.prompt('The full path of a folder');
+      if (!picked) return;
+      await sendJSON('/api/folder/check', 'POST', { folder: picked }).catch(() => {}); // in the browser a typed path is a chosen path; in the app the picker already did this
+      await change([...folders, picked]);
+    };
+    return el('span', { className: 'cz-scope' },
+      el('small', { className: 'cz-scope-label', text: folders.length ? `Only in: ${folders.map(folderName).join(', ')}` : 'Everywhere', title: folders.join('\n') }),
+      act(folders.length ? 'Add a folder' : 'Only in a folder…', pick),
+      folders.length ? act('Everywhere', () => change([])) : null);
   }
 
   function toggle(on, label, change) {
@@ -174,14 +214,23 @@
     if (view.kind === 'connectors') {
       for (const s of data.connectors.filter((s) => matches(s.name, s.url))) {
         const plugin = pluginOf('connectors', s.id);
-        const status = !s.enabled ? 'Off' : s.status === 'connected' ? `✓ ${s.tools?.length ?? 0} tools` : s.status === 'error' ? 'Error' : 'Not checked';
+        const flow = flows.get(s.id);
+        const signedIn = s.oauth?.signedIn === true;
+        const st = connectorStatus(s, flow);
+        const statusNode = renderStatus(st, document);
+        statusNode.setAttribute('role', 'cell');
         list.append(row({
           id: s.id,
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.url,
           type: 'Remote', typeTag: plugin ? 'Plugin' : 'Custom',
-          status, statusClass: s.status === 'error' ? 'text-bad' : s.status === 'connected' && s.enabled ? 'text-ok' : '',
+          statusNode,
+          extra: el('span', { className: 'cz-extra' }, plugin ? null : scopeNode(`/api/mcp/${s.id}`, s), flows.clientIdBox(s)),
           actions: [
-            act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; await fetch(`/api/mcp/${s.id}/tools`); await load(); }),
+            st.wait ? act('Cancel', () => { flows.clear(s.id); paint(); }) : null,
+            st.canSignIn ? act(st.signInLabel, () => startSignIn(s)) : null,
+            signedIn ? act('Sign out', () => signOut(s)) : null,
+            act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); }),
+            act(s.trustReadOnly ? 'Read-only labels trusted' : 'Trust read-only labels', async () => { try { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { trustReadOnly: !s.trustReadOnly }); notice = ''; } catch (err) { notice = err.message; } await load(); }),
             toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on })),
             plugin ? null : act('Remove', async () => { await sendJSON(`/api/mcp/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
           ],
@@ -195,6 +244,7 @@
           name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.description,
           type: 'Skill', typeTag: plugin ? 'Plugin' : 'Custom',
           status: s.enabled ? 'On' : 'Off', statusClass: s.enabled ? 'text-ok' : '',
+          extra: plugin ? null : scopeNode(`/api/skills/${s.id}`, s),
           actions: [
             toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/skills/${s.id}`, 'PATCH', { enabled: on })),
             plugin ? null : act('Remove', async () => { await sendJSON(`/api/skills/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
@@ -207,8 +257,9 @@
         list.append(row({
           id: p.id,
           name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
-          status: 'Installed', statusClass: 'text-ok',
-          actions: [act('Uninstall', () => uninstall(p), 'btn btn-danger btn-sm')],
+          status: pluginState(p).label, statusClass: pluginState(p).on ? 'text-ok' : '',
+          extra: scopeNode(`/api/plugins/${p.id}`, p),
+          actions: [p.source ? act('Update', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Updating…'; try { const r = await sendJSON(`/api/plugins/${p.id}/update`, 'POST'); notice = `Updated ${p.name}: ${r.skillsUpdated} skill(s) refreshed, ${r.skillsAdded} added, ${r.skillsRemoved} removed; ${r.connectorsAdded} new connector(s) added switched off.${r.message ? ` ${r.message}` : ''}`; } catch (err) { notice = err.message; } await load(); }) : null, toggle(pluginState(p).on, `Use ${p.name}`, (on) => sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on })), act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
         }));
       }
     }
@@ -228,7 +279,13 @@
         name: item.name, sub: item.desc ?? item.description,
         type: view.kind === 'connectors' ? 'Remote' : view.kind === 'skills' ? 'Skill' : 'Plugin', typeTag: 'No sign-in',
         status: added ? '✓ Added' : '', statusClass: added ? 'text-ok' : '',
-        actions: [added ? null : act('Add', async (e) => { e.currentTarget.textContent = 'Adding…'; await add(); await load(); }, 'btn btn-sm')],
+        actions: [added ? null : act('Add', async (e) => {
+          const button = e.currentTarget;
+          if (button.disabled) return;
+          button.disabled = true; button.textContent = 'Adding…'; showError('');
+          try { await add(); } catch (err) { showError(`${item.name} could not be added: ${err.message}`); }
+          await load();
+        }, 'btn btn-sm')],
       }));
     }
   }
@@ -241,7 +298,7 @@
     $('cz-col-name').textContent = { connectors: 'Connector', skills: 'Skill', plugins: 'Plugin' }[view.kind];
     if (view.scope === 'yours') paintYours(); else paintDiscover();
     const empty = !list.children.length;
-    $('cz-note').textContent = empty
+    $('cz-note').textContent = notice ? notice : empty
       ? (view.q ? 'Nothing matches that search.'
         : view.scope === 'yours' ? `No ${view.kind} yet. Add one, or look in Discover.` : 'Nothing to discover here yet.')
       : view.kind === 'connectors' ? 'The tools of every connector that is on are offered to the model in your chats.'
@@ -270,27 +327,26 @@
     return kind === 'plugins' ? data.plugins.map((p) => p.id) : data[kind].map((x) => x.id);
   }
 
-  // ---- plugins: install adds each part and records what was added ----
-  async function install(bundle) {
-    const name = String(bundle?.name ?? '').trim();
-    if (!name) throw new Error('A plugin needs a name');
-    const record = { id: crypto.randomUUID(), name: name.slice(0, 60), description: String(bundle.description ?? '').slice(0, 200), connectors: [], skills: [] };
-    for (const c of bundle.connectors ?? []) {
-      const added = await sendJSON('/api/mcp', 'POST', { name: c.name, url: c.url, enabled: true });
-      if (added?.id) record.connectors.push(added.id);
-    }
-    for (const s of bundle.skills ?? []) {
-      const added = await sendJSON('/api/skills', 'POST', { name: s.name, description: s.description ?? '', instructions: s.instructions, enabled: true });
-      if (added?.id) record.skills.push(added.id);
-    }
-    await sendJSON('/api/settings', 'PUT', { plugins: [...data.plugins, record] });
-  }
+  // ---- plugins: the server adds and removes every part, one plugin at a time, from its own list (W4-10) ----
+  const install = (bundle) => sendJSON('/api/plugins', 'POST', bundle);
 
+  // A failure is shown in words in a line under the list, never swallowed.
+  function showError(text) {
+    const box = $('cz-error');
+    box.textContent = text || '';
+    box.hidden = !text;
+  }
   async function uninstall(plugin) {
-    for (const id of plugin.connectors ?? []) await sendJSON(`/api/mcp/${id}`, 'DELETE');
-    for (const id of plugin.skills ?? []) await sendJSON(`/api/skills/${id}`, 'DELETE');
-    await sendJSON('/api/settings', 'PUT', { plugins: data.plugins.filter((p) => p.id !== plugin.id) });
+    showError('');
+    try {
+      await sendJSON(`/api/plugins/${plugin.id}`, 'DELETE');
+    } catch (err) {
+      showError(`${plugin.name} could not be uninstalled: ${err.message}`);
+      await load();
+      return false;
+    }
     await load();
+    return true;
   }
 
   // ---- controls ----
@@ -327,7 +383,7 @@
     $('cz-bulk-note').textContent = 'Working…';
     try {
       if (kind === 'plugins') {
-        for (const id of ids) { const p = data.plugins.find((x) => x.id === id); if (p) await uninstall(p); }
+        for (const id of ids) { const p = data.plugins.find((x) => x.id === id); if (p && !(await uninstall(p))) break; }
       } else {
         const base = kind === 'connectors' ? '/api/mcp' : '/api/skills';
         for (const id of ids) {
@@ -363,7 +419,8 @@
     const err = form.querySelector('[data-err]');
     err.textContent = '';
     try {
-      await sendJSON(url, 'POST', body); // (through the window's own channel in the desktop app: adding a connector is window-only)
+      const added = await sendJSON(url, 'POST', body); // (through the window's own channel in the desktop app: adding a connector is window-only)
+      if (kind === 'connectors' && added?.id) await fetch(`/api/mcp/${added.id}/tools`).catch(() => {}); // a 401 marks it "Needs sign-in"
       form.reset(); form.hidden = true;
       view.kind = kind; view.scope = 'yours';
       document.querySelector(`.cz-tab[data-kind="${kind}"]`).click();
@@ -408,7 +465,7 @@
       document.querySelector('.cz-scope [data-scope="yours"]').click();
       await load();
     } catch (err) {
-      $('cz-note').textContent = `That plugin could not be installed: ${err.message}`;
+      showError(`That plugin could not be installed: ${err.message}`);
     }
   });
 
