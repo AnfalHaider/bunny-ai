@@ -9,6 +9,7 @@ const SCHEMES = ['light', 'dark'];
 async function gaps(page) {
   return page.evaluate(() => {
     const out = [];
+    const control_ = (el) => ['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(el.tagName);
     for (const group of document.querySelectorAll('.group')) {
       const g = group.getBoundingClientRect();
       if (!g.width || getComputedStyle(group).display === 'none') continue;
@@ -16,9 +17,13 @@ async function gaps(page) {
         const r = el.getBoundingClientRect();
         if (!r.width || !r.height || el.closest('[hidden]')) continue;
         const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        // an element with its own text and its own padding (a row) is measured where its TEXT starts, not at its box
+        const cs = getComputedStyle(el);
+        const padL = control_(el) ? 0 : (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0);
+        const padR = control_(el) ? 0 : (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderRightWidth) || 0);
         const control = ['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(el.tagName);
         if (!own && !control) continue;
-        out.push({ what: `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}.${String(el.className).split(' ')[0]} "${(el.textContent || el.value || '').trim().slice(0, 24)}"`, left: Math.round(r.left - g.left), right: Math.round(g.right - r.right), group: group.id || group.className });
+        out.push({ what: `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}.${String(el.className).split(' ')[0]} "${(el.textContent || el.value || '').trim().slice(0, 24)}"`, left: Math.round(r.left + padL - g.left), right: Math.round(g.right - r.right + padR), group: group.id || group.className });
       }
     }
     return out;
