@@ -43,6 +43,9 @@ function run(label, args, env) {
     const child = spawn(process.execPath, ['--test', '--test-timeout=120000', ...args], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let last = '';
     let timer;
+    let tail = '';
+    const failing = new Set();
+    const started = Date.now();
     const arm = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -50,15 +53,33 @@ function run(label, args, env) {
         child.kill('SIGKILL');
       }, SILENT_MS);
     };
-    const pass = (stream, out) => stream.on('data', (chunk) => { out.write(chunk); last = (last + chunk.toString()).slice(-2000); arm(); });
+    const pass = (stream, out) => stream.on('data', (chunk) => {
+      out.write(chunk);
+      last = (last + chunk.toString()).slice(-2000);
+      // the names of failing tests, kept for the summary at the very end (the gate shows only the last lines of this script's output)
+      tail += chunk.toString();
+      const lines = tail.split(/\r?\n/);
+      tail = lines.pop();
+      for (const line of lines) if (/^\s*✖ /.test(line)) failing.add(line.trim().slice(0, 160));
+      arm();
+    });
     pass(child.stdout, process.stdout);
     pass(child.stderr, process.stderr);
     arm();
-    child.on('close', (code, signal) => { clearTimeout(timer); resolve(signal ? 1 : code ?? 1); });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      resolve({ label, code: signal ? 1 : code ?? 1, seconds: Math.round((Date.now() - started) / 1000), failing: [...failing].slice(0, 12) });
+    });
   });
 }
 
 const first = await run('all other unit tests, in parallel', others, process.env);
 const { CLAUDE_PROJECT_DIR, ...withoutProjectDir } = process.env;
 const second = await run('guard and kit tests, one at a time', ['--test-concurrency=1', ...guard], withoutProjectDir);
-process.exit(first || second ? 1 : 0);
+// The last lines the gate keeps: how long each step took, whether it passed, and the names of the tests that failed.
+console.log('\n# SUMMARY');
+for (const r of [first, second]) {
+  console.log(`# ${r.code === 0 ? 'PASS' : 'FAIL'} ${r.label}: ${r.seconds} s, exit ${r.code}`);
+  for (const name of r.failing) console.log(`#   ${name}`);
+}
+process.exit(first.code || second.code ? 1 : 0);
