@@ -1439,7 +1439,7 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-form { margin-bottom: var(--sp-6); }
 .cz-table { border-top: 1px solid var(--line); }
 .cz-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) 150px 140px auto; align-items: center; gap: var(--sp-6);
+  display: grid; grid-template-columns: minmax(0, 1fr) 112px 176px 260px; align-items: center; gap: var(--sp-6); /* fixed columns, so the header words sit over their columns */
   padding: var(--sp-5) var(--sp-4); border-bottom: 1px solid var(--line); font-size: var(--fs-base);
 }
 .cz-head { padding-top: var(--sp-4); padding-bottom: var(--sp-4); font-size: var(--fs-md); color: var(--text-dim); font-weight: var(--fw-medium); }
@@ -1453,10 +1453,15 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-text b { font-weight: var(--fw-medium); }
 .cz-text small { font-size: var(--fs-md); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cz-type { display: flex; align-items: center; gap: var(--sp-4); color: var(--text-dim); }
-.cz-status { color: var(--text-dim); font-size: var(--fs-md); }
+.cz-status { display: flex; flex-direction: column; gap: 1px; min-width: 0; color: var(--text-dim); font-size: var(--fs-md); }
+.cz-status-word { font-weight: var(--fw-medium); }
+.cz-status-detail { color: var(--text-dim); font-weight: 400; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
 .cz-note { margin-top: var(--sp-6); }
-.cz-status.is-warn { color: var(--warn); font-weight: var(--fw-medium); }
+.cz-status.is-warn .cz-status-word { color: var(--warn); }
+.cz-status.text-ok .cz-status-word { color: var(--ok); }
+.cz-status.text-bad .cz-status-word { color: var(--bad); }
+main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px of a settings page */
 .cz-signin-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-md); color: var(--text-dim); }
 .cz-signin-note .input { flex: 1 1 200px; min-width: 0; }
 /* Phone: each item is a card, with its status under the name (the Type column is not drawn) */
@@ -1467,7 +1472,7 @@ html.embedded .cz-bar { margin-top: 0; }
   #cz-list { display: flex; flex-direction: column; gap: var(--sp-4); }
   .cz-row[role="row"]:not(.cz-head) { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
   .cz-row .cz-type { display: none; }
-  .cz-row .cz-status { display: block; overflow-wrap: anywhere; }
+  .cz-row .cz-status { overflow-wrap: anywhere; }
   .cz-actions { justify-content: flex-start; flex-wrap: wrap; }
 }
 
@@ -1877,8 +1882,10 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .automation-page .auto-section > .sub { margin-bottom: var(--sp-4); }
 .auto-card { padding: 0; overflow: hidden; }
 .auto-card .kv { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); padding: var(--sp-5) var(--sp-7); border-bottom: 1px solid var(--line); }
-.auto-card .kv .k { min-width: 0; overflow-wrap: anywhere; }
-.auto-card .kv .v { display: flex; align-items: center; gap: var(--sp-4); flex: none; }
+.auto-card .kv .k { flex: 1 1 0; width: auto; min-width: 0; overflow-wrap: anywhere; } /* the later .kv .k (92px, for the session panel) must not squeeze a connector's name and status */
+.auto-card .kv .k .cz-status { margin-top: var(--sp-2); }
+@media (max-width: 560px) { .auto-card .kv { flex-wrap: wrap; } .auto-card .kv .k { flex-basis: 100%; } .auto-card .kv .v { max-width: 100%; width: 100%; justify-content: flex-start; } }
+.auto-card .kv .v { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--sp-4); flex: none; max-width: 60%; }
 .auto-card > div > .row { padding: var(--sp-5) var(--sp-7); border-bottom: 1px solid var(--line); }
 .add-row { display: grid; gap: var(--sp-4); align-items: center; padding: var(--sp-5) var(--sp-7); background: var(--bg-sidebar); }
 .add-row + .add-row { border-top: 1px solid var(--line); }

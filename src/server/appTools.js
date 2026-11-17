@@ -4,6 +4,7 @@
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
 import { readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
+import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
 
 export const APP_TOOL_RISK = {
   web_search: 'read', read_url: 'read', search_plugins: 'read', read_skill: 'read',
@@ -29,11 +30,12 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
     fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI and switch it on.',
       { name: { type: 'string' }, description: { type: 'string' }, instructions: { type: 'string' } }, ['name', 'instructions']),
     fn('add_connector', 'Add an MCP server to Bunny AI as a connector and switch it on: a remote one by its https address, '
-      + 'or a local one by the command that runs it (for example command "npx", args ["-y", "@modelcontextprotocol/server-filesystem", "C:\\notes"]). The person always confirms a local command.',
+      + `or a local one by the program that runs it (one of ${LOCAL_COMMANDS.join(', ')}; for example command "npx", args ["-y", "@modelcontextprotocol/server-filesystem", "C:\\notes"]). `
+      + 'The person always sees the exact command line on a card and confirms it before anything runs. The first start can take a few minutes.',
       { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
         command: { type: 'string', description: 'For a local connector: the program to run' },
         args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
-        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Settings it needs, such as an API key name and value' } }, ['name']),
+        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' } }, ['name']),
   ].filter((d) => risks.includes(APP_TOOL_RISK[d.function.name]));
 }
 
@@ -158,6 +160,14 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     },
     add_skill: async (args) => `Added skill ${(await skills.add({ ...args, enabled: true })).name}. It is switched on.`,
     add_connector: async (args) => {
+      if (String(args.command ?? '').trim()) {
+        // A local connector proposed by the model: a known program, separate arguments, and no secrets through the chat.
+        const checked = checkProposedCommand(args.command, args.args);
+        if (args.env && typeof args.env === 'object' && Object.keys(args.env).length) {
+          throw new Error('Keys and passwords are not taken through the chat. Add the connector without settings and ask the person to enter them in Settings, Customize.');
+        }
+        args = { ...args, ...checked, env: {} };
+      }
       const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: true });
       return `Added the ${added.type === 'local' ? 'local' : 'remote'} connector ${added.name}. It is switched on; its tools are offered from the next message.`;
     },

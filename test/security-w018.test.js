@@ -86,3 +86,18 @@ test('W69-1 review: read_url refuses, and never reads, an address the rule check
     await assert.rejects(() => ws.readFileUrl(url), /not valid|inside the workspace/, url);
   }
 });
+
+test('W6-NEW-1 review: the .git pattern is exact: agit and xgit/ are ordinary, and GIT~1 is refused by its spelling', async (t) => {
+  const { dir, ws } = await folder(t);
+  for (const path of ['agit', 'xgit/file.txt', 'git/notes.txt', 'gitx/a.txt', '.gitx', 'a.git']) {
+    await ws.run('write_file', { path, content: 'fine\n' });
+    assert.equal(existsSync(join(dir, path)), true, path);
+  }
+  // no GIT~1 folder exists here, so only the spelling can stop these (the real-path check has nothing to resolve)
+  for (const path of ['GIT~1/hooks/x', 'git~12/y', 'a/GIT~1/b']) {
+    await assert.rejects(() => ws.run('write_file', { path, content: 'x' }), /inside \.git/, path);
+  }
+  for (const path of ['.git', '.git.', '.git /x', '.git::$DATA/x']) {
+    await assert.rejects(() => ws.run('write_file', { path, content: 'x' }), /inside \.git/, path);
+  }
+});

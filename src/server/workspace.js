@@ -256,7 +256,7 @@ export function createWorkspace(rootFolder, { envRunner = undefined, beforeWrite
 
   // W6-NEW-1: a file written inside .git (a hook, the config) runs the next time the person commits, so the edit tools refuse it.
   // ".git", ".git." and ".git::$DATA" are all the same folder on NTFS, and so is its short name GIT~1.
-  const GIT_SEGMENT = /^(.git|git~d+)(?:[. ]*|:.*)$/i;
+  const GIT_SEGMENT = /^(\.git|git~\d+)(?:[. ]*|:.*)$/i;
   const inGit = (from, abs) => relative(from, abs).split(sep).some((part) => GIT_SEGMENT.test(part));
   async function refuseGit(abs, path) {
     let bad = inGit(root, abs);
