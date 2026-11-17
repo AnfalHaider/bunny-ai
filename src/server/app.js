@@ -33,6 +33,7 @@ import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
+import { thinkingBody } from '../providers/thinking.js';
 import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSignIn.js';
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
@@ -2732,7 +2733,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       if (JOB_NOTES[job]) history.unshift({ role: 'system', content: JOB_NOTES[job] });
       // OpenRouter image models answer with pictures when asked for image output.
       const jobBody = job === 'image' && providerId === 'openrouter' ? { modalities: ['image', 'text'] } : null;
-      const extraBody = reasoningBody || jobBody ? { ...(reasoningBody ?? {}), ...(jobBody ?? {}) } : null;
+      // W4-13b: the person's own Thinking choice for this model, in the provider's own field (only for providers whose field is known); it replaces the Effort-based reasoning
+      const thinkBody = ['low', 'medium', 'high'].includes(body.thinking) ? thinkingBody(providerId, body.thinking) : null;
+      const extraBody = reasoningBody || jobBody || thinkBody ? { ...(thinkBody ? {} : (reasoningBody ?? {})), ...(jobBody ?? {}), ...(thinkBody ?? {}) } : null;
       const answeredBy = {
         model, providerId, job, auto: body.auto === true,
         fellBackFrom: typeof body.fellBackFrom === 'string' ? body.fellBackFrom.slice(0, 200) : undefined,
@@ -2794,6 +2797,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             },
             contextChars: workspace ? 240_000 : 0,
             tokenBudget: replyCaps.tokens,
+            onThinkingRefused: () => send('tool', { tool: 'Thinking setting not used', status: 'done', result: 'This model does not take that setting, so it answered at its default. Choose Default under Thinking in the model\'s Details.' }),
             // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
             onLimit: async ({ kind, inputTokens, step }) => {
               if (scheduledTask) return false; // nobody is there to answer

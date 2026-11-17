@@ -57,7 +57,7 @@ export const firstByteLimit = (model, setting) => { const l = waitLimits(setting
  */
 export async function* streamChat({
   baseUrl, apiKey, model, messages, signal, fetchImpl = globalThis.fetch,
-  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting,
+  fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting, onThinkingRefused = null,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
   onReplyEnd = null,
@@ -119,9 +119,21 @@ export async function* streamChat({
     if (offerTools) body.tools = tools;
     if (extraBody) Object.assign(body, extraBody);
 
-    let { text, toolCalls, finish, aborted, shown } = yield* streamRound({
-      baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
-    });
+    let first;
+    try {
+      first = yield* streamRound({
+        baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
+      });
+    } catch (err) {
+      // W4-13b: a model that refuses the thinking field is asked again without it, once
+      if (!refusesThinking(err, body) || signal?.aborted) throw err;
+      for (const key of THINKING_KEYS) delete body[key];
+      if (typeof onThinkingRefused === 'function') { try { onThinkingRefused(err.message); } catch { /* a notice only */ } }
+      first = yield* streamRound({
+        baseUrl, headers, body, signal, fetchImpl, stallMs, firstByteMs: stallMs ?? firstByteLimit(model, waitSetting), gapMs: stallMs ?? waitLimits(waitSetting).gapMs, onThinking, hideMarkup: offerTools,
+      });
+    }
+    let { text, toolCalls, finish, aborted, shown } = first;
     if (aborted) return; // stopped: what arrived is kept, nothing more is asked
 
     // A thinking model can spend the whole reply limit thinking and stop with
@@ -502,6 +514,18 @@ function collectToolCall(into, fragments) {
     if (fragment.function?.arguments) existing.arguments += fragment.function.arguments;
     into.set(index, existing);
   }
+}
+
+/** The request fields a Thinking choice adds (see src/providers/thinking.js). */
+const THINKING_KEYS = ['reasoning_effort', 'reasoning', 'thinking'];
+
+/** W4-13b: did the provider answer 400 and say the trouble is the reasoning or thinking field, which this request carries? */
+export function refusesThinking(err, body) {
+  if (!err || err.code !== 'chat.http' || !THINKING_KEYS.some((k) => body && k in body)) return false;
+  const m = String(err.message ?? '');
+  const detail = m.split(':').slice(1).join(':');
+  const about = /\b(reasoning|thinking)(_effort)?\b[^.]{0,60}\b(not|n't|unsupported|invalid|unknown|unrecognized|cannot|can't|no support)\b|\b(not|n't|unsupported|invalid|unknown|unrecognized|no support for|does not support|doesn't support)\b[^.]{0,40}\b(reasoning|thinking)(_effort)?\b/i;
+  return /answered (400|404|405|415|422)\b/.test(m) && about.test(detail) && !/max_tokens|context|too (large|long)|rate/i.test(detail);
 }
 
 /** Deterministic stand-in so the UI is fully exercisable offline. */

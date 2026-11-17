@@ -1172,6 +1172,8 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .picker-details-meta, .picker-details-note { font-size: var(--fs-xs); color: var(--text-dim); }
 .picker-details-k { font-size: var(--fs-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
 .picker-back, .picker-fav { justify-self: start; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-md); padding: 4px 10px; font-size: var(--fs-sm); color: var(--text); cursor: pointer; }
+.picker-thinking { display: grid; gap: var(--sp-3); }
+.picker-seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .picker-fav[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .picker-order { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .picker-order li { display: flex; align-items: center; gap: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); padding: 5px 8px; font-size: var(--fs-sm); }
