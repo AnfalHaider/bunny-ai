@@ -19,15 +19,40 @@ export function parseGithubUrl(raw) {
   return { owner: m[1], repo: m[2], ref: m[3] ?? 'HEAD', base: (m[4] ?? '').replace(/\/$/, '') };
 }
 
-function frontmatter(text) {
+export function frontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!m) return { data: {}, body: text };
   const data = {};
-  for (const line of m[1].split(/\r?\n/)) {
-    const kv = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-    if (kv && kv[2]) data[kv[1]] = kv[2].replace(/^(['"])(.*)\1$/, '$2');
+  const lines = m[1].split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const kv = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(lines[i]);
+    if (!kv) continue;
+    const block = /^([|>])[+-]?\s*$/.exec(kv[2]);
+    // a block (| keeps the lines, > folds them) or a value that goes on over indented lines
+    if (block || !kv[2]) {
+      const rest = [];
+      while (i + 1 < lines.length && (/^\s+\S/.test(lines[i + 1]) || !lines[i + 1].trim())) { i += 1; rest.push(lines[i].trim()); }
+      const joined = (block?.[1] === '|' ? rest.join('\n') : rest.join(' ')).replace(/\s+$/, '').replace(/ {2,}/g, ' ');
+      if (joined) data[kv[1]] = joined;
+      continue;
+    }
+    let value = kv[2];
+    while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1]) && !/^\s*[A-Za-z0-9_-]+:\s/.test(lines[i + 1])) { i += 1; value += ` ${lines[i].trim()}`; }
+    data[kv[1]] = value.replace(/^(['"])([\s\S]*)\1$/, '$2');
   }
   return { data, body: m[2] };
+}
+
+/** S-2: a skill with no description in its front matter is described by the first sentence of its text that is not a heading. */
+export function firstSentence(body) {
+  let fenced = false;
+  for (const line of String(body ?? '').split(/\r?\n/)) {
+    const t = line.trim();
+    if (t.startsWith('```')) { fenced = !fenced; continue; }
+    if (fenced || !t || /^(#|---|>|\|)/.test(t)) continue;
+    return t.replace(/[*_`]/g, '').slice(0, 200);
+  }
+  return '';
 }
 
 export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {}) {
@@ -67,7 +92,7 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     }
     skills.push({
       name: String(data.name ?? (dir.split('/').filter(Boolean).pop() || repo)).slice(0, 60),
-      description: String(data.description ?? '').slice(0, 200),
+      description: String(data.description || firstSentence(body)).slice(0, 200),
       instructions: instructions.slice(0, MAX_SKILL),
     });
   }

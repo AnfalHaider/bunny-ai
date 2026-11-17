@@ -23,8 +23,8 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { url: { type: 'string' } }, ['url']),
     fn('search_plugins', 'Find agent plugins and skills on GitHub, and connectors (MCP servers) in the official MCP registry.',
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
-    fn('read_skill', 'Load the full instructions of a switched-on skill by name.',
-      { name: { type: 'string' } }, ['name']),
+    fn('read_skill', 'Load the instructions of a switched-on skill by name. A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
+      { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
     fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI and switches them on.',
       { url: { type: 'string' } }, ['url']),
     fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI and switch it on.',
@@ -149,10 +149,16 @@ export function createAppTools({ skills, mcp, getSettings, saveSettings, stopCon
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
     search_plugins: ({ query }) => searchPlugins(query),
-    read_skill: async ({ name }) => {
+    read_skill: async ({ name, part }) => {
       const skill = await skills.find(name);
       if (!skill) throw new Error(`There is no skill called ${name}`);
-      return skill.instructions.slice(0, 60_000);
+      const text = String(skill.instructions ?? '');
+      const SIZE = 8000;
+      if (text.length <= SIZE) return text;
+      const total = Math.ceil(text.length / SIZE);
+      const at = Math.min(Math.max(1, Math.floor(Number(part) || 1)), total);
+      const slice = text.slice((at - 1) * SIZE, at * SIZE);
+      return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
     install_plugin: async ({ url }) => {
       const { plugin } = await installFromGithub(url);
