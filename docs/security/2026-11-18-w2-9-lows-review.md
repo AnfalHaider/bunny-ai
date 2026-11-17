@@ -41,3 +41,10 @@ Severity stays LOW to MEDIUM, as before. It needs a project that brings its own 
 - A value with a newline in it comes out as a second line, which matches no key, so it is refused too.
 - `w29-lows` passes 4 of 4 from a copy of 0fdf76c with the variable unset. It covers separators, `$(…)`, backticks, a newline and extra text.
 - c7a3d51 changes only the e2e spec.
+
+## Re-stamp at 21c20bd: PASS (supersedes 0fdf76c)
+
+- The filter settings are now read with `git config --local -z --get-regexp`. Each record ends with NUL; the key ends at the first newline and the value is everything after it.
+- Any value that holds a CR or LF is refused. So is a key with no value. Otherwise the value must equal the exact `git lfs install` value for that key, after trimming.
+- `w29-lows` passes 4 of 4 from a copy of 21c20bd with the variable unset, including a standard second line.
+- LOW: a `git config` that fails for a reason other than "no such setting" is read as "no filters". `worktree add` would then fail on a broken config anyway.
