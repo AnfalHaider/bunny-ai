@@ -13,5 +13,6 @@ try {
   let out;
   try { out = await runGit([], { cwd: project }); } catch (err) { out = `git refused: ${err.message.slice(0, 120)}`; }
   console.log(`runGit in a folder holding git.exe (really whoami) answered: ${JSON.stringify(out)}`);
-  console.log(/\\/.test(out) && !/fatal|not a git/i.test(out) ? 'PLANTED git.exe RAN  <-- finding' : 'the real git ran');
+  // whoami prints DOMAIN\user and succeeds; git with no command fails with its usage (the error names the git program it started)
+  console.log(/git/i.test(out) ? 'the real git ran' : 'PLANTED program RAN  <-- finding');
 } finally { rmSync(project, { recursive: true, force: true }); }
