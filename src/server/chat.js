@@ -116,7 +116,7 @@ export async function* streamChat({
       }
     }
     inputTokens += Math.ceil(conversation.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0), 0) / 4);
-    const body = { model, messages: conversation, stream: true };
+    const body = { model, messages: mergeSameRole(conversation), stream: true };
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
     if (maxTokens) body.max_tokens = maxTokens;
@@ -265,11 +265,11 @@ export async function* streamChat({
   async function* finalAnswer() {
     const body = {
       model, stream: true,
-      messages: [...conversation, {
+      messages: mergeSameRole([...conversation, {
         role: 'user',
         content: 'Stop using tools now and reply to me. Say briefly what you did and found, what is left to do (if anything), '
           + 'and what you need from me (if anything). If work remains, end by telling me to send "continue". Do not call any more tools.',
-      }],
+      }]),
     };
     if (maxTokens) body.max_tokens = maxTokens;
     if (extraBody) Object.assign(body, extraBody);
@@ -533,6 +533,27 @@ function collectToolCall(into, fragments) {
     if (fragment.function?.arguments) existing.arguments += fragment.function.arguments;
     into.set(index, existing);
   }
+}
+
+/**
+ * ROLES: strict chat templates (some Mistral and local models) refuse two messages of the same role in a row. A note added in front of the person's
+ * message (a connector's instructions, a task note) or a screenshot sent as its own message would make two. Only the REQUEST changes, never the saved chat:
+ * plain user+user and assistant+assistant messages become one (two strings joined by a blank line; if either holds parts, one list of parts with the pictures in
+ * order). A tool message, an assistant message with tool_calls and system messages are never touched, so every tool_call_id stays next to its result.
+ */
+export function mergeSameRole(messages) {
+  const plain = (m) => m && (m.role === 'user' || m.role === 'assistant') && !m.tool_calls && (typeof m.content === 'string' || Array.isArray(m.content));
+  const parts = (c) => (Array.isArray(c) ? c : [{ type: 'text', text: c }]);
+  const out = [];
+  for (const m of messages) {
+    const last = out[out.length - 1];
+    if (last && plain(last) && plain(m) && last.role === m.role) {
+      out[out.length - 1] = { ...last, content: typeof last.content === 'string' && typeof m.content === 'string' ? `${last.content}
+
+${m.content}` : [...parts(last.content), ...parts(m.content)] };
+    } else out.push(m);
+  }
+  return out;
 }
 
 /** PV-1: did the provider answer 400 and say the trouble is the tools (\"does not support tools\", \"tools is not allowed\")? */
