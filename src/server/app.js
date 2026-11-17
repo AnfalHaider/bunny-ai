@@ -1716,6 +1716,11 @@ export async function createApp({ dataDir, fake = process.env.BUNNY_FAKE_UPSTREA
       // Settings, Capabilities: skills and connectors can be switched off for every chat.
       const skillText = settings.skillsEnabled === false ? null : await skills.context();
       if (skillText) history.unshift({ role: 'system', content: skillText });
+      // S-4: the person called a skill by name (/name in the message box): the model is told to load it first
+      if (settings.skillsEnabled !== false && typeof body.useSkill === 'string' && body.useSkill) {
+        const called = await skills.find(body.useSkill.slice(0, 80));
+        if (called && called.enabled !== false) history.unshift({ role: 'system', content: `The person asked for the skill "${called.name}": call read_skill with that name first, then follow it for this request.` });
+      }
 
       res.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
