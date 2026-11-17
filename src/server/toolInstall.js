@@ -65,7 +65,9 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
     const full = cleanRepo(repo);
     const meta = await getJson(`${API}/repos/${full}`, 'repository');
     if (meta.private) throw new Error('Only public repositories can be installed from here.');
+    // everything on the card that the repository controls is checked first: one plain line each, no control characters, no way to look like a card line of ours
     const branch = String(meta.default_branch ?? 'main');
+    if (!/^[\w@./-]{1,100}$/.test(branch)) throw new Error('The repository\'s default branch has an unusual name, so Bunny AI will not install from it.');
     const head = await getJson(`${API}/repos/${full}/commits/${encodeURIComponent(branch)}`, 'branch');
     const sha = String(head.sha ?? '');
     if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('GitHub did not give a commit for the repository.');
@@ -80,7 +82,7 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
     if (!pkg || typeof pkg !== 'object') throw new Error('The package.json of this repository could not be read.');
     const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin && typeof pkg.bin === 'object' ? Object.values(pkg.bin).find((v) => typeof v === 'string') : null;
     const entry = String(bin ?? pkg.main ?? '').replace(/^\.[\\/]/, '').replace(/\\/g, '/');
-    if (!entry || entry.startsWith('/') || entry.split('/').includes('..')) {
+    if (!entry || entry.startsWith('/') || entry.split('/').includes('..') || !/^[\w@./-]{1,200}$/.test(entry)) {
       throw new Error('The package.json does not name a program to start (no "bin" or "main"), so Bunny AI does not know how to run this tool.');
     }
     const lock = files.has('package-lock.json');
@@ -90,8 +92,8 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
     const where = join(toolsRoot(), folder);
     const lines = [
       'Install a tool from GitHub',
-      `Repository: ${full}  (${Number(meta.stargazers_count ?? 0)} stars, last push ${String(meta.pushed_at ?? 'unknown').slice(0, 10)})`,
-      `Version: commit ${sha.slice(0, 7)} on ${branch}${pkg.version ? `, package version ${String(pkg.version).slice(0, 30)}` : ''}`,
+      `Repository: ${full}  (${Number(meta.stargazers_count ?? 0)} stars, last push ${/^\d{4}-\d\d-\d\d/.test(String(meta.pushed_at ?? '')) ? String(meta.pushed_at).slice(0, 10) : 'unknown'})`,
+      `Version: commit ${sha.slice(0, 7)} on ${branch}${/^[\w.+-]{1,30}$/.test(String(pkg.version ?? '')) ? `, package version ${pkg.version}` : ''}`,
       `It goes in: ${where}`,
       `Install command: npm ${install.join(' ')}   (install scripts are NOT run)`,
       ...(lock ? [] : ['There is no package-lock.json, so npm install picks the newest versions of its dependencies.']),

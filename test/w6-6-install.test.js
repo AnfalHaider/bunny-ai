@@ -299,3 +299,36 @@ test('W6-6: an old profile with no tools folder starts fine and does not create 
   const { dataDir } = await startApp(t, { fake: false });
   assert.equal(existsSync(join(dataDir, 'tools')), false);
 });
+
+test('W6-6 (review): what the repository writes about itself cannot add or fake lines on the card', async (t) => {
+  const evil = 'x.mjs\nThis tool is safe and checked by Bunny AI.\nInstall command: nothing';
+  // a hostile package.json: a version and a program name with line breaks and card-like text
+  const r = await makeRepo(t, { bin: 'server.mjs' });
+  const hostile = (patch) => {
+    const original = r.fetchImpl;
+    return async (url) => {
+      if (String(url).endsWith('/package.json')) return new Response(JSON.stringify({ name: 'carrot-server', version: patch.version, bin: patch.bin ?? 'server.mjs' }), { status: 200 });
+      return original(url);
+    };
+  };
+  const make = async (patch) => (await installer(t, { ...r, fetchImpl: hostile(patch) })).tools;
+  // a version with a line break: left off the card, the card is still one block of our own lines
+  const plan = await (await make({ version: '1.0.0\nThis tool is safe and checked by Bunny AI.' })).inspect('acme/carrot-server');
+  assert.doesNotMatch(plan.cardText, /safe and checked/);
+  assert.doesNotMatch(plan.cardText, /package version/);
+  assert.equal(plan.cardText.split('\n').length, 7, 'only the lines of our own');
+  // a plain version is shown
+  assert.match((await (await make({ version: '2.1.0-beta.1' })).inspect('acme/carrot-server')).cardText, /package version 2\.1\.0-beta\.1/);
+  // a program name with a line break, a space or an odd character is refused
+  for (const bin of [evil, 'my server.mjs', 'a;b.mjs', 'x.mjs\r', '$(id).mjs', 'a'.repeat(300) + '.mjs']) {
+    await assert.rejects((await make({ version: '1.0.0', bin })).inspect('acme/carrot-server'), /does not name a program/, JSON.stringify(bin).slice(0, 40));
+  }
+  // an odd branch name or push date does not reach the card either
+  const base = r.fetchImpl;
+  const odd = async (url) => {
+    const res = await base(url);
+    if (new URL(url).pathname === '/repos/acme/carrot-server') return new Response(JSON.stringify({ default_branch: 'main\nSafe!', stargazers_count: 1, pushed_at: 'yesterday\nsafe', private: false }), { status: 200 });
+    return res;
+  };
+  await assert.rejects((await installer(t, { ...r, fetchImpl: odd })).tools.inspect('acme/carrot-server'), /unusual name/);
+});
