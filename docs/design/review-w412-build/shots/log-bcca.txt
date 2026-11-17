@@ -1,0 +1,12 @@
+lightd waiting: BUNNY HAS A QUESTION | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | Send | Skip
+lightd typed: card=BUNNY ASKED | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | You answered: yes, but skip the last step || last reply=Finished after all.
+lightd model saw user lines: ["go round in circles","The person answered your question (\"I have run the same step (update_tasks) three times in a row. Keep trying, or stop here?\"): yes, but skip the last step"]
+lightm waiting: BUNNY HAS A QUESTION | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | Send | Skip
+lightm typed: card=BUNNY ASKED | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | You answered: yes, but skip the last step || last reply=Finished after all.
+lightm model saw user lines: ["go round in circles","The person answered your question (\"I have run the same step (update_tasks) three times in a row. Keep trying, or stop here?\"): yes, but skip the last step"]
+darkd waiting: BUNNY HAS A QUESTION | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | Send | Skip
+darkd typed: card=BUNNY ASKED | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | You answered: yes, but skip the last step || last reply=Finished after all.
+darkd model saw user lines: ["go round in circles","The person answered your question (\"I have run the same step (update_tasks) three times in a row. Keep trying, or stop here?\"): yes, but skip the last step"]
+darkm waiting: BUNNY HAS A QUESTION | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | Send | Skip
+darkm typed: card=BUNNY ASKED | I have run the same step (update_tasks) three times in a row. Keep trying, or stop here? | Stop here | Recommended | Keep going | You answered: yes, but skip the last step || last reply=Finished after all.
+darkm model saw user lines: ["go round in circles","The person answered your question (\"I have run the same step (update_tasks) three times in a row. Keep trying, or stop here?\"): yes, but skip the last step"]

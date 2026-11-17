@@ -1,9 +1,9 @@
 ---
 piece: w4-12
 role: design
-sha: c2da6a8
+sha: bcca328
 verdict: PASS
 date: 2026-11-17
 ---
 
-Waiting, answered by click, answered by typing, unanswered cards and Send staying on shot on the real path (invented provider), light dark phone; see docs/design/review-w412-build/README.md
+UI unchanged since c2da6a8 (git diff src/ui empty); typed yes-but-skip answer shown as You answered with the typed words, light dark phone; see docs/design/review-w412-build/README-bcca328.md
