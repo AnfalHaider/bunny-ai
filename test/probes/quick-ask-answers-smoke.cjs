@@ -58,8 +58,15 @@ async function main() {
   const js = (w, code) => w.webContents.executeJavaScript(code);
   const askIn = async (w, q) => js(w, `(() => { const t = document.getElementById('text'); t.value = ${JSON.stringify(q)}; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
 
-  // 1. a hostile reply is shown as inert text
+  // 0. the + menu works in the real bar (the owner chose "the + menu keeps working")
   let w = await openBar();
+  await js(w, `document.getElementById('plus').click(); 0`);
+  await wait(300);
+  const menu = await js(w, `(() => { const m = document.getElementById('menu'); const r = m.getBoundingClientRect(); return { hidden: m.hidden, bottom: Math.round(r.bottom), inner: window.innerHeight, items: [...m.querySelectorAll('button')].map((b) => b.id) }; })()`);
+  check('the + menu opens in the real bar with both items inside the window', menu.hidden === false && menu.items.includes('shot-item') && menu.items.includes('file-item') && menu.bottom <= menu.inner, JSON.stringify(menu));
+  await js(w, `document.getElementById('plus').click(); 0`);
+
+  // 1. a hostile reply is shown as inert text
   check('the bar opened and its page (with the markdown module) loaded without errors', Boolean(w) && !logs.some((l) => /^3:/.test(l)), logs.join(' | '));
   if (!w) { console.log('no bar window'); app.exit(2); return; }
   await askIn(w, 'Give me the hostile reply');
