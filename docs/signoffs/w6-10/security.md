@@ -1,9 +1,9 @@
 ---
 piece: w6-10
 role: security
-sha: 9859ea6
-verdict: FAIL
+sha: 504c388
+verdict: PASS
 date: 2026-11-17
 ---
 
-W610-1 (MEDIUM): a local page captured with allowLoopback can name http://127.0.0.1:<Bunny port>/; fetchLimited sends Host 127.0.0.1:<port> and no Origin or Sec-Fetch, so requestGuard serves index.html with the launch token (meta bunny-token) and capture saves it in the workspace, readable by the model; Accept mode needs no card. Fix: capture (and fetchLimited for every caller) refuses Bunny's own port in every loopback spelling, re-checked on redirects. W610-2 (LOW-MEDIUM): only captures/.../index.html is checked against the person's rules; check every written path (any deny: write nothing; any ask: one card). Read-only review; tests after the gate.
+Supersedes FAIL at 9859ea6. Real-app probe: 8 spellings, a resolving name and a redirect to Bunny's / all refused; rules judged per path; 15/15 + 14/14. docs/security/2026-11-17-w6-6-w6-10-p4-1-qa-batch-audit-review.md
