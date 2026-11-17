@@ -2,6 +2,12 @@
 // Pages see window.bunnyDesktop; nothing else from Node or Electron is exposed.
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
+// SB-1: the bridge exists only in Bunny's own pages. A page served from Bunny's address that is not one (a model-written artifact) gets nothing, even if this file was loaded into it.
+// Kept equal to OWN_PAGE_PATHS in own-pages.js (a test checks).
+const OWN_PAGE_PATHS = ['/src/ui/index.html', '/src/ui/settings.html', '/src/ui/providers.html', '/src/ui/automation.html', '/src/ui/customize.html'];
+const isOwnPagePath = (() => { try { return OWN_PAGE_PATHS.includes(new URL(location.href).pathname); } catch { return false; } })();
+if (isOwnPagePath) {
+
 contextBridge.exposeInMainWorld('bunnyDesktop', {
   platform: process.platform,
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
@@ -34,3 +40,4 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
     onStatus: (fn) => { const h = (_e, s) => fn(s); ipcRenderer.on('update:status', h); return () => ipcRenderer.removeListener('update:status', h); },
   },
 });
+}

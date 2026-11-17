@@ -14,6 +14,7 @@ import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { createUpdater } from './updater.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
+import { childWindowOptions, isOwnPage, openDecision } from './own-pages.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -60,7 +61,9 @@ async function startServer() {
   return bunny;
 }
 
-const isOwn = (url) => url.startsWith(`${origin}/`);
+// SB-1: Bunny's own page means one of the allow-listed page paths (own-pages.js), NOT everything on Bunny's address: a model-written artifact at /api/artifacts/<id>/raw
+// is served from the same address and must neither get the desktop bridge nor be believed by any IPC check below.
+const isOwn = (url) => isOwnPage(String(url ?? ''), origin);
 const webPreferences = () => ({
   preload: join(here, 'preload.cjs'),
   contextIsolation: true,
@@ -92,10 +95,10 @@ function guard(contents) {
   // Bunny's own pages may open in new Bunny windows (pop-out chat); everything
   // else opens in the person's normal browser.
   contents.setWindowOpenHandler(({ url }) => {
-    if (isOwn(url)) {
-      return { action: 'allow', overrideBrowserWindowOptions: { icon: ICON, autoHideMenuBar: true, backgroundColor: '#faf9f6', webPreferences: webPreferences() } };
-    }
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    const kind = openDecision(url, origin);
+    // 'bunny': a Bunny page (pop-out chat), with the preload. 'plain': a page from Bunny's server that is not one of its own pages (an artifact): a window with NO preload.
+    if (kind === 'bunny' || kind === 'plain') return { action: 'allow', overrideBrowserWindowOptions: childWindowOptions(kind, { icon: ICON, bunnyPreferences: webPreferences }) };
+    if (kind === 'web') shell.openExternal(url);
     return { action: 'deny' };
   });
   contents.on('will-navigate', (event, url) => {
