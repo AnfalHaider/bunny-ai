@@ -98,13 +98,17 @@ export const connectorInstructions = (server) => sessions.get(sessionKey(server,
 export const forgetSession = (server) => { sessions.delete(sessionKey(server, String(server?.url ?? '').trim())); };
 
 /** @param {{name: string, url: string, headers?: object}} server */
-export async function callTool(server, { name, arguments: args = {}, timeoutMs = 30_000, fetchImpl = globalThis.fetch, auth = null }) {
+export async function callTool(server, { name, arguments: args = {}, timeoutMs = 30_000, fetchImpl = globalThis.fetch, auth = null, signal = null }) {
   const url = String(server?.url ?? '').trim();
   if (!url) throw new McpError('This MCP server has no address', 'mcp.noUrl');
   if (!/^https?:\/\//i.test(url)) throw new McpError('An MCP server must be reached over http or https', 'mcp.badUrl');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // R-7: the person's Stop ends the call at once
+  let stopped = false;
+  const onStop = () => { stopped = true; controller.abort(); };
+  if (signal?.aborted) onStop(); else signal?.addEventListener('abort', onStop, { once: true });
 
   try {
     const opts = { signal: controller.signal, auth, fetchImpl };
@@ -123,10 +127,12 @@ export async function callTool(server, { name, arguments: args = {}, timeoutMs =
     return payload?.result ?? null;
   } catch (err) {
     if (err instanceof McpError) throw err;
+    if (stopped) throw new McpError('Stopped.', 'mcp.cancelled');
     if (err?.name === 'AbortError') throw new McpError('The server did not answer in time', 'mcp.timeout');
     throw new McpError(err.message ?? 'The server could not be reached', 'mcp.unreachable');
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener?.('abort', onStop);
   }
 }
 

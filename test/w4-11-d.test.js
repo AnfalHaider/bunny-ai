@@ -121,3 +121,32 @@ test('L-2: the model is told which connectors exist, and why one is not connecte
   assert.match(line, /Notes \(2 tools\)/);
   assert.match(line, /Gone \(not connected: /);
 });
+
+test('R-7: pressing Stop ends a remote tool call at once', async (t) => {
+  const url = await http(t, (r, res) => { if (r.method === 'tools/call') return; /* never answers */ reply(res, r.id, {}); });
+  const stop = new AbortController();
+  setTimeout(() => stop.abort(), 150);
+  const t0 = Date.now();
+  await assert.rejects(callTool({ id: 'slow-http', name: 'Slow', url }, { name: 'nap', signal: stop.signal, timeoutMs: 20_000 }), (err) => err.code === 'mcp.cancelled');
+  assert.ok(Date.now() - t0 < 3000, 'the reply did not wait for the tool');
+});
+
+test('R-7: pressing Stop ends a local tool call at once, and the connector is told to cancel', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-sleep-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const log = join(dir, 'log.txt');
+  const local = createLocalMcp();
+  t.after(() => local.stopAll());
+  const script = fileURLToPath(new URL('./fixtures/mcp-sleep-server.mjs', import.meta.url));
+  const server = { id: 'sleepy', type: 'local', name: 'Sleepy', command: process.execPath, args: [script], env: { SLEEP_LOG: log } };
+  await local.listTools(server);
+  const stop = new AbortController();
+  setTimeout(() => stop.abort(), 200);
+  const t0 = Date.now();
+  await assert.rejects(local.callTool(server, { name: 'nap', signal: stop.signal }), (err) => err.code === 'mcp.cancelled');
+  assert.ok(Date.now() - t0 < 3000, 'the reply did not wait for the tool');
+  const { readFile } = await import('node:fs/promises');
+  let said = '';
+  for (let i = 0; i < 40 && !said; i += 1) { said = await readFile(log, 'utf8').catch(() => ''); if (!said) await new Promise((r) => setTimeout(r, 50)); }
+  assert.match(said, /^cancelled \d+/m, 'the connector saw notifications/cancelled');
+});
