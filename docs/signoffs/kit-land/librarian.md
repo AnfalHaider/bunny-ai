@@ -2,8 +2,8 @@
 piece: kit-land
 role: librarian
 sha: 88bbd53
-verdict: FAIL
+verdict: PASS
 date: 2026-11-17
 ---
 
-Librarian review of kit-land at 88bbd53 (origin claude/kit-land-k2). FAIL. (1) The owner's words and question are recorded in docs/kit-changes/2026-11-17-kit-0.6.0.md and are correct. (2) The record's installed hashes do not match the committed files: all 47 entries differ from the blobs at 88bbd53 under both line-ending variants (e.g. .bootstrap/bin/adapt.mjs is recorded 5a4b9997 but the blob is 8b7fdb2a, which equals the plugin 0.6.0 file). The record must be regenerated from the landed files. (3) scripts/kit-next/README.md does not match what landed: line 3 still says nothing in .bootstrap/ or .githooks/ was touched and it is 'staged here, not landed'; it has no line that upgrade skips existing .githooks so the K-2 hooks were copied by hand. (4) docs/kit-changes/2026-11-17-tests/ (live-kitnext1.txt, live-no-kitnext.txt): searched for the owner's name, Windows user paths, key, token, secret, password and mail-address patterns; none found, test names only. Re-sign at the new sha after the record and README are fixed.
+Librarian re-check of kit-land at 88bbd53 (code sha; 7b73eef adds docs only). PASS. (2) Record hashes: re-checked with the push check's hashText (CRLF to LF, trimEnd, sha256) against the blobs at 88bbd53: 40 of 40 OK. The record's said_at now names the overnight delegation. (3) The landing facts are in docs/kit-changes/2026-11-17-landing.md (7b73eef): the hooks copied by hand, the hashText note, and the .gitignore line left out. That settles the missing facts. Follow-up, not a blocker: scripts/kit-next/README.md line 3 still says 'staged here, not landed' and that nothing in .bootstrap/ or .githooks/ was touched; it is wrong after landing and should be corrected for Builder A. (4) docs/kit-changes/2026-11-17-tests/: no private data found (pattern search: owner name, Windows user paths, keys, tokens, secrets, passwords, mail addresses).
