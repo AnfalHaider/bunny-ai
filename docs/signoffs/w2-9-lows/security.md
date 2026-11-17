@@ -1,8 +1,8 @@
 ---
 piece: w2-9-lows
 role: security
-sha: 598ebc1
-verdict: FAIL
+sha: 69b35e9
+verdict: PASS
 date: 2026-11-17
 ---
 
@@ -78,3 +78,11 @@ Tests from a copy of 598ebc1, with the variable unset:
 - **Fix:** add `-c commit.gpgSign=false` to Bunny's own git calls in `runGit`, next to `core.fsmonitor=false` and `core.hooksPath`. That turns signing off whatever the format.
 - **Test:** a project with local `commit.gpgSign=true` and a signing program that leaves a marker file. After Finish (keep), the marker must not exist.
 - Nothing else Bunny's own git calls run (`status`, `add -A`, `commit`, `worktree add/remove`, `merge --ff-only`, `branch`, `rev-parse`, `rev-list`, `config`) starts a program from config, apart from filters (closed), fsmonitor and hooks (closed) and signing (this item). `merge --ff-only` uses no merge drivers. A project with `.gitmodules` gets no copy.
+
+## Re-stamp at 69b35e9 (with dd5967d and cd39ef0): PASS (supersedes the FAIL at 598ebc1)
+
+- **Signing is closed.** `runGit` adds `-c commit.gpgSign=false -c tag.gpgSign=false -c rebase.gpgSign=false` next to the fsmonitor and empty-hooks settings, so a signing program named by the project (`gpg.program`, `gpg.ssh.program`) never starts. The marker-file test covers both forms, and Builder C reports it fails without the flags.
+- **Includes are closed (dd5967d).** Any `include.path` or `includeIf.*.path` in the project's own settings (read with `--no-includes`, so the key is seen, not followed) refuses the copy, whether or not its condition matches here. That closes `gitdir:` and `onbranch:` conditions that would match only in the copy. Filters are also checked from the copy before Finish.
+- **Exit codes (cd39ef0).** Every git failure other than exit 1 refuses the copy, in the status check and in Finish.
+- **Tests,** from a copy of 69b35e9 with the variable unset: `w29-lows` 7 of 7, `w2-9-worktree` 12 of 12, `w29-safe-exec` 4 of 4.
+- **Still accepted (LOW):** a file the person's own global config includes from inside a project is trusted as global. That is their own config choice.
