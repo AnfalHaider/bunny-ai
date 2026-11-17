@@ -322,6 +322,15 @@ function relativeTime(iso) {
 // ---------------------------------------------------------------------------
 // model picker
 
+/** The provider's own colour: the same name always gives the same hue. */
+function chipDot(providerName) {
+  let h = 0;
+  for (const ch of String(providerName)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  const dot = element('span', { className: 'chip-dot', 'aria-hidden': 'true' });
+  dot.style.setProperty('--chip-hue', String(h));
+  return dot;
+}
+
 function renderPicker() {
   const host = $('picker');
   host.replaceChildren();
@@ -336,14 +345,19 @@ function renderPicker() {
     const pick = state.autoPick;
     trigger.classList.add('is-auto');
     trigger.append(
+      chipDot(pick?.providerName ?? 'auto'),
       element('span', { className: 'label', textContent: 'Auto' }),
       element('span', { className: 'meta', textContent: pick ? `· ${pick.displayName ?? pick.id}` : '· no model for this job' }),
     );
+    if (pick?.freeKind) trigger.append(element('span', { className: 'chip-free', textContent: 'Free' }));
+    const full = pick ? `Auto: ${pick.displayName ?? pick.id} (${pick.providerName})` : 'Auto: no model for this job';
+    trigger.title = full; trigger.setAttribute('aria-label', `Model: ${full}`);
   } else if (state.selected) {
-    trigger.append(
-      element('span', { className: 'label', textContent: state.selected.model }),
-      element('span', { className: 'meta', textContent: state.selected.providerName }),
-    );
+    const row = state.models.find((m) => m.id === state.selected.model && m.providerId === state.selected.providerId) ?? state.models.find((m) => m.id === state.selected.model);
+    const name = row?.displayName ?? state.selected.model;
+    trigger.append(chipDot(state.selected.providerName), element('span', { className: 'label', textContent: name }));
+    if (row?.freeKind) trigger.append(element('span', { className: 'chip-free', textContent: row.freeKind === 'daily' ? 'Free daily' : 'Free' }));
+    trigger.title = `${name} (${state.selected.providerName})`; trigger.setAttribute('aria-label', `Model: ${name}, ${state.selected.providerName}`);
   } else {
     trigger.append(element('span', {
       className: 'label',
@@ -417,6 +431,7 @@ function rememberRecent(modelId) { writeList('bunny.recent', [modelId, ...readLi
 
 function closePicker() {
   document.querySelector('.picker-panel')?.remove();
+  document.querySelector('.picker-scrim')?.remove();
   $('picker-button')?.setAttribute('aria-expanded', 'false');
 }
 
@@ -468,8 +483,12 @@ function openPicker(host, trigger) {
   filtersBtn.addEventListener('click', () => { bar.hidden = !bar.hidden; filtersBtn.setAttribute('aria-expanded', String(!bar.hidden)); });
   paintBar();
 
-  panel.append(search, filtersBtn, bar, count, list);
-  host.append(panel);
+  panel.append(element('button', { className: 'picker-handle', type: 'button', 'aria-label': 'Close the model list', tabIndex: -1 }), search, filtersBtn, bar, count, list);
+  panel.querySelector('.picker-handle').addEventListener('click', () => { closePicker(); trigger.focus(); });
+  // On a phone the list is a bottom sheet over a dimmed page; a tap on the dimmed page closes it
+  const scrim = element('div', { className: 'picker-scrim' });
+  scrim.addEventListener('click', () => { closePicker(); trigger.focus(); });
+  host.append(scrim, panel);
   search.focus();
 
   // The keyboard drives the list: arrows move, Enter chooses, Escape closes.
@@ -516,7 +535,7 @@ function openPicker(host, trigger) {
     const byModel = new Map();
     for (const m of rows) { if (!byModel.has(m.id)) byModel.set(m.id, []); byModel.get(m.id).push(m); }
     const totalModels = new Set(state.models.map((m) => m.id)).size;
-    count.hidden = !filtered;
+    count.hidden = !filtered && !q;
     count.textContent = `${byModel.size} of ${totalModels} models`;
     const matches = rows;
     if (!matches.length) {
@@ -540,6 +559,7 @@ function openPicker(host, trigger) {
         localStorage.setItem('bunny.modelAuto', '1');
         closePicker();
         refreshAutoPreview();
+        $('picker-button')?.focus();
       });
       list.append(autoItem);
       const favs = readList('bunny.favourites');
@@ -716,7 +736,7 @@ function openPicker(host, trigger) {
     else if (e.key === 'End') { e.preventDefault(); active = all.length - 1; highlight(); }
     else if (e.key === 'Enter') { e.preventDefault(); all[active]?.click(); }
   });
-  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePicker(); trigger.focus(); } });
   setTimeout(() => {
     // a click on something inside the picker that was rebuilt by that very click (the arrows in the details) is not outside
     const outside = (ev) => {
@@ -741,6 +761,7 @@ async function selectModel(m) {
   state.selected = { providerId: m.providerId, providerName: m.providerName, model: m.id };
   closePicker();
   renderPicker();
+  $('picker-button')?.focus();
   await sendJSON('/api/settings', 'PUT', { providerId: m.providerId, model: m.id });
 }
 
