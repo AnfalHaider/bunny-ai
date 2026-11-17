@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - Published v0.1.9
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-17) "add the fix for this and other similar layout issues to 0.1.9 ... ensure all remaining gaps and fixes are built and pushed to main with the release ... 0.1.9 will be completely built and pushed, including the installer and release", and (2026-11-18) "Sign the exception"; the question as asked, shas, pasted gate 9/9 at b9bdd7a, all five sign-offs PASS. Accepted because the words name 0.1.9 and the release.
+
+**Commands (PST)**
+
+- Fresh worktree outside the project (scratchpad `release-0.1.9`), detached at 8b49c55 (= origin/main); role set by the Chief of Staff.
+- `npm ci`, `npm run dist` -> build-sha 8b49c55, tree clean, `latest.yml` version 0.1.9 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.9-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.9-notes.md` ran 01:12 to 01:20 -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.9
+- Checks: not draft, not prerelease; .exe 122320093, .blockmap 128637, latest.yml 345; tag v0.1.9 -> 8b49c55 (the built commit); latest feed serves `version: 0.1.9` with the sha512.
+
+**Not checked:** an update on an invented profile; the sign-off files (hook bars me); the record and notes contents (hook bars me; `release.mjs` accepted them).
+
+**Rollback:** a higher version (0.1.10) with the last good code (0.1.8's); pulling the release is owner-only.
+
+**Lesson:** no lesson; the fresh-worktree recipe ran clean first time.
+
 ## 2026-11-17 - Published v0.1.8
 
 **Word:** the Chief of Staff's 7E relay: the owner's words "I am thinking we push the update done ao far, including the release and installer. as 0.1.8 and the rest we will do in 0.1.9" (2026-11-17), the question as asked, shas, pasted gate 8/8 at 685b93d, all five sign-offs PASS at a6afcf5. I accepted it because the words name 0.1.8 and the release. Then held at the Chief's request while Security ruled on an OAuth finding (verdict SHIP; a 0.1.9 fix row; P-6, L-4 and RO-1 ship open as in 0.1.7). The Chief then sent "publish".
