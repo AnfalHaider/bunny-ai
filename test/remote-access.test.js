@@ -867,3 +867,21 @@ test('R-DF1: a device at Everything is signed out after 30 minutes idle; a devic
   assert.equal(access.sessionFor(access.cookieFor(b.secret).split(';')[0]), null, 'and after two idle hours it is not');
   assert.ok((await access.actions()).some((e) => e.kind === 'idle-signout'), 'the idle sign-out is logged');
 });
+
+test('R-DF2: after a restart a new entry is added to the saved log, never written over it', async (t) => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-actions-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const logFile = join(dir, 'remote-actions.json');
+  const device = { deviceId: 'abababababababab', label: 'Phone', level: 'chats' };
+  const first = createRemoteAccess({ logFile });
+  first.logAction(device, { kind: 'tool', tool: 'read_file' });
+  first.logAction(device, { kind: 'tool', tool: 'list_files' });
+  await first.flushLog();
+  const second = createRemoteAccess({ logFile }); // Bunny restarted; nobody has read the log yet
+  second.logAction(device, { kind: 'tool', tool: 'write_file' });
+  await second.flushLog();
+  const names = (await createRemoteAccess({ logFile }).actions()).map((e) => e.tool).sort();
+  assert.deepEqual(names, ['list_files', 'read_file', 'write_file']);
+});
