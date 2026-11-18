@@ -1,375 +1,464 @@
-# CLI-ENGINES: architecture spec (draft)
+# CLI-ENGINES: architecture spec (draft, revision 2)
 
-Tech Lead, 2026-11-18. Written for the v0.1.14 headline in `docs/plans/2026-11-18-v0.1.14-wishlist.md` (af8e3da).
+Tech Lead, 2026-11-18. Revision 2 replaces 0b6a2f9. It takes in:
+- Researcher's report, e462903 (`docs/research/2026-11-18-cli-engines.md`);
+- the owner's decisions, as relayed by the Chief of Staff.
 
-- Owner's words: Claude Code and Codex CLI are selectable in Settings as engines behind Bunny's interface. They use the models Bunny provides, ship bundled, and can be updated from inside Bunny. Bunny's own engine stays the default.
-- Status: **draft**. Risk: **HIGH**. It adds a new execution engine, a permission bridge, bundled third-party code and a local model endpoint.
-- Order: Security sets the requirements and Design draws Settings and the update screens. The owner's go is asked with the drawing. Then Builder builds.
-- An ADR is filed once Researcher's facts settle the open choices.
+Status: **draft**. Risk: **HIGH**: a new execution engine, a permission bridge, third-party code downloaded and run, and a local model endpoint.
 
-**How to read the assumption marks.** Anything marked **[R*n*]** waits on Researcher's report, `docs/research/2026-11-18-cli-engines.md`, which had not landed when this was written. If a fact comes back different, the section that names it is revised before anything is built. The rule throughout: **an engine whose facts fail a must below is not offered.** Bunny does not ship a weaker version of the rule to fit a CLI.
+Order of work:
+1. Security sets the requirements.
+2. Design draws Settings → Engines and the download, update and rollback states.
+3. The owner's go is asked with the drawing.
+4. Builder builds.
+
+An ADR is filed once the open facts below are settled.
+
+## The owner's words (typed in the Chief of Staff's chat, 2026-11-18)
+
+1. "Yes, lets go with claude and codex , also the cli's should be bundled in the application, with the option to update them from within the application also."
+2. "Claude Code, Codex CLI, Aider, Cline , add all these."
+3. "my idea is that none work on accounts, since we are using custom models and anyway, so the CLI's should not require linking to an account."
+
+What follows from them, as the Chief of Staff relayed it:
+- **Four engines:** Codex CLI, Aider, Cline and Claude Code.
+- **No accounts.** An engine works on the models Bunny provides, through Bunny's local endpoint, with no vendor account linked.
+  - Codex, Aider and Cline fit that.
+  - Claude Code does not fit it as Researcher found it. It needs the person's own paid Anthropic account, and Anthropic does not support it on other models. **Claude Code is with the owner** (§7).
+- **Downloaded on click, never inside the installer.** Each engine is about 380 MB or more. Engines are stored per version, and updated and rolled back from Settings.
+  - This replaces "bundled" in word 1. A download from inside Bunny is the owner's "from within the application"; carrying all four in the installer would make it several times larger.
+
+**Assumption marks.** **[F*n*]** marks a fact Researcher has confirmed, with its section in e462903. **[R*n*]** marks a fact still waiting on Researcher; Aider and Cline are being added now. If a fact comes back different, the section that names it is revised before it is built.
+
+**The rule throughout:** an engine whose facts fail a must is not offered. Bunny does not weaken a must to fit a CLI.
 
 Code references are to main at 43ced06 (v0.1.13).
 
 ---
 
-## 0. Scope and the musts
+## 0. The musts
 
-| # | Must | Why |
-|---|---|---|
-| M1 | Bunny's own engine stays the default. Choosing an engine is a window-only setting. | Owner's words; a device must not switch what runs on the PC. |
-| M2 | Every action the CLI takes on the PC (a command, a file write or edit, a file read outside the folder, a network fetch, an MCP call) is decided by Bunny **before** it runs, using the same rules and modes as Bunny's engine. | Deny/Ask/Allow, Plan mode, protected folders and device levels must hold. |
-| M3 | The CLI never sees a provider key or a sign-in token. It sees only a per-run token for Bunny's local endpoint. | Keys never leave the DPAPI store or Bunny's process (AGENTS.md). |
-| M4 | The CLI runs with its **own isolated config home** under Bunny's data folder. It never reads the person's own `~/.claude`, `~/.codex`, global MCP servers, hooks or plugins. | Otherwise the person's global settings would run tools Bunny never judged. |
-| M5 | No paid account. No vendor sign-in. No telemetry or auto-update phoning home from the bundled CLI. | R4 (free only); updates go through Bunny's pinned flow only. |
-| M6 | Fail closed. If the permission bridge is unreachable, an event cannot be parsed, or the CLI exits oddly, the run stops and says so. It never continues unjudged. | |
+| # | Must |
+|---|---|
+| M1 | Bunny's own engine stays the default. Choosing an engine is a window-only setting. |
+| M2 | Every action an engine takes on the PC is decided by Bunny **before it reaches the person's folder**: a command, a file write, a read outside the folder, a fetch, an MCP call. The same rules and modes apply as for Bunny's own engine. Two ways to meet it (§3): a per-call approval, or a staged copy that Bunny judges before anything is copied back. |
+| M3 | An engine never sees a provider key or a sign-in token. It sees only a per-run token for Bunny's local endpoint. |
+| M4 | An engine runs with its own isolated config home inside Bunny's data folder. It never reads the person's own `~/.codex`, `~/.aider*`, `~/.cline` or `~/.claude`, or their global MCP servers, hooks and rules. |
+| M5 | No account (owner's word 3), and nothing paid (R4). No vendor sign-in, no telemetry, and no self-update that phones home. Updates come only through Bunny's pinned flow (§4). |
+| M6 | Fail closed. If the approval channel is unreachable, an event cannot be parsed, or a run ends oddly, the run stops and says why. Nothing goes on unjudged. |
+| M7 | Nothing an engine changes is left without a way back. Checkpoints and "Undo changes" work for an engine chat as they do for Bunny's own engine. |
 
-Out of scope for v0.1.14: Cursor, Cline and Aider (the owner's later list); Chat-mode chats (§1.4); helper agents through an engine.
+Not in v0.1.14: Cursor CLI; Chat-mode chats on an engine (§1.4); Bunny's own tools offered to an engine (memory, artifacts, browser, connectors, helpers).
 
 ---
 
-## 1. The engine adapter
+## 1. The adapter: one interface, four engines
 
-### 1.1 Where it lives
+### 1.1 Files
 
 `src/server/engines/`:
-- `index.js` (registry);
-- `claude-code.js` and `codex.js` (adapters);
-- `events.js` (the shared event union and validators);
-- `bridge.js` (the permission bridge, §3);
-- `endpoint.js` (the local model endpoint, §2);
-- `store.js` (bundled and installed versions, §4);
-- `fake-engine.mjs` (a scripted stand-in CLI for tests, §5).
+- `index.js`: the registry;
+- `codex.js`, `aider.js`, `cline.js`, `claude-code.js`: one adapter per engine;
+- `events.js`: the event union;
+- `bridge.js`: approvals, §3;
+- `staging.js`: staged copies, §3.3;
+- `endpoint.js`: the local endpoint and translators, §2;
+- `store.js`: downloads, versions, rollback, §4;
+- `fake-engine.mjs`: a scripted stand-in for tests, §5.
 
-### 1.2 The interface
+### 1.2 What an adapter declares
+
+The four CLIs differ in how they talk, how they ask, and which API shape they speak, so each adapter declares those differences as data. Everything else in Bunny reads the declaration, never the engine's name.
 
 ```js
-/** One adapter per CLI. Pure Node; no Electron. */
-export const engine = {
-  id: 'claude-code' | 'codex',
-  label: 'Claude Code' | 'Codex CLI',
-  /** Where the executable is, its version, and whether this build can run it ({ ok, version, path } | { ok: false, reason }). */
-  async locate(store) {},
-  /**
-   * Start one turn. Returns a run whose `events` is an async iterator of EngineEvent (1.3).
-   * Never throws for a CLI failure: it yields { type: 'error' } and ends.
-   */
-  start({
-    runId,          // randomUUID, one per Bunny reply
-    cwd,            // the workspace root (createWorkspace's root), never the data folder
-    prompt,         // the person's message (text; attachments as file paths inside cwd only)
-    resume,         // the CLI's own session id kept on the Bunny chat (1.5), or null
-    model,          // a label only: the endpoint decides what really answers (2.3)
-    mode,           // 'plan' | 'ask' | 'accept' | 'auto' (Bunny's permission mode)
-    endpoint,       // { baseUrl, token } for this run (2)
-    bridge,         // { url, token } for this run (3), or the adapter's in-process hook
-    home,           // the isolated config folder for this run (M4)
-    env,            // safeEnv() plus only what the adapter adds (never process.env as a whole)
-    signal,         // AbortSignal: Stop in Bunny's window, or the reply's connection closing
-  }) { return { events, stop } },
+export const profile = {
+  id: 'codex' | 'aider' | 'cline' | 'claude-code',
+  label: 'Codex CLI' | 'Aider' | 'Cline' | 'Claude Code',
+  transport: 'json-rpc' | 'jsonl' | 'text',    // how events arrive (1.3)
+  approvals: 'per-call' | 'staged',            // how M2 is met (3.2 or 3.3)
+  wire: 'responses' | 'chat' | 'messages',     // what it sends to the model endpoint (2.1)
+  models: 'bunny' | 'own-account',             // 'own-account' only for Claude Code if the owner allows it (7); never offered while M5 stands
+  resume: boolean,                             // can it pick up its own session by id (1.5)
+  runtime: 'native' | 'node' | 'python',       // what it needs to run (4.2)
 };
 ```
 
-- The CLI is spawned through `safeExec` (absolute path, `safeEnv`, `windowsHide`) with `stdio: ['pipe', 'pipe', 'pipe']`.
-- It is killed as a whole tree on `stop()`. This is the RUN-1 Windows child-kill lesson: `taskkill /T /F` on Windows.
-- A run that prints nothing for the wait limit (`waitLimits`) is ended the way `unit-tests.mjs` ends a HUNG run, and says so.
+| Engine | transport | approvals | wire | runtime | Source |
+|---|---|---|---|---|---|
+| Codex CLI | `json-rpc` (`codex app-server`) | `per-call` (`item/*/requestApproval`) | `responses` | native | F1 §1–§2, §4 |
+| Cline | `jsonl` or `json-rpc` **[R1]** | `per-call` if its headless mode carries approvals, else `staged` **[R2]** | `chat` (OpenAI-compatible provider) **[R3]** | node **[R4]** | waits |
+| Aider | `text`, unless it has a structured output **[R5]** | `staged` (its edits are applied by Aider itself, with no per-call hook) **[R6]** | `chat` (OpenAI-compatible base URL) **[R7]** | python **[R8]** | waits |
+| Claude Code | `jsonl` (`-p --output-format stream-json --verbose`) | `per-call` (`canUseTool` / `--permission-prompt-tool`) | `messages` | native (`claude.exe`) | F2 §1, §2, §4; held, §7 |
 
-### 1.3 Events (the shared union, `events.js`)
+### 1.3 The run, and its events
 
-| EngineEvent | Fields | Bunny's SSE event (`send` in the message route, app.js ~1960) | Saved in the chat |
-|---|---|---|---|
-| `text` | `delta` | `delta` | Joined into the assistant message, as Bunny's engine does. |
-| `thinking` | `delta` | `thinking` | As today (thinking kept or not, per setting). |
-| `tool-start` | `callId, name, input` | `tool` `{ status: 'running' }` | A step, opened. |
-| `tool-end` | `callId, ok, output` | `tool` `{ status: 'done' \| 'failed', result }` | A step through `keepForModel`: short `result` (1 200), `modelResult` (8 000, never secret-like, never incognito). |
-| `permission` | `requestId, name, input` | Decided by the bridge (§3). Only an Ask reaches `send('permission')` via `askPermission`. | Nothing until answered; the answer is a step note. |
-| `question` | `requestId, text, options` | `question` (Bunny's existing card), only if the CLI has a structured "ask the user" event **[R1]** | As today. |
-| `edit` | `path, before?, after?` | Feeds the Changes pane (`changesFor`) and checkpoints, as `write_file` / `edit_file` do. | As today. |
-| `usage` | `inputTokens, outputTokens` | None; added to `usage.js` against the real provider and model the endpoint used (2.3). | |
-| `session` | `engineSessionId` | None | `session.engine = { id, sessionId, version }` (1.5). |
-| `done` | `stopReason` | `done` | |
-| `error` | `code, message` | `error` | |
+```js
+start({ runId, cwd, prompt, resume, mode, endpoint, approve, home, env, signal })
+  → { events /* AsyncIterable<EngineEvent> */, stop() }
+```
 
-**Tool names.** Each adapter maps its CLI's tool names onto Bunny's step vocabulary: a shell tool shows as `run_command`, read/write/edit tools as `read_file` / `write_file` / `edit_file`, search tools as `search_files` / `find_files`. The step list, the Verbose view and the action log then read the same whatever the engine. The CLI's own name rides along as `engineTool` for Activity. The exact names per CLI are **[R2]**. An unknown tool name is shown under its own name and judged as the riskiest kind (`run`) by the bridge (§3.2).
+- `cwd` is the workspace root, or the staged copy for a `staged` engine (§3.3).
+- `approve(request)` resolves to `{ allow, reason }` (§3.2). A `staged` engine never calls it.
+- `env` is `safeEnv()` plus only what the adapter names (M3, M4).
+- The CLI is spawned through `safeExec`: an absolute path and `windowsHide`. On `stop()`, a timeout or an abort, its whole process tree is killed with `taskkill /T /F` (the RUN-1 lesson).
+- A run that prints nothing for the wait limit (`waitLimits`) ends the way `unit-tests.mjs` ends a hung run, and says so.
 
-**Parsing.** Each adapter reads the CLI's structured stream: Claude Code `--output-format stream-json` **[R3]**, and Codex `exec --json` or its app-server protocol **[R4]**.
-- One JSON object per line, at most 1 MB a line.
-- A line that is not valid JSON, or does not validate, ends the run with `error` (M6). It is not skipped.
+The event union is the same for every engine:
+
+| EngineEvent | Bunny's SSE event (`send`, app.js ~1960) | Saved in the chat |
+|---|---|---|
+| `text {delta}` | `delta` | the assistant message |
+| `thinking {delta}` | `thinking` | as today |
+| `tool-start {callId, name, input}` | `tool {status: 'running'}` | a step, opened |
+| `tool-end {callId, ok, output}` | `tool {status: 'done' \| 'failed', result}` | a step through `keepForModel`: `result` up to 1 200 characters; `modelResult` up to 8 000, never when it looks like a secret, never in an incognito chat |
+| `approval {requestId, name, input}` | decided by the bridge; only an Ask reaches `send('permission')` through `askPermission` | the answer, as a step note |
+| `question {requestId, text, options}` | `question` (the existing card), where the CLI has one: Claude Code's `AskUserQuestion` (F2 §1); Codex `mcpServer/elicitation/request` (F1 §1); others **[R9]** | as today |
+| `edit {path}` | the Changes pane (`changesFor`) and checkpoints | as today |
+| `usage {input, output}` | none; added to `usage.js` against the real provider (2.3) | |
+| `session {engineSessionId}` | none | `session.engine = {id, sessionId, version}` |
+| `done {stopReason}`, `error {code, message}` | `done`, `error` | |
+
+How each transport is read:
+
+- **json-rpc** (Codex `app-server`). The adapter does the `initialize` / `initialized` handshake, then `thread/start` (cwd, `approvalPolicy: on-request`, sandbox), then `turn/start`. It maps the `item/started`, `item/completed`, `item/agentMessage/delta` and `turn/*` notifications.
+  - It answers `item/commandExecution/requestApproval` and the file-change approval request with `accept` or `decline`, from `approve()`.
+  - Stop sends `turn/interrupt`.
+  - The method names come from `codex app-server generate-json-schema` **for the pinned version**, kept beside the pin (F1 §1; several names are still UNKNOWN there). An unknown method or notification ends the run (M6).
+- **jsonl** (Claude Code; Cline if [R1]). One JSON object per line, at most 1 MB a line. A line that is not valid JSON, or fails validation, ends the run (M6).
+- **text** (Aider if [R5]). No structured stream. The adapter shows Aider's reply as text, and builds the steps from the staged copy's diff when the turn ends (§3.3): one `edit` step per changed file, and one `tool` step per command Aider ran, if any **[R6]**. The step view is coarser than for a `jsonl` or `json-rpc` engine. Design is to say so on the engine's Settings row.
+
+**Tool names.** Each adapter maps its CLI's tool names onto Bunny's step names: `run_command`, `read_file`, `write_file`, `edit_file`, `search_files`, `find_files`. The CLI's own name rides along as `engineTool`. The names per CLI are **[R10]** (Codex: the item types in F1 §1). An unknown tool is judged as `run` (§3.2).
 
 ### 1.4 Where it plugs into app.js
 
-The message route (`POST /api/sessions/<id>/messages`, the `streamChat` loop at app.js ~3160) gains one branch before the provider loop:
+One branch in the message route, before the provider loop (app.js ~3160):
 
 ```
-engineId = chat.engine ?? settings.engine ?? 'bunny'
-if engineId !== 'bunny' && workMode === 'code' && workspace && !req.bunnyRemote:
-    return runEngineTurn(...)
+engineId = session.engine?.id ?? settings.engine ?? 'bunny'
+if engineId !== 'bunny' && workMode === 'code' && workspace && !req.bunnyRemote → runEngineTurn(...)
 ```
 
 `runEngineTurn` reuses what is already there:
-- `send`;
-- `replyStatus`;
-- `waitNudges`;
-- `askPermission`;
-- `keepForModel`;
-- `stepsTaken`;
-- checkpoints;
-- `noteRemoteMode`;
-- `remote.logAction`;
-- the hooks (`runHooks` UserPromptSubmit / Stop).
+- `send`, `replyStatus`, `waitNudges`, `askPermission`, `keepForModel`, `stepsTaken`;
+- checkpoints, `noteRemoteMode`, `remote.logAction`;
+- `runHooks` (UserPromptSubmit and Stop).
 
-The streaming page, the transcript, Stop, Verbose, Changes and the sidebar status labels then need **no new event types**.
+The page needs no new event types.
 
-Choices made here, for Design and Security to confirm:
-- **Code mode with a folder only.** Chat mode, a chat with no folder, scheduled tasks and the Quick ask bar always use Bunny's engine. The CLIs are coding agents; Bunny's Chat-mode tools (web, connectors, artifacts, memory, Google, GitHub) are Bunny's own.
-- **A Chats-level device never runs an engine.** Its chats use Bunny's engine (§3.5).
-- **One engine per chat.** The engine is fixed when the chat's first message is sent (`session.engine`). Switching engine in Settings applies to new chats. Opening an existing chat keeps its engine. Changing it means starting a new chat (Design to draw how that is said).
-- **Bunny's own tools are not offered to the CLI in v0.1.14.** That covers memory, artifacts, the browser pane, computer use, connectors and helpers. A later step could offer them as a Bunny MCP server behind the same bridge. Not now: it doubles the surface Security must judge.
+Scope choices, for Design and Security to confirm:
+- Engines are used only for Code-mode chats with a folder. Chat mode, chats with no folder, schedules and Quick ask stay on Bunny's own engine.
+- A device at the Chats level never runs an engine.
+- A chat's engine is fixed when its first message is sent. A change in Settings applies to new chats.
 
 ### 1.5 Chat continuity
 
-- `session.engine = { id, sessionId, version }` is saved on the chat. The next message resumes the CLI's own session: Claude Code `--resume <id>` **[R5]**, Codex `exec resume <id>` **[R5]**.
-- The CLI's session files live in the run's isolated home (M4), inside Bunny's data folder. Deleting the chat deletes them.
-- An incognito chat uses a temporary home that is removed when the reply ends, and cannot be resumed.
-- Bunny's own transcript stays the record the person reads. If the CLI's session cannot be resumed (another version, files gone), Bunny starts a new CLI session. It sends Bunny's transcript, cut by `shrinkConversation`, as the first prompt and says so in one line.
+- Where `resume` is true (Codex `resume`, F1 §1; Claude Code; Cline and Aider **[R11]**), the next message picks up the CLI's own session.
+- The CLI's session files live in the chat's isolated home inside Bunny's data folder, and are deleted with the chat.
+- An incognito chat uses a temporary home that is removed when the reply ends.
+- If a session cannot be resumed (another version, or its files are gone), Bunny starts a new one. It sends Bunny's own transcript, cut by `shrinkConversation`, and says so in one line.
 
 ---
 
 ## 2. Bunny's local model endpoint
 
-### 2.1 Shape
+### 2.1 Shapes
 
-`endpoint.js` makes **one listener per run**, started by `runEngineTurn` and closed when the run ends:
-- `127.0.0.1` on port 0 (the OS picks it);
-- never the LAN address;
-- never the main server's port.
+`endpoint.js` opens one listener per run, on `127.0.0.1`, port 0. It is closed when the run ends.
 
-It answers only:
-- `POST /v1/messages`: Anthropic Messages, streaming and not, with tools. This is for Claude Code **[R6]**.
-- `POST /v1/chat/completions`: OpenAI Chat Completions, streaming, with tools.
-- `POST /v1/responses`: the OpenAI Responses API. Included if Codex needs it for custom providers **[R7]**. This is the largest unknown: if Codex speaks only Responses to a custom provider, the Responses↔Chat translation is its own work item.
-- `GET /v1/models`: one entry, the chat's model label.
+| Path | Used by | What Bunny does |
+|---|---|---|
+| `POST /v1/responses` | Codex (`wire_api = "responses"` is the only value it accepts, F1 §2) | **Translator:** Responses → Chat Completions to the owner's provider, and Chat stream → Responses stream back. This is the largest single work item. |
+| `POST /v1/chat/completions` | Aider **[R7]**, Cline **[R3]** | Passed on to the owner's provider through the existing fetch path, after the checks in 2.2. |
+| `POST /v1/messages` (+ `/count_tokens`) | Claude Code, only if the owner chooses the gateway route (§7) | Messages ⇄ Chat translator, forwarding `anthropic-version` and `anthropic-beta` (F2 §2). **Not built** while Claude Code is held. |
+| `GET /v1/models` | all | One entry: the chat's model label. |
 
-Anything else returns 404.
+Anything else gets a 404.
+
+**The Responses translator**, `translate/responses.js`, is made of pure functions with fixtures. In each direction it covers:
+- input items, so `message`, `function_call` and `function_call_output` ⇄ messages and `tool_calls`;
+- `instructions` and the `developer` role ⇄ a system message, since some local servers reject `developer` (F1 §2, issue 9392);
+- `reasoning` ⇄ thinking where the provider has it, and dropped where it does not;
+- tools ⇄ functions (Codex's built-in tools such as `apply_patch` and `shell` reach the model as functions);
+- the streaming events (`response.created`, `response.output_item.added`, `response.output_text.delta`, `response.function_call_arguments.delta`, `response.completed`) ⇄ `chat.completion.chunk`;
+- usage ⇄ usage.
+
+State that Responses keeps on the server (`previous_response_id`, `store`) is not offered. The adapter sets `--ephemeral` or the equivalent, so Codex sends the full input each turn **[R12]**. A request that needs stored state is refused with a plain error.
+
+Where a provider already serves `/v1/responses` natively, the call may be passed through after the same checks **[R13]**. Which of Bunny's providers do is UNKNOWN (F1 §2).
 
 ### 2.2 Who may call it
 
-Every request must pass every check below, or it gets a 403 with no body detail:
+Every request must pass all of these, or it gets a 403 with no detail:
+1. `Host` is exactly `127.0.0.1:<port>`.
+2. **There is no `Origin` header.** A web page on the PC always sends one (the S-1 lesson).
+3. The run's token arrives in `Authorization: Bearer` or `x-api-key`. It is `randomBytes(32)`, checked with `timingSafeEqual`, and dies with the run.
+4. The body is at most `MAX_MESSAGE_BODY` and is JSON.
 
-1. The `Host` is exactly `127.0.0.1:<port>`.
-2. **No `Origin` header.** A browser always sends one on a cross-site request; the CLI does not. This stops a web page on the PC (the S-1 lesson).
-3. The token is in `x-api-key`, or in `Authorization: Bearer`, and equals the run's token. The token is `randomBytes(32)` and is compared with `timingSafeEqual`.
-4. The request body is at most `MAX_MESSAGE_BODY`. Only these JSON content types are accepted.
+The responses never carry CORS headers, and always carry `cache-control: no-store`.
 
-Further rules:
-- The token reaches the CLI only through its environment: `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY` **[R6]**; for Codex, a custom `model_providers` entry in the isolated `config.toml`, with `env_key` naming a variable Bunny sets **[R7]**. It is never on the command line, where other processes could read it (O6).
-- The token dies with the run. A leaked token is worth one reply's model calls, on this PC only.
-- No CORS headers, ever. Responses carry `cache-control: no-store`.
+The token reaches the CLI by environment only, never on the command line (O6):
+- **Codex:** `[model_providers.bunny]` in the isolated `config.toml` (`base_url`, `env_key = "BUNNY_ENGINE_TOKEN"`, `wire_api = "responses"`, `requires_openai_auth = false`). Codex then needs no OpenAI account (F1 §6).
+- **Aider and Cline:** the adapter's OpenAI-compatible base URL plus a key variable **[R7] [R3]**.
 
-### 2.3 Routing to the owner's providers
+### 2.3 Routing
 
-- The endpoint **ignores the model name the CLI sends**. It answers with the provider and model the Bunny chat has chosen: the chip, or Auto through `providerOrder` and the "Try another model when yours is busy" fallback.
-- The keys are read through the existing registry (`createProviderRegistry`, `secretStore`) inside Bunny's process, and the call goes out through `streamChat`'s fetch path. So `waitLimits`, `firstReplyWaitSeconds`, `refusesTools`, `refusesThinking` and the fake upstream (`BUNNY_FAKE_UPSTREAM`) all hold unchanged.
-- Translation lives in `endpoint.js`, as pure functions with fixtures:
-  - Anthropic Messages ⇄ OpenAI Chat: `tool_use` / `tool_result` ⇄ `tool_calls` / `role: tool`, `system` ⇄ system message, `thinking` blocks, and `stop_reason` ⇄ `finish_reason`;
-  - streaming events: `message_start` / `content_block_*` / `message_delta` ⇄ `chat.completion.chunk`.
-- A provider that already speaks the CLI's format natively may be passed through after the same checks (Anthropic's own API for Claude Code; an OpenAI-compatible API for Codex Chat) **[R8]**.
-- Usage is counted against the real provider and model, not the CLI's label.
-- A model that refuses tools fails the run with Bunny's existing "this model can't use tools" message. These CLIs cannot work without tools.
-
-### 2.4 The local-network-down case
-
-The owner's rule from 2026-11-16 holds: degrade gracefully only when the local network is down. Auto picks a local model (Ollama) if one is set up. Otherwise the run fails with Bunny's offline message. The CLI is never pointed at a vendor URL.
+- The endpoint ignores the model name the CLI sends. It answers with the chat's provider and model, or with Auto through `providerOrder` and "Try another model when yours is busy".
+- Keys are read inside Bunny's process (`createProviderRegistry`, `secretStore`). The call goes out through `streamChat`'s fetch path, so these hold unchanged:
+  - `waitLimits` and `firstReplyWaitSeconds`;
+  - `refusesTools` and `refusesThinking`;
+  - the fake upstream (`BUNNY_FAKE_UPSTREAM`).
+- Usage is counted against the real provider and model.
+- A model that refuses tools fails the run with Bunny's existing message.
+- When the local network is down, Auto may pick a local model; otherwise the run fails with Bunny's offline message (the owner's 2026-11-16 rule). An engine is never pointed at a vendor URL.
 
 ---
 
-## 3. Permissions: one judge, Bunny
+## 3. Permissions: Bunny is the one judge
 
-### 3.1 The bridge
+### 3.1 The decision (shared by both ways)
 
-Every action the CLI wants to take goes to Bunny first. How each CLI hands it over is **[R9]**:
+`bridge.js` decides with **the same functions Bunny's own engine uses, in the same order** (app.js ~2083–2100):
 
-- **Claude Code.** Preferred: `--permission-prompt-tool` naming a tool on a Bunny MCP server, or a `PreToolUse` hook command in the isolated settings that calls the bridge and blocks on the answer. Either way, the isolated `settings.json` sets `permissions.defaultMode` to the strictest mode, so nothing runs without the prompt tool's answer. It also disables `WebFetch` / `WebSearch`, MCP servers other than Bunny's, and subagents **[R9]**.
-- **Codex.** Its approval policy is "ask for everything" (`on-request` / `untrusted`), and its sandbox is `workspace-write` with network off, or `read-only` in Plan mode. Each approval request on the JSON or app-server channel goes to the bridge, and Bunny's answer is written back **[R9]**.
-
-The bridge is `127.0.0.1`, has a per-run token, and has the same Host, Origin and token checks as §2.2. It can also be the adapter's stdin channel, if the CLI's protocol carries approvals in-band: preferred, since there is no second listener.
-
-**If an adapter cannot route every action through the bridge before it runs, that engine is not offered (M2).**
-
-### 3.2 What the bridge decides
-
-It calls the **same functions Bunny's engine calls**, in the same order (app.js ~2083–2100):
-
-1. **Plan mode** refuses edits, commands, builds and sends: `planRefuses`. The CLI's own read-only or plan mode is also set, as a second wall.
-2. **Deny rules**: `checkToolCall` / `checkCommand` / `checkPath` from `permissionRules.js` on the mapped tool (1.3).
-   - A shell command is judged by `commandParts` (quotes respected; `$( )`, backticks and redirection taken into account).
-   - A path is canonicalised against the workspace root, the way `createWorkspace` does it.
-3. **Protected folders**: the workspace's `protect: [dataDir]`, `neverBrowse`, and the `hidden` read-deny rules.
-   - A path outside the workspace is denied for writes, and for reads goes to Ask in every mode but Auto (Security to confirm).
-   - The data folder is denied always. So is the engine's own isolated home, so the CLI cannot rewrite its own permission settings.
-4. **Ask rules**, then `needsOk` for the mode: Manual asks edits and runs, Accept asks runs, and Auto asks only `asksInAuto`. An Ask reaches the person through `askPermission`: the same card, the same nudges, and "no answer when the reply ends" means no.
+1. **Plan mode** refuses edits, commands, builds and sends (`planRefuses`).
+2. **Deny rules:** `checkToolCall`, `checkCommand` (through `commandParts`) and `checkPath`, on the mapped tool. Paths are canonicalised against the workspace root, as `createWorkspace` does.
+3. **Protected folders:** `protect: [dataDir]`, `neverBrowse`, and the `hidden` read-deny rules. The engine's own home is denied too, so it cannot rewrite its own config. A write outside the workspace is denied. A read outside it is an Ask, except in Auto (Security to confirm).
+4. **Ask rules**, then `needsOk` for the mode. An Ask reaches the person through `askPermission`: the same card and nudges, and no answer by the end of the reply means no.
 5. **Allow rules**, then allow.
 
-Two rules for unknowns:
-- An unknown or unmappable tool is judged as `run`.
-- A tool the bridge cannot read the input of is **denied** (M6).
+An unknown tool is judged as `run`. A request whose input cannot be read is denied. Bunny sends its one-line reason back (`describeRule`).
 
-The answer goes back to the CLI as allow or deny with Bunny's one-line reason (`describeRule`), so the model sees why.
+### 3.2 Way one: per-call approval (Codex; Cline if [R2]; Claude Code if allowed)
 
-### 3.3 Second walls (defence in depth)
+- Every action reaches `approve()` before it runs. This works on native Windows, where Claude Code has no sandbox at all (F2 §5).
+- **Codex:**
+  - `approvalPolicy: on-request`;
+  - `sandbox: workspace-write`, or `read-only` in Plan mode, as a second wall;
+  - `--ignore-user-config` and `--ignore-rules`, with an isolated `CODEX_HOME` (M4);
+  - `check_for_update_on_startup = false` (F1 §1, §4).
+  - **The Windows sandbox:** Codex's sandbox needs helper executables (`codex-windows-sandbox-setup`, `-service`, `codex-command-runner`), and the elevated mode may need an admin step (F1 §5, UNKNOWN). Bunny never asks for elevation. It uses `unelevated` if that works without admin **[R14]**; otherwise per-call approval alone is the wall, as for Claude Code.
+- **Claude Code** (only if the owner allows it, §7):
+  - a generated `--settings` file holding Bunny's deny rules (protected folders as `Edit(//path)` and `Read(//path)`);
+  - `canUseTool` or `--permission-prompt-tool` answering everything else through `approve()`;
+  - its web tools, other MCP servers and subagents turned off;
+  - `DISABLE_UPDATES` set (F2 §4).
 
-- **cwd** is the workspace root. A copy-folder chat (`folder.copy`) runs in the copy.
-- The **isolated home** (M4) holds only what Bunny wrote: settings with deny rules for the data folder and the home itself, and no MCP servers but Bunny's bridge, if that is the route. It is rewritten at every run start, so a CLI edit to it never survives a run.
-- **Environment.** `safeEnv` (the W29-1 pattern) plus the endpoint variables and telemetry/update-off variables **[R10]**. Nothing else from `process.env`: no `GITHUB_TOKEN`, no provider keys.
-- **Network.** The CLI's own web tools are off (3.1). Commands the CLI runs can still reach the network, the same as `run_command` today; the rules judge them as commands.
+**If per-call approval cannot be made to cover every tool for an engine, it uses way two or is not offered.**
 
-### 3.4 The action log and checkpoints
+### 3.3 Way two: a staged copy (Aider; Cline if [R2] fails)
 
-- A tool run by an Everything-level device's engine chat is written to `remote.logAction` as `{ kind: 'tool', tool: '<mapped name>' }`, exactly as R-DF2 logs Bunny's tools: name only, never arguments.
-- Edits feed checkpoints and the Changes pane through the `edit` event. "Undo changes" works the same for an engine chat.
+For an engine that applies edits itself, with no per-call hook:
 
-### 3.5 Device levels
+1. **Copy.** Before the turn, Bunny makes a staged copy of the workspace in the chat's engine folder: the `worktrees.js` pattern for a git repo, otherwise a plain copy. The copy **leaves out every path the read-deny rules hide**, and the data folder, so the engine cannot read them even through a repo map. The engine runs with that copy as its `cwd`.
+2. **No commands, no git.** The engine is started with its own shell commands and git actions turned off (Aider: `--no-auto-commits`, no `/run`, no shell suggestions **[R6]**). Where they cannot be turned off, that engine is not offered (M2).
+3. **Judge every changed path.** At the end of the turn, Bunny diffs the copy against the real folder and judges each changed, added or deleted path with the bridge (§3.1), as a `write_file` or `edit_file`.
+   - Denied paths are discarded, and the reply says which and why.
+   - An Ask shows one card listing the files, and the person may take all or none. Design to draw a per-file choice.
+   - Plan mode keeps nothing.
+4. **Apply.** What is allowed is written through the workspace's own write path, so `beforeWrite`, checkpoints and the Changes pane all work as for Bunny's own edits (M7). The staged copy is then removed.
 
-| Who | May choose the engine | Chats run on an engine |
+The person's folder only ever changes through Bunny's own write path.
+
+### 3.4 Second walls, for every engine
+
+- An isolated home under `engines\<id>\home\<chat>`, **rewritten at each run start**.
+- `safeEnv` plus only the named variables: no provider keys, no `GITHUB_TOKEN`, no paths to the person's home config.
+- The CLI's own web and fetch tools are off **[R10]**.
+- A command run by a per-call engine can still reach the network, as `run_command` can today. It is judged as a command.
+
+### 3.5 Device levels and the action log
+
+| Who | Choose an engine, download, update or roll back | Chats run on an engine |
 |---|---|---|
-| Bunny's window | Yes. `engine` joins `WINDOW_ONLY_SETTING_KEYS`, and `session.engine` joins `WINDOW_ONLY_SESSION_SETTINGS`. | Yes |
-| Device at Everything | No: the setting is window-only, and `/api/settings` PUT with `engine` is refused. | Yes, if the window chose it. Logged (3.4). An Auto chat goes back to Ask when the device signs out (as today). |
-| Device at Chats | No | **No.** Its chats always use Bunny's engine. The engine needs Code mode and `run_command`, which `remoteToolBlocked` already refuses a Chats device. |
+| Bunny's window | yes: `engine` joins `WINDOW_ONLY_SETTING_KEYS`, `session.engine` joins `WINDOW_ONLY_SESSION_SETTINGS`, and `/api/engines*` joins `WINDOW_ONLY_ROUTES` | yes |
+| a device at Everything | no: those routes are window-only, and Everything excludes nothing else on them | yes, if the window chose it. Every engine tool goes to `remote.logAction` as `{kind: 'tool', tool: <mapped name>}`, by name only (R-DF2) |
+| a device at Chats | no | no: its chats always use Bunny's engine (`remoteToolBlocked` already refuses it Code-mode tools) |
 
 ---
 
-## 4. Bundled CLIs: where they live, pinning, updates, rollback
+## 4. Download on click, versions, updates, rollback
 
-### 4.1 Licence gate (first)
+### 4.1 Licences and terms (checked before any build)
 
-- **Codex CLI** is open source (Apache-2.0) **[R11]**. Bundling is allowed with its licence and NOTICE shipped, listed in About next to the fonts.
-- **Claude Code**: whether it may be redistributed inside another app is **[R12]**. If the terms do not allow it, Claude Code is **not bundled**. Bunny downloads the official package on the owner's click, through the same verified pipeline as an update (4.4), into the same folder layout. The owner's wish "bundled" then reads as "installed and updated from inside Bunny"; that change is put to the owner with the drawing.
-- Also checked before anything is built: whether either CLI may be pointed at a non-vendor model endpoint under its terms **[R12]**, and that neither needs a paid account or vendor sign-in when its base URL is Bunny's (M5) **[R13]**.
+| Engine | Licence | May Bunny download and run it for the person? |
+|---|---|---|
+| Codex CLI | Apache-2.0 (F1 §3) | Yes. The licence text and notices are shown in About. Trademark terms: UNKNOWN. |
+| Aider | **[R15]** (believed Apache-2.0) | waits |
+| Cline | **[R15]** (believed Apache-2.0) | waits |
+| Claude Code | "All rights reserved" plus Anthropic's Commercial Terms (F2 §3) | Only as the official package, unmodified, with its own sign-in intact, and Bunny never collecting claude.ai credentials (F2 §3). Held, §7. |
 
-### 4.2 Layout
+### 4.2 Layout (nothing in the installer)
 
 ```
-<app>/resources/engines/<id>/<version>/...                  bundled with the installer (electron-builder extraResources; never inside app.asar)
-%LOCALAPPDATA%\BunnyAI\engines\<id>\<version>\...           installed by an in-app update (BUNNY_DATA_DIR\engines in tests)
-%LOCALAPPDATA%\BunnyAI\engines\<id>\current.json            { version, source: 'bundled' | 'installed', sha256 } — which one runs
-%LOCALAPPDATA%\BunnyAI\engines\<id>\home\<chat>\            the isolated config homes (M4, 1.5)
+%LOCALAPPDATA%\BunnyAI\engines\<id>\<version>\...        one folder per downloaded version (BUNNY_DATA_DIR\engines in tests)
+%LOCALAPPDATA%\BunnyAI\engines\<id>\current.json         { version, sha256 } — which version runs
+%LOCALAPPDATA%\BunnyAI\engines\<id>\home\<chat>\         isolated homes (M4)
+%LOCALAPPDATA%\BunnyAI\engines\<id>\stage\<chat>\        staged copies (3.3), removed after each turn
+%LOCALAPPDATA%\BunnyAI\engines\runtimes\<name>-<ver>\    a pinned runtime an engine needs, shared
 ```
 
-- How each CLI runs is **[R14]**. Codex ships native binaries per platform. Claude Code is a Node package, or now a native build. A Node package runs on Electron's own Node (`ELECTRON_RUN_AS_NODE=1` with `process.execPath`) rather than a second bundled Node, if it supports that Node version.
-- The installer size cost is measured and put beside the drawing.
+What each engine needs to run:
+- **Codex:** the release asset `codex-x86_64-pc-windows-msvc` plus its sandbox helpers (F1 §4).
+- **Claude Code:** `claude.exe` from `@anthropic-ai/claude-code-win32-x64`. Node is not needed to run it (F2 §4).
+- **Cline:** Node **[R4]**. It runs on Electron's own Node (`ELECTRON_RUN_AS_NODE=1` with `process.execPath`) if its Node version fits; otherwise Bunny downloads a pinned Node runtime.
+- **Aider:** Python **[R8]**: a pinned embeddable CPython and a locked wheel set, installed with no network access beyond the pinned files. If a locked offline install is not possible, Aider is not offered.
+
+Settings shows each engine's size on disk, and a **Remove** button that deletes every version, home and staged copy of that engine.
 
 ### 4.3 Pins
 
-`src/server/engines/pins.json` ships in every Bunny release. It is the list of **tested** versions:
+`src/server/engines/pins.json` ships in every Bunny release. It lists only **tested** versions:
 
 ```json
-{ "codex": { "version": "x.y.z", "files": { "win32-x64": { "url": "https://github.com/openai/codex/releases/download/...", "sha256": "..." } }, "licence": "Apache-2.0" },
-  "claude-code": { "version": "x.y.z", "files": { "npm": { "url": "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-x.y.z.tgz", "integrity": "sha512-...", "sha256": "..." } }, "licence": "<R12>" } }
+{ "codex": { "version": "0.170.0", "files": [ { "url": "https://github.com/openai/codex/releases/download/rust-v0.170.0/<asset>", "sha256": "…" } ], "schema": "codex-app-server-0.170.0.json" },
+  "aider": { "version": "<R16>", "runtime": "python-<R8>", "files": [ … ] },
+  "cline": { "version": "<R16>", "runtime": "electron-node | node-<R4>", "files": [ … ] },
+  "claude-code": { "held": "owner decision, §7" } }
 ```
 
-(The URLs show the shape; the real ones are **[R15]**.)
+The Codex version is the one Researcher found (F1 §1). The others wait on **[R16]**, and the real sha256 values are computed when a pin is tested.
 
-- A version is tested when the adapter's fixture tests were recorded against it (§5.2) and QA's engine smoke passed on an invented profile.
-- **Updates between Bunny releases.** Each Bunny GitHub Release may carry an `engines.json` asset with the same shape and newer tested pins. Bunny reads it from the same releases feed `updater.js` already trusts (`RELEASES_FEED`), so a CLI can be updated without a whole Bunny release.
-- Whether to also offer "latest, untested" from upstream is **the owner's question**. Recommendation: no, at least for v0.1.14.
+- A version is **tested** when QA's engine smoke (5.4) has passed for it on an invented profile and its fixtures were recorded from it.
+- **Between Bunny releases**, a Bunny GitHub Release may carry an `engines.json` asset in the same shape, read from the feed `updater.js` already trusts (`RELEASES_FEED`). An engine can then move to a newer tested version without a whole Bunny release.
+- Whether to offer "latest, untested" is an owner question. Recommendation: no.
 
-### 4.4 Update flow (Settings → Engines; window-only routes)
+### 4.4 Download, update, switch, rollback (window-only routes)
 
-1. **Check.** `GET /api/engines` lists, per engine:
-   - the running version;
-   - its source;
-   - the tested version available (from the newest `engines.json`, or the bundled pins);
-   - whether a previous version is kept.
-2. **Update** (`POST /api/engines/<id>/update`, window-only):
-   - download over HTTPS from the pinned URL only (no redirects off the pinned host) into `engines\<id>\.staging-<rand>`;
-   - verify `sha256`, and npm `integrity` where given; a mismatch deletes the staging folder and says so;
+1. `GET /api/engines` returns, for each engine: whether it is downloaded, the running version, the tested version available, the size, and whether a previous version is kept.
+2. `POST /api/engines/<id>/download` (also used for an update):
+   - fetch over HTTPS from the pinned URLs only, with no redirect off the pinned host;
+   - write into `engines\<id>\.staging-<rand>`, with progress shown in Settings and a Cancel button (about 380 MB);
+   - verify every file's `sha256`; any mismatch deletes the staging folder and says so;
    - extract with no paths outside the folder and no links;
-   - run `<cli> --version` there with `safeEnv`, no network and a 10 s timeout. It must print the pinned version.
-3. **Switch.** Rename staging to `engines\<id>\<version>`, then write `current.json` atomically (write a temp file, then rename).
-   - Never during a run of that engine: the update waits, or says "after the current reply".
-   - A run already started keeps the version it started with.
-4. **Keep two.** The version before is kept for rollback, and older ones are removed (the `removeTree` pattern, W6-6: a failed install cleans up after itself).
-5. **Rollback.** `POST /api/engines/<id>/rollback` switches `current.json` back, also to `bundled`.
-   - If the running version fails `locate()` at start (missing, or the hash changed on disk), Bunny falls back to the bundled pin by itself and says so in one line.
-   - If even that fails, the engine shows as unavailable and new chats use Bunny's engine.
-
-Two more rules:
-- **The CLI's own self-update is off** **[R10]**. Only this flow changes what runs.
-- A device, at any level, never reaches these routes. They are window-only, and the `engines` paths are added to `WINDOW_ONLY_ROUTES`.
+   - run `<cli> --version` there with `safeEnv`, no network, and a 10 s timeout. It must print the pinned version.
+3. **Switch:** rename the staging folder to `engines\<id>\<version>`, then write `current.json` atomically (a temp file, then a rename).
+   - Never while a run of that engine is going: the update says "after the current reply".
+   - A run that has already started keeps its version.
+4. **Keep two:** the previous version is kept, and older ones are removed. A failed download cleans up after itself (the `removeTree` pattern, W6-6).
+5. **Rollback:** `POST /api/engines/<id>/rollback` switches back to the previous version.
+   - If the current version fails `locate()` at a run start (missing, or its hash changed on disk), the run says so and offers rollback.
+   - With no previous version, new chats use Bunny's own engine.
+6. **The CLI's own self-update is off** (Codex `check_for_update_on_startup = false`; Claude Code `DISABLE_UPDATES`, F2 §4; Aider and Cline **[R17]**). Only this flow changes what runs.
 
 ---
 
 ## 5. Tests and the gate
 
-### 5.1 No real CLI, network or account in the gate
+### 5.1 Nothing real in the gate
 
-`fake-engine.mjs` is a stand-in CLI. It replays a recorded JSONL script and, where the script says so, asks the bridge for permission and waits for the answer. It is selected with `BUNNY_FAKE_ENGINE=<script>`, the way `BUNNY_FAKE_UPSTREAM` stands in for providers. Its model calls go to the run's endpoint, which goes to the fake upstream.
+`fake-engine.mjs` stands in for any profile, selected with `BUNNY_FAKE_ENGINE=<profile>:<script>`:
+- it replays a recorded script;
+- for a per-call profile it asks `approve()` and waits;
+- for a staged profile it edits its staged copy;
+- its model calls go through the run's endpoint to the fake upstream.
+
+The gate runs no real CLI, uses no network, and needs no account.
 
 ### 5.2 Unit tests (new files)
 
 | File | What it proves |
 |---|---|
-| `test/engine-events.test.js` | Each adapter's parser on recorded fixture streams (`test/fixtures/engines/<id>/<version>/*.jsonl`, recorded from the real CLIs by QA on an invented profile, with nothing secret in them) produces exactly the expected EngineEvents. A malformed line, an over-long line or an unknown event type ends the run with `error` (M6). The tool-name mapping covers every name seen. |
-| `test/engine-endpoint.test.js` | The listener binds 127.0.0.1 only. A wrong Host, any Origin, a missing or wrong token, a token from another run, or a request after the run ended is refused. The model name sent is ignored. The Anthropic⇄OpenAI (and Responses, if [R7]) translation round-trips text, thinking, tool calls and stop reasons, streaming and not. Usage is counted against the real provider. No key appears in anything the endpoint sends to the CLI. |
-| `test/engine-bridge.test.js` | A table: every Bunny mode × every rule effect × every mapped tool kind → the decision, compared with what Bunny's own engine decides for the same call (one judge, two callers). Covered cases: Plan mode refuses writes; the data folder and the engine home are denied; a path outside the workspace; an unknown tool is judged `run`; unreadable input is denied; an unreachable bridge stops the run; Ask reaches `askPermission`, and "no answer before the reply ends" is a no. |
-| `test/engine-store.test.js` | Pins parse. A hash mismatch is refused and staging is removed. A path-escape in the archive is refused. `current.json` is written atomically. Rollback works, including to bundled. A missing or changed installed version falls back to bundled. An update waits while a run is going. There is no network (a fake registry). |
-| `test/engine-device.test.js` | Over real HTTP, with the remote-access harness: a Chats device's Code-mode chat runs on Bunny's engine, never an engine. A device (Everything included) cannot set `engine` or reach `/api/engines*`. An Everything device's engine tools land in the action log by name only. |
-| `test/engine-env.test.js` | The spawned environment is `safeEnv` plus the named variables only: no provider key, no `GITHUB_TOKEN`, and no person's home config path. The isolated home is rewritten at every start. The incognito home is removed after the reply. |
+| `test/engine-events.test.js` | Each adapter's parser, on fixtures recorded from the pinned version (`test/fixtures/engines/<id>/<version>/`, invented profile and fake upstream, nothing secret), gives exactly the expected events. A malformed or over-long line, or an unknown method or event, ends the run. Codex's methods match the pinned schema file. |
+| `test/engine-endpoint.test.js` | The listener is on 127.0.0.1 only. It refuses: a wrong Host, any Origin, a missing or wrong token, another run's token, and any request after the run. The model name the CLI sends is ignored. The **Responses ⇄ Chat** translator round-trips text, reasoning, tool calls, tool results, the `developer` role, stop reasons and usage, streaming and not. A request that needs stored state is refused. No key appears in anything the endpoint sends to a CLI. |
+| `test/engine-bridge.test.js` | A table: every mode × every rule effect × every mapped tool kind gives the same decision as Bunny's own engine for the same call. Also: protected folders and the engine home are denied; an unknown tool is judged `run`; unreadable input is denied; an unreachable bridge stops the run; no answer by the end of the reply means no. |
+| `test/engine-staging.test.js` | The staged copy leaves out hidden and denied paths. Only allowed changes are applied, through the workspace write path and checkpoints. Denied and Plan-mode changes are discarded and named. Deletes are judged too. The copy is removed afterwards. Symlinks in the copy are not followed. |
+| `test/engine-store.test.js` | A hash mismatch, an archive path-escape, a redirect off the pinned host, or a wrong `--version` is refused and the staging folder is removed. `current.json` is written atomically. Rollback works. An update waits during a run. Remove deletes everything. A fake registry is used, with no network. |
+| `test/engine-device.test.js` | Over real HTTP, with the remote-access harness: a Chats device's Code-mode chat runs on Bunny's engine. No device reaches `/api/engines*` or `engine`. An Everything device's engine tools are logged by name only. |
+| `test/engine-env.test.js` | The spawned environment is `safeEnv` plus the named variables only. The home is rewritten at each start. An incognito home is removed. The token never appears in the spawn arguments. |
 
 ### 5.3 End-to-end (Playwright, invented profile, fake engine)
 
-- Settings → Engines shows each engine, its version, Update and Use previous version. Both themes, phone and desktop (O3/O8).
-- A Code-mode chat on the fake engine:
-  - draws its steps, Verbose results, the Changes pane and the Stop button exactly as Bunny's engine does;
-  - shows an Ask card, and answering it continues the run;
-  - in Plan mode shows the refusal.
-- Switching engine applies to new chats only, and an existing chat keeps its engine.
-- Help text and pictures ship with the screen (O7).
+- **Settings → Engines:** download with progress and Cancel, update, rollback, Remove, and the size on disk. Both themes, at phone and desktop widths (O3, O8).
+- **A Code-mode chat on a per-call fake engine:** the steps, Verbose results, the Changes pane and Stop work; an Ask card is answered; Plan mode refuses.
+- **A Code-mode chat on a staged fake engine:** a denied file is named and not written; the Ask card lists the files.
+- Switching engine applies to new chats only. Help text and pictures ship with the screen (O7).
 
-### 5.4 Gate changes (`scripts/gate.mjs`)
+### 5.4 Gate changes
 
-1. **New step "engine pins".** `pins.json` parses. Every bundled file under `resources/engines` (when present in `dist`) matches its `sha256`. Every bundled engine has its licence text in `src/ui/fonts/licenses`-style `engines/licenses/`, and About lists it. Done as a small script, `scripts/engine-pins.mjs`, with its own test.
-2. **The dependency audit does not see bundled CLIs** (they are not npm dependencies of Bunny). The "engine pins" step is their audit stand-in. Security decides whether a known-CVE lookup by version is added **[R16]**.
-3. **The secret scan** already covers the fixtures. Fixture recording must use the invented profile and the fake upstream, so no real key can be recorded.
-4. **No change to unit or e2e invocation.** The new tests run in the existing suites. GATE-WHY (5c32755) shows the cause when an engine test hangs.
-5. **Outside the gate.** `scripts/engine-smoke.mjs` (QA, before each release that changes a pin) runs each real pinned CLI on an invented profile, against the fake upstream through the real endpoint. It records fresh fixtures and fails if the stream shape changed. It needs the network to fetch the pin, which is why it stays outside the gate.
+1. **New step, "engine pins"** (`scripts/engine-pins.mjs`, with its own test): `pins.json` parses; each entry has an https URL and a sha256 for every file; Codex's schema file is present for its pin; every licence named is shown in About.
+2. **The dependency audit cannot see downloaded engines.** The pins step stands in for it. Security decides whether to add a known-CVE check by version.
+3. **The secret scan already covers the fixtures.** Recording uses only the invented profile and the fake upstream.
+4. **Unit and e2e run as today.** GATE-WHY (5c32755) names the cause if an engine test hangs.
+5. **Outside the gate:** `scripts/engine-smoke.mjs`, run by QA before any pin change. It downloads the real pinned engine into an invented profile and runs it against the fake upstream through the real endpoint. It records fresh fixtures and fails if the event shape changed.
 
 ---
 
 ## 6. Build order (each a board row; HIGH rows keep an independent review and Security's sign-off)
 
-1. Researcher's facts R1–R16, then this spec revised and an ADR filed.
-2. Security's requirements on §2, §3 and §4. Design's drawing (Settings → Engines, the update and rollback states, the per-chat engine line, and the "starts a new chat" wording). The owner's go.
-3. `events.js`, `endpoint.js` and `bridge.js` with their tests. No CLI is needed yet; the fake engine is enough.
-4. The Codex adapter (open licence, the likelier one to bundle), then the Claude Code adapter.
-5. `store.js`, the update and rollback routes, and the Settings screens.
-6. The gate's engine pins step, `engine-smoke.mjs`, help text and pictures.
+1. Researcher's Aider and Cline facts (R1–R17), then this spec is revised and an ADR filed.
+2. Security's requirements. Design's drawing. The owner's go.
+3. `events.js`, `endpoint.js` with the **Responses translator**, `bridge.js` and `staging.js`, each with tests, on the fake engine.
+4. The Codex adapter (Responses, app-server, per-call).
+5. The Cline adapter.
+6. The Aider adapter, staged.
+7. `store.js`, the download, update and rollback routes, and the Settings screens.
+8. The pins gate step, `engine-smoke.mjs`, help text and pictures.
+
+Claude Code is held until the owner decides (§7).
 
 ---
 
-## 7. Assumptions waiting on Researcher
+## 7. Claude Code: with the owner
 
-| Mark | Assumption | If it comes back wrong |
+The owner's word 3 ("none work on accounts") and Researcher's findings (F2 §2, §3, §6) leave two routes. **Neither is built until the owner chooses.**
+
+**A. The owner's own Anthropic account, Claude models only** (the Chief of Staff's earlier relay).
+- It is installed on click from the official package, unmodified (F2 §3).
+- The owner signs in through Claude Code's own flow, in a visible terminal started with the isolated home. Bunny never reads, copies or stores those credentials, and the bridge denies reading that home.
+- Models are the owner's Anthropic ones, not Bunny's: `models: 'own-account'`, so the endpoint is not used.
+- **This conflicts with word 3 and with R4 (free only),** since it needs a paid Anthropic plan (F2 §6). It is offered only if the owner says so in words.
+
+**B. The gateway route: Claude Code on Bunny's models through `/v1/messages`.**
+- No account is needed (F2 §2).
+- But Anthropic does not support non-Claude models this way, documented failures exist (thinking and beta-field 400s, no auto-compaction), and the terms question in F2 §3 (section D.4) is the owner's legal call.
+- It also needs a second translator, Messages ⇄ Chat.
+
+**Recommendation:** ship v0.1.14 with Codex, Cline and Aider, which fit word 3, and leave Claude Code off until the owner picks A or B, in words.
+
+---
+
+## 8. Open facts
+
+**Confirmed by Researcher (F):**
+- F1 is Codex (e462903 §1–§6):
+  - app-server JSON-RPC with `requestApproval`;
+  - `wire_api = "responses"` only;
+  - Apache-2.0;
+  - no OpenAI account with a custom provider;
+  - about 386 MB plus helpers;
+  - `--ignore-user-config`, `--ignore-rules`, `check_for_update_on_startup`.
+- F2 is Claude Code (e462903 §1–§6):
+  - stream-json and `canUseTool` / permission-prompt-tool;
+  - Messages API only;
+  - all rights reserved, with preinstall conditions;
+  - a paid Anthropic account;
+  - no sandbox on native Windows;
+  - `DISABLE_UPDATES`;
+  - 379 MB.
+
+**Waiting on Researcher (R):**
+
+| Mark | Fact | If it comes back wrong |
 |---|---|---|
-| R1 | Each CLI has a structured "ask the user a question" event in headless mode. | Questions show as plain text in the reply; no card. |
-| R2 | The exact tool names each CLI emits, for the mapping. | The mapping table changes; unknowns are judged `run`. |
-| R3 | Claude Code has a headless JSON-lines stream (`-p --output-format stream-json`) with tool start and end, text and usage. | Without a structured stream, Claude Code is not offered. |
-| R4 | Codex has `exec --json` or an app-server JSON protocol with the same. | Without it, Codex is not offered. |
-| R5 | Both can resume their own session by id, headless. | 1.5's fallback (re-send Bunny's transcript) becomes the only path. |
-| R6 | Claude Code honours `ANTHROPIC_BASE_URL` + an auth token variable for any Messages-compatible server, with no vendor sign-in. | Claude Code cannot use Bunny's models: not offered (M3, M5). |
-| R7 | Codex accepts a custom provider in `config.toml` (`base_url`, `env_key`, `wire_api` = chat or responses). | If it needs Responses only, §2's Responses translation becomes its own row. |
-| R8 | Pass-through for native-format providers is safe and worth it. | Always translate. |
-| R9 | Each CLI can hand every action to an external judge before it runs: Claude Code's permission prompt tool or PreToolUse hook; Codex's approval requests in the JSON or app-server channel. Their web tools, other MCP servers and subagents can be turned off. | That CLI is not offered (M2). This is the deciding fact. |
-| R10 | Telemetry and self-update can be turned off by environment or config. | Security decides whether it is blocking (M5). |
-| R11 | Codex CLI is Apache-2.0 and its native binaries may be redistributed. | Install on click instead of bundling (as R12's fallback). |
-| R12 | Whether Claude Code may be redistributed, and whether either CLI's terms allow a non-vendor model endpoint. | Claude Code installs on the owner's click instead of bundled. If terms forbid other endpoints, that engine is not offered. |
-| R13 | Neither CLI requires a paid account or sign-in when pointed at Bunny's endpoint. | Not offered (R4, free only). |
-| R14 | How each CLI is packaged (native binary or Node package; which Node), and its size. | Changes §4.2's layout, and possibly a bundled Node. |
-| R15 | The official download URLs and the integrity data each publishes. | Pins carry our own computed sha256 only. |
-| R16 | Whether a version-to-CVE lookup exists that the gate can use offline. | Security decides on a manual check at each pin change. |
+| R1 | Cline's headless output: JSON lines or JSON-RPC | text transport, coarser steps |
+| R2 | Cline's headless mode carries per-call approvals for every tool | Cline uses the staged copy (3.3) |
+| R3 | Cline accepts an OpenAI-compatible base URL and key with no account | Cline not offered (M5) |
+| R4 | Cline's runtime and Node version, and its size | Changes 4.2 (a pinned Node) |
+| R5 | Aider has a structured output mode | text transport |
+| R6 | Aider can run with shell commands, `/run` and git commits off, and its edits all land in `cwd` | Aider not offered (M2) |
+| R7 | Aider accepts an OpenAI-compatible base URL and key (litellm) with no account | Aider not offered (M5) |
+| R8 | Aider installs offline from a pinned Python and a locked wheel set | Aider not offered |
+| R9 | Aider and Cline have a structured "ask the person" event | questions shown as text |
+| R10 | Tool names per CLI, and that their web and fetch tools can be turned off | mapping changes; if web cannot be turned off, Security decides |
+| R11 | Aider and Cline can resume their own session headless | the transcript fallback (1.5) |
+| R12 | Codex can run with no stored Responses state (`--ephemeral` or the like) | the translator keeps per-run state in memory |
+| R13 | Which of Bunny's providers serve `/v1/responses` natively | always translate |
+| R14 | Codex's Windows sandbox runs `unelevated` with no admin step | per-call approval alone (as Claude Code) |
+| R15 | Aider and Cline licences | not offered until known |
+| R16 | Aider and Cline versions to pin | |
+| R17 | Aider and Cline self-update and telemetry can be turned off | Security decides (M5) |
 
-## 8. Questions for the owner (asked one at a time, with the drawing, O12)
+## 9. Questions for the owner (one at a time, with the drawing, O12)
 
-1. If Claude Code may not be bundled (R12): is "installed from inside Bunny on your click, and updated there" acceptable? Recommended: yes.
-2. Should updates offer only versions Bunny has tested, or also "latest, untested"? Recommended: tested only.
-3. Is the engine for Code-mode chats only, with Chat mode always Bunny's own? Recommended: yes.
+1. Claude Code: route A (your own Anthropic account, paid), route B (Bunny's models, unsupported by Anthropic), or leave it off for now? Recommendation: off for v0.1.14, decided later (§7).
+2. Updates: tested versions only, or also "latest, untested"? Recommendation: tested only.
+3. Engines for Code-mode chats only, with Chat mode always on Bunny's own engine? Recommendation: yes.
