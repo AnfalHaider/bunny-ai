@@ -1,8 +1,8 @@
 ---
 piece: device-full
 role: security
-sha: 55181f1
-verdict: FAIL
+sha: 24359c2
+verdict: PASS
 date: 2026-11-18
 ---
 
@@ -90,3 +90,15 @@ So the first action after every restart erases the history (for example, last ni
 **Limit to state honestly (not a code fix):** an Everything device can run commands, so it can edit `remote-actions.json` itself. The log shows what a device did unless that device set out to hide it. The window's Activity view should not claim more than that.
 
 **Still required for release:** R-DF1, the visible warning, the named status line and the Activity view, which come with the drawing.
+
+## Re-review at 24359c2 (the log fix): PASS for the server side (supersedes the FAIL at 55181f1)
+
+- The saved log is read once, and every write waits for that read, so a new entry is added to the history, never written over it.
+- My probe `device-full-probe/log-restart.mjs`, from a copy of 24359c2 (an earlier entry, a restart, one new action):
+  ```
+  entries on disk after a restart and one new action: 2; the earlier entry is KEPT
+  what the window then reads: 2 entries (New device, Earlier device)
+  ```
+  No duplicates.
+- `remote-access` passes 45 of 45 with the variable unset. Builder A's restart test covers two runs before any read.
+- **Still required for the v0.1.13 release:** R-DF1, the visible warning text, the status line naming the device, and the Activity view (with the honest limit above), which come with Design's drawing.
