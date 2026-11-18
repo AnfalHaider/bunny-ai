@@ -26,6 +26,7 @@ function refresh() {
   go.classList.toggle('on', text.value.trim().length > 0 && !busy);
   text.style.height = '44px';
   text.style.height = `${Math.min(128, Math.max(44, text.scrollHeight))}px`;
+  scheduleFit();
 }
 
 function renderChip() {
@@ -55,12 +56,14 @@ function renderChip() {
 function closeMenu() {
   $('menu').hidden = true;
   $('plus').setAttribute('aria-expanded', 'false');
+  scheduleFit();
 }
 
 $('plus').addEventListener('click', () => {
   const open = $('menu').hidden;
   $('menu').hidden = !open;
   $('plus').setAttribute('aria-expanded', String(open));
+  fit(); // the window grows for the menu, then follows the pill again when it closes
 });
 
 $('shot-item').addEventListener('click', async () => {
@@ -95,12 +98,24 @@ let question = '';
 let answering = false;
 let asked = false; // the first question has been sent: the bar is now an answer panel
 const ICON = {
-  stop: '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>',
-  copy: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+  // the namespace is what makes DOMParser read these as SVG: without it they were unknown elements that measured 0 x 0 (the blank Stop and Copy buttons)
+  stop: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>',
+  copy: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
 };
 
-/** Tell main how tall the content is, so the bar grows to fit (main keeps it under about 560 px and on the screen). */
-function fit() { window.quickAsk.resize(Math.ceil($('bar').getBoundingClientRect().height) + 20).catch(() => {}); }
+/**
+ * Tell main how tall the content is, so the window is exactly as tall as the pill (its 8 px margin included), and a little taller while the + menu is open (main keeps it under
+ * about 560 px and on the screen). Called whenever the content changes, and by a size observer, so no case is forgotten.
+ */
+function fit() {
+  const pill = $('bar').getBoundingClientRect();
+  const menu = $('menu').hidden ? null : $('menu').getBoundingClientRect();
+  const bottom = Math.max(pill.bottom, menu ? menu.bottom : 0);
+  window.quickAsk.resize(Math.ceil(bottom) + 8).catch(() => {});
+}
+let fitQueued = false;
+function scheduleFit() { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fit(); }); }
+new ResizeObserver(scheduleFit).observe($('bar'));
 
 /** A reply is untrusted text: render it with the app's sanitising markdown, then make links inert and drop pictures and anything interactive. */
 function showAnswer(streaming) {
@@ -139,7 +154,7 @@ function enterPanel(q) {
   $('ans').replaceChildren();
   $('card').hidden = true; $('card').replaceChildren();
   $('meta').hidden = true;
-  const busy = document.createElement('div'); busy.className = 'msg'; busy.id = 'busy';
+  const busy = document.createElement('div'); busy.className = 'msg'; busy.id = 'busy'; busy.style.paddingLeft = '0'; // the answer box already has the indent
   const spin = document.createElement('span'); spin.className = 'spin'; busy.append(spin, document.createTextNode('Bunny is thinking…'));
   $('ans').append(busy);
   topButton('stop');

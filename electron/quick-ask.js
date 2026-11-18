@@ -13,11 +13,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const BAR_DIR = join(here, 'quick-ask');
 const KEEP_TEXT_MS = 5 * 60 * 1000; // clicking away hides the bar and keeps the text this long
 
+const BAR_WIDTH = 640;
+
 /** The window options of the bar, kept as data so a test can check them. */
 export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
   return {
-    width: 700,
-    height: 300,
+    width: BAR_WIDTH,
+    height: MIN_BAR_HEIGHT,
     show: false,
     frame: false,
     transparent: true,
@@ -34,7 +36,7 @@ export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
   };
 }
 
-export const MIN_BAR_HEIGHT = 300;
+export const MIN_BAR_HEIGHT = 80; // the pill alone (about 70 px with its margin); the page asks for more while the + menu is open or an answer is shown
 export const MAX_BAR_HEIGHT = 560; // a long answer grows the bar to about this and then scrolls inside it
 
 export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open }, adminFetch = null, onOpenChat = () => {}, onAnswerFinished = () => {} }) {
@@ -64,7 +66,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   function place() {
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { x, y, width, height } = display.workArea;
-    const w = Math.min(700, Math.floor(width * 0.95));
+    const w = Math.min(BAR_WIDTH, Math.floor(width * 0.95));
     bar.setBounds({ x: Math.round(x + (width - w) / 2), y: Math.round(y + Math.max(0, height * 0.2 - 8)), width: w, height: barHeight });
   }
 
