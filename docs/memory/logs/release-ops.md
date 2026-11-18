@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-19 - Published v0.1.13
+
+**Word:** the Chief of Staff's 7E relay: the owner's words, typed in the Chief's chat. 2026-11-18, answering "Release v0.1.13 as soon as every check passes?": "Yes, release when ready"; later "push and release when ready"; 2026-11-19, for the last fix: "just run the test for cut part, then release and push, no need for all the tests and sign offs again". The relay had the shas, the pasted gate (9/9 at 07d6d2f) and the sign-off row (Design at 371b4b4, the rest at 07d6d2f; the Chief explained the one fix after Design's sign-off). The owner also asked to be pinged on his phone when it's live; that is the Chief's to do.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at 03c5a06 = origin/main.
+- `npm ci`, `npm run dist` -> build-sha 03c5a06, tree clean, `latest.yml` 0.1.13 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.13-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.13-notes.md` ran 01:04 to 01:07 (GitHub publishedAt 2026-11-18T20:07:35Z); no retry needed -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.13
+- Checks: not draft, not prerelease; .exe 122952268, .blockmap 129614, latest.yml 348; tag v0.1.13 -> 03c5a06; feed serves 0.1.13. Downloaded the uploaded .exe: sha256 48ce61c56d622a3bfb45e009e40e1dc50fc981a3815a0fb877f8c1ff96a7cd6e equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.14) with 0.1.12's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
 ## 2026-11-18 - Published v0.1.12
 
 **Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-18) "Then push 0.1.12 immediately after.", after the Chief had told the owner the web app was built and waiting for v0.1.12; the web-app drawing was approved with "Approved". The words name 0.1.12 and "push", not the word "release"; I took "push 0.1.12" as the release word because it names the version and the Chief relayed it as the release. Shas, pasted gate (9/9 at eba5478) and the sign-off row were in the relay.
