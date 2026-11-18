@@ -47,3 +47,9 @@ test('a device page asks the server for its level once; at Everything nothing is
   assert.equal(await deviceLevel(async () => { throw new Error('offline'); }, doc), null, 'not known: not cached');
   resetBrowserMode();
 });
+
+test('only a device changing a setting is announced: the route and method of the log entry, never a value', async () => {
+  const { isSettingChange } = await import('../src/ui/device-access.js');
+  assert.equal(isSettingChange({ kind: 'route', method: 'PUT', path: '/api/settings' }), true);
+  for (const e of [{ kind: 'route', method: 'POST', path: '/api/skills' }, { kind: 'tool', tool: 'read_file' }, { kind: 'level' }, { kind: 'signin' }, null]) assert.equal(isSettingChange(e), false);
+});

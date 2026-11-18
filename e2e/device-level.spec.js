@@ -23,10 +23,10 @@ const LOG = [
 const WARNING = "Everything lets this device do anything you can do on this PC: run programs, change settings, read your files and saved keys. The connection is not encrypted, so on a network you don't fully trust, someone could take over this device's access. Give it only on your own home network, to a device you own. Signing the device out stops it, but does not undo what it already did.";
 
 /** Bunny's window: a tab with a stand-in for the desktop bridge, and the server's answers for device access made up. */
-async function windowWith(page, devices, { patches = [] } = {}) {
+async function windowWith(page, devices, { patches = [], log = { entries: LOG } } = {}) {
   let current = devices.map((d) => ({ ...d }));
   await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: status(current) }) : r.continue()));
-  await page.route('**/api/remote/log', (r) => r.fulfill({ json: { entries: LOG } }));
+  await page.route('**/api/remote/log', (r) => r.fulfill({ json: { entries: log.entries } }));
   await page.route(/\/api\/remote\/devices\/[a-f0-9]{16}\/level$/, async (r) => {
     const body = r.request().postDataJSON();
     const id = r.request().url().match(/devices\/([a-f0-9]{16})\/level/)[1];
@@ -134,6 +134,27 @@ for (const scheme of ['light', 'dark']) {
       await shot(page, 'activity', scheme);
       await view.getByRole('button', { name: 'Back to devices' }).click();
       await expect(page.locator('.device-row')).toHaveCount(2);
+    });
+
+    test('a device with Everything changes a setting: a notice (names only, never the value) says who and when, and See Activity opens that device Activity', async ({ page }) => {
+      const log = { entries: LOG };
+      await windowWith(page, [{ ...PHONE, asked: true }, LAPTOP], { log });
+      await page.goto('/src/ui/index.html');
+      await expect(page.locator('#remote-bar')).toContainText('Kitchen laptop has Everything');
+      await page.waitForTimeout(300);
+      await expect(page.locator('#device-notice')).toHaveCount(0); // what happened before the window looked is not announced
+      log.entries = [{ at: '2026-11-18T09:40:00.000Z', device: LAPTOP.id, label: LAPTOP.label, level: 'everything', kind: 'route', method: 'PUT', path: '/api/settings' }, ...LOG];
+      const notice = page.locator('#device-notice');
+      await expect(notice).toBeVisible({ timeout: 15000 });
+      await expect(notice).toContainText('Kitchen laptop changed a setting');
+      await expect(notice).toContainText(/Everything access · [0-9]{2}:[0-9]{2} · See Activity/);
+      await expect(notice).not.toContainText('/api/settings');
+      await shot(page, 'notice', scheme);
+      await notice.getByRole('button', { name: 'See Activity' }).click();
+      await expect(notice).toHaveCount(0);
+      const frame = page.frameLocator('#settings-frame');
+      await expect(frame.locator('.device-activity')).toContainText('Activity · Kitchen laptop');
+      await expect(frame.getByRole('listitem').first()).toContainText('Setting changed');
     });
 
     test('a narrow window: the devices list wraps and nothing scrolls sideways', async ({ page }) => {

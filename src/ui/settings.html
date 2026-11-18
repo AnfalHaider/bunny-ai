@@ -1373,6 +1373,10 @@
     };
     const refresh = async () => { try { render(await getJSON('/api/remote')); } catch { /* the status stays as it was */ } };
     await refresh();
+    // See Activity on the window's notice opens that device's Activity
+    const wanted = new URLSearchParams(location.search).get('activity');
+    const target = wanted && lastStatus?.devices?.find((d) => d.id === wanted);
+    if (target) await openActivity(target);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuOpen) { document.querySelector('.level-menu')?.remove(); menuOpen = false; } });
     document.addEventListener('click', (e) => { if (menuOpen && !e.target.closest?.('.level-menu, [data-action="change"]')) { document.querySelector('.level-menu')?.remove(); menuOpen = false; } });
     box.addEventListener('change', async () => {

@@ -25,7 +25,7 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
-import { chooseLevel, paintStatus } from './device-access.js';
+import { chooseLevel, everythingDevices, isSettingChange, paintStatus, settingNotice } from './device-access.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
@@ -2620,8 +2620,22 @@ function watchRemote() {
       else show(await sendJSON(`/api/remote/devices/${device.id}/level`, 'PATCH', { level: choice }));
     } catch { dismissed.add(device.id); /* the device signed out meanwhile, or the write failed: Settings still has the choice */ } finally { asking = false; }
   };
+  // DEVICE-FULL: when a device with Everything changes a setting, a notice says so (from the same window-only log Activity reads: names only). Entries older than the first look are not announced.
+  let seenAt = null;
+  const announceChanges = async (s) => {
+    if (seenAt !== null && !everythingDevices(s).length) return;
+    try {
+      const entries = (await getJSON('/api/remote/log')).entries ?? [];
+      const first = seenAt === null;
+      const fresh = entries.filter((e) => isSettingChange(e) && !first && e.at > seenAt);
+      if (entries.length) seenAt = entries[0].at > (seenAt ?? '') ? entries[0].at : seenAt;
+      else if (seenAt === null) seenAt = '';
+      const latest = fresh[0];
+      if (latest) settingNotice(document, { label: latest.label ?? 'A device', level: latest.level, at: latest.at, onActivity: () => openSettings('desktop', { activity: latest.device }) });
+    } catch { /* not now */ }
+  };
   const show = (s) => {
-    if (!s?.enabled) { bar?.remove(); bar = null; return; }
+    if (!s?.enabled) { bar?.remove(); bar = null; document.getElementById('device-notice')?.remove(); seenAt = null; return; }
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'remote-bar';
@@ -2639,6 +2653,7 @@ function watchRemote() {
     off.addEventListener('click', async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } });
     bar.append(text, off);
     askAboutDevices(s);
+    announceChanges(s);
   };
   const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
   tick();
@@ -3913,19 +3928,19 @@ window.addEventListener('message', async (e) => {
 // Sections that live on their own page rather than inside settings.html.
 const SETTINGS_PAGES = { providers: './providers.html', automation: './automation.html', customize: './customize.html' };
 
-function openSettings(section = 'profile') {
+function openSettings(section = 'profile', extra = {}) {
   closeAccountMenu();
   const backdrop = $('settings-backdrop');
   if (!backdrop) return;
   backdrop.hidden = false;
-  showSettingsSection(section);
+  showSettingsSection(section, extra);
   $('settings-search')?.focus();
 }
 
-function showSettingsSection(section) {
+function showSettingsSection(section, extra = {}) {
   const frame = $('settings-frame');
   const base = SETTINGS_PAGES[section] ?? './settings.html';
-  const query = SETTINGS_PAGES[section] ? '?embed=1' : `?embed=1&section=${encodeURIComponent(section)}`;
+  const query = (SETTINGS_PAGES[section] ? '?embed=1' : `?embed=1&section=${encodeURIComponent(section)}`) + (typeof extra.activity === 'string' && /^[a-f0-9]{16}$/.test(extra.activity) ? `&activity=${extra.activity}` : '');
   if (frame) frame.src = base + query;
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     const on = b.dataset.section === section;
