@@ -1402,7 +1402,13 @@
   }
 
   // Install as an app (Design's drawing): in a browser tab the page shows the row, driven by the browser's own install offer; Bunny's window shows a pointer line instead.
+  // Bunny's Settings window shows one section per tab (settings.html?embed=1&section=<tab>). The Desktop app section, and "Use Bunny in a browser" inside it, belong to
+  // the Desktop app tab only (or to the whole page when no tab is named): a page that is not showing it must not show it, nor start it.
+  const embedParams = new URLSearchParams(location.search);
+  const namedTab = embedParams.get('embed') === '1' ? embedParams.get('section') : null;
+  const showsDesktop = !namedTab || namedTab === 'desktop';
   function bootInstall(desk) {
+    if (!showsDesktop) return;
     $('desktop-section').hidden = false;
     $('browser-section').hidden = false;
     const ctx = installContext(window);
@@ -1441,6 +1447,7 @@
 
   async function bootDesktop() {
     // The Settings window shows this page in an iframe; the bridge lives on the parent.
+    if (!showsDesktop) return; // another tab: nothing here to show, and no second copy of the preferences
     const desk = desktopBridge();
     bootInstall(desk);
     if (!desk) return;
