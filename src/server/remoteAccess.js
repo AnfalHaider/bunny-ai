@@ -19,6 +19,7 @@ export const MIN_PASSCODE = 12;
 export const COOKIE = 'bunny_remote';
 export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // R7: two hours without use ends a session
 export const FAILS_BEFORE_WAIT = 5;
+export const FLOOD_LIMIT = 30; // wrong tries from anyone in 10 minutes before everyone waits a minute
 const KDF = { N: 16384, r: 8, p: 1, keylen: 32 };
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I: readable aloud
 
@@ -192,6 +193,8 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
   const sessions = new Map(); // secret cookie value -> { deviceId, label, ip, csrf, signedInAt, lastSeen }
   const failures = new Map(); // ip -> { count, until }
   let recent = [];            // times of recent failures from anyone
+  const inflight = new Map(); // ip -> tries being checked right now (scrypt takes time, and tries that arrive together must count together)
+  let inflightAll = 0;
 
   async function load() {
     if (loaded) return;
@@ -210,7 +213,7 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     const own = failures.get(ip);
     const ownWait = own && own.until > t ? Math.ceil((own.until - t) / 1000) : 0;
     recent = recent.filter((x) => t - x < 10 * 60_000);
-    const floodWait = recent.length > 30 && recent.at(-1) + 60_000 > t ? Math.ceil((recent.at(-1) + 60_000 - t) / 1000) : 0;
+    const floodWait = recent.length > FLOOD_LIMIT && recent.at(-1) + 60_000 > t ? Math.ceil((recent.at(-1) + 60_000 - t) / 1000) : 0;
     return Math.max(ownWait, floodWait);
   };
 
@@ -219,7 +222,22 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     if (!on) return { ok: false, status: 403, message: 'Bunny is not open to other devices.' };
     const wait = waitFor(ip);
     if (wait > 0) return { ok: false, status: 429, waitSeconds: wait, message: `Too many tries. Wait ${wait} seconds and try again.` };
-    const good = await verifyPasscode(typeof passcode === 'string' ? passcode.trim() : '', record);
+    // RA-1: a try is RESERVED before its (slow) check starts, so tries that arrive together count together. A device has FAILS_BEFORE_WAIT tries in all, counting the ones
+    // already being checked; once it has used them, one at a time. Everyone together has FLOOD_LIMIT + 1 checked tries (those being checked count) before the flood wait.
+    const flying = inflight.get(ip) ?? 0;
+    const used = failures.get(ip)?.count ?? 0;
+    const budget = used < FAILS_BEFORE_WAIT ? FAILS_BEFORE_WAIT - used : 1;
+    if (flying >= budget) return { ok: false, status: 429, waitSeconds: 30, message: 'Too many tries. Wait 30 seconds and try again.' };
+    // (the wrong tries of the last minutes count only while the last of them is under a minute old; tries in flight always count)
+    if (recent.length + inflightAll > FLOOD_LIMIT && (inflightAll > 0 || recent.at(-1) + 60_000 > now())) return { ok: false, status: 429, waitSeconds: 60, message: 'Too many tries. Wait 60 seconds and try again.' };
+    inflight.set(ip, flying + 1);
+    inflightAll += 1;
+    let good;
+    try { good = await verifyPasscode(typeof passcode === 'string' ? passcode.trim() : '', record); } finally {
+      const left = (inflight.get(ip) ?? 1) - 1;
+      if (left > 0) inflight.set(ip, left); else inflight.delete(ip);
+      inflightAll -= 1;
+    }
     if (!good) {
       const entry = failures.get(ip) ?? { count: 0, until: 0 };
       entry.count += 1;

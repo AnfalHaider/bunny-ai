@@ -4,7 +4,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  COOKIE, FAILS_BEFORE_WAIT, checkPasscodeChoice, createRemoteAccess, deviceLabel, findLanAddress, generatePasscode, hashPasscode, readCookie, remoteBody, remoteException, remotePolicy, verifyPasscode,
+  COOKIE, FAILS_BEFORE_WAIT, FLOOD_LIMIT, checkPasscodeChoice, createRemoteAccess, deviceLabel, findLanAddress, generatePasscode, hashPasscode, readCookie, remoteBody, remoteException, remotePolicy, verifyPasscode,
 } from '../src/server/remoteAccess.js';
 import { startApp } from './helpers.js';
 
@@ -649,4 +649,43 @@ test('a device picks a model for ITS chat through the chat\'s own routes (PATCH 
   const put = await lan(d.url, { method: 'PUT', path: '/api/settings', headers: d.w, body: { providerId: 'openai', model: 'other-model' } });
   assert.equal(put.status, 403);
   assert.equal((await (await fetch(d.base + '/api/settings')).json()).model, settingsBefore.model, 'the default model did not change');
+});
+
+test('RA-1: tries that arrive together count together: 60 parallel wrong passcodes from one device get at most 5 checks, the rest wait; a right one still works after the wait', async () => {
+  let t = 9_000_000;
+  const r = createRemoteAccess({ now: () => t });
+  await r.enable({ lanHost: '10.0.0.5:5555', lanAddress: '10.0.0.5', passcode: PASS });
+  const results = await Promise.all(Array.from({ length: 60 }, () => r.signIn('10.0.0.9', 'wrong wrong wrong')));
+  const checked = results.filter((x) => x.status === 401);
+  const waiting = results.filter((x) => x.status === 429);
+  assert.equal(checked.length, FAILS_BEFORE_WAIT, 'only the 5 tries the device has were checked');
+  assert.equal(waiting.length, 55);
+  assert.ok(waiting.every((x) => x.waitSeconds > 0));
+  // the device is now waiting; even the right passcode waits; another device is not affected
+  assert.equal((await r.signIn('10.0.0.9', PASS)).status, 429);
+  assert.equal((await r.signIn('10.0.0.77', PASS)).ok, true);
+  t += 31_000;
+  assert.equal((await r.signIn('10.0.0.9', PASS)).ok, true, 'a right passcode after the wait works');
+});
+
+test('RA-1: fewer in flight than the limit: the first few parallel tries are all checked (a right one among them signs in), none more than the limit', async () => {
+  const r = createRemoteAccess({ now: () => 1 });
+  await r.enable({ lanHost: '10.0.0.5:5555', lanAddress: '10.0.0.5', passcode: PASS });
+  const results = await Promise.all([r.signIn('10.0.0.4', 'wrong wrong wrong'), r.signIn('10.0.0.4', PASS), r.signIn('10.0.0.4', 'wrong wrong wrong')]);
+  assert.deepEqual(results.map((x) => x.status ?? 200), [401, 200, 401]);
+  assert.equal(results[1].ok, true);
+});
+
+test('RA-1: the flood limit counts tries in flight too: 60 parallel wrong tries from 60 devices get at most 31 checks; after the minute a right one works', async () => {
+  let t = 7_000_000;
+  const r = createRemoteAccess({ now: () => t });
+  await r.enable({ lanHost: '10.0.0.5:5555', lanAddress: '10.0.0.5', passcode: PASS });
+  const results = await Promise.all(Array.from({ length: 60 }, (_, i) => r.signIn(`10.0.1.${i}`, 'wrong wrong wrong')));
+  const checked = results.filter((x) => x.status === 401).length;
+  assert.ok(checked <= FLOOD_LIMIT + 1, `at most ${FLOOD_LIMIT + 1} tries were checked, not ${checked}`);
+  assert.ok(checked >= FLOOD_LIMIT, `and the first ones were not refused early (${checked})`);
+  assert.equal(results.filter((x) => x.status === 429).length, 60 - checked);
+  assert.equal((await r.signIn('10.0.2.1', PASS)).status, 429, 'everyone waits');
+  t += 61_000;
+  assert.equal((await r.signIn('10.0.2.1', PASS)).ok, true, 'after the minute a right passcode works');
 });
