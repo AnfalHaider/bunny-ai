@@ -103,3 +103,14 @@ test('the sign-in page says why: the answer of the server, an address that canno
   assert.ok(signinJs.includes("has('signedout')"));
   assert.ok(remoteJs.includes("location.replace('/?signedout=1')"));
 });
+
+test('refusals have their own share of the log: a flood over days never pushes out a sign-in', async () => {
+  let t = 9_000_000;
+  const r = createRemoteAccess({ now: () => t });
+  await r.enable({ lanHost: '10.0.0.5:5555', lanAddress: '10.0.0.5', passcode: PASS });
+  await r.signIn('10.0.0.9', PASS, IPHONE);
+  for (let i = 0; i < 200; i += 1) { t += 61_000; r.logRefusal('address', IPHONE); }
+  const log = await r.actions();
+  assert.equal(log.filter((e) => e.kind === 'refused').length, 50, 'only the newest 50 refusals are kept');
+  assert.ok(log.some((e) => e.kind === 'signin'), 'the sign-in is still there');
+});

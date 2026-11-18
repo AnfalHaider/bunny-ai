@@ -27,6 +27,7 @@ export const FAILS_BEFORE_WAIT = 5;
 export const EVERYTHING_IDLE_MS = 30 * 60 * 1000;
 /** R-DF2: the action log keeps the last 500 entries or 30 days, whichever is fewer. */
 export const LOG_MAX_ENTRIES = 500;
+export const LOG_MAX_REFUSED = 50; // of those, at most this many are refusals (the newest)
 /** Why a device that is not signed in was refused (WEBAPP-SIGNIN): shown in Activity, never an address or a value. */
 export const REFUSAL_REASONS = Object.freeze(['passcode', 'wait', 'address', 'origin']);
 export const LOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -249,7 +250,11 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   let loading = null;
   const prune = () => {
     const t = now();
-    actions = actions.filter((a) => t - Date.parse(a.at) <= LOG_MAX_AGE_MS).slice(-LOG_MAX_ENTRIES);
+    actions = actions.filter((a) => t - Date.parse(a.at) <= LOG_MAX_AGE_MS);
+    // Refusals (anyone on the network can cause them) have a small share of their own, so a flood can never push out sign-ins, tools or changes.
+    let refused = actions.filter((a) => a.kind === 'refused').length - LOG_MAX_REFUSED;
+    if (refused > 0) actions = actions.filter((a) => a.kind !== 'refused' || (refused -= 1) < 0);
+    actions = actions.slice(-LOG_MAX_ENTRIES);
   };
   // The saved log is read once, and ANYTHING that writes or reads waits for it, so a new entry after a restart is added to the old ones, never written over them.
   function loadActions() {
