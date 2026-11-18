@@ -2719,6 +2719,9 @@ function watchRemote() {
   };
   const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
   tick();
+  // START-WAIT: the window opens before the resume of "open to other devices" is done, so for the first 15 s the page asks every second: the banner shows as soon as access is really open
+  const early = setInterval(tick, 1000);
+  setTimeout(() => clearInterval(early), 15000);
   setInterval(tick, 10000);
 }
 
