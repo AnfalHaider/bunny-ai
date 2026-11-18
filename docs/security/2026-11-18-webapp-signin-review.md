@@ -53,3 +53,16 @@ The rules will need to cover:
 - the tunnel's own listener kept separate from the window's 127.0.0.1 server, so tunnel traffic can never be treated as the window;
 - a passcode of 16 or more characters;
 - Everything off for tunnel devices unless the owner agrees again.
+
+## Re-review at b475675: PASS (supersedes the FAIL at 57c11a3)
+
+- **WS-1 fixed.** `prune()` keeps at most `LOG_MAX_REFUSED` = 50 refusals, the newest, dropping the oldest first. It does this before the 500 cap, so refusals can never push other entries out.
+- **My probe on b475675:**
+
+      minutes of refusals from a requester that never signed in: 1440
+      log size: 51; refused entries: 50
+      the Everything device's run_command entry is KEPT
+
+- **Tests:** `webapp-signin` and `remote-access` pass 53 of 53 on an extract with an invented profile. That includes Builder B's new test where a sign-in entry survives 200 refusals.
+
+Verdict: PASS at b475675.
