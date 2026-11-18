@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="./theme-boot.js"></script>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141518" media="(prefers-color-scheme: dark)">
@@ -816,11 +817,22 @@
     });
   }
 
+  // THEME-APPLY: a theme change reaches every part of the window at once: this page (every colour, the code colours too), the chat page behind it (told with the
+  // chosen value, not after the save and a second read), and the desktop window. The save follows; if it fails the old theme comes back.
   theme.addEventListener('change', async () => {
-    applyTheme(theme.value);
-    const s = await save({ theme: theme.value });
-    showAppearance(s);
-    window.parent?.postMessage?.({ type: 'bunny:appearance' }, location.origin);
+    const before = current?.theme ?? 'system';
+    const chosen = theme.value;
+    applyAppearance({ ...current, theme: chosen });
+    window.parent?.postMessage?.({ type: 'bunny:appearance', patch: { theme: chosen } }, location.origin);
+    try {
+      const s = await save({ theme: chosen });
+      showAppearance(s);
+      window.parent?.postMessage?.({ type: 'bunny:appearance' }, location.origin);
+    } catch {
+      theme.value = before;
+      applyAppearance({ ...current, theme: before });
+      window.parent?.postMessage?.({ type: 'bunny:appearance', patch: { theme: before } }, location.origin);
+    }
   });
 
   // ---- profile ----

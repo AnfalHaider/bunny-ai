@@ -3917,13 +3917,37 @@ window.addEventListener('message', async (e) => {
   if (e.origin !== location.origin) return;
   if (e.data?.type === 'bunny:open-section' && typeof e.data.section === 'string') { showSettingsSection(e.data.section); return; }
   if (!['bunny:profile', 'bunny:appearance', 'bunny:settings'].includes(e.data?.type)) return;
+  // THEME-APPLY: Settings says what it just chose; it is applied before anything is read back, so the page behind never lags the window in front.
+  if (e.data.type === 'bunny:appearance' && e.data.patch && typeof e.data.patch === 'object') applyAppearanceNow({ ...state.settings, ...e.data.patch });
   try {
     const settings = await getJSON('/api/settings');
     state.settings = settings;
     applyProfile(settings);
-    applyAppearance(settings);
+    applyAppearanceNow(settings);
   } catch { /* the next open of the window updates it */ }
 });
+
+/** Apply the appearance here and hand it to the Settings frame (a tab that is open already), so every part follows together. */
+function applyAppearanceNow(settings) {
+  applyAppearance(settings);
+  try { $('settings-frame')?.contentWindow?.postMessage({ type: 'bunny:appearance-applied', settings }, location.origin); } catch { /* the frame is empty */ }
+}
+
+// Another copy of Bunny (the desktop window and a browser tab, or two tabs) shares one profile: a theme or font chosen in one reaches the others on their next look.
+const APPEARANCE_KEYS = ['theme', 'interfaceFont', 'responseFont', 'transcriptSize', 'transcriptWidth', 'motion', 'codeFont', 'codeFontSize', 'codeThemeLight', 'codeThemeDark'];
+const appearanceOf = (settings) => JSON.stringify(APPEARANCE_KEYS.map((k) => settings?.[k] ?? null));
+async function followAppearance() {
+  if (document.hidden) return;
+  try {
+    const settings = await getJSON('/api/settings');
+    if (appearanceOf(settings) === appearanceOf(state.settings)) return;
+    state.settings = { ...state.settings, ...settings };
+    applyAppearanceNow(state.settings);
+  } catch { /* offline: the next look */ }
+}
+setInterval(followAppearance, 10000);
+window.addEventListener('focus', followAppearance);
+document.addEventListener('visibilitychange', followAppearance);
 
 // Sections that live on their own page rather than inside settings.html.
 const SETTINGS_PAGES = { providers: './providers.html', automation: './automation.html', customize: './customize.html' };
@@ -3960,7 +3984,7 @@ async function closeSettings() {
     state.settings = settings;
     applyProfile(settings);
     applyCapabilities(settings);
-    applyAppearance(settings);
+    applyAppearanceNow(settings);
     state.language = settings.language ?? 'en';
     applyLanguage(state.language);
     state.providers = await getJSON('/api/providers');

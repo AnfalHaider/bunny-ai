@@ -266,7 +266,30 @@ export function esc(value) {
  * the stylesheet's prefers-color-scheme rules decide.
  */
 export function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === 'light' || theme === 'dark' ? theme : '';
+  const forced = theme === 'light' || theme === 'dark' ? theme : '';
+  document.documentElement.dataset.theme = forced;
+  syncThemeColor(forced);
+  try { forced ? localStorage.setItem('bunny.theme', forced) : localStorage.removeItem('bunny.theme'); } catch { /* storage blocked */ } // theme-boot.js reads it before the next page is drawn
+  tellDesktop(forced || 'system');
+}
+
+const THEME_COLORS = { light: '#faf9f6', dark: '#141518' };
+/** The browser bar colour follows the chosen theme, not only the system's: a chosen theme gets a meta of its own first in the head; "System" removes it so the pages' media rules decide. */
+function syncThemeColor(forced) {
+  const head = document.head;
+  if (!head) return;
+  let meta = document.getElementById('bunny-theme-color');
+  if (!forced) { meta?.remove(); return; }
+  if (!meta) { meta = document.createElement('meta'); meta.id = 'bunny-theme-color'; meta.name = 'theme-color'; head.prepend(meta); }
+  meta.content = THEME_COLORS[forced];
+}
+
+/** The desktop app's window, title bar and browser pane follow the theme too (main process: nativeTheme and the window colours). Once per change. */
+let toldDesktop = null;
+function tellDesktop(theme) {
+  if (toldDesktop === theme) return;
+  toldDesktop = theme;
+  try { desktopBridge()?.setTheme?.(theme); } catch { /* an older shell without it: the window follows the system */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -346,6 +369,12 @@ export function applyAppearance(settings = {}) {
   const custom = Boolean(CODE_THEMES[id]) && !String(id).startsWith('bunny-');
   for (const [name, value] of Object.entries(codeThemeVars(id, dark))) set(name, custom ? value : null);
 }
+
+// A page that is open already (a Settings tab in its frame) follows a change made elsewhere at once: the chat page sends the settings it applied.
+window.addEventListener?.('message', (e) => {
+  if (e.origin !== location.origin || e.data?.type !== 'bunny:appearance-applied' || !e.data.settings || e.source === window) return;
+  applyAppearance(e.data.settings);
+});
 
 // Following the system theme: the code colours switch with it.
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyAppearance(lastAppearance));
