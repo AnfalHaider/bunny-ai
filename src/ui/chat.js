@@ -25,7 +25,7 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
-import { chooseLevel, everythingDevices, isSettingChange, paintStatus, settingNotice } from './device-access.js';
+import { chooseLevel, isSettingChange, paintStatus, settingNotice } from './device-access.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
@@ -2623,7 +2623,7 @@ function watchRemote() {
   // DEVICE-FULL: when a device with Everything changes a setting, a notice says so (from the same window-only log Activity reads: names only). Entries older than the first look are not announced.
   let seenAt = null;
   const announceChanges = async (s) => {
-    if (seenAt !== null && !everythingDevices(s).length) return;
+    // always while access is on: a device may change a setting and be signed out (or time out) before the next look, and that must still be announced
     try {
       const entries = (await getJSON('/api/remote/log')).entries ?? [];
       const first = seenAt === null;

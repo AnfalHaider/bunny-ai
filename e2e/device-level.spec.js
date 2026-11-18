@@ -157,6 +157,18 @@ for (const scheme of ['light', 'dark']) {
       await expect(frame.getByRole('listitem').first()).toContainText('Setting changed');
     });
 
+    test('a setting change is announced even if the device has signed out (or timed out) by the next look', async ({ page }) => {
+      const log = { entries: LOG };
+      const devices = [{ ...PHONE, asked: true }, LAPTOP];
+      await windowWith(page, devices, { log });
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: status(devices) }) : r.continue()));
+      await page.goto('/src/ui/index.html');
+      await expect(page.locator('#remote-bar')).toContainText('Kitchen laptop has Everything');
+      log.entries = [{ at: '2026-11-18T09:40:00.000Z', device: LAPTOP.id, label: LAPTOP.label, level: 'everything', kind: 'route', method: 'PUT', path: '/api/settings' }, ...LOG];
+      devices.splice(1, 1); // the laptop is signed out before the window next looks
+      await expect(page.locator('#device-notice')).toContainText('Kitchen laptop changed a setting', { timeout: 15000 });
+    });
+
     test('a narrow window: the devices list wraps and nothing scrolls sideways', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 800 });
       await windowWith(page, [{ ...PHONE, asked: true }, LAPTOP]);
