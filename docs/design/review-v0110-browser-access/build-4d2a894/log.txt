@@ -51,7 +51,7 @@ device after answering: []
 device capability(code_mode) card: []
 device capability(computer_use) card: []
 PC tab picker: "Filters | Auto | Best available for chat, then the next if it fails | Best for Chat | Bunny Code (offline) | offline/bunny-code · Code | Scripted | 200K | Details › | Bunny Large (offline) | offline/bunny-large | Scripte"
-PC tab after "pick a colour": {"cards":[],"tail":"we making today, Anfal? | Type below. I'll do the hopping. |  | Pick a model, then type below. |  | Send | Manual | Change this in Bunny's window. | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | | | offline/bunny-code | Scripted | Enter sends · Shift+Enter new line · /compact frees context"}
+PC tab after "pick a colour": {"cards":[],"tail":"we making today, Sam? | Type below. I'll do the hopping. |  | Pick a model, then type below. |  | Send | Manual | Change this in Bunny's window. | Ask each time | Accept edits | Plan mode | Auto | | | Low | Medium | High | Max | | | Auto · Chat | | | offline/bunny-code | Scripted | Enter sends · Shift+Enter new line · /compact frees context"}
 device picker: "no panel"
 device no model row: TimeoutError: locator.click: Timeout 4000ms exceeded.
 Call l
