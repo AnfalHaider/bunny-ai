@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - Published v0.1.12
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-18) "Then push 0.1.12 immediately after.", after the Chief had told the owner the web app was built and waiting for v0.1.12; the web-app drawing was approved with "Approved". The words name 0.1.12 and "push", not the word "release"; I took "push 0.1.12" as the release word because it names the version and the Chief relayed it as the release. Shas, pasted gate (9/9 at eba5478) and the sign-off row were in the relay.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at a29a5db = origin/main.
+- `npm ci`, `npm run dist` -> build-sha a29a5db, tree clean, `latest.yml` 0.1.12 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.12-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.12-notes.md` ran 09:04 to 09:13 (GitHub publishedAt 2026-11-18T04:13:41Z) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.12
+- Checks: not draft, not prerelease; .exe 122431635, .blockmap 128894, latest.yml 348; tag v0.1.12 -> a29a5db; feed serves 0.1.12. Downloaded the uploaded .exe: sha256 7b2318dd35bd93fa2e9b693b93f2fc70b9218521902435681a087133848ef9d0 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.13) with 0.1.11's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
 ## 2026-11-18 - Published v0.1.11
 
 **Word:** the Chief of Staff's 7E relay: the owner answered "Yes, release v0.1.11" to "Release v0.1.11 (the row fix, the chip fix and the web app) once it passes every check?", then "i am driving , push and release." and "push and release when ready". The web app moved to v0.1.12. The relay had the shas, the pasted gate (9/9 at 28812e1) and the sign-off row; I accepted it at once.
