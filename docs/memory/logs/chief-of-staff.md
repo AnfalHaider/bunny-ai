@@ -2,6 +2,34 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - v0.1.10 published
+
+**Owner's words (typed in this chat):** "Both artifacts approved, now fix all issues discussed and pending gaps. Then push the update and release. Ensure all issue are fixed in this build."; "Browser option tonight everything in the same build"; "I want the full chats from the devices also."; "We are not signing the code."; "Proceed with recommendation." (minimatch).
+
+- v0.1.10 is published at https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.10.
+  - The tag points at db4ab9a; the code is 975970a, plus a docs-only merge at 807176d.
+  - Published at 2026-11-18T01:18:36Z.
+  - The installer is 122,362,712 bytes, with sha256 82153b85…cd766. Its sha512 matches latest.yml. I checked the feed myself: version 0.1.10.
+- Gate 9/9 at 975970a: e2e 270/270. Six PASS sign-offs at 807176d.
+- What's in it:
+  - the Settings bridge;
+  - SB-1/SB-2;
+  - Quick Ask answers in the bar;
+  - the model chip;
+  - Bunny in the browser, with LAN devices and full chats (R1-R9, a tool allow-list, RA-1, F-1/F-2);
+  - W2-9 worktrees, with git hardening through 4f63b27;
+  - W6-11;
+  - S-3, S-5..S-7;
+  - QA's gaps and RUN;
+  - the minimatch exceptions.
+- Out: K-5. Of its 16 files, 14 pass; guard-next-a2 has 1 failure to name.
+- Problems along the way:
+  - The pre-push check counts merge commits as code (`diff-tree -m`). My first push merged the reviewers' branches and was refused. Fixed by resetting local main, getting the sign-offs re-signed at 807176d on docs-only branches, and cherry-picking them.
+  - The write guard blocks the Chief copying another role's sign-off by path.
+  - Release Ops can't read the evidence folder, so I paste the gate output.
+
+Lesson: bring sign-offs in as one docs-only commit per reviewer, cut from the exact sha main will carry, and never merge reviewer branches into main. A merge of main into anything makes a "code commit" that needs its own sign-offs.
+
 ## 2026-11-17 - Kit 0.6.0 landed; v0.1.8 shipped as "what is done"; extra sessions retired
 
 **Owner's words (typed in this chat):** "apply the kit upgrade when ready ... proceed with building the complete 0.1.8"
