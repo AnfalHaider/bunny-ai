@@ -59,9 +59,14 @@ let chatReady = false; // there is a chat to open in Bunny (an answer, or an err
 let modelLine = ''; // "Answers with Auto · text only", when the app told us
 const turns = []; // earlier questions and answers of this chat, folded above the current one
 
+// What the card on screen allows: '' (an answer, a follow-up is possible), 'settings' (no model: the card's only action is Open Bunny settings), 'chat' (a card that can open the chat in Bunny)
+let cardKind = '';
+
 function keysText() {
   if (!asked) return 'Enter to send · Shift+Enter new line · Esc to close';
   if (answering) return 'Esc stops the answer · it stays in the chat';
+  if (cardKind === 'settings') return 'Esc closes'; // nothing else works until a model is connected: no follow-up, no chat to open
+  if (cardKind === 'chat') return 'Ctrl+Enter opens it in Bunny · Esc closes'; // a problem or "this needs Bunny's window": no follow-up, the card has the buttons
   return 'Enter sends a follow-up · Ctrl+Enter opens it in Bunny · Esc closes';
 }
 
@@ -257,6 +262,8 @@ function enterPanel(q) {
   $('ans').replaceChildren();
   $('latest').hidden = true;
   $('card').hidden = true; $('card').replaceChildren();
+  cardKind = '';
+  $('foot').hidden = false;
   $('meta').hidden = true;
   const thinking = document.createElement('div'); thinking.className = 'think'; thinking.id = 'busy';
   const spin = document.createElement('span'); spin.className = 'spin'; thinking.append(spin, document.createTextNode('Bunny is thinking…'));
@@ -288,6 +295,9 @@ function card(kind, title, bodyText, acts) {
   box.append(t, b, row);
   c.append(box);
   c.hidden = false;
+  if (!cardKind) cardKind = 'chat';
+  $('foot').hidden = true; // in a problem state the card is the whole panel: no follow-up field and no second "Open in Bunny" under it
+  refreshButtons();
   scheduleFit();
   row.querySelector('button')?.focus(); // after an error the focus is on the card's main button
 }
@@ -319,7 +329,7 @@ function onAnswer(event) {
     const why = typeof event.message === 'string' ? event.message : '';
     if (event.kind === 'offline') card('warn', 'You are offline', 'Bunny could not reach a model. Your question is kept. Try again when the network is back, or open Bunny and it will send the question when it is.', [again, openBunny]);
     // no provider yet: Try again cannot work until one exists, so the card leads with the way to set one up
-    else if (event.kind === 'none') card('bad', 'Bunny could not answer', "No model is connected yet. Connect a provider in Bunny's settings, then ask again.", [['Open Bunny settings', () => openInBunny('settings'), 'fill']]);
+    else if (event.kind === 'none') { cardKind = 'settings'; chatReady = false; card('bad', 'Bunny could not answer', "No model is connected yet. Connect a provider in Bunny's settings, then ask again.", [['Open Bunny settings', () => openInBunny('settings'), 'fill']]); }
     else card('bad', 'Bunny could not answer', why || 'Something went wrong. Try again.', [again, openBunny]);
   }
 }
