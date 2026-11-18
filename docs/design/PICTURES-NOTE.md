@@ -1,0 +1,3 @@
+# A note on the pictures in the review folders
+
+PRIV rule (2026-11-18): no real name in the repo. Some invented-profile pictures taken before PRIV-2 showed the app greeting with the Windows user name. In 38 of them (the picker, Thinking, window-status and phone-question pictures in review-head-795a8a2, review-v0110-browser-access, review-v0110-model-selector and review-w413b-build) the headline of that greeting is covered by a plain band in the background colour; the line under it is untouched. Nothing else in those pictures was changed. The pictures already on main were checked and show only invented names (Pat, Ada, Alex).
