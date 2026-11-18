@@ -22,6 +22,7 @@ test('each moved setting is in its new tab, no longer in its old one, and still 
     await page.goto(PAGE(m.from));
     await expect(page.locator(`section[data-section="${m.from}"] ${m.control}`), `${m.name} not in ${m.from}`).toHaveCount(0);
   }
+  await expect(page.locator('section[data-section="appearance"] .row:has([data-key="transcriptView"]) .desc')).toHaveText("How much detail chats show. Thinking opens the model's thinking; Verbose also shows longer step results (up to 8,000 characters).");
   // next to transcript size and width
   await page.goto(PAGE('appearance'));
   const names = await page.locator('section[data-section="appearance"] .row .name').allTextContents();
