@@ -177,7 +177,11 @@ function readBody(req, max = MAX_BODY) {
 }
 
 /** The signed-in Windows user's name, capitalised (a name such as "ada" becomes "Ada"); empty when unknown. */
-function systemUserName() {
+export function systemUserName(env = process.env) {
+  // PRIV-2: an invented profile (BUNNY_DATA_DIR / BUNNY_FAKE_UPSTREAM) never reads the OS user name, so pictures and tests carry no real name.
+  const forced = String(env.BUNNY_DISPLAY_NAME ?? '').trim().split(/\s+/)[0];
+  if (forced) return forced;
+  if (env.BUNNY_DATA_DIR || env.BUNNY_FAKE_UPSTREAM) return 'Sam';
   try {
     const raw = String(userInfo().username ?? '').replace(/[._-]+/g, ' ').trim().split(/\s+/)[0] ?? '';
     return raw ? raw[0].toUpperCase() + raw.slice(1) : '';
@@ -746,7 +750,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
-    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName() }); // R4: a device reads display settings only
+    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
