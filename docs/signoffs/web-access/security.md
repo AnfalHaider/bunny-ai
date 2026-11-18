@@ -1,9 +1,9 @@
 ---
 piece: web-access
 role: security
-sha: 0f24a08
+sha: 75912d6
 verdict: PASS
 date: 2026-11-18
 ---
 
-0f24a08: search titles/snippets one line, links with whitespace/control chars not listed; WA-1/WA-2 unchanged; 22/22 tests; note CRLF rewrite of appTools.js
+75912d6: appTools.js back to LF, no code change vs 0f24a08 (ignore-cr diff empty); 9/9 web-access tests

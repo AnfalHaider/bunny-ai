@@ -101,3 +101,12 @@ Verdict: PASS at a49d800.
 - **Tests:** `web-access`, `web-access-ssrf`, `quick-ask-answers-server` and `agent-tools` pass 22 of 22 on an extract with an invented profile. The structured `{ text, links }` result isn't required.
 
 Verdict: PASS at 0f24a08.
+
+## Re-stamp at 75912d6: PASS (supersedes 0f24a08)
+
+- 75912d6 only restores LF in `src/server/appTools.js`. `git diff --ignore-cr-at-eol 0f24a08 75912d6` is empty.
+- Against a49d800, the source change is 2 insertions and 1 deletion in `appTools.js`, plus 15 test lines.
+- `test/web-access-ssrf.test.js` is still CRLF (from 0f24a08). That's cosmetic, for Builder B to tidy.
+- `web-access-ssrf` and `web-access` pass 9 of 9 on an extract with an invented profile.
+
+Verdict: PASS at 75912d6.
