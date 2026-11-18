@@ -140,6 +140,17 @@ try {
   await dev.screenshot({ path: join(OUT, 'device-chat-phone.png') });
   const chipText = await dev.locator('#picker-button').textContent();
   console.log('INFO  6.3b the device chip for a chat whose model is set in the window shows: ' + JSON.stringify(chipText));
+  // the device sets its chat's permission mode in the real page (menu), and the server has it
+  const modeOf = async () => (await adminJson('/api/sessions/' + made.id)).json?.permissionMode;
+  await dev.locator('#mode-menu').evaluate((el) => el.hidden).catch(() => {});
+  await dev.locator('#mode-button').click(); await dev.waitForTimeout(300);
+  const items = await dev.locator('#mode-menu [role="menuitem"], #mode-menu button').allInnerTexts();
+  const plan = dev.locator('#mode-menu').getByText(/Plan/).first(); if (await plan.count()) await plan.click(); await dev.waitForTimeout(900);
+  const afterPlan = await modeOf(); const errAfter = await dev.locator('#error').innerText().catch(() => '');
+  check('6.4d', 'a device sets its chat to Plan mode from the menu in the real page: the server has it and no refusal sentence is shown', afterPlan === 'plan' && !errAfter.includes(SENTENCE), 'server: ' + afterPlan + '; menu: ' + items.join('/').slice(0, 80) + '; error: ' + errAfter.slice(0, 60));
+  await dev.locator('#mode-button').click(); await dev.waitForTimeout(300);
+  const ask = dev.locator('#mode-menu').getByText(/Manual/).first(); if (await ask.count()) await ask.click(); await dev.waitForTimeout(900);
+  check('6.4e', 'and back to Ask each time', (await modeOf()) === 'ask', String(await modeOf()));
   await dev.fill('#input', 'please WRITE a note'); await dev.locator('#send').click();
   const allow = dev.locator('.permission-prompt button', { hasText: /^Allow/ }).first();
   await allow.waitFor({ timeout: 15000 }).catch(() => {});
