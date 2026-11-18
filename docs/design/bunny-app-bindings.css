@@ -263,6 +263,8 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
 .picker-trigger .chip-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: hsl(var(--chip-hue, 200) 60% 50%); }
 .picker-trigger .chip-free { flex: none; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: var(--fw-medium); }
 .picker-trigger .meta { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.picker-trigger.is-auto .label { flex: none; overflow: visible; } /* "Auto" is never cut to "A…": the chosen model after it takes the ellipsis, at its end */
+.composer-row .picker-trigger { max-width: min(340px, 46vw); }
 .picker-handle, .picker-scrim { display: none; }
 .picker-trigger .label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .picker-trigger .meta { color: var(--text-faint); white-space: nowrap; }
@@ -1207,8 +1209,7 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 
 /* v0.1.10 phone: the model selector is a bottom sheet with a grab handle over a dimmed page */
 @media (max-width: 600px) {
-  .composer-row .picker-trigger { max-width: 150px; padding: 0 var(--sp-4); }
-  .composer-row .picker-trigger .label { max-width: 10ch; }
+  .composer-row .picker-trigger { max-width: 55vw; padding: 0 var(--sp-4); } /* a long model name reads about 18 characters; the mic, + and Send keep their room (the chip shrinks first) */
   .composer-row .picker-trigger .chip-free { display: none; }
   .picker-scrim { display: block; position: fixed; inset: 0; z-index: calc(var(--z-menu) - 1); background: rgba(0, 0, 0, .4); }
   .picker-panel {
@@ -1218,3 +1219,10 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
   }
   .picker-handle { display: block; flex: none; width: 40px; height: 5px; margin: 2px auto var(--sp-4); border: 0; border-radius: 999px; background: var(--line-strong, var(--line)); padding: 0; cursor: pointer; }
 }
+
+/* v0.1.11: the "Open to other devices" line is part of the page's layout, not a layer over a window-high app: the app takes the height that is left,
+   so the row under the composer and the sidebar's profile row are never pushed off the bottom (the owner's report) */
+body:has(> #remote-bar) { display: flex; flex-direction: column; }
+body:has(> #remote-bar) > #remote-bar { flex: none; }
+body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
+
