@@ -1,0 +1,12 @@
+390x780-light-picked {"chipW":215,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+390x780-light-auto {"chipW":215,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+390x780-dark-picked {"chipW":215,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+390x780-dark-auto {"chipW":215,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-light-picked {"chipW":176,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-light-auto {"chipW":176,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-dark-picked {"chipW":176,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-dark-auto {"chipW":176,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+600x800-light-picked {"chipW":226,"chipPct":"38%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+600x800-light-auto {"chipW":266,"chipPct":"44%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+600x800-dark-picked {"chipW":226,"chipPct":"38%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+600x800-dark-auto {"chipW":266,"chipPct":"44%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
