@@ -1775,6 +1775,10 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .account-check { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--text-dim); }
 
 /* a new version is ready */
+/* Installed app on a phone (viewport-fit=cover): the header grows by the top inset and the composer sits above the bottom inset */
+.topbar { height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); }
+.dock { padding-bottom: calc(var(--sp-7) + env(safe-area-inset-bottom, 0px)); }
+
 .update-banner { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-8); background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
 .update-banner[hidden] { display: none; }
 .update-banner #update-text { flex: 1; }
