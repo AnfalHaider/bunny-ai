@@ -99,7 +99,7 @@ export function chooseLevel(doc, { label, current = 'chats', first = true } = {}
     const group = make(doc, 'div', { role: 'radiogroup', 'aria-label': 'What this device may do', style: 'display:grid;gap:8px' });
     const warn = make(doc, 'div');
     const acts = make(doc, 'div', { style: 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px' });
-    const notNow = make(doc, 'button', { type: 'button', class: 'btn', id: 'level-not-now', text: 'Not now' });
+    const notNow = make(doc, 'button', { type: 'button', class: 'btn', id: 'level-not-now', text: 'Not now', style: `background:var(--surface,#fff);border:1px solid ${LINE};color:var(--text,#1f2023)` });
     const go = make(doc, 'button', { type: 'button', class: 'btn', id: 'level-go' });
     const options = {};
     const paint = () => {
@@ -112,7 +112,9 @@ export function chooseLevel(doc, { label, current = 'chats', first = true } = {}
       warn.replaceChildren();
       if (picked === 'everything') warn.append(warningBox(doc, { title: 'Before you give Everything', idle: true }));
       go.textContent = picked === 'everything' ? 'Give Everything' : (first ? 'Keep Chats' : 'Use Chats');
-      go.style.cssText = picked === 'everything' ? `border-color:${BAD};color:${BAD}` : 'background:var(--ink,#1f2023);color:var(--on-ink,#faf9f6);border-color:var(--ink,#1f2023)';
+      // as drawn (btn pri / btn bad): Keep Chats is the filled dark button; Give Everything, the one dangerous choice, is the red-outlined one on the surface colour, never filled
+      go.className = picked === 'everything' ? 'btn bad' : 'btn pri';
+      go.style.cssText = picked === 'everything' ? `background:var(--surface,#fff);border:1px solid ${BAD};color:${BAD}` : 'background:var(--ink,#1f2023);color:var(--on-ink,#faf9f6);border:1px solid var(--ink,#1f2023)';
     };
     for (const level of ['chats', 'everything']) {
       const input = make(doc, 'input', { type: 'radio', name: 'device-level', value: level, style: 'margin-top:3px' });

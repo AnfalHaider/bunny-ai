@@ -55,11 +55,20 @@ for (const scheme of ['light', 'dark']) {
       await expect(dialog.getByRole('radio', { name: /Chats/ })).toBeChecked();
       await expect(dialog.locator('.everything-warning')).toHaveCount(0);
       await expect(page.locator('#level-go')).toHaveText('Keep Chats');
+      await expect(page.locator('#level-go')).toHaveClass('btn pri'); // the filled dark button, as drawn
       await shot(page, 'first-signin-chats', scheme);
       await dialog.getByRole('radio', { name: /Everything/ }).check();
       await expect(dialog.locator('.everything-warning')).toContainText(WARNING);
       await expect(dialog.locator('.everything-warning')).toContainText('Ends after 30 minutes idle. Everything ends by itself after 30 minutes without use, and when the device signs out or Bunny restarts.');
       await expect(page.locator('#level-go')).toHaveText('Give Everything');
+      await expect(page.locator('#level-go')).toHaveClass('btn bad'); // the red-outlined button, as drawn: never the filled dark one
+      await page.waitForTimeout(500); // the button's colours fade (a short transition)
+      const look = await page.locator('#level-go').evaluate((el) => { const c = getComputedStyle(el); const root = getComputedStyle(document.documentElement); return { border: c.borderTopColor, width: c.borderTopWidth, color: c.color, bg: c.backgroundColor, ink: root.getPropertyValue('--ink').trim() }; });
+      expect(look.width).toBe('1px');
+      expect(look.border).toBe(look.color); // the outline and the words are the same red
+      expect(look.border).not.toBe(look.bg);
+      expect(look.bg).not.toBe('rgb(31, 32, 35)'); // not the dark ink fill
+      expect(look.bg).not.toBe('rgb(236, 236, 238)'); // not the light ink fill in dark mode
       expect(patches).toEqual([]); // nothing is given by choosing
       await shot(page, 'first-signin-everything', scheme);
       await page.locator('#level-go').click();
