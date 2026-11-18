@@ -19,3 +19,13 @@ test('a failed clear is not marked done, so the next start tries again', async (
   assert.equal(await clearOldWorkersOnce({ session: { clearStorageData: async () => { throw new Error('x'); } }, flagFile: 'f', fs }), false);
   assert.equal(files.size, 0);
 });
+
+test('a clear that never finishes does not hold anything up: it gives up at the timeout and the flag stays unset', async () => {
+  const files = new Set();
+  const fs = { existsSync: (f) => files.has(f), writeFileSync: (f) => files.add(f) };
+  const started = Date.now();
+  const ran = await clearOldWorkersOnce({ session: { clearStorageData: () => new Promise(() => {}) }, flagFile: 'f', fs, timeoutMs: 50 });
+  assert.equal(ran, false);
+  assert.ok(Date.now() - started < 1000, 'returned within the timeout');
+  assert.equal(files.size, 0, 'no flag, so the next start retries');
+});
