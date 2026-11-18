@@ -1295,8 +1295,9 @@
       $('remote-state').textContent = s.enabled ? 'on' : 'off';
       $('remote-setup').hidden = s.enabled || !$('remote-setup').dataset.open;
       $('remote-open').hidden = !s.enabled;
-      $('remote-not-opened').textContent = s.notOpened || ''; // RS-4: one plain sentence when Bunny stayed closed at start
-      $('remote-not-opened').hidden = !s.notOpened || s.enabled;
+      const heldNote = s.notOpened || s.reopenNote || ''; // RS-4: one plain sentence when Bunny stayed closed at start, or will not reopen by itself
+      $('remote-not-opened').textContent = heldNote;
+      $('remote-not-opened').hidden = !heldNote;
       $('remote-status').hidden = !s.enabled;
       if (s.enabled) paintStatus(document, $('remote-status'), s, ' (back to Ask when it signs out)'); else $('remote-status').textContent = '';
       if (!s.enabled) { generated = ''; return; }

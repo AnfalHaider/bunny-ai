@@ -182,6 +182,13 @@ for (const scheme of ['light', 'dark']) {
       await shot(page, 'settings-not-opened', scheme);
     });
 
+    test('RS4-a: while access is on but Bunny could not name the network, the row says it will not reopen by itself after a restart', async ({ page }) => {
+      await page.addInitScript(() => { window.bunnyDesktop = { getPrefs: async () => ({}), setPrefs: async () => ({}), openInBrowser: async () => ({}) }; });
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { enabled: true, url: 'http://192.168.1.24:52814/', signedIn: 0, autoChats: [], devices: [], hasPasscode: true, notOpened: '', reopenNote: 'Bunny could not tell which network this is, so it will not reopen by itself after a restart.' } }) : r.continue()));
+      await page.goto('/src/ui/settings.html?embed=1&section=desktop');
+      await expect(page.locator('#remote-not-opened')).toHaveText('Bunny could not tell which network this is, so it will not reopen by itself after a restart.');
+    });
+
     test('a narrow window: the devices list wraps and nothing scrolls sideways', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 800 });
       await windowWith(page, [{ ...PHONE, asked: true }, LAPTOP]);

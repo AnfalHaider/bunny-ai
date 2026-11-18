@@ -86,7 +86,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -3482,6 +3482,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   let lanServer = null;
   // REMOTE-STAY: whether device access is on is kept in the data folder (never the passcode: only the hash file remote-access.json has that), so it stays on across restarts until the person turns it off.
   const remoteStateFile = join(dataDir, 'remote-state.json');
+  let rememberedNetwork = null; // the network name access was turned on with (null: it could not be read)
   let notOpened = ''; // why Bunny did not open it again at start (one plain sentence for the Settings row), until it is turned on or off
   const NOT_BUNNY_REMOTE = 'That request did not come from a device signed in to Bunny AI.';
 
@@ -3496,6 +3497,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       hasPasscode: await remote.hasPasscode(),
       networkAddress: lanAddressOverride ?? findLanAddress(),
       minPasscode: 12,
+      // RS4-a: on Windows, when the network could not be named at turn-on, say on the row that it will not reopen by itself
+      reopenNote: remote.enabled && process.platform === 'win32' && !rememberedNetwork?.name ? NOT_OPENED_UNKNOWN_NETWORK : '',
       notOpened, // RS-4: said on the "Allow other devices" row when Bunny stayed closed at start
       autoChats: (await sessions.list()).filter((s) => s.remoteAuto).map((s) => ({ id: s.id, title: s.title })), // R6: chats a device has put on Auto
     };
@@ -3522,7 +3525,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     const started = await openLan(lan, passcode);
     if (!started.ok) return sendJson(res, started.status ?? 400, { code: started.code ?? 'remote.passcode', message: started.message });
     notOpened = '';
-    await writeJson(remoteStateFile, { enabled: true, address: lan, network: await networkProfile(lan).catch(() => null) }); // what it was turned on with: the network is checked against it at the next start (RS-4)
+    rememberedNetwork = await networkProfile(lan).catch(() => null);
+    await writeJson(remoteStateFile, { enabled: true, address: lan, network: rememberedNetwork }); // what it was turned on with: the network is checked against it at the next start (RS-4)
     return sendJson(res, 200, { ...(await remoteStatus()), ...(generated ? { generatedPasscode: generated } : {}) });
   }
 
@@ -3551,11 +3555,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     if (saved?.enabled !== true || remote.enabled) return { resumed: false };
     if (!(await remote.hasPasscode())) { notOpened = NOT_OPENED_NO_PASSCODE; return { resumed: false, reason: notOpened }; }
     const lan = lanAddressOverride ?? findLanAddress();
-    const verdict = canReopen(saved, lan, lan ? await networkProfile(lan).catch(() => null) : null);
+    const verdict = canReopen(saved, lan, lan ? await networkProfile(lan).catch(() => null) : null, process.platform);
     if (!verdict.ok) { notOpened = verdict.reason; return { resumed: false, reason: notOpened }; }
     const opened = await openLan(lan, null).catch((err) => ({ ok: false, message: err.message }));
     if (!opened.ok) { notOpened = 'Not opened: ' + String(opened.message ?? 'it could not start').replace(/^Bunny could not open to other devices: /, '') + ' Turn it on again to allow it.'; return { resumed: false, reason: notOpened }; }
     notOpened = '';
+    rememberedNetwork = saved.network ?? null;
     return { resumed: true, url: lanUrl() };
   }
 

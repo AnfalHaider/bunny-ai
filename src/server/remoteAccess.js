@@ -16,6 +16,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { networkInterfaces } from 'node:os';
 import { execFile } from 'node:child_process';
+import { powershellPath, safeEnv } from './safeExec.js';
 
 export const MIN_PASSCODE = 12;
 export const COOKIE = 'bunny_remote';
@@ -72,6 +73,8 @@ export async function verifyPasscode(passcode, record) {
 
 /** REMOTE-STAY (RS-4): the one plain sentence on the "Allow other devices" row when Bunny does not open it again at start. */
 export const NOT_OPENED_NETWORK = "Not opened: this network isn't the one you turned it on with. Turn it on again to allow it here.";
+/** RS4-a: on Windows, when Bunny could not tell which network it was turned on with, it does not reopen by itself. Said on the row while it is on, and again at start. */
+export const NOT_OPENED_UNKNOWN_NETWORK = 'Bunny could not tell which network this is, so it will not reopen by itself after a restart.';
 export const NOT_OPENED_NO_NETWORK = 'Not opened: no local network was found. Turn it on again when you are connected.';
 export const NOT_OPENED_NO_PASSCODE = 'Not opened: the saved passcode was not found. Turn it on again and choose one.';
 
@@ -80,11 +83,13 @@ const subnet24 = (a) => String(a ?? '').split('.').slice(0, 3).join('.');
 /**
  * RS-4: may Bunny open to other devices again at start? Only on the network access was turned on with, or on one Windows calls Private.
  * `saved` is what was kept when it was turned on ({ address, network: { name, category } | null }); `profile` is what the network is called now ({ name, category } | null).
- * A saved network name that cannot be read now means closed. With no saved name at all (not Windows), the same /24 as the saved address stands for "the same network".
+ * A saved network name that cannot be read now means closed, and on Windows so does no saved name at all (RS4-a). With no saved name on another system, the same /24 as the saved address stands for "the same network".
  */
-export function canReopen(saved, lan, profile) {
+export function canReopen(saved, lan, profile, platform = process.platform) {
   if (!lan) return { ok: false, reason: NOT_OPENED_NO_NETWORK };
   if (profile?.category === 'Private') return { ok: true };
+  // RS4-a: on Windows a network is always named, so a missing saved name means it could not be read when access was turned on: closed (the /24 is only for systems that have no names)
+  if (platform === 'win32' && !saved?.network?.name) return { ok: false, reason: NOT_OPENED_UNKNOWN_NETWORK };
   // A network name was saved: it has to be read now and be the same (fail closed when Windows cannot say). Only when none was ever known (not Windows) does the same /24 stand for it.
   const same = saved?.network?.name ? profile?.name === saved.network.name : Boolean(saved?.address) && subnet24(saved.address) === subnet24(lan);
   return same ? { ok: true } : { ok: false, reason: NOT_OPENED_NETWORK };
@@ -96,8 +101,9 @@ export async function networkProfileOf(address, { interfaces = networkInterfaces
   const alias = Object.entries(interfaces).find(([, list]) => (list ?? []).some((i) => i.address === address))?.[0];
   if (!alias) return null;
   const ask = run ?? ((alias2) => new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-NetConnectionProfile -InterfaceAlias $env:BUNNY_NET_ALIAS | Select-Object -First 1 Name,NetworkCategory | ConvertTo-Json -Compress'],
-      { timeout: 5000, windowsHide: true, env: { ...process.env, BUNNY_NET_ALIAS: alias2 } }, (err, out) => resolve(err ? null : String(out)));
+    // RS4-b: PowerShell by its full path and the safe environment (the W29-1 pattern), not a bare name with the whole environment
+    execFile(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-NetConnectionProfile -InterfaceAlias $env:BUNNY_NET_ALIAS | Select-Object -First 1 Name,NetworkCategory | ConvertTo-Json -Compress'],
+      { timeout: 5000, windowsHide: true, env: safeEnv({ BUNNY_NET_ALIAS: alias2 }) }, (err, out) => resolve(err ? null : String(out)));
   }));
   try {
     const parsed = JSON.parse(String(await ask(alias)).trim());

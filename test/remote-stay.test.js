@@ -6,13 +6,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../src/server/app.js';
 import { memorySecretStore } from '../src/providers/connections.js';
-import { NOT_OPENED_NETWORK, NOT_OPENED_NO_NETWORK, canReopen, networkProfileOf } from '../src/server/remoteAccess.js';
+import { NOT_OPENED_NETWORK, NOT_OPENED_NO_NETWORK, NOT_OPENED_UNKNOWN_NETWORK, canReopen, networkProfileOf } from '../src/server/remoteAccess.js';
 
 // REMOTE-STAY (HIGH; the owner: "stay after restart"): once device access is on it stays on across restarts until the person turns it off. Security's RS-1..RS-6.
 const PASS = 'correct horse battery staple';
 
 /** Bunny started: the window's server on `port` (0 = any), the way the shell does, then resumeRemote(). */
-async function start(t, dataDir, { port = 0, resume = true, lanAddress = '127.0.0.2', networkProfile = async () => null } = {}) {
+async function start(t, dataDir, { port = 0, resume = true, lanAddress = '127.0.0.2', networkProfile = async () => ({ name: 'Test network', category: 'Public' }) } = {}) { // Windows always names its network (RS4-a)
   const app = await createApp({ dataDir, fake: true, secretStore: memorySecretStore(), localGuard: false, lanAddress, networkProfile });
   await new Promise((resolve) => app.server.listen(port, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => { app.remote.disable(); app.server.close(() => resolve()); }));
@@ -151,9 +151,16 @@ test('REMOTE-STAY RS-4: canReopen, the rules: same network name (closed when it 
   assert.equal(canReopen(saved, '10.0.0.5', { name: 'Elsewhere', category: 'Private' }).ok, true);
   assert.equal(canReopen(saved, null, null).reason, NOT_OPENED_NO_NETWORK);
   assert.equal(canReopen(saved, '192.168.1.99', null).ok, false, 'a saved name that cannot be read now: closed, even on the same /24');
-  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.1.99', null).ok, true, 'no name was ever known (not Windows): the same /24');
-  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.7.99', null).ok, false);
+  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.1.99', null, 'linux').ok, true, 'no name was ever known (not Windows): the same /24');
+  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.7.99', null, 'linux').ok, false);
   assert.equal(canReopen({}, '192.168.1.99', null).ok, false, 'nothing known about the saved network: closed');
+  // RS4-a: on Windows a missing saved name is closed, even in the same /24 on a Public network (a cafe)
+  const cafe = { name: 'Cafe', category: 'Public' };
+  assert.deepEqual(canReopen({ address: '192.168.1.24', network: null }, '192.168.1.99', cafe, 'win32'), { ok: false, reason: NOT_OPENED_UNKNOWN_NETWORK });
+  assert.equal(canReopen({ address: '192.168.1.24' }, '192.168.1.99', null, 'win32').ok, false);
+  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.1.99', cafe, 'linux').ok, true, 'the /24 stays only off Windows');
+  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '10.0.0.5', { name: 'x', category: 'Private' }, 'win32').ok, true, 'Private is still fine');
+  assert.equal(NOT_OPENED_UNKNOWN_NETWORK, 'Bunny could not tell which network this is, so it will not reopen by itself after a restart.');
 });
 
 test('REMOTE-STAY: what Windows calls the network is read for the interface that has the address (numbers or words), and nothing is asked on another system or when it cannot be read', async () => {
@@ -176,4 +183,24 @@ test('REMOTE-STAY: a saved "on" with no passcode file stays closed and says so; 
   const second = await start(t, dataDir);
   assert.equal(second.resumed.resumed, false);
   assert.match((await status(second.base)).notOpened, /^Not opened: the saved passcode was not found\./);
+});
+
+test('REMOTE-STAY RS4-a: on Windows, if the network could not be named when access was turned on, the row says it will not reopen by itself, and after a restart it stays closed (even on a Public network in the same /24)', { skip: process.platform !== 'win32' }, async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bunny-stay-'));
+  const unknown = async () => null; // PowerShell too slow, alias not found, or an error
+  const first = await start(t, dataDir, { networkProfile: unknown });
+  await put(first.base, { enabled: true, passcode: PASS });
+  const s1 = await status(first.base);
+  assert.equal(s1.enabled, true);
+  assert.equal(s1.reopenNote, 'Bunny could not tell which network this is, so it will not reopen by itself after a restart.');
+  await stop(first);
+  const second = await start(t, dataDir, { networkProfile: async () => ({ name: 'Cafe', category: 'Public' }) });
+  assert.equal(second.resumed.resumed, false);
+  const s2 = await status(second.base);
+  assert.deepEqual([s2.enabled, s2.notOpened], [false, NOT_OPENED_UNKNOWN_NETWORK]);
+  // a named network on turn-on says nothing
+  const dir2 = await mkdtemp(join(tmpdir(), 'bunny-stay-'));
+  const named = await start(t, dir2);
+  await put(named.base, { enabled: true, passcode: PASS });
+  assert.equal((await status(named.base)).reopenNote, '');
 });
