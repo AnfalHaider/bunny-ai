@@ -1,7 +1,7 @@
 ---
 piece: device-full
 role: security
-sha: 24359c2
+sha: 2c289da
 verdict: PASS
 date: 2026-11-18
 ---
@@ -102,3 +102,10 @@ So the first action after every restart erases the history (for example, last ni
   No duplicates.
 - `remote-access` passes 45 of 45 with the variable unset. Builder A's restart test covers two runs before any read.
 - **Still required for the v0.1.13 release:** R-DF1, the visible warning text, the status line naming the device, and the Activity view (with the honest limit above), which come with Design's drawing.
+
+## Re-stamp at 2c289da: PASS (supersedes 24359c2)
+
+- One line in `remoteAccess.js`: the saved log is now read when the app is created, and every save still waits for that read. The test also reads in the same run.
+- My probe on 2c289da: "entries on disk after a restart and one new action: 2; the earlier entry is KEPT"; the window reads 2 entries (New device, Earlier device), with no duplicates.
+- `remote-access` passes 45 of 45 with the variable unset.
+- R-DF1 (the visible parts) is still required for the release.
