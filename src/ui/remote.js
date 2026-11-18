@@ -38,7 +38,7 @@
     bar.innerHTML = (all ? GLYPH.warn : GLYPH.lock) + '<span><b style="font-weight:600"></b></span>';
     const b = bar.querySelector('b');
     b.textContent = all ? 'Everything access' : 'Chats access';
-    b.parentElement.append(all ? " · ends after 30 min idle · same as the PC's window" : ' · the PC can give this device more');
+    b.parentElement.append(all ? " · ends after 30 min idle" : ' · the PC can give this device more');
   };
   const check = async () => {
     try {

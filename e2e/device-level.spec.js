@@ -78,6 +78,8 @@ for (const scheme of ['light', 'dark']) {
       await expect(page.locator('#level-dialog')).toHaveCount(0);
       await page.waitForTimeout(500);
       expect(patches).toEqual([]);
+      // no device has Everything: the top bar ends at the count, with no dangling separator
+      await expect(page.locator('#remote-bar span').first()).toHaveText('Open to other devices · 1 signed in');
       await expect(page.locator('#level-dialog')).toHaveCount(0); // not asked again by the next look at the list
     });
 
@@ -175,7 +177,7 @@ for (const scheme of ['light', 'dark']) {
       await devicePage(page, '/src/ui/settings.html', 'everything');
       await page.goto('/src/ui/settings.html?section=desktop');
       const line = page.locator('#device-level-line');
-      await expect(line).toContainText("Everything access · ends after 30 min idle · same as the PC's window");
+      await expect(line).toHaveText("Everything access · ends after 30 min idle"); // the drawn text, nothing added (it wraps on a phone otherwise)
       await expect(line).toHaveAttribute('data-level', 'everything');
       await expect(page.locator('#default-permission')).toBeEnabled();
       await expect(page.locator('.window-only-note')).toHaveCount(0);

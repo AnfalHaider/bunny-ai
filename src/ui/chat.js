@@ -2632,7 +2632,6 @@ function watchRemote() {
     bar.replaceChildren();
     const text = document.createElement('span');
     paintStatus(document, text, s); // names the devices that have Everything, in bold
-    text.append(' · ');
     const off = document.createElement('button');
     off.type = 'button';
     off.textContent = 'Turn off';
