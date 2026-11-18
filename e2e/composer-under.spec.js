@@ -89,3 +89,26 @@ for (const [w, h] of [[1280, 800], [390, 780]]) {
     });
   }
 }
+
+// Design (c1c0e8d): on a narrow phone the chip never touches Send, and Send keeps its width.
+for (const w of [390, 360, 320]) {
+  for (const scheme of ['light', 'dark']) {
+    test(`a long model name at ${w} px: the chip ends before Send and Send keeps its size (${scheme})`, async ({ page, request }) => {
+      await request.put('/api/settings', { data: { modelFilter: 'all' } });
+      await page.route('**/api/models*', (r) => r.fulfill({ json: MODELS }));
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width: w, height: 700 });
+      await page.addInitScript(() => { localStorage.setItem('bunny.workMode', 'chat'); localStorage.setItem('bunny.modelAuto', '0'); });
+      await page.goto('/');
+      await expect(page.locator('#picker-button .label')).toBeVisible();
+      const m = await page.evaluate(() => {
+        const r = (id) => { const b = document.getElementById(id).getBoundingClientRect(); return { left: b.left, right: b.right, width: b.width }; };
+        return { chip: r('picker-button'), send: r('send'), attach: r('attach'), voice: r('voice') };
+      });
+      expect(m.chip.right).toBeLessThanOrEqual(m.send.left - 4);
+      expect(m.send.width).toBeGreaterThanOrEqual(35);
+      expect(m.attach.width).toBeGreaterThanOrEqual(30);
+      expect(m.chip.left).toBeGreaterThanOrEqual(m.voice.right);
+    });
+  }
+}
