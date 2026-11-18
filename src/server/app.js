@@ -103,6 +103,7 @@ const MAX_IMPORT = 300 * 1024 * 1024;
 
 /** Quick ask is text only, with two look-ups added: they only read the web, change nothing and need nobody's OK. */
 export const QUICK_ASK_TOOLS = Object.freeze(['web_search', 'read_url']);
+export const QUICK_ASK_LOOKUPS = 5; // look-ups in one quick answer
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -2928,6 +2929,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
         if (textOnly && !QUICK_ASK_TOOLS.includes(name)) throw new Error(`${name} is not available in a quick answer. Only web_search and read_url are.`);
+        if (textOnly && (quickLookups += 1) > QUICK_ASK_LOOKUPS) throw new Error(`A quick answer may look things up ${QUICK_ASK_LOOKUPS} times. Answer with what you have, or tell the person to open this in Bunny's window.`);
         // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         if (req.bunnyRemote ?? req.bunnyDevice) remote.logAction(req.bunnyRemote ?? req.bunnyDevice, { kind: 'tool', tool: String(name) }); // R-DF2: the tool's name only, never its arguments
@@ -3162,6 +3164,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // more go: a model that is not provisioned for this account yet, and a
       // request that asks for more tokens than the balance covers.
       // WEB-ACCESS: the tools of this request. A provider that refused the whole list once gets Bunny's own tools without the connectors', then none (see onToolsRefused).
+      let quickLookups = 0;
       const refusalKey = `${id}|${providerId}|${model}`;
       const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
       const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
@@ -3206,7 +3209,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             onThinkingRefused: () => send('tool', { tool: 'Thinking setting not used', status: 'done', result: 'This model does not take that setting, so it answered at its default. Choose Default under Thinking in the model\'s Details.' }),
             // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
             onLimit: async ({ kind, inputTokens, step }) => {
-              if (scheduledTask) return false; // nobody is there to answer
+              if (scheduledTask || textOnly) return false; // nobody is there to answer (a scheduled task, or the quick bar: a repeated look-up must not wait for a card)
               const question = kind === 'tokens' ? `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`
                 : kind === 'repeat' ? `I have run the same step (${String(step).slice(0, 60)}) three times in a row. Keep trying, or stop here?`
                   : 'I have made no new progress in 25 steps. Keep going, or stop here?';

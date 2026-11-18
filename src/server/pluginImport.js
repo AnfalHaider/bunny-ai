@@ -9,6 +9,8 @@
  * Hooks, commands, agents and scripts are built for other apps: they are listed
  * as skipped, never run.
  */
+import { fetchLimited } from './download.js';
+
 const MAX_SKILL = 120_000;
 
 export function parseGithubUrl(raw) {
@@ -195,14 +197,25 @@ export async function searchPlugins(query, { fetchImpl = globalThis.fetch } = {}
 }
 
 /** Read a web page as text (README-friendly), for the model to check before installing. */
-export async function readUrl(url, { fetchImpl = globalThis.fetch } = {}) {
+export async function readUrl(url, { fetchImpl = null } = {}) {
   let target = String(url ?? '').trim();
   if (!/^https?:\/\//i.test(target)) throw new Error('read_url needs an http or https address');
   const gh = parseGithubUrl(target);
   if (gh && !gh.base) target = `https://raw.githubusercontent.com/${gh.owner}/${gh.repo}/${gh.ref}/README.md`;
-  const res = await fetchImpl(target, { headers: { 'user-agent': 'bunny-ai', accept: 'text/html,text/plain,*/*' }, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`The page answered ${res.status}`);
-  let text = await res.text();
+  let text;
+  if (fetchImpl) { // a stand-in for tests
+    const res = await fetchImpl(target, { headers: { 'user-agent': 'bunny-ai', accept: 'text/html,text/plain,*/*' }, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`The page answered ${res.status}`);
+    text = await res.text();
+  } else {
+    // WEB-ACCESS (Security): the model, and a page it reads, choose this address, so it is fetched like download_file: public addresses only, the address checked
+    // again on every redirect, never Bunny's own server, 5 MB at most.
+    try {
+      text = (await fetchLimited(target, { maxBytes: 5 * 1024 * 1024 })).bytes.toString('utf8');
+    } catch (err) {
+      throw new Error(String(err.message).replace(/download_file/g, 'read_url').replace(/^Could not download:/, 'Could not read the page:'));
+    }
+  }
   if (/<html|<body|<div/i.test(text.slice(0, 2000))) {
     text = text.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
       .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')

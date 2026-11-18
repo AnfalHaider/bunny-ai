@@ -99,7 +99,7 @@ function requestOnce(url, { sig, allowLoopback, lookupImpl }) {
 }
 
 /** Returns { bytes: Buffer, type, url }. Throws a readable error; nothing is written here. */
-export async function fetchLimited(url, { signal, allowLoopback = false, lookupImpl = (h, o) => dnsLookup(h, o) } = {}) {
+export async function fetchLimited(url, { signal, allowLoopback = false, lookupImpl = (h, o) => dnsLookup(h, o), maxBytes = MAX_DOWNLOAD_BYTES } = {}) {
   let current;
   try { current = new URL(String(url ?? '').trim()); } catch { throw new Error('download_file needs a full http or https address'); }
   const sig = AbortSignal.any([AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS), ...(signal ? [signal] : [])]);
@@ -124,14 +124,14 @@ export async function fetchLimited(url, { signal, allowLoopback = false, lookupI
       continue;
     }
     if (res.statusCode < 200 || res.statusCode >= 300) { res.destroy(); throw new Error(`The server answered ${res.statusCode}`); }
-    const tooBig = () => new Error(`The file is larger than the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB limit, so nothing was saved.`);
-    if (Number(res.headers['content-length']) > MAX_DOWNLOAD_BYTES) { res.destroy(); throw tooBig(); }
+    const tooBig = () => new Error(`The file is larger than the ${maxBytes / 1024 / 1024} MB limit, so nothing was saved.`);
+    if (Number(res.headers['content-length']) > maxBytes) { res.destroy(); throw tooBig(); }
     const chunks = [];
     let size = 0;
     try {
       for await (const chunk of res) {
         size += chunk.length;
-        if (size > MAX_DOWNLOAD_BYTES) { res.destroy(); throw tooBig(); }
+        if (size > maxBytes) { res.destroy(); throw tooBig(); }
         chunks.push(chunk);
       }
     } catch (err) {
