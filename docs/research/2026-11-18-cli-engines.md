@@ -94,6 +94,55 @@ The wishlist entry named in the brief (`docs/plans/2026-11-18-v0.1.14-wishlist.m
 - Subscription use is also excluded for third-party apps: Bunny cannot route a user's Claude subscription through its own sign-in (legal page, Authentication and credential use).
 - Conclusion for the free-only rule: Codex with a free Responses-API provider is cost-free; Claude Code is not, unless the owner supplies a gateway that translates to free models, in which case support and terms issues apply.
 
+## 7. Update 2026-11-18: the owner added Aider and Cline (four engines)
+
+Owner's decision (relayed by the Chief of Staff): Claude Code, Codex CLI, Aider and Cline; Claude Code on the owner's own Anthropic account, installed on click, unmodified; the others use Bunny's models; all downloaded on click and updated in Settings.
+
+### 7a. Claude Code sign-in on Windows when Bunny runs it hidden
+
+Source: https://code.claude.com/docs/en/authentication.md (Credential management, Authentication precedence, Generate a long-lived token).
+
+- **Where credentials live:** on Windows `%USERPROFILE%\.claude\.credentials.json`, inheriting the user profile's access controls. With `CLAUDE_CONFIG_DIR` set, the file lives under that directory instead; each directory has its own settings, history and login.
+- **Order Claude Code picks a credential:** cloud-provider variables, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `apiKeyHelper` output, `CLAUDE_CODE_OAUTH_TOKEN`, Anthropic profiles, then the subscription login from `/login`. In `-p` mode "the key is always used when present".
+- **Ways Bunny can stay out of the owner's credentials:**
+  1. **Let the owner sign in themselves, outside Bunny:** a "Sign in" button opens a visible terminal that runs `claude auth login` (browser flow, "Login successful"); Claude Code writes its own `.credentials.json`; Bunny then runs `claude -p` hidden and never reads that file. To keep it apart from the owner's own Claude Code, point Bunny's runs at a Bunny-owned folder with `CLAUDE_CONFIG_DIR` and sign in against that folder.
+  2. **API key (Console):** the owner stores an `ANTHROPIC_API_KEY` in Bunny's existing protected store (DPAPI) and Bunny passes it only in the child process environment. That means Bunny holds the key, which the brief wanted to avoid; an `apiKeyHelper` command that reads the key from the store on demand is a variant.
+  3. **Long-lived subscription token:** `claude setup-token` prints a one-year OAuth token (needs Pro/Max/Ultra/Team/Enterprise) for `CLAUDE_CODE_OAUTH_TOKEN`; "It does not save the token anywhere", so Bunny would have to store it. It "can only make model requests". Bare mode (`--bare`) does not read it.
+- **Recommended:** option 1 with a Bunny-owned `CLAUDE_CONFIG_DIR`, so Bunny never sees a credential and a failed or expired login ("Login expired") is shown as "Sign in again" in Settings. Check login state with `claude auth status`-style commands: UNKNOWN (not read; `/status` is documented, a headless equivalent is not confirmed).
+- **Terms:** Anthropic does not permit third-party developers to "collect, store, or intermediate Claude.ai credentials or session tokens", and sign-in must "complete through Anthropic's own flow" (https://code.claude.com/docs/en/legal-and-compliance). That rules out Bunny capturing the OAuth token or running its own sign-in form; option 1 complies, options 2 and 3 store a credential and should be reviewed by the owner and Security.
+- **Do not set** `ANTHROPIC_BASE_URL` for this engine, since the owner uses Anthropic's own endpoint and Claude models.
+
+### 7b. Aider
+
+Facts below are from the official docs and registries; Aider has no structured stream.
+
+1. **Headless / output:** `--message`/`-m` (send one message, process the reply, exit), `--message-file`/`-f`, `--yes` ("Always say yes to every confirmation"), `--no-stream`, `--no-auto-commits`, `--commit`, `--dry-run`. No JSON or other structured output is documented. https://aider.chat/docs/scripting.html . A Python scripting API (`Coder.create`, `coder.run`) exists but is "not officially supported or documented, and could change". Same page. So Bunny would parse plain text and read the git diff after the run for edits; thinking and tool calls as events: not available.
+2. **Custom models:** `OPENAI_API_BASE` + `OPENAI_API_KEY`, then `aider --model openai/<model-name>` (the `openai/` prefix is required); any OpenAI-compatible endpoint. https://aider.chat/docs/llms/openai-compat.html . The page does not name the API shape; Aider is built on LiteLLM (my knowledge; not confirmed from these pages), which calls `/chat/completions` for `openai/` models: UNKNOWN from official text, test needed. This matches Bunny's providers without a translator. Unrecognised models give warnings.
+3. **Licence:** Apache-2.0 (GitHub API: `Aider-AI/aider`, `license.spdx_id`). Redistribution allowed with licence text and notices. https://github.com/Aider-AI/aider/blob/main/LICENSE.txt . Trademark: UNKNOWN. Project health: latest GitHub release v0.86.0 (2025-08-09), last push 2026-05-22; PyPI `aider-chat` 0.86.2 (2026-02-12), `requires_python <3.13,>=3.10`. Slow-moving; the pin matters less, but maintenance risk is real.
+4. **Windows packaging:** Python tool. Official install is `aider-install` (uses uv, installs its own Python 3.12 if needed), a PowerShell one-liner `install.ps1` based on uv, `uv tool install --force --python python3.12 --with pip aider-chat@latest`, `pipx` or `pip` (Python 3.9-3.12 for pipx/pip). https://aider.chat/docs/install.html . The wheel itself is small (377 KB; PyPI JSON), but its dependency tree is large (not measured; UNKNOWN). Shipping a pinned runtime: download the `uv` binary (open source, official) on click, run `uv tool install --python 3.12 aider-chat==0.86.2` into a Bunny-owned folder (`UV_TOOL_DIR`, `UV_PYTHON_INSTALL_DIR`); that pins both Python and Aider and updates by re-running with a new pin. The install page does not document `==` pinning, but `uv` and `pip` accept it (standard behaviour, not shown on that page). Antivirus or SmartScreen on a freshly downloaded `python.exe`: UNKNOWN.
+5. **Permissions / sandbox:** none documented. `--yes` auto-confirms everything; Aider edits only files added to the chat and commits through git (auto-commits on by default, so every edit is an undoable commit; `/undo` exists). Aider runs shell commands only via `/run`, `/test` or confirmed suggestions; the pages I read do not describe a deny list or sandbox. https://aider.chat/docs/usage/commands.html . Mapping Bunny's rules: Bunny cannot intercept per-tool calls; it can only choose which files to add, set `--no-auto-commits` or use a worktree, and decline suggested shell commands by not passing `--yes` (which blocks without a TTY: UNKNOWN). Protected folders: enforce by never adding those files and by checking the git diff after each run.
+6. **Free:** yes (no account; model cost is whatever Bunny's provider charges).
+
+### 7c. Cline
+
+1. **Headless / output:** `cline` npm package (3.0.74, Apache-2.0, built on `@cline/sdk 0.2.0`; GitHub release `cli-v3.0.74` 2026-10-26). Headless starts with `--json`, piped stdin or redirected stdout. `--json` prints one JSON object per line with `type` and ISO `ts`: `agent_event` (event in the `event` field), `hook_event`, `team_event`, `run_result` (final text, usage, model), `run_aborted`; errors go to stderr as `{"type":"error",...}`. Flags: `--plan`, `--auto-approve <bool>` (default true), `--config <dir>` (default `~/.cline`), `--data-dir <dir>`, `--model`, `--provider` (default `cline`), `--cwd`, `--thinking none|low|medium|high|xhigh`, `--timeout`. https://docs.cline.bot/cline-cli/overview and https://docs.cline.bot/cline-cli/cli-reference . The inner `agent_event` shapes (text, reasoning, tool call, edit) are not on the pages I read: UNKNOWN; the `@cline/sdk` types in https://github.com/cline/cline/tree/main/sdk are the place.
+2. **Custom models:** `cline auth` configures the Cline provider, ClinePass or "your own provider key". Setting an OpenAI-compatible base URL from the CLI, and the provider ID to use, are not on the pages I read: UNKNOWN. The Cline extension supports OpenAI-compatible providers (my knowledge, not verified here); confirm the CLI/SDK has a base-URL setting before committing.
+3. **Licence:** Apache-2.0 (repo `cline/cline` licence field and `cline` npm package). Redistribution allowed with notices. https://github.com/cline/cline/blob/main/LICENSE . Trademark/name use: UNKNOWN.
+4. **Windows packaging / maturity:** The repo (`cline/cline`, last push 2026-11-17) has `apps/cli`, `apps/vscode`, `apps/cline-hub`, `sdk`; the CLI is a Node package (the npm tarball is 48 KB of launcher; it depends on `@cline/sdk` and four more `@cline/*` 0.2.0 packages). Node requirement and Windows support are not stated on the pages I read: UNKNOWN (the repo has `.nvmrc`; read it). Maturity: the CLI has its own docs, versioned releases (3.0.74) and a SDK at 0.2.0, so it is real, but the `@cline/*` packages are 0.x, so expect churn; a pinned `npm i cline@3.0.74` into a Bunny-owned prefix (needs a Node runtime: Electron's can run it with `ELECTRON_RUN_AS_NODE=1`, which is standard Electron behaviour but untested here) would give a pinned install.
+5. **Permissions:** by default `--auto-approve true`: "Autonomous execution can modify files and run commands without further prompts." No allow/deny list for shell commands; the docs recommend a `PreToolUse` hook to block commands, and `--auto-approve false` for approvals. How a host answers an approval request in `--json` mode: UNKNOWN. Mapping: Bunny can supply a `PreToolUse` hook script (via `--config` dir) that calls back into Bunny's rule engine for Deny/Ask/Allow and protected folders; this is the most promising of the two new engines but unverified. https://docs.cline.bot/cline-cli/overview
+6. **Free:** CLI and SDK are free and Apache-2.0; `cline auth` offers the "Cline Provider" and "ClinePass" which may be paid or need an account: using Bunny's own provider keys needs no Cline account (not verified for the CLI; check that `cline auth` is skippable).
+
+### 7d. Where each engine stands now (summary)
+
+| | Claude Code | Codex CLI | Aider | Cline |
+|---|---|---|---|---|
+| Structured stream | `stream-json` | `exec --json`, `app-server` | none (text + git diff) | `--json` lines |
+| Host answers approvals | yes (`canUseTool`) | yes (`app-server`) | no | UNKNOWN (hook) |
+| Wire format needed | Anthropic Messages (owner's own account) | OpenAI Responses | OpenAI chat-compatible (UNKNOWN official) | UNKNOWN |
+| Licence for bundling | restricted | Apache-2.0 | Apache-2.0 | Apache-2.0 |
+| Runtime on Windows | native exe, 379 MB | native exe, ~386 MB | Python 3.12 via uv | Node + `@cline/*` |
+| Free | no (own Anthropic account) | yes | yes | likely, check `cline auth` |
+
 ## Risks
 
 1. **Wire format gap (high):** Codex needs Responses, Claude Code needs Messages, Bunny's providers speak Chat Completions. A translating proxy is a new, security-relevant component with its own bugs.
