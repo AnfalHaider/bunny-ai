@@ -130,3 +130,22 @@ Tests on an extract of bf9f320, invented profile (`BUNNY_DATA_DIR` temp, `BUNNY_
 **DF-L1 (LOW, not blocking):** the server names a device only by system and browser ("iPhone or iPad · Safari"). The first-sign-in dialog shows only that name, so a second device with the same browser looks identical to the owner's own. Anyone signing in still needs the passcode. Recommendation for a later release: show the address and sign-in time in the dialog, and let the owner name a device. (The pictures' "Sam's phone" and "Kitchen laptop" are invented examples.)
 
 Verdict: the visible parts meet R-DF1, and the release needs nothing more from Security. I'll sign release-0.1.13 on the sha main will carry, after checking it is bf9f320 or the same changes.
+
+## Review of fa152a1..f7caeb4 (claude/builder-a-device-full-v0113): PASS, diff read only (a gate was running)
+
+Commits read:
+- a8ed5e7, from bf9f320 to fa152a1: wording only. The device line drops "same as the PC's window", and the top bar loses a dangling separator.
+- d46888a: the setting-change notice.
+- 5cf3234: pictures.
+- f7caeb4: the window reads the log on every poll while access is on.
+
+- **Names only, never values.** `isSettingChange` matches a log entry `{kind:'route', method:'PUT', path:'/api/settings'}`. The server never keeps the body (R-DF2), so the notice can only say "<device> changed a setting", then the level, the time and See Activity. The device name goes in through `textContent`. The only `innerHTML` is a constant SVG.
+- **Window-only.** The notice reads `GET /api/remote/log`, which stays window-only (a device gets 403 at both levels, tested at 832). It runs from `watchRemote`, which a device page never gets past, because its `/api/remote` read is refused.
+- **Nothing new reachable from a device.** No server file changed in this range. `?activity=<id>` is added only when the id is 16 hex characters (`chat.js`). `settings.html` only compares it with ids from the window-only `/api/remote` list. On a device page that list is refused, so nothing opens.
+- **f7caeb4.** The log is read on every poll while access is on, not only while a device has Everything. So a change by a device that signed out or timed out before the window looked is still announced. The log is newest first (`actions()` reverses it), and the ISO times compare correctly as text. Entries from before the window's first look are not announced, as drawn.
+
+Notes, not blocking:
+- **DF-L2 (LOW):** only setting changes get the notice. Other window-only changes made by a device at Everything (installs, rules, connectors) and `run_command` show in Activity, in red, but not as a notice. The drawing chose this. Consider a notice for any window-only route in a later release.
+- Two changes in the same poll show only the newest one in the notice. Activity lists both.
+
+Verdict: PASS at f7caeb4 for DEVICE-FULL. The release-0.1.13 sign-off goes on main's sha once the gate passes. I'll check that sha holds these same changes first.

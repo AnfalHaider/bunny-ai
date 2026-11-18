@@ -1,9 +1,9 @@
 ---
 piece: device-full
 role: security
-sha: bf9f320
+sha: f7caeb4
 verdict: PASS
 date: 2026-11-18
 ---
 
-Visible parts 2c289da..bf9f320: R-DF1 warning verbatim, level set only by the window, device pages cannot change a level, Activity limit shown; rebased server commits patch-identical; 52/52 tests; DF-L1 LOW (device names look alike) not blocking
+fa152a1..f7caeb4 read: setting-change notice names only (route+method, no value), reads the window-only log, no server change, activity param hex-checked; DF-L2 LOW only settings get a notice
