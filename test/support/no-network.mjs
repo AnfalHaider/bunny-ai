@@ -56,8 +56,9 @@ if (process.env.BUNNY_TEST_NETWORK !== '1' && !globalThis[KEY]) {
     });
   };
   const originalLookup = dns.lookup;
+  const originalLookupPromise = dnsPromises.lookup; // kept before patching: Node's own answer for an empty name
   const lookupPromise = async (hostname, options) => {
-    if (!hostname) return dnsPromises.lookup.call(dnsPromises, hostname, options);
+    if (!hostname) return originalLookupPromise.call(dnsPromises, hostname, options);
     const list = answerFor(hostname, options);
     if (!list || !list.length) throw notFound(hostname);
     return toLookupResult(list, options);

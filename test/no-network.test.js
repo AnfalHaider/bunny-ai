@@ -30,6 +30,11 @@ test('localhost and an IP literal still resolve', async () => {
   assert.deepEqual(await dns.lookup('app.localhost'), { address: '127.0.0.1', family: 4 });
 });
 
+test('an empty host name gets the plain Node answer (ERR_INVALID_ARG_VALUE), not a loop', async () => {
+  await assert.rejects(() => dns.lookup(''), (e) => e.code === 'ERR_INVALID_ARG_VALUE');
+  await assert.rejects(() => dns.lookup(undefined), (e) => e.code === 'ERR_INVALID_ARG_TYPE' || e.code === 'ERR_INVALID_ARG_VALUE' || e.code === 'ENOTFOUND');
+});
+
 test('fetch to a real site fails at once, with ENOTFOUND as its cause (undici resolves through dns.lookup)', async () => {
   const r = await timed(() => fetch('https://api.openai.com/'));
   assert.ok(r.error, 'it did not leave this computer');
