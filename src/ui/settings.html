@@ -626,15 +626,16 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Allow other devices to open Bunny</div>
-          <div class="desc">Lets a phone or another computer on your own network open Bunny, after a passcode. It is off until you turn it on, and off again every time Bunny starts. Local network only: never forward a router port to it.</div>
+          <div class="desc">Lets a phone or another computer on your own network open Bunny, after a passcode. It is off until you turn it on, then it stays on, also after Bunny restarts, until you turn it off. Devices sign in again after a restart. Local network only: never forward a router port to it.</div>
           <div class="desc" id="remote-status" role="status" hidden></div>
+          <div class="desc" id="remote-not-opened" role="status" style="color:var(--warn,#b45309)" hidden></div>
         </div>
         <div class="right">
           <label class="switch"><input type="checkbox" id="remote-on" aria-label="Allow other devices to open Bunny" /><span id="remote-state">off</span></label>
         </div>
       </div>
       <div class="row stack" id="remote-setup" style="align-items:stretch;text-align:left" hidden>
-        <div class="desc"><b>Before you turn this on.</b> This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. A device you have just signed in gets <b>Chats</b>: ordinary chats, with their tools, and it can answer a chat's own permission questions there. It cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. You can give a device <b>Everything</b> (the same as this window) for that device only, from this window, after a warning; it ends after 30 minutes without use. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, never Public.</div>
+        <div class="desc"><b>Before you turn this on.</b> This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Once on, it stays on until you turn it off, also after Bunny restarts, but only on the network you turned it on with; devices sign in again each time. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. A device you have just signed in gets <b>Chats</b>: ordinary chats, with their tools, and it can answer a chat's own permission questions there. It cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. You can give a device <b>Everything</b> (the same as this window) for that device only, from this window, after a warning; it ends after 30 minutes without use. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, never Public.</div>
         <input type="password" id="remote-pass" autocomplete="new-password" placeholder="Choose a passcode (12 or more characters)" aria-label="Passcode, 12 or more characters" style="width:100%;max-width:420px" />
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="remote-generate" class="btn">Make one for me</button><button type="button" id="remote-turn-on" class="btn">Turn on</button><button type="button" id="remote-cancel" class="btn">Cancel</button></div>
         <div class="desc" id="remote-error" role="alert" style="color:var(--bad,#cf3f55)" hidden></div>
@@ -1283,7 +1284,7 @@
   });
 
   // ---- desktop app (only inside the Electron shell, which exposes window.bunnyDesktop) ----
-  // BROWSER step 2: open to other devices on the local network (window only). Off by default and off after every restart.
+  // BROWSER step 2: open to other devices on the local network (window only). Off until turned on; then on after every restart until turned off (REMOTE-STAY), on the same network only.
   async function bootRemote() {
     const box = $('remote-on');
     const err = (text) => { $('remote-error').textContent = text || ''; $('remote-error').hidden = !text; };
@@ -1294,6 +1295,8 @@
       $('remote-state').textContent = s.enabled ? 'on' : 'off';
       $('remote-setup').hidden = s.enabled || !$('remote-setup').dataset.open;
       $('remote-open').hidden = !s.enabled;
+      $('remote-not-opened').textContent = s.notOpened || ''; // RS-4: one plain sentence when Bunny stayed closed at start
+      $('remote-not-opened').hidden = !s.notOpened || s.enabled;
       $('remote-status').hidden = !s.enabled;
       if (s.enabled) paintStatus(document, $('remote-status'), s, ' (back to Ask when it signs out)'); else $('remote-status').textContent = '';
       if (!s.enabled) { generated = ''; return; }

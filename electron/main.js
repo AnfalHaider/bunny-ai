@@ -2,7 +2,7 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, WebContentsView, Menu, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
+import { app, BrowserWindow, WebContentsView, Menu, Notification, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
 import { buildContextMenuTemplate } from './context-menu.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -141,6 +141,19 @@ function createWindow() {
 function showWindow() {
   if (!win) createWindow();
   else { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+}
+
+// REMOTE-STAY (RS-5): the tray says so while Bunny is open to other devices, even when it started hidden (tray or start at login).
+const syncTrayTooltip = () => { try { tray?.setToolTip(bunnyApp?.remote?.enabled ? 'Bunny AI: Open to other devices' : 'Bunny AI'); } catch { /* the tray is going away */ } };
+async function resumeOpenToDevices() {
+  try {
+    const result = await bunnyApp.resumeRemote(); // only on the network it was turned on with (RS-4); every device signs in again
+    if (Notification.isSupported()) {
+      if (result.resumed) new Notification({ title: 'Bunny AI', body: 'Open to other devices on this network. Turn it off in Settings.' }).show();
+      else if (result.reason) new Notification({ title: 'Bunny AI', body: result.reason }).show();
+    }
+  } catch { /* it stays closed; Settings says it is off */ }
+  syncTrayTooltip();
 }
 
 function createTray() {
@@ -300,6 +313,8 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
+  await resumeOpenToDevices(); // before the window loads, so its first look already shows the banner (RS-5)
+  setInterval(syncTrayTooltip, 5000).unref();
   quickAsk = createQuickAsk({
     BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat,
     // QA-ANSWERS: the bar answers through Bunny's own server (text only); Open in Bunny and a finished answer tell the window which chat

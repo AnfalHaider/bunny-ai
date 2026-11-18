@@ -1,7 +1,8 @@
 /**
  * BROWSER, step 2: let a phone or another computer on the SAME local network open Bunny, behind a passcode.
  *
- * OFF by default and off again after every restart (nothing here is read back as "on"). While it is on:
+ * OFF until the person turns it on. REMOTE-STAY (owner, 2026-11-18): once on it stays on across restarts until the person turns it off; the app then opens it again at start
+ * (resumeRemote in app.js) on the same network only, and every device signs in again (sessions are never saved). While it is on:
  *  - a second server listens on the PC's local-network address ONLY (127.0.0.1 keeps its own server and its own rules, untouched);
  *  - nothing is served to a device that has not signed in except the sign-in page; no token is handed out, no API answers;
  *  - a session is an HttpOnly, SameSite=Strict cookie, and every write also needs the session's own CSRF header;
@@ -14,6 +15,7 @@ import { randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { networkInterfaces } from 'node:os';
+import { execFile } from 'node:child_process';
 
 export const MIN_PASSCODE = 12;
 export const COOKIE = 'bunny_remote';
@@ -66,6 +68,43 @@ export async function verifyPasscode(passcode, record) {
     const got = await scryptAsync(String(passcode ?? ''), salt);
     return got.length === want.length && timingSafeEqual(got, want);
   } catch { return false; }
+}
+
+/** REMOTE-STAY (RS-4): the one plain sentence on the "Allow other devices" row when Bunny does not open it again at start. */
+export const NOT_OPENED_NETWORK = "Not opened: this network isn't the one you turned it on with. Turn it on again to allow it here.";
+export const NOT_OPENED_NO_NETWORK = 'Not opened: no local network was found. Turn it on again when you are connected.';
+export const NOT_OPENED_NO_PASSCODE = 'Not opened: the saved passcode was not found. Turn it on again and choose one.';
+
+const subnet24 = (a) => String(a ?? '').split('.').slice(0, 3).join('.');
+
+/**
+ * RS-4: may Bunny open to other devices again at start? Only on the network access was turned on with, or on one Windows calls Private.
+ * `saved` is what was kept when it was turned on ({ address, network: { name, category } | null }); `profile` is what the network is called now ({ name, category } | null).
+ * When Windows cannot say, the same /24 as the saved address stands for "the same network".
+ */
+export function canReopen(saved, lan, profile) {
+  if (!lan) return { ok: false, reason: NOT_OPENED_NO_NETWORK };
+  if (profile?.category === 'Private') return { ok: true };
+  const sameName = saved?.network?.name && profile?.name ? saved.network.name === profile.name : null;
+  const same = sameName ?? (Boolean(saved?.address) && subnet24(saved.address) === subnet24(lan));
+  return same ? { ok: true } : { ok: false, reason: NOT_OPENED_NETWORK };
+}
+
+/** What Windows calls the network behind this local address: { name, category: 'Private' | 'Public' | 'DomainAuthenticated' } or null (not Windows, or it could not be asked). The address is private IPv4 only. */
+export async function networkProfileOf(address, { interfaces = networkInterfaces(), platform = process.platform, run = null } = {}) {
+  if (platform !== 'win32') return null;
+  const alias = Object.entries(interfaces).find(([, list]) => (list ?? []).some((i) => i.address === address))?.[0];
+  if (!alias) return null;
+  const ask = run ?? ((alias2) => new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-NetConnectionProfile -InterfaceAlias $env:BUNNY_NET_ALIAS | Select-Object -First 1 Name,NetworkCategory | ConvertTo-Json -Compress'],
+      { timeout: 5000, windowsHide: true, env: { ...process.env, BUNNY_NET_ALIAS: alias2 } }, (err, out) => resolve(err ? null : String(out)));
+  }));
+  try {
+    const parsed = JSON.parse(String(await ask(alias)).trim());
+    const raw = parsed?.NetworkCategory;
+    const category = typeof raw === 'string' ? raw : ({ 0: 'Public', 1: 'Private', 2: 'DomainAuthenticated' }[raw] ?? '');
+    return parsed?.Name ? { name: String(parsed.Name), category } : null;
+  } catch { return null; }
 }
 
 /** The PC's local-network IPv4 address (a private range), or null. A test may pass its own. */

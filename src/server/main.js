@@ -20,6 +20,8 @@ const fixedToken = process.env.BUNNY_FAKE_UPSTREAM === '1' && process.env.BUNNY_
 const app = await createApp({ dataDir, apiToken: fixedToken });
 
 app.server.listen(port, '127.0.0.1', () => {
+  // REMOTE-STAY: if the person left device access on, open it again (on the same network only)
+  app.resumeRemote().then((r) => { if (r.resumed) console.log(`Open to other devices -> ${r.url}`); else if (r.reason) console.log(r.reason); }).catch(() => {});
   const mode = process.env.BUNNY_FAKE_UPSTREAM === '1' ? ' (test mode)' : '';
   console.log(`Bunny AI${mode} -> http://127.0.0.1:${port}/`);
   console.log(`data: ${dataDir}`);

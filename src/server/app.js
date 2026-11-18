@@ -86,7 +86,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { NOT_OPENED_NO_PASSCODE, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -207,7 +207,9 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null } = {}) {
+export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+  // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
+  const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
 
   // S-1: only Bunny's own pages may use the local API. The token is made here, lives in memory,
@@ -3478,6 +3480,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     return session;
   }
   let lanServer = null;
+  // REMOTE-STAY: whether device access is on is kept in the data folder (never the passcode: only the hash file remote-access.json has that), so it stays on across restarts until the person turns it off.
+  const remoteStateFile = join(dataDir, 'remote-state.json');
+  let notOpened = ''; // why Bunny did not open it again at start (one plain sentence for the Settings row), until it is turned on or off
   const NOT_BUNNY_REMOTE = 'That request did not come from a device signed in to Bunny AI.';
 
   const lanUrl = () => (remote.enabled ? 'http://' + remote.host + '/' : null);
@@ -3491,6 +3496,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       hasPasscode: await remote.hasPasscode(),
       networkAddress: lanAddressOverride ?? findLanAddress(),
       minPasscode: 12,
+      notOpened, // RS-4: said on the "Allow other devices" row when Bunny stayed closed at start
       autoChats: (await sessions.list()).filter((s) => s.remoteAuto).map((s) => ({ id: s.id, title: s.title })), // R6: chats a device has put on Auto
     };
   }
@@ -3501,7 +3507,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     if (old) { old.closeAllConnections?.(); await new Promise((r) => old.close(() => r())); }
   }
   async function remoteSet(res, body) {
-    if (body?.enabled === false) { await stopRemote(); return sendJson(res, 200, await remoteStatus()); }
+    if (body?.enabled === false) { await stopRemote(); notOpened = ''; await writeJson(remoteStateFile, { enabled: false }); return sendJson(res, 200, await remoteStatus()); } // RS-6: the off state is saved before the answer
     if (body?.enabled !== true) return sendJson(res, 400, { code: 'remote.invalid', message: 'Say whether to turn it on or off.' });
     const lan = lanAddressOverride ?? findLanAddress();
     if (!lan) return sendJson(res, 400, { code: 'remote.noNetwork', message: "Bunny could not find this computer's address on your local network. Connect to your Wi-Fi or network and try again." });
@@ -3513,6 +3519,15 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       if (!checked.ok) return sendJson(res, 400, { code: 'remote.passcode', message: checked.message });
       passcode = checked.passcode;
     } else if (!(await remote.hasPasscode())) return sendJson(res, 400, { code: 'remote.passcode', message: 'Choose a passcode first.' });
+    const started = await openLan(lan, passcode);
+    if (!started.ok) return sendJson(res, started.status ?? 400, { code: started.code ?? 'remote.passcode', message: started.message });
+    notOpened = '';
+    await writeJson(remoteStateFile, { enabled: true, address: lan, network: await networkProfile(lan).catch(() => null) }); // what it was turned on with: the network is checked against it at the next start (RS-4)
+    return sendJson(res, 200, { ...(await remoteStatus()), ...(generated ? { generatedPasscode: generated } : {}) });
+  }
+
+  /** Listen on the local-network address only (private IPv4, never 0.0.0.0) and turn the sign-in on. */
+  async function openLan(lan, passcode) {
     await stopRemote(); // starting again ends any earlier session
     const server2 = createServer((req, res2) => {
       remoteRoute(req, res2).catch((err) => { if (!res2.headersSent) sendJson(res2, 500, { code: 'server.error', message: 'Something went wrong.' }); res2.end(); void err; });
@@ -3521,8 +3536,27 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     try { await listenAt(server.address()?.port ?? 0); } catch { await listenAt(0).catch((err) => { throw Object.assign(new Error('Bunny could not open to other devices: ' + err.message), { code: 'remote.listen' }); }); }
     lanServer = server2;
     const started = await remote.enable({ lanHost: lan + ':' + server2.address().port, lanAddress: lan, passcode });
-    if (!started.ok) { await stopRemote(); return sendJson(res, 400, { code: 'remote.passcode', message: started.message }); }
-    return sendJson(res, 200, { ...(await remoteStatus()), ...(generated ? { generatedPasscode: generated } : {}) });
+    if (!started.ok) { await stopRemote(); return { ok: false, message: started.message }; }
+    return { ok: true };
+  }
+
+  /**
+   * REMOTE-STAY: at start, open to other devices again if the person left it on. Called by the shell once the window's server is listening (the local-network server uses the same port,
+   * so with "Keep the same address" the address is the same). Only on the network it was turned on with, or one Windows calls Private (RS-4); otherwise it stays closed and says why.
+   * Sessions are never saved: every device signs in again, at Chats (RS-2).
+   */
+  async function resumeRemote() {
+    let saved = null;
+    try { saved = JSON.parse(await readFile(remoteStateFile, 'utf8')); } catch { /* never turned on */ }
+    if (saved?.enabled !== true || remote.enabled) return { resumed: false };
+    if (!(await remote.hasPasscode())) { notOpened = NOT_OPENED_NO_PASSCODE; return { resumed: false, reason: notOpened }; }
+    const lan = lanAddressOverride ?? findLanAddress();
+    const verdict = canReopen(saved, lan, lan ? await networkProfile(lan).catch(() => null) : null);
+    if (!verdict.ok) { notOpened = verdict.reason; return { resumed: false, reason: notOpened }; }
+    const opened = await openLan(lan, null).catch((err) => ({ ok: false, message: err.message }));
+    if (!opened.ok) { notOpened = 'Not opened: ' + String(opened.message ?? 'it could not start').replace(/^Bunny could not open to other devices: /, '') + ' Turn it on again to allow it.'; return { resumed: false, reason: notOpened }; }
+    notOpened = '';
+    return { resumed: true, url: lanUrl() };
   }
 
   /** The sign-in page and its script: the ONLY files a device that has not signed in may get. */
@@ -3606,7 +3640,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
   return {
     server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
-    computer, terminals, remote,
+    computer, terminals, remote, resumeRemote,
     getSettings: () => settings,
     chooseFolder,
     dataDir,

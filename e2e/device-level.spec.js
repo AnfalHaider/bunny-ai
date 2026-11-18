@@ -169,6 +169,19 @@ for (const scheme of ['light', 'dark']) {
       await expect(page.locator('#device-notice')).toContainText('Kitchen laptop changed a setting', { timeout: 15000 });
     });
 
+    test('REMOTE-STAY: the row says it stays on until you turn it off, also after a restart; when Bunny stayed closed at start (another network) one plain sentence says why', async ({ page }) => {
+      await page.addInitScript(() => { window.bunnyDesktop = { getPrefs: async () => ({}), setPrefs: async () => ({}), openInBrowser: async () => ({}) }; });
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { enabled: false, url: null, signedIn: 0, autoChats: [], devices: [], hasPasscode: true, notOpened: "Not opened: this network isn't the one you turned it on with. Turn it on again to allow it here." } }) : r.continue()));
+      await page.goto('/src/ui/settings.html?embed=1&section=desktop');
+      const row = page.locator('#remote-on').locator('xpath=ancestor::div[contains(@class,"row")][1]');
+      await expect(row).toContainText('It is off until you turn it on, then it stays on, also after Bunny restarts, until you turn it off. Devices sign in again after a restart.');
+      await expect(row).not.toContainText('off again every time Bunny starts');
+      await expect(page.locator('#remote-not-opened')).toHaveText("Not opened: this network isn't the one you turned it on with. Turn it on again to allow it here.");
+      await expect(page.locator('#remote-on')).not.toBeChecked();
+      await row.scrollIntoViewIfNeeded();
+      await shot(page, 'settings-not-opened', scheme);
+    });
+
     test('a narrow window: the devices list wraps and nothing scrolls sideways', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 800 });
       await windowWith(page, [{ ...PHONE, asked: true }, LAPTOP]);
