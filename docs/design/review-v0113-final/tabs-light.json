@@ -1,0 +1,112 @@
+{
+ "profile": [
+  "Profile",
+  "Profile photo",
+  "Full name",
+  "What should Bunny call you?",
+  "Account",
+  "GitHub",
+  "Google",
+  "Sign-in apps (advanced)"
+ ],
+ "appearance": [
+  "Appearance",
+  "Theme",
+  "Interface font",
+  "Response font",
+  "Transcript text size",
+  "Transcript width",
+  "Label chats by status",
+  "Default transcript view",
+  "Motion",
+  "Code",
+  "Code font",
+  "Code font size"
+ ],
+ "capabilities": [
+  "Capabilities",
+  "Artifacts",
+  "Draw charts in artifacts",
+  "Use skills",
+  "Use connectors",
+  "Voice",
+  "Speech voice",
+  "Computer use Local only",
+  "Enable computer use",
+  "Let the AI control the desktop",
+  "Tools the AI builds",
+  "Let the AI build its own tools"
+ ],
+ "models": [
+  "Models",
+  "Show models",
+  "Longest reply",
+  "Token budget for one reply",
+  "Try another model when yours is busy",
+  "Wait for a first reply",
+  "Allowed models",
+  "Aliases"
+ ],
+ "code": [
+  "Code",
+  "Default permission mode",
+  "Permission rules",
+  "Default effort",
+  "Branch prefix",
+  "Copies of projects",
+  "Keep going on long jobs",
+  "Longest long job",
+  "Code theme and font",
+  "Helpers (dynamic workflows)",
+  "Prompt suggestions",
+  "Summary and next steps",
+  "When you ask for an unrelated task"
+ ],
+ "desktop": [
+  "Desktop app",
+  "Quick ask",
+  "Start when I sign in",
+  "Keep running in the tray",
+  "Use Bunny in a browser",
+  "Open in your browser",
+  "Keep the same address after restart",
+  "Allow other devices to open Bunny"
+ ],
+ "about": [
+  "About",
+  "Installed version",
+  "Update automatically",
+  "Licences"
+ ],
+ "privacy": [
+  "Privacy",
+  "Storage"
+ ],
+ "usage": [
+  "Usage"
+ ],
+ "connection": [
+  "Connection",
+  "Provider",
+  "Model",
+  "Test mode"
+ ],
+ "bunny": [
+  "Instructions",
+  "Memory",
+  "Use memory",
+  "Search and reference chats",
+  "Generate memory from chats",
+  "Include sensitive topics in memory",
+  "Your memory",
+  "Import memory from other AI providers"
+ ],
+ "language": [
+  "Language",
+  "Language"
+ ],
+ "notifications": [
+  "Notifications",
+  "Reply ready"
+ ]
+}

@@ -1,0 +1,96 @@
+enable: 200
+dialog: true
+bar BEFORE answering: Open to other devices · 1 signed in Turn off
+bar after Everything: Open to other devices · 1 signed in · Android · Chrome has Everything Turn off
+light tab appearance has Default transcript view: true
+light tab appearance has Label chats by status: true
+light tab models has Try another model when yours is busy: true
+light tab models has Wait for a first reply: true
+light tab code has Keep going on long jobs: true
+light tab code has Longest long job: true
+light tab code has Default permission mode: true
+light tab capabilities lacks Try another model: true
+light tab capabilities lacks Wait for a first reply: true
+light tab models lacks Keep going on long jobs: true
+light tab models lacks Longest long job: true
+light tab code lacks Default transcript view: true
+light tab code lacks Label chats by status: true
+light browser section leaks into tabs: []
+light desktop tab shows it: true
+dark tab appearance has Default transcript view: true
+dark tab appearance has Label chats by status: true
+dark tab models has Try another model when yours is busy: true
+dark tab models has Wait for a first reply: true
+dark tab code has Keep going on long jobs: true
+dark tab code has Longest long job: true
+dark tab code has Default permission mode: true
+dark tab capabilities lacks Try another model: true
+dark tab capabilities lacks Wait for a first reply: true
+dark tab models lacks Keep going on long jobs: true
+dark tab models lacks Longest long job: true
+dark tab code lacks Default transcript view: true
+dark tab code lacks Label chats by status: true
+dark browser section leaks into tabs: []
+dark desktop tab shows it: truelight font options: [[17,["Sans:4","Easy to read:2","Rounded:2","Serif:5","Monospace:3"]],[17,["Sans:4","Easy to read:2","Rounded:2","Serif:5","Monospace:3"]]]
+interface labels: Default · System | Segoe UI | Inter | Source Sans 3 | IBM Plex Sans | Atkinson Hyperlegible | Lexend | Nunito | Quicksand | Serif | Lora | Literata | Source Serif 4 | Noto Serif | Monospace | JetBrains Mono | IBM Plex Mono
+light picked atkinson-hyperlegible: "Bunny Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif / body "Bunny Atkinson Hyperlegible", "Segoe UI", system-ui, sans-s | loaded: Bunny Atkinson Hyperlegible,Bunny Atkinson Hyperlegible
+light transcript view control count: 1
+light device rows: ["Android · Chrome\n127.0.0.1 · signed in 11/18/2026, 3:59:30 PM · Ends after 30 min idle\nEverything\nChange ▾\nActivity\nSign out","iPhone or iPad · Safari\n127.0.0.1 · signed in 11/18/2026, 4:00:21 PM\nChats\nChange ▾\nActivity\nSign out"]
+light allow-row: Allow other devices to open Bunny | Lets a phone or another computer on your own network open Bunny, after a passcode. It is off until you turn it on, then it stays on, also after Bunny restarts, until you turn it off. Devices sign in again after a restart. Local network only: never forward a router port to it. | Open to other devices · 2 signed in · Android · Chrome has Everything | Bunny could not tell which network this is, so it will not reopen by itself after a restart. | on
+light activity limit: true
+light device chats top: NO bar
+light device body font: Inter, ui-sans-serif, system-ui, -apple-
+light device everything top: NO bar
+dark font options: [[17,["Sans:4","Easy to read:2","Rounded:2","Serif:5","Monospace:3"]],[17,["Sans:4","Easy to read:2","Rounded:2","Serif:5","Monospace:3"]]]
+dark picked atkinson-hyperlegible: "Bunny Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif / body "Bunny Atkinson Hyperlegible", "Segoe UI", system-ui, sans-s | loaded: Bunny Atkinson Hyperlegible,Bunny Atkinson Hyperlegible
+dark transcript view control count: 1
+dark device rows: ["Android · Chrome\n127.0.0.1 · signed in 11/18/2026, 3:59:30 PM · Ends after 30 min idle\nEverything\nChange ▾\nActivity\nSign out","iPhone or iPad · Safari\n127.0.0.1 · signed in 11/18/2026, 4:00:21 PM · Ends after 30 min idle\nEverything\nChange ▾\nActivity\nSign out"]
+dark allow-row: Allow other devices to open Bunny | Lets a phone or another computer on your own network open Bunny, after a passcode. It is off until you turn it on, then it stays on, also after Bunny restarts, until you turn it off. Devices sign in again after a restart. Local network only: never forward a router port to it. | Open to other devices · 2 signed in · Everything: Android · Chrome, iPhone or iPad · Safari | Bunny could not tell which network this is, so it will not reopen by itself after a restart. | on
+dark activity limit: true
+dark device chats top: NO bar
+dark device body font: Inter, ui-sans-serif, system-ui, -apple-
+dark device everything top: NO bar
+device GET fonts dir: 404light empty pill: 624x54 radius 20px bg rgba(255, 255, 255, 0.92)
+light placeholder: What are we burrowing into?
+light visible buttons when empty: none
+light keys line when typing: Enter to send · Shift+Enter new line · Esc to close Answers with Auto · text only
+light resize heights asked: 70,70,98,98,98,193
+light Esc with menu open: menu hidden=true calls=escHandled
+light Stop icon: {"ns":"http://www.w3.org/2000/svg","w":14,"h":14,"btn":34}
+light keys while thinking: Esc stops the answer · it stays in the chat Answers with Auto · text only
+light Esc while answering: stop,escHandled
+light visible buttons after answer: copy:Copy the answer:32px svg 16 | open:null:186px svg 0
+light text after Copy: no confirmation element
+light keys after answer: Enter sends a follow-up · Ctrl+Enter opens it in Bunny · Esc closes Answers with Auto · text only
+light Ctrl+Enter: open:
+light long answer: scrollTop 199 of 529; latest pill true
+light code block Copy button: true
+light earlier turns: Earlier row present
+light no-model focus: Open Bunny settings
+light no-model buttons: Open Bunny settings
+light offline focus: Try again
+light offline buttons: Try again | Open in Bunny
+light needs-window focus: Open in Bunny
+light needs-window buttons: Open in Bunny
+dark empty pill: 624x54 radius 20px bg rgba(38, 39, 44, 0.92)
+dark placeholder: What are we burrowing into?
+dark visible buttons when empty: none
+dark keys line when typing: Enter to send · Shift+Enter new line · Esc to close Answers with Auto · text only
+dark resize heights asked: 70,70,98,98,193
+dark Esc with menu open: menu hidden=true calls=escHandled
+dark Stop icon: {"ns":"http://www.w3.org/2000/svg","w":14,"h":14,"btn":34}
+dark keys while thinking: Esc stops the answer · it stays in the chat Answers with Auto · text only
+dark Esc while answering: stop,escHandled
+dark visible buttons after answer: copy:Copy the answer:32px svg 16 | open:null:186px svg 0
+dark text after Copy: no confirmation element
+dark keys after answer: Enter sends a follow-up · Ctrl+Enter opens it in Bunny · Esc closes Answers with Auto · text only
+dark Ctrl+Enter: open:
+dark long answer: scrollTop 199 of 529; latest pill true
+dark code block Copy button: true
+dark earlier turns: Earlier row present
+dark no-model focus: Open Bunny settings
+dark no-model buttons: Open Bunny settings
+dark offline focus: Try again
+dark offline buttons: Try again | Open in Bunny
+dark needs-window focus: Open in Bunny
+dark needs-window buttons: Open in Bunny
