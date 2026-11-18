@@ -90,3 +90,14 @@ Commits: c571a03 (WA-1) and a49d800 (WA-2).
 - **Tests:** `web-access`, `web-access-ssrf`, `quick-ask-answers-server` and `agent-tools` pass 21 of 21 on an extract with an invented profile.
 
 Verdict: PASS at a49d800.
+
+## Re-stamp at 0f24a08: PASS (supersedes a49d800)
+
+- 0f24a08 hardens WA-2's list of allowed addresses.
+  - `webSearch`'s `strip()` now collapses all whitespace, so a page's title or snippet is always one line and can't forge a "two spaces + URL" link line. JS `\s` also covers U+2028 and U+2029.
+  - A result link that contains whitespace or control characters after `uddg` decoding is left off the list.
+- Even before this fix, a forged line could only list a fixed address the page's author wrote in advance. It could carry no data from the person, so WA-2's exfiltration route stayed closed. This removes the forged listing anyway.
+- **Note:** the commit rewrites `src/server/appTools.js` with CRLF line endings. The real change is 2 lines, which `git diff --ignore-cr-at-eol` shows. Builder B should restore LF so later reviews and blame stay readable.
+- **Tests:** `web-access`, `web-access-ssrf`, `quick-ask-answers-server` and `agent-tools` pass 22 of 22 on an extract with an invented profile. The structured `{ text, links }` result isn't required.
+
+Verdict: PASS at 0f24a08.
