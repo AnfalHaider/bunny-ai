@@ -23,6 +23,7 @@ function mayCache(request, response) {
   if (request.headers.has('authorization') || request.headers.has('x-bunny-token') || request.headers.has('x-bunny-csrf')) return false;
   if (url.pathname.startsWith('/api/')) return false;
   if (response) {
+    // (A worker never sees a set-cookie header, so the protection is the path rule below, not this check; it stays only as a belt.)
     if (!response.ok || response.type === 'opaque' || response.headers.has('set-cookie')) return false;
     const type = response.headers.get('content-type') ?? '';
     if (/text\/html/i.test(type) && url.pathname !== OFFLINE) return false; // a page may hold the launch token or the CSRF token

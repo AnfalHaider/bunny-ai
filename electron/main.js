@@ -12,6 +12,7 @@ import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
 import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { createUpdater } from './updater.js';
+import { clearOldWorkersOnce } from './clear-old-workers.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
@@ -288,6 +289,7 @@ app.on('web-contents-created', (_event, contents) => guard(contents));
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
+  await clearOldWorkersOnce({ session: session.defaultSession, flagFile: join(app.getPath('userData'), 'old-workers-cleared-0.1.11') }); // once: the 0.1.9/0.1.10 worker
   // W6-24: the browser panel's tabs are views with a session of their own (browserViews.js), so Bunny's own session no longer drops any frame header:
   // Bunny's own pages keep X-Frame-Options and CSP frame-ancestors like any other page.
   try {
