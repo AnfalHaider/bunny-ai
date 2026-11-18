@@ -1,8 +1,14 @@
-# CLI-ENGINES: architecture spec (draft, revision 4)
+# CLI-ENGINES: architecture spec (draft, revision 5)
 
-Tech Lead, 2026-11-18. Revision 4 replaces bda6b05 (revision 3), d6465bf (revision 2) and 0b6a2f9 (revision 1).
+Tech Lead, 2026-11-18. Revision 5 replaces 84e68af (revision 4), bda6b05 (revision 3), d6465bf (revision 2) and 0b6a2f9 (revision 1).
 
-**What revision 4 adds:**
+**What revision 5 adds:**
+- Security's requirements CE-1 to CE-9 (13478ca), folded in (§3.6);
+- the CE-6 gap is closed: an Everything device is refused the engine routes, settings and `session.engine`;
+- the hook denies on every path (CE-1);
+- tested pins only, with a Security sign-off on every pin change (CE-5).
+
+**What revision 4 added:**
 - the owner's word 5, "restricted mode", and what restricted mode is exactly (§0.2);
 - Codex and Cline fall back to restricted mode, no longer "not offered";
 - the spikes, planned as the first build step (§6.1).
@@ -189,6 +195,7 @@ start({ runId, cwd, prompt, resume, mode, endpoint, approve, home, env, signal }
 - `cwd` is the workspace root, or the staged copy for a `staged` engine (§3.3).
 - `approve(request)` resolves to `{ allow, reason }` (§3.2). A `staged` engine never calls it.
 - `env` is `safeEnv()` plus only what the adapter names (M3, M4).
+- `prompt` never goes on the command line (CE-8). It goes by stdin, the JSON-RPC `turn/start`, or a file in the isolated home.
 - The CLI is spawned through `safeExec`: an absolute path and `windowsHide`. On `stop()`, a timeout or an abort, its whole process tree is killed with `taskkill /T /F` (the RUN-1 lesson).
 - A run that prints nothing for the wait limit (`waitLimits`) ends the way `unit-tests.mjs` ends a hung run, and says so.
 
@@ -312,7 +319,7 @@ The token reaches the CLI by environment only, never on the command line (O6):
 
 1. **Plan mode** refuses edits, commands, builds and sends (`planRefuses`).
 2. **Deny rules:** `checkToolCall`, `checkCommand` (through `commandParts`) and `checkPath`, on the mapped tool. Paths are canonicalised against the workspace root, as `createWorkspace` does.
-3. **Protected folders:** `protect: [dataDir]`, `neverBrowse`, and the `hidden` read-deny rules. The engine's own home is denied too, so it cannot rewrite its own config. A write outside the workspace is denied. A read outside it is an Ask, except in Auto (Security to confirm).
+3. **Protected folders:** `protect: [dataDir]`, `neverBrowse`, and the `hidden` read-deny rules. The engine's own home is denied too, so it cannot rewrite its own config. A write outside the workspace is denied. **A read outside it is an Ask in every mode, Auto included (CE-1.6).** The always-Deny list is in §3.6, CE-1.
 4. **Ask rules**, then `needsOk` for the mode. An Ask reaches the person through `askPermission`: the same card and nudges, and no answer by the end of the reply means no.
 5. **Allow rules**, then allow.
 
@@ -321,7 +328,7 @@ An unknown tool is judged as `run`. A request whose input cannot be read is deni
 ### 3.2 Way one: per-call approval (Claude Code; Codex if the granular policy holds; Cline if its hook spike holds)
 
 - Every action reaches `approve()` before it runs. This works on native Windows, where Claude Code has no sandbox at all (F2 §5).
-- **The hook route (Claude Code, Cline).** The hook is a small Node script that Bunny writes into the engine's isolated home. It calls the bridge on 127.0.0.1 with the run's token, and blocks on the answer. It exits with "deny" on any error, timeout or unreachable bridge (M6).
+- **The hook route (Claude Code, Cline).** The hook is a small Node script that Bunny writes into the engine's isolated home. It calls the bridge on 127.0.0.1 with the run's token, and blocks on the answer. It answers deny (`permissionDecision: "deny"` or exit 2, **never exit 1, which lets the tool run**) on any error, crash, timeout, bad answer or unreachable bridge (M6, CE-1).
   - The home folder is denied to the engine's own tools (§3.1), so the agent cannot edit the hook away.
   - The hook is rewritten at every run start.
 - **Codex:**
@@ -344,7 +351,7 @@ An unknown tool is judged as `run`. A request whose input cannot be read is deni
 
 For an engine that applies edits itself, with no per-call hook:
 
-1. **Copy.** Before the turn, Bunny makes a staged copy of the workspace in the chat's engine folder: the `worktrees.js` pattern for a git repo, otherwise a plain copy. The copy **leaves out every path the read-deny rules hide**, and the data folder, so the engine cannot read them even through a repo map. The engine runs with that copy as its `cwd`.
+1. **Copy.** Before the turn, Bunny makes a staged copy of the workspace in the chat's engine folder: a plain file copy, with no `.git` and no link back to the real repository (CE-2). The copy **leaves out every path the read-deny rules hide**, the data folder, every engine home, the engine-config folders, and every symlink, junction and reparse point, so the engine cannot read them even through a repo map. The engine runs with that copy as its `cwd`.
 2. **No commands, no git.** The engine is started with its own shell commands and git actions turned off (Aider R6, Codex R23, Cline R24). Web and MCP are off too. Where commands cannot be turned off, that engine is not offered, even in restricted mode (M2).
 3. **Judge every changed path.** At the end of the turn, Bunny diffs the copy against the real folder and judges each changed, added or deleted path with the bridge (§3.1), as a `write_file` or `edit_file`.
    - Denied paths are discarded, and the reply says which and why.
@@ -366,8 +373,41 @@ The person's folder only ever changes through Bunny's own write path.
 | Who | Choose an engine, download, update or roll back | Chats run on an engine |
 |---|---|---|
 | Bunny's window | yes: `engine` joins `WINDOW_ONLY_SETTING_KEYS`, `session.engine` joins `WINDOW_ONLY_SESSION_SETTINGS`, and `/api/engines*` joins `WINDOW_ONLY_ROUTES` | yes |
-| a device at Everything | no: those routes are window-only, and Everything excludes nothing else on them | yes, if the window chose it. Every engine tool goes to `remote.logAction` as `{kind: 'tool', tool: <mapped name>}`, by name only (R-DF2) |
+| a device at Everything | **no**: refused by `isDeviceRefused` (CE-6, §3.6). Being window-only is not enough, because Everything counts as the window | yes, if the window chose it. Every engine tool goes to `remote.logAction` as `{kind: 'tool', tool: '<engine id>:<mapped name>'}`, by name only (R-DF2, CE-7). An Ask is answered on that device |
 | a device at Chats | no | no: its chats always use Bunny's engine (`remoteToolBlocked` already refuses it Code-mode tools) |
+
+---
+
+### 3.6 Security's requirements CE-1 to CE-9 (13478ca), folded in
+
+Security's requirements are `docs/security/2026-11-18-cli-engines-requirements.md` at 13478ca, written against revision 4. They are **binding**. Where they are stricter than the text above, they win. What each one changes here:
+
+| CE | What changes in this spec | Where |
+|---|---|---|
+| **CE-1** Hook and bridge fail closed | The hook script is one fixed text from Bunny's code. It is started as `process.execPath` with `ELECTRON_RUN_AS_NODE=1` plus the script's absolute path, never a bare `node`. Its sha256 is checked before each run.<br>**On every path it writes `permissionDecision: "deny"` or exits 2. Exit 1, or any other code, lets Claude Code's tool run.** The whole script is wrapped, so a throw, a crash, a bad or empty answer, an unreachable bridge or its own timeout all end in deny.<br>The CLI's hook timeout is set above the longest an Ask card can wait, and the bridge answers deny before it. Asks wait through the CLI's own permission channel (`canUseTool`, `--permission-prompt-tool`, Codex `requestApproval`) wherever there is one, since that channel can stay pending.<br>Every call is judged: no cached decision, and a CLI's "allow always" is never used. Paths are canonicalised (realpath, 8.3 names, junctions, case) before the rules run.<br>**Reads outside the workspace are Ask in every mode, Auto included.** These are always Deny:<br>- the data folder;<br>- every engine home;<br>- `~\.claude`, `~\.codex`, `~\.cline` and `~\.aider*`;<br>- `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker` and `.config\gh`;<br>- `%APPDATA%` and `%LOCALAPPDATA%`. | §3.1 step 3; §3.2 (hook route); spikes S1(c) and S3: crash, runtime missing, killed, bridge closed, garbage answer and timeout must each show a deny |
+| **CE-2** Restricted mode | **The copy leaves out** `.git` (no worktree link back), `.aider*`, and every symlink, junction and reparse point (skipped, never followed).<br>**The diff always discards, and names:**<br>- anything under `.git` or an engine-config folder;<br>- alternate data streams (a `:` after the drive);<br>- reserved names, and names ending in a dot or space;<br>- links;<br>- files over the write limit.<br>Renames and file-type changes are judged.<br>**"Runs code later" files are Ask in every mode, Auto included,** marked on the card:<br>- `package.json`;<br>- `.vscode\tasks.json`, `.vscode\settings.json` and `.vscode\launch.json`;<br>- `.github\workflows\*`;<br>- `Makefile`;<br>- `*.ps1`, `*.bat`, `*.cmd`;<br>- `.husky\*` and `.pre-commit-config.yaml`;<br>- `pyproject.toml` and `setup.py`.<br>"Commands off" needs spike evidence, at the fake upstream and in the process list. An engine whose canary read is open ships only with the owner's answer recorded. | §0.2; §3.3 steps 1 and 3 (the staging copy no longer uses the `worktrees.js` pattern for git repos, because the copy has no `.git`); `engine-staging.test.js` |
+| **CE-3** Account homes and the person's homes | Bunny never reads, copies, hashes, logs, exports, backs up or searches an account home. It writes only its own config files there, by name.<br>The account home is left out of the secret-scan walk, Activity, export, staging and SEARCH-PC.<br>Sign-in state comes only from the CLI's status command or a run's error (R21).<br>Sign-in and sign-out run the vendor's fixed command, from the pinned binary by absolute path, in a visible terminal, with only the home variable set, started only from the window.<br>Every CLI home variable points at the isolated home explicitly.<br>A local-mode run's environment carries no vendor credential variable, and an account-mode run's environment carries no endpoint token. | §7.1, §7.3; spikes S1 to S4 add a **fake `USERPROFILE`** holding `.claude\settings.json`, `.codex\config.toml` and `.cline` with allow-everything rules and hooks. None of them may load |
+| **CE-4** Local endpoint | A request carrying **any `Sec-Fetch-*` header** is refused too, as well as one with an `Origin`. Only the listed paths are answered.<br>Upstream error text passes through `looksSecret`, and no upstream headers are passed on.<br>**An engine run counts against the chat's `replyCaps` token budget**, and reaching it shows the existing `onLimit` card.<br>At most 4 requests at once per run. The listener is closed on Stop, at the run's end and when Bunny quits. | §2.2, §2.3; `engine-endpoint.test.js` |
+| **CE-5** Downloads | **Every byte that runs is hash-pinned:**<br>- release assets and helpers;<br>- Claude Code's package, plus its Authenticode check;<br>- Cline's whole npm tree, from a lockfile with `integrity` values, installed with **`--ignore-scripts`**;<br>- `uv`, its Python runtime, and every Aider wheel (`--require-hashes`, wheels only, no source builds).<br>**Redirects:** every hop must be on the pin's own host list, which includes GitHub's asset host.<br>**Unpacking** refuses `..`, absolute paths, drive letters, symlinks and hardlinks, alternate data streams and reserved names, and stops at **2 GB in total**.<br>**Tested pins only.** `engines.json` is read only from Bunny's own releases feed, with a sha256 for each file.<br>**Every pin change is a Security sign-off** (Security reads the vendor's notes and advisories).<br>Self-update, telemetry and "non-essential traffic" are off, checked at network level.<br>**Elevation is never asked for.** | §4.3, §4.4; §9 question 2 is answered; `engine-store.test.js` |
+| **CE-6** Devices: **a real gap in revision 4** | Revision 4 made `/api/engines*`, `engine`, `engines.<id>.auth` and `session.engine` "window-only". But **a device at Everything counts as the window for window-only routes** (DEVICE-FULL: `windowOnly()` returns false for `req.bunnyDevice` except `isRemoteAdminPath`, app.js ~226). So revision 4 would have let an Everything device download, sign in or switch engines. **The fix is below this table.** | §3.5 (the device table rewritten); `engine-device.test.js` runs **at Everything** |
+| **CE-7** The record | A local engine record is shown in Settings → Engines. It covers download, update, switch, rollback, remove, sign-in, sign-out and auth-mode change. Each entry holds the time, the engine, the old and new versions, the first 12 characters of the sha256, and who (always the window).<br>Device engine tools are logged as `{kind: 'tool', tool: '<engine id>:<mapped name>'}`.<br>Bridge denials are named in the chat's steps with the rule's one-line reason. | §3.5, §4.4; `engines\record.json` in the data folder |
+| **CE-8** Starting the process | **The prompt never goes on the command line.** It goes by stdin (stream-json input for Claude Code; `turn/start` for Codex; stdin for Cline and Aider, or `--message-file` in the isolated home). There is no `-p "<prompt>"`.<br>No inherited handles but the pipes. No engine process outlives its run, and Bunny checks for stragglers on quit.<br>Where the engine's web, fetch, MCP or subagent tools cannot be turned off, the bridge judges them as `run`. | §1.3 (`start()`); §3.4 |
+| **CE-9** What Security signs each engine on | The spike evidence for its row; CE-1's failure set all showing deny; the canary unread, or the owner's recorded answer; the fake-home test; the CE-6 test at Everything; and the store tests (hash mismatch, path escape, redirect off-list, `--ignore-scripts`). | §5, §6.1 |
+
+**The CE-6 fix, in code terms.**
+
+1. `src/server/remoteAccess.js` gains `isDeviceRefused(method, path, body)`. It is true for:
+   - `isRemoteAdminPath(path)`;
+   - any `^/api/engines(/|$)` path;
+   - `PUT /api/settings` whose body has `engine` or `engines`;
+   - `PATCH /api/sessions/<id>` (and the session-setting route) whose body has `engine`;
+   - `POST /api/sessions` whose body has `engine`.
+2. It is checked in three places, the same way `isRemoteAdminPath` is today:
+   - in `remoteRoute`'s Everything branch, before `route(req, res)`;
+   - in `route()`'s belt, for `req.bunnyDevice`;
+   - in `windowOnly()`'s `req.bunnyDevice` branch, on the decoded path, as R-DF3 did.
+3. A Chats device is already refused by `remotePolicy`. A test proves it anyway.
+4. The refusal message is: "Only Bunny's window can change engines."
 
 ---
 
@@ -418,7 +458,7 @@ The versions are the ones Researcher found: Codex 0.170.0 (F1 §1); Claude Code'
 
 - A version is **tested** when QA's engine smoke (5.4) has passed for it on an invented profile and its fixtures were recorded from it.
 - **Between Bunny releases**, a Bunny GitHub Release may carry an `engines.json` asset in the same shape, read from the feed `updater.js` already trusts (`RELEASES_FEED`). An engine can then move to a newer tested version without a whole Bunny release.
-- Whether to offer "latest, untested" is an owner question. Recommendation: no.
+- **Tested pins only** (Security, CE-5.4). There is never a "latest, untested" option. **Every pin change is a Security sign-off.**
 
 ### 4.4 Download, update, switch, rollback (window-only routes)
 
@@ -647,5 +687,5 @@ The Codex granular policy, the Claude Code hook coverage and the Cline hook bloc
 ## 9. Questions for the owner (one at a time, with the drawing, O12)
 
 1. ~~Engines that cannot check with Bunny first~~: **answered**: "restricted mode" (word 5, §0.2). Still to come, from the Chief of Staff, per engine: an open read path after S2, S3 or S4.
-2. **Updates:** tested versions only, or also "latest, untested"? Recommendation: tested only.
+2. ~~Updates: tested only, or also latest?~~ **Answered by Security: tested only, and every pin change gets a Security sign-off (CE-5.4).**
 3. **Code-mode chats only**, with Chat mode always on Bunny's own engine? Recommendation: yes.
