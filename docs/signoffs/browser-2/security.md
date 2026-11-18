@@ -1,7 +1,7 @@
 ---
 piece: browser-2
 role: security
-sha: 0e5bc55
+sha: 975970a
 verdict: PASS
 date: 2026-11-18
 ---
@@ -143,3 +143,11 @@ None of them decides tools, folders, mode or unattended running.
   - The reservation is released in a `finally`, so a thrown check can't leak a slot.
   - The rest of `remoteAccess.js` is unchanged.
 - **Tests,** from a copy of 0e5bc55 with the variable unset: `remote-access` 34 of 34. They include 60 wrong passcodes at once from one device (5 checked, 55 told to wait), the flood across devices, and a right passcode working after the wait.
+
+## Re-stamp at 975970a (F-1 and F-2, page side only): PASS by code reading (supersedes 0e5bc55)
+
+- **Nothing under `src/server` changed.** The diff from 0e5bc55 touches `src/ui/api.js`, `src/ui/browser-mode.js`, the e2e spec and `test/browser-mode.test.js`.
+- **`deviceException`** (`browser-mode.js:169`) equals `remoteException` (`remoteAccess.js:107`) line for line: the same three cases and the same `UUID` pattern (`[a-f0-9-]{36}`), with the server's `isWindowOnlyRoute` passed in. It allows nothing wider.
+- **`api.js`** uses it only on a device page (`isDevicePage()`) and only to skip the page's early refusal. The server still decides every request, as before.
+- **F-2** re-applies the permission-rules lock after a redraw. That is UI only.
+- Builder A's tests were not re-run by Security for this stamp (a read-only check, while the K-5 guard runs used the PC). QA's walk at 975970a passed 80 of 80.
