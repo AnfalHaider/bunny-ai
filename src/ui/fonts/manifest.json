@@ -1,0 +1,267 @@
+{
+  "note": "Unmodified woff2 Latin files exactly as published by Google Fonts (fonts.gstatic.com, fetched 2026-11-18). Each licence text is the OFL.txt that ships with that family in github.com/google/fonts.",
+  "totalBytes": 490768,
+  "fonts": [
+    {
+      "id": "inter",
+      "name": "Inter",
+      "group": "Sans",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Inter Project Authors",
+      "licenceFile": "licenses/inter-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/inter/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "inter-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 48256,
+          "version": "v20",
+          "source": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+        }
+      ]
+    },
+    {
+      "id": "source-sans-3",
+      "name": "Source Sans 3",
+      "group": "Sans",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Adobe",
+      "licenceFile": "licenses/sourcesans3-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/sourcesans3/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "source-sans-3-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 28872,
+          "version": "v20",
+          "source": "https://fonts.gstatic.com/s/sourcesans3/v20/nwpStKy2OAdR1K-IwhWudF-R3w8aZQ.woff2"
+        }
+      ]
+    },
+    {
+      "id": "ibm-plex-sans",
+      "name": "IBM Plex Sans",
+      "group": "Sans",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "IBM Corp.",
+      "licenceFile": "licenses/ibmplexsans-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/ibmplexsans/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "ibm-plex-sans-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 45712,
+          "version": "v23",
+          "source": "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxeKYY.woff2"
+        }
+      ]
+    },
+    {
+      "id": "atkinson-hyperlegible",
+      "name": "Atkinson Hyperlegible",
+      "group": "Easy to read",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Braille Institute of America, Inc.",
+      "licenceFile": "licenses/atkinsonhyperlegible-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/atkinsonhyperlegible/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "atkinson-hyperlegible-400.woff2",
+          "weight": "400",
+          "bytes": 17208,
+          "version": "v12",
+          "source": "https://fonts.gstatic.com/s/atkinsonhyperlegible/v12/9Bt23C1KxNDXMspQ1lPyU89-1h6ONRlW45G04pIo.woff2"
+        },
+        {
+          "file": "atkinson-hyperlegible-700.woff2",
+          "weight": "700",
+          "bytes": 17524,
+          "version": "v12",
+          "source": "https://fonts.gstatic.com/s/atkinsonhyperlegible/v12/9Bt73C1KxNDXMspQ1lPyU89-1h6ONRlW45G8Wbc9dCWP.woff2"
+        }
+      ]
+    },
+    {
+      "id": "lexend",
+      "name": "Lexend",
+      "group": "Easy to read",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Lexend Project Authors",
+      "licenceFile": "licenses/lexend-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/lexend/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "lexend-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 39680,
+          "version": "v26",
+          "source": "https://fonts.gstatic.com/s/lexend/v26/wlpwgwvFAVdoq2_v-6QU.woff2"
+        }
+      ]
+    },
+    {
+      "id": "nunito",
+      "name": "Nunito",
+      "group": "Rounded",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Nunito Project Authors",
+      "licenceFile": "licenses/nunito-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/nunito/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "nunito-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 39128,
+          "version": "v32",
+          "source": "https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofINeaB.woff2"
+        }
+      ]
+    },
+    {
+      "id": "quicksand",
+      "name": "Quicksand",
+      "group": "Rounded",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Quicksand Project Authors",
+      "licenceFile": "licenses/quicksand-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/quicksand/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "quicksand-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 28244,
+          "version": "v37",
+          "source": "https://fonts.gstatic.com/s/quicksand/v37/6xKtdSZaM9iE8KbpRA_hK1QN.woff2"
+        }
+      ]
+    },
+    {
+      "id": "lora",
+      "name": "Lora",
+      "group": "Serif",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Lora Project Authors",
+      "licenceFile": "licenses/lora-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/lora/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "lora-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 37788,
+          "version": "v37",
+          "source": "https://fonts.gstatic.com/s/lora/v37/0QIvMX1D_JOuMwr7Iw.woff2"
+        }
+      ]
+    },
+    {
+      "id": "literata",
+      "name": "Literata",
+      "group": "Serif",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Literata Project Authors",
+      "licenceFile": "licenses/literata-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/literata/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "literata-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 38996,
+          "version": "v40",
+          "source": "https://fonts.gstatic.com/s/literata/v40/or3aQ6P12-iJxAIgLa78DkrbXsDgk0oVDaDPYLanFLHpPf2TbBG_df3-vbgKBM6YoggA-vpO-7c.woff2"
+        }
+      ]
+    },
+    {
+      "id": "source-serif-4",
+      "name": "Source Serif 4",
+      "group": "Serif",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Source Serif 4 Project Authors (Adobe)",
+      "licenceFile": "licenses/sourceserif4-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/sourceserif4/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "source-serif-4-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 50936,
+          "version": "v15",
+          "source": "https://fonts.gstatic.com/s/sourceserif4/v15/vEFF2_tTDB4M7-auWDN0ahZJW3IX2ih5nk3AucvUHf6kDXr4.woff2"
+        }
+      ]
+    },
+    {
+      "id": "noto-serif",
+      "name": "Noto Serif",
+      "group": "Serif",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "Noto Project Authors",
+      "licenceFile": "licenses/notoserif-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/notoserif/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "noto-serif-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 36756,
+          "version": "v33",
+          "source": "https://fonts.gstatic.com/s/notoserif/v33/ga6daw1J5X9T9RW6j9bNVls-hfgvz8JcMofYTYf6D30.woff2"
+        }
+      ]
+    },
+    {
+      "id": "jetbrains-mono",
+      "name": "JetBrains Mono",
+      "group": "Monospace",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "JetBrains Mono Project Authors",
+      "licenceFile": "licenses/jetbrainsmono-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/jetbrainsmono/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "jetbrains-mono-400-700.woff2",
+          "weight": "400 700",
+          "bytes": 31432,
+          "version": "v24",
+          "source": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+        }
+      ]
+    },
+    {
+      "id": "ibm-plex-mono",
+      "name": "IBM Plex Mono",
+      "group": "Monospace",
+      "licence": "SIL Open Font License 1.1",
+      "copyright": "IBM Corp.",
+      "licenceFile": "licenses/ibmplexmono-OFL.txt",
+      "licenceSource": "https://github.com/google/fonts/blob/main/ofl/ibmplexmono/OFL.txt",
+      "subset": "latin",
+      "files": [
+        {
+          "file": "ibm-plex-mono-400.woff2",
+          "weight": "400",
+          "bytes": 14648,
+          "version": "v23",
+          "source": "https://fonts.gstatic.com/s/ibmplexmono/v23/-F63fjptAgt5VM-kVkqdyU8n1i8q1w.woff2"
+        },
+        {
+          "file": "ibm-plex-mono-600.woff2",
+          "weight": "600",
+          "bytes": 15588,
+          "version": "v23",
+          "source": "https://fonts.gstatic.com/s/ibmplexmono/v23/-F6qfjptAgt5VM-kVkqdyU8n3vAOwlBFgg.woff2"
+        }
+      ]
+    }
+  ]
+}

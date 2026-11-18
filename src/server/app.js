@@ -108,6 +108,8 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2', // v0.1.13 bundled fonts
+  '.txt': 'text/plain; charset=utf-8', // their licence texts
 };
 
 async function readJson(file, fallback) {
