@@ -3922,6 +3922,7 @@ window.addEventListener('message', async (e) => {
     state.settings = settings;
     applyProfile(settings);
     applyAppearance(settings);
+    renderSidebar(); // "Label chats by status" is read when the list is drawn
   } catch { /* the next open of the window updates it */ }
 });
 
@@ -3968,6 +3969,7 @@ async function closeSettings() {
     renderPicker();
     renderComposerHeader();
     paintMessages();
+    renderSidebar(); // "Label chats by status" and the like are read when the list is drawn
   } catch { /* the chat keeps working with what it had */ }
 }
 

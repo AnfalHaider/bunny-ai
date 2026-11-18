@@ -132,6 +132,16 @@
         </select></div>
       </div>
       <div class="row">
+        <div class="meta-col"><div class="name">Label chats by status</div><div class="desc">The sidebar marks each chat as working, needs you, ready or failed.</div></div>
+        <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="statusLabels" data-default="true" aria-label="Label chats by status" /><span class="pref-state"></span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col"><div class="name">Default transcript view</div><div class="desc">How much detail chats show. Thinking opens the model's thinking; Verbose also shows whole step results.</div></div>
+        <div class="right"><select class="pref" data-key="transcriptView" data-default="normal" aria-label="Default transcript view">
+          <option value="normal">Normal</option><option value="thinking">Thinking</option><option value="verbose">Verbose</option>
+        </select></div>
+      </div>
+      <div class="row">
         <div class="meta-col"><div class="name">Motion</div><div class="desc">System follows Windows. Reduced calms animations, the hopping bunny included.</div></div>
         <div class="right"><select class="appearance" data-key="motion" aria-label="Motion">
           <option value="system">System</option><option value="reduced">Reduced</option><option value="full">Full</option>
@@ -281,31 +291,6 @@
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" aria-label="Connectors" /><span>on</span></label></div>
       </div>
-      <div class="row">
-        <div class="meta-col">
-          <div class="name" data-i18n="settings.fallbackName">Try another model when yours is busy</div>
-          <div class="desc" data-i18n="settings.fallbackDesc">When the model you picked hits a rate limit or does not answer, the reply goes to the best other model for the job, and the reply says which answered.</div>
-        </div>
-        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" aria-label="Switch model when busy" /><span>on</span></label></div>
-      </div>
-      <div class="row" id="wait-row">
-        <div class="meta-col">
-          <div class="name">Wait for a first reply</div>
-          <div class="desc">How long Bunny waits for the model you picked to start answering before it tries another. Reasoning, image and video models get twice as long, and so does a reply that goes quiet part-way. <span id="wait-off-note" hidden>Used only when "Try another model" is on.</span></div>
-        </div>
-        <div class="right wait-right">
-          <select id="wait-select" aria-label="Wait for a first reply">
-            <option value="15">15 seconds</option>
-            <option value="30">30 seconds (default)</option>
-            <option value="60">60 seconds</option>
-            <option value="90">90 seconds</option>
-            <option value="120">120 seconds</option>
-            <option value="custom">Custom…</option>
-          </select>
-          <label class="wait-custom" id="wait-custom" hidden><input type="text" inputmode="numeric" id="wait-custom-input" aria-label="Seconds to wait for a first reply" autocomplete="off" /> seconds</label>
-          <div class="wait-now" id="wait-now" aria-live="polite"></div>
-        </div>
-      </div>
     </div>
 
     <h2>Voice</h2>
@@ -401,24 +386,35 @@
       </div>
       <div class="row">
         <div class="meta-col">
-          <div class="name">Keep going on long jobs</div>
-          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps or the time below, whichever comes first. 0 turns it off.</div>
-        </div>
-        <div class="right"><input id="auto-steps" type="number" min="0" step="50" aria-label="Most steps in one reply" /></div>
-      </div>
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Longest long job</div>
-          <div class="desc">The most minutes one reply may keep working in Code mode. The default is 120 (2 hours). 0 turns it off.</div>
-        </div>
-        <div class="right"><input id="auto-minutes" type="number" min="0" step="10" aria-label="Most minutes in one reply" /></div>
-      </div>
-      <div class="row">
-        <div class="meta-col">
           <div class="name">Token budget for one reply</div>
           <div class="desc">When a long job has used this many input tokens, Bunny asks whether to keep going instead of stopping. The default is 5,000,000; it cannot be turned off, and the smallest allowed is 100,000.</div>
         </div>
         <div class="right"><input id="auto-tokens" type="number" min="100000" step="500000" aria-label="Token budget for one reply" /></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name" data-i18n="settings.fallbackName">Try another model when yours is busy</div>
+          <div class="desc" data-i18n="settings.fallbackDesc">When the model you picked hits a rate limit or does not answer, the reply goes to the best other model for the job, and the reply says which answered.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="fallbackWhenBusy" aria-label="Switch model when busy" /><span>on</span></label></div>
+      </div>
+      <div class="row" id="wait-row">
+        <div class="meta-col">
+          <div class="name">Wait for a first reply</div>
+          <div class="desc">How long Bunny waits for the model you picked to start answering before it tries another. Reasoning, image and video models get twice as long, and so does a reply that goes quiet part-way. <span id="wait-off-note" hidden>Used only when "Try another model" is on.</span></div>
+        </div>
+        <div class="right wait-right">
+          <select id="wait-select" aria-label="Wait for a first reply">
+            <option value="15">15 seconds</option>
+            <option value="30">30 seconds (default)</option>
+            <option value="60">60 seconds</option>
+            <option value="90">90 seconds</option>
+            <option value="120">120 seconds</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <label class="wait-custom" id="wait-custom" hidden><input type="text" inputmode="numeric" id="wait-custom-input" aria-label="Seconds to wait for a first reply" autocomplete="off" /> seconds</label>
+          <div class="wait-now" id="wait-now" aria-live="polite"></div>
+        </div>
       </div>
       <div class="row">
         <div class="meta-col">
@@ -520,14 +516,18 @@
         <div class="right"></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Label chats by status</div><div class="desc">The sidebar marks each chat as working, needs you, ready or failed.</div></div>
-        <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="statusLabels" data-default="true" aria-label="Label chats by status" /><span class="pref-state"></span></label></div>
+        <div class="meta-col">
+          <div class="name">Keep going on long jobs</div>
+          <div class="desc">In Code mode, Bunny keeps working past its step limit until the job is done, up to this many steps or the time below, whichever comes first. 0 turns it off.</div>
+        </div>
+        <div class="right"><input id="auto-steps" type="number" min="0" step="50" aria-label="Most steps in one reply" /></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Default transcript view</div><div class="desc">How much detail chats show. Thinking opens the model's thinking; Verbose also shows whole step results.</div></div>
-        <div class="right"><select class="pref" data-key="transcriptView" data-default="normal" aria-label="Default transcript view">
-          <option value="normal">Normal</option><option value="thinking">Thinking</option><option value="verbose">Verbose</option>
-        </select></div>
+        <div class="meta-col">
+          <div class="name">Longest long job</div>
+          <div class="desc">The most minutes one reply may keep working in Code mode. The default is 120 (2 hours). 0 turns it off.</div>
+        </div>
+        <div class="right"><input id="auto-minutes" type="number" min="0" step="10" aria-label="Most minutes in one reply" /></div>
       </div>
       <div class="row">
         <div class="meta-col"><div class="name">Code theme and font</div><div class="desc">Change how code looks in replies, files, diffs and the terminal.</div></div>
