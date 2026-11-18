@@ -173,3 +173,24 @@ test('window-only: quickAskEnabled and quickAskShortcut are window-only settings
     assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { [key]: true }), true, key);
   }
 });
+
+test('desktop preferences: every one the person saves is kept and is still there after Bunny is closed and started again (Start when I sign in and Keep the same address used to be dropped on every save)', async () => {
+  const { mkdtempSync, readFileSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const defaults = { launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: 'Ctrl+Alt+Space', keepAddress: false, fixedPort: null };
+  const file = join(mkdtempSync(join(tmpdir(), 'bunny-prefs-')), 'desktop-prefs.json');
+  const start = () => { try { return { ...defaults, ...JSON.parse(readFileSync(file, 'utf8')) }; } catch { return { ...defaults }; } }; // what main.js does when it starts
+  let prefs = start();
+  const save = (patch) => { prefs = applyTrayRule(prefs, patch).prefs; writeFileSync(file, JSON.stringify(prefs)); }; // what 'prefs:set' does
+  for (const patch of [{ launchAtLogin: true }, { keepAddress: true }, { closeToTray: true }, { quickAskShortcut: 'Ctrl+Alt+B' }]) save(patch);
+  const again = start(); // Bunny closed and started again
+  assert.equal(again.launchAtLogin, true, 'Start when I sign in');
+  assert.equal(again.keepAddress, true, 'Keep the same address after restart');
+  assert.equal(again.closeToTray, true, 'Keep running in the tray');
+  assert.equal(again.quickAskShortcut, 'Ctrl+Alt+B', 'the Quick ask shortcut');
+  save({ launchAtLogin: false });
+  assert.deepEqual([start().launchAtLogin, start().keepAddress], [false, true], 'turning one off leaves the others as they were');
+  const quick = applyTrayRule(start(), { quickAskEnabled: true });
+  assert.deepEqual([quick.prefs.launchAtLogin, quick.prefs.keepAddress, quick.prefs.closeToTray], [false, true, true], 'the tray rule changes only what it must');
+});

@@ -53,11 +53,10 @@ export function validateAccelerator(input) {
  * Turning Quick ask on turns the tray on; turning the tray off turns Quick ask off (with a note).
  */
 export function applyTrayRule(current, patch) {
-  const next = { ...current };
+  // Every preference the person changed is kept, not only the three this rule is about: this used to copy just those three, so "Start when I sign in" and
+  // "Keep the same address after restart" were thrown away on every save and never came back after a restart.
+  const next = { ...current, ...patch };
   let note = null;
-  if (typeof patch.closeToTray === 'boolean') next.closeToTray = patch.closeToTray;
-  if (typeof patch.quickAskEnabled === 'boolean') next.quickAskEnabled = patch.quickAskEnabled;
-  if (typeof patch.quickAskShortcut === 'string') next.quickAskShortcut = patch.quickAskShortcut;
   if (patch.quickAskEnabled === true && !next.closeToTray) {
     next.closeToTray = true;
     note = 'Quick ask needs Bunny to keep running in the tray, so that is on now.';
