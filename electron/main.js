@@ -289,7 +289,7 @@ app.on('web-contents-created', (_event, contents) => guard(contents));
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
-  await clearOldWorkersOnce({ session: session.defaultSession, flagFile: join(app.getPath('userData'), 'old-workers-cleared-0.1.11') }); // once: the 0.1.9/0.1.10 worker
+  await clearOldWorkersOnce({ session: session.defaultSession, flagFile: join(app.getPath('userData'), 'old-workers-cleared-0.1.12') }); // once: the 0.1.9/0.1.10 worker
   // W6-24: the browser panel's tabs are views with a session of their own (browserViews.js), so Bunny's own session no longer drops any frame header:
   // Bunny's own pages keep X-Frame-Options and CSP frame-ancestors like any other page.
   try {
