@@ -2,6 +2,31 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-19 - v0.1.13 published
+
+**Owner's words (typed in this chat):** "Yes, release when ready"; "push and release when ready"; "just run the test for cut part, then release and push, no need for all the tests and sign offs again"; "ok, ping my phone when it's live". The full words for every row are in docs/plans/2026-11-18-v0.1.13-plan.md.
+
+**Published:** v0.1.13, tag 03c5a06 (code 07d6d2f), 2026-11-18T20:07:35Z. Bunny-AI-Setup-0.1.13.exe is 122,952,268 bytes, sha256 48ce61c5…7cd6e. Release Ops downloaded the uploaded file, and it matches the build and latest.yml. I checked the feed myself: latest is v0.1.13, and latest.yml says 0.1.13. Gate 9/9 at 07d6d2f; QA, Tech Lead, Librarian, Security and Chief of Staff signed at 07d6d2f, Design at 371b4b4. The owner's phone was pinged.
+
+**What shipped:**
+- DEVICE-FULL and its notice;
+- PRIV-2;
+- REMOTE-STAY;
+- the Settings fixes: tabs, prefs kept, the moves, Verbose, saves finished before close;
+- CHAT-SWITCH;
+- FONTS and THEME-APPLY;
+- the Quick ask redesign, its error states and QUICK-CLIP.
+
+**What went wrong:**
+- Three real bugs only showed up late, and each needed another gate:
+  - a change made just before Settings closed was lost;
+  - tests chose a select's default before the page filled it;
+  - the Quick ask error cards were clipped.
+- This PC's network kept failing, 12-second failing DNS lookups and npm ECONNRESETs. That stopped gates and sessions for hours.
+- The push hook refused a carried sign-off that edited another role's earlier one. A role's re-sign must be a fresh file on the final sha.
+
+**Lesson:** for a re-sign, ask each role for a new commit cut from the final sha that adds its file. Never carry an edit of an older sign-off. Also: the gate's network steps (npm audit, and unit tests that look up real names) fail on a bad connection. TEST-DNS (v0.1.14) removes the second; check the network before blaming code.
+
 ## 2026-11-18 - v0.1.11 and v0.1.12 published
 
 **Owner's words (typed in this chat):**
