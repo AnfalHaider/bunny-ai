@@ -95,3 +95,27 @@ test('2: the window is only as tall as the pill, and grows for the + menu and fo
   await page.evaluate(() => window.__emit({ type: 'delta', text: 'A line of the answer.\n\n'.repeat(12) }));
   await expect.poll(() => lastResize(page)).toBeGreaterThan(rest + 100);
 });
+
+test('3: Esc does one thing at a time: closes the + menu first, then stops a running answer, then closes the bar', async ({ page }) => {
+  await openBar(page, { ask: 'ok' });
+  // the + menu is open: Esc closes the menu, the focus goes back to +, the bar stays
+  await page.locator('#plus').click();
+  await expect(page.locator('#menu')).toBeVisible();
+  await page.evaluate(() => window.__esc());
+  await expect(page.locator('#menu')).toBeHidden();
+  await expect(page.locator('#plus')).toBeFocused();
+  expect(await calls(page, 'escHandled')).toHaveLength(1);
+  expect(await calls(page, 'close')).toHaveLength(0);
+  // an answer is coming: Esc stops it (what arrived stays), and the bar stays
+  await page.locator('#text').fill('hello');
+  await page.locator('#go').click();
+  await page.evaluate(() => window.__emit({ type: 'delta', text: 'Part of an answer' }));
+  await page.evaluate(() => window.__esc());
+  expect(await calls(page, 'stop')).toHaveLength(1);
+  expect(await calls(page, 'escHandled')).toHaveLength(2);
+  expect(await calls(page, 'close')).toHaveLength(0);
+  await page.evaluate(() => window.__emit({ type: 'stopped' }));
+  // nothing left to handle: Esc closes the bar
+  await page.evaluate(() => window.__esc());
+  expect(await calls(page, 'close')).toHaveLength(1);
+});

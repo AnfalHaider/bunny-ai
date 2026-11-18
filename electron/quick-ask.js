@@ -14,6 +14,7 @@ const BAR_DIR = join(here, 'quick-ask');
 const KEEP_TEXT_MS = 5 * 60 * 1000; // clicking away hides the bar and keeps the text this long
 
 const BAR_WIDTH = 640;
+const ESC_ANSWER_MS = 600; // how long the page has to answer an Esc before the bar closes by itself
 
 /** The window options of the bar, kept as data so a test can check them. */
 export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
@@ -49,6 +50,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     emit: (event) => { if (alive()) bar.webContents.send('quickask:answer', event); },
     onFinishedDetached: (sessionId) => onAnswerFinished(sessionId),
   }) : null;
+  let escTimer = null;
   let held = null; // W4-8b: the one file the person picked, { id, file }: the checked bytes live only here until sent, removed or the bar closes
 
   const alive = () => bar && !bar.isDestroyed();
@@ -56,6 +58,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
 
   function destroyBar({ keepAnswer = false } = {}) {
     clearTimeout(keepTimer);
+    clearTimeout(escTimer);
     held = null;
     if (answerer && !keepAnswer) { answerer.stop(); answerer.reset(); } // Esc and closing stop a running answer; what arrived is kept in the chat
     barHeight = MIN_BAR_HEIGHT;
@@ -88,7 +91,13 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     wc.on('will-attach-webview', (event) => event.preventDefault());
     wc.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
     wc.on('before-input-event', (event, input) => {
-      if (input.type === 'keyDown' && input.key === 'Escape') { event.preventDefault(); destroyBar(); } // closes and forgets the text
+      if (input.type !== 'keyDown' || input.key !== 'Escape') return;
+      event.preventDefault();
+      // QUICK-UI 3: Esc does one thing at a time. The page decides: the + menu open, it closes the menu; an answer coming, it stops it and keeps what arrived; otherwise it closes the bar
+      // (and forgets the text). A page that does not answer in 600 ms is stuck: the bar closes, so Esc can always close it.
+      clearTimeout(escTimer);
+      try { wc.send('quickask:esc'); } catch { destroyBar(); return; }
+      escTimer = setTimeout(() => { if (bar === win) destroyBar(); }, ESC_ANSWER_MS);
     });
     win.on('blur', () => {
       if (bar !== win || !alive() || capturing || picking) return;
@@ -202,6 +211,9 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     return { ok: true };
   });
   ipcMain.handle('quickask:stop', (event) => { if (fromBar(event) && answerer) answerer.stop(); return { ok: true }; });
+  // QUICK-UI 3: the page says what it did with an Esc: it dealt with it itself (menu closed, answer stopped), or the bar should close. Both only from the bar's own page.
+  ipcMain.handle('quickask:escHandled', (event) => { if (fromBar(event)) clearTimeout(escTimer); return { ok: true }; });
+  ipcMain.handle('quickask:close', (event) => { if (!fromBar(event)) return { ok: false }; destroyBar(); return { ok: true }; });
   // Open in Bunny: the chat (and an answer still coming) is carried over to the main window; the bar closes.
   ipcMain.handle('quickask:open', (event) => {
     if (!fromBar(event) || !answerer) return { ok: false, message: 'Not allowed' };

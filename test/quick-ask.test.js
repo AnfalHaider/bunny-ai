@@ -78,16 +78,16 @@ test('new chat request: Chat mode, no folder, text as plain data, the screenshot
   assert.equal(withShot.files[0].data, pngUrl(shot));
 });
 
-test('structure: the bar preload exposes exactly these functions (submit, the screenshot, one file, dropping it, ask, stop, open in Bunny, resize, hear the answer) and nothing else', async () => {
+test('structure: the bar preload exposes exactly these functions (submit, the screenshot, one file, dropping it, ask, stop, open in Bunny, resize, hear the answer, and the three that settle Esc) and nothing else', async () => {
   const src = await readFile(new URL('../electron/quick-ask/preload.cjs', import.meta.url), 'utf8');
   const bridge = /exposeInMainWorld\('quickAsk', \{([\s\S]*?)\}\);/.exec(src)[1];
   const names = [...bridge.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
-  assert.deepEqual(names, ['submit', 'captureScreenshot', 'pickFile', 'ask', 'stop', 'openInBunny', 'resize', 'onAnswer', 'dropFile']);
+  assert.deepEqual(names, ['submit', 'captureScreenshot', 'pickFile', 'ask', 'stop', 'openInBunny', 'resize', 'onAnswer', 'dropFile', 'close', 'escHandled', 'onEscape']);
   assert.equal((src.match(/exposeInMainWorld/g) ?? []).length, 1);
   assert.doesNotMatch(src, /ipcRenderer\.(send|once)\b|require\((?!'electron')/);
   // the one thing that may arrive from main is the plain answer, and nothing else is listened to
   const listened = [...src.matchAll(/ipcRenderer\.on\('([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(listened, ['quickask:answer']);
+  assert.deepEqual(listened, ['quickask:answer', 'quickask:esc']);
 });
 
 test('structure: the bar window is frameless, transparent, always on top, and secure', () => {

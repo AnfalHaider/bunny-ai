@@ -261,6 +261,12 @@ text.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
 });
 go.addEventListener('click', () => { if (!asked) send(); });
+// QUICK-UI 3: Esc does one thing at a time: the + menu open, close it (focus back on +); an answer coming, stop it and keep what arrived; otherwise close the bar.
+window.quickAsk.onEscape(() => {
+  if (!$('menu').hidden) { closeMenu(); $('plus').focus(); window.quickAsk.escHandled().catch(() => {}); return; }
+  if (answering) { window.quickAsk.stop().catch(() => {}); window.quickAsk.escHandled().catch(() => {}); return; }
+  window.quickAsk.close().catch(() => {});
+});
 window.addEventListener('focus', () => text.focus());
 refresh();
 text.focus();
