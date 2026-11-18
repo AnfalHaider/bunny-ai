@@ -1,8 +1,8 @@
 ---
 piece: device-full
 role: security
-sha: 3d1cde0
-verdict: PASS
+sha: 55181f1
+verdict: FAIL
 date: 2026-11-18
 ---
 
@@ -64,3 +64,29 @@ This is the piece of Design's suggestion I need. Notifications on the window for
 **PASS for the server side at 3d1cde0:** levels can't be raised from a device, Everything gets no launch token, the cookie and CSRF are still required on every write, and the level ends with its session.
 
 **v0.1.13 needs R-DF1, R-DF2 and R-DF3 before Security signs the release.** I'll check them on the candidate.
+
+## Re-review at 55181f1 (R-DF2, R-DF3, the 30-minute idle): FAIL, the action log loses its history on a restart
+
+**R-DF3 fixed.** `windowOnly()` now tests the decoded path for `req.bunnyDevice`, and a path that can't be decoded is refused. Tested with the encoded spellings.
+
+**The 30-minute idle limit is in.** `idleLimit(s)` gives `EVERYTHING_IDLE_MS` (30 minutes) to an Everything session and 2 hours to Chats. It applies in both `sweep()` and `sessionFor`, and a level change resets the idle clock.
+
+**R-DF2, the log, holds in content and access:**
+- An entry is the time, the device's id, name and level, and `kind`, `tool`, `method`, `path`, `level` and `from` only, each cut to 200 characters. There are no arguments and no bodies.
+- Tool calls are logged in `runTool` for `req.bunnyRemote` and `req.bunnyDevice`, so helper chats count too. Window-only writes are logged as route and method. Sign-ins, idle sign-outs and level changes are logged as well.
+- `GET /api/remote/log` is window-only, and devices are refused anything under `/api/remote*`.
+
+**But the log is not kept across a restart.** `logAction` writes the in-memory list to `remote-actions.json` before the saved file was ever read. The saved file is loaded only when the window reads the log (`actions()`). My probe `docs/security/device-full-probe/log-restart.mjs`, with invented data in a temp folder, wrote an earlier entry, made a fresh `createRemoteAccess` (a restart) and logged one action:
+
+```
+entries on disk after a restart and one new action: 1; the earlier entry is LOST
+what the window then reads: 2 entries (New device, New device)
+```
+
+So the first action after every restart erases the history (for example, last night's actions by a stolen session). The window then shows the new entry twice: `loadActions` adds the saved file, which now holds it, to the copy in memory.
+
+**Fix:** load the saved log before the first write. For example, start `loadActions()` when the module is created and chain every save after it, or `await loadActions()` inside the save chain before writing, and stop concatenating the in-memory entries onto a file that already holds them. Test it with a probe like mine: an entry written by an earlier run, a restart, one new action, and the earlier entry still there, with no duplicates.
+
+**Limit to state honestly (not a code fix):** an Everything device can run commands, so it can edit `remote-actions.json` itself. The log shows what a device did unless that device set out to hide it. The window's Activity view should not claim more than that.
+
+**Still required for release:** R-DF1, the visible warning, the named status line and the Activity view, which come with the drawing.
