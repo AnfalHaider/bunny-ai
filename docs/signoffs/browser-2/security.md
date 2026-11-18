@@ -1,9 +1,9 @@
 ---
 piece: browser-2
 role: security
-sha: 564b28b
+sha: 0e5bc55
 verdict: PASS
-date: 2026-11-17
+date: 2026-11-18
 ---
 
 # BROWSER step 2 (f741c89 + 86848df, full chats from devices): Security FAIL, with a list of required changes
@@ -133,3 +133,13 @@ None of them decides tools, folders, mode or unattended running.
 - **The model chip on a device** now PATCHes the chat's own `setting/providerId` and `setting/model`, both already on the device write list (`remoteAccess.js`, 568f8d5), instead of writing the app's default. A device's `PUT /api/settings` is still refused (new test).
 - **The escaped-dot fix** turns `(customize|providers|automation).html$` into `\.html$` in the page-name tests that choose which controls to lock. That is UI-only, and stricter.
 - **Tests,** from a copy of 564b28b with the variable unset: `remote-access` 31 of 31, `browser-mode` 5 of 5.
+
+## Re-stamp at 0e5bc55 (RA-1, found by Tech Lead on 9d4e942): PASS (supersedes 564b28b)
+
+- **The problem.** A wrong try was counted only after its scrypt check finished, so tries sent at the same moment all ran (60 wrong passcodes were all checked). I missed this in my f741c89 reading; Tech Lead found it.
+- **The fix.** `signIn` now reserves the try **before** scrypt:
+  - A device has `FAILS_BEFORE_WAIT` (5) tries in all, counting those still being checked, then one at a time. Its own timed lockout (`waitFor`) is still checked first.
+  - Everyone together has `FLOOD_LIMIT` (30) failures plus the tries in flight before the 60 s wait.
+  - The reservation is released in a `finally`, so a thrown check can't leak a slot.
+  - The rest of `remoteAccess.js` is unchanged.
+- **Tests,** from a copy of 0e5bc55 with the variable unset: `remote-access` 34 of 34. They include 60 wrong passcodes at once from one device (5 checked, 55 told to wait), the flood across devices, and a right passcode working after the wait.
