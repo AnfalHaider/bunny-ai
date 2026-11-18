@@ -1,7 +1,7 @@
 ---
 piece: release-0.1.10
 role: security
-sha: 9d4e942
+sha: 975970a
 verdict: PASS
 date: 2026-11-18
 ---
@@ -63,3 +63,13 @@ Other files:
 - **BROWSER's real-Electron probe** was not re-run by Security. The browser-2 verdicts rest on code reading and the HTTP tests.
 - **Design's sign-off** of the BROWSER screens against the drawing is Design's, not Security's.
 - **For the owner:** connectors stay denied for devices, and that question goes to the owner.
+
+## Moved to 975970a: PASS (supersedes 9d4e942)
+
+`git log 9d4e942..975970a` adds exactly two commits, both stamped under browser-2:
+- **0e5bc55, RA-1:** sign-in tries are reserved before scrypt. PASS, 4bfab0b. `remote-access` 34 of 34.
+- **975970a, F-1 and F-2:** page side only; `deviceException` equals `remoteException`. PASS by code reading, 781f9de.
+
+They change only `src/server/remoteAccess.js`, `src/ui/api.js`, `src/ui/browser-mode.js` and tests. Everything else in the review above holds at 975970a. QA signed release-0.1.10 PASS at 975970a, an 80 of 80 walk.
+
+K-5 is not in v0.1.10 (the Chief of Staff's decision). It is its own review for the next release.
