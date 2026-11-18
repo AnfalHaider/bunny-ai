@@ -25,6 +25,7 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
+import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -4466,7 +4467,10 @@ async function boot() {
   // localhost; a device on the network over plain http gets none) and never inside Bunny's own window. It keeps static files only; see src/ui/bunny-sw.js.
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && !window.bunnyDesktop) {
     navigator.serviceWorker.getRegistrations().then((list) => { for (const r of list) if (/\/src\/ui\/$/.test(r.scope)) r.unregister(); }).catch(() => {}); // the old worker (it kept index.html) goes
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+    watchInstall(window); // the browser's install offer comes to this top page; Settings reads it from here
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((registration) => {
+      watchUpdates(registration, (apply) => showUpdateBar(document, apply)); // a new version waits: "Update ready · Reload"
+    }).catch(() => {
       // An app that cannot cache itself still works.
     });
   }

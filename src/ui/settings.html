@@ -601,15 +601,17 @@
         <div class="meta-col">
           <div class="name">Open in your browser</div>
           <div class="desc">Opens Bunny in your usual browser, on this computer only, next to this window. Things that change what Bunny may do (permissions, connectors, installs, updates) can only be changed in this window. Bunny has to keep running: turn on Keep running in the tray above to close the window and still use the browser.</div>
+          <div class="desc" id="open-browser-pointer" hidden></div>
         </div>
         <div class="right"><button type="button" id="open-browser" class="btn">Open in your browser</button></div>
       </div>
-      <div class="row">
+      <div class="row" id="install-row" hidden>
         <div class="meta-col">
-          <div class="name">Install as an app</div>
-          <div class="desc">Open Bunny in your browser, then use its own install step: in Chrome or Edge the install icon in the address bar (or the menu, Install Bunny AI); on an iPhone or iPad Share, then Add to Home Screen; on Android the menu, then Add to Home screen. It gets its own icon and window.</div>
-          <div class="desc">On your network over plain HTTP (a phone or another computer), browsers do not run the offline part or offer a full install: an iPhone's Add to Home Screen still opens it as an app, and Android gives a home-screen shortcut.</div>
+          <div class="name"><span id="install-title">Install as an app</span> <span class="badge" id="install-badge" hidden>Installed</span></div>
+          <div class="desc" id="install-body"></div>
+          <div class="desc" id="install-network"></div>
         </div>
+        <div class="right"><button type="button" id="install-app" class="btn"></button></div>
       </div>
       <div class="row">
         <div class="meta-col">
@@ -677,6 +679,7 @@
 
 <script type="module">
   import { getJSON, sendJSON, applyTheme, applyAppearance, CODE_THEMES, codeThemeVars, desktopBridge } from './api.js';
+  import { installContext, installRowState, installRowText, runInstall } from './install-app.js';
   import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
   const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
@@ -1322,9 +1325,43 @@
     setInterval(refresh, 10000);
   }
 
+  // Install as an app (Design's drawing): in a browser tab the page shows the row, driven by the browser's own install offer; Bunny's window shows a pointer line instead.
+  function bootInstall(desk) {
+    $('desktop-section').hidden = false;
+    $('browser-section').hidden = false;
+    const ctx = installContext(window);
+    const render = () => {
+      const state = installRowState({ bridge: Boolean(desk), host: location.hostname, installed: ctx.installed, hasPrompt: Boolean(ctx.prompt) });
+      const t = installRowText(state);
+      if (state === 'window') {
+        $('install-row').hidden = true;
+        $('open-browser-pointer').hidden = false;
+        $('open-browser-pointer').textContent = `${t.body} ${t.network}`;
+        return;
+      }
+      $('open-browser-pointer').hidden = true;
+      $('install-row').hidden = false;
+      $('install-row').dataset.state = state;
+      $('install-title').textContent = t.title;
+      $('install-badge').hidden = !t.badge;
+      $('install-body').textContent = t.body;
+      $('install-network').textContent = t.network; // shown in every state
+      $('install-app').textContent = t.button;
+      $('install-app').disabled = !t.enabled;
+    };
+    if (!desk) { // a browser tab: only this row is meaningful here (the rest is Bunny's own window's)
+      for (const g of document.querySelectorAll('#desktop-section > .group')) g.hidden = true;
+      for (const row of document.querySelectorAll('#browser-section .group > .row:not(#install-row)')) row.hidden = true;
+    }
+    ctx.listeners?.add(render);
+    $('install-app').addEventListener('click', async () => { await runInstall(ctx); render(); });
+    render();
+  }
+
   async function bootDesktop() {
     // The Settings window shows this page in an iframe; the bridge lives on the parent.
     const desk = desktopBridge();
+    bootInstall(desk);
     if (!desk) return;
     $('desktop-section').hidden = false;
     const prefs = await desk.getPrefs();

@@ -32,7 +32,12 @@ function mayCache(request, response) {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  // A new version WAITS for the person ("Update ready · Reload"); it never replaces the page under them. (The very first install has nothing to wait for and takes over.)
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting(); // the person pressed Reload
 });
 
 self.addEventListener('activate', (event) => {

@@ -162,12 +162,14 @@ test('pages that Bunny serves to a browser link the manifest and carry the theme
   assert.match(chat, /!window\.bunnyDesktop/, 'not inside Bunny\'s own window');
 });
 
-test('Settings says plainly that over plain HTTP on the network there is no full install, and gives the browser install steps', async () => {
+test('Settings has the one Install as an app row (its states are built by install-app.js, see test/install-app.test.js) and says the network line in every state', async () => {
   const html = await read('settings.html');
-  assert.match(html, /Install as an app/);
-  assert.match(html, /On your network over plain HTTP/);
-  assert.match(html, /Add to Home Screen/);
-  assert.match(html, /home-screen shortcut/);
+  assert.equal((html.match(/id="install-row"/g) ?? []).length, 1);
+  assert.equal((html.match(/>Install as an app</g) ?? []).length, 1, 'one row, not two');
+  assert.match(html, /id="install-network"/);
+  assert.match(html, /id="open-browser-pointer"/);
+  const { NETWORK_LINE } = await import('../src/ui/install-app.js');
+  assert.match(NETWORK_LINE, /home-screen shortcut/);
 });
 
 // ---------------------------------------------------------------- over real HTTP, with the request guard on
