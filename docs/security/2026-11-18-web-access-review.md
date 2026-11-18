@@ -58,3 +58,35 @@ The bar can carry a screenshot or a file (W4-8b). With `read_url` and no card, a
 ## Verdict
 
 FAIL at 0370c2c, for WA-1 and WA-2. Part 1, the retry path, and the bar's two-tool limit are correct. A re-review needs the fix diff, this probe refusing all three addresses, and a test for WA-2.
+
+## Re-review at a49d800: PASS (supersedes the FAIL at 0370c2c)
+
+Commits: c571a03 (WA-1) and a49d800 (WA-2).
+
+- **WA-1 fixed.** `readUrl` now fetches through `download.js` `fetchLimited`:
+  - `isPrivateAddress` on literals and on every DNS answer, with the socket pinned to the checked address;
+  - Bunny's own ports refused;
+  - redirects followed one at a time (at most 5), each hop checked;
+  - a 5 MB cap.
+
+  The tool path (`appTools`: `read_url: ({ url }) => readUrl(url)`) passes no `fetchImpl`, so the guarded path always runs. The `fetchImpl` stand-in is for tests only. `readUrl` is shared, so the chat is fixed too. My probe on a49d800:
+
+      http://127.0.0.1:<port>/admin -> refused: 127.0.0.1 is on this computer or a private network; read_url only fetches public addresses.
+      http://localhost:<port>/admin -> refused: localhost is on this computer or a private network; …
+      http://[::1]:<port>/admin -> refused: [::1] is on this computer or a private network; …
+      http://127.0.0.1:<port>/hop -> refused: 127.0.0.1 is on this computer or a private network; …
+
+- **WA-2 fixed (option a).** In a quick answer, `read_url` opens only an address whose normalised `URL.href` exactly equals:
+  - one in the person's own message;
+  - or one on a link line of this answer's own `web_search` output.
+
+  The model can't add a path or query, so nothing it read can ride out in the address. A redirect target is chosen by the server, not the model. Builder B's tests cover:
+  - an attachment with a page-instructed `?d=` (refused);
+  - a listed address with `?d=` added (refused);
+  - an address that appears only in a snippet (refused);
+  - the exact listed address (allowed).
+- **Also:** 5 look-ups per quick answer, and the bar never waits on a repeat-step card.
+- **Residual, accepted:** the text of a `web_search` query goes to the search provider (DuckDuckGo). The model could put attached text into a query, but the provider isn't an address a page chooses, and the query never reaches the page's author.
+- **Tests:** `web-access`, `web-access-ssrf`, `quick-ask-answers-server` and `agent-tools` pass 21 of 21 on an extract with an invented profile.
+
+Verdict: PASS at a49d800.
