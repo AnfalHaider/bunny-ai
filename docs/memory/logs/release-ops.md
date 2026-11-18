@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - Published v0.1.10
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-18) "Both artifacts approved, now fix all issues discussed and pending gaps. Then push the update and release. Ensure all issue are fixed in this build." and "Browser option tonight everything in the same build"; the question as asked, shas, sign-offs. The first relay only pointed at the gate file, so I held until the Chief pasted the gate (9/9 at 975970a). Then accepted.
+
+**Commands (PST)**
+
+- Fresh worktree (scratchpad `release-0.1.10`), detached at db4ab9a (= origin/main); role set by the Chief of Staff.
+- `npm ci`, `npm run dist` -> build-sha db4ab9a, tree clean, `latest.yml` 0.1.10 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.10-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.10-notes.md` ran 06:12 to 06:18 (published 2026-11-18T01:18:36Z by GitHub's clock, as shown) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.10
+- Checks: not draft, not prerelease; .exe 122362712, .blockmap 128727, latest.yml 348; tag v0.1.10 -> db4ab9a (the built commit); feed serves 0.1.10. I downloaded the uploaded .exe: sha256 82153b85a7ed2d5fe5b9d1f98bafd8830c49c8e84809738e0ca42aefc05cd766 equals my built file; sha512 equals latest.yml.
+
+**Not checked:** an update on an invented profile; the sign-off files, record and notes (hook bars me).
+
+**Rollback:** a higher version (0.1.11) with 0.1.9's code; pulling the release is owner-only.
+
+**Lesson:** a relay that points at the gate file instead of pasting it costs a round trip; 7E needs it pasted.
+
 ## 2026-11-18 - Published v0.1.9
 
 **Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-17) "add the fix for this and other similar layout issues to 0.1.9 ... ensure all remaining gaps and fixes are built and pushed to main with the release ... 0.1.9 will be completely built and pushed, including the installer and release", and (2026-11-18) "Sign the exception"; the question as asked, shas, pasted gate 9/9 at b9bdd7a, all five sign-offs PASS. Accepted because the words name 0.1.9 and the release.
