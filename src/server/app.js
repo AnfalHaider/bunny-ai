@@ -86,7 +86,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -215,6 +215,11 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
   const windowOnly = (req, res) => {
     // BROWSER step 2: a request from another device NEVER makes a window-only change, whatever the build and whatever it sends
     if (req.bunnyRemote) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
+    // DEVICE-FULL: a device the person gave 'everything' is treated as the window, but never for /api/remote* (device access, levels, other devices)
+    if (req.bunnyDevice) {
+      if (isRemoteAdminPath(new URL(req.url, 'http://localhost').pathname)) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
+      return false;
+    }
     if (!folderPickerOnly || adminOk(req)) return false;
     sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
     return true;
@@ -559,10 +564,11 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
+    if (req.bunnyDevice && isRemoteAdminPath(path)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); // belt: remoteRoute already refused it
     // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
     if (isWindowOnlyRoute(method, path) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
 
-    if (localGuard !== false && !req.bunnyRemote) { // a request from another device was already checked by the LAN server (remoteRoute)
+    if (localGuard !== false && !req.bunnyRemote && !req.bunnyDevice) { // a request from another device was already checked by the LAN server (remoteRoute)
       const verdict = guard.check(req, path, method, url.searchParams);
       if (!verdict.ok) return sendJson(res, 403, { code: verdict.code, message: verdict.message });
     }
@@ -572,6 +578,14 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (path === '/api/remote' && method === 'PUT') {
       if (windowOnly(req, res)) return;
       return remoteSet(res, await readBody(req));
+    }
+    const deviceLevel = path.match(/^\/api\/remote\/devices\/([a-f0-9]{16})\/level$/);
+    if (deviceLevel && method === 'PATCH') { // DEVICE-FULL: only the window sets what a device may do
+      if (windowOnly(req, res)) return;
+      const body = await readBody(req);
+      if (!LEVELS.includes(body?.level)) return sendJson(res, 400, { code: 'remote.invalid', message: 'Choose Chats or Everything.' });
+      if (!remote.setLevel(deviceLevel[1], body.level)) return sendJson(res, 404, { code: 'remote.noDevice', message: 'That device is not signed in.' });
+      return sendJson(res, 200, await remoteStatus());
     }
     const remoteDevice = path.match(/^\/api\/remote\/devices\/([a-f0-9]{16})\/signout$/);
     if (remoteDevice && method === 'POST') {
@@ -3398,8 +3412,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       if (extname(target) === '.html') {
         // Bunny's own pages are given the launch token, and are never cached with a stale one.
         // Another device is NEVER handed the launch token: it gets its session's CSRF token (a header on every write) instead.
-        const inject = req.bunnyRemote
-          ? `<head>\n<meta name="bunny-csrf" content="${req.bunnyRemote.csrf}">\n<script src="/src/ui/remote.js"></script>`
+        const inject = (req.bunnyRemote ?? req.bunnyDevice)
+          ? `<head>\n<meta name="bunny-csrf" content="${(req.bunnyRemote ?? req.bunnyDevice).csrf}">\n<script src="/src/ui/remote.js"></script>`
           : `<head>\n<meta name="bunny-token" content="${guard.token}">\n<script src="/src/ui/token.js"></script>`;
         const page = body.toString('utf8').replace(/<head>/i, inject);
         res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', 'content-security-policy': "frame-ancestors 'self'" });
@@ -3445,9 +3459,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   remoteSweep.unref();
   /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */
   async function noteRemoteMode(req, session) {
-    if (!req.bunnyRemote || !session) return session;
+    const device = req.bunnyRemote ?? req.bunnyDevice; // an 'everything' device's Auto chats also go back to Ask when it signs out
+    if (!device || !session) return session;
     const auto = session.permissionMode === 'auto';
-    if (auto && session.remoteAuto !== req.bunnyRemote.deviceId) return sessions.update(session.id, { remoteAuto: req.bunnyRemote.deviceId });
+    if (auto && session.remoteAuto !== device.deviceId) return sessions.update(session.id, { remoteAuto: device.deviceId });
     if (!auto && session.remoteAuto) return sessions.update(session.id, { remoteAuto: null });
     return session;
   }
@@ -3461,6 +3476,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       url: lanUrl(),
       signedIn: remote.count(),
       devices: remote.list(),
+      anyEverything: remote.anyEverything(), // DEVICE-FULL: while a device has 'everything' the window says so
       hasPasscode: await remote.hasPasscode(),
       networkAddress: lanAddressOverride ?? findLanAddress(),
       minPasscode: 12,
@@ -3555,6 +3571,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     }
     if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf });
     // 5. What a device may do is a short allow-list; a window-only route is never one of them.
+    // DEVICE-FULL: a device the person gave 'everything' may do all the window can, except /api/remote* (the person's own switches for device access)
+    if (session.level === 'everything') {
+      if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
+      req.bunnyDevice = session;
+      return route(req, res);
+    }
     if (!remotePolicy(method, path) || (isWindowOnlyRoute(method, path) && !remoteException(method, path))) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
     req.bunnyRemote = session;
     return route(req, res);

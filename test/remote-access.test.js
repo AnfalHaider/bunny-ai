@@ -689,3 +689,110 @@ test('RA-1: the flood limit counts tries in flight too: 60 parallel wrong tries 
   t += 61_000;
   assert.equal((await r.signIn('10.0.2.1', PASS)).ok, true, 'after the minute a right passcode works');
 });
+
+// ---------------------------------------------------------------- DEVICE-FULL: the level a device is given (only by the window)
+const deviceId = (d) => d.app.remote.list()[0].id;
+const setLevel = (d, level, id = deviceId(d)) => fetch(`${d.base}/api/remote/devices/${id}/level`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ level }) });
+
+test('DEVICE-FULL: a new device starts at Chats; only the window sets a level (a device cannot, with or without the CSRF token); a bad level or an unknown device is refused', async (t) => {
+  const d = await deviceSetup(t);
+  const status = await (await fetch(d.base + '/api/remote')).json();
+  assert.deepEqual([status.devices[0].level, status.anyEverything], ['chats', false]);
+  for (const withCsrf of [false, true]) {
+    const r = await lan(d.url, { method: 'PATCH', path: `/api/remote/devices/${deviceId(d)}/level`, headers: withCsrf ? d.w : { host: d.host, cookie: d.cookie, origin: 'http://' + d.host }, body: { level: 'everything' } });
+    assert.equal(r.status, 403, 'csrf ' + withCsrf);
+  }
+  assert.equal(d.app.remote.list()[0].level, 'chats', 'still Chats');
+  assert.equal((await setLevel(d, 'root')).status, 400);
+  assert.equal((await setLevel(d, 'everything', 'abababababababab')).status, 404);
+  const ok = await setLevel(d, 'everything');
+  assert.equal(ok.status, 200);
+  const after = await ok.json();
+  assert.deepEqual([after.devices[0].level, after.anyEverything], ['everything', true], 'the window is told');
+  assert.equal((await (await setLevel(d, 'chats')).json()).anyEverything, false);
+});
+
+test('DEVICE-FULL: a device at Chats is unchanged (settings, installs and /api/remote stay refused)', async (t) => {
+  const d = await deviceSetup(t);
+  for (const [method, path, body] of [['PUT', '/api/settings', { defaultPermissionMode: 'auto' }], ['POST', '/api/skills', { name: 'x', instructions: 'y' }], ['GET', '/api/remote', null]]) {
+    assert.equal((await lan(d.url, { method, path, headers: d.w, body })).status, 403, method + ' ' + path);
+  }
+});
+
+test('DEVICE-FULL: a device at Everything does what the window does (every setting, installs, every tool in a chat), but never /api/remote*', async (t) => {
+  const d = await deviceSetup(t);
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  // settings, including the keys that are the window's
+  const saved = await lan(d.url, { method: 'PUT', path: '/api/settings', headers: d.w, body: { defaultPermissionMode: 'auto', theme: 'dark' } });
+  assert.equal(saved.status, 200, saved.text);
+  assert.equal((await (await fetch(d.base + '/api/settings')).json()).defaultPermissionMode, 'auto', 'it really changed on this computer');
+  const full = await lan(d.url, { path: '/api/settings', headers: { host: d.host, cookie: d.cookie } });
+  const windowKeys = Object.keys(await (await fetch(d.base + '/api/settings')).json()).sort();
+  assert.deepEqual(Object.keys(full.json()).sort(), windowKeys, 'all settings are read, the same as the window');
+  assert.equal(full.json().defaultPermissionMode, 'auto', 'a setting that is only the window has is readable');
+  // an install-class route
+  const skill = await lan(d.url, { method: 'POST', path: '/api/skills', headers: d.w, body: { name: 'from-device', description: 'd', instructions: 'Keep it tidy.' } });
+  assert.ok([200, 201].includes(skill.status), skill.status + ' ' + skill.text);
+  // a tool the allow-list denies, in a chat in Auto, really runs
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone', permissionMode: 'auto' } })).json();
+  const deviceChat = d.provider.offered.length;
+  const cards = [];
+  await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please SKILL add one') }, async (name, data) => {
+    cards.push(name);
+    if (name === 'permission') assert.equal((await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/permission/' + data.id, headers: d.w, body: { allowed: true } })).status, 200);
+    if (name === 'capability') assert.equal((await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/capability/' + data.id, headers: d.w, body: { allowed: true } })).status, 200, 'the device answers the card: ' + JSON.stringify(data));
+  });
+  assert.equal((await (await fetch(d.base + '/api/skills')).json()).some((x) => x.name === 'tidy'), true, 'add_skill ran for the device');
+  const deviceTools = [...new Set(d.provider.offered[deviceChat])].sort();
+  // it is offered exactly the tools the window's own chat is offered (connector, computer_*, install_*, schedules, memory ...)
+  const own = await (await fetch(d.base + '/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Window', permissionMode: 'auto' }) })).json();
+  const before = d.provider.offered.length;
+  await fetch(d.base + '/api/sessions/' + own.id + '/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(modelBody('hello')) }).then((r) => r.text());
+  const windowTools = [...new Set(d.provider.offered[before])].sort();
+  for (const n of ['add_skill', 'schedule_task', 'remember']) assert.ok(deviceTools.includes(n), n + ' is offered to the device');
+  assert.deepEqual(deviceTools, windowTools, 'the same tools as the window\'s chat');
+});
+
+test('DEVICE-FULL: even at Everything a device cannot touch /api/remote* (no level, not even its own; no turning access off; no list; no signing out other devices); it can sign itself out', async (t) => {
+  const d = await deviceSetup(t);
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  assert.equal((await signIn(d.url, d.host)).status, 200); // a second device
+  const me = deviceId(d);
+  const otherId = d.app.remote.list().find((x) => x.id !== me).id;
+  for (const [method, path, body] of [
+    ['PATCH', `/api/remote/devices/${me}/level`, { level: 'everything' }], ['PATCH', `/api/remote/devices/${otherId}/level`, { level: 'everything' }], ['PATCH', `/api/remote/devices/${me}/level`, { level: 'chats' }],
+    ['PUT', '/api/remote', { enabled: false }], ['PUT', '/api/remote', { enabled: true, passcode: 'another passcode 12' }], ['POST', '/api/remote/signout-all', {}], ['POST', `/api/remote/devices/${otherId}/signout`, {}], ['GET', '/api/remote', null], ['DELETE', '/api/remote', {}],
+  ]) {
+    const r = await lan(d.url, { method, path, headers: d.w, body });
+    assert.equal(r.status, 403, `${method} ${path}`);
+  }
+  assert.equal(d.app.remote.enabled, true);
+  assert.equal(d.app.remote.list().length, 2, 'nobody was signed out');
+  assert.equal(d.app.remote.list().find((x) => x.id === me).level, 'everything', 'the level is as the window set it');
+  // it may sign itself out
+  const out = await lan(d.url, { method: 'POST', path: '/api/remote/signout', headers: d.w, body: {} });
+  assert.equal(out.status, 200);
+  assert.equal(d.app.remote.list().some((x) => x.id === me), false);
+});
+
+test('DEVICE-FULL: the level ends with sign-out and with turning device access off: the next sign-in is at Chats again', async (t) => {
+  const d = await deviceSetup(t);
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  d.app.remote.signOutDevice(deviceId(d));
+  assert.equal((await signIn(d.url, d.host)).status, 200);
+  assert.equal(d.app.remote.list()[0].level, 'chats', 'a new sign-in is Chats');
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  d.app.remote.disable();
+  assert.equal(d.app.remote.anyEverything(), false, 'no session, no level');
+});
+
+test('DEVICE-FULL: the level route is window-only (in the server\'s list and the page\'s copy), and what even Everything never reaches is exactly /api/remote*', async () => {
+  const { isWindowOnlyRoute } = await import('../src/server/windowOnly.js');
+  const { isRemoteAdminPath } = await import('../src/server/remoteAccess.js');
+  const page = await import('../src/ui/api.js').catch(() => null);
+  const path = '/api/remote/devices/0123456789abcdef/level';
+  assert.equal(isWindowOnlyRoute('PATCH', path), true);
+  if (page?.isWindowOnlyRoute) assert.equal(page.isWindowOnlyRoute('PATCH', path), true, 'the page\'s copy agrees');
+  for (const p of ['/api/remote', '/api/remote/', path, '/api/remote/signout-all', '/api/remote/devices/0123456789abcdef/signout']) assert.equal(isRemoteAdminPath(p), true, p);
+  for (const p of ['/api/remotely', '/api/settings', '/api/sessions', '/api/remoteX/y']) assert.equal(isRemoteAdminPath(p), false, p);
+});
