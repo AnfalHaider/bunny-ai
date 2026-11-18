@@ -64,10 +64,12 @@ export function lockSelectorsFor(pathname, keys = []) {
 
 /** Switch one control off with the sentence beside it. A block (like the permission rules) gets the sentence once, at its top, and all its controls are switched off. */
 export function lockControl(el, doc = globalThis.document, { note: withNote = true, short = false } = {}) {
-  if (!el || el.dataset?.windowOnlyLocked) return;
-  el.dataset.windowOnlyLocked = '1';
+  if (!el) return;
   const controls = el.matches?.('input, select, textarea, button') ? [el] : [...el.querySelectorAll('input, select, textarea, button')];
-  for (const c of controls) { c.disabled = true; c.setAttribute('aria-disabled', 'true'); c.style.opacity = '.5'; c.style.cursor = 'not-allowed'; c.title = LOCK_MESSAGE; c.dataset.windowOnlyLocked = '1'; }
+  // F-2: the page may draw its controls again and switch them on (the rules list does, after every render): they are switched off again every time
+  for (const c of controls) { if (!c.disabled) c.disabled = true; c.setAttribute('aria-disabled', 'true'); c.style.opacity = '.5'; c.style.cursor = 'not-allowed'; c.title = LOCK_MESSAGE; c.dataset.windowOnlyLocked = '1'; }
+  if (el.dataset?.windowOnlyNoted) return;
+  el.dataset.windowOnlyNoted = '1';
   if (!withNote) return; // a whole page of window-only controls (Customize, Providers, Automation) has the one note at the top
   const note = doc.createElement('span');
   note.className = 'window-only-note';
@@ -88,7 +90,8 @@ export function lockPage(doc = globalThis.document, pathname = globalThis.locati
   const run = () => { for (const sel of selectors) for (const el of doc.querySelectorAll(sel)) lockControl(el, doc, { note: !wholePage, short }); };
   run();
   let queued = false;
-  new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; run(); }); }).observe(doc.body, { childList: true, subtree: true });
+  // also when a page switches a control back on (a changed `disabled` attribute), not only when it adds or removes elements
+  new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; run(); }); }).observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
 }
 
 /**
@@ -155,6 +158,24 @@ export function watchCards(doc = globalThis.document, state = {}) {
   };
   check(doc.body);
   new MutationObserver((records) => { for (const r of records) for (const n of r.addedNodes) if (n.nodeType === 1) check(n); }).observe(doc.body, { childList: true, subtree: true });
+}
+
+/**
+ * F-1: the window-only routes a signed-in DEVICE may still use for its own chat, exactly what the server's remoteException() lets through: answering that chat's
+ * permission, question and capability cards, setting the mode of a chat, and starting or changing a chat whose only window-only field is its mode.
+ * (The server decides what is allowed; this only keeps the page from refusing before it asks.) `isWindowOnly(method, path, body)` is api.js's copy of the server's list.
+ */
+const UUID = '[a-f0-9-]{36}';
+export function deviceException(method, path, body, isWindowOnly) {
+  const m = String(method).toUpperCase();
+  if (m === 'POST' && new RegExp(`^/api/sessions/${UUID}/(permission|question|capability)/${UUID}$`).test(path)) return true;
+  if (m === 'PATCH' && new RegExp(`^/api/sessions/${UUID}/setting/permissionMode$`).test(path)) return true;
+  if ((m === 'POST' && path === '/api/sessions') || (m === 'PATCH' && new RegExp(`^/api/sessions/${UUID}$`).test(path))) {
+    if (!body || typeof body !== 'object' || !Object.hasOwn(body, 'permissionMode')) return false;
+    const { permissionMode: _mode, ...rest } = body;
+    return !isWindowOnly(m, path, rest);
+  }
+  return false;
 }
 
 /** A page-wide note on a Settings page opened in a browser, so a locked control is not a surprise. */

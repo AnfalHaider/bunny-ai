@@ -140,3 +140,79 @@ test('a signed-in device that picks a model sets THAT chat\'s model through the 
   expect(writes.filter((w) => w === 'PUT /api/settings'), 'no write of the default model').toEqual([]);
   await expect(page.locator('#error')).not.toContainText(SENTENCE);
 });
+
+// ---- F-1 and F-2 (QA, from the real page) ----
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { connectAnthropic, pickFirstModel } from './helpers.js';
+
+/** Connect the fake provider once (the e2e server keeps it between tests). */
+async function ensureProvider(page, request) {
+  const list = await (await request.get('/api/providers')).json();
+  if (!list.some((x) => x.id === 'anthropic' && x.status === 'connected')) await connectAnthropic(page);
+}
+
+test('F-2: in a tab on this computer the permission-rules controls are really disabled (the property), stay so after the page redraws them, and typing or clicking does nothing', async ({ page }) => {
+  const writes = [];
+  page.on('request', (r) => { if (r.method() !== 'GET' && /permission-rules/.test(r.url())) writes.push(r.url()); });
+  await locked(page);
+  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.waitForTimeout(800);
+  const real = () => page.evaluate(() => [...document.querySelectorAll('#perm-rules input, #perm-rules select, #perm-rules textarea, #perm-rules button')].map((c) => [c.id || c.className || c.tagName, c.disabled]));
+  const bad = async () => (await real()).filter(([, d]) => d !== true);
+  expect(await bad(), 'every control has disabled === true, not only aria-disabled').toEqual([]);
+  // the page draws the list again when the tab changes: the controls must be off again afterwards
+  await page.evaluate(() => document.getElementById('rules-tab-folder').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.getElementById('rules-tab-all').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await page.waitForTimeout(500);
+  expect(await bad(), 'still off after the page redrew the rules').toEqual([]);
+  // typing into the locked Pattern box gets nothing, and "Add rule" does nothing
+  await page.evaluate(() => document.getElementById('rules-pattern').focus());
+  await page.keyboard.type('npm run lint*');
+  expect(await page.evaluate(() => document.getElementById('rules-pattern').value)).toBe('');
+  await page.evaluate(() => document.getElementById('rules-add-btn').click());
+  await page.waitForTimeout(300);
+  expect(writes, 'no rule was sent').toEqual([]);
+});
+
+test('F-1: on a signed-in device page, Allow on a permission card sends the answer and the tool runs; the page no longer refuses it first', async ({ page, request }) => {
+  const folder = mkdtempSync(join(tmpdir(), 'bunny-device-e2e-'));
+  await ensureProvider(page, request);
+  await request.put('/api/settings', { data: { modelFilter: 'all' } });
+  const made = await (await request.post('/api/sessions', { data: { title: 'Device chat', workMode: 'code', folder, permissionMode: 'ask' } })).json();
+  await locked(page);
+  await page.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const m = document.createElement('meta'); m.name = 'bunny-csrf'; m.content = 'a'.repeat(48); document.head.append(m); }); });
+  const answers = [];
+  page.on('request', (r) => { if (/\/permission\//.test(r.url())) answers.push(r.method()); });
+  await page.goto('/src/ui/index.html?s=' + made.id);
+  await pickFirstModel(page);
+  await page.locator('#input').fill('[[call write_file {"path":"note.txt","content":"from a device"}]]');
+  await page.locator('#send').click();
+  const allow = page.locator('.permission-prompt').getByRole('button', { name: 'Allow' }).first();
+  await expect(allow).toBeEnabled({ timeout: 15_000 });
+  await allow.click();
+  await expect(page.locator('.msg.assistant .body').last()).toContainText('Scripted', { timeout: 20_000 });
+  expect(readFileSync(join(folder, 'note.txt'), 'utf8')).toBe('from a device');
+  expect(answers).toEqual(['POST']);
+  await expect(page.locator('#error')).not.toContainText(SENTENCE);
+});
+
+test('F-1 (the other side): in a tab on this computer, Allow on a card still sends nothing and says the sentence', async ({ page, request }) => {
+  const folder = mkdtempSync(join(tmpdir(), 'bunny-tab-e2e-'));
+  await ensureProvider(page, request);
+  const made = await (await request.post('/api/sessions', { data: { title: 'Tab chat', workMode: 'code', folder, permissionMode: 'ask' } })).json();
+  await locked(page);
+  const answers = [];
+  page.on('request', (r) => { if (/\/permission\//.test(r.url())) answers.push(r.method()); });
+  await page.goto('/src/ui/index.html?s=' + made.id);
+  await pickFirstModel(page);
+  await page.locator('#input').fill('[[call write_file {"path":"note.txt","content":"nope"}]]');
+  await page.locator('#send').click();
+  const card = page.locator('.permission-prompt').first();
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await expect(card.locator('.window-only-note')).toHaveText(SENTENCE);
+  for (const b of await card.locator('button').all()) expect(await b.evaluate((e) => e.disabled)).toBe(true);
+  expect(answers).toEqual([]);
+});

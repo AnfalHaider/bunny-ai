@@ -1,6 +1,6 @@
 /** Thin client for the Bunny AI server. */
 
-import { LOCK_MESSAGE, installRevert, lockPage, showBrowserLockNote, showNotRunning, watchCards, windowOnlyLocked } from './browser-mode.js';
+import { LOCK_MESSAGE, deviceException, installRevert, isDevicePage, lockPage, showBrowserLockNote, showNotRunning, watchCards, windowOnlyLocked } from './browser-mode.js';
 
 const refused = () => { try { document.dispatchEvent(new CustomEvent('bunny:window-only-refused')); } catch { /* no page */ } };
 
@@ -92,7 +92,9 @@ export async function sendJSON(path, method, body) {
   // In the desktop app those writes go to the main process (preload and IPC), which makes the request; in a plain browser they go over HTTP.
   const desk = desktopBridge();
   // BROWSER: no bridge and the server keeps window-only changes to the window: say so at once, in the server's own words (the server would answer the same)
-  if (!desk && isWindowOnlyRoute(method, path, body) && (await windowOnlyLocked())) { refused(); throw Object.assign(new Error(LOCK_MESSAGE), { code: 'window.only', message: LOCK_MESSAGE }); }
+  // A signed-in device (its page carries the CSRF meta) may still use the few window-only routes of its OWN chat that the server allows it (F-1); the server decides.
+  const deviceMay = !desk && isDevicePage() && deviceException(method, path, body, isWindowOnlyRoute);
+  if (!desk && !deviceMay && isWindowOnlyRoute(method, path, body) && (await windowOnlyLocked())) { refused(); throw Object.assign(new Error(LOCK_MESSAGE), { code: 'window.only', message: LOCK_MESSAGE }); }
   if (desk?.secureWrite && isWindowOnlyRoute(method, path, body)) {
     const r = await desk.secureWrite(method, path, body ?? {});
     if (r.status >= 400) throw Object.assign(new Error(r.data?.message ?? `HTTP ${r.status}`), r.data);

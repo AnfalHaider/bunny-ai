@@ -90,3 +90,44 @@ test('which cards a page may answer: the window always, a tab on this computer n
   assert.deepEqual(cardKind(fake(['permission-prompt', 'question-card'])), { kind: 'question' });
   assert.deepEqual(cardKind(fake(['permission-prompt'])), { kind: 'permission' });
 });
+
+test('F-1: a device page lets through exactly the window-only routes of its own chat that the server allows (cards, the chat\'s mode), and nothing else', async () => {
+  const { deviceException } = mode;
+  const { isWindowOnlyRoute } = await import('../src/ui/api.js');
+  const id = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+  const may = (m, p, b) => deviceException(m, p, b, isWindowOnlyRoute);
+  for (const kind of ['permission', 'question', 'capability']) assert.equal(may('POST', `/api/sessions/${id}/${kind}/${id}`, { allowed: true }), true, kind);
+  assert.equal(may('PATCH', `/api/sessions/${id}/setting/permissionMode`, { value: 'ask' }), true);
+  assert.equal(may('POST', '/api/sessions', { title: 'x', permissionMode: 'auto' }), true);
+  assert.equal(may('PATCH', `/api/sessions/${id}`, { permissionMode: 'plan', title: 'y' }), true);
+  // nothing else that is window-only rides along
+  for (const [m, p, b] of [
+    ['PUT', '/api/settings', { defaultPermissionMode: 'auto' }], ['PUT', '/api/permission-rules', {}], ['POST', '/api/mcp', {}], ['POST', '/api/skills', {}], ['POST', '/api/plugins/install', {}],
+    ['POST', '/api/sessions', { title: 'x' }], ['PATCH', `/api/sessions/${id}/setting/folder`, { value: 'a-folder' }], ['POST', '/api/computer/click', {}], ['PUT', '/api/remote', { enabled: true }],
+    ['POST', `/api/sessions/${id}/permission`, {}], ['DELETE', `/api/sessions/${id}/permission/${id}`, {}],
+  ]) assert.equal(may(m, p, b), false, `${m} ${p}`);
+});
+
+test('F-1: sendJSON on a device page does not refuse a card answer or the chat\'s mode before asking the server; on a tab on this computer it still does', async () => {
+  const real = globalThis.fetch;
+  const id = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+  const sent = [];
+  const meta = { name: 'bunny-csrf', content: 'a'.repeat(48) };
+  const win = { matchMedia: undefined };
+  try {
+    globalThis.window = win;
+    globalThis.document = { querySelector: (sel) => (/bunny-csrf/.test(sel) ? meta : null), body: null, dispatchEvent: () => true };
+    mode.resetBrowserMode();
+    globalThis.fetch = async (path, init) => { sent.push([path, init?.method]); return path === '/api/health' ? { ok: true, json: async () => ({ windowOnlyLock: true }) } : { ok: true, json: async () => ({ ok: 1 }) }; };
+    assert.deepEqual(await sendJSON(`/api/sessions/${id}/permission/${id}`, 'POST', { allowed: true }), { ok: 1 });
+    assert.deepEqual(await sendJSON(`/api/sessions/${id}/setting/permissionMode`, 'PATCH', { value: 'ask' }), { ok: 1 });
+    assert.deepEqual(sent.filter(([p]) => p !== '/api/health').map(([p]) => p), [`/api/sessions/${id}/permission/${id}`, `/api/sessions/${id}/setting/permissionMode`], 'both were sent to the server');
+    await assert.rejects(() => sendJSON('/api/permission-rules', 'PUT', {}), /Change this in Bunny's window/, 'a device still cannot change rules');
+    // a tab on this computer (no csrf meta): refused before anything is sent
+    globalThis.document = { querySelector: () => null, body: null, dispatchEvent: () => true };
+    mode.resetBrowserMode();
+    sent.length = 0;
+    await assert.rejects(() => sendJSON(`/api/sessions/${id}/permission/${id}`, 'POST', { allowed: true }), /Change this in Bunny's window/);
+    assert.deepEqual(sent.filter(([p]) => p !== '/api/health'), []);
+  } finally { globalThis.fetch = real; delete globalThis.document; globalThis.window = { matchMedia: undefined }; mode.resetBrowserMode(); }
+});
