@@ -1,12 +1,12 @@
 ---
 piece: release-0.1.10
 role: chief-of-staff
-sha: 975970a
+sha: 807176d
 verdict: PASS
 date: 2026-11-18
 ---
 
-Chief of Staff, 2026-11-18. v0.1.10 is main d183f9c plus these rows, each built and reviewed tonight:
+Chief of Staff, 2026-11-18. Signed at 807176d, which is 975970a plus a docs-only merge of main's plan notes. v0.1.10 is main d183f9c plus these rows, each built and reviewed tonight:
 
 - SETTINGS-BRIDGE;
 - SB-1 with SB1-a, and SB-2;
