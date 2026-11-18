@@ -60,7 +60,7 @@ export async function* streamChat({
   fake = false, tools = null, runTool = null, maxTokens = 4096, auth = null, stallMs, waitSeconds: waitSetting, onThinkingRefused = null,
   maxToolRounds = MAX_TOOL_ROUNDS, extraBody = null, parallel = null, onThinking = null,
   extendRounds = null, contextChars = 0, tokenBudget = 0, onLimit = null,
-  onReplyEnd = null, onToolsRefused = null,
+  onReplyEnd = null, onToolsRefused = null, coreTools = null, noToolsNote = '',
 }) {
   if (fake) {
     // PV-3: with tools offered and a [[call tool {json}]] line in the person's message, the stand-in calls those tools through the real loop
@@ -82,6 +82,7 @@ export async function* streamChat({
   // mutated in place.
   const conversation = messages.map((m) => ({ ...m }));
   let offerTools = Array.isArray(tools) && tools.length > 0 && typeof runTool === 'function';
+  let activeTools = tools; // WEB-ACCESS: narrowed to coreTools when the provider refuses the full list
 
   // The limit may rise during the reply (Code mode switched on part-way), so it is read each round.
   const roundLimit = () => (typeof maxToolRounds === 'function' ? maxToolRounds() : maxToolRounds);
@@ -120,7 +121,7 @@ export async function* streamChat({
     // Without a limit, some providers assume the largest window the model
     // supports and refuse the request when the balance cannot cover it.
     if (maxTokens) body.max_tokens = maxTokens;
-    if (offerTools) body.tools = tools;
+    if (offerTools) body.tools = activeTools;
     if (extraBody) Object.assign(body, extraBody);
 
     let first;
@@ -131,13 +132,22 @@ export async function* streamChat({
     } catch (err) {
       // Two kinds of refusal can come back on the first request, each answered once: PV-1 (the tools) and W4-13b (the thinking field). Either, or both in turn.
       let refused = err;
-      for (let again = 0; again < 2 && refused; again += 1) {
+      for (let again = 0; again < 3 && refused; again += 1) {
         if (signal?.aborted) throw refused;
         if (offerTools && refusesTools(refused)) {
-          // PV-1: a model or provider that refuses tools would fail every message while any tool is on. Ask again without them, once, and stay without them.
-          offerTools = false;
-          delete body.tools;
-          if (typeof onToolsRefused === 'function') { try { onToolsRefused(refused.message); } catch { /* a notice only */ } }
+          // PV-1: a model or provider that refuses tools would fail every message while any tool is on. Ask again with less, and stay with that.
+          // WEB-ACCESS: first without the connectors' tools (one odd schema is enough to be refused) but with Bunny's own (web search, reading pages); only then with none.
+          if (Array.isArray(coreTools) && coreTools.length && activeTools !== coreTools) {
+            activeTools = coreTools;
+            body.tools = coreTools;
+            if (typeof onToolsRefused === 'function') { try { onToolsRefused(refused.message, 'connectors'); } catch { /* a notice only */ } }
+          } else {
+            offerTools = false;
+            delete body.tools;
+            if (typeof onToolsRefused === 'function') { try { onToolsRefused(refused.message, 'all'); } catch { /* a notice only */ } }
+            if (noToolsNote) conversation.unshift({ role: 'system', content: noToolsNote }); // the earlier words about tools are not true for this reply
+            body.messages = mergeSameRole(conversation);
+          }
         } else if (refusesThinking(refused, body)) {
           // W4-13b: a model that refuses the thinking field is asked again without it, once
           for (const key of THINKING_KEYS) delete body[key];
@@ -168,7 +178,7 @@ export async function* streamChat({
     // Some models write their tool calls as text instead of asking for them properly.
     // Those are read and run, so the work goes on instead of stopping on a line of markup.
     if (offerTools && !toolCalls.length) {
-      const offered = new Set(tools.map((d) => d.function?.name).filter(Boolean));
+      const offered = new Set((activeTools ?? []).map((d) => d.function?.name).filter(Boolean));
       // A call for a tool that is not offered is read too, and answered with an error, so it is never left on screen as text.
       const written = parseTextToolCalls(text, null);
       if (written.length) {
@@ -227,7 +237,7 @@ export async function* streamChat({
     // A tool may answer with pictures too (a screenshot): tool messages carry text
     // only, so the pictures follow the answers as one message the model can see.
     const pictures = [];
-    const offeredNames = new Set((tools ?? []).map((d) => d.function?.name).filter(Boolean));
+    const offeredNames = new Set((activeTools ?? []).map((d) => d.function?.name).filter(Boolean));
     const runOne = async (call) => {
       if (call.unoffered) return `There is no tool called ${call.function.name} here. The tools you have: ${[...offeredNames].join(', ')}.`;
       try {

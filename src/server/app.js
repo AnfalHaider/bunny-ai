@@ -40,7 +40,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, META_TOOLS, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -100,6 +100,9 @@ const MAX_BODY = 1024 * 1024;
 const MAX_MESSAGE_BODY = 48 * 1024 * 1024; // a message with its attachments: documents up to 30 MB (a third more as a data address) and pictures; the files themselves are limited one by one in attachments.js
 const MAX_BROWSER_ANSWER = 12 * 1024 * 1024; // W620-1: one screenshot from the browser panel; only the route that waits for it reads this much
 const MAX_IMPORT = 300 * 1024 * 1024;
+
+/** Quick ask is text only, with two look-ups added: they only read the web, change nothing and need nobody's OK. */
+export const QUICK_ASK_TOOLS = Object.freeze(['web_search', 'read_url']);
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -348,7 +351,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
   // Questions the model asked, waiting for the person's answer.
   const pendingQuestions = new Map();
   // PV-1: a model (on a provider, in a chat) that refused tools is not asked with them again in that chat
-  const toolsRefused = new Set();
+  const toolsRefused = new Map(); // WEB-ACCESS: chat|provider|model -> 'connectors' (answers with Bunny's own tools only) or 'all' (no tools)
   // How each chat's reply is going: working, needs you (a card is waiting), ready (finished,
   // not opened yet) or failed. Kept in memory: it describes this run of the app only.
   const replyStatus = new Map();
@@ -2167,7 +2170,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       // QA-ANSWERS: a question asked in the Quick ask bar is answered as text only: no tool is offered, whatever the person's settings say
       const textOnly = body.textOnly === true;
       const textOnlyText = textOnly
-        ? 'This is a quick answer shown in a small bar. You have no tools here and nobody can allow anything. Answer in plain text and simple Markdown. If the question needs a tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
+        ? 'This is a quick answer shown in a small bar. The only tools you have are web_search and read_url, which only look things up on the web: use them when the question needs current or outside facts (news, weather, prices, people, anything after your training), and say which sites the facts came from, with their links. Nobody can allow anything else. Answer in plain text and simple Markdown. If the question needs any other tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
       const scheduledText = scheduledTask
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
@@ -2924,6 +2927,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
 
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
+        if (textOnly && !QUICK_ASK_TOOLS.includes(name)) throw new Error(`${name} is not available in a quick answer. Only web_search and read_url are.`);
         // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         if (req.bunnyRemote ?? req.bunnyDevice) remote.logAction(req.bunnyRemote ?? req.bunnyDevice, { kind: 'tool', tool: String(name) }); // R-DF2: the tool's name only, never its arguments
@@ -3157,6 +3161,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // Two things can be wrong with a first attempt, and both are worth one
       // more go: a model that is not provisioned for this account yet, and a
       // request that asks for more tokens than the balance covers.
+      // WEB-ACCESS: the tools of this request. A provider that refused the whole list once gets Bunny's own tools without the connectors', then none (see onToolsRefused).
+      const refusalKey = `${id}|${providerId}|${model}`;
+      const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
+      const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
+      const quickTools = appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)); // Quick ask: look-ups only
+      const refusedLevel = textOnly ? undefined : toolsRefused.get(refusalKey);
+      const NO_TOOLS_NOTE = 'No tools are available in this reply (this model does not accept them), so you cannot search the web, read pages or use connectors, whatever was said before. If asked, say so plainly; never claim you did.';
+      if (refusedLevel === 'all') history.unshift({ role: 'system', content: NO_TOOLS_NOTE });
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
           if (attempt === 1 && compacted) send('compacted', { before: compacted.before, after: compacted.after });
@@ -3168,7 +3180,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // The stand-in upstream (tests) answers for built-in providers; a custom one is reached for real.
             fake: fake && !provider.custom,
             signal: controller.signal,
-            tools: textOnly || toolsRefused.has(`${id}|${providerId}|${model}`) ? null : (req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions),
+            tools: textOnly ? quickTools : refusedLevel === 'all' ? null : refusedLevel === 'connectors' ? coreOnly : fullTools,
+            coreTools: textOnly || refusedLevel || coreOnly.length === fullTools.length ? null : coreOnly,
+            noToolsNote: NO_TOOLS_NOTE,
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
@@ -3183,7 +3197,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             contextChars: workspace ? 240_000 : 0,
             tokenBudget: replyCaps.tokens,
             // PV-1: this model refused tools, so the reply goes on without them; the person is told once
-            onToolsRefused: () => { toolsRefused.add(`${id}|${providerId}|${model}`); send('tool', { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no connectors, skills or files). Pick another model to use them.' }); },
+            onToolsRefused: (_message, stage) => {
+              toolsRefused.set(refusalKey, stage === 'connectors' ? 'connectors' : 'all');
+              send('tool', stage === 'connectors'
+                ? { tool: 'Connector tools are off for this model', status: 'done', result: "This model refused the connectors' tools, so it answers with Bunny's own tools only (web search, reading pages, memory). Remove a connector or pick another model to use them." }
+                : { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no web search, connectors, skills or files). Pick another model to use them.' });
+            },
             onThinkingRefused: () => send('tool', { tool: 'Thinking setting not used', status: 'done', result: 'This model does not take that setting, so it answered at its default. Choose Default under Thinking in the model\'s Details.' }),
             // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
             onLimit: async ({ kind, inputTokens, step }) => {

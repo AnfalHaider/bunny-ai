@@ -1,5 +1,5 @@
 // QA-ANSWERS: the Quick ask bar answers in place. This is the main-process side: it asks Bunny's own server for a TEXT-ONLY answer and hands plain events to the bar.
-// Safety (Security, HIGH): no tool is ever offered (the request says textOnly, and the server then offers none); nothing in here can ask a permission; the bar only ever
+// Safety (Security, HIGH): the only tools offered are web_search and read_url, which only read the web (the request says textOnly, and the server then offers just those two and refuses any other); nothing in here can ask a permission; the bar only ever
 // receives plain data (text, the model's name, a kind of failure), never anything it could run; and a reply that asks for a tool becomes a card that sends the person to Bunny's window.
 
 export const NEEDS_WINDOW_MARKER = '[[NEEDS_BUNNY_WINDOW]]';
