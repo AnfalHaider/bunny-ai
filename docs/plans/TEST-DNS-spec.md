@@ -94,9 +94,11 @@ This file fails if part 1 is missing, so the gate checks itself.
 
 **`test/test-progress.test.js`:** it runs `node --test` on a fixture folder that holds one file that never ends and one that passes, with `SILENT_MS` set low through an env override that only the tests use. It checks that the HUNG text names the never-ending file and its test, and that the temp file is gone afterwards.
 
-**The whole suite, with the network unplugged and with a slow resolver.** Before review, the build runs `node scripts/unit-tests.mjs`:
-1. once with Wi-Fi off;
-2. once with the resolver made slow. Pointing the adapter at an unreachable DNS server simulates the 12 s.
+**The whole suite, normally and with a slow resolver.** Before review, the build runs `node scripts/unit-tests.mjs`:
+1. once as it is;
+2. once with the in-test slow-resolver stand-in loaded before the preload. That is `test/support/slow-resolver.mjs`, with `BUNNY_SLOW_DNS_MS`, 12 s by default.
+
+**Corrected 2026-11-19 (the Chief of Staff):** no Wi-Fi switched off, and no system or network setting changed on the owner's PC. The stand-in replaces both of the original runs.
 
 Both runs must pass, and their total time must be within about 10% of a normal run. Paste both outputs (O1). Any `NO-NETWORK:` line in those runs is a test to fix (inject a `fetchImpl` / `lookupImpl`, or use `allowHost`), not a line to silence.
 
