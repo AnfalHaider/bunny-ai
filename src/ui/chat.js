@@ -821,7 +821,7 @@ function announceFinishedChats(rows) {
     if (state.settings?.notifications && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
         const note = new Notification(say('app.name'), { body: text, tag: `agent-${s.id}` });
-        note.onclick = () => { window.focus(); location.assign(`./index.html?s=${s.id}`); note.close(); };
+        note.onclick = () => { window.focus(); goToChat(s.id); note.close(); };
       } catch { /* notices are a help, not a requirement */ }
     }
   }
@@ -992,6 +992,7 @@ function renderSessionRow(s, depth) {
     title: `${s.title} · ${s.messageCount} messages · ${relativeTime(s.updatedAt)}`,
   });
   if (s.id === state.sessionId) a.setAttribute('aria-current', 'page');
+  a.addEventListener('click', (e) => chatLinkClick(e, s.id)); // CHAT-SWITCH: a plain click opens the chat here, without reloading the page
 
   if (depth) a.append(element('span', { className: 'branch-mark', textContent: '↳', 'aria-hidden': 'true' }));
   if (s.pinned) a.append(element('span', { className: 'pin', textContent: '★', 'aria-label': 'Pinned', role: 'img' }));
@@ -1676,7 +1677,7 @@ function renderActions(m, stored) {
   act(say('chat.branch'), 'branch', async () => {
     const branch = await sendJSON(`/api/sessions/${state.sessionId}/fork`, 'POST', { at: m.id });
     await loadSessions();
-    location.href = `./index.html?s=${branch.id}`;
+    goToChat(branch.id);
   });
 
   return bar;
@@ -2309,7 +2310,7 @@ function linkedChatCard(c) {
   card.append(button(say('card.openChat'), {
     className: 'ghost sm', 'aria-label': `Open the chat ${c.title ?? ''}`,
     // Leaving now would stop the reply that is still coming in.
-    onclick: () => (state.streaming ? flashStatus(say('card.wait')) : location.assign(`./index.html?s=${c.id}`)),
+    onclick: () => (state.streaming ? flashStatus(say('card.wait')) : goToChat(c.id)),
   }));
   return card;
 }
@@ -2548,6 +2549,57 @@ async function refreshSession({ expectAssistant = false } = {}) {
   paintMessages();
   renderContext(state.session.context);
   if (state.sidePaneOpen) state.workPanes?.refresh();
+}
+
+// ---------------------------------------------------------------------------
+// CHAT-SWITCH: opening a chat is done in this page. A chat row used to be a plain link, so every switch (above all between two projects) reloaded the whole app.
+
+let switchToken = 0;
+
+/**
+ * Open a chat in this page: save what is typed for the chat being left, load the other, keep the address (and so Back and Forward) true, and bring along everything a reload used
+ * to refresh: the project filter, the model chip, the composer row, the status tags and the highlighted row. The latest click wins when two come quickly.
+ */
+async function openChatInPlace(id, { push = true } = {}) {
+  const mine = ++switchToken;
+  const leaving = state.sessionId;
+  const typed = $('input').value;
+  if (typed.trim()) (state.drafts ??= new Map()).set(leaving ?? 'new', typed);
+  $('input').value = '';
+  $('error').textContent = '';
+  state.pendingFolder = null; state.pendingMode = null; state.pendingEffort = null; // what was being set up for an unsent new chat does not follow
+  if (state.pendingFiles?.length) { state.pendingFiles = []; renderPendingFiles(); }
+  if (push && id !== leaving) history.pushState(null, '', `./index.html?s=${id}`);
+  try {
+    await openSession(id);
+  } catch (err) {
+    if (mine === switchToken) { location.assign(`./index.html?s=${id}`); } // a chat that cannot be opened here is opened the old way, so the person sees the real answer
+    return;
+  }
+  if (mine !== switchToken) return;
+  const opened = state.session;
+  if (state.projectId && (opened?.projectId ?? null) !== state.projectId) { state.projectId = opened?.projectId ?? null; renderProjects(); } // the chat is in another project: the filter follows it
+  renderSidebar(); // the highlighted row at once
+  await loadSessions(); // status and unread tags, as a reload would have drawn them
+  if (mine !== switchToken) return;
+  renderComposerHeader();
+}
+
+/**
+ * A click on a link to a chat. Ctrl, Shift, Alt, the middle button and every other kind of click keep the real link (a new tab or window still works). While a reply is coming in
+ * the link is followed as it always was, which is what ends the stream cleanly: this page is replaced, as before.
+ */
+function chatLinkClick(event, id) {
+  if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  if (state.streaming) return;
+  event.preventDefault();
+  openChatInPlace(id);
+}
+
+/** Go to a chat from code (a notification, a card, the palette, a branch, an import): in this page, or the old way while a reply is streaming. */
+function goToChat(id) {
+  if (state.streaming) { location.assign(`./index.html?s=${id}`); return; }
+  openChatInPlace(id);
 }
 
 async function openSession(id) {
@@ -4098,7 +4150,7 @@ function renderPalette(query) {
     const item = button('', { className: 'palette-item', role: 'option' });
     item.append(element('span', { className: 'palette-name', textContent: s.title }),
       element('span', { className: 'palette-hint', textContent: 'chat' }));
-    item.addEventListener('click', () => { closePalette(); location.href = `./index.html?s=${s.id}`; });
+    item.addEventListener('click', () => { closePalette(); goToChat(s.id); });
     host.append(item);
   }
 
@@ -4138,7 +4190,7 @@ async function runImport() {
     const result = await sendJSON('/api/import', 'POST', { content, title: importFile?.name.replace(/\.(json|jsonl|md|txt)$/i, '') });
     closeImport();
     await loadSessions();
-    location.href = `./index.html?s=${result.session.id}`;
+    goToChat(result.session.id);
   } catch (err) {
     $('import-error').textContent = err.message ?? 'That file could not be imported.';
   } finally {
@@ -4154,6 +4206,14 @@ async function boot() {
   $('new-chat').addEventListener('click', () => startNewChat({ incognito: state.incognito }));
   $('send').addEventListener('click', send);
   $('stop').addEventListener('click', () => { state.streaming?.abort(); cancelQueued(); });
+  // CHAT-SWITCH: Back and Forward move between the chats this page opened in place. While a reply is coming in they act as they always did: the page is reloaded at the address.
+  window.addEventListener('popstate', () => {
+    if (state.streaming) { location.reload(); return; }
+    const id = new URLSearchParams(location.search).get('s');
+    if (id) { openChatInPlace(id, { push: false }); return; }
+    startNewChat();
+    renderSidebar();
+  });
 
   const input = $('input');
   input.addEventListener('keydown', (e) => {
