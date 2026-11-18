@@ -31,3 +31,10 @@ test('a passing result gives exactly the two first lines and no spawn error', ()
   const d = failureDetail({ status: 0 }, ['fine']);
   assert.deepEqual(d, ['exit status: 0', 'signal: none']);
 });
+
+test('a HUNG line keeps the 20 lines after it (the list of tests still running reaches the report), and no more', () => {
+  const out = ['HUNG: "x" printed nothing for 4 minutes.', ...Array.from({ length: 30 }, (_, i) => `line ${i + 1}`)];
+  const d = failureDetail({ status: 1 }, out);
+  assert.ok(d.includes('line 20'));
+  assert.ok(!d.includes('line 21'));
+});
