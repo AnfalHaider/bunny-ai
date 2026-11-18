@@ -62,3 +62,13 @@ test('the sign-in and "not running" pages link the manifest too, and the old wor
   const scopes = await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname));
   expect(scopes).toEqual(['/']);
 });
+
+test('Chrome itself finds nothing in the way of installing it (the installability check the browser runs)', async ({ page, context }) => {
+  await page.goto('/src/ui/index.html');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await page.reload();
+  await page.waitForTimeout(800);
+  const cdp = await context.newCDPSession(page);
+  const result = await cdp.send('Page.getInstallabilityErrors');
+  expect(result.installabilityErrors.map((e) => e.errorId), 'no installability errors').toEqual([]);
+});
