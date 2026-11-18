@@ -1,0 +1,174 @@
+<title>Bunny font choices</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400..700&family=Lexend:wght@400..700&family=Literata:wght@400..700&family=Lora:wght@400..700&family=Noto+Serif:wght@400..700&family=Nunito:wght@400..700&family=Quicksand:wght@400..700&family=Source+Sans+3:wght@400..700&family=Source+Serif+4:wght@400..700&display=swap">
+<style>
+/* Layout: summary, the two dropdowns drawn open in both themes, one card per font (name in itself, chat sample), then the licence and size table. Bunny's own tokens. */
+:root{--bg:#faf9f6;--panel:#fff;--soft:#f3f1ec;--line:#e4e1da;--fg:#1c1d20;--mute:#62656c;--accent:#5b4bd5;--accent-soft:#eceafb;--user:#eeece6;--ok:#1f7a4a;--warn:#a5600b;--warn-soft:#fbefd9;--sys:"Segoe UI",system-ui,sans-serif;--mono:ui-monospace,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--user:#2b2c32;--ok:#6fd49a;--warn:#f0b35a;--warn-soft:#3a2c12;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--user:#2b2c32;--ok:#6fd49a;--warn:#f0b35a;--warn-soft:#3a2c12;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--sys);padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1000px;margin:0 auto;display:grid;gap:26px}
+h1{font-size:26px;margin:0 0 4px;text-wrap:balance}
+h2{font-size:18px;margin:0 0 8px}
+p{margin:0}
+.mute{color:var(--mute)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:8px;min-width:0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.fact{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.fact b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.fact span{font-size:12.5px;color:var(--mute)}
+/* dropdown mocks: scoped tokens so both themes show at once */
+.mk{--bg:#faf9f6;--panel:#fff;--soft:#f3f1ec;--line:#e4e1da;--fg:#1c1d20;--mute:#62656c;--accent:#5b4bd5;--accent-soft:#eceafb;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.mk.dark{--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750}
+.mkgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0}
+.row .nm{font-weight:600;font-size:14px}.row .ds{font-size:12.5px;color:var(--mute)}
+.sel{border:1px solid var(--line);background:var(--soft);border-radius:8px;padding:6px 10px;font-size:13.5px;min-width:190px;display:flex;justify-content:space-between;gap:10px}
+.menu{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:4px 0;margin-top:2px;max-width:290px;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+.menu .g{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mute);padding:7px 12px 2px;font-family:var(--sys)}
+.menu .o{padding:4px 12px;font-size:15px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.menu .o.sel1{background:var(--accent-soft)}
+.menu .o small{font:11px var(--sys);color:var(--mute)}
+/* font cards */
+.fonts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:14px}
+.fc{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.fc header{padding:12px 16px 8px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.fc header .big{font-size:26px;line-height:1.2}
+.fc .meta{font:12px var(--sys);color:var(--mute)}
+.chat{padding:0 16px 14px;display:grid;gap:8px}
+.u{background:var(--user);border-radius:14px;padding:8px 12px;max-width:88%;justify-self:end;font-size:15px}
+.a{font-size:15.5px;line-height:1.6}
+.a code{font-family:var(--mono);font-size:13px;background:var(--soft);border-radius:5px;padding:1px 5px}
+.tag{font:11px var(--sys);letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:2px 9px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:620px;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 12px;border-top:1px solid var(--line)}
+thead th{border-top:0;background:var(--soft);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute)}
+td.r,th.r{text-align:right}
+tfoot td{font-weight:700;background:var(--soft)}
+.note{border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 14px;font-size:14px}
+@media (max-width:680px){.mkgrid{grid-template-columns:1fr}}
+</style>
+
+<main>
+<div class="top">
+  <div>
+    <h1>Bunny font choices</h1>
+    <p class="mute">Thirteen more fonts for Settings → Appearance, for v0.1.13. All free (SIL Open Font License), bundled with Bunny so every device looks the same, including a phone in the browser.</p>
+  </div>
+  <button id="theme" type="button">Show the other theme</button>
+</div>
+
+<section class="facts">
+  <div class="fact"><b>13</b><span>new fonts, added to the four that are there (System, Segoe UI, Serif, Monospace stay)</span></div>
+  <div class="fact"><b>≈ 491 kB</b><span>added to the app in total (Latin only, woff2); each font 14 to 51 kB</span></div>
+  <div class="fact"><b>OFL 1.1</b><span>every font; licence text ships in the app</span></div>
+  <div class="fact"><b>Both</b><span>dropdowns: Interface font and Response font get the same list</span></div>
+</section>
+
+<section class="card">
+  <h2>The two dropdowns</h2>
+  <p class="mute">Today each has four choices. Proposed: the same four stay at the top of their groups, the new fonts are grouped by kind, and every name is drawn in its own font. Response font keeps "Match interface" first.</p>
+  <div class="mkgrid">
+    <div class="mk light">
+      <div class="row"><div><div class="nm">Interface font</div><div class="ds">The font of menus, buttons and your messages.</div></div><div class="sel"><span>Default · System</span><span>▾</span></div></div>
+      <div class="menu" id="menu-l"></div>
+    </div>
+    <div class="mk dark">
+      <div class="row"><div><div class="nm">Response font</div><div class="ds">The font of Bunny's replies.</div></div><div class="sel"><span>Match interface</span><span>▾</span></div></div>
+      <div class="menu" id="menu-d"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Each font, as a chat</h2>
+  <p class="mute" style="margin-bottom:12px">The name, a message you send and a reply from Bunny, all set in that font. The theme button changes the colours. Greeting name: Sam, an invented profile.</p>
+  <div class="fonts" id="fonts"></div>
+</section>
+
+<section>
+  <h2>Licence and size</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Font</th><th>Kind</th><th>Licence</th><th>Weights bundled</th><th class="r">Size</th></tr></thead>
+    <tbody id="rows"></tbody>
+    <tfoot><tr><td colspan="4">Total added</td><td class="r">≈ 491 kB</td></tr></tfoot>
+  </table></div>
+  <p class="mute" style="margin-top:10px">Sizes are the real woff2 Latin files from the font foundry's published builds, measured today. The app installer is tens of megabytes already; this adds about half a megabyte.</p>
+</section>
+
+<section class="note">
+  <b>Things to know before this is built.</b>
+  <ul style="margin:6px 0 0;padding-left:20px;display:grid;gap:4px">
+    <li><b>Latin only.</b> The bundled files cover English and other Latin-script languages. Text in another script (Arabic, Cyrillic, Chinese and so on) shows in the system font, as it does today.</li>
+    <li><b>Italics are slanted by the browser</b> for these fonts, not drawn. Real italics would add roughly 40 kB for each serif; not needed for the first release.</li>
+    <li><b>Phones in the browser must be allowed to load the font files.</b> The sign-in page is the only file a device that has not signed in may get; after sign-in the font files must be served to Chats devices too, or the phone falls back to the system font.</li>
+    <li><b>The OFL licence texts must ship with the app</b> (a Licences page under About is the usual place), and the font files must stay unmodified.</li>
+    <li>The existing <b>Code font</b> box (type any installed font) is unchanged; JetBrains Mono and IBM Plex Mono are offered here as interface and reply fonts.</li>
+  </ul>
+</section>
+</main>
+
+<script>
+(function(){
+  var F=[
+   {n:'Inter',k:'Sans',f:"Inter",l:'OFL 1.1',w:'400–700 (variable)',s:48.3,note:'Clear, neutral screen font'},
+   {n:'Source Sans 3',k:'Sans',f:"'Source Sans 3'",l:'OFL 1.1',w:'400–700 (variable)',s:28.9,note:'Compact, friendly'},
+   {n:'IBM Plex Sans',k:'Sans',f:"'IBM Plex Sans'",l:'OFL 1.1',w:'400–700 (variable)',s:45.7,note:'Technical, even'},
+   {n:'Atkinson Hyperlegible',k:'Accessibility',f:"'Atkinson Hyperlegible'",l:'OFL 1.1 (Braille Institute)',w:'400, 700',s:34.7,note:'Made for low vision: every letter shape is distinct'},
+   {n:'Lexend',k:'Accessibility',f:"Lexend",l:'OFL 1.1',w:'400–700 (variable)',s:39.7,note:'Wide spacing, tuned for reading ease'},
+   {n:'Nunito',k:'Rounded',f:"Nunito",l:'OFL 1.1',w:'400–700 (variable)',s:39.1,note:'Soft rounded ends'},
+   {n:'Quicksand',k:'Rounded',f:"Quicksand",l:'OFL 1.1',w:'400–700 (variable)',s:28.2,note:'Light and geometric'},
+   {n:'Lora',k:'Serif',f:"Lora",l:'OFL 1.1',w:'400–700 (variable)',s:37.8,note:'Warm book serif for long replies'},
+   {n:'Literata',k:'Serif',f:"Literata",l:'OFL 1.1',w:'400–700 (variable)',s:39.0,note:'Designed for e-readers'},
+   {n:'Source Serif 4',k:'Serif',f:"'Source Serif 4'",l:'OFL 1.1',w:'400–700 (variable)',s:50.9,note:'Crisp, good at small sizes'},
+   {n:'Noto Serif',k:'Serif',f:"'Noto Serif'",l:'OFL 1.1',w:'400–700 (variable)',s:36.8,note:'Sturdy, plain'},
+   {n:'JetBrains Mono',k:'Monospace',f:"'JetBrains Mono'",l:'OFL 1.1',w:'400–700 (variable)',s:31.4,note:'Tall letters, for code'},
+   {n:'IBM Plex Mono',k:'Monospace',f:"'IBM Plex Mono'",l:'OFL 1.1',w:'400, 600',s:30.2,note:'Calm typewriter feel'}
+  ];
+  var sans='"Segoe UI",system-ui,sans-serif';
+  function kb(x){return x.toFixed(1)+' kB';}
+  function el(t,c,h){var e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;}
+  // cards
+  var host=document.getElementById('fonts');
+  F.forEach(function(x){
+    var mono=x.k==='Monospace';
+    var c=el('article','fc');
+    var h=el('header');
+    h.appendChild(el('div','big',x.n)).style.fontFamily=x.f+','+sans;
+    var m=el('div','meta','<span class="tag">'+x.k+'</span> · '+x.l.split(' ')[0]+' · '+kb(x.s));
+    h.appendChild(m);c.appendChild(h);
+    var ch=el('div','chat');ch.style.fontFamily=x.f+','+sans;
+    ch.appendChild(el('div','u','Can you make this email sound friendlier? &ldquo;Sam, the report is late again.&rdquo;'));
+    ch.appendChild(el('div','a','Sure. Here is a warmer version: <i>&ldquo;Hi Sam, could you send the report by Thursday? Tell me if anything is in the way.&rdquo;</i> I kept it short and left the deadline in. To keep it as a file, run <code>save draft.txt</code>.'));
+    var note=el('div','meta',x.note);note.style.fontFamily=sans;ch.appendChild(note);
+    c.appendChild(ch);host.appendChild(c);
+  });
+  // table
+  var rows=document.getElementById('rows');
+  F.forEach(function(x){var t=el('tr');t.innerHTML='<td style="font-family:'+x.f+','+sans+';font-size:15px">'+x.n+'</td><td>'+x.k+'</td><td>'+x.l+'</td><td>'+x.w+'</td><td class="r">'+kb(x.s)+'</td>';rows.appendChild(t);});
+  // dropdown mocks
+  function menu(id,first){
+    var m=document.getElementById(id);
+    function g(t){m.appendChild(el('div','g',t));}
+    function o(t,f,sel,small){var d=el('div','o'+(sel?' sel1':''));var s=el('span',null,t);if(f)s.style.fontFamily=f+','+sans;d.appendChild(s);if(small)d.appendChild(el('small',null,small));m.appendChild(d);}
+    if(first)o(first,null,true);else o('Default · System',null,true);
+    g('Sans');o('Segoe UI','"Segoe UI"');F.filter(function(x){return x.k==='Sans'}).forEach(function(x){o(x.n,x.f)});
+    g('Easy to read');F.filter(function(x){return x.k==='Accessibility'}).forEach(function(x){o(x.n,x.f)});
+    g('Rounded');F.filter(function(x){return x.k==='Rounded'}).forEach(function(x){o(x.n,x.f)});
+    g('Serif');o('Serif','Georgia,serif',false,'system');F.filter(function(x){return x.k==='Serif'}).forEach(function(x){o(x.n,x.f)});
+    g('Monospace');o('Monospace','Consolas,monospace',false,'system');F.filter(function(x){return x.k==='Monospace'}).forEach(function(x){o(x.n,x.f)});
+  }
+  menu('menu-l',null);menu('menu-d','Match interface');
+  document.getElementById('theme').addEventListener('click',function(){
+    var r=document.documentElement,d=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
+    r.setAttribute('data-theme',d?'light':'dark');
+  });
+})();
+</script>
