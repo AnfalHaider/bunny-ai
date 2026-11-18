@@ -2,6 +2,17 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - v0.1.10: release review FAIL at 9d4e942 (RA-1)
+
+- RA-1, required: the remote sign-in limit counts only finished tries (`remoteAccess.js:217-231`). 60 parallel wrong passcodes from one IP were all checked. The fix and its done-when are in the shared note `tech-lead-release-0.1.10-RA1.md`.
+- No finding elsewhere:
+  - 15 merges: no lost lines. The hand-resolved `askCapability` (1c678a6) and `selectModel` (b129e55) keep both sides.
+  - `app.css` equals the build at every merge.
+  - RUN is unchanged since 29aba58.
+  - `safeExec.js` is sound.
+  - Remote routing is allow-listed and re-checked with the body.
+- Lesson: a rate limit that is checked before an `await` and counted after it limits nothing. Test limits with parallel tries, not one at a time.
+
 ## 2026-11-18 - v0.1.9: release sign-off PASS at b9bdd7a
 
 - Final gate: 9/9 at b9bdd7a. The AssertionError in the unit-test tail is the todo test Q2-26 (`test/q2-permissions.test.js:154`), not a failure.
