@@ -1,0 +1,177 @@
+<title>Settings tabs audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one column, summary first, four today/proposed comparisons, then the full row table. Bunny's own tokens. */
+:root{--bg:#faf9f6;--panel:#fff;--soft:#f3f1ec;--line:#e4e1da;--fg:#1c1d20;--mute:#62656c;--accent:#5b4bd5;--accent-soft:#eceafb;--ok:#1f7a4a;--ok-soft:#e3f3ea;--warn:#a5600b;--warn-soft:#fbefd9;--bad:#c4304a;--bad-soft:#fbe5e9;--mono:ui-monospace,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--ok:#6fd49a;--ok-soft:#18301f;--warn:#f0b35a;--warn-soft:#3a2c12;--bad:#ff7a90;--bad-soft:#3d1a22;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--ok:#6fd49a;--ok-soft:#18301f;--warn:#f0b35a;--warn-soft:#3a2c12;--bad:#ff7a90;--bad-soft:#3d1a22;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 Inter,"Segoe UI",system-ui,sans-serif;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:980px;margin:0 auto;display:grid;gap:26px}
+h1{font-size:26px;margin:0 0 4px;text-wrap:balance}
+h2{font-size:18px;margin:0 0 8px;text-wrap:balance}
+p{margin:0}
+.mute{color:var(--mute)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px;min-width:0}
+.moves{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.moves li{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line)}
+.moves li:first-child{border-top:0}
+.tag{font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.t-move{background:var(--accent-soft);color:var(--accent)}
+.t-fix{background:var(--bad-soft);color:var(--bad)}
+.t-stay{background:var(--ok-soft);color:var(--ok)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.col>h3{margin:0;padding:9px 14px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);background:var(--soft);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+.col ul{list-style:none;margin:0;padding:6px 0}
+.col li{padding:6px 14px;font-size:14px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.col li small{color:var(--mute);font-size:12px}
+.col li.out{color:var(--mute);text-decoration:line-through;text-decoration-color:var(--bad)}
+.col li.out small{text-decoration:none}
+.col li.in{background:var(--accent-soft)}
+.col li.in b{color:var(--accent)}
+.col li.grp{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);padding-top:10px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+th,td{text-align:left;padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+thead th{border-top:0;background:var(--soft);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute)}
+tr.mv td{background:var(--accent-soft)}
+tr.fx td{background:var(--bad-soft)}
+td.n{font-weight:600}
+.legend{display:flex;gap:8px 14px;flex-wrap:wrap;font-size:13px;align-items:center}
+.note{border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 14px;font-size:14px}
+code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border-radius:5px;padding:1px 5px}
+@media (max-width:680px){.cmp{grid-template-columns:1fr}}
+</style>
+
+<main>
+<div class="top">
+  <div>
+    <h1>Settings tabs audit, v0.1.13</h1>
+    <p class="mute">Every row in Settings, the tab it is in now and the tab it should be in. Read from <code>src/ui/settings.html</code> and the Settings tab list, at bf9f320. No pictures: this is a list of moves, not a redesign.</p>
+  </div>
+  <button id="theme" type="button">Show the other theme</button>
+</div>
+
+<section class="card">
+  <h2>What I recommend</h2>
+  <ul class="moves">
+    <li><span class="tag t-fix">Fix</span><span><b>"Use Bunny in a browser" shows in every tab.</b> It belongs only in Desktop app. This is the bug Builder A is fixing (the install and desktop code un-hide the section after the single-tab view hid it). No row moves.</span></li>
+    <li><span class="tag t-move">Move 2</span><span><b>"Try another model when yours is busy" and "Wait for a first reply"</b> go from Capabilities to Models. They are about which model answers, and the Models tab is where model choices live.</span></li>
+    <li><span class="tag t-move">Move 2</span><span><b>"Keep going on long jobs" and "Longest long job"</b> go from Models to Code. Their own text says "In Code mode".</span></li>
+    <li><span class="tag t-move">Move 2</span><span><b>"Default transcript view" and "Label chats by status"</b> go from Code to Appearance. They change how chats and the sidebar look, and Appearance already holds transcript size and width.</span></li>
+    <li><span class="tag t-stay">Stay</span><span><b>The permission rules stay in Code</b>, with Default permission mode. Rules judge the commands and file paths Bunny's tools run, which is Code-mode work, and "Try a command" tests exactly that. Privacy holds only Storage, and Capabilities holds on/off switches for features, so neither fits better. If you later want one place for everything Bunny may do, that would be a new Permissions tab, a bigger change than this audit.</span></li>
+  </ul>
+  <p class="mute">Six rows move, nothing is removed, no wording changes. Everything else stays where people already look for it.</p>
+</section>
+
+<section>
+  <h2>Today beside proposed</h2>
+  <p class="mute" style="margin-bottom:12px">Only the four tabs that change. Highlighted rows are moved in, struck-through rows are moved out. Use the button at the top to see both themes.</p>
+  <div style="display:grid;gap:18px">
+
+    <div class="cmp" aria-label="Capabilities and Models">
+      <div class="col"><h3><span>Today: Capabilities</span></h3><ul>
+        <li>Artifacts</li><li>Draw charts in artifacts</li><li>Use skills</li><li>Use connectors</li>
+        <li class="out">Try another model when yours is busy</li><li class="out">Wait for a first reply</li>
+        <li>Voice: Speech voice</li><li>Computer use (2 rows)</li><li>Tools the AI builds</li></ul></div>
+      <div class="col"><h3><span>Proposed: Capabilities</span></h3><ul>
+        <li>Artifacts</li><li>Draw charts in artifacts</li><li>Use skills</li><li>Use connectors</li>
+        <li>Voice: Speech voice</li><li>Computer use (2 rows)</li><li>Tools the AI builds</li></ul></div>
+    </div>
+
+    <div class="cmp" aria-label="Models">
+      <div class="col"><h3><span>Today: Models</span></h3><ul>
+        <li>Show models</li><li>Longest reply</li><li class="out">Keep going on long jobs</li><li class="out">Longest long job</li>
+        <li>Token budget for one reply</li><li>Allowed models</li><li>Aliases</li></ul></div>
+      <div class="col"><h3><span>Proposed: Models</span></h3><ul>
+        <li>Show models</li><li>Longest reply</li><li>Token budget for one reply</li>
+        <li class="in"><b>Try another model when yours is busy</b></li><li class="in"><b>Wait for a first reply</b></li>
+        <li>Allowed models</li><li>Aliases</li></ul></div>
+    </div>
+
+    <div class="cmp" aria-label="Code">
+      <div class="col"><h3><span>Today: Code</span></h3><ul>
+        <li>Default permission mode</li><li>Permission rules <small>Deny / Ask / Allow, Try a command</small></li>
+        <li>Default effort</li><li>Branch prefix</li><li>Copies of projects</li>
+        <li class="out">Label chats by status</li><li class="out">Default transcript view</li>
+        <li>Code theme and font <small>points to Appearance</small></li><li>Helpers (dynamic workflows)</li><li>Prompt suggestions</li><li>Summary and next steps</li><li>When you ask for an unrelated task</li></ul></div>
+      <div class="col"><h3><span>Proposed: Code</span></h3><ul>
+        <li>Default permission mode</li><li>Permission rules <small>unchanged</small></li>
+        <li>Default effort</li>
+        <li class="in"><b>Keep going on long jobs</b></li><li class="in"><b>Longest long job</b></li>
+        <li>Branch prefix</li><li>Copies of projects</li>
+        <li>Code theme and font <small>points to Appearance</small></li><li>Helpers (dynamic workflows)</li><li>Prompt suggestions</li><li>Summary and next steps</li><li>When you ask for an unrelated task</li></ul></div>
+    </div>
+
+    <div class="cmp" aria-label="Appearance">
+      <div class="col"><h3><span>Today: Appearance</span></h3><ul>
+        <li>Theme</li><li>Interface font</li><li>Response font</li><li>Transcript text size</li><li>Transcript width</li><li>Motion</li>
+        <li>Code font</li><li>Code font size</li></ul></div>
+      <div class="col"><h3><span>Proposed: Appearance</span></h3><ul>
+        <li>Theme</li><li>Interface font</li><li>Response font</li><li>Transcript text size</li><li>Transcript width</li>
+        <li class="in"><b>Default transcript view</b></li><li class="in"><b>Label chats by status</b></li>
+        <li>Motion</li><li>Code font</li><li>Code font size</li></ul></div>
+    </div>
+
+    <div class="cmp" aria-label="Desktop app">
+      <div class="col"><h3><span>Today: "Use Bunny in a browser"</span><span class="tag t-fix">bug</span></h3><ul>
+        <li>Shown in Desktop app <small>correct</small></li><li class="out">Also shown under every other tab</li></ul></div>
+      <div class="col"><h3><span>Proposed</span></h3><ul>
+        <li>Open in your browser, Install as an app, Keep the same address, Allow other devices</li>
+        <li><small>Only under Desktop app, below Quick ask, Start when I sign in, Keep running in the tray. In a plain browser: Install as an app and Device access, still only in Desktop app.</small></li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="note"><b>Left alone on purpose.</b> "Include sensitive topics in memory" sounds like Privacy, but it sits with the other memory rows and moving one memory row apart would be worse. "Connection" (Provider, Model, Test mode) overlaps with "Providers and abilities"; that is a bigger question than a move, so I am only flagging it. "Default effort" says "in a new chat", so it applies beyond Code; it stays because it is where people look for it.</section>
+
+<section>
+  <h2>Every group and row</h2>
+  <div class="legend" style="margin-bottom:10px"><span class="tag t-move">moves</span><span class="tag t-fix">shown in the wrong places</span><span class="mute">Plain rows stay.</span></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Group / row</th><th>Tab today</th><th>Tab proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td class="n">Profile photo, Full name, What should Bunny call you?, Account, GitHub, Google, Sign-in apps</td><td>Profile</td><td>Profile</td><td>About the person and the sign-ins.</td></tr>
+      <tr><td class="n">Usage</td><td>Usage</td><td>Usage</td><td>Its own tab.</td></tr>
+      <tr><td class="n">Theme, Interface font, Response font, Transcript text size, Transcript width, Motion</td><td>Appearance</td><td>Appearance</td><td>How Bunny looks.</td></tr>
+      <tr><td class="n">Code font, Code font size</td><td>Appearance</td><td>Appearance</td><td>Look of code; Code tab points here.</td></tr>
+      <tr class="mv"><td class="n">Default transcript view</td><td>Code</td><td>Appearance</td><td>Changes how much detail chats show, for all chats; sits with transcript size and width.</td></tr>
+      <tr class="mv"><td class="n">Label chats by status</td><td>Code</td><td>Appearance</td><td>A sidebar display choice, not a Code behaviour.</td></tr>
+      <tr><td class="n">Instructions; Use memory, Search and reference chats, Generate memory, Include sensitive topics, Your memory, Import memory</td><td>My Dear Bunny</td><td>My Dear Bunny</td><td>What Bunny knows about you; one place.</td></tr>
+      <tr><td class="n">Language</td><td>Language</td><td>Language</td><td>Its own tab.</td></tr>
+      <tr><td class="n">Reply ready</td><td>Notifications</td><td>Notifications</td><td>Its own tab.</td></tr>
+      <tr><td class="n">Storage</td><td>Privacy</td><td>Privacy</td><td>Where your data is kept.</td></tr>
+      <tr><td class="n">Artifacts, Draw charts in artifacts, Use skills, Use connectors</td><td>Capabilities</td><td>Capabilities</td><td>On/off switches for what Bunny can use.</td></tr>
+      <tr class="mv"><td class="n">Try another model when yours is busy</td><td>Capabilities</td><td>Models</td><td>It decides which model answers.</td></tr>
+      <tr class="mv"><td class="n">Wait for a first reply</td><td>Capabilities</td><td>Models</td><td>Only applies when the row above is on; keep the pair together.</td></tr>
+      <tr><td class="n">Speech voice, Computer use (Enable, Let the AI control the desktop), Let the AI build its own tools</td><td>Capabilities</td><td>Capabilities</td><td>Things Bunny may do; switches.</td></tr>
+      <tr><td class="n">Provider, Model, Test mode</td><td>Connection</td><td>Connection</td><td>Unchanged. Overlaps with Providers and abilities; flagged, not moved.</td></tr>
+      <tr><td class="n">Show models, Longest reply, Token budget for one reply, Allowed models, Aliases</td><td>Models</td><td>Models</td><td>About the model list and reply size.</td></tr>
+      <tr class="mv"><td class="n">Keep going on long jobs</td><td>Models</td><td>Code</td><td>Its text says "In Code mode".</td></tr>
+      <tr class="mv"><td class="n">Longest long job</td><td>Models</td><td>Code</td><td>Same: Code mode only.</td></tr>
+      <tr><td class="n">Default permission mode, Permission rules (Deny/Ask/Allow, "Only from Bunny's window", "A guard rail, not a sandbox", Try a command)</td><td>Code</td><td>Code</td><td>Rules judge commands and file paths Bunny runs: Code-mode work. Not Privacy (only Storage) and not Capabilities (switches).</td></tr>
+      <tr><td class="n">Default effort, Branch prefix, Copies of projects, Helpers, Prompt suggestions, Summary and next steps, When you ask for an unrelated task</td><td>Code</td><td>Code</td><td>How Bunny works on a job.</td></tr>
+      <tr><td class="n">Code theme and font</td><td>Code</td><td>Code</td><td>A pointer ("Open Appearance"), not a second copy.</td></tr>
+      <tr><td class="n">Quick ask, Start when I sign in, Keep running in the tray</td><td>Desktop app</td><td>Desktop app</td><td>About the app on this PC.</td></tr>
+      <tr class="fx"><td class="n">Use Bunny in a browser: Open in your browser, Install as an app, Keep the same address after restart, Allow other devices to open Bunny</td><td>Desktop app and every other tab</td><td>Desktop app only</td><td>Un-hidden past the one-section view. This is the fix, no move. Two copies of "Allow other devices" exist in the file (window and browser); only one shows per surface, to be confirmed in the build.</td></tr>
+      <tr><td class="n">Installed version, Update automatically</td><td>About</td><td>About</td><td>About the app.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="mute" style="margin-top:10px">Nothing else is shown in more than one tab. Not checked: the Providers, Customize and Automation tabs (their own pages, not part of settings.html), and the real window, since I read the source rather than drove each tab.</p>
+</section>
+</main>
+
+<script>
+(function(){
+  var b=document.getElementById('theme');
+  b.addEventListener('click',function(){
+    var r=document.documentElement;
+    var dark=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
+    r.setAttribute('data-theme',dark?'light':'dark');
+  });
+})();
+</script>
