@@ -1,7 +1,7 @@
 ---
 piece: release-0.1.13
 role: security
-sha: 43ced06
+sha: 371b4b4
 verdict: PASS
 date: 2026-11-18
 ---
@@ -61,3 +61,21 @@ Tests Security ran on extracts with invented profiles:
 Not run by Security here: the full gate (the Chief reports 9/9). Also not run: the real Electron window with device access on, so as not to open a listener on the owner's network.
 
 Verdict: PASS for release 0.1.13 at 43ced06.
+
+## Re-sign at 371b4b4 (supersedes 43ced06)
+
+371b4b4 on claude/builder-a-v0113-final runs linearly on 43ced06 (`git merge-base --is-ancestor 43ced06 371b4b4`). I read the diff only, because a gate was running. The non-picture code changes are 9 files and 121 lines.
+
+- **a8845c6 and 2439def:** "Give Everything" becomes the red-outlined `btn bad`, "Keep Chats" `btn pri`, "Not now" outlined. Styling only. The dialog's logic, the warning text (R-DF1), and the window-only level route are unchanged.
+- **d235050 (from fc263e2):** Quick ask's problem cards fill the panel, hiding the follow-up row. The keys line follows the card. No new bridge call, IPC or data crosses: `openInBunny('settings')` already sits behind `fromBar` (cc2bc3e and 43ced06 review).
+- **01f64dc:**
+  - The Settings page tracks its saves in flight (`window.bunnyPendingSaves`).
+  - `closeSettings` waits for them, at most 4 s, before removing the frame.
+  - It reads the set from Bunny's own same-origin frame inside `try`, so another page in the frame has nothing to give.
+  - It changes no route and nothing a device can reach.
+- **371b4b4:** `data-settings-filled` on the Settings page's root element. A marker only.
+- **251d74e and 488de8c:** e2e only.
+
+Nothing in this range touches the server, the device routes, the remote-access code, the preload or IPC handlers, or the CSP.
+
+Verdict: PASS for release 0.1.13 at 371b4b4. The earlier sections' mapping still holds, since every signed piece is an ancestor. The open items carried to the board are unchanged.
