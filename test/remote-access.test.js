@@ -886,3 +886,19 @@ test('R-DF2: after a restart a new entry is added to the saved log, never writte
   const names = (await createRemoteAccess({ logFile }).actions()).map((e) => e.tool).sort();
   assert.deepEqual(names, ['list_files', 'read_file', 'write_file'], 'and after another restart');
 });
+
+// ---------------------------------------------------------------- DEVICE-FULL: what the window's screens read
+test('DEVICE-FULL: a device is asked about once (the window answers by setting a level, Chats too); the device learns its own level from /api/remote/me; reaching for device access at Everything says the drawn sentence', async (t) => {
+  const d = await deviceSetup(t);
+  const me = async () => (await lan(d.url, { path: '/api/remote/me', headers: { host: d.host, cookie: d.cookie } })).json();
+  assert.equal((await (await fetch(d.base + '/api/remote')).json()).devices[0].asked, false, 'a new device has not been asked about');
+  assert.equal((await me()).level, 'chats');
+  assert.equal((await setLevel(d, 'chats')).status, 200); // "Keep Chats"
+  assert.equal((await (await fetch(d.base + '/api/remote')).json()).devices[0].asked, true);
+  assert.equal(((await d.app.remote.actions()).filter((e) => e.kind === 'level')).length, 0, 'Chats to Chats is not a change, so it is not logged');
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  assert.equal((await me()).level, 'everything', 'the device is told by the server, never by its page');
+  const refused = await lan(d.url, { path: '/api/remote', headers: { host: d.host, cookie: d.cookie } });
+  assert.equal(refused.status, 403);
+  assert.equal(refused.json().message, "Only Bunny's window can change device access.");
+});

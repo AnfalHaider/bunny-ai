@@ -28,6 +28,8 @@ export const LOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export const LEVELS = Object.freeze(['chats', 'everything']);
 export const DEFAULT_LEVEL = 'chats';
 /** Routes even an 'everything' device never reaches: turning device access on or off, the list, levels, signing out OTHER devices. (A device may still sign ITSELF out: /api/remote/signout.) */
+/** What a device at Everything is told when it reaches for device access (the drawn sentence). */
+export const DEVICE_ACCESS_MESSAGE = "Only Bunny's window can change device access.";
 export const isRemoteAdminPath = (path) => /^\/api\/remote(\/|$)/.test(String(path));
 export const FLOOD_LIMIT = 30; // wrong tries from anyone in 10 minutes before everyone waits a minute
 const KDF = { N: 16384, r: 8, p: 1, keylen: 32 };
@@ -334,13 +336,13 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     sessionFor,
     /** The person's own browser sessions, for the list in the window (never the secrets). */
     sweep,
-    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString(), level: s.level })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
+    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString(), level: s.level, asked: Boolean(s.asked) })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
     count() { sweep(); return sessions.size; },
     /** DEVICE-FULL: the level lives with the session, so it ends with sign-out, turning access off or the idle timeout. Returns the device, or null. */
     setLevel(deviceId, level) {
       if (!LEVELS.includes(level)) return null;
       sweep();
-      for (const s of sessions.values()) if (s.deviceId === deviceId) { const from = s.level; s.level = level; s.lastSeen = now(); logAction(s, { kind: 'level', from }); return { id: s.deviceId, level: s.level }; }
+      for (const s of sessions.values()) if (s.deviceId === deviceId) { const from = s.level; s.level = level; s.asked = true; s.lastSeen = now(); if (from !== level) logAction(s, { kind: 'level', from }); return { id: s.deviceId, level: s.level }; }
       return null;
     },
     /** R-DF2: record one thing a device did (a tool's name, a window-only route and its method, a sign-in or a level change). */

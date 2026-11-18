@@ -634,7 +634,7 @@
         </div>
       </div>
       <div class="row stack" id="remote-setup" style="align-items:stretch;text-align:left" hidden>
-        <div class="desc"><b>Before you turn this on.</b> This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. They get ordinary chats, with their tools, and can answer a chat's own permission questions there. They cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, never Public.</div>
+        <div class="desc"><b>Before you turn this on.</b> This uses plain HTTP, not an encrypted connection: anyone on the same network who can see its traffic could take over a signed-in device and run programs on this computer. Use it only on your own home network, never on public or shared Wi-Fi. Anyone on your network who has the passcode can chat with Bunny and read your chats from their device. A device you have just signed in gets <b>Chats</b>: ordinary chats, with their tools, and it can answer a chat's own permission questions there. It cannot change what Bunny may do: the default mode, rules, connectors, installs, skills, schedules, providers, accounts and updates stay in this window. You can give a device <b>Everything</b> (the same as this window) for that device only, from this window, after a warning; it ends after 30 minutes without use. The first time, Windows asks about the firewall: choose <b>Private networks only</b>, never Public.</div>
         <input type="password" id="remote-pass" autocomplete="new-password" placeholder="Choose a passcode (12 or more characters)" aria-label="Passcode, 12 or more characters" style="width:100%;max-width:420px" />
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="remote-generate" class="btn">Make one for me</button><button type="button" id="remote-turn-on" class="btn">Turn on</button><button type="button" id="remote-cancel" class="btn">Cancel</button></div>
         <div class="desc" id="remote-error" role="alert" style="color:var(--bad,#cf3f55)" hidden></div>
@@ -644,6 +644,26 @@
         <div class="desc" id="remote-generated" hidden></div>
         <div id="remote-devices"></div>
         <div><button type="button" id="remote-signout-all" class="btn">Sign out all devices</button></div>
+      </div>
+    </div>
+    <!-- DEVICE-FULL: on a device the person gave Everything, the controls for device access stay with Bunny's window and say so (every other lock is gone) -->
+    <div id="device-access-note" hidden>
+      <h3 style="margin:22px 0 8px">Device access</h3>
+      <div class="group">
+        <div class="row" data-keep>
+          <div class="meta-col">
+            <div class="name">Allow other devices to open Bunny</div>
+            <div class="desc">Lets a phone or another computer on your network open Bunny.</div>
+          </div>
+          <div class="right"><span class="desc device-access-sentence"></span> <label class="switch"><input type="checkbox" checked disabled aria-label="Allow other devices to open Bunny" /><span>on</span></label></div>
+        </div>
+        <div class="row" data-keep>
+          <div class="meta-col">
+            <div class="name">Signed-in devices and Activity</div>
+            <div class="desc">Only Bunny's window can see or change this.</div>
+          </div>
+          <div class="right"><span class="desc device-access-sentence"></span></div>
+        </div>
       </div>
     </div>
     </div>
@@ -680,6 +700,8 @@
 <script type="module">
   import { getJSON, sendJSON, applyTheme, applyAppearance, CODE_THEMES, codeThemeVars, desktopBridge } from './api.js';
   import { installContext, installRowState, installRowText, runInstall } from './install-app.js';
+  import { activityView, chooseLevel, levelPill, paintStatus, warningBox, everythingDevices, IDLE_SHORT, DEVICE_ACCESS_SENTENCE } from './device-access.js';
+  import { deviceLevel } from './browser-mode.js';
   import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
   const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
@@ -1273,7 +1295,7 @@
       $('remote-setup').hidden = s.enabled || !$('remote-setup').dataset.open;
       $('remote-open').hidden = !s.enabled;
       $('remote-status').hidden = !s.enabled;
-      $('remote-status').textContent = s.enabled ? `Open to other devices · ${s.signedIn} signed in${s.autoChats?.length ? ` · ${s.autoChats.length} chat${s.autoChats.length === 1 ? '' : 's'} on Auto from a device (back to Ask when it signs out)` : ''}` : '';
+      if (s.enabled) paintStatus(document, $('remote-status'), s, ' (back to Ask when it signs out)'); else $('remote-status').textContent = '';
       if (!s.enabled) { generated = ''; return; }
       $('remote-address').textContent = `On your network, open ${s.url} in a browser and sign in with the passcode. Bunny has to stay running on this computer.`;
       const g = $('remote-generated');
@@ -1285,24 +1307,74 @@
         copy.addEventListener('click', () => navigator.clipboard?.writeText(generated).catch(() => {}));
         g.append('Your passcode (shown only now): ', code, copy);
       }
+      lastStatus = s;
+      paintDevices(s);
+    };
+    // DEVICE-FULL: each device shows its level, with Change, Activity and Sign out; the warning stays on screen while any device has Everything
+    let lastStatus = null;
+    let viewing = null; // the device whose Activity is open
+    let menuOpen = false;
+    const setLevel = async (d, level) => { err(''); try { render(await sendJSON(`/api/remote/devices/${d.id}/level`, 'PATCH', { level })); } catch (e) { err(e.message); } };
+    const openActivity = async (d) => {
+      viewing = d;
+      let entries = [];
+      try { entries = ((await getJSON('/api/remote/log')).entries ?? []).filter((e) => e.device === d.id); } catch (e) { err(e.message); }
       const list = $('remote-devices');
+      list.replaceChildren(activityView(document, { label: d.label, entries, onBack: () => { viewing = null; paintDevices(lastStatus); } }));
+      $('remote-signout-all').parentElement.hidden = true;
+    };
+    const paintDevices = (s) => {
+      if (!s || viewing || menuOpen) return;
+      const list = $('remote-devices');
+      $('remote-signout-all').parentElement.hidden = false;
       list.replaceChildren();
       if (!s.devices.length) { const none = document.createElement('div'); none.className = 'desc'; none.textContent = 'No device is signed in.'; list.append(none); }
       for (const d of s.devices) {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);text-align:left';
-        const label = document.createElement('div'); label.style.cssText = 'flex:1;text-align:left;min-width:0';
+        row.className = 'device-row';
+        row.dataset.level = d.level;
+        row.style.cssText = 'display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line);text-align:left;position:relative';
+        const label = document.createElement('div'); label.style.cssText = 'flex:1 1 200px;text-align:left;min-width:0';
         const name = document.createElement('div'); name.style.fontWeight = '600'; name.textContent = d.label;
         const details = document.createElement('div'); details.className = 'desc'; details.textContent = `${d.ip} · signed in ${when(d.signedInAt)}`;
+        if (d.level === 'everything') { const idle = document.createElement('b'); idle.textContent = IDLE_SHORT; idle.style.color = 'var(--bad,#cf3f55)'; details.append(' · ', idle); }
         label.append(name, details);
-        const out = document.createElement('button'); out.type = 'button'; out.className = 'btn'; out.textContent = 'Sign out';
+        const button = (text, id) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = text; if (id) b.dataset.action = id; return b; };
+        const change = button('Change ▾', 'change'); change.setAttribute('aria-haspopup', 'menu');
+        change.addEventListener('click', () => {
+          const open = row.querySelector('.level-menu');
+          if (open) { open.remove(); menuOpen = false; return; }
+          menuOpen = true;
+          const menu = document.createElement('div'); menu.className = 'level-menu'; menu.setAttribute('role', 'menu');
+          menu.style.cssText = 'position:absolute;right:0;top:100%;z-index:5;width:240px;background:var(--surface,#fff);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,.25);padding:6px;display:grid;gap:2px;font-size:13px;text-align:left';
+          for (const [level, title, help] of [['chats', 'Chats', 'Chats with tools, no settings or computer control'], ['everything', 'Everything', 'Same as this window. A warning comes first.']]) {
+            const item = document.createElement('button'); item.type = 'button'; item.setAttribute('role', 'menuitemradio'); item.setAttribute('aria-checked', String(d.level === level)); item.dataset.level = level;
+            item.style.cssText = `all:unset;cursor:pointer;padding:7px 10px;border-radius:8px;display:block;${d.level === level ? 'background:var(--accent-soft,rgba(106,79,216,.08))' : ''}`;
+            const t = document.createElement('div'); t.textContent = title; const sm = document.createElement('div'); sm.textContent = help; sm.style.cssText = 'color:var(--text-dim);font-size:11.5px';
+            item.append(t, sm);
+            item.addEventListener('click', async () => {
+              menu.remove(); menuOpen = false;
+              if (level === d.level) return;
+              if (level === 'chats') return setLevel(d, 'chats');
+              if ((await chooseLevel(document, { label: d.label, current: 'everything', first: false })) === 'everything') await setLevel(d, 'everything');
+            });
+            menu.append(item);
+          }
+          row.append(menu);
+          menu.querySelector('button')?.focus();
+        });
+        const activity = button('Activity', 'activity'); activity.addEventListener('click', () => openActivity(d));
+        const out = button('Sign out', 'signout');
         out.addEventListener('click', async () => { try { render(await sendJSON(`/api/remote/devices/${d.id}/signout`, 'POST')); } catch (e) { err(e.message); } });
-        row.append(label, out);
+        row.append(label, levelPill(document, d.level), change, activity, out);
         list.append(row);
       }
+      if (everythingDevices(s).length) list.append(warningBox(document, { title: 'A device has Everything' }));
     };
     const refresh = async () => { try { render(await getJSON('/api/remote')); } catch { /* the status stays as it was */ } };
     await refresh();
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuOpen) { document.querySelector('.level-menu')?.remove(); menuOpen = false; } });
+    document.addEventListener('click', (e) => { if (menuOpen && !e.target.closest?.('.level-menu, [data-action="change"]')) { document.querySelector('.level-menu')?.remove(); menuOpen = false; } });
     box.addEventListener('change', async () => {
       err('');
       if (box.checked) { box.checked = false; $('remote-setup').dataset.open = '1'; $('remote-setup').hidden = false; $('remote-pass').focus(); return; }
@@ -1351,7 +1423,12 @@
     };
     if (!desk) { // a browser tab: only this row is meaningful here (the rest is Bunny's own window's)
       for (const g of document.querySelectorAll('#desktop-section > .group')) g.hidden = true;
-      for (const row of document.querySelectorAll('#browser-section .group > .row:not(#install-row)')) row.hidden = true;
+      for (const row of document.querySelectorAll('#browser-section .group > .row:not(#install-row):not([data-keep])')) row.hidden = true;
+      deviceLevel().then((level) => { // DEVICE-FULL: at Everything nothing is locked except device access, and that says so
+        if (level !== 'everything') return;
+        for (const s of document.querySelectorAll('.device-access-sentence')) s.textContent = DEVICE_ACCESS_SENTENCE;
+        $('device-access-note').hidden = false;
+      }).catch(() => {});
     }
     ctx.listeners?.add(render);
     $('install-app').addEventListener('click', async () => { await runInstall(ctx); render(); });

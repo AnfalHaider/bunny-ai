@@ -8,8 +8,23 @@ export const NOT_RUNNING_TITLE = 'Bunny is not running';
 export const NOT_RUNNING_TEXT = 'Bunny runs on this computer and has been closed. Open Bunny again (or turn on Keep running in the tray in Settings, under Desktop app, so closing the window does not stop it). This page comes back by itself.';
 
 let locked = null;
-/** Does this server keep window-only changes to Bunny's own window? (/api/health says so.) Asked once. */
+let level = null;
+/**
+ * DEVICE-FULL: what the person gave THIS signed-in device: 'chats' or 'everything'. Asked of the server (never taken from the page), once; null on a page that is not a device's
+ * or when the server cannot be asked. (The server decides what a device may do; this only keeps the page from locking what the server will allow.)
+ */
+export async function deviceLevel(fetchImpl = globalThis.fetch, doc = globalThis.document) {
+  if (!isDevicePage(doc)) return null;
+  if (level !== null) return level;
+  try {
+    const body = await (await fetchImpl('/api/remote/me', { headers: { accept: 'application/json' } })).json();
+    level = body?.level === 'everything' ? 'everything' : 'chats';
+  } catch { return null; }
+  return level;
+}
+/** Does this server keep window-only changes to Bunny's own window? (/api/health says so.) Asked once. A device at Everything is not locked: the server lets it do what the window does. */
 export async function windowOnlyLocked(fetchImpl = globalThis.fetch) {
+  if (await deviceLevel(fetchImpl) === 'everything') return false;
   if (locked !== null) return locked;
   try {
     const res = await fetchImpl('/api/health', { headers: { accept: 'application/json' } });
@@ -20,7 +35,7 @@ export async function windowOnlyLocked(fetchImpl = globalThis.fetch) {
   }
   return locked;
 }
-export const resetBrowserMode = () => { locked = null; };
+export const resetBrowserMode = () => { locked = null; level = null; };
 
 /** The "Bunny is not running" page, built from text only. Returns the element (also appended to the document). */
 export function showNotRunning(doc = globalThis.document, { check = () => globalThis.fetch('/api/health').then((r) => r.ok), reload = () => globalThis.location.reload(), everyMs = 3000 } = {}) {

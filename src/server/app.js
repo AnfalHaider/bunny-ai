@@ -86,7 +86,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { checkPasscodeChoice, createRemoteAccess, findLanAddress, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -223,7 +223,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (req.bunnyDevice) {
       let decoded = '/api/remote'; // R-DF3: the decoded path (/api/%72emote is /api/remote); one that cannot be decoded is refused
       try { decoded = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { /* refused below */ }
-      if (isRemoteAdminPath(decoded)) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
+      if (isRemoteAdminPath(decoded)) { sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE }); return true; }
       return false;
     }
     if (!folderPickerOnly || adminOk(req)) return false;
@@ -570,7 +570,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
-    if (req.bunnyDevice && isRemoteAdminPath(path)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); // belt: remoteRoute already refused it
+    if (req.bunnyDevice && isRemoteAdminPath(path)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE }); // belt: remoteRoute already refused it
     // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
     if (isWindowOnlyRoute(method, path) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
 
@@ -3580,12 +3580,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': remote.clearCookie() });
       return res.end(JSON.stringify({ ok: true }));
     }
-    if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf });
+    if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf, level: session.level });
     // 5. What a device may do is a short allow-list; a window-only route is never one of them.
     // DEVICE-FULL: a device the person gave 'everything' may do all the window can, except /api/remote* (the person's own switches for device access)
     const logWindowOnly = () => { if (writes && (isWindowOnlyRoute(method, path) || (method === 'PUT' && path === '/api/settings'))) remote.logAction(session, { kind: 'route', method, path }); }; // R-DF2: route and method, never the body
     if (session.level === 'everything') {
-      if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
+      if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', DEVICE_ACCESS_MESSAGE);
       logWindowOnly();
       req.bunnyDevice = session;
       return route(req, res);

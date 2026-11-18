@@ -25,6 +25,7 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
+import { chooseLevel, paintStatus } from './device-access.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
@@ -2605,6 +2606,20 @@ function startNewChat({ incognito = false } = {}) {
 // BROWSER step 2: while Bunny is open to other devices, a line across the top of the window says so, with the off switch.
 function watchRemote() {
   let bar = null;
+  // DEVICE-FULL: a device that has just signed in is asked about, one at a time, over whatever the window is showing. It works as Chats meanwhile; Not now asks again only after a restart.
+  const dismissed = new Set();
+  let asking = false;
+  const askAboutDevices = async (s) => {
+    if (asking) return;
+    const device = (s.devices ?? []).find((d) => !d.asked && !dismissed.has(d.id));
+    if (!device) return;
+    asking = true;
+    try {
+      const choice = await chooseLevel(document, { label: device.label, first: true });
+      if (choice === null) dismissed.add(device.id);
+      else show(await sendJSON(`/api/remote/devices/${device.id}/level`, 'PATCH', { level: choice }));
+    } catch { dismissed.add(device.id); /* the device signed out meanwhile, or the write failed: Settings still has the choice */ } finally { asking = false; }
+  };
   const show = (s) => {
     if (!s?.enabled) { bar?.remove(); bar = null; return; }
     if (!bar) {
@@ -2616,14 +2631,15 @@ function watchRemote() {
     }
     bar.replaceChildren();
     const text = document.createElement('span');
-    const auto = s.autoChats?.length ?? 0;
-    text.textContent = `Open to other devices · ${s.signedIn} signed in${auto ? ` · ${auto} chat${auto === 1 ? '' : 's'} on Auto from a device` : ''} · `;
+    paintStatus(document, text, s); // names the devices that have Everything, in bold
+    text.append(' · ');
     const off = document.createElement('button');
     off.type = 'button';
     off.textContent = 'Turn off';
     off.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:8px;padding:1px 10px;cursor:pointer';
     off.addEventListener('click', async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } });
     bar.append(text, off);
+    askAboutDevices(s);
   };
   const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
   tick();
