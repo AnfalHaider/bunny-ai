@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - Published v0.1.11
+
+**Word:** the Chief of Staff's 7E relay: the owner answered "Yes, release v0.1.11" to "Release v0.1.11 (the row fix, the chip fix and the web app) once it passes every check?", then "i am driving , push and release." and "push and release when ready". The web app moved to v0.1.12. The relay had the shas, the pasted gate (9/9 at 28812e1) and the sign-off row; I accepted it at once.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at 4cebedc = origin/main.
+- `npm ci`, `npm run dist` -> build-sha 4cebedc, tree clean, `latest.yml` 0.1.11 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.11-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.11-notes.md` ran 08:11 to 08:17 (GitHub publishedAt 2026-11-18T03:17:03Z) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.11
+- Checks: not draft, not prerelease; .exe 122362916, .blockmap 128707, latest.yml 348; tag v0.1.11 -> 4cebedc; feed serves 0.1.11. Downloaded the uploaded .exe: sha256 db6124dd6e9f718e202742d96fabac761ebbf92fcbb06c6ee9059c531a1283f0 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.12) with 0.1.10's code; pulling the release is owner-only.
+
+**Lesson:** no lesson; a complete relay plus a prepared folder made this the fastest release.
+
 ## 2026-11-18 - Published v0.1.10
 
 **Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-18) "Both artifacts approved, now fix all issues discussed and pending gaps. Then push the update and release. Ensure all issue are fixed in this build." and "Browser option tonight everything in the same build"; the question as asked, shas, sign-offs. The first relay only pointed at the gate file, so I held until the Chief pasted the gate (9/9 at 975970a). Then accepted.
