@@ -388,3 +388,19 @@ test('a retry after a problem brings the follow-up row back with the answer', as
   await expect(page.locator('#follow')).toBeEnabled();
   await expect(page.locator('#keyline')).toContainText('Enter sends a follow-up');
 });
+
+// v0.1.13 clip fix (found by QA in the real window): the window is still short when a card opens, and focusing the card's button used to scroll the overflow-hidden page, so the pill's top was cut and the window settled too small.
+for (const [name, event] of [['model error', { type: 'error', kind: 'other', message: 'The model answered 500' }], ['offline', { type: 'error', kind: 'offline', message: '' }], ['no model', { type: 'error', kind: 'none', message: 'No model' }], ['needs window', { type: 'needs-window', text: 'I would need to read your files.' }]]) {
+  test(`clip: the ${name} card leaves the page unscrolled and the window as tall as the whole pill`, async ({ page }) => {
+    await openBar(page); // the viewport stays 80 px high, like the window before main has grown it
+    await page.locator('#text').fill('How do rabbits dig a burrow?');
+    await page.locator('#go').click();
+    await page.evaluate((e) => window.__emit(e), event);
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => { const r = document.getElementById('bar').getBoundingClientRect(); return { scrollY: window.scrollY, top: r.top, bottom: r.bottom, resizes: window.__calls.filter((c) => c[0] === 'resize').map((c) => c[1]) }; });
+    expect(m.scrollY).toBe(0);
+    expect(m.top).toBeGreaterThanOrEqual(0);
+    expect(m.resizes.at(-1)).toBe(Math.ceil(m.bottom) + 8); // the window height asked for is the pill's full height
+    expect(m.resizes.at(-1)).toBeGreaterThanOrEqual(Math.ceil(m.top) + 8 + Math.floor(m.bottom - m.top));
+  });
+}

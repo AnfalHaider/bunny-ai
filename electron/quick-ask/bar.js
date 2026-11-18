@@ -40,7 +40,14 @@ function message(s, kind = 'problem') {
  * Tell main how tall the content is, so the window is exactly as tall as the pill (its 8 px margin included), and a little taller while the + menu is open (main keeps it under
  * about 560 px and on the screen). Called whenever the content changes, and by a size observer, so no case is forgotten (the answer opening is eased, so it is followed frame by frame).
  */
+const NOSCROLL = { preventScroll: true }; // a focus() must never scroll the overflow-hidden page: while the window is still short it would push the pill's top out of view
+/** The page cannot be scrolled by the person (overflow hidden), only by the browser keeping something in view while the window is still short (the body is the scroller here): always show it from the top. */
+function unscroll() {
+  if (window.scrollY || document.scrollingElement?.scrollTop || document.body.scrollTop) { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; document.body.scrollTop = 0; }
+}
+document.addEventListener('scroll', unscroll, true); // body's own scroll does not bubble; the capture sees it
 function fit() {
+  unscroll();
   const pill = $('bar').getBoundingClientRect();
   const menu = $('menu').hidden ? null : $('menu').getBoundingClientRect();
   const bottom = Math.max(pill.bottom, menu ? menu.bottom : 0);
@@ -113,7 +120,7 @@ function renderChip() {
   x.type = 'button';
   x.setAttribute('aria-label', isFile ? 'Remove the file' : 'Remove the screenshot');
   x.textContent = '×';
-  x.addEventListener('click', () => { if (shot?.kind === 'file') window.quickAsk.dropFile().catch(() => {}); shot = null; renderChip(); text.focus(); });
+  x.addEventListener('click', () => { if (shot?.kind === 'file') window.quickAsk.dropFile().catch(() => {}); shot = null; renderChip(); text.focus(NOSCROLL); });
   if (img.src) chip.append(img);
   chip.append(label, x);
   host.append(chip);
@@ -132,7 +139,7 @@ plus.addEventListener('click', () => {
   plus.setAttribute('aria-expanded', String(open));
   refreshButtons();
   fit(); // the window grows for the menu, then follows the pill again when it closes
-  if (open) $('shot-item').focus();
+  if (open) $('shot-item').focus(NOSCROLL);
 });
 
 $('shot-item').addEventListener('click', async () => {
@@ -145,7 +152,7 @@ $('shot-item').addEventListener('click', async () => {
   } catch {
     message('Bunny could not take a screenshot.');
   }
-  text.focus();
+  text.focus(NOSCROLL);
 });
 
 $('file-item').addEventListener('click', async () => {
@@ -158,7 +165,7 @@ $('file-item').addEventListener('click', async () => {
   } catch {
     message('Bunny could not add that file.');
   }
-  text.focus();
+  text.focus(NOSCROLL);
 });
 
 // ---- the answer, in place ----
@@ -299,7 +306,7 @@ function card(kind, title, bodyText, acts) {
   $('foot').hidden = true; // in a problem state the card is the whole panel: no follow-up field and no second "Open in Bunny" under it
   refreshButtons();
   scheduleFit();
-  row.querySelector('button')?.focus(); // after an error the focus is on the card's main button
+  row.querySelector('button')?.focus(NOSCROLL); // after an error the focus is on the card's main button
 }
 
 const again = ['Try again', () => ask(question, [], true), 'ghost'];
@@ -314,7 +321,7 @@ function onAnswer(event) {
   if (event.type === 'done' || event.type === 'stopped') {
     ended(); showAnswer(false); showCopy(true);
     if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = `Answered by ${event.model} · text only`; $('meta').hidden = false; }
-    $('follow').disabled = false; $('follow').focus(); scheduleFit();
+    $('follow').disabled = false; $('follow').focus(NOSCROLL); scheduleFit();
     return;
   }
   if (event.type === 'needs-window') {
@@ -405,11 +412,11 @@ text.addEventListener('keydown', (e) => {
 
 // Esc does one thing at a time: the + menu open, close it (focus back on +); an answer coming, stop it and keep what arrived; otherwise close the bar.
 window.quickAsk.onEscape(() => {
-  if (!$('menu').hidden) { closeMenu(); plus.focus(); window.quickAsk.escHandled().catch(() => {}); return; }
+  if (!$('menu').hidden) { closeMenu(); plus.focus(NOSCROLL); window.quickAsk.escHandled().catch(() => {}); return; }
   if (answering) { window.quickAsk.stop().catch(() => {}); window.quickAsk.escHandled().catch(() => {}); return; }
   window.quickAsk.close().catch(() => {});
 });
-window.addEventListener('focus', () => { if (!asked) text.focus(); else if (!$('follow').disabled) $('follow').focus(); });
+window.addEventListener('focus', () => { if (!asked) text.focus(NOSCROLL); else if (!$('follow').disabled) $('follow').focus(NOSCROLL); });
 // ---- QUICK-UI 8 and 9: Bunny's theme and interface font, and which model answers ----
 // The font files are the app's own bundled ones (src/ui/fonts, SIL OFL), read from the package: the page's policy allows fonts from its own folder only. Each key maps to a fixed
 // family and fixed files here; main sends only the key, so nothing it sends can name a file or a style.
@@ -457,4 +464,4 @@ Promise.resolve(window.quickAsk.init?.()).then((look) => applyLook(look ?? {})).
 
 setGo('send');
 refresh();
-text.focus();
+text.focus(NOSCROLL);
