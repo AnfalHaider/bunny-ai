@@ -101,3 +101,32 @@ So the first action after every restart erases the history (for example, last ni
 - My probe on 2c289da: "entries on disk after a restart and one new action: 2; the earlier entry is KEPT"; the window reads 2 entries (New device, Earlier device), with no duplicates.
 - `remote-access` passes 45 of 45 with the variable unset.
 - R-DF1 (the visible parts) is still required for the release.
+
+## Review of the visible parts, 2c289da..bf9f320 (candidate on claude/builder-a-device-full): PASS, release sign-off waits for main's sha
+
+Commits: 5bebbdf (the screens), 6698ff1 (PRIV-2), bf9f320 (pictures). The branch was rebased onto 0603d13. The four server commits I signed are the same changes by `git patch-id --stable`:
+
+| Signed | Rebased | patch-id |
+|---|---|---|
+| 3d1cde0 | 271be01 | fc2bea03d4de |
+| 55181f1 | 04db6cf | 1991606fe0ed |
+| 24359c2 | 5e7e299 | 6eee1816a62b |
+| 2c289da | 2ad7751 | 6e0ab4e14942 |
+
+What I checked (code read from `git diff 2ad7751 bf9f320`):
+
+- **First-sign-in choice** (`chat.js` `watchRemote`, `device-access.js` `chooseLevel`): it runs only from the window's `/api/remote` status, which a device is refused (403). Chats is selected by default. Everything needs two deliberate actions: pick it, which puts the warning on screen, then press "Give Everything". "Not now" or Escape sets nothing and asks again only after a restart. A failed write sets nothing.
+- **Settings Change** (`settings.html`): Chats is set at once. Everything goes through the same dialog with the warning, every time. Both use the window-only `PATCH /api/remote/devices/<id>/level`.
+- **The warning (R-DF1):** `WARNING` is my R-DF1 text word for word, with the 30-minute line under it. It is in the dialog and stays in the device list while any device has Everything. The picture `first-signin-everything-light.png` shows it.
+- **Status line:** `paintStatus` names the devices at Everything in bold, in both the window's top line and Settings.
+- **Activity view:** it reads `GET /api/remote/log` (window-only). It shows names and route and method only, and the limit is said under it, as drawn: "unless one set out to hide it… not as proof that nothing happened."
+- **No device page can change a level:** the device pages only read their own level from `GET /api/remote/me`, and only to show a line and unlock what the server already allows. The server still refuses every `/api/remote*` route except the device's own sign-out and `me`, at both levels, including `%72emote` spellings (tests at lines 763, 805 and 832). A device that edits its page gains nothing. At Everything, the device's Settings shows "Only Bunny's window can change device access." with the switch disabled.
+- **Injection:** every device label, log path and tool name reaches the page through `textContent`. The only `innerHTML` (`remote.js`) holds two constant SVGs.
+- **`asked` and `level` fields:** `asked` appears only in the window's list. `level` in `/api/remote/me` tells a device only its own level. Setting the same level twice is not logged as a change.
+- **PRIV-2:** `systemUserName` returns `BUNNY_DISPLAY_NAME` or "Sam" when `BUNNY_DATA_DIR` or `BUNNY_FAKE_UPSTREAM` is set, so pictures and tests carry no OS user name. Normal installs are unchanged.
+
+Tests on an extract of bf9f320, invented profile (`BUNNY_DATA_DIR` temp, `BUNNY_FAKE_UPSTREAM=1`): `remote-access`, `device-access` and `priv2-name` pass 52 of 52.
+
+**DF-L1 (LOW, not blocking):** the server names a device only by system and browser ("iPhone or iPad · Safari"). The first-sign-in dialog shows only that name, so a second device with the same browser looks identical to the owner's own. Anyone signing in still needs the passcode. Recommendation for a later release: show the address and sign-in time in the dialog, and let the owner name a device. (The pictures' "Sam's phone" and "Kitchen laptop" are invented examples.)
+
+Verdict: the visible parts meet R-DF1, and the release needs nothing more from Security. I'll sign release-0.1.13 on the sha main will carry, after checking it is bf9f320 or the same changes.
