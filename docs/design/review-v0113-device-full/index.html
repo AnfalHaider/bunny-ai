@@ -1,0 +1,320 @@
+<title>Device access levels</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a decision page. What the owner asked, then the pictures grouped by moment (where the option lives, switching on
+   other-device access, the other device, the browser view, the status line), then notes with file:line and the HIGH risk.
+   Every picture is drawn in light and dark. Tokens are Bunny's own, inlined. */
+:root{
+  --bg:#faf9f6;--bg-sidebar:#f3f1ec;--surface:#fff;--hover:#efece6;--line:#e6e2da;--line-strong:#d6d1c6;
+  --text:#1f2023;--text-dim:#62666f;--text-faint:#8a8e96;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.08);
+  --on-accent:#fff;--ink:#1f2023;--on-ink:#faf9f6;--ok:#1f9d6a;--warn:#c07a12;--bad:#cf3f55;
+  --warn-soft:rgba(192,122,18,.10);--bad-soft:rgba(207,63,85,.10);--ok-soft:rgba(31,157,106,.12);
+  --font-sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141518;--bg-sidebar:#1a1b1f;--surface:#1f2025;--hover:#26272d;--line:#2c2d33;--line-strong:#3a3b42;
+  --text:#ececee;--text-dim:#a0a2aa;--text-faint:#6e717a;--accent:#b3a1ff;--accent-soft:rgba(179,161,255,.10);
+  --on-accent:#15121f;--ink:#ececee;--on-ink:#141518;--ok:#53cf9b;--warn:#e9ad52;--bad:#f07a8c;
+  --warn-soft:rgba(233,173,82,.12);--bad-soft:rgba(240,122,140,.12);--ok-soft:rgba(83,207,155,.12);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141518;--bg-sidebar:#1a1b1f;--surface:#1f2025;--hover:#26272d;--line:#2c2d33;--line-strong:#3a3b42;
+  --text:#ececee;--text-dim:#a0a2aa;--text-faint:#6e717a;--accent:#b3a1ff;--accent-soft:rgba(179,161,255,.10);
+  --on-accent:#15121f;--ink:#ececee;--on-ink:#141518;--ok:#53cf9b;--warn:#e9ad52;--bad:#f07a8c;
+  --warn-soft:rgba(233,173,82,.12);--bad-soft:rgba(240,122,140,.12);--ok-soft:rgba(83,207,155,.12);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 var(--font-sans)}
+.page{max-width:1500px;margin:0 auto;padding-block:28px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:20px;line-height:1.25;margin:0;text-wrap:balance}
+h3{font-size:15px;margin:22px 0 6px}
+.dim{color:var(--text-dim)}
+.lede{max-width:70ch;margin:0 0 6px}
+code{font:12.5px var(--font-mono);background:var(--bg-sidebar);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.ask{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:14px 18px;margin:18px 0;display:grid;gap:8px;max-width:1000px}
+.ask b.l{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:600}
+.ask blockquote{margin:0;padding:0 0 0 12px;border-left:3px solid var(--accent)}
+.tags{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:12.5px;color:var(--text-dim);background:var(--surface)}
+.tag.high{border-color:var(--bad);color:var(--bad);font-weight:600}
+.sec{margin-top:52px;border-top:1px solid var(--line);padding-top:22px}
+.sec>.dim{max-width:78ch;margin:4px 0 0}
+.grid{display:flex;flex-wrap:wrap;gap:20px;margin-top:16px;align-items:flex-start}
+.cap{width:100%;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin:10px 0 -8px}
+.cap.p{color:var(--accent)}
+figure.f{margin:0;min-width:0;max-width:100%}
+figure.f figcaption{font-size:12.5px;color:var(--text-dim);margin:0 0 6px;max-width:70ch}
+.scroll{overflow-x:auto;max-width:100%;border-radius:14px}
+ul.notes,ol.notes{margin:12px 0 0;padding-left:20px;max-width:100ch}.notes li{margin:5px 0}
+table.n{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:10px}
+table.n th,table.n td{text-align:left;vertical-align:top;border-top:1px solid var(--line);padding:8px 10px}
+table.n th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);border-top:0}
+.tw{overflow-x:auto}
+.safe{border:1px solid var(--bad);background:var(--bad-soft);border-radius:12px;padding:12px 18px;margin-top:14px;max-width:1000px}
+.safe b{color:var(--bad)}
+
+/* ---------- the pictures ---------- */
+.mk{font:14px/1.5 var(--font-sans);color:var(--text);text-align:left}
+.mk.light{--bg:#faf9f6;--bg-sidebar:#f3f1ec;--surface:#fff;--hover:#efece6;--line:#e6e2da;--line-strong:#d6d1c6;--text:#1f2023;--text-dim:#62666f;--text-faint:#8a8e96;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.08);--on-accent:#fff;--ink:#1f2023;--on-ink:#faf9f6;--ok:#1f9d6a;--warn:#c07a12;--bad:#cf3f55;--warn-soft:rgba(192,122,18,.10);--bad-soft:rgba(207,63,85,.10);--ok-soft:rgba(31,157,106,.12);--sh:0 1px 2px rgba(0,0,0,.05),0 14px 44px rgba(0,0,0,.16);--desk:#cfd3dc;--desk2:#e4e7ee;--sc:rgba(20,21,24,.32)}
+.mk.dark{--bg:#141518;--bg-sidebar:#1a1b1f;--surface:#1f2025;--hover:#26272d;--line:#2c2d33;--line-strong:#3a3b42;--text:#ececee;--text-dim:#a0a2aa;--text-faint:#6e717a;--accent:#b3a1ff;--accent-soft:rgba(179,161,255,.10);--on-accent:#15121f;--ink:#ececee;--on-ink:#141518;--ok:#53cf9b;--warn:#e9ad52;--bad:#f07a8c;--warn-soft:rgba(233,173,82,.12);--bad-soft:rgba(240,122,140,.12);--ok-soft:rgba(83,207,155,.12);--sh:0 14px 44px rgba(0,0,0,.6);--desk:#0c0d10;--desk2:#17181c;--sc:rgba(0,0,0,.55)}
+.mk *{box-sizing:border-box}
+.mk .panel{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative}
+.mk .panel.w{width:700px}
+.mk .panel.s{width:560px}
+.mk .panel.p{width:372px}
+.mk .ph{padding:16px 22px 6px;font-size:19px;font-weight:600}
+.mk .grp{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin:8px 20px 14px}
+.mk .p .grp{margin:8px 14px 12px}
+.mk .grp .row{display:flex;align-items:center;gap:16px;padding:14px 18px;border-top:1px solid var(--line)}
+.mk .p .grp .row{padding:12px 14px;gap:12px}
+.mk .grp .row:first-child{border-top:0}
+.mk .row .mid{flex:1;min-width:0}
+.mk .brw.ph .grp .row{flex-wrap:wrap;gap:8px}.mk .brw.ph .row .mid{flex:1 1 100%}
+.mk .brw.ph .grp .row .lockline{flex:1 1 auto}
+.mk .row .nm{font-weight:600;font-size:14px}
+.mk .row .ds{color:var(--text-dim);font-size:13px}
+.mk .row .ds code{font-size:12px}
+.mk .sw{width:36px;height:21px;border-radius:999px;background:var(--line-strong);position:relative;flex:none}
+.mk .sw:after{content:"";position:absolute;left:2px;top:2px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.mk .sw.on{background:var(--accent)}.mk .sw.on:after{left:17px}
+.mk .sw.lock{opacity:.45}
+.mk .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:5px 12px;font-size:13px;background:var(--surface);color:var(--text);white-space:nowrap;font-weight:500}
+.mk .btn.pri{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.mk .btn.acc{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.mk .btn.bad{border-color:var(--bad);color:var(--bad)}
+.mk .btn.off{opacity:.45}
+.mk .badge{font-size:10.5px;font-weight:600;border-radius:999px;padding:0 7px;border:1px solid var(--line);color:var(--text-dim);white-space:nowrap}
+.mk .badge.rec{border-color:var(--accent);color:var(--accent)}
+.mk .badge.hi{border-color:var(--bad);color:var(--bad)}
+.mk .addr{font:12.5px var(--font-mono);background:var(--bg-sidebar);border:1px solid var(--line);border-radius:7px;padding:2px 8px;display:inline-block;word-break:break-all}
+.mk .lockline{font-size:12.5px;color:var(--text-dim);display:flex;gap:6px;align-items:center}
+/* dialogs */
+.mk .scrimbox{position:relative;border-radius:14px;overflow:hidden;background:linear-gradient(160deg,var(--desk),var(--desk2));padding:26px 20px}
+.mk .scrimbox:before{content:"";position:absolute;inset:0;background:var(--sc)}
+.mk .dlg{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:18px 20px;display:grid;gap:10px;margin:0 auto}
+.mk .dlg h4{margin:0;font-size:16px}
+.mk .dlg .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}
+.mk .callout{border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:9px 12px;font-size:13px;display:grid;gap:4px}
+.mk .callout b{color:var(--warn)}
+.mk .callout.bad{border-color:var(--bad);background:var(--bad-soft)}.mk .callout.bad b{color:var(--bad)}
+.mk .field{display:grid;gap:4px;font-size:13px}
+.mk .field .in{border:1px solid var(--line-strong);border-radius:9px;padding:7px 10px;background:var(--bg);font:13.5px var(--font-mono);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mk .field .in.ph2{color:var(--text-faint);font-family:var(--font-sans)}
+.mk .meter{display:flex;gap:4px}.mk .meter i{flex:1;height:4px;border-radius:2px;background:var(--line)}.mk .meter i.on{background:var(--ok)}
+/* windows firewall (drawn, system dialog: wording is Windows') */
+.mk .win{width:470px;max-width:100%;background:#fff;color:#1b1b1b;border:1px solid #9a9a9a;box-shadow:0 10px 40px rgba(0,0,0,.35);font:13px/1.45 "Segoe UI",system-ui,sans-serif;margin:0 auto;position:relative;z-index:2}
+.mk .win .tb{display:flex;justify-content:space-between;padding:6px 10px;font-size:12px;background:#fff;border-bottom:1px solid #ddd}
+.mk .win .hd{background:#0a4fa8;color:#fff;padding:12px 14px;font-size:15px}
+.mk .win .bd{padding:12px 14px;display:grid;gap:8px}
+.mk .win .ck{display:flex;gap:8px;align-items:flex-start}
+.mk .win .ck i{width:14px;height:14px;border:1px solid #444;display:inline-block;flex:none;margin-top:3px;position:relative}
+.mk .win .ck i.on:after{content:"✓";position:absolute;left:1px;top:-3px;font-size:13px;font-style:normal}
+.mk .win .ft{background:#f0f0f0;padding:10px 14px;display:flex;gap:8px;justify-content:flex-end}
+.mk .win .ft span{border:1px solid #888;padding:3px 14px;background:#e6e6e6}.mk .win .ft span.d{border:2px solid #0a64d8}
+/* tray menu */
+.mk .tray{width:250px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh);padding:5px;display:grid;gap:1px;font-size:13.5px}
+.mk .tray .it{padding:6px 12px;border-radius:6px;display:flex;justify-content:space-between;gap:10px}
+.mk .tray .it.hl{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.mk .tray .sp{height:1px;background:var(--line);margin:3px 6px}
+/* browser frame */
+.mk .brw{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;background:var(--bg);width:760px;max-width:none}
+.mk .brw.ph{width:372px}
+.mk .brw .bar{display:flex;align-items:center;gap:10px;background:var(--bg-sidebar);border-bottom:1px solid var(--line);padding:8px 12px}
+.mk .brw .dots{display:flex;gap:5px}.mk .brw .dots i{width:9px;height:9px;border-radius:50%;background:var(--line-strong);display:block}
+.mk .brw .url{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:2px 12px;font-size:12.5px;color:var(--text-dim);display:flex;gap:6px;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.mk .brw .url b{color:var(--text);font-weight:500}
+.mk .app{display:flex;min-height:var(--h,380px);position:relative}
+.mk .side{width:180px;background:var(--bg-sidebar);border-right:1px solid var(--line);padding:12px 10px;font-size:13px;display:grid;gap:3px;align-content:start;flex:none}
+.mk .side .it{padding:5px 8px;border-radius:7px;color:var(--text-dim)}.mk .side .it.on{background:var(--hover);color:var(--text)}
+.mk .main{flex:1;min-width:0;position:relative}
+.mk .thread{padding:18px 20px;display:grid;gap:10px;font-size:13.5px}
+.mk .ub{justify-self:end;background:var(--bg-sidebar);border-radius:14px;padding:6px 12px}
+.mk .composer{position:absolute;left:16px;right:16px;bottom:12px}
+.mk .box{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 10px 8px;display:grid;gap:8px}
+.mk .ta{color:var(--text-faint);padding:2px 6px}
+.mk .crow{display:flex;align-items:center;gap:6px}.mk .sp2{flex:1}
+.mk .ib{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--text-dim)}
+.mk .send{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:grid;place-items:center}
+.mk .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:3px 9px;font-size:12px}
+.mk .dot{width:8px;height:8px;border-radius:50%;background:#3b82c4;display:inline-block}
+.mk .under{display:flex;gap:6px;font-size:12px;color:var(--text-dim);margin:6px 4px 0;white-space:nowrap;overflow:hidden}
+.mk .banner{display:flex;align-items:center;gap:10px;padding:6px 14px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.mk .banner.open{background:var(--warn-soft);color:var(--warn)}
+.mk .banner.open b{font-weight:600}
+.mk .banner a,.mk .banner .lnk{margin-left:auto;font-weight:600;text-decoration:underline;white-space:nowrap}
+.mk .signin{min-height:var(--h,420px);display:grid;place-items:center;padding:20px}
+.mk .card{width:100%;max-width:340px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;display:grid;gap:12px}
+.mk .card h4{margin:0;font-size:18px}
+.mk .mkb{width:34px;height:34px;color:var(--accent)}
+.mk .devs{display:grid;gap:0;margin:4px 0 0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mk .devs .d{display:flex;gap:12px;align-items:center;padding:9px 12px;border-top:1px solid var(--line);font-size:13px}
+.mk .devs .d:first-child{border-top:0}
+.mk .devs .d .mid{flex:1;min-width:0}.mk .devs .d small{display:block;color:var(--text-dim);font-size:12px}
+.mk .lk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text-dim)}
+</style>
+
+<style>
+/* additions for this page: access-level choices, level pills, change menu, device top line */
+.mk .lvl{display:grid;gap:8px;margin:2px 0 4px}
+.mk .opt{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;background:var(--bg)}
+.mk .opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.mk .opt .rd{width:16px;height:16px;border-radius:50%;border:2px solid var(--line-strong);flex:none;margin-top:2px;position:relative}
+.mk .opt.sel .rd{border-color:var(--accent)}.mk .opt.sel .rd:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+.mk .opt b{display:block;font-size:14px}
+.mk .opt span.d{font-size:12.5px;color:var(--text-dim)}
+.mk .pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;border-radius:999px;padding:1px 9px;border:1px solid var(--line);color:var(--text-dim);white-space:nowrap}
+.mk .pill.all{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+.mk .pill.chats{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.mk .menu{position:absolute;right:0;top:34px;z-index:5;width:240px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh);padding:6px;display:grid;gap:2px;font-size:13px}
+.mk .menu .m{padding:7px 10px;border-radius:8px}.mk .menu .m.on{background:var(--accent-soft)}.mk .menu .m small{display:block;color:var(--text-dim);font-size:11.5px}
+.mk .dline{display:flex;gap:8px;align-items:center;padding:5px 12px;font-size:12px;border-bottom:1px solid var(--line)}
+.mk .dline.chats{background:var(--accent-soft);color:var(--accent)}
+.mk .dline.all{background:var(--bad-soft);color:var(--bad)}
+.mk .dline b{font-weight:600}
+.mk .wnd{width:760px;border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;background:var(--bg);box-shadow:var(--sh);position:relative}
+.mk .wnd .inner{min-height:var(--h,300px);position:relative;display:flex}
+.mk .ph2{width:300px;border:7px solid #0d0e11;border-radius:34px;background:var(--bg);overflow:hidden;min-height:560px;position:relative}
+.mk .ph2 .sb{height:40px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 4px;font-size:12px;font-weight:600}
+.mk .ph2 .hdr{display:flex;justify-content:space-between;padding:8px 14px;font-size:13px;border-bottom:1px solid var(--line)}
+.mk .ph2 .grp{margin:8px 10px}
+.mk .ph2 .grp .row{padding:10px 12px;gap:8px;flex-wrap:wrap}
+.mk .ph2 .row .mid{flex:1 1 100%}
+.mk .exc{font-size:12.5px;color:var(--text-dim);display:flex;gap:6px;align-items:center}
+</style>
+<div class="page">
+<h1>Device access levels</h1>
+<p class="lede dim">Design drawing for the owner's approval. Nothing is built from this page. Device names, times and addresses in the pictures are examples.</p>
+<div class="tags"><span class="tag">v0.1.13</span><span class="tag high">Risk: HIGH (full access from other devices; Security reviews before any build)</span><span class="tag">Light and dark; desktop window, and the device's view at phone width</span><span class="tag">Design session, 2026-11-18</span></div>
+
+<div class="ask"><b class="l">The owner's words</b>
+<blockquote>"They should be able to use everything."<br>"Everything. And enabled through settings / device added."</blockquote></div>
+
+<div class="ask"><b class="l">What is proposed, in one paragraph</b>
+<div>Every signed-in device gets an access level, and only Bunny's window can set it. <b>Chats</b> is today's level and the default for a new device: chats with tools, but no computer control, installs, connectors, schedules, memory or settings. <b>Everything</b> is the same as Bunny's window: every tool and every setting. The level is chosen in two places, as the owner asked: when a device signs in for the first time (Bunny's window asks "What may it do?"), and later in Settings, in the signed-in devices list. A plain warning comes before Everything every time. A device with Everything sees no "Change this in Bunny's window" locks, with two exceptions: it cannot turn device access off and cannot change any device's level. Those stay with the window. The status line in the window says how many devices have Everything.</div></div>
+
+<section class="sec" id="first">
+<h2>1. A device signs in for the first time</h2>
+<p class="dim">Today nothing is asked: the device signs in and is listed. In the proposal Bunny's window asks, over whatever it is showing, and the device already works at the Chats level meanwhile, so nothing waits and nothing is open by accident. If nobody answers, the level stays Chats. Choosing Everything shows the warning first, with its own button, never in one click.</p>
+<div class="grid" id="g-first"></div>
+</section>
+
+<section class="sec" id="list">
+<h2>2. Settings → Use Bunny in a browser → Signed-in devices</h2>
+<p class="dim">Each device shows its level beside its name, with a Change control and Sign out. Change opens two choices; picking Everything shows the same warning. Going back to Chats needs no warning and takes effect at once.</p>
+<div class="grid" id="g-list"></div>
+</section>
+
+<section class="sec" id="dev">
+<h2>3. What a device with Everything sees</h2>
+<p class="dim">No locks: Settings, Customize, Providers and Automation all work, the same as in the window. A thin line under the top bar says which level this device has, always, so a person using it knows. Two things stay with Bunny's window: turning device access off, and changing any device's level. They show the sentence "Only Bunny's window can change device access." On a device with Chats, everything is as in the last release (locked controls with "Change this in Bunny's window.").</p>
+<div class="grid" id="g-dev"></div>
+</section>
+
+<section class="sec" id="status">
+<h2>4. The status line in Bunny's window</h2>
+<p class="dim">The line across the top of the window already says how many devices are signed in. It now says how many of them have Everything, in the warning colour, so the most powerful state is never hidden.</p>
+<div class="grid" id="g-status"></div>
+</section>
+
+<section class="sec" id="notes">
+<h2>Notes for the build</h2>
+<h3>Where it is today, and what changes</h3>
+<div class="tw"><table class="n">
+<tr><th>Part</th><th>Today (file:line on eba5478)</th><th>Change</th></tr>
+<tr><td>Window-only refusal for devices</td><td><code>src/server/app.js:215-217</code> <code>windowOnly()</code>: any request marked <code>req.bunnyRemote</code> is answered 403 "Change this in Bunny's window."; the exceptions at <code>:563, :878, :902, :917, :1474</code> call <code>remoteException</code> (<code>src/server/remoteAccess.js:107</code>)</td><td>A device whose level is Everything is let through the same checks as the window, except the device-access routes (<code>/api/remote</code> and its device and level routes), which stay refused for every device with "Only Bunny's window can change device access."</td></tr>
+<tr><td>What a device may send and read</td><td><code>src/server/remoteAccess.js:96</code> <code>remotePolicy</code> (the short allow-list), <code>:155</code> <code>remoteBody</code>, <code>:160</code> <code>remotePatch</code>, <code>app.js:729</code> (<code>remoteSettings</code>), <code>:1491</code> <code>REMOTE_CAPABILITIES</code></td><td>The allow-list is widened per device by its level. Chats keeps today's list exactly.</td></tr>
+<tr><td>The page's locks</td><td><code>src/ui/browser-mode.js</code>: <code>isDevicePage</code> (:120), <code>deviceException</code>, <code>lockControl</code>/<code>lockPage</code></td><td>A device page learns its level (from the server, never from the page) and locks nothing at Everything except the device-access controls.</td></tr>
+<tr><td>Devices list and status</td><td><code>src/ui/settings.html:630</code> <code>#remote-status</code>, <code>:645</code> <code>#remote-devices</code>, <code>:646</code> <code>#remote-signout-all</code>; <code>src/ui/chat.js:2620</code> the window's top line</td><td>A level pill and Change control per device; "N with Everything" in both lines; the first-sign-in prompt is a new dialog in the window.</td></tr>
+</table></div>
+
+<h3>Risk: HIGH, and why</h3>
+<div class="safe"><b>Security reviews this before any build.</b> This lifts the main protection of the other-device feature: a device at Everything can run programs, read and change files, use accounts and install tools on this computer, over plain HTTP on the local network. The owner has decided it should exist; the design keeps it deliberate, visible and reversible.</div>
+<ul class="notes">
+<li><b>The level is set only from Bunny's window</b>, with the window's own secret, never by a device and never by a request a device can make. A device cannot raise its own level, change another device's, or turn device access off.</li>
+<li><b>The default is Chats.</b> Everything is never the default and never set by a setting that a device can reach.</li>
+<li><b>A plain warning before Everything, every time</b> (the first-sign-in prompt and Settings Change). It says what Everything allows and that the connection is plain HTTP, so anyone on the network who obtains the device's session could do the same.</li>
+<li><b>Always visible:</b> the status line in the window counts devices with Everything; the device's own page shows its level in a line under the top bar; the devices list shows each level.</li>
+<li><b>Sessions are the limit:</b> device access turns off at every restart and ends every session, so every Everything grant ends with it (decision 2). Signing a device out, turning access off, or changing the passcode ends a grant at once.</li>
+<li><b>Suggested for Security:</b> a record of the actions an Everything device takes (a log line per tool run with the device's name), and a time limit on a grant as a later option. Neither is drawn.</li>
+<li>The device-access exceptions are server rules, not just disabled buttons: a device that sends the request anyway is refused with the same sentence.</li>
+</ul>
+
+<h3>Decisions for the owner (my recommendation first)</h3>
+<ol class="notes">
+<li><b>The default for a new device: Chats (recommended).</b> A device is useful at once and gets nothing dangerous until a person at the PC says so. The other choice, Everything by default, means anyone who learns the passcode gets full control the moment they sign in.</li>
+<li><b>Does Everything end when Bunny restarts?</b> It is kept per device until sign-out (recommended), which in practice means until Bunny restarts, because device access itself turns off at a restart and ends all sessions. A grant therefore never survives a restart by itself.</li>
+<li><b>The warning wording</b> (draft below): the draft says what Everything allows, says the connection is plain HTTP, and says to give it only to a device you own. A shorter version ("This device will be able to do anything you can do here, including run programs on this computer.") is the alternative; I recommend the longer one for the first grant and the shorter one for each later grant on the same device.</li>
+<li><b>Where Everything can be chosen: both places (as asked).</b> At first sign-in and in Settings. A device is never asked to choose its own level.</li>
+<li><b>An action log for Everything devices:</b> recommended as a follow-up for Security's review, not part of this drawing.</li>
+</ol>
+<div class="ask" style="max-width:100ch;margin-top:14px"><b class="l">Draft warning, for the owner's wording</b>
+<div>"Everything means this device can do anything you can do in this window: run commands and programs on this computer, read and change your files, use your accounts and connectors, install tools and change what Bunny is allowed to do. This connection is plain HTTP on your network, so anyone on it who gets this device's session could do the same. Only give Everything to a device you own and keep locked."</div></div>
+<p class="dim" style="margin-top:22px;font-size:13px">Not drawn: the exact look of the dialog when several devices sign in at once (they queue, one prompt at a time), and the device's own sign-out control, which is as before.</p>
+</section>
+</div>
+<script>
+const I = {
+  warn:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2zM12 10v5M12 18v.1"/></svg>',
+  lock:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  phone:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>',
+  pc:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  chev:'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  mark:'<svg width="16" height="16" viewBox="0 0 48 48" fill="currentColor"><path d="M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z"/><rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/><rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/></svg>'
+};
+const T = ['light','dark'];
+const mk = (t, inner) => `<div class="mk ${t}">${inner}</div>`;
+const fig = (cap, html) => `<figure class="f"><figcaption>${cap}</figcaption><div class="scroll">${html}</div></figure>`;
+const label = (t, c='') => `<div class="cap ${c}">${t}</div>`;
+const put = (id, html) => { document.getElementById(id).innerHTML = html; };
+const WARN = 'Everything means this device can do anything you can do in this window: run commands and programs on this computer, read and change your files, use your accounts and connectors, install tools and change what Bunny is allowed to do. This connection is plain HTTP on your network, so anyone on it who gets this device\'s session could do the same. Only give Everything to a device you own and keep locked.';
+const winBehind = (inner, h) => `<div class="wnd"><div class="banner open">${I.warn}<span><b>Open to other devices</b> · 1 signed in</span><span class="lnk">Turn off</span></div><div class="inner" style="--h:${h||330}px"><div class="side" style="width:150px"><div class="it">+ New chat</div><div class="it on">Summarise this changelog</div><div class="it">Plan for the garden</div></div><div class="main"><div class="thread"><div class="ub">Summarise this changelog in three lines</div><div>Here is a three-line summary: …</div></div></div>${inner}</div></div>`;
+const dlgWrap = (body) => `<div style="position:absolute;inset:0;background:var(--sc);z-index:3;display:grid;place-items:center;padding:14px"><div class="dlg" style="width:460px;max-width:100%">${body}</div></div>`;
+const choose = (sel, warn) => `<h4>Anfal's phone signed in. What may it do?</h4><div class="ds" style="color:var(--text-dim);font-size:13px">It works as <b>Chats</b> right now. You can change this at any time in Settings.</div><div class="lvl"><div class="opt${sel==='chats'?' sel':''}"><i class="rd"></i><div><b>Chats <span class="pill chats">Default</span></b><span class="d">Chats with tools. Not computer control, installs, connectors, schedules, memory or settings.</span></div></div><div class="opt${sel==='all'?' sel':''}"><i class="rd"></i><div><b>Everything <span class="pill all">Full access</span></b><span class="d">The same as this window: every tool and every setting.</span></div></div></div>${warn?`<div class="callout bad"><b>${I.warn} Before you give Everything</b><div>${WARN}</div></div>`:''}<div class="acts"><span class="btn">Not now</span>${warn?'<span class="btn bad">Give Everything</span>':'<span class="btn pri">Keep Chats</span>'}</div>`;
+let h = label('Today');
+for (const t of T) h += fig('The window when a device signs in, '+t+' (nothing is asked)', mk(t, winBehind('', 250)));
+h += label('Proposed','p');
+for (const t of T) h += fig('First sign-in: Chats chosen, '+t, mk(t, winBehind(dlgWrap(choose('chats', false)), 430)));
+for (const t of T) h += fig('Everything chosen: the warning comes first, '+t, mk(t, winBehind(dlgWrap(choose('all', true)), 560)));
+put('g-first', h);
+
+/* list */
+const devRow = (ic, nm, sub, lvl, menu) => `<div class="d" style="position:relative">${ic}<div class="mid">${nm}<small>${sub}</small></div><span class="pill ${lvl==='Everything'?'all':'chats'}">${lvl}</span><span class="btn" style="padding:2px 10px">Change ${I.chev}</span><span class="btn" style="padding:2px 10px">Sign out</span>${menu||''}</div>`;
+const listPanel = (rows, extra) => `<div class="panel s" style="position:relative"><div class="ph" style="font-size:15px">Use Bunny in a browser</div><div class="grp"><div class="row" style="display:block"><div class="nm" style="margin-bottom:6px">Signed-in devices</div><div class="devs">${rows}</div>${extra||''}</div></div></div>`;
+const todayRow = (ic, nm, sub) => `<div class="d">${ic}<div class="mid">${nm}<small>${sub}</small></div><span class="btn" style="padding:2px 10px">Sign out</span></div>`;
+h = label('Today');
+for (const t of T) h += fig('Signed-in devices, '+t, mk(t, `<div class="panel s"><div class="ph" style="font-size:15px">Use Bunny in a browser</div><div class="grp"><div class="row" style="display:block"><div class="nm" style="margin-bottom:6px">Signed-in devices</div><div class="devs">${todayRow(I.phone,"Anfal's phone (example)",'Signed in 14:02 · last seen now')}${todayRow(I.pc,'Laptop in the kitchen (example)','Signed in yesterday · last seen 3 hours ago')}</div></div></div></div>`));
+h += label('Proposed','p');
+for (const t of T) h += fig('Each device shows its level, '+t, mk(t, listPanel(devRow(I.phone,"Anfal's phone (example)",'Signed in 14:02 · last seen now','Chats')+devRow(I.pc,'Laptop in the kitchen (example)','Signed in yesterday · last seen 3 hours ago','Everything'))));
+const menu = `<div class="menu"><div class="m on">Chats<small>Chats with tools, no settings or computer control</small></div><div class="m">Everything<small>Same as this window. A warning comes first.</small></div></div>`;
+for (const t of T) h += fig('Change opened, '+t, mk(t, listPanel(devRow(I.phone,"Anfal's phone (example)",'Signed in 14:02 · last seen now','Chats',menu)+devRow(I.pc,'Laptop in the kitchen (example)','Signed in yesterday · last seen 3 hours ago','Everything'), '<div style="height:60px"></div>')));
+const phoneList = (t) => mk(t, `<div class="ph2"><div class="sb"><span>9:41</span><span>5G ▮</span></div><div class="hdr"><span>Settings</span><span>Bunny's window</span></div><div class="grp"><div class="row" style="display:block"><div class="nm" style="margin-bottom:6px">Signed-in devices</div><div class="devs"><div class="d" style="flex-wrap:wrap">${I.phone}<div class="mid">Anfal's phone<small>Chats</small></div><span class="btn" style="padding:2px 8px">Change</span></div><div class="d" style="flex-wrap:wrap">${I.pc}<div class="mid">Kitchen laptop<small>Everything</small></div><span class="btn" style="padding:2px 8px">Change</span></div></div></div></div></div>`);
+h += label('Proposed: in a narrow window','p');
+for (const t of T) h += fig('Narrow window, '+t, phoneList(t));
+put('g-list', h);
+
+/* device views */
+const row = (nm, ds, right) => `<div class="row"><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div>${right||''}</div>`;
+const lockNote = `<span class="lockline">${I.lock} Change this in Bunny's window.</span>`;
+const devBrowser = (t, level, phone) => {
+  const locked = level === 'chats';
+  const right = (lbl) => locked ? lockNote + ' <span class="btn off">' + lbl + '</span>' : '<span class="btn">' + lbl + '</span>';
+  const body = `<div class="ph" style="font-size:16px">${phone?'Code':'Settings · Code'}</div><div class="grp">${row('Default permission mode','How careful a new chat starts out.', locked ? lockNote+' <span class="btn off">Manual ▾</span>' : '<span class="btn">Manual ▾</span>')}${row('Connectors','Add, enable or remove connectors.', right('+ Add'))}${row('Update automatically','Checks GitHub Releases.', locked ? lockNote : '<span class="sw on"></span>')}</div>${locked?'':`<div class="ph" style="font-size:15px">Device access</div><div class="grp">${row('Allow other devices to open Bunny','Only Bunny\'s window can change device access.','<span class="exc">'+I.lock+' Only Bunny\'s window can change device access.</span> <span class="sw on lock"></span>')}${row('Signed-in devices','Each device\'s level.','<span class="exc">'+I.lock+' Only Bunny\'s window can change device access.</span>')}</div>`}`;
+  return mk(t, `<div class="brw${phone?' ph':''}" style="${phone?'':'width:700px'}"><div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url"><b>192.168.1.24:52814</b></div></div><div class="dline ${level==='all'?'all':'chats'}">${level==='all'?I.warn+' <b>Everything access</b> · set by the PC · same as the PC\'s window':I.lock+' <b>Chats access</b> · the PC can give this device more'}</div><div style="padding:6px 0 12px"><div class="panel ${phone?'p':'w'}" style="border:0;width:auto">${body}</div></div></div>`);
+};
+h = label('Today (and still the level called Chats)');
+for (const t of T) h += fig('Device with Chats, '+t, devBrowser(t, 'chats', false));
+h += label('Proposed: a device with Everything','p');
+for (const t of T) h += fig('Device with Everything, '+t+' (no locks; two device-access exceptions)', devBrowser(t, 'all', false));
+for (const t of T) h += fig('Phone, '+t, devBrowser(t, 'all', true));
+put('g-dev', h);
+
+/* status */
+const status = (t, txt) => mk(t, `<div class="wnd" style="width:760px"><div class="banner open">${I.warn}<span>${txt}</span><span class="lnk">Turn off</span></div></div>`);
+h = label('Today');
+for (const t of T) h += fig(t, status(t, '<b>Open to other devices</b> · 2 signed in'));
+h += label('Proposed','p');
+for (const t of T) h += fig(t, status(t, '<b>Open to other devices</b> · 2 signed in · <b>1 with Everything</b>'));
+put('g-status', h);
+</script>
