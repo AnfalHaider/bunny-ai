@@ -19,6 +19,11 @@ export const MIN_PASSCODE = 12;
 export const COOKIE = 'bunny_remote';
 export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // R7: two hours without use ends a session
 export const FAILS_BEFORE_WAIT = 5;
+/** DEVICE-FULL: what a signed-in device may do. 'chats' (the default) is the small allow-list below; 'everything' is what Bunny's window can do, except /api/remote*. Only the window sets it. */
+export const LEVELS = Object.freeze(['chats', 'everything']);
+export const DEFAULT_LEVEL = 'chats';
+/** Routes even an 'everything' device never reaches: turning device access on or off, the list, levels, signing out OTHER devices. (A device may still sign ITSELF out: /api/remote/signout.) */
+export const isRemoteAdminPath = (path) => /^\/api\/remote(\/|$)/.test(String(path));
 export const FLOOD_LIMIT = 30; // wrong tries from anyone in 10 minutes before everyone waits a minute
 const KDF = { N: 16384, r: 8, p: 1, keylen: 32 };
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I: readable aloud
@@ -249,7 +254,7 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     }
     failures.delete(ip);
     const secret = randomBytes(32).toString('hex');
-    const session = { deviceId: randomBytes(8).toString('hex'), label: deviceLabel(userAgent), ip, csrf: randomBytes(24).toString('hex'), signedInAt: now(), lastSeen: now() };
+    const session = { deviceId: randomBytes(8).toString('hex'), label: deviceLabel(userAgent), ip, csrf: randomBytes(24).toString('hex'), signedInAt: now(), lastSeen: now(), level: DEFAULT_LEVEL };
     sessions.set(secret, session);
     return { ok: true, secret, session };
   }
@@ -295,8 +300,16 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     sessionFor,
     /** The person's own browser sessions, for the list in the window (never the secrets). */
     sweep,
-    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString() })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
+    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString(), level: s.level })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
     count() { sweep(); return sessions.size; },
+    /** DEVICE-FULL: the level lives with the session, so it ends with sign-out, turning access off or the idle timeout. Returns the device, or null. */
+    setLevel(deviceId, level) {
+      if (!LEVELS.includes(level)) return null;
+      sweep();
+      for (const s of sessions.values()) if (s.deviceId === deviceId) { s.level = level; return { id: s.deviceId, level: s.level }; }
+      return null;
+    },
+    anyEverything() { sweep(); return [...sessions.values()].some((s) => s.level === 'everything'); },
     signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); ended([deviceId]); return true; } return false; },
     signOutSecret(secret) { const s = sessions.get(secret); const gone = sessions.delete(secret); if (gone && s) ended([s.deviceId]); return gone; },
     signOutAll() { const ids = [...sessions.values()].map((s) => s.deviceId); const n = sessions.size; sessions.clear(); if (ids.length) ended(ids); return n; },
