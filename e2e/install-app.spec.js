@@ -84,3 +84,27 @@ test('the app page asks to fill the screen and keeps clear of the notch and the 
   const normal = await page.evaluate(() => parseInt(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'), 10) || null);
   if (normal) expect(height).toBe(normal);
 });
+
+for (const [name, width, height] of [['desktop', 1280, 800], ['phone', 390, 844]]) {
+  test(`the "Update ready · Reload" line sits under the top bar and never covers the composer or its row (${name} ${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto('/src/ui/index.html');
+    await page.waitForTimeout(500);
+    await page.evaluate(async () => {
+      const { showUpdateBar } = await import('/src/ui/install-app.js');
+      showUpdateBar(document, () => {});
+    });
+    const bar = page.locator('#update-ready');
+    await expect(bar).toBeVisible();
+    const box = await bar.boundingBox();
+    const top = await page.evaluate(() => document.querySelector('.topbar').getBoundingClientRect().bottom);
+    expect(box.y).toBeGreaterThanOrEqual(top);
+    for (const sel of ['.composer', '.composer-under']) {
+      const el = page.locator(sel).first();
+      if (!(await el.count()) || !(await el.isVisible())) continue;
+      const other = await el.boundingBox();
+      const overlap = box.x < other.x + other.width && box.x + box.width > other.x && box.y < other.y + other.height && box.y + box.height > other.y;
+      expect(overlap, sel + ' is not covered').toBe(false);
+    }
+  });
+}

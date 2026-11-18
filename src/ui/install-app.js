@@ -86,13 +86,13 @@ export function watchUpdates(registration, onReady, { serviceWorker = globalThis
   });
 }
 
-/** The small "Update ready · Reload" line. Built from text; the person decides. */
+/** The small "Update ready · Reload" line, a thin line under the top bar so it never covers the composer or its controls. Built from text; the person decides. */
 export function showUpdateBar(doc, apply) {
   if (!doc || doc.getElementById('update-ready')) return null;
   const bar = doc.createElement('div');
   bar.id = 'update-ready';
   bar.setAttribute('role', 'status');
-  bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom, 0px));z-index:2147482000;display:flex;gap:12px;align-items:center;padding:8px 14px;border:1px solid var(--line,#e6e2da);border-radius:999px;background:var(--surface,#fff);color:var(--text,#1f2023);font:13px system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.18)';
+  bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--topbar-h, 56px) + env(safe-area-inset-top, 0px) + 6px);z-index:2147482000;display:flex;gap:12px;align-items:center;padding:4px 12px;border:1px solid var(--line,#e6e2da);border-radius:999px;background:var(--surface,#fff);color:var(--text,#1f2023);font:13px system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.18)';
   const text = doc.createElement('span');
   text.textContent = 'Update ready';
   const dot = doc.createElement('span');
