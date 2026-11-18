@@ -1459,7 +1459,7 @@ function renderMessage(m, { skipThinking = false } = {}) {
     tc.append(body);
     if (m.result) {
       const res = element('div', { className: 'tool-call-result' });
-      res.textContent = `→ ${String(m.result).slice(0, resultLimit())}`;
+      res.textContent = `→ ${stepResultText(m).slice(0, resultLimit())}`;
       tc.append(res);
     }
     if (failedStep) {
@@ -2181,6 +2181,16 @@ function answeredQuestionCard(q) {
 /** The model's thinking: folded under "Thinking…", open it to read along. */
 /** How much of a step's result shows: all of it in the Verbose transcript view. */
 const resultLimit = () => (state.settings?.transcriptView === 'verbose' ? 100_000 : 500);
+/**
+ * What a saved step shows. The chat keeps a short copy for display (1 200 characters) and, for the workspace's own file and command tools and connectors, a longer one (up to 8 000,
+ * `modelResult`: never a result that looks like a secret, never in an incognito chat). The Verbose view shows the longer one when there is one. It is part of the saved chat, so every
+ * client of the chat already has it: nothing new is sent and no route is added.
+ */
+const stepResultText = (m) => {
+  const short = String(m.result ?? '');
+  const longer = typeof m.modelResult === 'string' ? m.modelResult : '';
+  return state.settings?.transcriptView === 'verbose' && longer.length > short.length ? longer : short;
+};
 
 /** The "Thought for" row as its own line in the thread, so it can sit among the steps. */
 function thoughtRow(text, ms) {
