@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="./theme-boot.js"></script>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141518" media="(prefers-color-scheme: dark)">
@@ -48,13 +49,13 @@
 </main>
 
 <script type="module">
-  import { getJSON, sendJSON, esc } from './api.js';
+  import { getJSON, sendJSON, esc, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
   import { applyLanguage, t } from './i18n.js';
   applyEmbed();
   const tt = (key) => t(key, document.documentElement.lang || 'en');
   // The page speaks the language chosen in Settings.
-  try { applyLanguage((await getJSON('/api/settings')).language ?? 'en'); } catch { /* English it is */ }
+  try { const saved = await getJSON('/api/settings'); applyAppearance(saved); applyLanguage(saved.language ?? 'en'); } catch { /* English it is */ }
 
   const state = { providers: [], openForm: null, models: new Map(), errors: new Map() };
 

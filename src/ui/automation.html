@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="./theme-boot.js"></script>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141518" media="(prefers-color-scheme: dark)">
@@ -108,11 +109,11 @@
 </main>
 
 <script type="module">
-  import { getJSON, sendJSON } from './api.js';
+  import { getJSON, sendJSON, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
   import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
   import { applyLanguage } from './i18n.js';
-  getJSON('/api/settings').then((s) => applyLanguage(s.language ?? 'en')).catch(() => {});
+  getJSON('/api/settings').then((s) => { applyAppearance(s); applyLanguage(s.language ?? 'en'); }).catch(() => {});
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);

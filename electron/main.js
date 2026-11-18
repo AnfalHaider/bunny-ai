@@ -2,7 +2,7 @@
 // Runs the Bunny AI server inside this process on a free local port (127.0.0.1 only),
 // then shows the UI in a native window. Data lives where the web version keeps it
 // (%LOCALAPPDATA%\BunnyAI), so the desktop app and `npm start` share chats and keys.
-import { app, BrowserWindow, WebContentsView, Menu, Notification, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
+import { app, BrowserWindow, WebContentsView, nativeTheme, Menu, Notification, Tray, dialog, ipcMain, shell, nativeImage, session, clipboard, globalShortcut, screen, desktopCapturer } from 'electron';
 import { buildContextMenuTemplate } from './context-menu.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +34,7 @@ const dataDir = process.env.BUNNY_DATA_DIR
 
 // ---- desktop preferences (only the shell reads these) ----
 const prefsFile = join(app.getPath('userData'), 'desktop-prefs.json');
-let prefs = { launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: DEFAULT_SHORTCUT, keepAddress: false, fixedPort: null };
+let prefs = { theme: 'system', launchAtLogin: false, closeToTray: false, quickAskEnabled: false, quickAskShortcut: DEFAULT_SHORTCUT, keepAddress: false, fixedPort: null };
 try { prefs = { ...prefs, ...JSON.parse(readFileSync(prefsFile, 'utf8')) }; } catch { /* first run */ }
 function savePrefs(patch) {
   prefs = { ...prefs, ...patch };
@@ -43,6 +43,23 @@ function savePrefs(patch) {
   if ('launchAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: Boolean(prefs.launchAtLogin) });
   return prefs;
 }
+
+// THEME-APPLY: the window's own colours (behind the page, the title bar, the browser pane's tabs) follow the chosen theme. nativeTheme makes every page in the
+// window (the browser pane's sites too) see the same prefers-color-scheme, and the native frame take the same look; the last choice is kept so the next start
+// opens in the right colours (no light flash before a dark page).
+const WINDOW_COLORS = { light: '#faf9f6', dark: '#141518' };
+const windowColor = () => (nativeTheme.shouldUseDarkColors ? WINDOW_COLORS.dark : WINDOW_COLORS.light);
+nativeTheme.themeSource = ['light', 'dark'].includes(prefs.theme) ? prefs.theme : 'system';
+function paintWindows() {
+  const color = windowColor();
+  for (const w of BrowserWindow.getAllWindows()) {
+    try {
+      w.setBackgroundColor(color);
+      for (const child of w.contentView?.children ?? []) child.setBackgroundColor?.(color); // the browser pane's tab views
+    } catch { /* a window that is closing */ }
+  }
+}
+nativeTheme.on('updated', paintWindows); // "System": the PC's own switch
 
 let win = null;
 let tray = null;
@@ -100,7 +117,7 @@ function guard(contents) {
   contents.setWindowOpenHandler(({ url }) => {
     const kind = openDecision(url, origin);
     // 'bunny': a Bunny page (pop-out chat), with the preload. 'plain': a page from Bunny's server that is not one of its own pages (an artifact): a window with NO preload.
-    if (kind === 'bunny' || kind === 'plain') return { action: 'allow', overrideBrowserWindowOptions: childWindowOptions(kind, { icon: ICON, bunnyPreferences: webPreferences }) };
+    if (kind === 'bunny' || kind === 'plain') return { action: 'allow', overrideBrowserWindowOptions: { ...childWindowOptions(kind, { icon: ICON, bunnyPreferences: webPreferences }), backgroundColor: windowColor() } };
     if (kind === 'web') shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -123,7 +140,7 @@ function createWindow() {
     icon: ICON,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#faf9f6',
+    backgroundColor: windowColor(),
     webPreferences: webPreferences(),
   });
   guard(win.webContents);
@@ -175,6 +192,13 @@ function openInBrowser() {
   shell.openExternal(url);
   return true;
 }
+ipcMain.handle('theme:set', (event, theme) => {
+  if (!isOwn(event.senderFrame?.url ?? '') || !['light', 'dark', 'system'].includes(theme)) return { ok: false };
+  nativeTheme.themeSource = theme;
+  paintWindows();
+  if (prefs.theme !== theme) savePrefs({ theme });
+  return { ok: true, dark: nativeTheme.shouldUseDarkColors };
+});
 ipcMain.handle('app:open-browser', (event) => (isOwn(event.senderFrame?.url ?? '') ? { ok: openInBrowser() } : { ok: false }));
 ipcMain.handle('prefs:get', () => ({ ...prefs, address: browserAddress(origin), addressNote }));
 ipcMain.handle('prefs:set', (_event, patch) => {

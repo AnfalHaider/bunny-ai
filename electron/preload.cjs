@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
     send: (msg) => ipcRenderer.invoke('browser:view', msg),
     onEvent: (fn) => { const h = (_e, event) => fn(event); ipcRenderer.on('browser:view-event', h); return () => ipcRenderer.removeListener('browser:view-event', h); },
   },
+  // THEME-APPLY: the page tells the shell the theme it applied (light, dark or system): window colours, title bar and browser pane follow at once.
+  setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
   // Zoom for the whole window (Ctrl++ / Ctrl+- / Ctrl+0 and the account menu).
   zoom: {
     get: () => webFrame.getZoomFactor(),
