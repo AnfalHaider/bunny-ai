@@ -16,3 +16,6 @@ Checked by reading the code and one preview on its own port (invented profile, s
 ## Small notes
 - In a browser tab the Settings page shows only the Install row (the other rows of the group are hidden because they belong to the window); the drawing showed the Open row above it. Fine.
 - Not covered: the real installed window and title bar, a real phone (notch, home bar), the update flow with a real new service worker.
+
+## Re-check at 6d20c63: PASS (the update bar)
+The bar is now a thin line centred under the top bar (top = topbar height + inset + 6 px), 27 px high at 1280 and 390, 44 px (two lines) at 320. At 1280, 390 and 320, light and dark, it overlaps neither the top bar, the composer nor the row under it, is centred, and Reload applies the update (shots-6d20c63/, readings in its log.txt). The Open row left out of a tab is accepted: its button needs the window bridge, so it would be dead.
