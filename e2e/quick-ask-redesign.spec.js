@@ -281,12 +281,16 @@ for (const scheme of ['light', 'dark']) {
     await page.evaluate(() => window.__emit({ type: 'delta', text: 'Usually one to two metres, deeper in cold places.' }));
     await page.evaluate(() => window.__emit({ type: 'done', model: 'Auto' }));
     await shoot('earlier');
-    await page.evaluate(() => window.__emit({ type: 'error', kind: 'none', message: 'No model' }));
-    await shoot('no-model');
-    await page.evaluate(() => window.__emit({ type: 'needs-window', text: 'I would need to read your files for that.' }));
-    await shoot('needs-window');
-    await page.evaluate(() => window.__emit({ type: 'error', kind: 'offline', message: '' }));
-    await shoot('offline');
+    // the problem states are each a fresh question that ends in the card (the bar is opened again, as it would be)
+    const wall = `html { background: ${scheme === 'dark' ? 'linear-gradient(135deg,#24304a 0%,#3b2f4a 55%,#4a3a3c 100%)' : 'linear-gradient(135deg,#a8c3e6 0%,#e7c8d8 55%,#f3dbb8 100%)'} !important; }`;
+    for (const [name, event] of [['no-model', { type: 'error', kind: 'none', message: 'No model' }], ['needs-window', { type: 'needs-window', text: 'I would need to read your files for that.' }], ['offline', { type: 'error', kind: 'offline', message: '' }]]) {
+      await page.reload();
+      await page.addStyleTag({ content: wall });
+      await page.locator('#text').fill('How do rabbits dig a burrow?');
+      await page.locator('#go').click();
+      await page.evaluate((e) => window.__emit(e), event);
+      await shoot(name);
+    }
   });
 }
 
@@ -344,4 +348,43 @@ test('9: a bridge that never answers does not leave the bar hidden: it shows its
   await page.goto(`${origin}/electron/quick-ask/bar.html`);
   await expect(page.locator('html')).not.toHaveAttribute('data-pending', '', { timeout: 1500 });
   await expect(page.locator('#text')).toBeVisible();
+});
+
+// The drawing's problem states (Design, Quick ask v2) are the card and the keys line: no follow-up row, no second "Open in Bunny", and keys that fit what the card allows.
+for (const [name, event, keys, buttons] of [
+  ['no model connected', { type: 'error', kind: 'none', message: 'No model' }, 'Esc closes', ['Open Bunny settings']],
+  ['offline', { type: 'error', kind: 'offline', message: '' }, 'Ctrl+Enter opens it in Bunny · Esc closes', ['Try again', 'Open in Bunny']],
+  ['needs Bunny\'s window', { type: 'needs-window', text: '' }, 'Ctrl+Enter opens it in Bunny · Esc closes', ['Open in Bunny']],
+  ['another problem', { type: 'error', kind: 'other', message: 'Something broke' }, 'Ctrl+Enter opens it in Bunny · Esc closes', ['Try again', 'Open in Bunny']],
+]) {
+  test(`${name}: only the card and its keys line: no follow-up field, no second Open in Bunny, and keys that fit`, async ({ page }) => {
+    await openBar(page);
+    await page.locator('#text').fill('hello');
+    await page.locator('#go').click();
+    await page.evaluate((e) => window.__emit(e), event);
+    await expect(page.locator('#card .cardx')).toBeVisible();
+    await expect(page.locator('#foot')).toBeHidden();
+    await expect(page.locator('#follow')).toBeHidden();
+    await expect(page.locator('#open')).toBeHidden();
+    await expect(page.locator('#keyline')).toHaveText(keys);
+    await expect(page.locator('#card .cardx button')).toHaveText(buttons);
+    expect(await page.locator('button:visible', { hasText: 'Open in Bunny' }).count()).toBe(buttons.includes('Open in Bunny') ? 1 : 0); // never two
+    // Ctrl+Enter does only what the card allows
+    await page.keyboard.press('Control+Enter');
+    const opened = await calls(page, 'open');
+    expect(opened).toHaveLength(keys.includes('Ctrl+Enter') ? 1 : 0);
+  });
+}
+
+test('a retry after a problem brings the follow-up row back with the answer', async ({ page }) => {
+  await openBar(page);
+  await page.locator('#text').fill('hello');
+  await page.locator('#go').click();
+  await page.evaluate(() => window.__emit({ type: 'error', kind: 'offline', message: '' }));
+  await expect(page.locator('#foot')).toBeHidden();
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.locator('#foot')).toBeVisible();
+  await page.evaluate(() => { window.__emit({ type: 'delta', text: 'It worked.' }); window.__emit({ type: 'done', model: 'Auto' }); });
+  await expect(page.locator('#follow')).toBeEnabled();
+  await expect(page.locator('#keyline')).toContainText('Enter sends a follow-up');
 });
