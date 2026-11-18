@@ -97,6 +97,8 @@ test.describe('what the chat shows', () => {
   });
 
   async function ask(page, text) {
+    // a save that takes a while (a busy PC): the change must still be there after the window closes
+    await page.route('**/api/settings', async (r) => { if (r.request().method() === 'PUT') await new Promise((x) => setTimeout(x, 1200)); await r.continue(); });
     await page.goto('/');
     await page.evaluate(() => { localStorage.setItem('bunny.modelAuto', '0'); });
     await page.goto('/');
@@ -114,7 +116,7 @@ test.describe('what the chat shows', () => {
     const control = page.frameLocator('#settings-frame').locator(selector);
     await expect(control).toBeVisible();
     await how(control);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(150); // a person closes the window right after choosing
     await page.locator('#settings-close').click();
     await expect(page.locator('#settings-backdrop')).toBeHidden();
   }
@@ -122,16 +124,16 @@ test.describe('what the chat shows', () => {
   test('Default transcript view: Thinking and Verbose open the model\'s thinking in the chat, Normal folds it', async ({ page }) => {
     await ask(page, 'which option');
     // the reply is over (the working line is gone), so nothing redraws the chat behind the Settings window while it is looked at
-    await expect(page.locator('.bunny-working')).toHaveCount(0, { timeout: 15000 });
+    await expect(page.locator('.bunny-working')).toHaveCount(0);
     const open = () => page.locator('details.thinking').first().evaluate((el) => el.open);
-    await expect(page.locator('details.thinking')).toHaveCount(1, { timeout: 15000 });
-    await expect.poll(open, { message: 'Normal at first', timeout: 15000 }).toBe(false);
+    await expect(page.locator('details.thinking')).toHaveCount(1);
+    await expect.poll(open, { message: 'Normal at first' }).toBe(false);
     await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('thinking'));
-    await expect.poll(open, { message: 'Thinking', timeout: 15000 }).toBe(true);
+    await expect.poll(open, { message: 'Thinking' }).toBe(true);
     await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('normal'));
-    await expect.poll(open, { message: 'back to Normal', timeout: 15000 }).toBe(false);
+    await expect.poll(open, { message: 'back to Normal' }).toBe(false);
     await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('verbose'));
-    await expect.poll(open, { message: 'Verbose', timeout: 15000 }).toBe(true);
+    await expect.poll(open, { message: 'Verbose' }).toBe(true);
   });
 
   test('Label chats by status: the sidebar marks a chat as Ready (or Working, Needs you, Failed) when on, and says nothing when off', async ({ page }) => {
@@ -143,11 +145,11 @@ test.describe('what the chat shows', () => {
     });
     await page.reload(); // draws the list again, now with that status
     const tag = page.locator('#sessions .status-tag').first();
-    await expect(tag).toHaveText('Needs you', { timeout: 15000 });
+    await expect(tag).toHaveText('Needs you');
     await change(page, 'appearance', '[data-key="statusLabels"]', (c) => c.evaluate((el) => el.click()));
     await expect(page.locator('#sessions .status-tag')).toHaveCount(0);
     await change(page, 'appearance', '[data-key="statusLabels"]', (c) => c.evaluate((el) => el.click()));
-    await expect(page.locator('#sessions .status-tag').first()).toHaveText('Needs you', { timeout: 15000 });
+    await expect(page.locator('#sessions .status-tag').first()).toHaveText('Needs you');
   });
 
   test('Transcript text size and width change the chat itself', async ({ page }) => {
@@ -156,12 +158,12 @@ test.describe('what the chat shows', () => {
     const width = () => page.locator('.thread-col').first().evaluate((el) => el.getBoundingClientRect().width);
     const [size0, width0] = [await size(), await width()];
     await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('large'));
-    await expect.poll(size, { message: 'large text', timeout: 15000 }).toBeGreaterThan(size0);
+    await expect.poll(size, { message: 'large text' }).toBeGreaterThan(size0);
     await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('small'));
-    await expect.poll(size, { message: 'small text', timeout: 15000 }).toBeLessThan(size0);
+    await expect.poll(size, { message: 'small text' }).toBeLessThan(size0);
     await change(page, 'appearance', '[data-key="transcriptWidth"]', (c) => c.selectOption('wide'));
-    await expect.poll(width, { message: 'wide', timeout: 15000 }).toBeGreaterThan(width0);
+    await expect.poll(width, { message: 'wide' }).toBeGreaterThan(width0);
     await change(page, 'appearance', '[data-key="transcriptWidth"]', (c) => c.selectOption('narrow'));
-    await expect.poll(width, { message: 'narrow', timeout: 15000 }).toBeLessThan(width0);
+    await expect.poll(width, { message: 'narrow' }).toBeLessThan(width0);
   });
 });

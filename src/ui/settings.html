@@ -724,7 +724,15 @@
   const aliases = $('aliases');
   const language = $('language');
   const notifications = $('notifications');
-  const save = (patch) => sendJSON('/api/settings', 'PUT', patch);
+  // The window that shows this page waits for the saves in flight before it closes it (closeSettings in chat.js), so a change made just before closing is never lost.
+  const pendingSaves = (window.bunnyPendingSaves = new Set());
+  const save = (patch) => {
+    const p = sendJSON('/api/settings', 'PUT', patch);
+    pendingSaves.add(p);
+    const done = () => pendingSaves.delete(p);
+    p.then(done, done);
+    return p;
+  };
 
   // The list of languages comes from one place, so the page and the app agree.
   language.replaceChildren(...LANGUAGES.map((l) => {
