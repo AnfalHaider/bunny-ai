@@ -53,3 +53,22 @@ A gateway MAC is readable and copyable by anyone on the network, so binding to i
 ## Verdict
 
 FAIL at 6c1a901, for RS4-a and RS4-b only. Everything else passes. A re-review needs the diff for these two fixes and a passing `remote-stay` test.
+
+## Re-review at 0fc5f75: PASS (supersedes the FAIL at 6c1a901)
+
+Commits since 6c1a901:
+- 911ec51: Settings rows moved between tabs. UI only; no row's wording or control changed.
+- 74b6da9: "Keep the same address" saves the port in use the moment the switch is turned on. This doesn't touch device access: the device listener already uses the window's port.
+- 0fc5f75: the two fixes.
+
+- **RS4-a: fixed.** `canReopen(saved, lan, profile, platform)` returns closed on win32 when no network name was saved, even on a Public network in the same /24. The /24 rule now applies only to other systems, and a Private category still reopens. While access is on without a saved name, `GET /api/remote` returns `reopenNote` and the Settings row shows "Bunny could not tell which network this is, so it will not reopen by itself after a restart." My probe on 0fc5f75:
+
+      no saved name, Public cafe Wi-Fi in the same /24: {"ok":false,"reason":"Bunny could not tell which network this is, so it will not reopen by itself after a restart."}
+      no saved name, network unreadable now: {"ok":false,"reason":"Bunny could not tell which network this is, so it will not reopen by itself after a restart."}
+      saved name Home, Public cafe Wi-Fi: {"ok":false,"reason":"Not opened: this network isn't the one you turned it on with. Turn it on again to allow it here."}
+
+- **RS4-b: fixed.** `networkProfileOf` runs `powershellPath()`, the full System32 path on Windows. The `?? 'powershell.exe'` fallback is only reached off Windows, where the function has already returned null. It passes `safeEnv({ BUNNY_NET_ALIAS })`.
+- **Repo check:** no real network name is in the repository (`git grep` over 0fc5f75 for the name Builder A quoted from this PC finds nothing).
+- **Tests:** on an extract of 0fc5f75 with an invented profile, `remote-stay`, `remote-access` and `browser-access` pass 62 of 62.
+
+Verdict: PASS at 0fc5f75. RS-1 to RS-6 are all met. The release-0.1.13 sign-off goes on main's sha.
