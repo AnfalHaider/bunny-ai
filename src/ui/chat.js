@@ -4462,8 +4462,11 @@ async function boot() {
   }
 
   // The app can be installed as a desktop app, and opened in its own window.
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
+  // Installing Bunny as a web app (a browser tab on this computer): a service worker at the root scope, only where the browser allows one (a secure context: 127.0.0.1 and
+  // localhost; a device on the network over plain http gets none) and never inside Bunny's own window. It keeps static files only; see src/ui/bunny-sw.js.
+  if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && !window.bunnyDesktop) {
+    navigator.serviceWorker.getRegistrations().then((list) => { for (const r of list) if (/\/src\/ui\/$/.test(r.scope)) r.unregister(); }).catch(() => {}); // the old worker (it kept index.html) goes
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
       // An app that cannot cache itself still works.
     });
   }
