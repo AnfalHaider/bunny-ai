@@ -1,0 +1,15 @@
+enable: 200
+signin: 200 bunny_remote…
+light first-signin dialog: true
+light dialog text: iPhone or iPad · Safari signed in. What may it do? | It works as Chats right now. You can change this at any time in Settings. | Chats Default | Chats with tools. Not computer control, installs, connectors, schedules, memory or settings. | Everything Full access | The same as this window: every tool
+light status bar: Open to other devices · 1 signed in · iPhone or iPad · Safari has Everything · Turn off
+light device rows: ["iPhone or iPad · Safari\n127.0.0.1 · signed in 11/18/2026, 12:09:02 PM · Ends after 30 min idle\nEverything\nChange ▾\nActivity\nSign out"]
+light warning in list: 1
+light activity: Activity · iPhone or iPad · Safari | Back to devices | What this device did, newest first. Names only: never the details of a command, a file or a setting. Kept for the last 500 entries or 30 days. Only visible in Bunny's window. | 12:09 | Level changed to Everything | By Bunny's window | 12:09 | Signed in | At the Chats level | What this list can and cannot tell you | This shows what devices did, unless one set out to hide it. A device with Everything can run commands, so it could change this record. Use it to notice something odd, not as proof that nothing happened.
+light device top: NONE
+dark first-signin dialog: false
+dark status bar: Open to other devices · 1 signed in · iPhone or iPad · Safari has Everything · Turn off
+dark device rows: ["iPhone or iPad · Safari\n127.0.0.1 · signed in 11/18/2026, 12:09:02 PM · Ends after 30 min idle\nEverything\nChange ▾\nActivity\nSign out"]
+dark warning in list: 1
+dark activity: Activity · iPhone or iPad · Safari | Back to devices | What this device did, newest first. Names only: never the details of a command, a file or a setting. Kept for the last 500 entries or 30 days. Only visible in Bunny's window. | 12:09 | Level changed to Everything | By Bunny's window | 12:09 | Signed in | At the Chats level | What this list can and cannot tell you | This shows what devices did, unless one set out to hide it. A device with Everything can run commands, so it could change this record. Use it to notice something odd, not as proof that nothing happened.
+dark device top: NONE
