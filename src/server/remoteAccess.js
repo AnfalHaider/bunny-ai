@@ -197,17 +197,19 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   const idleLimit = (s) => (s.level === 'everything' ? EVERYTHING_IDLE_MS : SESSION_IDLE_MS);
   // R-DF2: what devices did, for the person to read in Bunny's window only. Names and routes only: never arguments, bodies, text or secrets.
   let actions = [];
-  let actionsLoaded = false;
+  let loading = null;
   const prune = () => {
     const t = now();
     actions = actions.filter((a) => t - Date.parse(a.at) <= LOG_MAX_AGE_MS).slice(-LOG_MAX_ENTRIES);
   };
-  async function loadActions() {
-    if (actionsLoaded) return;
-    actionsLoaded = true;
-    if (!logFile) return;
-    try { const saved = JSON.parse(await readFile(logFile, 'utf8')); if (Array.isArray(saved)) actions = saved.concat(actions); } catch { /* none yet */ }
-    prune();
+  // The saved log is read once, and ANYTHING that writes or reads waits for it, so a new entry after a restart is added to the old ones, never written over them.
+  function loadActions() {
+    loading ??= (async () => {
+      if (!logFile) return;
+      try { const saved = JSON.parse(await readFile(logFile, 'utf8')); if (Array.isArray(saved)) actions = saved.concat(actions); } catch { /* none yet */ }
+      prune();
+    })();
+    return loading;
   }
   let saving = Promise.resolve();
   function logAction(device, entry) {
@@ -217,7 +219,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     if (typeof entry.from === 'string') clean.from = entry.from;
     actions.push(clean);
     prune();
-    if (logFile) saving = saving.then(async () => { await mkdir(dirname(logFile), { recursive: true }); await writeFile(logFile, JSON.stringify(actions)); }).catch(() => {});
+    if (logFile) saving = saving.then(loadActions).then(async () => { prune(); await mkdir(dirname(logFile), { recursive: true }); await writeFile(logFile, JSON.stringify(actions)); }).catch(() => {});
   }
   let record = null;       // the scrypt record of the saved passcode
   let loaded = false;
@@ -342,6 +344,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     },
     /** R-DF2: record one thing a device did (a tool's name, a window-only route and its method, a sign-in or a level change). */
     logAction,
+    flushLog: () => saving,
     /** R-DF2: the log, newest first. Only the window's route hands it out. */
     async actions() { await loadActions(); prune(); return [...actions].reverse(); },
     anyEverything() { sweep(); return [...sessions.values()].some((s) => s.level === 'everything'); },
