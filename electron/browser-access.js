@@ -15,6 +15,14 @@ export function wantedPort(prefs, rand = Math.random) {
 }
 
 /**
+ * The port to keep the moment "Keep the same address after restart" is turned on: the one Bunny is listening on right now, so the very next start is on the same address
+ * (not only the start after that). Null when none is wanted: the switch is not on, a port is already kept, or this one is outside the range kept.
+ */
+export function portToKeepNow(prefs, currentPort) {
+  return prefs?.keepAddress && !validPort(prefs.fixedPort) && validPort(currentPort) ? currentPort : null;
+}
+
+/**
  * Listen on `host` (always 127.0.0.1 here) at the wanted port. If a fixed port is taken by another program, listen on any free one and say so.
  * @returns {Promise<{ port: number, note: string, fixed: boolean }>}
  */

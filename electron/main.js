@@ -16,7 +16,7 @@ import { clearOldWorkersOnce } from './clear-old-workers.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
-import { browserAddress, listenWithFallback, wantedPort } from './browser-access.js';
+import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -186,7 +186,9 @@ ipcMain.handle('prefs:set', (_event, patch) => {
   if (typeof patch?.keepAddress === 'boolean') clean.keepAddress = patch.keepAddress; // takes effect the next time Bunny starts
   // Quick ask (W4-8) keeps Bunny running in the tray; the two preferences move together.
   const ruled = applyTrayRule(prefs, clean);
-  const saved = savePrefs(ruled.prefs);
+  // "Keep the same address": the port in use now is kept at once, so the next start is on this address, not only the one after it
+  const keep = portToKeepNow(ruled.prefs, Number(new URL(origin || 'http://127.0.0.1').port));
+  const saved = savePrefs(keep ? { ...ruled.prefs, fixedPort: keep } : ruled.prefs);
   const quick = applyQuickAsk(patch);
   return { ...saved, quickAskNote: ruled.note, quickAskError: quick.error ?? null };
 });

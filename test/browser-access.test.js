@@ -70,3 +70,12 @@ test('/api/health says whether window-only changes are kept to the window', asyn
   const body = await (await fetch(`${started.base}/api/health`)).json();
   assert.equal(typeof body.windowOnlyLock, 'boolean');
 });
+
+test('Keep the same address: the port in use is kept the moment the switch is turned on (so the next start is on the same address), once, and only a port in the kept range', async () => {
+  const { portToKeepNow } = await import('../electron/browser-access.js');
+  assert.equal(portToKeepNow({ keepAddress: true, fixedPort: null }, 52814), 52814);
+  assert.equal(portToKeepNow({ keepAddress: true, fixedPort: 50000 }, 52814), null, 'one is already kept');
+  assert.equal(portToKeepNow({ keepAddress: false, fixedPort: null }, 52814), null, 'switched off');
+  assert.equal(portToKeepNow({ keepAddress: true, fixedPort: null }, 3000), null, 'outside the range');
+  assert.equal(portToKeepNow({ keepAddress: true }, NaN), null);
+});
