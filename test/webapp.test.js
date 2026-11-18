@@ -224,3 +224,8 @@ test('on the network: a device that has not signed in may fetch the manifest and
   assert.match(String(signin.headers['content-security-policy']), /manifest-src 'self'/);
   assert.match(String(signin.headers['content-security-policy']), /img-src 'self'/);
 });
+
+test('every icon the manifest lists is one a device that has not signed in can fetch (no icon behind the sign-in page)', async () => {
+  const manifest = JSON.parse(await read('manifest.webmanifest'));
+  for (const icon of manifest.icons) assert.ok(WEBAPP_PUBLIC_PATHS.includes(icon.src), `${icon.src} is a token-free path`);
+});
