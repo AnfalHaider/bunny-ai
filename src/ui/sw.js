@@ -1,57 +1,14 @@
 /**
- * A service worker, so the app can be installed as a desktop app and still
- * open when the machine is offline.
- *
- * Only the shell is cached. Nothing about a chat is cached: a transcript is
- * private, and the server is the only place it lives.
+ * The old service worker lived here (scope /src/ui/) and kept a copy of index.html, which holds the launch token. This one replaces it in any browser that still has it:
+ * it clears every cache it can see and removes itself. The app's service worker is now served at /sw.js (src/ui/bunny-sw.js).
  */
-
-const CACHE = 'bunny-shell-v1';
-
-const SHELL = [
-  './index.html',
-  './providers.html',
-  './settings.html',
-  './automation.html',
-  './app.css',
-  './api.js',
-  './chat.js',
-  './markdown.js',
-  './highlight.js',
-  './i18n.js',
-  './icon.svg',
-  './manifest.webmanifest',
-];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
-});
-
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim()),
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  // The API always goes to the server: a cached answer would be a wrong one.
-  // Only this app's own files are the worker's business: a failed request to another site must fail, not
-  // quietly come back as the cached start page (that hid "nothing is answering there" from the browser panel).
-  if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api/')) return;
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok && event.request.method === 'GET') {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((hit) => hit ?? caches.match('./index.html'))),
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .then(() => self.registration.unregister())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then((clients) => clients.forEach((client) => client.navigate(client.url).catch(() => {}))),
   );
 });

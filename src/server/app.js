@@ -31,6 +31,7 @@ import { parseImport } from './import.js';
 import { createUsageStore } from './usage.js';
 import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned, failureKind, cooldownFor } from './unavailable.js';
 import { appVersion, checkForUpdate, RELEASES_FEED } from './updates.js';
+import { WEBAPP_PUBLIC_PATHS, isWebappPath, webappResponse } from './webapp.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
@@ -3367,6 +3368,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       return;
     }
 
+    // --- the web app files (manifest, icons, service worker, offline page): exact paths, no token, no secret in any of them ---
+    if ((method === 'GET' || method === 'HEAD') && isWebappPath(path)) {
+      const file = await webappResponse(path, await appVersion());
+      res.writeHead(200, file.headers);
+      res.end(method === 'HEAD' ? undefined : file.body);
+      return;
+    }
+
     // --- static files (the UI ships as plain files; nothing else is exposed) ---
     if (path === '/') {
       res.writeHead(302, { location: '/src/ui/index.html' + url.search }).end(); // keeps ?s=<chat id> (Q2-22)
@@ -3523,8 +3532,13 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       if ((method === 'GET' || method === 'HEAD') && SIGNIN_FILES.has(path)) {
         const name = SIGNIN_FILES.get(path);
         const file = await readFile(join(UI_ROOT, name));
-        res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8', ...security, 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'" });
+        res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8', ...security, 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'none'; frame-ancestors 'none'" });
         return res.end(method === 'HEAD' ? undefined : file);
+      }
+      if ((method === 'GET' || method === 'HEAD') && WEBAPP_PUBLIC_PATHS.includes(path)) { // so the sign-in page can be added to a home screen
+        const file = await webappResponse(path, await appVersion());
+        res.writeHead(200, { ...security, ...file.headers });
+        return res.end(method === 'HEAD' ? undefined : file.body);
       }
       if (path.startsWith('/api/')) return refuse(401, 'remote.signin', 'Sign in first.');
       res.writeHead(302, { location: '/', ...security });

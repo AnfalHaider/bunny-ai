@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="en">
 <head>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141518" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Bunny">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Settings — Bunny AI</title>
@@ -594,6 +603,13 @@
           <div class="desc">Opens Bunny in your usual browser, on this computer only, next to this window. Things that change what Bunny may do (permissions, connectors, installs, updates) can only be changed in this window. Bunny has to keep running: turn on Keep running in the tray above to close the window and still use the browser.</div>
         </div>
         <div class="right"><button type="button" id="open-browser" class="btn">Open in your browser</button></div>
+      </div>
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Install as an app</div>
+          <div class="desc">Open Bunny in your browser, then use its own install step: in Chrome or Edge the install icon in the address bar (or the menu, Install Bunny AI); on an iPhone or iPad Share, then Add to Home Screen; on Android the menu, then Add to Home screen. It gets its own icon and window.</div>
+          <div class="desc">On your network over plain HTTP (a phone or another computer), browsers do not run the offline part or offer a full install: an iPhone's Add to Home Screen still opens it as an app, and Android gives a home-screen shortcut.</div>
+        </div>
       </div>
       <div class="row">
         <div class="meta-col">
