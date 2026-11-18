@@ -211,6 +211,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     })();
     return loading;
   }
+  if (logFile) loadActions().catch(() => {}); // read the saved log at once; every write waits for it
   let saving = Promise.resolve();
   function logAction(device, entry) {
     const clean = { at: new Date(now()).toISOString(), device: device?.deviceId ?? null, label: device?.label ?? null, level: device?.level ?? null };
