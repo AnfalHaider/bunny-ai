@@ -1,0 +1,26 @@
+390x780-light-picked {"chipW":215,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+390x780-light-auto {"chipW":215,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+390x780-dark-picked {"chipW":215,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+390x780-dark-auto {"chipW":215,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-light-picked {"chipW":176,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-light-auto {"chipW":176,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-dark-picked {"chipW":176,"chipPct":"55%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":true,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+320x640-dark-auto {"chipW":176,"chipPct":"55%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"CHIP OVERLAPS SEND","underInside":true,"sideways":false}
+600x800-light-picked {"chipW":226,"chipPct":"38%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+600x800-light-auto {"chipW":266,"chipPct":"44%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+600x800-dark-picked {"chipW":226,"chipPct":"38%","text":"NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+600x800-dark-auto {"chipW":266,"chipPct":"44%","text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","clipped":false,"rowFit":"ok","underInside":true,"sideways":false}
+
+28812e1:
+390-light-picked {"chip":[118,318,200],"send":[322,358,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+390-light-auto {"chip":[118,318,200],"send":[322,358,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+390-dark-picked {"chip":[118,318,200],"send":[322,358,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+390-dark-auto {"chip":[118,318,200],"send":[322,358,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+360-light-picked {"chip":[118,288,170],"send":[292,328,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+360-light-auto {"chip":[118,288,170],"send":[292,328,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+360-dark-picked {"chip":[118,288,170],"send":[292,328,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+360-dark-auto {"chip":[118,288,170],"send":[292,328,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+320-light-picked {"chip":[118,248,130],"send":[252,288,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+320-light-auto {"chip":[118,248,130],"send":[252,288,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+320-dark-picked {"chip":[118,248,130],"send":[252,288,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"NVIDIA: Nemotron 3 Ultra (free)","ok":true}
+320-dark-auto {"chip":[118,248,130],"send":[252,288,36],"gapToSend":4,"voiceToChip":15,"sendInsideComposer":true,"text":"Auto · NVIDIA: Nemotron 3 Ultra (free)","ok":true}
