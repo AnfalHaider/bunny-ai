@@ -2171,7 +2171,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       // QA-ANSWERS: a question asked in the Quick ask bar is answered as text only: no tool is offered, whatever the person's settings say
       const textOnly = body.textOnly === true;
       const textOnlyText = textOnly
-        ? 'This is a quick answer shown in a small bar. The only tools you have are web_search and read_url, which only look things up on the web: use them when the question needs current or outside facts (news, weather, prices, people, anything after your training), and say which sites the facts came from, with their links. Nobody can allow anything else. Answer in plain text and simple Markdown. If the question needs any other tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
+        ? 'This is a quick answer shown in a small bar. The only tools you have are web_search and read_url, which only look things up on the web: use them when the question needs current or outside facts (news, weather, prices, people, anything after your training), and say which sites the facts came from, with their links. read_url opens only an address the person typed or one web_search listed. Nobody can allow anything else. Answer in plain text and simple Markdown. If the question needs any other tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
       const scheduledText = scheduledTask
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
@@ -2944,6 +2944,10 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           return `Your call to ${name} could not be read: its arguments were not complete JSON, probably cut off because they were too long. `
             + 'Try again with shorter content (for an artifact, make it smaller, or create it and then add to it with update_artifact).';
         }
+        if (textOnly && name === 'read_url' && !quickAllowed.has(quickKey(parsed.url))) {
+          send('tool', { tool: 'read_url', status: 'failed', result: 'A quick answer opens only addresses you typed or that its own search found.' });
+          return 'read_url refused: a quick answer opens only an address exactly as the person typed it or as web_search listed it, nothing else. Use web_search, or tell the person to open this in Bunny' + String.fromCharCode(39) + 's window.';
+        }
         // PV-2: the two small tools that reach the connector tools not listed in the request
         if (name === 'list_connector_tools' && deferredTools.size > 0) return describeDeferred(deferredTools, parsed.match);
         if (viaMeta) {
@@ -3056,6 +3060,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
               const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha });
+              if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);
               if (!added) return said;
@@ -3165,6 +3170,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // request that asks for more tokens than the balance covers.
       // WEB-ACCESS: the tools of this request. A provider that refused the whole list once gets Bunny's own tools without the connectors', then none (see onToolsRefused).
       let quickLookups = 0;
+      // WA-2 (Security): a page the quick answer reads could tell it to put an attached picture or file into a web address. So read_url opens only an address EXACTLY as the person typed it
+      // or as this answer's own web_search listed it (never one the model or a page made up or added data to), whatever is attached.
+      const quickKey = (u) => { try { const x = new URL(String(u).trim()); return x.protocol === 'http:' || x.protocol === 'https:' ? x.href : ''; } catch { return ''; } };
+      const quickAllowed = new Set(textOnly ? (String(body.content ?? '').match(/https?:\/\/[^\s<>"'`]+/g) ?? []).map((u) => quickKey(u.replace(/[.,;:!?)\]]+$/, ''))).filter(Boolean) : []);
       const refusalKey = `${id}|${providerId}|${model}`;
       const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
       const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
