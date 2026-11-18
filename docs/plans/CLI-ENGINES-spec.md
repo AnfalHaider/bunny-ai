@@ -1,6 +1,13 @@
-# CLI-ENGINES: architecture spec (draft, revision 3)
+# CLI-ENGINES: architecture spec (draft, revision 4)
 
-Tech Lead, 2026-11-18. Revision 3 replaces d6465bf (revision 2) and 0b6a2f9 (revision 1). It takes in:
+Tech Lead, 2026-11-18. Revision 4 replaces bda6b05 (revision 3), d6465bf (revision 2) and 0b6a2f9 (revision 1).
+
+**What revision 4 adds:**
+- the owner's word 5, "restricted mode", and what restricted mode is exactly (§0.2);
+- Codex and Cline fall back to restricted mode, no longer "not offered";
+- the spikes, planned as the first build step (§6.1).
+
+It takes in:
 - Researcher's report: e462903, plus its Aider and Cline section 7 at 0e71850 (`docs/research/2026-11-18-cli-engines.md`);
 - the owner's decisions, as relayed by the Chief of Staff, including word 4 below (on main at 5d68314).
 
@@ -29,6 +36,8 @@ An ADR is filed once the open facts below are settled.
 4. "ok build all these, i will sign in with anthroic account when required, but now i think we will need this option in settings also, when we enable a CLI, we need to have option infront of all to sign in with accounts or operate locally."
 
 Word 4 is the decision. It supersedes the hold on Claude Code in revision 2, and turns word 3 into a choice per engine: **account** or **local** (§7). Local stays the default where an engine supports it.
+
+5. Asked "How should v0.1.14 offer the engines that can't check with Bunny first? 1. Restricted mode (recommended) 2. Leave them out", the owner typed: "restricted mode". See §0.2.
 
 What follows from them, as the Chief of Staff relayed it:
 - **Four engines:** Claude Code, Codex CLI, Cline and Aider. Each is offered only if it passes the fail-closed verdict in §0.1.
@@ -70,7 +79,7 @@ The question: can Bunny decide **every** action **before** it runs? That means c
 | Engine | Verdict | Why (Researcher's facts at 0e71850) | What must be proven first (a spike against the pinned version, invented profile) |
 |---|---|---|---|
 | **Claude Code** | **Yes**, through a hook on every tool | A `PreToolUse` hook runs before every tool call, including tools Claude Code would allow on its own, such as reads. It calls Bunny's bridge and blocks until Bunny answers. `canUseTool` / `--permission-prompt-tool` answers whatever still asks. Prompts can stay pending indefinitely (§1, §5 of the report). There is no sandbox on native Windows (§5), so the hook **is** the wall. | (a) The hook fires for every built-in tool, MCP tools and subagents, with no exceptions. (b) Settings can be limited to Bunny's own, so a repository's `.claude/settings.json` cannot add allow rules or hooks: `--setting-sources` or its equivalent **[R18]**. If (b) fails, Bunny runs Claude Code in a staged copy without the project's `.claude` folder (§3.3). |
-| **Codex CLI** | **Yes, if** approvals can be forced for every command and every file change; otherwise **no** | `app-server` sends `requestApproval` for commands and file changes, and Bunny answers accept or decline (§1). But `on-request` asks only when Codex wants to leave its sandbox: commands **inside** the sandbox run unasked, and `untrusted` (ask for everything) is not supported (§1). | (a) A `{granular}` approval policy that asks for every command and every patch. (b) The file-change approval method name, from the pinned schema. If (a) fails, Codex is not offered: a sandbox alone decides after Bunny, not before. On Windows the sandbox needs helpers and maybe elevation (UNKNOWN), so it cannot be counted on as a wall. |
+| **Codex CLI** | **Yes, if** approvals can be forced for every command and every file change; otherwise **no** | `app-server` sends `requestApproval` for commands and file changes, and Bunny answers accept or decline (§1). But `on-request` asks only when Codex wants to leave its sandbox: commands **inside** the sandbox run unasked, and `untrusted` (ask for everything) is not supported (§1). | (a) A `{granular}` approval policy that asks for every command and every patch. (b) The file-change approval method name, from the pinned schema. If (a) fails, Codex runs in restricted mode (§0.2): a sandbox alone would decide after Bunny, not before. On Windows the sandbox needs helpers and maybe elevation (UNKNOWN), so it cannot be counted on as a wall. |
 | **Cline** | **Unknown until a spike.** Likely yes, through a hook | `--auto-approve` is true by default. With `--auto-approve false`, the documented enforcement point is a `PreToolUse` hook, and Bunny would supply it in Cline's isolated `--config` folder. How a host answers an approval in `--json` mode is UNKNOWN (report §7c). | (a) With `--auto-approve false`, every tool call passes the hook first, and the hook can block on Bunny's answer. (b) The hook cannot be removed by the agent (its config folder is denied by the bridge, as in §3.1). (c) A custom OpenAI-compatible base URL is settable from the CLI or SDK (UNKNOWN; needed for local mode). If (a) fails, Cline runs only in a staged copy (§3.3). |
 | **Aider** | **No.** It has no permission controls and no hook | No structured output and no per-call channel (report §7b). `--yes` confirms everything. Without it, confirmations need a TTY (UNKNOWN). Shell commands run through `/run`, `/test` or confirmed suggestions. | It can be offered only in one of the two shapes below, and only on the owner's say. |
 
@@ -90,7 +99,7 @@ The question: can Bunny decide **every** action **before** it runs? That means c
 - **This meets M2 for writes and for commands** (there are none). The step view is coarse: text, then a list of files changed.
 - **What remains:** Bunny cannot stop Aider from **reading a file outside the copy**, for example an absolute path the model names, because Windows gives no sandbox here and Aider has no hook.
   - Mitigations: `--subtree-only` and no `--read` arguments; a check that Aider reads only from the copy is a spike item **[R19]**.
-  - If that read path cannot be closed, the owner accepts it in words, or Aider is not offered.
+  - If that read path cannot be closed, the Chief of Staff goes back to the owner before Aider ships (§0.2).
 - **Recommended**, if Aider is wanted at all.
 
 **Upkeep:** Aider's last release is v0.86.0 (2025-08-09; PyPI 0.86.2, 2026-02-12), so maintenance risk is real. It needs Python 3.10–3.12 through a pinned `uv` (§4.2).
@@ -100,6 +109,33 @@ The question: can Bunny decide **every** action **before** it runs? That means c
 - Codex: yes only if a granular policy asks for everything.
 - Cline: probably, after a spike.
 - Aider: no, unless it runs confined with Bunny reviewing its changes (option 2), and the owner accepts that out-of-folder reads cannot be blocked.
+
+### 0.2 The owner's answer: restricted mode (word 5)
+
+The Chief of Staff asked: "How should v0.1.14 offer the engines that can't check with Bunny first? 1. Restricted mode (recommended) 2. Leave them out". The owner typed: **"restricted mode"**.
+
+So an engine that fails per-call approval is offered in **restricted mode**. That is option 2 above, the staged copy of §3.3, applied to any engine:
+
+| Engine | Mode it runs in |
+|---|---|
+| Claude Code | Full mode (per-call, through the hook). Restricted mode only if spike S1 fails. |
+| Codex CLI | Full mode if spike S2 shows a granular ask-for-everything policy. **Restricted mode** if it does not. This replaces revision 3's "not offered". |
+| Cline | Full mode if spike S3 shows its hook sees and blocks every tool call. **Restricted mode** if it does not. |
+| Aider | **Restricted mode** always. |
+
+**Restricted mode, exactly:**
+1. The engine works in a **confined copy** of the workspace. The copy leaves out every hidden and denied path, the data folder, every engine home, and `.claude` / `.codex` / `.cline` folders.
+2. The engine's **own shell and command tools are off**, and so are git, web and MCP. A restricted turn runs no commands at all.
+   - How to turn them off, per engine: Aider R6; Codex R23; Cline R24.
+   - **An engine whose command tools cannot be turned off is not offered even in restricted mode.** A command inside the copy could still reach anything on the PC.
+3. When the turn ends, **Bunny reviews the diff**. Every changed, added or deleted path is judged with the same rules as Bunny's own `write_file` and `edit_file` (§3.1). Only what is allowed is written, through Bunny's own write path and checkpoints.
+   - Ask rules give one card listing the files.
+   - Plan mode keeps nothing.
+4. Settings and the chat say plainly that the engine is restricted. Design draws the line, for example: "Restricted: edits files in a copy; Bunny checks each change before it's kept; runs no commands."
+
+**What stays open, per engine:** whether it can read a file **outside** the copy, for example through an absolute path the model names. Windows gives no sandbox that Bunny can count on here. These are R19 (Aider), R23 (Codex) and R24 (Cline).
+
+**The Chief of Staff's condition:** if a spike cannot close the read path for an engine, the Chief of Staff goes back to the owner **before that engine ships**. Until then that engine stays off in the build, behind its own flag.
 
 Not in v0.1.14: Cursor CLI; Chat-mode chats on an engine (§1.4); Bunny's own tools offered to an engine (memory, artifacts, browser, connectors, helpers).
 
@@ -139,7 +175,7 @@ export const profile = {
 | Engine | transport | approvals | wire (local mode) | auth modes | runtime | Source |
 |---|---|---|---|---|---|---|
 | Claude Code | `jsonl` (`-p --output-format stream-json --verbose`) | `per-call`: a `PreToolUse` hook on every tool, plus `canUseTool` | `messages` | account (default), local (with the §7 note) | native `claude.exe` | F2; report §7a |
-| Codex CLI | `json-rpc` (`codex app-server`) | `per-call` (`requestApproval`), if the granular policy holds (§0.1) | `responses` | local (default), account (Codex's own login **[R20]**) | native | F1 |
+| Codex CLI | `json-rpc` (`codex app-server`) | `per-call` (`requestApproval`) if S2 passes; else `staged`, restricted mode (§0.2) | `responses` | local (default), account (Codex's own login **[R20]**) | native | F1 |
 | Cline | `jsonl` (`--json`: `agent_event`, `run_result`, `run_aborted`) | `per-call` via a `PreToolUse` hook with `--auto-approve false`, if the spike holds; else `staged` | `chat` **[R3]** | local (default), account (`cline auth`, the Cline provider) | node (`cline@3.0.74`, **[R4]**) | report §7c |
 | Aider | `text` (plain text plus the git diff) | `staged` only (option 2, §0.1) | `chat` (`OPENAI_API_BASE`, `--model openai/<name>`) | **local only** | python 3.12 through `uv` (`aider-chat==0.86.2`) | report §7b |
 
@@ -289,7 +325,7 @@ An unknown tool is judged as `run`. A request whose input cannot be read is deni
   - The home folder is denied to the engine's own tools (§3.1), so the agent cannot edit the hook away.
   - The hook is rewritten at every run start.
 - **Codex:**
-  - a `{granular}` approval policy that asks for every command and every patch (§0.1). If it cannot be set, Codex is not offered;
+  - a `{granular}` approval policy that asks for every command and every patch (§0.1). If it cannot be set, Codex runs in restricted mode (§0.2);
   - `sandbox: workspace-write`, or `read-only` in Plan mode, as a second wall;
   - `--ignore-user-config` and `--ignore-rules`, with an isolated `CODEX_HOME` (M4);
   - `check_for_update_on_startup = false` (F1 §1, §4).
@@ -302,14 +338,14 @@ An unknown tool is judged as `run`. A request whose input cannot be read is deni
   - its web tools, other MCP servers and subagents turned off;
   - `DISABLE_UPDATES` set (F2 §4).
 
-**If per-call approval cannot be made to cover every tool for an engine, it uses way two or is not offered.**
+**If per-call approval cannot be made to cover every tool for an engine, it runs in restricted mode, way two (owner's word 5, §0.2).**
 
-### 3.3 Way two: a staged copy (Aider, option 2 in §0.1; Cline if its hook spike fails; Claude Code if [R18] fails)
+### 3.3 Way two: restricted mode, a staged copy (Aider always; Codex if S2 fails; Cline if S3 fails; Claude Code if S1 fails; §0.2)
 
 For an engine that applies edits itself, with no per-call hook:
 
 1. **Copy.** Before the turn, Bunny makes a staged copy of the workspace in the chat's engine folder: the `worktrees.js` pattern for a git repo, otherwise a plain copy. The copy **leaves out every path the read-deny rules hide**, and the data folder, so the engine cannot read them even through a repo map. The engine runs with that copy as its `cwd`.
-2. **No commands, no git.** The engine is started with its own shell commands and git actions turned off (Aider: `--no-auto-commits`, no `/run`, no shell suggestions **[R6]**). Where they cannot be turned off, that engine is not offered (M2).
+2. **No commands, no git.** The engine is started with its own shell commands and git actions turned off (Aider R6, Codex R23, Cline R24). Web and MCP are off too. Where commands cannot be turned off, that engine is not offered, even in restricted mode (M2).
 3. **Judge every changed path.** At the end of the turn, Bunny diffs the copy against the real folder and judges each changed, added or deleted path with the bridge (§3.1), as a `write_file` or `edit_file`.
    - Denied paths are discarded, and the reply says which and why.
    - An Ask shows one card listing the files, and the person may take all or none. Design to draw a per-file choice.
@@ -447,22 +483,50 @@ The gate runs no real CLI, uses no network, and needs no account.
 
 ## 6. Build order (each a board row; HIGH rows keep an independent review and Security's sign-off)
 
-1. **Spikes** (Builder, read-only for Bunny; QA's invented profile) settle the "must be proven" column of §0.1:
-   - Claude Code: does the hook fire on every tool, and does R18 hold?
-   - Codex: is there a granular policy that asks for everything?
-   - Cline: does the hook block with `--auto-approve false`, and does a base URL work?
-   - Aider: R19, out-of-folder reads.
+### 6.1 Step 1: the spikes (first, before any Bunny code)
 
-   This spec is then revised and an ADR filed.
-2. Security's requirements. Design's drawing (Settings → Engines with the per-engine **auth mode** choice, sign-in states, the download, update and rollback states, and the local-mode note). The owner's go.
-3. `events.js`, `endpoint.js` with the **Responses translator**, `bridge.js` (with the hook script) and `staging.js`, each with tests, on the fake engine.
+**Who:** Builder runs each spike. QA checks the evidence. Tech Lead reads the result against §0.1 and §0.2.
+
+**Rules for every spike:**
+- **Nothing enters Bunny's code.** Spike scripts live in `docs/spikes/cli-engines/<id>/` as notes plus a small script. They are not built into the app.
+- **An invented profile only** (`BUNNY_DATA_DIR` = a temp folder). The engine's home goes in that temp folder too. The person's `~/.claude`, `~/.codex`, `~/.cline`, `%LOCALAPPDATA%\BunnyAI` and real projects are never touched.
+- **A throwaway test folder** holds:
+  - a `secret.txt` that a deny rule covers;
+  - a `protected/` folder;
+  - a project `.claude/settings.json` (or the engine's equivalent) holding an "allow everything" rule and a hook of its own;
+  - a canary file **outside** the folder: `<temp>\outside\canary.txt`, holding a unique string.
+- **The model** is the fake upstream, where the engine's wire allows (Bunny's endpoint is not built yet), or a scripted model stub that asks for exactly the tool calls under test. Claude Code in account mode needs no model for the hook test: the hook runs before any tool call.
+- **One engine pinned version per spike:** the versions in §4.3.
+- **Evidence is command plus output (O1).** Each claim is pasted beside the command that shows it. "Passes" means every row in the spike's table shows the expected result.
+- **Each spike is time-boxed to one working session.** A spike that cannot show a result within it reports UNKNOWN, and the engine falls back to restricted mode (§0.2).
+
+| Spike | Engine | What it must show | Pass gives | Fail gives |
+|---|---|---|---|---|
+| **S1** | Claude Code | (a) A `PreToolUse` hook from Bunny's settings fires **before** every tool: Read, Write, Edit, Bash/PowerShell, Glob, Grep, WebFetch, MCP, and a subagent's tools. A hook that answers deny stops each one (`secret.txt` unread, nothing written). (b) With Bunny's settings source only (R18), the project's `.claude/settings.json` allow rule and hook are **not** loaded. (c) A hook that fails, times out or cannot reach the bridge means deny. (d) An attempt to read `canary.txt` by absolute path hits the hook. | Full mode | Restricted mode (the `.claude` folder is left out of the copy) |
+| **S2** | Codex CLI | (a) A `{granular}` approval policy under which **every** command and **every** file change sends a `requestApproval` over `app-server`, including commands that would run inside the sandbox. (b) The file-change approval method name from the pinned schema. (c) Decline stops the action. (d) R23: shell and command tools can be turned off (for restricted mode), and whether the agent can read `canary.txt` with them off. (e) R12: `--ephemeral`, with no stored state. (f) R14: the `unelevated` Windows sandbox with no admin prompt. | Full mode | Restricted mode, if (d) turns commands off; otherwise not offered |
+| **S3** | Cline | (a) With `--auto-approve false`, a Bunny-written `PreToolUse` hook in the isolated `--config` sees **every** tool call (read, write, edit, command, browser, MCP) **before** it runs, and can block until answered. (b) The agent cannot edit or remove the hook (its config folder is outside the workspace). (c) R3: an OpenAI-compatible base URL and key with `cline auth` skipped. (d) R24: command tools can be turned off, and whether `canary.txt` can be read. (e) R4: Node version, Electron's Node, size on disk. | Full mode | Restricted mode, if (d) turns commands off; otherwise not offered |
+| **S4** | Aider | (a) R6: with `--no-suggest-shell-commands`, no `/run` or `/test`, `--no-auto-commits`, `--no-git` or the equivalent, analytics off and `--no-check-update`, a `--message` turn runs no command and makes no commit, even when the model asks for one. (b) Behaviour with no TTY and without `--yes`: it must not hang (the wait limit) and must not confirm by itself. (c) **R19:** when the model names `canary.txt` by absolute path, or asks to `/read` or add it, does its content reach the model? Checked at the fake upstream: does the unique string appear in any request? (d) R8: a hash-locked `uv` install of 0.86.2 with Python 3.12 into the temp folder; size, and whether Defender or SmartScreen objects. | Restricted mode, ready to ship | (a) fails: not offered. (c) open: the Chief of Staff goes back to the owner before Aider ships. |
+
+**How a read outside the folder is detected, for every engine (S1 d, S2 d, S3 d, S4 c):**
+- The canary's unique string is searched for in every request the model endpoint receives, and in the engine's stdout.
+- Seeing it anywhere means the read path is open.
+- This is the one check that does not depend on trusting the engine's own reporting.
+
+**After the spikes:**
+- Tech Lead revises §0.1 and §0.2 with the results and files the ADR.
+- The Chief of Staff takes any open read path (R19, R23, R24) to the owner, one engine at a time.
+
+### 6.2 Then
+
+2. Security's requirements. Design's drawing: Settings → Engines with the per-engine **auth mode** choice, the **restricted** line, sign-in states, the download, update and rollback states, and the local-mode note. The owner's go.
+3. `events.js`, `endpoint.js` with the **Responses translator**, `bridge.js` (with the hook script) and `staging.js` (restricted mode), each with tests, on the fake engine.
 4. The Claude Code adapter in account mode (the hook route; no translator needed).
-5. The Codex adapter (Responses, app-server, per-call), if its spike passes.
-6. The Cline adapter.
-7. The Aider adapter, staged, if the owner takes option 2.
+5. The Codex adapter: full mode if S2 passed, otherwise restricted.
+6. The Cline adapter: full mode if S3 passed, otherwise restricted.
+7. The Aider adapter, restricted, behind its flag until R19 is closed or the owner accepts it.
 8. The Messages translator, for Claude Code in local mode.
 9. `store.js`, the download, update and rollback routes, the sign-in and sign-out flows, and the Settings screens.
-10. The pins gate step, `engine-smoke.mjs`, help text and pictures.
+10. The pins gate step, `engine-smoke.mjs` (it re-runs the canary check at each pin change), help text and pictures.
 
 ---
 
@@ -571,15 +635,17 @@ The CLI is pointed at the mode's `shared` folder for its config and login. Where
 | R14 | Codex: its Windows sandbox runs `unelevated` with no admin step | Per-call approval is the only wall |
 | R17 | Cline and Aider: self-update and telemetry can be turned off | Security decides (M5) |
 | R18 | Claude Code: only Bunny's settings source is loaded (no project `.claude/settings.json`) | A staged copy without `.claude` (3.3) |
-| R19 | Aider: whether it can read files outside its `cwd` (absolute paths, `/read`) | Owner accepts in words, or Aider is not offered |
+| R19 | Aider: whether it can read files outside its `cwd` (absolute paths, `/read`); spike S4 c | Aider stays behind its flag; the Chief of Staff goes back to the owner before it ships |
 | R20 | Codex: its own login command and where it writes the credential under `CODEX_HOME` | Codex is local only |
 | R21 | Each engine: a way to read the sign-in state without reading the credential | The state is known only from a run's error |
 | R22 | Codex and Claude Code: a per-chat session folder separate from the config home | A per-chat copy of the config |
+| R23 | Codex: its shell and command tools can be turned off for restricted mode, and whether it can then read outside the copy (spike S2 d) | Not offered in restricted mode. Outside reads: the Chief of Staff goes back to the owner |
+| R24 | Cline: the same as R23 (spike S3 d) | The same as R23 |
 
 The Codex granular policy, the Claude Code hook coverage and the Cline hook blocking are the "must be proven" items in §0.1.
 
 ## 9. Questions for the owner (one at a time, with the drawing, O12)
 
-1. **Aider:** option 2 (a confined copy, with Bunny reviewing the changes before they land, and out-of-folder reads not blockable), or leave Aider out? Recommendation: option 2, if R19 can be closed; otherwise leave it out.
+1. ~~Engines that cannot check with Bunny first~~: **answered**: "restricted mode" (word 5, §0.2). Still to come, from the Chief of Staff, per engine: an open read path after S2, S3 or S4.
 2. **Updates:** tested versions only, or also "latest, untested"? Recommendation: tested only.
 3. **Code-mode chats only**, with Chat mode always on Bunny's own engine? Recommendation: yes.
