@@ -882,6 +882,7 @@ test('R-DF2: after a restart a new entry is added to the saved log, never writte
   const second = createRemoteAccess({ logFile }); // Bunny restarted; nobody has read the log yet
   second.logAction(device, { kind: 'tool', tool: 'write_file' });
   await second.flushLog();
+  assert.deepEqual((await second.actions()).map((e) => e.tool).sort(), ['list_files', 'read_file', 'write_file'], 'read in the same run: kept, and no entry twice');
   const names = (await createRemoteAccess({ logFile }).actions()).map((e) => e.tool).sort();
-  assert.deepEqual(names, ['list_files', 'read_file', 'write_file']);
+  assert.deepEqual(names, ['list_files', 'read_file', 'write_file'], 'and after another restart');
 });
