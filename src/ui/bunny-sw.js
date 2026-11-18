@@ -29,7 +29,7 @@ function mayCache(request, response) {
     if (/text\/html/i.test(type) && url.pathname !== OFFLINE) return false; // a page may hold the launch token or the CSRF token
   }
   if (url.pathname === OFFLINE) return true;
-  return /^\/(src\/ui\/[\w.-]+\.(css|js|svg|woff2?|ttf)|icons\/[\w.-]+\.png|manifest\.webmanifest)$/.test(url.pathname) && !/\/(token|signin|remote)\.js$/.test(url.pathname);
+  return /^\/(src\/ui\/(fonts\/)?[\w.-]+\.(css|js|svg|woff2?|ttf)|icons\/[\w.-]+\.png|manifest\.webmanifest)$/.test(url.pathname) && !/\/(token|signin|remote)\.js$/.test(url.pathname);
 }
 
 self.addEventListener('install', (event) => {

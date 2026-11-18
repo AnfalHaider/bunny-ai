@@ -2185,3 +2185,20 @@ body:has(> #remote-bar) { display: flex; flex-direction: column; }
 body:has(> #remote-bar) > #remote-bar { flex: none; }
 body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 
+
+/* Bundled fonts (v0.1.13). SIL OFL 1.1, unmodified Latin woff2, see src/ui/fonts/manifest.json. Named "Bunny ..." so the default font stack is not changed by them. */
+@font-face { font-family: "Bunny Inter"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/inter-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Source Sans 3"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/source-sans-3-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny IBM Plex Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/ibm-plex-sans-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Atkinson Hyperlegible"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/atkinson-hyperlegible-400.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Atkinson Hyperlegible"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/atkinson-hyperlegible-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Lexend"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/lexend-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Nunito"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/nunito-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Quicksand"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/quicksand-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Lora"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/lora-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Literata"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/literata-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Source Serif 4"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/source-serif-4-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny Noto Serif"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/noto-serif-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny JetBrains Mono"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/jetbrains-mono-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/ibm-plex-mono-600.woff2") format("woff2"); }

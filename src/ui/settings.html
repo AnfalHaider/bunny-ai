@@ -110,13 +110,13 @@
       <div class="row">
         <div class="meta-col"><div class="name">Interface font</div><div class="desc">The font of menus, buttons and your messages.</div></div>
         <div class="right"><select class="appearance" data-key="interfaceFont" aria-label="Interface font">
-          <option value="system">Default · System</option><option value="sans">Segoe UI</option><option value="serif">Serif</option><option value="mono">Monospace</option>
+          <option value="system">Default · System</option><optgroup label="Sans"><option value="sans" style="font-family:'Segoe UI'">Segoe UI</option><option value="inter" style="font-family:'Bunny Inter'">Inter</option><option value="source-sans-3" style="font-family:'Bunny Source Sans 3'">Source Sans 3</option><option value="ibm-plex-sans" style="font-family:'Bunny IBM Plex Sans'">IBM Plex Sans</option></optgroup><optgroup label="Easy to read"><option value="atkinson-hyperlegible" style="font-family:'Bunny Atkinson Hyperlegible'">Atkinson Hyperlegible</option><option value="lexend" style="font-family:'Bunny Lexend'">Lexend</option></optgroup><optgroup label="Rounded"><option value="nunito" style="font-family:'Bunny Nunito'">Nunito</option><option value="quicksand" style="font-family:'Bunny Quicksand'">Quicksand</option></optgroup><optgroup label="Serif"><option value="serif" style="font-family:Georgia,serif">Serif</option><option value="lora" style="font-family:'Bunny Lora'">Lora</option><option value="literata" style="font-family:'Bunny Literata'">Literata</option><option value="source-serif-4" style="font-family:'Bunny Source Serif 4'">Source Serif 4</option><option value="noto-serif" style="font-family:'Bunny Noto Serif'">Noto Serif</option></optgroup><optgroup label="Monospace"><option value="mono" style="font-family:Consolas,monospace">Monospace</option><option value="jetbrains-mono" style="font-family:'Bunny JetBrains Mono'">JetBrains Mono</option><option value="ibm-plex-mono" style="font-family:'Bunny IBM Plex Mono'">IBM Plex Mono</option></optgroup>
         </select></div>
       </div>
       <div class="row">
         <div class="meta-col"><div class="name">Response font</div><div class="desc">The font of Bunny's replies.</div></div>
         <div class="right"><select class="appearance" data-key="responseFont" aria-label="Response font">
-          <option value="match">Match interface</option><option value="sans">Segoe UI</option><option value="serif">Serif</option><option value="mono">Monospace</option>
+          <option value="match">Match interface</option><optgroup label="Sans"><option value="sans" style="font-family:'Segoe UI'">Segoe UI</option><option value="inter" style="font-family:'Bunny Inter'">Inter</option><option value="source-sans-3" style="font-family:'Bunny Source Sans 3'">Source Sans 3</option><option value="ibm-plex-sans" style="font-family:'Bunny IBM Plex Sans'">IBM Plex Sans</option></optgroup><optgroup label="Easy to read"><option value="atkinson-hyperlegible" style="font-family:'Bunny Atkinson Hyperlegible'">Atkinson Hyperlegible</option><option value="lexend" style="font-family:'Bunny Lexend'">Lexend</option></optgroup><optgroup label="Rounded"><option value="nunito" style="font-family:'Bunny Nunito'">Nunito</option><option value="quicksand" style="font-family:'Bunny Quicksand'">Quicksand</option></optgroup><optgroup label="Serif"><option value="serif" style="font-family:Georgia,serif">Serif</option><option value="lora" style="font-family:'Bunny Lora'">Lora</option><option value="literata" style="font-family:'Bunny Literata'">Literata</option><option value="source-serif-4" style="font-family:'Bunny Source Serif 4'">Source Serif 4</option><option value="noto-serif" style="font-family:'Bunny Noto Serif'">Noto Serif</option></optgroup><optgroup label="Monospace"><option value="mono" style="font-family:Consolas,monospace">Monospace</option><option value="jetbrains-mono" style="font-family:'Bunny JetBrains Mono'">JetBrains Mono</option><option value="ibm-plex-mono" style="font-family:'Bunny IBM Plex Mono'">IBM Plex Mono</option></optgroup>
         </select></div>
       </div>
       <div class="row">
@@ -691,6 +691,13 @@
         <div class="right"><button id="check-update" class="primary">Check for updates</button> <button id="restart-update" class="ghost" hidden>Restart to update</button></div>
         <div class="meta-col"><div class="desc" id="update-note"></div>
           <details id="update-notes" hidden><summary>What is in this version</summary><pre id="update-notes-text" style="white-space:pre-wrap;overflow:auto;max-height:320px;margin:8px 0 0;font:inherit"></pre></details></div>
+      </div>
+      <div class="row" id="licences-row">
+        <div class="meta-col">
+          <div class="name">Licences</div>
+          <div class="desc">The fonts bundled with Bunny are free under the SIL Open Font License 1.1 and are not modified.</div>
+          <details id="licences"><summary>Fonts and their licences</summary><ul id="licence-list" class="licence-list"></ul></details>
+        </div>
       </div>
     </div>
   </section>
@@ -1607,6 +1614,20 @@
   };
 
   boot();
+</script>
+
+<script type="module">
+  // About -> Licences: the bundled fonts, each with its licence text (src/ui/fonts/manifest.json)
+  const list = document.getElementById('licence-list');
+  if (list) fetch('./fonts/manifest.json').then((r) => r.json()).then((m) => {
+    for (const f of m.fonts) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = './fonts/' + f.licenceFile; a.target = '_blank'; a.rel = 'noopener'; a.textContent = f.licence;
+      li.append(document.createTextNode(f.name + ' · © ' + f.copyright + ' · '), a);
+      list.append(li);
+    }
+  }).catch(() => { list.textContent = 'The list could not be loaded.'; });
 </script>
 </body>
 </html>

@@ -277,6 +277,20 @@ const FONTS = {
   serif: 'Georgia, "Cambria", "Times New Roman", serif',
   sans: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
   mono: 'ui-monospace, "Cascadia Code", Consolas, monospace',
+  // v0.1.13: bundled fonts (src/ui/fonts, SIL OFL); the family names start with "Bunny " so the default stack is not changed
+  'inter': '"Bunny Inter", "Segoe UI", system-ui, sans-serif',
+  'source-sans-3': '"Bunny Source Sans 3", "Segoe UI", system-ui, sans-serif',
+  'ibm-plex-sans': '"Bunny IBM Plex Sans", "Segoe UI", system-ui, sans-serif',
+  'atkinson-hyperlegible': '"Bunny Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif',
+  'lexend': '"Bunny Lexend", "Segoe UI", system-ui, sans-serif',
+  'nunito': '"Bunny Nunito", "Segoe UI", system-ui, sans-serif',
+  'quicksand': '"Bunny Quicksand", "Segoe UI", system-ui, sans-serif',
+  'lora': '"Bunny Lora", Georgia, "Times New Roman", serif',
+  'literata': '"Bunny Literata", Georgia, "Times New Roman", serif',
+  'source-serif-4': '"Bunny Source Serif 4", Georgia, "Times New Roman", serif',
+  'noto-serif': '"Bunny Noto Serif", Georgia, "Times New Roman", serif',
+  'jetbrains-mono': '"Bunny JetBrains Mono", ui-monospace, Consolas, monospace',
+  'ibm-plex-mono': '"Bunny IBM Plex Mono", ui-monospace, Consolas, monospace',
 };
 const SIZES = { small: '13px', medium: null, large: '16px', xlarge: '18px' };
 const WIDTHS = { narrow: null, medium: '880px', wide: '1080px', full: 'none' };
