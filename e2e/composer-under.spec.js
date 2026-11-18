@@ -56,3 +56,33 @@ for (const mode of ['chat', 'code']) {
     }
   }
 }
+
+// "Open to other devices" puts a line across the top of the window: the app below takes the height that is left, so nothing is pushed off the bottom.
+for (const [w, h] of [[1280, 800], [390, 780]]) {
+  for (const scheme of ['light', 'dark']) {
+    test(`with the Open to other devices line shown, ${w}x${h}, ${scheme}: the row under the box and the sidebar's bottom stay inside the window`, async ({ page, request }) => {
+      const folder = mkdtempSync(join(tmpdir(), 'bunny-e2e-remote-bar-'));
+      expect((await request.post('/api/folder/check', { data: { folder } })).ok()).toBeTruthy();
+      await request.put('/api/settings', { data: { modelFilter: 'all' } });
+      await page.route('**/api/models*', (r) => r.fulfill({ json: MODELS }));
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { enabled: true, signedIn: 2, autoChats: [] } }) : r.continue()));
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width: w, height: h });
+      await page.addInitScript(() => { window.bunnyDesktop = {}; /* the line is drawn only in the desktop app */ localStorage.setItem('bunny.workMode', 'code'); localStorage.setItem('bunny.modelAuto', '1'); });
+      const made = await (await request.post('/api/sessions', { data: { title: 'Bar row', workMode: 'code', folder } })).json();
+      await page.goto(`/?s=${made.id}`);
+      await expect(page.locator('#remote-bar')).toBeVisible();
+      await expect(page.locator('#folder-chip')).toBeVisible();
+      const m = await page.evaluate(() => {
+        const box = (el) => { const b = el?.getBoundingClientRect(); return b ? { top: b.top, bottom: b.bottom } : null; };
+        return { vh: window.innerHeight, bar: box(document.getElementById('remote-bar')), app: box(document.getElementById('app')), under: box(document.querySelector('.composer-under')), foot: box(document.querySelector('.sidebar-foot')), docH: document.documentElement.scrollHeight };
+      });
+      expect(m.bar.top).toBeGreaterThanOrEqual(0);
+      expect(m.app.top).toBeGreaterThanOrEqual(m.bar.bottom - 1); // the app starts under the line
+      expect(m.app.bottom).toBeLessThanOrEqual(m.vh + 0.5);        // and ends inside the window
+      expect(m.under.bottom).toBeLessThanOrEqual(m.vh + 0.5);
+      if (m.foot && m.foot.bottom > 0 && w >= 600) expect(m.foot.bottom).toBeLessThanOrEqual(m.vh + 0.5); // the sidebar's profile row
+      expect(m.docH).toBeLessThanOrEqual(m.vh + 1);                // nothing to scroll to
+    });
+  }
+}

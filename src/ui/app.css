@@ -2173,3 +2173,10 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
   }
   .picker-handle { display: block; flex: none; width: 40px; height: 5px; margin: 2px auto var(--sp-4); border: 0; border-radius: 999px; background: var(--line-strong, var(--line)); padding: 0; cursor: pointer; }
 }
+
+/* v0.1.11: the "Open to other devices" line is part of the page's layout, not a layer over a window-high app: the app takes the height that is left,
+   so the row under the composer and the sidebar's profile row are never pushed off the bottom (the owner's report) */
+body:has(> #remote-bar) { display: flex; flex-direction: column; }
+body:has(> #remote-bar) > #remote-bar { flex: none; }
+body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
+
