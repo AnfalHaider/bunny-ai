@@ -20,6 +20,11 @@ export const COOKIE = 'bunny_remote';
 export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // R7: two hours without use ends a session
 export const FAILS_BEFORE_WAIT = 5;
 /** DEVICE-FULL: what a signed-in device may do. 'chats' (the default) is the small allow-list below; 'everything' is what Bunny's window can do, except /api/remote*. Only the window sets it. */
+/** DEVICE-FULL (Security R-DF1): a device at Everything is signed out after 30 minutes idle, not 2 hours. */
+export const EVERYTHING_IDLE_MS = 30 * 60 * 1000;
+/** R-DF2: the action log keeps the last 500 entries or 30 days, whichever is fewer. */
+export const LOG_MAX_ENTRIES = 500;
+export const LOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export const LEVELS = Object.freeze(['chats', 'everything']);
 export const DEFAULT_LEVEL = 'chats';
 /** Routes even an 'everything' device never reaches: turning device access on or off, the list, levels, signing out OTHER devices. (A device may still sign ITSELF out: /api/remote/signout.) */
@@ -188,7 +193,32 @@ export function readCookie(header, name = COOKIE) {
   return '';
 }
 
-export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd = () => {} } = {}) {
+export function createRemoteAccess({ file = null, logFile = null, now = () => Date.now(), onEnd = () => {} } = {}) {
+  const idleLimit = (s) => (s.level === 'everything' ? EVERYTHING_IDLE_MS : SESSION_IDLE_MS);
+  // R-DF2: what devices did, for the person to read in Bunny's window only. Names and routes only: never arguments, bodies, text or secrets.
+  let actions = [];
+  let actionsLoaded = false;
+  const prune = () => {
+    const t = now();
+    actions = actions.filter((a) => t - Date.parse(a.at) <= LOG_MAX_AGE_MS).slice(-LOG_MAX_ENTRIES);
+  };
+  async function loadActions() {
+    if (actionsLoaded) return;
+    actionsLoaded = true;
+    if (!logFile) return;
+    try { const saved = JSON.parse(await readFile(logFile, 'utf8')); if (Array.isArray(saved)) actions = saved.concat(actions); } catch { /* none yet */ }
+    prune();
+  }
+  let saving = Promise.resolve();
+  function logAction(device, entry) {
+    const clean = { at: new Date(now()).toISOString(), device: device?.deviceId ?? null, label: device?.label ?? null, level: device?.level ?? null };
+    for (const key of ['kind', 'tool', 'method', 'path']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
+    if (typeof entry.level === 'string') clean.level = entry.level;
+    if (typeof entry.from === 'string') clean.from = entry.from;
+    actions.push(clean);
+    prune();
+    if (logFile) saving = saving.then(async () => { await mkdir(dirname(logFile), { recursive: true }); await writeFile(logFile, JSON.stringify(actions)); }).catch(() => {});
+  }
   let record = null;       // the scrypt record of the saved passcode
   let loaded = false;
   let on = false;          // never read back from a file: OFF after every restart
@@ -256,13 +286,14 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     const secret = randomBytes(32).toString('hex');
     const session = { deviceId: randomBytes(8).toString('hex'), label: deviceLabel(userAgent), ip, csrf: randomBytes(24).toString('hex'), signedInAt: now(), lastSeen: now(), level: DEFAULT_LEVEL };
     sessions.set(secret, session);
+    logAction(session, { kind: 'signin' });
     return { ok: true, secret, session };
   }
 
   /** Drop every session idle for too long, and tell the app (so a device's Auto chats go back to Ask). Called on a timer and before any count or list. */
   function sweep() {
     const gone = [];
-    for (const [secret, s] of sessions) if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); gone.push(s.deviceId); }
+    for (const [secret, s] of sessions) if (now() - s.lastSeen > idleLimit(s)) { sessions.delete(secret); gone.push(s.deviceId); logAction(s, { kind: 'idle-signout' }); }
     if (gone.length) ended(gone);
     return gone.length;
   }
@@ -273,7 +304,7 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     if (!secret || !on) return null;
     const s = sessions.get(secret);
     if (!s) return null;
-    if (now() - s.lastSeen > SESSION_IDLE_MS) { sessions.delete(secret); ended([s.deviceId]); return null; }
+    if (now() - s.lastSeen > idleLimit(s)) { sessions.delete(secret); ended([s.deviceId]); logAction(s, { kind: 'idle-signout' }); return null; }
     s.lastSeen = now();
     return s;
   }
@@ -306,9 +337,13 @@ export function createRemoteAccess({ file = null, now = () => Date.now(), onEnd 
     setLevel(deviceId, level) {
       if (!LEVELS.includes(level)) return null;
       sweep();
-      for (const s of sessions.values()) if (s.deviceId === deviceId) { s.level = level; return { id: s.deviceId, level: s.level }; }
+      for (const s of sessions.values()) if (s.deviceId === deviceId) { const from = s.level; s.level = level; s.lastSeen = now(); logAction(s, { kind: 'level', from }); return { id: s.deviceId, level: s.level }; }
       return null;
     },
+    /** R-DF2: record one thing a device did (a tool's name, a window-only route and its method, a sign-in or a level change). */
+    logAction,
+    /** R-DF2: the log, newest first. Only the window's route hands it out. */
+    async actions() { await loadActions(); prune(); return [...actions].reverse(); },
     anyEverything() { sweep(); return [...sessions.values()].some((s) => s.level === 'everything'); },
     signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); ended([deviceId]); return true; } return false; },
     signOutSecret(secret) { const s = sessions.get(secret); const gone = sessions.delete(secret); if (gone && s) ended([s.deviceId]); return gone; },

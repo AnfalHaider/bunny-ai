@@ -796,3 +796,74 @@ test('DEVICE-FULL: the level route is window-only (in the server\'s list and the
   for (const p of ['/api/remote', '/api/remote/', path, '/api/remote/signout-all', '/api/remote/devices/0123456789abcdef/signout']) assert.equal(isRemoteAdminPath(p), true, p);
   for (const p of ['/api/remotely', '/api/settings', '/api/sessions', '/api/remoteX/y']) assert.equal(isRemoteAdminPath(p), false, p);
 });
+
+// ---------------------------------------------------------------- DEVICE-FULL: Security's R-DF1 / R-DF2 / R-DF3
+test('R-DF3: the encoded spelling of /api/remote is refused like the plain one, for a device at Everything', async (t) => {
+  const d = await deviceSetup(t);
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  for (const [method, path, body] of [
+    ['PATCH', `/api/%72emote/devices/${deviceId(d)}/level`, { level: 'chats' }], ['PUT', '/api/%72emote', { enabled: false }], ['POST', '/api/%72emote/signout-all', {}], ['GET', '/api/%72emote/log', null], ['GET', '/api/remote%2Flog', null], ['GET', '/api/%72emote', null],
+  ]) assert.equal((await lan(d.url, { method, path, headers: d.w, body })).status, 403, `${method} ${path}`);
+  assert.equal(d.app.remote.enabled, true);
+  assert.equal(d.app.remote.list()[0].level, 'everything', 'nothing changed');
+});
+
+test('R-DF2: the window reads what devices did (sign-in, level changes, tool names, window-only routes: no arguments, no bodies); a device at either level cannot read it', async (t) => {
+  const d = await deviceSetup(t);
+  const log = async () => (await (await fetch(d.base + '/api/remote/log')).json()).entries;
+  // a device at Chats, then at Everything
+  assert.equal((await setLevel(d, 'everything')).status, 200);
+  const made = await (await lan(d.url, { method: 'POST', path: '/api/sessions', headers: d.w, body: { title: 'Phone', permissionMode: 'auto' } })).json();
+  await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('please WRITE a note SECRET-ARGUMENT') }, async (name, data) => {
+    if (name === 'permission') await lan(d.url, { method: 'POST', path: '/api/sessions/' + made.id + '/permission/' + data.id, headers: d.w, body: { allowed: true } });
+  });
+  await lan(d.url, { method: 'PUT', path: '/api/settings', headers: d.w, body: { theme: 'dark', instructions: 'SECRET-BODY' } });
+  const entries = await log();
+  const kinds = entries.map((e) => e.kind);
+  for (const k of ['signin', 'level', 'tool', 'route']) assert.ok(kinds.includes(k), k + ' is logged: ' + kinds.join(','));
+  assert.ok(entries.some((e) => e.kind === 'tool' && e.tool === 'write_file'), 'the tool name');
+  assert.ok(entries.some((e) => e.kind === 'route' && e.method === 'PUT' && e.path === '/api/settings'), 'the route and its method');
+  assert.ok(entries.every((e) => e.device === deviceId(d) && e.label && e.at), 'time and device on each');
+  assert.doesNotMatch(JSON.stringify(entries), /SECRET|hello from a device|note\.txt/, 'no arguments, no body, no text');
+  assert.ok(entries[0].at >= entries.at(-1).at, 'newest first');
+  // a device cannot read it, at Everything or at Chats, plain or encoded
+  for (const level of ['everything', 'chats']) {
+    assert.equal((await setLevel(d, level)).status, 200);
+    for (const path of ['/api/remote/log', '/api/%72emote/log']) assert.equal((await lan(d.url, { path, headers: { host: d.host, cookie: d.cookie } })).status, 403, level + ' ' + path);
+  }
+  assert.equal((await lan(d.url, { path: '/api/remote/log', headers: { host: d.host } })).status, 401, 'not signed in');
+  // the page's and the server's window-only lists both name it
+  const { isWindowOnlyRoute } = await import('../src/server/windowOnly.js');
+  assert.equal(isWindowOnlyRoute('GET', '/api/remote/log'), true);
+});
+
+test('R-DF2: the log keeps the last 500 entries or 30 days', async () => {
+  let t = Date.UTC(2026, 10, 1);
+  const access = createRemoteAccess({ now: () => t });
+  const device = { deviceId: 'abababababababab', label: 'Phone', level: 'chats' };
+  for (let i = 0; i < 520; i += 1) access.logAction(device, { kind: 'tool', tool: 'read_file' });
+  assert.equal((await access.actions()).length, 500);
+  t += 29 * 86_400_000;
+  assert.equal((await access.actions()).length, 500, 'still inside 30 days');
+  t += 2 * 86_400_000;
+  assert.equal((await access.actions()).length, 0, 'older than 30 days is gone');
+  access.logAction(device, { kind: 'tool', tool: 'x', arguments: 'SECRET', body: 'SECRET' });
+  assert.doesNotMatch(JSON.stringify(await access.actions()), /SECRET/, 'only the known fields are kept');
+});
+
+test('R-DF1: a device at Everything is signed out after 30 minutes idle; a device at Chats keeps its 2 hours', async () => {
+  let t = Date.UTC(2026, 10, 1);
+  const access = createRemoteAccess({ now: () => t });
+  await access.enable({ lanHost: '127.0.0.1:1', lanAddress: '127.0.0.1', passcode: PASS });
+  const a = await access.signIn('1.1.1.1', PASS, 'Mozilla/5.0 (iPhone)');
+  const b = await access.signIn('2.2.2.2', PASS, 'Mozilla/5.0 (Android)');
+  access.setLevel(a.session.deviceId, 'everything');
+  t += 29 * 60_000;
+  assert.ok(access.sessionFor(access.cookieFor(a.secret).split(';')[0]), 'inside 30 minutes it is signed in (and counts as use)');
+  t += 31 * 60_000;
+  assert.equal(access.sessionFor(access.cookieFor(a.secret).split(';')[0]), null, 'idle past 30 minutes at Everything: signed out');
+  assert.ok(access.sessionFor(access.cookieFor(b.secret).split(';')[0]), 'a Chats device is still signed in after an hour');
+  t += 3 * 60 * 60_000;
+  assert.equal(access.sessionFor(access.cookieFor(b.secret).split(';')[0]), null, 'and after two idle hours it is not');
+  assert.ok((await access.actions()).some((e) => e.kind === 'idle-signout'), 'the idle sign-out is logged');
+});

@@ -217,7 +217,9 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (req.bunnyRemote) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
     // DEVICE-FULL: a device the person gave 'everything' is treated as the window, but never for /api/remote* (device access, levels, other devices)
     if (req.bunnyDevice) {
-      if (isRemoteAdminPath(new URL(req.url, 'http://localhost').pathname)) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
+      let decoded = '/api/remote'; // R-DF3: the decoded path (/api/%72emote is /api/remote); one that cannot be decoded is refused
+      try { decoded = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { /* refused below */ }
+      if (isRemoteAdminPath(decoded)) { sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); return true; }
       return false;
     }
     if (!folderPickerOnly || adminOk(req)) return false;
@@ -578,6 +580,10 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (path === '/api/remote' && method === 'PUT') {
       if (windowOnly(req, res)) return;
       return remoteSet(res, await readBody(req));
+    }
+    if (path === '/api/remote/log' && method === 'GET') { // R-DF2: what devices did; only the window reads it (a device is refused by remoteRoute and by windowOnly)
+      if (windowOnly(req, res)) return;
+      return sendJson(res, 200, { entries: await remote.actions() });
     }
     const deviceLevel = path.match(/^\/api\/remote\/devices\/([a-f0-9]{16})\/level$/);
     if (deviceLevel && method === 'PATCH') { // DEVICE-FULL: only the window sets what a device may do
@@ -2912,6 +2918,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         closeThinking(); // a step ends the thinking that led to it
         // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
+        if (req.bunnyRemote ?? req.bunnyDevice) remote.logAction(req.bunnyRemote ?? req.bunnyDevice, { kind: 'tool', tool: String(name) }); // R-DF2: the tool's name only, never its arguments
         let parsed = {};
         const viaMeta = name === 'call_connector_tool' && deferredTools.size > 0;
         try {
@@ -3453,7 +3460,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       }
     } catch { /* a chat that is gone needs nothing */ }
   };
-  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
+  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), logFile: join(dataDir, 'remote-actions.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
   resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
   const remoteSweep = setInterval(() => remote.sweep(), 60_000); // idle devices are signed out even if they never call again
   remoteSweep.unref();
@@ -3572,12 +3579,15 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf });
     // 5. What a device may do is a short allow-list; a window-only route is never one of them.
     // DEVICE-FULL: a device the person gave 'everything' may do all the window can, except /api/remote* (the person's own switches for device access)
+    const logWindowOnly = () => { if (writes && (isWindowOnlyRoute(method, path) || (method === 'PUT' && path === '/api/settings'))) remote.logAction(session, { kind: 'route', method, path }); }; // R-DF2: route and method, never the body
     if (session.level === 'everything') {
       if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
+      logWindowOnly();
       req.bunnyDevice = session;
       return route(req, res);
     }
     if (!remotePolicy(method, path) || (isWindowOnlyRoute(method, path) && !remoteException(method, path))) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
+    logWindowOnly(); // the few window-only routes a Chats device may use (its own chat's cards and mode)
     req.bunnyRemote = session;
     return route(req, res);
   }
