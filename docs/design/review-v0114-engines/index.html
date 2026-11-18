@@ -100,9 +100,9 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 <div class="top">
   <div>
     <h1>Bunny engines</h1>
-    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p>
+    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p><p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p>
   </div>
-  <div class="tops"><button class="t" id="ctlsw" type="button">Control: labelled toggle (A)</button><button class="t" id="theme" type="button">Show the other theme</button></div>
+  <div class="tops"><button class="t" id="theme" type="button">Show the other theme</button></div>
 </div>
 
 <section class="card">
@@ -120,7 +120,7 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
   <div class="rec first"><span class="n">1</span><div><b><span class="pill p-med">medium</span>A new Settings page, "Engines", under Code; one compact row per engine</b><span class="m">Bunny's engine first (always there, Default), then Claude Code, Codex CLI, Aider, Cline. Window-only to change; a phone can read it. Notes are one dim line under the name (full text on hover or tap), never extra rows.</span></div></div>
   <div class="rec"><span class="n">2</span><div><b><span class="pill p-med">medium</span>The row's button and a ⋯ menu carry every action</b><span class="m">Main button by state: Download (size) · Cancel · Update to vY (tested) · Sign in again · Try again. The ⋯ menu holds Check for update, Roll back to vX, Sign out, Remove. Section 3.</span></div></div>
   <div class="rec"><span class="n">3</span><div><b><span class="pill p-hi">high</span>Download on click, size first, checked before use</b><span class="m">About 380 MB for Claude Code and 390 MB for Codex CLI; Aider and Cline sizes come from the release file when built. Checksum and, for Claude Code, Anthropic's signature. Claude Code from Anthropic's official installer, unmodified.</span></div></div>
-  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>One Local | Account control on each installed engine's row</b><span class="m">Account opens the vendor's own sign-in in a visible window; Bunny never sees or stores the token. Back to Local keeps you signed in until Sign out. Aider is Local, fixed. Defaults: Claude Code Account; Codex and Cline Local; Aider Local only. The control can be the labelled toggle (A) or the two-option control (B, recommended): use the button at the top to switch every row.</span></div></div>
+  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>One Local | Account control on each installed engine's row</b><span class="m">Account opens the vendor's own sign-in in a visible window; Bunny never sees or stores the token. Back to Local keeps you signed in until Sign out. Aider is Local, fixed. Defaults: Claude Code Account; Codex and Cline Local; Aider Local only. The control is the two-option Local | Account control (approved by the owner).</span></div></div>
   <div class="rec"><span class="n">5</span><div><b><span class="pill p-hi">high</span>The catch is in the row's dim line, not a block</b><span class="m">Claude Code on Local: "Anthropic does not support Claude Code with other models; it may stop working after an update." Codex on Local: OpenAI or OpenRouter only (Responses API). Same text, one line.</span></div></div>
   <div class="rec"><span class="n">6</span><div><b><span class="pill p-hi">high</span>"Restricted" is a chip on the row</b><span class="m">Aider always; Codex, Cline (and Claude Code) only if their check fails. Hover or tap the chip for what it means; the legend and the review at the end of a run are shown once in section 5.</span></div></div>
   <div class="rec"><span class="n">7</span><div><b><span class="pill p-med">medium</span>Per chat: a one-line Engine menu and a short chip</b><span class="m">Code chats with a folder pick the engine before the first message; it is fixed after. The chip reads "Claude Code · Account", with an amber dot if restricted. Section 6.</span></div></div>
@@ -129,9 +129,9 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 </section>
 
 <section class="card">
-  <h2>2. The control: toggle (A) or two-option control (B)</h2>
-  <p class="mute">Both kept. The button at the top switches every row on the page. My recommendation stays B: both choices written out, the chosen one filled, room for "Account, sign-in expired" (amber), and a clear reading for a screen reader.</p>
-  <div class="twocol"><div><div class="lab">A. Labelled toggle</div><div class="app" id="alt-a"></div></div><div><div class="lab">B. Two-option control (recommended)</div><div class="app" id="alt-b"></div></div></div>
+  <h2>2. The control: two-option Local | Account (approved)</h2>
+  <p class="mute">Both choices are written out and the chosen one is filled. "Account, sign-in expired" turns the Account half amber, Aider is Local and fixed (greyed), and each half is a radio button for a screen reader ("Account, selected"). The earlier labelled toggle (A) was not chosen and is not built.</p>
+  <div class="app" id="alt-b"></div>
 </section>
 
 <section class="card">
@@ -219,7 +219,6 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
   <ul style="margin:6px 0 0;padding-left:20px;display:grid;gap:4px">
     <li><b>Restricted Aider (and Cline or Codex if their test fails):</b> offer them in the restricted form drawn here, or leave them out?</li>
     <li><b>Codex "Account":</b> drawn as its own login; confirm it exists before building.</li>
-    <li><b>The control:</b> toggle (A) or two-option control (B, recommended)?</li>
     <li><b>The go</b> to build, after Security's requirements.</li>
   </ul>
 </section>
@@ -227,7 +226,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
 
 <script>
 (function(){
-  var variant='tg';
+  var variant='seg';
   function btn(t,c){return '<span class="btn2'+(c?' '+c:'')+'">'+t+'</span>';}
   function chip(t,c){return '<span class="chip'+(c?' '+c:'')+'">'+t+'</span>';}
   function ctl(v,mode){
@@ -251,8 +250,8 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
   function list(rows,v){return '<div class="grp">'+rows.map(function(r){return er(r,v);}).join('')+'</div>';}
   function paint(){
     document.getElementById('v3main').innerHTML='<h4>Engines</h4>'+list(MAIN,variant);
-    document.getElementById('ctlsw').textContent='Control: '+(variant==='tg'?'labelled toggle (A)':'two-option control (B)');
-    document.getElementById('alt-a').innerHTML=list(MAIN.slice(1,4),'tg');
+    
+    
     document.getElementById('alt-b').innerHTML=list(MAIN.slice(1,4),'seg');
     var S=[
      ['Not installed',{t:'CC',name:'Claude Code',ver:'not installed',st:chip('Account by default','ac'),note:'Installed from Anthropic\'s official installer, unmodified. Needs your Anthropic account.',mode:null,btn:btn('Download · 380 MB','pri')}],
@@ -278,7 +277,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     if(!h2||!h3)return;var scale=im.naturalWidth?im.getBoundingClientRect().width/im.naturalWidth:1;
     document.getElementById('stat').innerHTML='<div><b>'+Math.round(h2)+' px</b>version 2 list</div><div><b>'+Math.round(h3)+' px</b>version 3 list</div><div><b>'+Math.round((1-h3/h2)*100)+'% less</b>height for the same five engines</div><div><b>5 rows</b>one per engine, no extra blocks</div>';
   }
-  document.getElementById('ctlsw').addEventListener('click',function(){variant=variant==='tg'?'seg':'tg';paint();});
+  
   document.getElementById('theme').addEventListener('click',function(){var r=document.documentElement,d=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',d?'light':'dark');setTimeout(fitStat,60);});
   paint();window.addEventListener('load',fitStat);window.addEventListener('resize',fitStat);setTimeout(fitStat,400);
   document.getElementById('v2l').addEventListener('load',fitStat);
