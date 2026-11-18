@@ -2,6 +2,30 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - v0.1.11 and v0.1.12 published
+
+**Owner's words (typed in this chat):**
+- "Yes, release v0.1.11";
+- "i am driving , push and release." and "push and release when ready";
+- "Approved" (the install-as-an-app drawing);
+- "Then push 0.1.12 immediately after."
+
+**v0.1.11** (tag 4cebedc, code 28812e1, published 03:17:03Z):
+- The "Open to other devices" bar no longer pushes the layout off the window. The owner's full screenshot found this; Builder B couldn't reproduce it with the bar off.
+- "Auto" is no longer clipped on the chip.
+- The phone chip is wider, and never overlaps Send (Design found a 1-21 px overlap at 390-320 px).
+- Gate 9/9. QA 175/175, with a control run that fails on 0.1.10.
+
+**v0.1.12** (tag a29a5db, code eba5478, published 04:13:41Z) is the installable web app:
+- The SHIPPED 0.1.9/0.1.10 service worker cached index.html with the launch token. Security rated it LOW; it is replaced by a clean-up worker plus a one-time clear in the window.
+- Tech Lead caught that clear blocking startup, now on a 3 s background timeout.
+- Gate 9/9. QA 36/36.
+- Installer sha256 7b2318dd…ef9d0; sha512 matches latest.yml. I checked the feed myself.
+
+Moved to the next release: K-5, the manifest SVG icon (c11239e), and the LOWs in the v0.1.10 plan. The owner's question on connectors from devices is still open.
+
+Lesson: when the main branch has only my own docs commits, cut the candidate from current main (as for v0.1.12) so main fast-forwards to the gated sha. Then the sign-offs sit on the gated code itself, with no merge commit to re-sign.
+
 ## 2026-11-18 - v0.1.10 published
 
 **Owner's words (typed in this chat):** "Both artifacts approved, now fix all issues discussed and pending gaps. Then push the update and release. Ensure all issue are fixed in this build."; "Browser option tonight everything in the same build"; "I want the full chats from the devices also."; "We are not signing the code."; "Proceed with recommendation." (minimatch).
