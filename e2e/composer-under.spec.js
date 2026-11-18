@@ -47,6 +47,9 @@ for (const mode of ['chat', 'code']) {
         for (const k of m.kids) { expect(k.right, `${k.id} stays inside the composer's width`).toBeLessThanOrEqual(m.comp.right + 1); expect(k.right).toBeLessThanOrEqual(m.vw + 0.5); expect(k.bottom).toBeLessThanOrEqual(m.vh + 0.5); }
         expect(m.sw).toBeLessThanOrEqual(m.vw + 1); // no sideways scroll
         expect(m.chipBox.right).toBeLessThanOrEqual(m.vw + 0.5);
+        if (w < 600 && mode === 'chat') expect(m.labelW).toBeGreaterThan(95); // a phone chip shows well over ten characters of a long name
+        const row = await page.evaluate(() => { const r = document.querySelector('.composer-row').getBoundingClientRect(); const need = ['attach', 'voice', 'send'].map((id) => document.getElementById(id)?.getBoundingClientRect()).filter(Boolean); return { right: r.right, left: r.left, items: need.map((b) => ({ left: b.left, right: b.right })) }; });
+        for (const it of row.items) { expect(it.left).toBeGreaterThanOrEqual(row.left - 1); expect(it.right).toBeLessThanOrEqual(row.right + 1); } // the mic, + and Send still fit
         // the chip name is readable: at least the first part of the name, an ellipsis only at the end
         expect(m.label.length).toBeGreaterThan(3);
         if (w >= 600 || m.label === 'Auto') expect(m.clipped).toBe(false); // the first word of the chip is never cut (Auto, or the model name up to its end)

@@ -2162,8 +2162,7 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 
 /* v0.1.10 phone: the model selector is a bottom sheet with a grab handle over a dimmed page */
 @media (max-width: 600px) {
-  .composer-row .picker-trigger { max-width: 150px; padding: 0 var(--sp-4); }
-  .composer-row .picker-trigger .label { max-width: 10ch; }
+  .composer-row .picker-trigger { max-width: 55vw; padding: 0 var(--sp-4); } /* a long model name reads about 18 characters; the mic, + and Send keep their room (the chip shrinks first) */
   .composer-row .picker-trigger .chip-free { display: none; }
   .picker-scrim { display: block; position: fixed; inset: 0; z-index: calc(var(--z-menu) - 1); background: rgba(0, 0, 0, .4); }
   .picker-panel {
