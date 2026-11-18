@@ -1616,6 +1616,7 @@
       sel.addEventListener('change', () => save({ speechVoice: sel.value || null }));
     }).catch(() => {});
     $('model-filter').value = settings.modelFilter === 'all' ? 'all' : 'free-nvidia';
+    document.documentElement.dataset.settingsFilled = '1'; // every control now shows what is saved (a choice made before this is undone by the fill above)
 
     const version = await getJSON('/api/version');
     $('version').textContent = version.version;

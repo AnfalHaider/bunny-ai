@@ -40,6 +40,7 @@ for (const [os, from, to] of [['light', 'light', 'dark'], ['dark', 'dark', 'ligh
       await page.locator('#settings-nav-list [data-section="appearance"]').click();
       const frame = page.frameLocator('#settings-frame');
       await expect(frame.locator('#theme')).toBeVisible();
+      await expect(frame.locator('html')).toHaveAttribute('data-settings-filled', '1'); // the page has filled its controls from the saved settings
       const settingsFrame = page.frames().find((f) => f.url().includes('settings.html'));
       navigations = 0;
 
@@ -97,6 +98,7 @@ test('System removes the chosen browser-bar colour and the shell is told "system
   await page.keyboard.press('Control+,');
   await page.locator('#settings-nav-list [data-section="appearance"]').click();
   // the Settings page fills its controls from the saved settings when it has loaded; choosing before that would be undone by it (a person cannot be that quick)
+  await expect(page.frameLocator('#settings-frame').locator('html')).toHaveAttribute('data-settings-filled', '1');
   await expect(page.frameLocator('#settings-frame').locator('#theme')).toHaveValue('dark');
   await page.frameLocator('#settings-frame').locator('#theme').selectOption('system');
   await expect(page.locator('html')).toHaveAttribute('data-theme', '');
