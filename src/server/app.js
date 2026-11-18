@@ -3485,6 +3485,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   // REMOTE-STAY: whether device access is on is kept in the data folder (never the passcode: only the hash file remote-access.json has that), so it stays on across restarts until the person turns it off.
   const remoteStateFile = join(dataDir, 'remote-state.json');
   let rememberedNetwork = null; // the network name access was turned on with (null: it could not be read)
+  let remoteChanges = 0; // SW-1: counts the person's own On and Off; a resume that was started before one of them must not undo it
   let notOpened = ''; // why Bunny did not open it again at start (one plain sentence for the Settings row), until it is turned on or off
   const NOT_BUNNY_REMOTE = 'That request did not come from a device signed in to Bunny AI.';
 
@@ -3512,6 +3513,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     if (old) { old.closeAllConnections?.(); await new Promise((r) => old.close(() => r())); }
   }
   async function remoteSet(res, body) {
+    remoteChanges += 1; // anything a resume that is still looking up the network was about to do is now out of date
     if (body?.enabled === false) { await stopRemote(); notOpened = ''; await writeJson(remoteStateFile, { enabled: false }); return sendJson(res, 200, await remoteStatus()); } // RS-6: the off state is saved before the answer
     if (body?.enabled !== true) return sendJson(res, 400, { code: 'remote.invalid', message: 'Say whether to turn it on or off.' });
     const lan = lanAddressOverride ?? findLanAddress();
@@ -3552,14 +3554,30 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
    * Sessions are never saved: every device signs in again, at Chats (RS-2).
    */
   async function resumeRemote() {
+    // SW-1: the shell resumes alongside the first window, so the person can use Settings (turn access on or off) during the seconds the network lookup takes. The saved state was read before
+    // that lookup, so it is read again after it, and a resume that the person has overtaken (an On or an Off through Settings, or a changed state file) does nothing.
+    const mark = remoteChanges;
+    const overtaken = () => remoteChanges !== mark;
     let saved = null;
     try { saved = JSON.parse(await readFile(remoteStateFile, 'utf8')); } catch { /* never turned on */ }
     if (saved?.enabled !== true || remote.enabled) return { resumed: false };
     if (!(await remote.hasPasscode())) { notOpened = NOT_OPENED_NO_PASSCODE; return { resumed: false, reason: notOpened }; }
+    if (overtaken()) return { resumed: false };
     const lan = lanAddressOverride ?? findLanAddress();
-    const verdict = canReopen(saved, lan, lan ? await networkProfile(lan).catch(() => null) : null, process.platform);
+    const profile = lan ? await networkProfile(lan).catch(() => null) : null;
+    let now = null;
+    try { now = JSON.parse(await readFile(remoteStateFile, 'utf8')); } catch { /* gone */ }
+    if (overtaken() || remote.enabled || now?.enabled !== true) return { resumed: false }; // the person got there first: what they chose stands
+    const verdict = canReopen(saved, lan, profile, process.platform);
     if (!verdict.ok) { notOpened = verdict.reason; return { resumed: false, reason: notOpened }; }
     const opened = await openLan(lan, null).catch((err) => ({ ok: false, message: err.message }));
+    if (overtaken()) { // an On or an Off came in while it was opening: what they chose stands (an Off must not be undone by a resume that finished a moment later)
+      let after = null;
+      try { after = JSON.parse(await readFile(remoteStateFile, 'utf8')); } catch { /* gone */ }
+      if (after?.enabled !== true) await stopRemote();
+      return { resumed: false };
+    }
+
     if (!opened.ok) { notOpened = 'Not opened: ' + String(opened.message ?? 'it could not start').replace(/^Bunny could not open to other devices: /, '') + ' Turn it on again to allow it.'; return { resumed: false, reason: notOpened }; }
     notOpened = '';
     rememberedNetwork = saved.network ?? null;
