@@ -1,0 +1,291 @@
+<title>Search this PC</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: summary and numbered recommendations, the Settings choice, the Quick ask bar states, the chat version (desktop and phone), the Security list, the owner's questions. Bunny's tokens; the bar uses the airy pill from the v0.1.13 drawing. */
+:root{--bg:#faf9f6;--panel:#fff;--soft:#f3f1ec;--line:#e4e1da;--fg:#1c1d20;--mute:#62656c;--accent:#5b4bd5;--accent-soft:#eceafb;--ok:#1f7a4a;--ok-soft:#e3f3ea;--warn:#a5600b;--warn-soft:#fbefd9;--bad:#c4304a;--bad-soft:#fbe5e9;--wall:linear-gradient(135deg,#a8c3e6 0%,#e7c8d8 55%,#f3dbb8 100%);--mono:ui-monospace,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--ok:#6fd49a;--ok-soft:#18301f;--warn:#f0b35a;--warn-soft:#3a2c12;--bad:#ff7a90;--bad-soft:#3d1a22;--wall:linear-gradient(135deg,#24304a 0%,#3b2f4a 55%,#4a3a3c 100%);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--ok:#6fd49a;--ok-soft:#18301f;--warn:#f0b35a;--warn-soft:#3a2c12;--bad:#ff7a90;--bad-soft:#3d1a22;--wall:linear-gradient(135deg,#24304a 0%,#3b2f4a 55%,#4a3a3c 100%);color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:26px}
+h1{font-size:26px;margin:0 0 4px;text-wrap:balance}h2{font-size:18px;margin:0 0 8px}h3{font-size:15px;margin:0}p{margin:0}
+.mute{color:var(--mute)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+button.t{font:inherit;color:var(--fg);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0}
+.rec{display:grid;grid-template-columns:34px 1fr;gap:4px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.rec.first{border-top:0}
+.card>*,main>*{min-width:0}
+.rec .n{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px}
+.rec b{display:block}.rec .m{font-size:12.5px;color:var(--mute)}
+.pill{display:inline-block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-radius:999px;padding:1px 8px;margin-right:6px}
+.p-hi{background:var(--bad-soft);color:var(--bad)}.p-low{background:var(--ok-soft);color:var(--ok)}.p-med{background:var(--warn-soft);color:var(--warn)}.p-new{background:var(--accent-soft);color:var(--accent)}
+.state{display:grid;gap:10px;min-width:0}
+.state>header{display:flex;gap:8px 12px;align-items:baseline;flex-wrap:wrap}
+.state>header .refs{font-size:12.5px;color:var(--mute)}
+.pair{display:grid;gap:12px}.pair>*,.state>*{min-width:0}
+.lab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mute);margin-bottom:4px;display:flex;justify-content:space-between;gap:8px}
+.stagebox{background:var(--wall);border-radius:12px;padding:10px;overflow:hidden;min-width:0}
+.sb{width:656px;transform-origin:0 0}
+.plain{background:var(--soft);border-radius:12px;padding:12px;overflow:hidden;min-width:0}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+th,td{text-align:left;padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+thead th{border-top:0;background:var(--soft);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute)}
+kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.note{border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 14px;font-size:14px}
+.twocol{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.twocol>*{min-width:0}
+@media (max-width:760px){.twocol{grid-template-columns:minmax(0,1fr)}}
+
+/* ---- the bar (airy pill from the v0.1.13 drawing) ---- */
+.bw{--surface:rgba(255,255,255,.92);--solid:#ffffff;--text:#1f2024;--dim:#6b6e78;--line:rgba(31,32,36,.10);--accent:#6b4fd3;--ink:#1f2024;--on-ink:#ffffff;--soft:rgba(31,32,36,.05);--hover:rgba(31,32,36,.08);--warn:#b45309;--bad:#cf3f55;--warn-bg:rgba(180,83,9,.09);--bad-bg:rgba(207,63,85,.09);--mark:rgba(107,79,211,.14);font:15px/1.5 system-ui,"Segoe UI",sans-serif;color:var(--text)}
+:root[data-theme="dark"] .bw{--surface:rgba(38,39,44,.92);--solid:#26272c;--text:#ececf0;--dim:#a3a6b1;--line:rgba(255,255,255,.11);--accent:#a592ff;--ink:#ececf0;--on-ink:#1f2024;--soft:rgba(255,255,255,.06);--hover:rgba(255,255,255,.09);--warn:#e9ad52;--bad:#ff7a90;--warn-bg:rgba(233,173,82,.12);--bad-bg:rgba(255,122,144,.12);--mark:rgba(165,146,255,.22)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .bw{--surface:rgba(38,39,44,.92);--solid:#26272c;--text:#ececf0;--dim:#a3a6b1;--line:rgba(255,255,255,.11);--accent:#a592ff;--ink:#ececf0;--on-ink:#1f2024;--soft:rgba(255,255,255,.06);--hover:rgba(255,255,255,.09);--warn:#e9ad52;--bad:#ff7a90;--warn-bg:rgba(233,173,82,.12);--bad-bg:rgba(255,122,144,.12);--mark:rgba(165,146,255,.22)}}
+.bw *{box-sizing:border-box}
+.pl{position:relative;margin:8px;width:624px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 14px 44px rgba(20,22,40,.20),0 2px 6px rgba(20,22,40,.08)}
+.pr{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 10px 0 16px}
+.pr.top1{align-items:flex-start;padding-top:10px;min-height:0}
+.mk{width:24px;height:24px;color:var(--accent);flex:none}.pr.top1 .mk{margin-top:6px}
+.tx{flex:1;min-width:0;font-size:17px;line-height:1.4;padding:7px 0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.tx.ph{color:var(--dim)}
+.cr{display:inline-block;width:2px;height:20px;background:var(--accent);vertical-align:-4px;margin-left:1px;border-radius:1px}
+.q2{flex:1;min-width:0;font-size:15.5px;font-weight:600;line-height:1.4;padding:7px 0;overflow-wrap:anywhere}
+.ib2{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--dim)}
+.act{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--ink);color:var(--on-ink)}
+.keys{font-size:12px;color:var(--dim);padding:0 16px 10px 52px;display:flex;gap:14px;flex-wrap:wrap}.keys .push{margin-left:auto}
+.body{padding:0 20px 2px 52px}
+.ansb{font-size:15px;line-height:1.65;position:relative;padding-top:2px}.ansb p{margin:0 0 9px}
+.think{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--dim);padding:2px 0 8px}
+.dots{display:inline-flex;gap:4px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.35}.dots i:nth-child(2){opacity:.65}.dots i:nth-child(3){opacity:1}
+.meta2{font-size:12px;color:var(--dim);padding:2px 0 8px}
+.fr{display:flex;align-items:center;gap:10px;padding:6px 12px 12px 52px}
+.fin2{flex:1;min-width:0;height:40px;border-radius:14px;background:var(--soft);color:var(--dim);font-size:14px;display:flex;align-items:center;padding:0 14px}
+.ob2{display:inline-flex;align-items:center;gap:8px;height:36px;border-radius:12px;padding:0 14px;font-size:13px;font-weight:600;white-space:nowrap;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)}
+.ob2.fill{background:var(--accent);color:var(--solid);border-color:var(--accent)}
+.ob2 .kb,.kb{font:11px var(--mono);opacity:.8}
+.card2{margin:6px 20px 8px 52px;border-radius:14px;padding:12px 14px;display:grid;gap:8px}
+.card2.warn{background:var(--warn-bg)}.card2.bad{background:var(--bad-bg)}.card2.soft{background:var(--soft)}
+.card2 .t{font-weight:600}.card2.warn .t{color:var(--warn)}.card2.bad .t{color:var(--bad)}.card2 .b{font-size:13.5px}.card2 .acts{display:flex;gap:8px;flex-wrap:wrap}
+.menu2{position:absolute;left:44px;top:56px;background:var(--solid);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(20,22,40,.22);padding:6px;min-width:270px;z-index:2}
+.menu2 div{font-size:14px;padding:7px 10px;border-radius:9px}.menu2 div.f{background:var(--hover)}.menu2 small{display:block;color:var(--dim);font-size:12px}
+.chipx{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px 2px 8px;font-size:13px;background:var(--mark);color:var(--accent);font-weight:600;white-space:nowrap}
+/* result list (bar and chat) */
+.res{display:grid;margin:2px 0 6px;border-radius:14px;overflow:hidden;background:var(--soft)}
+.rw{display:grid;grid-template-columns:30px 1fr auto;gap:2px 10px;padding:9px 12px;align-items:start}
+.rw+.rw{border-top:1px solid var(--line)}
+.rw.sel{background:var(--mark)}
+.rw .ic{width:26px;height:30px;border-radius:5px;background:var(--solid);border:1px solid var(--line);display:grid;place-items:center;font:700 8.5px var(--mono);color:var(--accent);margin-top:1px}
+.rw .nm{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .fo{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.rw .fo bdo{direction:ltr;unicode-bidi:embed}
+.rw .sn{grid-column:2/4;font-size:12.5px;color:var(--text);opacity:.85;line-height:1.45}
+.rw .sn mark{background:color-mix(in srgb,var(--accent) 25%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+.rw .dt{font-size:12px;color:var(--dim);white-space:nowrap;text-align:right}
+.rw .ac{grid-column:2/4;display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+.mini{font-size:12px;border-radius:8px;padding:2px 9px;background:var(--solid);border:1px solid var(--line);color:var(--text)}
+.mini.pri{border-color:color-mix(in srgb,var(--accent) 50%,transparent);color:var(--accent);font-weight:600}
+.src{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px}
+.srcc{display:inline-flex;align-items:center;gap:6px;font-size:12px;border-radius:8px;padding:2px 9px;background:var(--soft);border:1px solid var(--line)}
+.srcc b{color:var(--accent)}
+.read{font-size:12.5px;color:var(--dim);display:flex;gap:8px;align-items:center;padding:0 0 8px}
+/* app mock (settings, chat) */
+.app{--bg:#faf9f6;--panel:#fff;--soft:#f3f1ec;--line:#e4e1da;--fg:#1c1d20;--mute:#62656c;--accent:#5b4bd5;--accent-soft:#eceafb;--bad:#c4304a;--bad-soft:#fbe5e9;--warn:#a5600b;--warn-soft:#fbefd9;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:14px;font:14px/1.5 "Segoe UI",system-ui,sans-serif;min-width:0}
+:root[data-theme="dark"] .app{--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--bad:#ff7a90;--bad-soft:#3d1a22;--warn:#f0b35a;--warn-soft:#3a2c12}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .app{--bg:#141518;--panel:#1d1e22;--soft:#26272c;--line:#34353b;--fg:#ececee;--mute:#9a9ca4;--accent:#a99cff;--accent-soft:#2a2750;--bad:#ff7a90;--bad-soft:#3d1a22;--warn:#f0b35a;--warn-soft:#3a2c12}}
+.app h4{margin:0 0 6px;font-size:15px}
+.grp{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.srow{display:flex;justify-content:space-between;gap:14px;padding:12px 14px;border-top:1px solid var(--line);align-items:flex-start}
+.srow:first-child{border-top:0}.srow .l{min-width:0}.srow .nme{font-weight:600}.srow .d{font-size:12.5px;color:var(--mute)}
+.sw{display:inline-flex;gap:8px;align-items:center;flex:none;font-size:13px}.sw i{width:34px;height:20px;border-radius:999px;background:var(--line);position:relative;display:block}.sw i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff}.sw.on i{background:var(--accent)}.sw.on i::after{left:16px}
+.opt{display:grid;grid-template-columns:22px 1fr;gap:2px 8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-top:8px;background:var(--panel)}
+.opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.opt .rd{width:16px;height:16px;border-radius:50%;border:2px solid var(--mute);margin-top:3px}.opt.sel .rd{border-color:var(--accent);background:radial-gradient(var(--accent) 0 40%,transparent 45%)}
+.opt b{display:block}.opt span.d{font-size:12.5px;color:var(--mute);grid-column:2}
+.lnk{color:var(--accent);text-decoration:underline;cursor:pointer}
+.chipf{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12.5px;background:var(--soft);margin:2px 4px 2px 0}
+.chipf.fx{opacity:.85}.chipf u{text-decoration:none;color:var(--mute)}
+.btn2{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;padding:5px 12px;font-size:13px;background:var(--panel)}.btn2.pri{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.dlg{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:8px;box-shadow:0 14px 44px rgba(20,22,40,.25)}
+.msgu{background:var(--soft);border-radius:14px;padding:8px 12px;justify-self:end;max-width:88%}
+.tcall{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.tcall .hd{display:flex;gap:8px;align-items:center;padding:8px 12px;color:var(--mute);font-size:13px}.tcall .hd b{color:var(--fg)}
+.phone{width:390px;max-width:100%;margin:0 auto}
+</style>
+
+<main>
+<div class="top">
+  <div>
+    <h1>Search this PC</h1>
+    <p class="mute">v0.1.14 drawing for the owner's wish: ask Bunny from the Quick ask bar or the chat to find something on this computer and tell you about it. Invented files only. Nothing here is built.</p>
+  </div>
+  <button class="t" id="theme" type="button">Show the other theme</button>
+</div>
+
+<section class="card">
+  <h2>What this is, in one paragraph</h2>
+  <p>Bunny gets one new, read-only ability: ask Windows' own search index (the one behind the Start menu and File Explorer) for files by name, folder, date and a snippet of text. It is <b>off until you turn it on</b> in Settings, it never changes, moves or deletes a file, and the folders you exclude are never searched. A setting decides what happens after a search: <b>read the best files, then answer with links to them</b> (the owner's wish), or <b>show what was found</b> and read a file only when you ask.</p>
+  <div class="note"><b>Risk for Security: HIGH.</b> This reads files outside the project folders and, in "read then answer", sends their contents to the model you use (a cloud model, unless you use a local one). It needs Security's requirements and the owner's go before anything is built. The list for Security is at the end of this page; the owner's questions are right after it.</div>
+</section>
+
+<section class="card">
+  <h2>Recommendations</h2>
+  <div class="rec first"><span class="n">1</span><div><b><span class="pill p-hi">high</span>"Search this PC" is a switch in Settings → Capabilities, off by default</b><span class="m">Same family as Computer use and Use connectors: a switch, a plain description, a "Local only" tag. Turning it on shows a one-time dialog (figure 2) that says what is read and what leaves the PC. Nothing is searched while it is off; the bar and the chat say so and point to Settings.</span></div></div>
+  <div class="rec"><span class="n">2</span><div><b><span class="pill p-hi">high</span>The owner's choice: "After a search", two options</b><span class="m"><b>Read the files, then answer</b> (Bunny opens the best matches, up to 3 files and about 20 000 characters each, answers from them and links the files) or <b>Show what was found</b> (a list; Bunny reads a file only when you press "Ask about this file"). Recommended starting choice when you turn it on: <i>Read the files, then answer</i>, because that is what the owner asked for; the dialog says exactly what is sent. Security may prefer the other as the default: that is a question for the owner.</span></div></div>
+  <div class="rec"><span class="n">3</span><div><b><span class="pill p-hi">high</span>What the model sees differs by choice, and the screen says so</b><span class="m">"Show what was found": the model gets only names, folders and dates (no file text) to write a one-line summary; no file text leaves the PC until you press "Ask about this file". "Read then answer": the model gets the text of the files named in a "Read 2 files" line you can see.</span></div></div>
+  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>Excluded folders: a link in the row, a list behind it, and fixed exclusions you cannot remove</b><span class="m">"Excluded folders (9)" opens a panel (figure 3). Bunny always skips its own data folder, AppData, .ssh and other key folders, browser profiles, password-manager folders, Windows and Program Files, and the recycle bin. You add your own. An excluded folder is skipped even when a link or junction points into it.</span></div></div>
+  <div class="rec"><span class="n">5</span><div><b><span class="pill p-med">medium</span>Quick ask: search is automatic when it is on, and "Search this PC" in the + menu forces it</b><span class="m">The bar stays text-only: no other tool, no permission prompt, no writing. Search is its one read-only exception, and the Settings switch is the permission. Results appear as a list in the same pill (figures 4 to 8).</span></div></div>
+  <div class="rec"><span class="n">6</span><div><b><span class="pill p-med">medium</span>The result list: name, folder, date, a snippet with the match marked</b><span class="m">Up to 8 rows, "Show more" for the rest. Keys: ↑ ↓ choose, Enter opens the file, Ctrl+Enter asks Bunny about it, Esc closes. Row buttons: Open, Show in folder, Ask about this file, Copy path.</span></div></div>
+  <div class="rec"><span class="n">7</span><div><b><span class="pill p-hi">high</span>Open only opens safe kinds of file</b><span class="m">Documents, text, pictures, PDFs and Office files open in their usual app. Programs, scripts, installers and shortcuts (.exe .bat .cmd .ps1 .msi .lnk and similar) get only "Show in folder". Otherwise a search result would be a way to run a program.</span></div></div>
+  <div class="rec"><span class="n">8</span><div><b><span class="pill p-med">medium</span>Answers that use files cite them</b><span class="m">Numbered marks in the answer ([1], [2]) and a "Sources" line of file chips under it (name, folder, what part was read). A chip opens the file the same way a result row does.</span></div></div>
+  <div class="rec"><span class="n">9</span><div><b><span class="pill p-med">medium</span>The chat shows the same thing as a collapsible step</b><span class="m">"Searched this PC for “tax return 2025” · 6 results" in the transcript (figure 9), the same list inside, and sources under the answer. At phone width the rows stack.</span></div></div>
+  <div class="rec"><span class="n">10</span><div><b><span class="pill p-hi">high</span>Window and Everything-level devices only; every search is in the Activity record</b><span class="m">A phone signed in at the Chats level cannot search the PC. An Everything device can, like it can do anything the window can. Each search and each file read is logged by name ("Searched this PC", "Read 2 files") in Activity.</span></div></div>
+  <div class="rec"><span class="n">11</span><div><b><span class="pill p-low">low</span>Honest states</b><span class="m">Search is off; searching; no results (and how many folders are excluded); Windows Search is off or still indexing; a file that cannot be read (too big, scanned PDF, excluded, locked); a file's text that is only partly read. Figures 5 to 8.</span></div></div>
+</section>
+
+<section class="card">
+  <h2>Settings</h2>
+  <p class="mute">Settings → Capabilities, next to Computer use. Today the group does not exist; the bar says "This needs Bunny's window" when you ask it to find a file.</p>
+  <div class="twocol">
+    <div><div class="lab"><span>1. Today</span></div><div class="app" id="s-today"></div></div>
+    <div><div class="lab"><span>1 and 2. Proposed: on, with the choice</span></div><div class="app" id="s-new"></div></div>
+  </div>
+  <div class="twocol">
+    <div><div class="lab"><span>2. First time you turn it on</span></div><div class="app"><div class="dlg" id="dlg"></div></div></div>
+    <div><div class="lab"><span>3. Excluded folders</span></div><div class="app" id="s-ex"></div></div>
+  </div>
+  <div class="lab"><span>Settings at phone width (390 px): the row stacks, the options go full width</span></div>
+  <div class="phone"><div class="app" id="s-phone"></div></div>
+</section>
+
+<section class="card">
+  <h2>Quick ask bar</h2>
+  <p class="mute">The bar is for the desktop only (a global shortcut), so there is no phone version of it. It uses the airy pill from the v0.1.13 drawing. Today: ask it to find a file and it cannot.</p>
+  <div id="bar-states" style="display:grid;gap:26px"></div>
+</section>
+
+<section class="card">
+  <h2>In the chat</h2>
+  <p class="mute">The same search inside a conversation: a collapsible step, the list, and an answer with sources. Desktop width and phone width.</p>
+  <div class="twocol" style="align-items:start">
+    <div><div class="lab"><span>9. Desktop</span></div><div class="app" id="chat-d"></div></div>
+    <div><div class="lab"><span>9. Phone (390 px)</span></div><div class="phone"><div class="app" id="chat-m"></div></div></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Keyboard flow in the result list</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Key</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Choose a result (the chosen row is tinted). The first result is chosen when the list appears.</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Open the chosen file (safe kinds only; a program shows "Show in folder" instead).</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Ask Bunny about the chosen file: reads it (with the "Read 1 file" line) and answers.</td></tr>
+      <tr><td><kbd>Tab</kbd></td><td>Moves to the row's buttons (Open, Show in folder, Ask about this file, Copy path), then to the follow-up box.</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>While searching or reading: stops it. With a list: closes the bar (Esc does one thing at a time, as in v0.1.13).</td></tr>
+      <tr><td>Typing</td><td>Typing in the follow-up box ("only the PDFs", "from last year") searches again with what you add.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>For Security</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>What</th><th>Why it matters</th><th>Proposed rule</th></tr></thead>
+    <tbody>
+      <tr><td>Reads outside the project folders</td><td>The first Bunny feature that reads the person's whole computer, not just a chosen folder.</td><td>Off by default; the switch is the permission; read-only; only what Windows Search has indexed (Bunny builds no index of its own).</td></tr>
+      <tr><td>File text goes to the model</td><td>In "read then answer" the contents leave the PC for a cloud model unless the model is local.</td><td>The dialog names the provider and says what is sent; the "Read 2 files" line shows which files; caps of 3 files and about 20 000 characters each; "Show what was found" sends no text.</td></tr>
+      <tr><td>Excluded folders</td><td>Keys, browser profiles, Bunny's own data and password stores must never be read.</td><td>Fixed exclusions the person cannot remove; the person's own list; checked after resolving links and junctions, on search results and again on the read.</td></tr>
+      <tr><td>File text is untrusted</td><td>A file can contain text that tries to give the model instructions.</td><td>The text is passed as data in a marked block; the bar stays text-only; the only tool in play is read-only search, with no write or run tool beside it.</td></tr>
+      <tr><td>Open could run a program</td><td>A result list that opens anything could launch an installer or script.</td><td>Open only for a fixed list of document, text, picture and Office kinds; everything else "Show in folder".</td></tr>
+      <tr><td>Remote devices</td><td>A phone must not be able to search the PC through Bunny.</td><td>Window and Everything-level devices only; Chats-level devices are refused; both logged.</td></tr>
+      <tr><td>Record</td><td>The person should be able to see what Bunny looked at.</td><td>Activity logs each search and each read by name, not by content, and not the typed question beyond a short label.</td></tr>
+      <tr><td>Query handling</td><td>The question becomes a Windows Search query.</td><td>Built from escaped parts, never by pasting the question into a query; a result cap (50) and a time limit (10 s).</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>Questions for the owner</h2>
+  <ul style="margin:0;padding-left:20px;display:grid;gap:5px">
+    <li><b>Starting choice.</b> When you turn Search on, should "Read the files, then answer" be pre-chosen (what you asked for), or "Show what was found" (safer)? The page draws the first.</li>
+    <li><b>Quick ask.</b> Should the bar search by itself when you ask about a file (drawn), or only when you pick "Search this PC" from the + menu?</li>
+    <li><b>Files Windows has not indexed</b> are not found; Bunny will not scan the disk itself. Is that acceptable for the first version?</li>
+    <li><b>The go.</b> This page asks for the owner's go to build it, after Security's requirements.</li>
+  </ul>
+</section>
+</main>
+
+<script>
+(function(){
+  var SV='xmlns="http://www.w3.org/2000/svg"';
+  var STOP='<svg '+SV+' width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="3.2"/></svg>';
+  var COPY='<svg '+SV+' width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+  var UP='<svg '+SV+' width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>';
+  var PLUS='<svg '+SV+' width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  var LENS='<svg '+SV+' width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>';
+  var MARK='<svg class="mk" viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z"/><g fill="currentColor"><rect x="16.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(-9 19.5 25)"/><rect x="25.4" y="4" width="6.2" height="21" rx="3.1" transform="rotate(9 28.5 25)"/></g></svg>';
+  var QS='Find my tax return from last year';
+  function keys(a,m){return '<div class="keys">'+a.map(function(t){return '<span>'+t+'</span>';}).join('')+(m?'<span class="push">'+m+'</span>':'')+'</div>';}
+  function btn(c,h){return '<span class="'+c+'">'+h+'</span>';}
+  function head(q,b){return '<div class="pr top1">'+MARK+'<div class="q2">'+q+'</div>'+(b||'')+'</div>';}
+  function pl(inner,x){return '<div class="bw"><div class="pl">'+inner+(x||'')+'</div></div>';}
+  function idle(text,show,chip){return '<div class="pr">'+MARK+(chip?'<span class="chipx">'+LENS+' Search this PC</span>':'')+'<div class="tx'+(text?'':' ph')+'">'+(text?text+'<span class="cr"></span>':'What are we burrowing into?')+'</div>'+(show?btn('ib2',PLUS)+btn('act',UP):'')+'</div>';}
+  function row(ic,nm,fo,dt,sn,sel,acts){return '<div class="rw'+(sel?' sel':'')+'"><span class="ic">'+ic+'</span><div style="min-width:0"><div class="nm">'+nm+'</div><div class="fo"><bdo>'+fo+'</bdo></div></div><div class="dt">'+dt+'</div>'+(sn?'<div class="sn">'+sn+'</div>':'')+(acts?'<div class="ac">'+acts+'</div>':'')+'</div>';}
+  var R1=row('PDF','Tax return 2025 - signed.pdf','C:\\Users\\Sam\\Documents\\Taxes','12 Apr 2025','…total income <mark>tax return</mark> for the year ended 31 Dec 2024, filed jointly with…',true,'<span class="mini pri">Open</span><span class="mini">Show in folder</span><span class="mini">Ask about this file</span><span class="mini">Copy path</span>');
+  var R2=row('XLS','Tax return workings.xlsx','C:\\Users\\Sam\\Documents\\Taxes\\Drafts','3 Mar 2025','Sheet “Income”: salary, interest, <mark>tax return</mark> adjustments…',false,'');
+  var R3=row('DOC','Accountant letter - tax return.docx','C:\\Users\\Sam\\Downloads','20 Feb 2025','Dear Sam, please find enclosed your <mark>tax return</mark> for review…',false,'');
+  var R4=row('TXT','tax-notes.txt','C:\\Users\\Sam\\Desktop','8 Jan 2025','remember: ask about the home office part of the <mark>tax return</mark>',false,'');
+  var LIST='<div class="body"><div class="res">'+R1+R2+R3+R4+'</div><div class="meta2">4 of 6 results · Windows Search · 9 folders excluded</div></div>';
+  var FOOT='<div class="fr"><div class="fin2">Narrow it down, or ask about a file…</div><span class="ob2">Open in Bunny <span class="kb">Ctrl+↵</span></span></div>';
+  var SRCS='<div class="src"><span class="srcc"><b>1</b> Tax return 2025 - signed.pdf · pages 1 to 3</span><span class="srcc"><b>2</b> Accountant letter - tax return.docx · whole file</span></div>';
+  var B={
+    today:function(){return pl(head(QS,btn('ib2',COPY))+'<div class="body"><div class="ansb">I can\'t search your computer from here.</div></div><div class="card2 warn"><div class="t">This needs Bunny\'s window</div><div class="b">This needs a tool, and Bunny asks your permission for tools in its own window, never here. Nothing has been touched.</div><div class="acts"><span class="ob2 fill">Open in Bunny <span class="kb">Ctrl+↵</span></span></div></div>'+keys(['Ctrl+Enter opens in Bunny','Esc closes']));},
+    menu:function(){return pl(idle('',false),'<div class="menu2"><div>Add a screenshot<small>Takes a picture of this screen when you choose it</small></div><div>Add a file…<small>A picture, a PDF or a text file, up to 8 MB</small></div><div class="f">Search this PC<small>Looks for this in files on this computer</small></div></div>')+'<div style="height:150px"></div>';},
+    chip:function(){return pl(idle(QS,true,true)+keys(['Enter searches','Esc closes'],'Searches files Windows has indexed'));},
+    searching:function(){return pl(head(QS,btn('act',STOP))+'<div class="body"><div class="think"><span class="dots"><i></i><i></i><i></i></span>Searching this PC…</div></div>'+keys(['Esc stops'],'Windows Search · 9 folders excluded'));},
+    show:function(){return pl(head(QS,btn('ib2',COPY))+LIST+FOOT+keys(['↑ ↓ choose','Enter opens','Ctrl+Enter asks Bunny about it','Esc closes'],'Show what was found'));},
+    reading:function(){return pl(head(QS,btn('act',STOP))+'<div class="body"><div class="res">'+R1+R3+'</div><div class="read"><span class="dots"><i></i><i></i><i></i></span>Reading 2 files: Tax return 2025 - signed.pdf, Accountant letter - tax return.docx</div></div>'+keys(['Esc stops'],'Sent to Auto · Sonnet'));},
+    answer:function(){return pl(head(QS,btn('ib2',COPY))+'<div class="body"><div class="read">Read 2 files · Tax return 2025 - signed.pdf (3 pages), Accountant letter - tax return.docx</div><div class="ansb"><p>Your 2024 return was filed on 12 April 2025, jointly, with a total income of $84,200 <b>[1]</b>. Your accountant\'s letter asks you to review the home office section before you keep it <b>[2]</b>.</p></div>'+SRCS+'<div class="meta2">Answered by Auto · Sonnet · files read on this PC, sent to the model</div></div>'+FOOT+keys(['Enter asks a follow-up','Ctrl+Enter opens in Bunny','Esc closes']));},
+    none:function(){return pl(head('Find my 2019 gym receipts',btn('ib2',COPY))+'<div class="card2 soft"><div class="t">Nothing found</div><div class="b">Windows has nothing indexed that matches. 9 folders are excluded, and files Windows has not indexed are not searched. Try another word, or check the excluded folders.</div><div class="acts"><span class="ob2">Excluded folders</span></div></div>'+keys(['Type to search again','Esc closes']));},
+    off:function(){return pl(head(QS,btn('ib2',COPY))+'<div class="card2 warn"><div class="t">Search this PC is off</div><div class="b">Turn it on in Settings → Capabilities to let Bunny look for files on this computer. Nothing was searched.</div><div class="acts"><span class="ob2 fill">Open Bunny settings <span class="kb" style="color:var(--solid)">Ctrl+↵</span></span></div></div>'+keys(['Ctrl+Enter opens Bunny settings','Esc closes']));},
+    cant:function(){return pl(head(QS,btn('ib2',COPY))+'<div class="body"><div class="res">'+R1+'</div><div class="read">Could not read “Tax return 2025 - signed.pdf”: it is a scanned picture with no text.</div></div><div class="card2 soft"><div class="t">Only the file name and folder were used</div><div class="b">Open it yourself, or ask for another file. Other reasons a file is skipped: over 8 MB, in an excluded folder, locked by another program.</div></div>'+keys(['↑ ↓ choose','Enter opens','Esc closes']));},
+    index:function(){return pl(head(QS,btn('ib2',COPY))+'<div class="card2 warn"><div class="t">Windows Search is not available</div><div class="b">The Windows Search service is off or still building its index. Bunny does not search the disk itself. Start the service in Windows, then ask again.</div><div class="acts"><span class="ob2">Try again</span></div></div>'+keys(['Enter tries again','Esc closes']));}
+  };
+  var ORDER=[
+    ['today','Today (v0.1.13): the bar cannot search','Ask it to find a file and it sends you to the window.',null],
+    ['menu','4. Turn a search on from the + menu','With Search on in Settings the + menu gets a third item. The bar also searches by itself when the question is about a file.','The bar is text only; search is its one read-only exception.'],
+    ['chip','5. A search chip in the pill','Chosen from the menu, the chip shows what will happen when you press Enter.',null],
+    ['searching','Searching','Stop is real; Esc stops. The line says where it looks and how many folders are skipped.',null],
+    ['show','6. Results: show what was found','Names, folders, dates and a snippet. Nothing was read; the model saw only names, folders and dates.',null],
+    ['reading','Results: read the files, then answer: reading','The two best files are named while they are read, with the model that receives them.',null],
+    ['answer','7 and 8. The answer, with sources','A "Read 2 files" line, numbered marks, source chips that open the files, and where the text went.',null],
+    ['none','11. Nothing found','Says why, and how many folders are excluded.',null],
+    ['cant','11. A file could not be read','Honest about what was used instead.',null],
+    ['off','11. Search is off','A hint, not a prompt. Open Bunny settings is the main button.',null],
+    ['index','11. Windows Search is not available','Bunny does not fall back to scanning the disk.',null]
+  ];
+  var host=document.getElementById('bar-states');
+  ORDER.forEach(function(o){var s=document.createElement('section');s.className='state';
+    s.innerHTML='<header><h3>'+o[1]+'</h3></header><p class="mute">'+o[2]+'</p><div class="stagebox"><div class="sb">'+B[o[0]]()+'</div></div>';host.appendChild(s);});
+  // settings
+  function sw(on){return '<span class="sw'+(on?' on':'')+'"><i></i>'+(on?'on':'off')+'</span>';}
+  function srow(n,d,r){return '<div class="srow"><div class="l"><div class="nme">'+n+'</div><div class="d">'+d+'</div></div>'+r+'</div>';}
+  document.getElementById('s-today').innerHTML='<h4>Capabilities</h4><div class="grp">'+srow('Artifacts','Let Bunny make documents, pages and drawings you can open.',sw(true))+srow('Use connectors','Let Bunny use the connectors you set up.',sw(true))+'</div><h4 style="margin-top:14px">Computer use <span class="chipf">Local only</span></h4><div class="grp">'+srow('Enable computer use','Let Bunny look at and control this computer.',sw(false))+'</div><p class="d" style="margin-top:10px;color:var(--mute)">No setting for searching files.</p>';
+  var CHOICE='<div class="opt sel"><span class="rd"></span><b>Read the files, then answer</b><span class="d">Bunny opens the best matches (up to 3 files, about 20 000 characters each), answers from them and links the files. The text of those files is sent to the model you use.</span></div><div class="opt"><span class="rd"></span><b>Show what was found</b><span class="d">Bunny lists the matches and reads a file only when you ask about it. The model sees names, folders and dates only.</span></div>';
+  var NEWHTML='<h4>Capabilities</h4><div class="grp">'+srow('Artifacts','Let Bunny make documents, pages and drawings you can open.',sw(true))+srow('Use connectors','Let Bunny use the connectors you set up.',sw(true))+'</div><h4 style="margin-top:14px">Search this PC <span class="chipf">Local only</span></h4><div class="grp"><div class="srow"><div class="l"><div class="nme">Let Bunny search this PC</div><div class="d">Looks for files with Windows Search and tells you about them. It only reads: nothing is changed, moved or deleted. Used by the Quick ask bar and the chat. <span class="lnk">Excluded folders (9)</span></div></div>'+sw(true)+'</div><div style="padding:0 14px 14px"><div class="nme" style="margin-top:2px">After a search</div>'+CHOICE+'</div></div><h4 style="margin-top:14px">Computer use <span class="chipf">Local only</span></h4><div class="grp">'+srow('Enable computer use','Let Bunny look at and control this computer.',sw(false))+'</div>';
+  document.getElementById('s-new').innerHTML=NEWHTML;
+  document.getElementById('dlg').innerHTML='<h4 style="font-size:16px">Let Bunny search this PC?</h4><p style="color:var(--mute);font-size:13.5px">Bunny can look for files with Windows Search and tell you about them.</p><ul style="margin:4px 0;padding-left:18px;display:grid;gap:4px;font-size:13.5px"><li>It only reads. It never changes, moves or deletes a file.</li><li>It searches only what Windows has indexed, and skips your <span class="lnk">excluded folders</span> (9 now).</li><li>With "Read the files, then answer", the text of the files it opens is <b>sent to Auto · Sonnet</b>, a cloud model. With "Show what was found", only names, folders and dates are.</li><li>Every search and every file it reads is listed in Activity.</li></ul><div style="margin-top:6px"><b>After a search</b></div>'+CHOICE+'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><span class="btn2">Not now</span><span class="btn2 pri">Turn on</span></div>';
+  var FIXED=['Bunny\'s own data folder','AppData (all users)','.ssh and other key folders','Browser profiles','Password-manager folders','Windows','Program Files','Recycle Bin'];
+  document.getElementById('s-ex').innerHTML='<h4>Excluded folders</h4><p class="d" style="color:var(--mute);margin-bottom:8px">Bunny never searches or reads these. A link or shortcut that points into one is skipped too.</p><div class="nme" style="font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute)">Always excluded</div><div style="margin:4px 0 10px">'+FIXED.map(function(f){return '<span class="chipf fx">🔒 '+f+'</span>';}).join('').replace(/🔒/g,'')+'</div><div class="nme" style="font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute)">Yours</div><div style="margin:4px 0 10px"><span class="chipf">C:\\Users\\Sam\\Documents\\Private <u>×</u></span></div><span class="btn2">Add a folder…</span>';
+  document.getElementById('s-phone').innerHTML=NEWHTML;
+  // chat
+  function chatHtml(){
+    return '<div style="display:grid;gap:10px"><div class="msgu">'+QS+'</div><div class="tcall"><div class="hd">'+LENS+'<span><b>Searched this PC</b> for “tax return” · 6 results ▾</span></div><div class="res" style="margin:0;border-radius:0">'+R1+R2+'</div></div><div class="read" style="padding:0">Read 2 files · Tax return 2025 - signed.pdf, Accountant letter - tax return.docx</div><div style="line-height:1.65">Your 2024 return was filed on 12 April 2025, jointly, with a total income of $84,200 <b style="color:var(--accent)">[1]</b>. Your accountant asks you to review the home office section before you keep it <b style="color:var(--accent)">[2]</b>.</div><div class="src"><span class="srcc"><b>1</b> Tax return 2025 - signed.pdf</span><span class="srcc"><b>2</b> Accountant letter - tax return.docx</span></div></div>';
+  }
+  document.getElementById('chat-d').innerHTML='<div class="bw" style="background:transparent">'+chatHtml()+'</div>';
+  document.getElementById('chat-m').innerHTML='<div class="bw" style="background:transparent">'+chatHtml()+'</div>';
+  // fit stages
+  function fit(){document.querySelectorAll('.stagebox').forEach(function(b){var s=b.querySelector('.sb');if(!s)return;var k=Math.min(1,(b.clientWidth-20)/656);s.style.transform='scale('+k+')';s.style.height='';var hh=s.scrollHeight;b.style.height=Math.ceil(hh*k+20)+'px';});}
+  window.addEventListener('resize',fit);window.addEventListener('load',fit);setTimeout(fit,300);setTimeout(fit,1000);
+  document.getElementById('theme').addEventListener('click',function(){var r=document.documentElement,d=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',d?'light':'dark');setTimeout(fit,50);});
+})();
+</script>
