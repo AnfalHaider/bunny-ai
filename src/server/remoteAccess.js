@@ -80,13 +80,13 @@ const subnet24 = (a) => String(a ?? '').split('.').slice(0, 3).join('.');
 /**
  * RS-4: may Bunny open to other devices again at start? Only on the network access was turned on with, or on one Windows calls Private.
  * `saved` is what was kept when it was turned on ({ address, network: { name, category } | null }); `profile` is what the network is called now ({ name, category } | null).
- * When Windows cannot say, the same /24 as the saved address stands for "the same network".
+ * A saved network name that cannot be read now means closed. With no saved name at all (not Windows), the same /24 as the saved address stands for "the same network".
  */
 export function canReopen(saved, lan, profile) {
   if (!lan) return { ok: false, reason: NOT_OPENED_NO_NETWORK };
   if (profile?.category === 'Private') return { ok: true };
-  const sameName = saved?.network?.name && profile?.name ? saved.network.name === profile.name : null;
-  const same = sameName ?? (Boolean(saved?.address) && subnet24(saved.address) === subnet24(lan));
+  // A network name was saved: it has to be read now and be the same (fail closed when Windows cannot say). Only when none was ever known (not Windows) does the same /24 stand for it.
+  const same = saved?.network?.name ? profile?.name === saved.network.name : Boolean(saved?.address) && subnet24(saved.address) === subnet24(lan);
   return same ? { ok: true } : { ok: false, reason: NOT_OPENED_NETWORK };
 }
 

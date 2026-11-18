@@ -143,14 +143,15 @@ test('REMOTE-STAY RS-4: Bunny opens again only on the network it was turned on w
   assert.equal(office.resumed.resumed, true);
 });
 
-test('REMOTE-STAY RS-4: canReopen, the rules: same network name, Private, no network, or (when Windows cannot say) the same /24', () => {
+test('REMOTE-STAY RS-4: canReopen, the rules: same network name (closed when it cannot be read), Private, no network, or (no name ever known) the same /24', () => {
   const saved = { address: '192.168.1.24', network: { name: 'Home', category: 'Public' } };
   assert.equal(canReopen(saved, '192.168.1.30', { name: 'Home', category: 'Public' }).ok, true);
   assert.equal(canReopen(saved, '10.0.0.5', { name: 'Elsewhere', category: 'Public' }).ok, false);
   assert.equal(canReopen(saved, '10.0.0.5', { name: 'Elsewhere', category: 'DomainAuthenticated' }).ok, false);
   assert.equal(canReopen(saved, '10.0.0.5', { name: 'Elsewhere', category: 'Private' }).ok, true);
   assert.equal(canReopen(saved, null, null).reason, NOT_OPENED_NO_NETWORK);
-  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.1.99', null).ok, true, 'Windows cannot say: the same /24');
+  assert.equal(canReopen(saved, '192.168.1.99', null).ok, false, 'a saved name that cannot be read now: closed, even on the same /24');
+  assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.1.99', null).ok, true, 'no name was ever known (not Windows): the same /24');
   assert.equal(canReopen({ address: '192.168.1.24', network: null }, '192.168.7.99', null).ok, false);
   assert.equal(canReopen({}, '192.168.1.99', null).ok, false, 'nothing known about the saved network: closed');
 });
