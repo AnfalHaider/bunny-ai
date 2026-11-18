@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-pending>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; font-src 'self'">
 <title>Bunny AI quick ask</title>
 <style>
   /* QUICK-UI (v0.1.13, drawn in docs/design/review-v0113-quick-ask, version 2, option A): one light, airy pill, about 92% opaque, over a transparent window. No blur, no acrylic. */
@@ -12,6 +12,7 @@
   :root[data-theme="light"] { color-scheme: light; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: transparent; font: 15px/1.5 var(--font); color: var(--text); overflow: hidden; }
+  textarea, input, button { font-family: inherit; }
   /* the pill: 20 px radius, a hairline border, a soft shadow drawn inside the 8 px margin the window leaves for it */
   .bar { position: relative; margin: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 3px 10px rgba(20,22,40,.22), 0 1px 2px rgba(20,22,40,.10); }
   .row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 10px 0 16px; }
@@ -88,6 +89,8 @@
   .cardx .b { font-size: 13.5px; } .cardx .acts { display: flex; gap: 8px; flex-wrap: wrap; }
   .copied { font-size: 12px; color: var(--dim); margin-right: 2px; align-self: center; }
   [hidden] { display: none !important; }
+  /* hidden for the instant it takes to learn the theme, so the bar never flashes the wrong one (the page shows itself after at most 300 ms whatever happens) */
+  html[data-pending] body { visibility: hidden; }
   /* nothing bounces, and all of it is off with reduced motion (the system's setting, or Bunny's own Motion setting passed in by the app) */
   @media (prefers-reduced-motion: reduce) {
     .reveal, .collapse, .ib2, .act, .spin { transition: none; animation: none; }

@@ -1,6 +1,24 @@
 // W4-8: the quick-ask bar's pure rules (no Electron here, so they can be tested).
 import { looksSecret } from '../src/server/secretLike.js';
 
+/**
+ * QUICK-UI 9: what the bar may be told about Bunny's looks when it opens: a theme name, a font key from this fixed list, whether motion is reduced, and the name of the model that will
+ * answer. Never a path, a url or any text the page could use: the page has its own fixed table for each key (and the font files are bundled in src/ui/fonts).
+ */
+export const BAR_THEMES = ['light', 'dark', 'system'];
+export const BAR_FONT_KEYS = ['system', 'serif', 'sans', 'mono', 'inter', 'source-sans-3', 'ibm-plex-sans', 'atkinson-hyperlegible', 'lexend', 'nunito', 'quicksand', 'lora', 'literata', 'source-serif-4', 'noto-serif', 'jetbrains-mono', 'ibm-plex-mono'];
+
+/** The settings the bar is told when it opens, cleaned: unknown values become the safe default. */
+export function barLook(settings = {}) {
+  const model = String(settings?.model ?? '').replace(/[^A-Za-z0-9 ._:+/-]/g, '').split('/').pop().trim().slice(0, 60);
+  return {
+    theme: BAR_THEMES.includes(settings?.theme) ? settings.theme : 'system',
+    font: BAR_FONT_KEYS.includes(settings?.interfaceFont) ? settings.interfaceFont : 'system',
+    motion: settings?.motion === 'reduced' ? 'reduced' : '',
+    model,
+  };
+}
+
 export const DEFAULT_SHORTCUT = 'Ctrl+Alt+Space';
 export const MAX_TEXT = 20_000;
 export const MAX_SHOT_BYTES = 8 * 1024 * 1024; // the most the bar will read of any file

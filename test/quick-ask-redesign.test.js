@@ -113,3 +113,45 @@ test('3: the bridge lists exactly the functions the redesign needs, and the page
   const listened = [...src.matchAll(/ipcRenderer\.on\('([^']+)'/g)].map((m) => m[1]);
   assert.ok(listened.every((l) => ['quickask:answer', 'quickask:esc'].includes(l)), listened.join(','));
 });
+
+test('8 and 9: what the bar is told about Bunny\'s looks is cleaned to fixed keys: a theme name, a font key from the list, reduced motion, and a plain model name', async () => {
+  const { barLook, BAR_FONT_KEYS } = await import('../electron/quick-ask-logic.js');
+  assert.deepEqual(barLook({ theme: 'dark', interfaceFont: 'lexend', motion: 'reduced', model: 'meta/llama-3-70b' }), { theme: 'dark', font: 'lexend', motion: 'reduced', model: 'llama-3-70b' });
+  assert.deepEqual(barLook({}), { theme: 'system', font: 'system', motion: '', model: '' });
+  assert.deepEqual(barLook(null), { theme: 'system', font: 'system', motion: '', model: '' });
+  // anything that is not on the list becomes the safe default: a url, a path, a style, markup
+  const evil = barLook({ theme: 'url(http://x)', interfaceFont: '../../secrets/x', motion: '<b>', model: '<img src=x onerror=alert(1)> gpt\nnext' });
+  assert.deepEqual([evil.theme, evil.font, evil.motion], ['system', 'system', '']);
+  assert.doesNotMatch(evil.model, /[<>\n=()]/);
+  assert.ok(evil.model.length <= 60);
+  assert.equal(barLook({ model: 'x'.repeat(500) }).model.length, 60);
+  // the font keys are the app's own: the four stacks and the thirteen bundled fonts
+  assert.deepEqual(BAR_FONT_KEYS.slice(0, 4), ['system', 'serif', 'sans', 'mono']);
+  for (const id of ['inter', 'source-sans-3', 'ibm-plex-sans', 'atkinson-hyperlegible', 'lexend', 'nunito', 'quicksand', 'lora', 'literata', 'source-serif-4', 'noto-serif', 'jetbrains-mono', 'ibm-plex-mono']) assert.ok(BAR_FONT_KEYS.includes(id), id);
+  assert.equal(BAR_FONT_KEYS.length, 17);
+});
+
+test('8 and 9: the bar gets its look through one call that only its own page may make, and a failure gives it nothing (the defaults, and no model line)', async () => {
+  const e = fakes();
+  createQuickAsk({ ...e, onSubmit: () => true, getSettings: () => ({ theme: 'dark', interfaceFont: 'nunito', model: 'a/b-model', motion: 'reduced', providerKey: 'sk-should-never-travel' }) }).open();
+  const win = e.windows[0];
+  const init = e.handlers.get('quickask:init');
+  assert.deepEqual(await init(fromBar(win)), { theme: 'dark', font: 'nunito', motion: 'reduced', model: 'b-model' });
+  assert.deepEqual(await init(stranger), {}, 'not the bar: nothing');
+  const e2 = fakes();
+  createQuickAsk({ ...e2, onSubmit: () => true, getSettings: () => { throw new Error('settings are not readable'); } }).open();
+  assert.deepEqual(await e2.handlers.get('quickask:init')(fromBar(e2.windows[0])), {});
+});
+
+test('9: the bar\'s policy allows fonts from its own folder only, and nothing else was loosened; the font files it names exist in the package', async () => {
+  const { existsSync } = await import('node:fs');
+  const html = await readFile(new URL('../electron/quick-ask/bar.html', import.meta.url), 'utf8');
+  const csp = /Content-Security-Policy" content="([^"]+)"/.exec(html)[1];
+  assert.equal(csp, "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; font-src 'self'");
+  const js = await readFile(new URL('../electron/quick-ask/bar.js', import.meta.url), 'utf8');
+  const files = [...js.matchAll(/'([a-z0-9-]+-\d{3}(?:-\d{3})?)'\]/g)].map((m) => m[1]);
+  assert.ok(files.length >= 15, `found ${files.length} font files named`);
+  for (const f of files) assert.ok(existsSync(new URL(`../src/ui/fonts/${f}.woff2`, import.meta.url)), `${f}.woff2`);
+  assert.match(js, /src: url\("\.\.\/\.\.\/src\/ui\/fonts\/\$\{file\}\.woff2"\)/);
+  assert.doesNotMatch(js, /https?:\/\/(?!www\.w3\.org\/2000\/svg)/); // the only address in the page is the SVG namespace
+});

@@ -400,6 +400,51 @@ window.quickAsk.onEscape(() => {
   window.quickAsk.close().catch(() => {});
 });
 window.addEventListener('focus', () => { if (!asked) text.focus(); else if (!$('follow').disabled) $('follow').focus(); });
+// ---- QUICK-UI 8 and 9: Bunny's theme and interface font, and which model answers ----
+// The font files are the app's own bundled ones (src/ui/fonts, SIL OFL), read from the package: the page's policy allows fonts from its own folder only. Each key maps to a fixed
+// family and fixed files here; main sends only the key, so nothing it sends can name a file or a style.
+const STACK_SANS = '"Segoe UI", system-ui, sans-serif';
+const STACK_SERIF = 'Georgia, "Times New Roman", serif';
+const STACK_MONO = 'ui-monospace, Consolas, monospace';
+const FONT_STACKS = {
+  system: null,
+  serif: 'Georgia, "Cambria", "Times New Roman", serif',
+  sans: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
+  mono: 'ui-monospace, "Cascadia Code", Consolas, monospace',
+  'inter': `"Bunny Inter", ${STACK_SANS}`, 'source-sans-3': `"Bunny Source Sans 3", ${STACK_SANS}`, 'ibm-plex-sans': `"Bunny IBM Plex Sans", ${STACK_SANS}`,
+  'atkinson-hyperlegible': `"Bunny Atkinson Hyperlegible", ${STACK_SANS}`, 'lexend': `"Bunny Lexend", ${STACK_SANS}`, 'nunito': `"Bunny Nunito", ${STACK_SANS}`, 'quicksand': `"Bunny Quicksand", ${STACK_SANS}`,
+  'lora': `"Bunny Lora", ${STACK_SERIF}`, 'literata': `"Bunny Literata", ${STACK_SERIF}`, 'source-serif-4': `"Bunny Source Serif 4", ${STACK_SERIF}`, 'noto-serif': `"Bunny Noto Serif", ${STACK_SERIF}`,
+  'jetbrains-mono': `"Bunny JetBrains Mono", ${STACK_MONO}`, 'ibm-plex-mono': `"Bunny IBM Plex Mono", ${STACK_MONO}`,
+};
+const FONT_FACES = { // [family, weight, file]
+  'inter': [['Bunny Inter', '400 700', 'inter-400-700']], 'source-sans-3': [['Bunny Source Sans 3', '400 700', 'source-sans-3-400-700']], 'ibm-plex-sans': [['Bunny IBM Plex Sans', '400 700', 'ibm-plex-sans-400-700']],
+  'atkinson-hyperlegible': [['Bunny Atkinson Hyperlegible', '400', 'atkinson-hyperlegible-400'], ['Bunny Atkinson Hyperlegible', '700', 'atkinson-hyperlegible-700']],
+  'lexend': [['Bunny Lexend', '400 700', 'lexend-400-700']], 'nunito': [['Bunny Nunito', '400 700', 'nunito-400-700']], 'quicksand': [['Bunny Quicksand', '400 700', 'quicksand-400-700']],
+  'lora': [['Bunny Lora', '400 700', 'lora-400-700']], 'literata': [['Bunny Literata', '400 700', 'literata-400-700']], 'source-serif-4': [['Bunny Source Serif 4', '400 700', 'source-serif-4-400-700']],
+  'noto-serif': [['Bunny Noto Serif', '400 700', 'noto-serif-400-700']], 'jetbrains-mono': [['Bunny JetBrains Mono', '400 700', 'jetbrains-mono-400-700']],
+  'ibm-plex-mono': [['Bunny IBM Plex Mono', '400', 'ibm-plex-mono-400'], ['Bunny IBM Plex Mono', '600', 'ibm-plex-mono-600']],
+};
+
+function applyLook(look) {
+  const root = document.documentElement;
+  const theme = look && look.theme;
+  if (theme === 'light' || theme === 'dark') root.dataset.theme = theme; else delete root.dataset.theme; // anything else follows the system
+  if (look && look.motion === 'reduced') root.dataset.motion = 'reduce'; else delete root.dataset.motion;
+  const key = look && typeof look.font === 'string' && Object.hasOwn(FONT_STACKS, look.font) ? look.font : 'system';
+  if (FONT_STACKS[key]) {
+    const faces = (FONT_FACES[key] ?? []).map(([family, weight, file]) => `@font-face { font-family: "${family}"; font-style: normal; font-weight: ${weight}; font-display: swap; src: url("../../src/ui/fonts/${file}.woff2") format("woff2"); }`).join('\n');
+    if (faces) { const style = document.createElement('style'); style.id = 'bar-fonts'; style.textContent = faces; document.head.append(style); }
+    root.style.setProperty('--font', FONT_STACKS[key]);
+  }
+  const model = look && typeof look.model === 'string' ? look.model.trim().slice(0, 60) : '';
+  modelLine = model ? `Answers with ${model} · text only` : '';
+  refreshButtons();
+}
+
+const showPage = () => document.documentElement.removeAttribute('data-pending');
+setTimeout(showPage, 300); // whatever happens, the bar shows itself
+Promise.resolve(window.quickAsk.init?.()).then((look) => applyLook(look ?? {})).catch(() => {}).finally(showPage);
+
 setGo('send');
 refresh();
 text.focus();

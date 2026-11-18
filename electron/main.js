@@ -345,6 +345,7 @@ app.whenReady().then(async () => {
     BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat,
     // QA-ANSWERS: the bar answers through Bunny's own server (text only); Open in Bunny and a finished answer tell the window which chat
     adminFetch: (path, init) => bunnyApp.adminFetch(path, init),
+    getSettings: () => bunnyApp?.getSettings() ?? {},
     onOpenChat: (sessionId) => startQuickChat({ openChat: sessionId }),
     onOpenSettings: () => startQuickChat({ openSettings: true }),
     onAnswerFinished: (sessionId) => startQuickChat({ openChat: sessionId, refresh: true, quiet: true }),

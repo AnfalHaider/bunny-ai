@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { lstat, open } from 'node:fs/promises';
 import { createAnswerer } from './quick-ask-answer.js';
-import { FILE_DIALOG_FILTERS, MAX_IMAGE_BYTES, MAX_SHOT_BYTES, TAKEN_MESSAGE, buildNewChatRequest, checkFile, checkPath, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
+import { FILE_DIALOG_FILTERS, MAX_IMAGE_BYTES, MAX_SHOT_BYTES, TAKEN_MESSAGE, barLook, buildNewChatRequest, checkFile, checkPath, validateAccelerator, validateSubmission } from './quick-ask-logic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BAR_DIR = join(here, 'quick-ask');
@@ -40,7 +40,7 @@ export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
 export const MIN_BAR_HEIGHT = 80; // the pill alone (about 70 px with its margin); the page asks for more while the + menu is open or an answer is shown
 export const MAX_BAR_HEIGHT = 560; // a long answer grows the bar to about this and then scrolls inside it
 
-export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open }, adminFetch = null, onOpenChat = () => {}, onOpenSettings = () => {}, onAnswerFinished = () => {} }) {
+export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open }, adminFetch = null, getSettings = () => ({}), onOpenChat = () => {}, onOpenSettings = () => {}, onAnswerFinished = () => {} }) {
   let bar = null;
   let registered = null; // the accelerator currently held
   let keepTimer = null;
@@ -195,6 +195,12 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     }
   }
 
+  // QUICK-UI 8 and 9: when the bar opens it asks once how Bunny looks (theme, interface font, reduced motion) and which model will answer. Read in this process from Bunny's own settings,
+  // cleaned to fixed keys (barLook); the page gets plain words and nothing it could run. If anything fails it gets nothing, and shows the defaults and no model line.
+  ipcMain.handle('quickask:init', (event) => {
+    if (!fromBar(event)) return {};
+    try { return barLook(getSettings() ?? {}); } catch { return {}; }
+  });
   ipcMain.handle('quickask:pickFile', async (event) => (fromBar(event) ? pickFile() : { ok: false, message: 'Not allowed' }));
   ipcMain.handle('quickask:dropFile', (event) => { if (fromBar(event)) held = null; return { ok: true }; });
   ipcMain.handle('quickask:capture', async (event) => (fromBar(event) ? capture() : { ok: false, message: 'Not allowed' }));

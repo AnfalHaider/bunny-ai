@@ -289,3 +289,59 @@ for (const scheme of ['light', 'dark']) {
     await shoot('offline');
   });
 }
+
+test('8: the keys line says which model will answer, as text, once you type; nothing when the app could not say', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'llama-3-70b' } });
+  await expect(page.locator('#modelline')).toBeHidden(); // the empty pill shows none
+  await page.locator('#text').fill('x');
+  await expect(page.locator('#modelline')).toHaveText('Answers with llama-3-70b · text only');
+});
+
+test('8: with no model name, no model line is drawn', async ({ page }) => {
+  await openBar(page, { config: {} });
+  await page.locator('#text').fill('x');
+  await expect(page.locator('#hint')).toBeVisible();
+  await expect(page.locator('#modelline')).toBeHidden();
+});
+
+for (const [theme, scheme, expected] of [['dark', 'light', 'rgba(38, 39, 44, 0.92)'], ['light', 'dark', 'rgba(255, 255, 255, 0.92)'], ['system', 'dark', 'rgba(38, 39, 44, 0.92)'], ['system', 'light', 'rgba(255, 255, 255, 0.92)']]) {
+  test(`9: the bar follows Bunny's Theme (${theme}) over the system (${scheme})`, async ({ page }) => {
+    await openBar(page, { scheme, config: { theme } });
+    await expect(page.locator('html')).not.toHaveAttribute('data-pending', '');
+    expect(await page.evaluate(() => getComputedStyle(document.getElementById('bar')).backgroundColor)).toBe(expected);
+  });
+}
+
+test('9: the bar uses Bunny\'s interface font: a bundled one is loaded from the package (and really loads), an unknown key changes nothing', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'lexend' } });
+  await expect(page.locator('html')).not.toHaveAttribute('data-pending', '');
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Bunny Lexend');
+  expect(await page.evaluate(async () => { await document.fonts.load('15px "Bunny Lexend"'); return document.fonts.check('15px "Bunny Lexend"'); })).toBe(true);
+  await page.locator('#text').fill('Fonts');
+  const sans = await page.evaluate(() => getComputedStyle(document.getElementById('text')).fontFamily);
+  expect(sans).toContain('Bunny Lexend'); // the box, the buttons and the answer all follow
+  // a key that is not on the list: the system font, and no font style is added
+  const other = await page.context().newPage();
+  await other.emulateMedia({ colorScheme: 'light' });
+  await other.addInitScript(() => { window.quickAsk = { init: async () => ({ theme: 'system', font: 'https://evil.example/x.woff2' }), resize: async () => ({}), onAnswer: () => () => {}, onEscape: () => () => {}, close: async () => ({}), escHandled: async () => ({}), stop: async () => ({}), openInBunny: async () => ({}) }; });
+  await other.goto(`${origin}/electron/quick-ask/bar.html`);
+  await expect(other.locator('html')).not.toHaveAttribute('data-pending', '');
+  expect(await other.evaluate(() => getComputedStyle(document.body).fontFamily)).not.toContain('evil');
+  expect(await other.locator('#bar-fonts').count()).toBe(0);
+  await other.close();
+});
+
+test('9: Bunny\'s reduced motion turns the transitions off, whatever the system says', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: 'reduced' } });
+  await expect(page.locator('html')).not.toHaveAttribute('data-pending', '');
+  const times = await page.evaluate(() => ({ go: getComputedStyle(document.getElementById('go')).transitionDuration, panel: getComputedStyle(document.getElementById('panel-wrap')).transitionDuration }));
+  expect(times).toEqual({ go: '0s', panel: '0s' });
+});
+
+test('9: a bridge that never answers does not leave the bar hidden: it shows itself within 300 ms', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.addInitScript(() => { window.quickAsk = { init: () => new Promise(() => {}), resize: async () => ({}), onAnswer: () => () => {}, onEscape: () => () => {}, close: async () => ({}), escHandled: async () => ({}), stop: async () => ({}), openInBunny: async () => ({}) }; });
+  await page.goto(`${origin}/electron/quick-ask/bar.html`);
+  await expect(page.locator('html')).not.toHaveAttribute('data-pending', '', { timeout: 1500 });
+  await expect(page.locator('#text')).toBeVisible();
+});
