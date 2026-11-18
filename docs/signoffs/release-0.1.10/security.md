@@ -1,0 +1,65 @@
+---
+piece: release-0.1.10
+role: security
+sha: 9d4e942
+verdict: PASS
+date: 2026-11-18
+---
+
+# release-0.1.10 at 9d4e942: Security PASS
+
+The candidate is `claude/release-0.1.10` at 9d4e942 (version 0.1.10). The Chief of Staff reports its gate green, 9 of 9. Security's check was read-only (no test suites were run while QA walked the candidate).
+
+## Every Security-signed piece is in the candidate
+
+`git merge-base --is-ancestor <sha> 9d4e942`:
+
+| Piece | Signed at | In 9d4e942 |
+|---|---|---|
+| settings-bridge | 1d16eb6 | IN |
+| sb-1 | 07b6e6a | IN |
+| sb-2 | dbbf1dc | IN |
+| qa-answers | 7eb62e7 | IN (plus f7eb53b, see below) |
+| w2-9-lows | 4f63b27 | IN |
+| s5-s7 | 6b2a351 | IN |
+| w6-11 | 1ee1b01 | IN |
+| browser-1 | 516aa43 | IN |
+| browser-2 | 564b28b | IN |
+| s-3 | 1ec5c64 | rebuilt as **e90e961**, same change |
+| w2-9 | 3df05d5 | rebuilt as **ae9b97a**, same change |
+
+S-3 and W2-9 were signed on `claude/builder-c-v0110`, which also carries the unfinished K-5 work. The candidate has them as rebuilt commits on `claude/builder-c-v0110-app`. `git patch-id --stable` gives the same id for each pair, so they are the same change. The check is in `docs/security/release-0.1.10-check/patch-ids.mjs`.
+
+## Nothing unreviewed came along
+
+- **No K-5 work.** 884e9b4 is not an ancestor. `git diff origin/main 9d4e942 -- scripts/kit-next .bootstrap .githooks .claude` is empty, so no kit, guard, hook or Claude-settings change ships in 0.1.10.
+- **f7eb53b** (the text-only LOW from QA-ANSWERS): a text-only answer gets a short system text of its own (today's date, the person's chosen name, "You are Bunny AI ... never claim you did something you did not do", and the text-only note), with no mention of tools that aren't there. Tools are still `null` for text-only. Accepted.
+- **0d0d5d4** changes one line in `e2e/browser-lock.spec.js`. **c9f5f04** changes one line in `test/helpers.js` (a retry when removing a temp folder). **9d4e942** changes only the three `version` fields in `package.json` and `package-lock.json`.
+
+## The merges kept what was signed (spot check in 9d4e942)
+
+`src/server/app.js` still has:
+- `remoteToolBlocked(` three times (offered tools, helper tools, the refusal at call time);
+- the `REMOTE_CAPABILITIES` check, `remoteSettings`, `remotePatch`, and `windowOnly()` refusing `req.bunnyRemote`;
+- `textOnly` giving no tools;
+- `protect: [dataDir]` in both workspaces, with the chat's own copy as the only `allow`.
+
+Other files:
+- `worktrees.js`, `github.js` and `procGuard.js` use `safeExec`.
+- `worktrees.js` has the signing, signature-verification, LFS and `--show-scope` settings.
+- `electron/own-pages.js` has `OWN_PAGE_PATHS` and `navigationAllowed`.
+
+## Other checks
+
+- **`browser_compare`** is on `REMOTE_TOOLS_DENIED` (`src/server/remoteAccess.js:139`).
+- **Audit exceptions** (`docs/security/audit-exceptions.json`) are unchanged since 0b39248:
+  - GHSA-fc5q-39xc-vjpf at `node_modules/picomatch`, "Sign the exception";
+  - GHSA-g3hv-75wg-m249 at `node_modules/minimatch` and `node_modules/@electron/universal/node_modules/minimatch`, "Proceed with recommendation.";
+  - all three to be reviewed by 2026-12-17.
+
+## Not covered by this sign-off
+
+- **K-5** is not in 0.1.10. Its review is paused: K-5's own test passes 13 of 13 and `guard-next` 7 of 7, and the remaining 16 guard files wait until QA is done.
+- **BROWSER's real-Electron probe** was not re-run by Security. The browser-2 verdicts rest on code reading and the HTTP tests.
+- **Design's sign-off** of the BROWSER screens against the drawing is Design's, not Security's.
+- **For the owner:** connectors stay denied for devices, and that question goes to the owner.
