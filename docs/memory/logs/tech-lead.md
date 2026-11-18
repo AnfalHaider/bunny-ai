@@ -2,6 +2,13 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-18 - v0.1.10: release sign-off PASS at 975970a (supersedes FAIL at 9d4e942)
+
+- RA-1 fixed at 0e5bc55: each try is reserved before scrypt and released in a finally. `remote-access.test.js` passes 34/34 on its own; my race script now gets 5 × 401 and 55 × 429.
+- 975970a (F-1/F-2) changes the page only: `deviceException` copies the server's `remoteException`. `browser-mode.test.js` passes 7/7 on its own.
+- Gate 9/9 at 975970a.
+- Lesson: no lesson (the RA-1 lesson is in the entry below).
+
 ## 2026-11-18 - v0.1.10: release review FAIL at 9d4e942 (RA-1)
 
 - RA-1, required: the remote sign-in limit counts only finished tries (`remoteAccess.js:217-231`). 60 parallel wrong passcodes from one IP were all checked. The fix and its done-when are in the shared note `tech-lead-release-0.1.10-RA1.md`.
