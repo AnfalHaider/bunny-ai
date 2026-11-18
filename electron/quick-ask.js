@@ -40,7 +40,7 @@ export function barWindowOptions(preload = join(BAR_DIR, 'preload.cjs')) {
 export const MIN_BAR_HEIGHT = 80; // the pill alone (about 70 px with its margin); the page asks for more while the + menu is open or an answer is shown
 export const MAX_BAR_HEIGHT = 560; // a long answer grows the bar to about this and then scrolls inside it
 
-export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open }, adminFetch = null, onOpenChat = () => {}, onAnswerFinished = () => {} }) {
+export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, onSubmit, dialog = null, fileOps = { lstat, open }, adminFetch = null, onOpenChat = () => {}, onOpenSettings = () => {}, onAnswerFinished = () => {} }) {
   let bar = null;
   let registered = null; // the accelerator currently held
   let keepTimer = null;
@@ -215,8 +215,10 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   ipcMain.handle('quickask:escHandled', (event) => { if (fromBar(event)) clearTimeout(escTimer); return { ok: true }; });
   ipcMain.handle('quickask:close', (event) => { if (!fromBar(event)) return { ok: false }; destroyBar(); return { ok: true }; });
   // Open in Bunny: the chat (and an answer still coming) is carried over to the main window; the bar closes.
-  ipcMain.handle('quickask:open', (event) => {
+  ipcMain.handle('quickask:open', (event, target) => {
     if (!fromBar(event) || !answerer) return { ok: false, message: 'Not allowed' };
+    // QUICK-UI 10: "No model connected" leads with Open Bunny settings: the window comes forward on its Providers page; the bar closes (nothing is carried over: there is no chat worth keeping)
+    if (target === 'settings') { onOpenSettings(); destroyBar(); return { ok: true }; }
     const id = answerer.sessionId;
     if (!id) return { ok: false, message: 'There is no chat to open yet.' };
     answerer.detach();

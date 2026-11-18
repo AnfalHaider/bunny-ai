@@ -2724,6 +2724,8 @@ function watchRemote() {
 
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
+  // QUICK-UI 10: the bar had no model to answer with: its button opens Bunny on the Providers page
+  if (request && request.openSettings === true) { openSettings('providers'); return; }
   // QA-ANSWERS: Open in Bunny carries a chat that began in the bar over to this window (and a later refresh when its answer finished).
   if (request && typeof request.openChat === 'string' && /^[a-f0-9-]{36}$/.test(request.openChat)) {
     if (request.refresh) { if (state.sessionId === request.openChat && !state.streaming) await openSession(request.openChat); await loadSessions(); return; }

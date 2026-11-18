@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('quickAsk', {
   // QA-ANSWERS: ask (text only), stop, open the chat in Bunny's window, grow to fit, and hear the plain events of the answer
   ask: (text, attachments) => ipcRenderer.invoke('quickask:ask', text, attachments),
   stop: () => ipcRenderer.invoke('quickask:stop'),
-  openInBunny: () => ipcRenderer.invoke('quickask:open'),
+  openInBunny: (target) => ipcRenderer.invoke('quickask:open', target), // target: nothing (open the chat) or 'settings' (open Bunny's settings, when no model is connected)
   resize: (height) => ipcRenderer.invoke('quickask:resize', height),
   onAnswer: (fn) => { const h = (_e, event) => fn(event); ipcRenderer.on('quickask:answer', h); return () => ipcRenderer.removeListener('quickask:answer', h); },
   dropFile: () => ipcRenderer.invoke('quickask:dropFile'),

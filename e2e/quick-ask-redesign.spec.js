@@ -81,15 +81,16 @@ test('2: the window is only as tall as the pill, and grows for the + menu and fo
   await openBar(page);
   await expect.poll(() => lastResize(page)).not.toBeNull();
   const rest = await lastResize(page);
-  expect(rest).toBeLessThanOrEqual(130); // the pill, not the 300 of before (tightened to about 70 when the pill is redrawn)
+  expect(rest).toBeLessThanOrEqual(76); // the pill alone: about 70, not the 300 of before
   expect(rest).toBeGreaterThanOrEqual(60);
+  await page.locator('#text').fill('x'); // + and Send appear with the first keystroke
   await page.locator('#plus').click();
   const withMenu = await lastResize(page);
   expect(withMenu).toBeGreaterThan(rest + 60);
   const menuBottom = await page.locator('#menu').evaluate((m) => m.getBoundingClientRect().bottom);
   expect(withMenu).toBeGreaterThanOrEqual(menuBottom); // the menu is not cut off by the window
   await page.locator('#plus').click(); // closes
-  await expect.poll(() => lastResize(page)).toBeLessThanOrEqual(130);
+  await expect.poll(() => lastResize(page)).toBeLessThanOrEqual(110); // the pill with its keys line
   await page.locator('#text').fill('hello');
   await page.locator('#go').click();
   await page.evaluate(() => window.__emit({ type: 'delta', text: 'A line of the answer.\n\n'.repeat(12) }));
@@ -99,6 +100,7 @@ test('2: the window is only as tall as the pill, and grows for the + menu and fo
 test('3: Esc does one thing at a time: closes the + menu first, then stops a running answer, then closes the bar', async ({ page }) => {
   await openBar(page, { ask: 'ok' });
   // the + menu is open: Esc closes the menu, the focus goes back to +, the bar stays
+  await page.locator('#text').fill('hi');
   await page.locator('#plus').click();
   await expect(page.locator('#menu')).toBeVisible();
   await page.evaluate(() => window.__esc());
@@ -119,3 +121,171 @@ test('3: Esc does one thing at a time: closes the + menu first, then stops a run
   await page.evaluate(() => window.__esc());
   expect(await calls(page, 'close')).toHaveLength(1);
 });
+
+/** Ask a question and finish an answer, for the tests that need an answer on screen. */
+async function answered(page, answer = 'Here is the answer.') {
+  await page.locator('#text').fill('What is a burrow?');
+  await page.locator('#go').click();
+  await page.evaluate((a) => { window.__emit({ type: 'delta', text: a }); window.__emit({ type: 'done', model: 'Auto', finished: true }); }, answer);
+  await expect(page.locator('#follow')).toBeEnabled();
+}
+
+test('4: the keys are a quiet line from the first keystroke, stay through the answer, and Ctrl+Enter opens the chat once there is one', async ({ page }) => {
+  await openBar(page);
+  await expect(page.locator('#hint')).toBeHidden(); // the empty pill shows none
+  await page.locator('#text').fill('h');
+  await expect(page.locator('#hint')).toBeVisible();
+  await expect(page.locator('#keyline')).toContainText('Enter to send');
+  await page.locator('#text').press('Control+Enter');
+  expect(await calls(page, 'open')).toHaveLength(0); // no chat yet
+  expect(await calls(page, 'ask')).toHaveLength(0); // and Ctrl+Enter does not send
+  await page.locator('#text').fill('What is a burrow?');
+  await page.locator('#go').click();
+  await expect(page.locator('#hint')).toBeVisible(); // stays through thinking
+  await page.keyboard.press('Control+Enter');
+  expect(await calls(page, 'open')).toHaveLength(0); // still no chat to open while it thinks
+  await page.evaluate(() => { window.__emit({ type: 'delta', text: 'An answer.' }); window.__emit({ type: 'done', model: 'Auto' }); });
+  await expect(page.locator('#hint')).toBeVisible();
+  await expect(page.locator('#keyline')).toContainText('Ctrl+Enter');
+  await page.keyboard.press('Control+Enter');
+  expect(await calls(page, 'open')).toHaveLength(1);
+  await expect(page.locator('#open .kb')).toHaveText('Ctrl+Enter');
+});
+
+test('5: Copy says "Copied", and each code block has its own Copy', async ({ page }) => {
+  await page.addInitScript(() => { window.__clip = []; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__clip.push(t); } }, configurable: true }); });
+  await openBar(page);
+  await answered(page, 'Run this:\n\n```js\nconsole.log("hi");\n```\n\nand that:\n\n```sh\nls\n```\n');
+  await page.locator('#copy').click();
+  await expect(page.locator('.copied')).toHaveText('Copied');
+  expect((await page.evaluate(() => window.__clip))[0]).toContain('Run this:');
+  const blocks = page.locator('#ans pre .cpy');
+  await expect(blocks).toHaveCount(2);
+  await blocks.nth(1).click();
+  await expect(blocks.nth(1)).toHaveText('Copied');
+  expect((await page.evaluate(() => window.__clip)).at(-1)).toContain('ls');
+});
+
+test('6: a long answer can be read while it streams: it follows the end until the reader scrolls up, then "Latest" brings them back', async ({ page }) => {
+  await openBar(page, { ask: 'wait' });
+  await page.locator('#text').fill('Tell me a lot');
+  await page.locator('#go').click();
+  const line = (n) => `Line ${n} of a long answer.\n\n`;
+  await page.evaluate((text) => window.__emit({ type: 'delta', text }), Array.from({ length: 40 }, (_, i) => line(i)).join(''));
+  const ans = page.locator('#ans');
+  const nearEnd = () => ans.evaluate((n) => n.scrollHeight - n.scrollTop - n.clientHeight < 30);
+  expect(await nearEnd()).toBe(true); // following
+  await ans.evaluate((n) => { n.scrollTop = 0; n.dispatchEvent(new Event('scroll')); });
+  await expect(page.locator('#latest')).toBeVisible();
+  await page.evaluate((text) => window.__emit({ type: 'delta', text }), Array.from({ length: 10 }, (_, i) => line(100 + i)).join(''));
+  expect(await ans.evaluate((n) => n.scrollTop)).toBeLessThan(40); // it did not jump to the end
+  await page.locator('#latest').click();
+  expect(await nearEnd()).toBe(true);
+  await expect(page.locator('#latest')).toBeHidden();
+});
+
+test('7: earlier turns stay, folded, and a long question is cut to three lines', async ({ page }) => {
+  await openBar(page);
+  await answered(page, 'First answer.');
+  await expect(page.locator('#earlier')).toBeHidden();
+  await page.locator('#follow').fill('And a second question that is quite long '.repeat(14));
+  await page.locator('#follow').press('Enter');
+  await expect(page.locator('#earlier')).toBeVisible();
+  await expect(page.locator('#earlier-toggle')).toContainText('Earlier in this chat (1)');
+  await expect(page.locator('#earlier-list')).toBeHidden();
+  await page.locator('#earlier-toggle').click();
+  await expect(page.locator('#earlier-list')).toContainText('What is a burrow?');
+  await expect(page.locator('#earlier-list')).toContainText('First answer.');
+  const q = page.locator('#q');
+  const lineHeight = await q.evaluate((n) => parseFloat(getComputedStyle(n).lineHeight));
+  expect((await q.boundingBox()).height).toBeLessThanOrEqual(lineHeight * 3 + 16 + 1); // three lines and its padding
+  expect(await q.getAttribute('title')).toContain('quite long'); // the whole question is in the tooltip
+});
+
+test('10: "No model connected" leads with Open Bunny settings and has no Try again', async ({ page }) => {
+  await openBar(page);
+  await page.locator('#text').fill('hello');
+  await page.locator('#go').click();
+  await page.evaluate(() => window.__emit({ type: 'error', kind: 'none', message: 'No model' }));
+  const card = page.locator('#card .cardx.bad');
+  await expect(card.getByRole('button', { name: 'Open Bunny settings' })).toBeFocused();
+  await expect(card.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Open Bunny settings' }).click();
+  expect(await calls(page, 'open')).toEqual([['open', 'settings']]);
+});
+
+test('11 and 12: at rest the pill is just the mark and the placeholder; the first keystroke brings + and Send; + is reached by Tab even when hidden', async ({ page }) => {
+  await openBar(page);
+  await expect(page.locator('#text')).toHaveAttribute('placeholder', 'What are we burrowing into?');
+  const rest = await page.evaluate(() => {
+    const bar = getComputedStyle(document.getElementById('bar'));
+    const w = (id) => ({ opacity: getComputedStyle(document.getElementById(id)).opacity });
+    return { radius: bar.borderTopLeftRadius, bg: bar.backgroundColor, plus: w('plus'), go: w('go') };
+  });
+  expect(rest.radius).toBe('20px');
+  expect(rest.bg).toMatch(/rgba\(255, 255, 255, 0\.92\)/); // about 92% opaque, over a transparent window
+  expect(Number(rest.plus.opacity)).toBe(0);
+  expect(Number(rest.go.opacity)).toBe(0);
+  await page.locator('#text').fill('x');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.getElementById('go')).opacity)).toBe('1');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.getElementById('plus')).opacity)).toBe('1');
+  await page.locator('#text').fill('');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.getElementById('plus')).opacity)).toBe('0');
+  await page.locator('#text').focus();
+  await page.keyboard.press('Tab'); // the hidden + takes the focus and shows itself
+  await expect(page.locator('#plus')).toBeFocused();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.getElementById('plus')).opacity)).toBe('1');
+  expect((await page.locator('#plus').boundingBox()).width).toBeGreaterThan(20);
+});
+
+test('13: the buttons fade in over 160 ms and the answer opens over 220 ms; all of it is off with reduced motion', async ({ page }) => {
+  await openBar(page);
+  const times = () => page.evaluate(() => ({ go: getComputedStyle(document.getElementById('go')).transitionDuration, panel: getComputedStyle(document.getElementById('panel-wrap')).transitionDuration }));
+  const normal = await times();
+  expect(normal.go).toContain('0.16s');
+  expect(normal.panel).toBe('0.22s');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reduced = await times();
+  expect(reduced.go).toBe('0s');
+  expect(reduced.panel).toBe('0s');
+});
+
+// Pictures of every state, in both themes, on an invented profile: written when QUICKUI_SHOTS names a folder (they are what Design and QA look at; not part of the gate).
+for (const scheme of ['light', 'dark']) {
+  test(`pictures: every state of the pill (${scheme})`, async ({ page }) => {
+    const folder = process.env.QUICKUI_SHOTS;
+    test.skip(!folder, 'QUICKUI_SHOTS is not set');
+    await openBar(page, { scheme, config: {}, ask: 'ok' });
+    // a wallpaper behind the transparent window, like the one in Design's page
+    await page.addStyleTag({ content: `html { background: ${scheme === 'dark' ? 'linear-gradient(135deg,#24304a 0%,#3b2f4a 55%,#4a3a3c 100%)' : 'linear-gradient(135deg,#a8c3e6 0%,#e7c8d8 55%,#f3dbb8 100%)'} !important; }` });
+    await page.setViewportSize({ width: 640, height: 720 });
+    const shoot = async (name) => {
+      await page.waitForTimeout(350); // the eased height and the fades settle
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const bottom = await page.evaluate(() => Math.ceil(Math.max(document.getElementById('bar').getBoundingClientRect().bottom, document.getElementById('menu').hidden ? 0 : document.getElementById('menu').getBoundingClientRect().bottom)) + 8);
+      await page.screenshot({ path: `${folder}/${name}-${scheme}.png`, clip: { x: 0, y: 0, width: 640, height: Math.min(bottom, 720) } });
+    };
+    await shoot('rest');
+    await page.locator('#text').fill('How do rabbits dig a burrow?');
+    await shoot('typing');
+    await page.locator('#plus').click();
+    await shoot('menu');
+    await page.locator('#plus').click();
+    await page.locator('#go').click();
+    await shoot('thinking');
+    await page.evaluate(() => window.__emit({ type: 'delta', text: 'Rabbits dig with their front paws and push the soil back with their hind legs. A burrow has several rooms.\n\n```text\nentrance -> tunnel -> nest\n```\n' }));
+    await page.evaluate(() => window.__emit({ type: 'done', model: 'Auto' }));
+    await shoot('answer');
+    await page.locator('#follow').fill('And how deep?');
+    await page.locator('#follow').press('Enter');
+    await page.evaluate(() => window.__emit({ type: 'delta', text: 'Usually one to two metres, deeper in cold places.' }));
+    await page.evaluate(() => window.__emit({ type: 'done', model: 'Auto' }));
+    await shoot('earlier');
+    await page.evaluate(() => window.__emit({ type: 'error', kind: 'none', message: 'No model' }));
+    await shoot('no-model');
+    await page.evaluate(() => window.__emit({ type: 'needs-window', text: 'I would need to read your files for that.' }));
+    await shoot('needs-window');
+    await page.evaluate(() => window.__emit({ type: 'error', kind: 'offline', message: '' }));
+    await shoot('offline');
+  });
+}
