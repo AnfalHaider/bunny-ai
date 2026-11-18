@@ -54,7 +54,11 @@ function run(label, args, env) {
     pass(child.stdout, process.stdout);
     pass(child.stderr, process.stderr);
     arm();
-    child.on('close', (code, signal) => { clearTimeout(timer); resolve(signal ? 1 : code ?? 1); });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      if (code !== 0) console.error(`\nEXIT: "${label}" ended with code ${code ?? 'none'}, signal ${signal ?? 'none'}`);
+      resolve(signal ? 1 : code ?? 1);
+    });
   });
 }
 
