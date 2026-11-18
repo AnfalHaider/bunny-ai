@@ -74,6 +74,22 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 .diff{font:12px/1.5 var(--mono);background:var(--soft);border-radius:8px;padding:6px 10px;overflow:auto}.diff .a{color:var(--ok)}.diff .r{color:var(--bad)}
 .seq{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));align-items:start}.seq>*{min-width:0}
 .seq .lab b{color:var(--accent)}
+/* account / local control */
+.mrow{display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+.tgw{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--mute)}
+.tgw .tl.on{color:var(--fg);font-weight:700}
+.sw2{width:44px;height:24px;border-radius:999px;background:var(--mute);position:relative;display:block;flex:none;opacity:.55}
+.sw2::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .16s}
+.sw2.ac{background:var(--accent);opacity:1}.sw2.ac::after{left:23px}
+.sw2.wr{background:var(--warn);opacity:1}
+.tgw.dis{opacity:.75}.sw2.lock{opacity:.35}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--soft);font-size:13.5px}
+.seg b{padding:5px 16px;font-weight:500;color:var(--mute)}
+.seg b.on{background:var(--fg);color:var(--bg);font-weight:700}
+.seg b.on.wr{background:var(--warn);color:#fff}
+.seg.dis b.on{background:var(--mute);color:#fff}
+.mst{font-size:13px;color:var(--mute);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mbox{display:grid;gap:8px}
 </style>
 
 <main>
@@ -87,7 +103,7 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 
 <section class="card">
   <h2>What this is</h2>
-  <p>Bunny's own engine stays the default and works as it does today. Settings gets an <b>Engines</b> page where you can set up another engine: Bunny downloads it when you click, keeps it at a version Bunny has tested, and runs it hidden. You still see the same chat, the same steps and the same permission prompts, and Bunny's rules still decide. For each engine you choose <b>Sign in with an account</b> or <b>Run locally on Bunny's models</b>. Engines work in Code chats with a folder only.</p>
+  <p>Bunny's own engine stays the default and works as it does today. Settings gets an <b>Engines</b> page where you can set up another engine: Bunny downloads it when you click, keeps it at a version Bunny has tested, and runs it hidden. You still see the same chat, the same steps and the same permission prompts, and Bunny's rules still decide. Each installed engine has a toggle on its row, <b>Account</b> or <b>Local</b>: Account signs in with the vendor's own sign-in, Local runs on Bunny's models. Engines work in Code chats with a folder only.</p>
   <div class="note"><b>Risk for Security: HIGH.</b> A new execution engine, a permission bridge, third-party code downloaded and run, and (for local mode) a local model endpoint. Two engines (Aider, Cline) cannot yet promise that Bunny checks every action first, so they are drawn as <b>restricted</b>. The rule from Tech Lead's spec stays: an engine that cannot be checked is not offered. The owner's go is asked with this page.</div>
 </section>
 
@@ -96,7 +112,7 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
   <div class="rec first"><span class="n">1</span><div><b><span class="pill p-med">medium</span>A new Settings page, "Engines", under Code</b><span class="m">Bunny's engine first (always there, "Default"), then Claude Code, Codex CLI, Aider, Cline. Changing anything on it is window-only; a phone can read it but not change it.</span></div></div>
   <div class="rec"><span class="n">2</span><div><b><span class="pill p-med">medium</span>Each engine shows one state, with one main button</b><span class="m">Not installed (Download · size) → Installing (progress, Cancel) → Installed (version) → Update to vY (tested) → Roll back. A failed download says why and keeps what was there. Figure 1.</span></div></div>
   <div class="rec"><span class="n">3</span><div><b><span class="pill p-hi">high</span>Download on click, never silently, with the size first</b><span class="m">About 380 MB for Claude Code and 390 MB for Codex CLI; Aider and Cline sizes are filled in from the release file when built. Files are checked (checksum, and Anthropic's signature for Claude Code) before use, and stored in Bunny's own folder. Claude Code is installed from Anthropic's official installer, unmodified, on your click (its licence does not allow Bunny to ship it).</span></div></div>
-  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>Every enabled engine asks: sign in with an account, or run locally</b><span class="m">"Sign in with an account" opens the vendor's own sign-in in a terminal window you can see; Bunny never sees your password or token and never stores it. The row then shows "Signed in" and "Sign out". "Run locally" uses Bunny's own models and keys. Figure 2.</span></div></div>
+  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>Every installed engine has an Account / Local toggle on its row</b><span class="m">Turning on Account opens the vendor's own sign-in in a terminal window you can see (Bunny never sees or stores your password or token); the row then shows "Signed in" and "Sign out". If you close that window without finishing, the toggle goes back to Local and says so. Turning it back to Local keeps you signed in until you press Sign out. Local uses Bunny's own models and keys. Aider shows Local, fixed. Figure 2 also draws a two-option control beside the toggle, with a recommendation.</span></div></div>
   <div class="rec"><span class="n">5</span><div><b><span class="pill p-hi">high</span>Plain notes where a choice has a catch</b><span class="m">Claude Code run locally carries: "Anthropic does not support Claude Code with other models; it may stop working after an update." Codex locally works only with providers that offer the OpenAI Responses API. Aider is local only. Figure 3.</span></div></div>
   <div class="rec"><span class="n">6</span><div><b><span class="pill p-hi">high</span>Restricted engines say so, on the row and in the chat</b><span class="m">Aider and Cline cannot be asked before every step the way Bunny's engine can. Restricted means: they work in a copy of your folder (a git worktree), every edit is a commit you can undo, shell commands are off, and Bunny shows what changed and asks "Keep the changes?" when the run ends. Figure 4.</span></div></div>
   <div class="rec"><span class="n">7</span><div><b><span class="pill p-med">medium</span>Choose the engine per chat, before the first message</b><span class="m">Code chats with a folder get an "Engine" menu in the composer, defaulting to Bunny (or the engine you set as default). Engines that are not installed are listed with "Set up in Settings". After the first message the engine is fixed for that chat. Figure 5.</span></div></div>
@@ -118,9 +134,13 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 </section>
 
 <section class="card">
-  <h2>2. Account or local, for each engine</h2>
-  <p class="mute">Shown for Claude Code, the one with an account. The choice appears when the engine is installed.</p>
+  <h2>2. Account / Local: one toggle on each engine's row</h2>
+  <p class="mute">The owner's steer: a toggle labelled Account and Local, with the state clear at a glance. Turning on <b>Account</b> opens the vendor's own sign-in in a window you can see; turning it off goes back to <b>Local</b>. It appears once the engine is installed. Drawn for Claude Code first, then the other engines.</p>
   <div class="seq" id="f-modes"></div>
+  <h3 style="margin-top:8px">Toggle, or a two-option control?</h3>
+  <p class="mute">Both are drawn so you can compare. A plain on/off switch can mislead here, because "off" is not "nothing": it is a different way to run. The labelled toggle fixes that by naming both ends and bolding the one in use.</p>
+  <div class="seq" id="f-alt"></div>
+  <div class="note"><b>Recommendation: the two-option control (B).</b> It is the same single control on the row, but both choices are always written out and the chosen one is filled, so nobody has to read a knob's position. It also has room for the awkward state "Account, but the sign-in has expired" (the Account half turns amber), and it reads out correctly in a screen reader ("Account, selected"). If you prefer the toggle (A), it works too: both labels stay visible, the bold label shows what is in use, and the knob is purple only for Account. Either way the behaviour is the same.</div>
 </section>
 
 <section class="card">
@@ -204,7 +224,7 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
   }
   var BUNNYROW=function(){return '<div class="erow">'+head('B','Bunny',"Bunny's own engine. Always there.",badge('Default','ac'),'')+'</div>';};
   var CCROW=function(){return '<div class="erow">'+head('CC','Claude Code','Installed v2.1.311 · Signed in · Anthropic account',badge('Update ready','ac'),btn('Update to v2.1.327 (tested)','pri')+btn('Remove'))+modeCC('signedin')+'</div>';};
-  var CXROW=function(){return '<div class="erow">'+head('CX','Codex CLI','Installed v0.170.0 · Running locally',badge('Restricted providers','wr'),btn('Check for update')+btn('Remove'))+'<div class="callout info">Local mode works only with providers that offer the OpenAI Responses API (OpenAI, OpenRouter). Others after they are tested.</div></div>';};
+  var CXROW=function(){return '<div class="erow">'+head('CX','Codex CLI','Installed v0.170.0 · Running locally',badge('Restricted providers','wr'),btn('Check for update')+btn('Remove'))+modeLine('cx','local','tg')+'</div>';};
   var AIROW=function(){return '<div class="erow">'+head('AI','Aider','Not installed · local only · restricted',badge('Restricted','wr'),btn('Download · size shown before you start','pri'))+'<div class="d">Works in a copy of your folder, edits as undoable commits, no shell commands; Bunny shows the changes when it finishes.</div></div>';};
   var CLROW=function(){return '<div class="erow">'+head('CL','Cline','Installing v3.0.74 · 38%',badge('Restricted','wr'),btn('Cancel'))+'<div class="acts"><span class="bar"><i style="width:38%"></i></span><span class="d">Checking the file when it finishes</span></div></div>';};
   document.getElementById('f-today').innerHTML='<h4>Code</h4><div class="grp"><div class="erow"><div class="eh"><div><div class="en">Default permission mode</div><div class="es">How careful a new chat starts out.</div></div>'+btn('Manual ▾')+'</div></div><div class="erow"><div class="eh"><div><div class="en">Default effort</div></div>'+btn('Medium ▾')+'</div></div></div><div class="d">No engine choice. Every Code chat runs on Bunny\'s own engine.</div>';
@@ -256,6 +276,48 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
   // phone
   document.getElementById('p-set').innerHTML='<h4>Engines</h4><div class="callout info">Only Bunny\'s window can change engines.</div><div class="grp">'+BUNNYROW()+'<div class="erow">'+head('CC','Claude Code','v2.1.311 · Signed in · account','','')+'</div><div class="erow">'+head('CX','Codex CLI','v0.170.0 · local · restricted providers','','')+'</div><div class="erow">'+head('AI','Aider','Not installed','','')+'</div><div class="erow">'+head('CL','Cline','Installing · 38%','','')+'</div></div>';
   document.getElementById('p-chat').innerHTML='<div class="hdr"><span><b>Fix the footer links</b></span><span class="chipe">Claude Code · account</span></div><div class="msgu">The footer links point to the old site. Fix them.</div><div class="step"><b>Edited</b> <code>footer.html</code> <span class="eng">Claude Code</span></div><div class="perm"><h5>Allow this command?</h5><p><code>npm run build</code> in my-site</p><div class="acts">'+btn('Allow once','pri')+btn('Deny')+'</div></div><div class="d">A phone signed in at the Chats level cannot start a Code chat on an engine; this chat was started in the window.</div>';
+  // ---- Account / Local control (toggle 'tg' or two-option 'seg') ----
+  function ctl(v,mode){
+    var acct=(mode==='account'||mode==='warn'||mode==='pending');
+    if(mode==='fixed'){return '<span class="tgw dis" aria-label="Local, fixed"><span class="tl on">Local</span><span class="sw2 lock"></span><span class="tl">Account</span></span><span class="bd">Fixed</span>';}
+    if(v==='seg'){return '<span class="seg" role="radiogroup" aria-label="Account or Local"><b class="'+(!acct?'on':'')+'">Local</b><b class="'+(acct?'on'+(mode==='warn'?' wr':''):'')+'">Account</b></span>';}
+    return '<span class="tgw" role="switch" aria-label="Account or Local"><span class="tl'+(!acct?' on':'')+'">Local</span><span class="sw2'+(acct?' ac':'')+(mode==='warn'?' wr':'')+'"></span><span class="tl'+(acct?' on':'')+'">Account</span></span>';
+  }
+  function VENDF(){return {cc:'Anthropic',cx:'OpenAI',cl:'Cline'};}
+  function NOTEF(){return {cc:'<div class="callout">'+CCNOTE+'</div>',cx:'<div class="callout info">Restricted: Local works only with providers that offer the OpenAI Responses API (OpenAI, OpenRouter). With another provider this engine says so and does not start.</div>',cl:'<div class="callout info">Restricted: Cline asks Bunny before each action through a check that is still being verified.</div>'};}
+  function modeLine(eng,mode,v){
+    var NOTE=NOTEF(),VEND=VENDF(),st;
+    if(mode==='local'){st='<span class="mst">Runs on Bunny\'s models and keys. No account needed.</span>'+(NOTE[eng]||'');}
+    else if(mode==='pending'){st='<span class="mst"><span class="bd ac" style="margin-left:0">Waiting for sign-in</span> A '+VEND[eng]+' sign-in window is open. Finish there.</span><div class="acts">'+btn('Cancel')+'</div>';}
+    else if(mode==='account'){st='<span class="mst"><span class="bd ok" style="margin-left:0">Signed in</span> '+VEND[eng]+' account</span><div class="acts">'+btn('Sign out')+'</div>';}
+    else if(mode==='warn'){st='<span class="mst"><span class="bd wr" style="margin-left:0">Sign-in expired</span> Account needs you to sign in again.</span><div class="acts">'+btn('Sign in again…','pri')+'</div>';}
+    else if(mode==='cancelled'){st='<div class="callout info">Sign-in was not finished, so this engine is back on Local.</div>'+(NOTE[eng]||'');}
+    else if(mode==='fixed'){st='<span class="mst">Aider has no account of its own, so it always runs on Bunny\'s models.</span>';}
+    var m=mode==='cancelled'?'local':mode;
+    return '<div class="mbox"><div class="mrow">'+ctl(v||'tg',m)+'</div>'+st+'</div>';
+  }
+  function modeCC(kind,v){return modeLine('cc',kind==='signedin'?'account':kind==='notsigned'?'pending':kind,v||'tg');}
+  function box(l,inner){return '<div><div class="lab"><b>'+l+'</b></div><div class="app">'+inner+'</div></div>';}
+  function er(t,n,s,bd,r,body){return '<div class="erow" style="padding:0;border:0">'+head(t,n,s,bd,r)+body+'</div>';}
+  var CCH=function(s){return head('CC','Claude Code',s||'Installed v2.1.311',badge('Ready','ok'),btn('Remove'));};
+  document.getElementById('f-modes').innerHTML=
+    box('Local (the starting state)','<div class="erow" style="padding:0;border:0">'+CCH()+modeLine('cc','local')+'</div>')
+   +box('Turn on Account: the vendor\'s sign-in opens','<div class="erow" style="padding:0;border:0">'+CCH()+modeLine('cc','pending')+'</div><div class="term"><div class="tb"><span>Claude Code sign-in · opened by Bunny</span><span>×</span></div><div class="tx">Opening your browser to sign in…\nIf it does not open, use this link:\nhttps://claude.ai/…  (the vendor\'s own page)\n\nWaiting for you to finish in the browser…</div></div><div class="d">A visible terminal window, owned by Claude Code. Bunny does not see what is typed or the token it saves.</div>')
+   +box('Signed in','<div class="erow" style="padding:0;border:0">'+CCH()+modeLine('cc','account')+'</div>')
+   +box('Window closed without finishing: back to Local','<div class="erow" style="padding:0;border:0">'+CCH()+modeLine('cc','cancelled')+'</div>')
+   +box('Sign-in expired','<div class="erow" style="padding:0;border:0">'+head('CC','Claude Code','Installed v2.1.311',badge('Sign in again','wr'),btn('Remove'))+modeLine('cc','warn')+'</div>')
+   +box('Toggle back to Local: you stay signed in','<div class="erow" style="padding:0;border:0">'+CCH()+modeLine('cc','local')+'<div class="d">You are still signed in to Claude Code. Switch to Account again any time without signing in. Press Sign out (shown on Account) to remove it.</div></div>');
+  document.getElementById('f-notes').innerHTML=
+    box('Codex CLI: Local, with its provider note','<div class="erow" style="padding:0;border:0">'+head('CX','Codex CLI','Installed v0.170.0',badge('Restricted providers','wr'),btn('Check for update')+btn('Remove'))+modeLine('cx','local')+'</div>')
+   +box('Codex CLI: Account (OpenAI sign-in, to be confirmed)','<div class="erow" style="padding:0;border:0">'+head('CX','Codex CLI','Installed v0.170.0',badge('Ready','ok'),btn('Remove'))+modeLine('cx','account')+'</div>')
+   +box('Aider: Local, fixed','<div class="erow" style="padding:0;border:0">'+head('AI','Aider','Installed v0.86.2 · restricted',badge('Restricted','wr'),btn('Remove'))+modeLine('cx','fixed').replace('cx','ai')+'</div>')
+   +box('Cline: Account or Local, restricted','<div class="erow" style="padding:0;border:0">'+head('CL','Cline','Installed v3.0.74',badge('Restricted','wr'),btn('Remove'))+modeLine('cl','local')+'</div>');
+  function alt(label,v){return '<div><div class="lab"><b>'+label+'</b></div><div class="app"><div class="erow" style="padding:0;border:0;gap:12px">'
+    +'<div><div class="d" style="margin-bottom:4px">Local</div>'+ctl(v,'local')+'</div>'
+    +'<div><div class="d" style="margin-bottom:4px">Account, signed in</div>'+ctl(v,'account')+'</div>'
+    +'<div><div class="d" style="margin-bottom:4px">Account, sign-in expired</div>'+ctl(v,'warn')+'</div>'
+    +'<div><div class="d" style="margin-bottom:4px">Aider (fixed)</div>'+ctl(v,'fixed')+'</div></div></div></div>';}
+  document.getElementById('f-alt').innerHTML=alt('A. Labelled toggle (the owner\'s idea)','tg')+alt('B. Two-option control (recommended)','seg');
   document.getElementById('theme').addEventListener('click',function(){var r=document.documentElement,d=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',d?'light':'dark');});
 })();
 </script>
