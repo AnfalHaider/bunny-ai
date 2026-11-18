@@ -1,0 +1,30 @@
+light empty: bar 684x99
+light typing: bar 684x99
+light menu: bar 684x99
+light chip: bar 684x137
+light thinking: bar 684x170
+light streaming: bar 684x200
+light short: bar 684x226
+light heights asked: 191,220,244,220,246
+light long: ans scrollHeight 528 clientHeight 329 scrollTop 199
+light long: bar 684x482
+light code: bar 684x284
+light none: bar 684x271
+light offline: bar 684x292
+light needs: bar 684x324
+light focus after done: follow; hint hidden: true
+dark empty: bar 684x99
+dark typing: bar 684x99
+dark menu: bar 684x99
+dark chip: bar 684x137
+dark thinking: bar 684x170
+dark streaming: bar 684x200
+dark short: bar 684x226
+dark heights asked: 191,220,244,220,246
+dark long: ans scrollHeight 528 clientHeight 329 scrollTop 199
+dark long: bar 684x482
+dark code: bar 684x284
+dark none: bar 684x271
+dark offline: bar 684x292
+dark needs: bar 684x324
+dark focus after done: follow; hint hidden: true
