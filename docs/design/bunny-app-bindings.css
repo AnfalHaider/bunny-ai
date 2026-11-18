@@ -263,6 +263,8 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
 .picker-trigger .chip-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: hsl(var(--chip-hue, 200) 60% 50%); }
 .picker-trigger .chip-free { flex: none; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: var(--fw-medium); }
 .picker-trigger .meta { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.picker-trigger.is-auto .label { flex: none; overflow: visible; } /* "Auto" is never cut to "A…": the chosen model after it takes the ellipsis, at its end */
+.composer-row .picker-trigger { max-width: min(340px, 46vw); }
 .picker-handle, .picker-scrim { display: none; }
 .picker-trigger .label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .picker-trigger .meta { color: var(--text-faint); white-space: nowrap; }
