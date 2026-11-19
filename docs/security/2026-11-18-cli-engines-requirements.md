@@ -287,3 +287,32 @@ The evidence:
 - After the run, Bunny checks that the entry still says `untrusted`, and logs it if not. The next run's rewrite resets it anyway.
 
 **Builder C's note is also recorded:** Codex appears not to apply prefix exec-policy rules to its `powershell.exe -Command` wrapper on Windows. Bunny's own `checkCommand` on the command text (CE-1.13) stays the rule that decides.
+
+## Ruling after S5 (2026-11-19, Builder B's 9ca7474): OpenCode is not offered in v0.1.14; it can be a candidate later
+
+I read `docs/spikes/cli-engines/s5/README.md` (Results and Verdict).
+
+**What holds:**
+- over ACP with `*: ask`, every tool asks the host first, including reads and writes outside the folder (asked twice);
+- `reject` ends the turn;
+- the failure set (client killed, silent, garbage) is fail-closed;
+- no account is needed;
+- MIT licence, one hash-pinnable zip, no install script.
+
+**Why it doesn't ship in v0.1.14:**
+1. **Project plugins run code before any permission (CE-3.3):** `.opencode/plugins/*.js` ran in every run, despite `OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_PURE`. That's a repository running its own code on the PC the moment the engine starts, before any question. It's the worst failure in the engine work so far. Running in a staged copy without `.opencode/` and `opencode.json` is the only handling found, and it isn't proven:
+   - it's unknown whether OpenCode also looks **upward** from its working folder (the staged copy sits under Bunny's data folder, inside the user profile), or in other plugin locations;
+   - it hasn't been tested on the real adapter.
+2. **Network beyond the model (M5, CE-5.5):** it downloads ripgrep from github.com at start, and installs its provider package from registry.npmjs.org, repeating about every 50 s. Those are downloaded executables outside Bunny's pins (CE-5.1). A clean capture with both supplied by Bunny hasn't been shown.
+3. **Subagents bypass the host (CE-1.5):** once `task` is allowed, its own tool calls never reach ACP. `task` must always be refused, both in config and in Bunny's answer.
+4. **Not tested:** turning commands, web, MCP and subagents off (restricted mode); process clean-up after a normal run (CE-8.2); the Git Bash dependency of the shell tool. Under the spec's rule, an engine whose facts aren't proven isn't offered.
+
+**Ruling:** OpenCode is **not offered** in v0.1.14, in any mode, and not behind a flag that ships. It can come back as a candidate for a later release, **full mode over ACP** (`once` or `reject` only, never `always`), only with a new spike showing all of:
+- **OC-1:** the engine always runs in a staged copy with no `.opencode/`, `opencode.json` or `.opencode*` anywhere in the copy. A hostile `.opencode/plugins/x.js` placed (a) in the person's folder, (b) in the folder **above** the staged copy, and (c) in the isolated home's config locations never runs (a marker file must be absent). CE-2's diff review applies to every change.
+- **OC-2:** `rg` is supplied by Bunny, hash-pinned, and the provider package is pre-seeded or replaced by a built-in provider shape. A proxy capture over a full run shows **no host but Bunny's endpoint**, the 50-second repeat included.
+- **OC-3:** `task` is set to `deny` in the config **and** answered with `reject`. A test shows no subagent tool runs.
+- **OC-4:** with `permission.bash`, `webfetch`, `task` and MCP set to `deny`, those tools are gone or refused. That's needed to offer restricted mode at all.
+- **OC-5:** no process outlives a normal run or a Stop. The shell's Git Bash dependency is resolved by absolute path, or is absent.
+- **OC-6:** Bunny's watchdog (CE-1.10 style) checks every `tool_call` in the ACP stream against a host request Bunny answered `once`.
+
+Claude Code and Codex are unaffected.
