@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const rootArg = process.argv.indexOf('--root');
+if (rootArg > 0 && !process.argv[rootArg + 1]) { console.error('--root needs a folder: node scripts/build-css.mjs [--check] --root <folder>'); process.exit(2); }
 const root = rootArg > 0 ? process.argv[rootArg + 1] : join(dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
 const parts = ['docs/design/bunny-design-system.css', 'docs/design/bunny-app-bindings.css'];

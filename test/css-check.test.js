@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 // CSS-CHECK: src/ui/app.css is generated from docs/design/bunny-design-system.css and bunny-app-bindings.css. `build-css.mjs --check` builds in memory and fails when app.css differs
 // (ignoring line endings), naming the bindings file, so a hand edit (which the next build would drop) cannot reach a release. The gate runs it as "css matches its build", also in --quick.
-const script = new URL('../scripts/build-css.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const script = fileURLToPath(new URL('../scripts/build-css.mjs', import.meta.url)); // a real path (a URL's pathname keeps %20 for a space)
 const run = (root, ...args) => spawnSync(process.execPath, [script, '--root', root, ...args], { encoding: 'utf8' });
 
 function fixture() {
@@ -43,6 +44,12 @@ test('a hand-edited app.css fails the check, and the message names the bindings 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('--root with no value says what is wrong, and does not read the wrong folder', () => {
+  const r = spawnSync(process.execPath, [script, '--check', '--root'], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--root needs a folder/);
+});
+
 test('a missing app.css fails the check; a source change that was not rebuilt fails it too', () => {
   const root = fixture();
   try {
@@ -54,7 +61,7 @@ test('a missing app.css fails the check; a source change that was not rebuilt fa
 });
 
 test('the real app.css matches its build, and the gate runs the check (also in --quick)', () => {
-  const real = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const real = fileURLToPath(new URL('..', import.meta.url));
   assert.equal(spawnSync(process.execPath, [script, '--check'], { encoding: 'utf8', cwd: real }).status, 0);
   const gate = readFileSync(new URL('../scripts/gate.mjs', import.meta.url), 'utf8');
   assert.match(gate, /step\('css matches its build', process\.execPath, \['scripts\/build-css\.mjs', '--check'\]/);
