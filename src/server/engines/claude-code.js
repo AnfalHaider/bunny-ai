@@ -128,7 +128,7 @@ const textOf = (content) => (typeof content === 'string' ? content : Array.isArr
  */
 export function createClaudeReader({ queue = createEventQueue(), bridge, mode = 'full', expectedTools = EXPECTED_TOOLS.full, onWatchdog = () => {}, toolIsChecked = () => true } = {}) {
   const calls = new Map(); // tool_use id -> { name, input }
-  let sawDelta = false; let tripped = false; let initSeen = false;
+  let sawDelta = false; let tripped = false; let initSeen = false; let resultSeen = false;
   const trip = (reason) => { if (tripped) return; tripped = true; onWatchdog(reason); queue.push({ type: 'error', code: 'watchdog', message: reason }); };
 
   function onAssistant(msg) {
@@ -179,6 +179,7 @@ export function createClaudeReader({ queue = createEventQueue(), bridge, mode = 
       } else if (msg.type === 'assistant') { onAssistant(msg); sawDelta = false; }
       else if (msg.type === 'user') onUser(msg);
       else if (msg.type === 'result') {
+        resultSeen = true;
         const u = msg.usage ?? {};
         queue.push({ type: 'usage', input: Number(u.input_tokens ?? 0) + Number(u.cache_read_input_tokens ?? 0), output: Number(u.output_tokens ?? 0) });
         if (msg.is_error || String(msg.subtype ?? '').startsWith('error')) queue.push({ type: 'error', code: 'engine', message: cutResult(String(msg.result ?? msg.subtype ?? 'The engine ended with an error.'), 600) });
@@ -189,6 +190,7 @@ export function createClaudeReader({ queue = createEventQueue(), bridge, mode = 
     ended({ code, stderr = '' }) {
       if (tripped) { queue.end(); return; }
       if (!initSeen) queue.push({ type: 'error', code: 'engine.start', message: `Claude Code did not start (${cutResult(stderr.trim() || `exit code ${code}`, 300)}).` });
+      else if (!resultSeen && !queue.hadError) queue.push({ type: 'error', code: 'engine.ended', message: 'Claude Code stopped before it finished.' });
       queue.end();
     },
   };

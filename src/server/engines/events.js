@@ -46,13 +46,15 @@ export function checkEvent(e) {
 
 /** A queue that an adapter pushes events into and Bunny reads as an async iterable. `end()` finishes it; `fail(err)` ends it with an error for the reader. */
 export function createEventQueue() {
-  const items = []; const waiters = []; let ended = false; let failure = null;
+  const items = []; const waiters = []; let ended = false; let failure = null; let hadError = false; let hadDone = false;
   const wake = () => { while (waiters.length) waiters.shift()(); };
   return {
-    push(e) { if (ended) return; items.push(checkEvent(e)); wake(); },
+    push(e) { if (ended) return; const ok = checkEvent(e); if (ok.type === 'error') hadError = true; if (ok.type === 'done') hadDone = true; items.push(ok); wake(); },
     end() { ended = true; wake(); },
     fail(err) { failure = err; ended = true; wake(); },
     get ended() { return ended; },
+    get hadError() { return hadError; },
+    get hadDone() { return hadDone; },
     async *[Symbol.asyncIterator]() {
       for (;;) {
         if (items.length) { yield items.shift(); continue; }

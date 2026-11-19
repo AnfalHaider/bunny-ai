@@ -109,7 +109,8 @@
   "config/value/write",
   "config/batchWrite",
   "configRequirements/read",
-  "account/read"
+  "account/read",
+  "fuzzyFileSearch"
  ],
  "serverRequests": [
   "item/commandExecution/requestApproval",
@@ -124,6 +125,7 @@
   "execCommandApproval"
  ],
  "serverNotifications": [
+  "error",
   "thread/started",
   "thread/status/changed",
   "thread/readState/changed",
@@ -189,6 +191,10 @@
   "modelProvider/authRecoveryCompleted",
   "turn/moderationMetadata",
   "model/safetyBuffering/updated",
+  "warning",
+  "guardianWarning",
+  "deprecationNotice",
+  "configWarning",
   "fuzzyFileSearch/sessionUpdated",
   "fuzzyFileSearch/sessionCompleted",
   "thread/realtime/started",

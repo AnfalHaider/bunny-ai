@@ -80,7 +80,72 @@ if (profile === 'claude-code') {
     out({ type: 'result', subtype: last.subtype ?? 'success', is_error: Boolean(last.is_error), result: last.result ?? 'done', stop_reason: 'end_turn', session_id: sessionId, usage });
     process.exit(0);
   }
-} else {
+} 
+else if (profile === 'codex') {
+  // JSON-RPC over stdio, like `codex app-server`. Steps:
+  //   { say }  { command, marker?, skipApproval? }  { patch: [changes], marker?, skipApproval? }  { rawLine }  { notify: method, params }  { serverRequest: method, params }  { exit } { hang }
+  // Script options: { policy: 'on-request' } makes thread/start answer with another policy; { noInit } never answers initialize.
+  let buf = ''; let started = false; const waiters = new Map(); let nextServerId = 100; let threadId = 'thr-1'; let turnId = 'turn-1';
+  const send = (o) => out({ jsonrpc: '2.0', ...o });
+  const askServer = (method, params) => new Promise((resolve) => { const id = nextServerId++; waiters.set(id, resolve); send({ id, method, params }); });
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (c) => { buf += c; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (line.trim()) onLine(JSON.parse(line)); } });
+  function onLine(m) {
+    if (m.id !== undefined && !m.method && waiters.has(m.id)) { waiters.get(m.id)(m); waiters.delete(m.id); return; }
+    if (m.method === 'initialize') { if (!script.noInit) send({ id: m.id, result: { userAgent: 'fake/0.170.0', codexHome: process.env.CODEX_HOME } }); process.env.FAKE_INIT_PARAMS = JSON.stringify(m.params); return; }
+    if (m.method === 'initialized') return;
+    if (m.method === 'thread/start') { threadId = 'thr-1'; send({ id: m.id, result: { thread: { id: threadId }, approvalPolicy: script.policy ?? m.params.approvalPolicy, sandbox: { type: m.params.sandbox === 'read-only' ? 'readOnly' : 'workspaceWrite' }, model: m.params.model ?? 'm', modelProvider: m.params.modelProvider ?? 'p', cwd: m.params.cwd } }); if (script.dumpParams) writeFileSync(script.dumpParams, JSON.stringify({ init: JSON.parse(process.env.FAKE_INIT_PARAMS ?? 'null'), thread: m.params, env: { CODEX_HOME: process.env.CODEX_HOME, BUNNY_ENGINE_TOKEN: Boolean(process.env.BUNNY_ENGINE_TOKEN) } })); return; }
+    if (m.method === 'turn/start') { send({ id: m.id, result: { turn: { id: turnId, status: 'inProgress' } } }); if (!started) { started = true; play(); } return; }
+    if (m.method === 'turn/interrupt') { send({ id: m.id, result: {} }); send({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'interrupted' } } }); return; }
+  }
+  async function play() {
+    send({ method: 'turn/started', params: { threadId, turn: { id: turnId, status: 'inProgress' } } });
+    let n = 0;
+    for (const step of script.steps ?? []) {
+      if (step.exit !== undefined) process.exit(step.exit);
+      if (step.hang) { await sleep(60_000); continue; }
+      if (step.rawLine !== undefined) { out(step.rawLine); continue; }
+      if (step.notify) { send({ method: step.notify, params: step.params ?? {} }); continue; }
+      if (step.serverRequest) { const r = await askServer(step.serverRequest, step.params ?? {}); if (step.recordTo) writeFileSync(step.recordTo, JSON.stringify(r)); continue; }
+      if (step.say !== undefined) {
+        n += 1; const id = `msg_${n}`;
+        send({ method: 'item/started', params: { threadId, turnId, item: { type: 'agentMessage', id, text: '' } } });
+        for (const part of String(step.say).match(/.{1,6}/gs) ?? []) send({ method: 'item/agentMessage/delta', params: { threadId, turnId, itemId: id, delta: part } });
+        send({ method: 'item/completed', params: { threadId, turnId, item: { type: 'agentMessage', id, text: String(step.say) } } });
+        continue;
+      }
+      if (step.command !== undefined) {
+        n += 1; const id = `call_${n}`;
+        const item = { type: 'commandExecution', id, command: step.command, cwd: process.cwd(), status: 'inProgress' };
+        send({ method: 'item/started', params: { threadId, turnId, item } });
+        let ans = { result: { decision: 'accept' } };
+        if (!step.skipApproval) ans = await askServer('item/commandExecution/requestApproval', { kind: 'command', threadId, turnId, itemId: id, command: step.command, cwd: process.cwd() });
+        if (step.recordTo) writeFileSync(step.recordTo, JSON.stringify(ans));
+        if (ans.result?.decision === 'accept') {
+          if (step.marker) writeFileSync(step.marker, 'the command ran');
+          send({ method: 'item/commandExecution/outputDelta', params: { threadId, turnId, itemId: id, delta: step.output ?? 'ok' } });
+          send({ method: 'item/completed', params: { threadId, turnId, item: { ...item, status: 'completed', aggregatedOutput: step.output ?? 'ok', exitCode: 0 } } });
+        } else send({ method: 'item/completed', params: { threadId, turnId, item: { ...item, status: 'declined' } } });
+        continue;
+      }
+      if (step.patch) {
+        n += 1; const id = `call_${n}`;
+        const item = { type: 'fileChange', id, changes: step.patch, status: 'inProgress' };
+        send({ method: 'item/started', params: { threadId, turnId, item } });
+        let ans = { result: { decision: 'accept' } };
+        if (!step.skipApproval) ans = await askServer('item/fileChange/requestApproval', { threadId, turnId, itemId: id, reason: null, grantRoot: null });
+        if (step.recordTo) writeFileSync(step.recordTo, JSON.stringify(ans));
+        if (ans.result?.decision === 'accept') { if (step.marker) writeFileSync(step.marker, 'the patch applied'); send({ method: 'item/completed', params: { threadId, turnId, item: { ...item, status: 'completed' } } }); }
+        else send({ method: 'item/completed', params: { threadId, turnId, item: { ...item, status: 'declined' } } });
+        continue;
+      }
+    }
+    send({ method: 'thread/tokenUsage/updated', params: { threadId, turnId, tokenUsage: { total: { inputTokens: 11, outputTokens: 5, totalTokens: 16 } } } });
+    send({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: script.turnStatus ?? 'completed', error: script.turnError ?? null } } });
+    await sleep(60_000); // a server does not end by itself
+  }
+}
+else {
   console.error(`fake-engine: unknown profile ${profile}`);
   process.exit(2);
 }
