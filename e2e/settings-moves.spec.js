@@ -63,7 +63,7 @@ test('the moved settings save and are still the same after the page is opened ag
   await expect(page.locator('#auto-minutes')).toHaveValue('45');
   await page.goto(PAGE('models'));
   await expect(page.locator('#wait-select')).toHaveValue('90');
-  await request.put('/api/settings', { data: { autoContinueSteps: 0, autoContinueMinutes: 0, firstReplyWaitSeconds: 30, fallbackWhenBusy: true } });
+  await request.put('/api/settings', { data: { autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true } }); // back to the defaults (0 means Off, and an Off left behind changed every later chat that runs past its step limit)
 });
 
 // ---- the transcript settings: each changes what the chat shows ----
@@ -162,6 +162,7 @@ test.describe('what the chat shows', () => {
     await ask(page, 'which option');
     const size = () => page.locator('.msg.assistant .body').last().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const width = () => page.locator('.thread-col').first().evaluate((el) => el.getBoundingClientRect().width);
+    await expect.poll(size, { message: 'the reply has a text size' }).toBeGreaterThan(0); // under load the reply body can be measured before it has a computed size (NaN)
     const [size0, width0] = [await size(), await width()];
     await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('large'), 'medium');
     await expect.poll(size, { message: 'large text' }).toBeGreaterThan(size0);

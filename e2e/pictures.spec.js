@@ -25,7 +25,7 @@ async function begin(page, request, entry) {
   await resetProfile(request);
   await request.put('/api/settings', { data: {
     displayName: 'Sam', callName: 'Sam', theme: entry.theme, interfaceFont: 'inter', responseFont: 'inter', codeFont: 'Bunny JetBrains Mono', motion: 'reduced',
-    transcriptSize: 'medium', transcriptWidth: 'narrow', language: 'en',
+    transcriptSize: 'medium', transcriptWidth: 'narrow', language: 'en', autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true,
   } });
   await page.clock.setFixedTime(new Date(FIXED_TIME));
   // the app's own random picks (the working-line words, greetings) come from a fixed sequence: the same screen every run

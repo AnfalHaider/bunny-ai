@@ -46,6 +46,8 @@ export async function resetProfile(request) {
   await request.put('/api/settings', {
     data: {
       language: 'en', theme: 'system', allowlist: [], aliases: {}, notifications: false,
+      // the run limits and the wait are Settings too (0 means Off): back to the defaults, so a chat that runs past its step limit behaves the same in every spec
+      autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true,
       // The tests chat through a test Anthropic provider, so every model is shown.
       modelFilter: 'all',
     },
