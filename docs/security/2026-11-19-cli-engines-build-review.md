@@ -136,3 +136,32 @@ Verdict: PASS at e78209b for the engine build so far. **Still to come:** ENGINE-
 - **Tests:** the `engine-*` files pass **134 of 134** on an extract of 6c3ed0d. 7028f7b and e78209b are both ancestors.
 
 Verdict: PASS at 6c3ed0d. Still to come: ENGINE-RULES with EN-5.
+
+## Review of 988e07c ("Allow for this chat"), a9e3cf9 (Codex sandbox seed) and 8bcf527 (merge of claude/v0114-integration ba6f461): FAIL at 8bcf527 for EN-8
+
+On an extract of 8bcf527 with the gate's `test/support/no-network.mjs` preload, the `engine-*`, `window-only` and `pc-device` tests pass **165 of 165**.
+
+**988e07c, "Allow for this chat": the code is right; EN-9 must be answered before the button ships.**
+- The third button appears only when the card itself carries `forSession`. The server turns an answer into `'session'` only if that pending card was opened with `forSession`. The service offers it only with Bunny's engine off (`ownRules`) **and** for Codex. `codex.js` sends `acceptForSession` only when the bridge's verdict says `forSession`, which comes only from that click. Claude Code never offers it. Tests are in `engine-rules`.
+- **EN-9 (MEDIUM, required before the button ships):** what Codex 0.170.0 does **after** `acceptForSession` isn't proven.
+  - If it stops sending `requestApproval` for later commands or patches, the CE-1.17 watchdog (`ran && !accepted`) trips on the next one and stops the run. That fails safe, but the feature then doesn't work.
+  - Worse, an approval Bunny never sees would skip the floor check that declines patches to a floor path. The unelevated sandbox would still confine writes to the workspace.
+  - **Needed:** a spike line on the real Codex showing exactly which later items skip the approval after `acceptForSession` on a command and on a patch. The watchdog and the floor then follow that scope: Bunny records the session-accepted scope and never auto-accepts a floor path. **Until then, hide the button.**
+
+**a9e3cf9, the shared sandbox identity: EN-8 (MEDIUM, required).**
+- The seed copies one `cap_sid` into **every** Codex chat home, so every chat's sandbox runs as the same capability SID.
+- Codex grants that SID write access to each chat's workspace. With one SID, a sandboxed command in a chat on project B can write into project A, which an earlier chat granted.
+- This doesn't touch CE-3, since there's no credential in these files. It weakens **CE-1.16's second wall** (write confinement) across projects. Every command still needs a yes (`untrusted`), so it isn't a hole on its own, but the sandbox exists to hold when a yes was a mistake.
+- **Answer to Builder C:** a fresh SID per chat isolates projects, but leaves one more grant on the project folder per chat. One shared SID removes the cost and the clutter, but joins every project together.
+- **The fix, and the better of both:** key the seed by the **project's real path**: `sandbox-seed/<sha256 of the canonical root>`. The first chat in a project pays the set-up once, later chats in it are fast, and each project keeps its own SID. That's one grant per project, never across projects. Remove engine removes all seeds. Add a test that two different roots get different seeds.
+
+**8bcf527, the merge: PASS.**
+- The four hand-resolved hunks keep both sides:
+  - in `app.js`'s settings PUT, the engine device-refusal and validation run before the window-only check, and SEARCH-PC's device refusal and validation follow;
+  - `windowOnly.js` and `api.js` carry both the `pcSearch*` keys and `engine`, `engines` and `useBunnyEngine`, plus `engine` in the session list;
+  - `app.css` was rebuilt.
+- I didn't find a security change in the resolution.
+
+## Verdict
+
+**FAIL at 8bcf527, for EN-8** (key the seed per project). EN-9 must be answered by a spike, or the "Allow for this chat" button hidden, before it ships. The merge passes.
