@@ -1,9 +1,9 @@
 ---
 piece: cli-engines
 role: security
-sha: 6c3ed0d
+sha: 570b987
 verdict: PASS
 date: 2026-11-19
 ---
 
-fe90806 account sign-in: vendor login/logout by absolute path, account folder only, boolean state, window-only; 6c3ed0d Messages translator behind the CE-4 checks with tool-list check and budget; 7028f7b entrySha256; 134/134 tests
+ENGINE-RULES at 570b987: useBunnyEngine device-refused (EN-5 closed), floor kept in deny and hook, prompt tool fail-closed per the ER-4 spike on 2.1.311, Codex relay; 144/144 tests

@@ -130,3 +130,39 @@ It's still written as the engine's deny rules, and enforced by Bunny where it se
 
 - **Settings → Rules** (Bunny's own rules page) shows one line while the option is off: "Not used while Bunny's engine is off. <engine>'s rules apply." That way the person isn't left believing a deny rule still protects a file.
 - **ER-7, tests, revised:** with the option off, a path covered only by a Bunny deny rule reaches the engine's own decision (an allow or a card), and a floor path is still refused. With the option on, Bunny's deny rules apply as before.
+
+## Build review at 570b987 (claude/builder-c-v0114-engines): PASS against ER-1 to ER-7
+
+I read the diff 6c3ed0d..570b987:
+- `approve-server.js`;
+- `bridge.js`: `floor`, `floorOnly` and `relay`;
+- the Claude Code adapter, the service, `app.js`, `remoteAccess.js` and `windowOnly.js`;
+- the UI warning;
+- the ER-4 spike (`docs/spikes/cli-engines/s1/ER-4-prompt-tool.md`, run on the real Claude Code 2.1.311).
+
+On an extract of 570b987, the `engine-*` files (with the new `engine-rules`) pass **144 of 144**.
+
+- **ER-1, the option.**
+  - `useBunnyEngine` is window-only, and `deviceRefusal` refuses it to every device, including Everything. That closes EN-5.
+  - Turning it off is refused (409) unless a downloaded, enabled engine with its own rules exists. Each change is recorded (`rules-on` / `rules-off`).
+  - A chat's rules are fixed at its first message (`rulesFixed`).
+  - Engine rules apply only in **full mode**. A restricted run keeps Bunny's rules and the diff review.
+- **ER-2, rules set in Bunny only.**
+  - The engine's rules are `{allow, ask, deny}` lists in Claude Code's pattern form, edited in Settings under `engines.claude-code.rules` (which falls under the device refusal).
+  - `cleanRules` and `validateRules` accept only `Tool(…)` patterns, at most 200 rules of 200 characters, never `mcp__bunny__*`. There's no `defaultMode` or bypass key, so no bypass or auto-approve mode can be set.
+  - `--setting-sources user` stays, so a project's `.claude` still never loads. Codex has no editable rules: every step goes to a card.
+- **ER-3, the floor.**
+  - With the option off, `denyRules` gets **no** person rules, but still writes the floor (data folder, engine homes, key folders, in both proven forms) into `permissions.deny`.
+  - The hook runs `floorOnly`, which denies the floor and Bunny's own tool and otherwise prints `{}` ("no opinion"), so the engine's rules decide.
+  - Commands naming a floor path are flagged, not decided. Spike line 4: a floor deny beats an owner allow rule **and** a prompt-tool Allow.
+  - CE-1.14, the watchdog, the process rules and the budget are unchanged.
+- **ER-4, questions to the person.**
+  - Claude Code uses `--permission-prompt-tool mcp__bunny__approve`, with a per-run server under the CE-4 rules. Only a well-formed request reaches `decide`, which runs the floor first, then a card naming the engine.
+  - No answer within 150 s, a throw, a closed server or a killed engine all mean deny. `MCP_TOOL_TIMEOUT=200000` keeps Claude Code from ending the wait at 60 s, a finding from the spike.
+  - The model can't call the prompt tool: it isn't in the model's tool list (spike line 3), and the floor denies `mcp__bunny__*` too.
+  - `AskUserQuestion`, `EnterPlanMode` and `ExitPlanMode` are disallowed in this mode, so the expected tool list holds.
+  - **Codex:** `untrusted` is kept. Every command goes to a card through `relay`, and a patch to a floor path is declined. `acceptForSession` isn't offered yet: "Allow for this chat" comes next, and it's click-only per ER-4.
+- **ER-6:** the warning is word for word as revised, and the Rules page shows "Not used while Bunny's engine is off. <engine>'s rules apply."
+- **Noted (EN-4 class, LOW):** `BUNNY_APPROVE_TOKEN` is in the engine's environment, so an allowed command could send a fake question to the approve server. That only shows the person a card whose answer nothing uses. Accepted.
+
+Verdict: PASS at 570b987. **"Allow for this chat"** (Codex `acceptForSession`) needs its own short review when it lands. It must come only from the person's click, and must last only for that chat.
