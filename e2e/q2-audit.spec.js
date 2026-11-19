@@ -84,7 +84,7 @@ test('Settings: every section in the window opens its page, and the search narro
   await open(page);
   await page.locator('#settings-open').click();
   const sections = await page.locator('#settings-nav-list button.nav-row[data-section]:visible').evaluateAll((e) => e.map((x) => x.dataset.section));
-  expect(sections.length).toBe(16); // 15 + "Desktop app", which a browser tab now shows too (it holds Install as an app)
+  expect(sections.length).toBe(17); // 15 + "Desktop app", which a browser tab now shows too (it holds Install as an app), + "Engines" (the CLI engines page)
   for (const s of sections) {
     await page.locator(`#settings-nav-list button.nav-row[data-section="${s}"]`).click();
     await expect(page.locator('#settings-frame')).toHaveAttribute('src', /settings\.html|providers\.html|customize\.html|automation\.html/);

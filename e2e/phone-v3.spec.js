@@ -106,7 +106,7 @@ for (const w of [360, 390, 412]) {
     await expect(page.locator('#settings-search')).toBeVisible();
     await expect(page.locator('.settings-body')).toBeHidden();
     const rows = page.locator('#settings-nav-list [data-section]');
-    expect(await rows.count()).toBe(16);
+    expect(await rows.count()).toBe(17); // 16 + "Engines" (the CLI engines page)
     for (const h of await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(45.5);
     for (const b of await rows.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.right]; }))) { expect(b[0]).toBeGreaterThanOrEqual(0); expect(b[1]).toBeLessThanOrEqual(w + 0.5); }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
