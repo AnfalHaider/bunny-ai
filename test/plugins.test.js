@@ -26,10 +26,10 @@ test('a GitHub plugin is read: its skills with their references, remote connecto
   const plugin = await readGithubPlugin('https://github.com/bunny/carrot-helper', { fetchImpl: fakeGithub(files) });
   assert.equal(plugin.name, 'carrot-helper');
   assert.equal(plugin.skills[0].name, 'grow');
-  assert.match(plugin.skills[0].instructions, /Water them every morning\.[\s\S]*Reference: references\/soil\.md[\s\S]*Sandy soil/);
+  assert.match(plugin.skills[0].instructions, /Water them every morning\.[\s\S]*Reference: soil[\s\S]*Sandy soil/);
   assert.deepEqual(plugin.connectors, [{ name: 'weather', url: 'https://weather.example.com/mcp' }]);
   assert.ok(plugin.skipped.some((s) => /local connector "files" \(npx -y some-server\): add it with add_connector/.test(s)));
-  assert.ok(plugin.skipped.some((s) => /1 hooks file/.test(s)));
+  assert.ok(plugin.skipped.some((s) => /hooks and scripts made for other apps. They don't run in Bunny yet/.test(s)));
   await assert.rejects(readGithubPlugin('https://example.com/x', { fetchImpl: fakeGithub(files) }), /not a GitHub repository link/);
   await assert.rejects(readGithubPlugin('https://github.com/bunny/empty', { fetchImpl: fakeGithub({ 'README.md': 'hi' }) }), /no skills/);
 });

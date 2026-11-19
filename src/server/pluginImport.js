@@ -2,14 +2,15 @@
  * Install an agent plugin from a GitHub repository.
  *
  * Reads the common plugin layout (plugin.json or .claude-plugin/plugin.json,
- * skills/<name>/SKILL.md with optional references/, and .mcp.json) and brings in
- * what Bunny can use:
- *   - every skill, with its reference files appended (long skills load on demand);
+ * skills/<name>/SKILL.md with optional references/, commands/*.md, agents/*.md, the
+ * repository's CLAUDE.md, and .mcp.json) and brings in what Bunny can use:
+ *   - every skill, command, agent brief and the instructions file, with reference files appended (long skills load on demand);
  *   - every remote MCP server (http / streamable-http / sse with a url) as a connector.
- * Hooks, commands, agents and scripts are built for other apps: they are listed
- * as skipped, never run.
+ * Hooks and scripts are built for other apps and run commands: they are listed as not imported, never run.
+ * What is imported is kept as written; it is said in Bunny's words when it is read (bunnyText.js).
  */
 import { fetchLimited } from './download.js';
+import { bunnyText } from './bunnyText.js';
 
 const MAX_SKILL = 120_000;
 
@@ -94,7 +95,7 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     const refs = files.filter((p) => p.startsWith(`${dir}references/`) && /\.(md|txt)$/i.test(p));
     for (const ref of refs) {
       if (instructions.length > MAX_SKILL) break;
-      instructions += `\n\n---\n# Reference: ${ref.slice(dir.length)}\n\n${(await raw(ref)).trim()}`;
+      instructions += `\n\n---\n# Reference: ${ref.slice(dir.length).replace(/^references\//i, '').replace(/\.(md|txt)$/i, '')}\n\n${(await raw(ref)).trim()}`; // the topic, not the file's name
     }
     skills.push({
       name: String(data.name ?? (dir.split('/').filter(Boolean).pop() || repo)).slice(0, 60),
@@ -106,6 +107,11 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
   // P-2: commands/*.md are prompts the person invokes; agents/*.md are briefs for a helper. Both are kept as skills (read_skill / the /name menu),
   // counted in the same limit as the skills, and never from node_modules, tests, fixtures or examples.
   const pname = String(meta.name ?? repo);
+  // BRAND-BUNNY: the instructions file at the top of a repository written for another app (CLAUDE.md) is the plugin's own instructions: it becomes a skill (switched off like the rest)
+  if (skills.length < MAX_SKILLS && files.includes('CLAUDE.md')) {
+    const { body } = frontmatter(await raw('CLAUDE.md'));
+    if (body.trim()) skills.push({ name: `${pname}:instructions`.slice(0, 60), description: `The ${pname} plugin's own instructions`.slice(0, 200), instructions: body.trim().slice(0, MAX_SKILL) });
+  }
   const extra = files.filter((p) => !NOT_A_SKILL.test(p) && /(^|\/)(commands|agents)\/[^/]+\.md$/i.test(p));
   let extraLeft = 0;
   for (const path of extra) {
@@ -145,15 +151,13 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
         else if (def?.command) skipped.push(`local connector "${name}" (${[def.command, ...(def.args ?? [])].join(' ')}): add it with add_connector so the person can confirm the command`);
         else skipped.push(`connector "${name}" (no address or command)`);
       }
-    } catch { skipped.push('.mcp.json (could not be read)'); }
+    } catch { skipped.push('the connectors list (it could not be read)'); }
   }
   if (extraLeft) skipped.push(`${extraLeft} more commands or agents were not imported (the limit of ${MAX_SKILLS} is reached)`);
-  for (const [label, test] of [['hooks', /^hooks\//], ['scripts', /^(bin|scripts)\//]]) {
-    const n = files.filter((p) => test.test(p)).length;
-    if (n) skipped.push(`${n} ${label} file${n === 1 ? '' : 's'}`);
-  }
+  // BRAND-BUNNY: hooks and scripts are made for other apps and run commands: they are not imported, and the person is told in plain words (hook mapping is its own, reviewed piece of work)
+  if (files.some((p) => /^hooks\//.test(p) || /^(bin|scripts)\//.test(p))) skipped.push("hooks and scripts made for other apps. They don't run in Bunny yet");
   if (!skills.length && !connectors.length) {
-    throw new Error('That repository has no skills (SKILL.md) or remote connectors (.mcp.json) Bunny can use.');
+    throw new Error('That repository has no skills or remote connectors Bunny can use.');
   }
   return {
     name: String(meta.name ?? repo).slice(0, 60),
@@ -173,8 +177,8 @@ export async function searchPlugins(query, { fetchImpl = globalThis.fetch } = {}
     const res = await fetchImpl(`https://api.github.com/search/repositories?q=${encodeURIComponent(`${q} skill OR plugin OR mcp`)}&sort=stars&per_page=8`,
       { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai' } });
     const data = await res.json();
-    lines.push('GitHub repositories (install with install_plugin and the url):');
-    for (const r of data.items ?? []) lines.push(`- ${r.full_name} (★${r.stargazers_count}) https://github.com/${r.full_name} — ${String(r.description ?? '').slice(0, 140)}`);
+    lines.push("GitHub repositories with skills, plugins or connectors for Bunny (install with install_plugin and the url; a repository's name may mention another app, its skills still work in Bunny):");
+    for (const r of data.items ?? []) lines.push(`- ${r.full_name} (★${r.stargazers_count}) https://github.com/${r.full_name} — ${bunnyText(String(r.description ?? '')).slice(0, 140)}`);
     if (!(data.items ?? []).length) lines.push('- none found');
   } catch (err) { lines.push(`GitHub search failed: ${err.message}`); }
   try {

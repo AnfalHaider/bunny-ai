@@ -33,7 +33,7 @@ test('P-2: a command becomes a skill named plugin:command, an agent a helper bri
   assert.match(agent.description, /^Helper brief: Looks over a field/);
   assert.match(agent.instructions, /call run_subagent with this brief/);
   assert.match(agent.instructions, /report what is ready/);
-  assert.ok(plugin.skipped.some((s) => /1 hooks file/.test(s)));
+  assert.ok(plugin.skipped.some((s) => /hooks and scripts made for other apps. They don.t run in Bunny yet/.test(s)));
   assert.ok(!plugin.skipped.some((s) => /commands|agents/.test(s)), 'commands and agents are no longer skipped');
   assert.ok(!plugin.skills.some((s) => /bad/.test(s.name)), 'nothing from node_modules');
 });
