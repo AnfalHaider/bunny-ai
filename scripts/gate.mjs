@@ -90,6 +90,7 @@ step('conflict markers', 'git', ['grep', '-nE', '^(<<<<<<<|>>>>>>>)( |$)', '--',
 // S-1: the request guard has one off switch, for tests. It must never be set in code that ships.
 step('request guard stays on', 'git', ['grep', '-nE', 'localGuard\\s*:\\s*false', '--', 'src', 'electron', 'scripts', 'e2e'], { ok: (r) => r.status === 1, tail: 4 });
 step('help pictures listed', process.execPath, ['scripts/pictures-check.mjs'], { tail: 12 }); // O7: every help picture is listed once, shown, and described the same way (no browser; also in --quick)
+step('css matches its build', process.execPath, ['scripts/build-css.mjs', '--check'], { tail: 6 }); // CSS-CHECK: src/ui/app.css is generated; a hand edit would be lost at the next build (no browser; also in --quick)
 step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
 if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });
