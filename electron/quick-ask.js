@@ -278,5 +278,5 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     destroyBar();
   }
 
-  return { enable, disable, open, isEnabled: () => Boolean(registered), accelerator: () => registered };
+  return { enable, disable, open, isEnabled: () => Boolean(registered), accelerator: () => registered, fromBar };
 }

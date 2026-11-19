@@ -16,6 +16,7 @@ import { clearOldWorkersOnce } from './clear-old-workers.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
+import { createPcOpen } from './pc-open.js';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -199,6 +200,15 @@ ipcMain.handle('theme:set', (event, theme) => {
   if (prefs.theme !== theme) savePrefs({ theme });
   return { ok: true, dark: nativeTheme.shouldUseDarkColors };
 });
+// SEARCH-PC SP-4: Open, Show in folder and Copy path for a result, from Bunny's window and the Quick ask bar only; each names a result by ref and the server judges the path again
+const pcOpen = createPcOpen({
+  shell, clipboard,
+  resolve: async (ref) => (await bunnyApp.adminFetch('/api/pcsearch/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref }) })).json(),
+  allowedSender: (event) => isOwn(event.senderFrame?.url ?? '') || Boolean(quickAsk?.fromBar?.(event)),
+});
+ipcMain.handle('pcsearch:open', (event, ref) => pcOpen.open(event, ref));
+ipcMain.handle('pcsearch:show', (event, ref) => pcOpen.show(event, ref));
+ipcMain.handle('pcsearch:copy', (event, ref) => pcOpen.copy(event, ref));
 ipcMain.handle('app:open-browser', (event) => (isOwn(event.senderFrame?.url ?? '') ? { ok: openInBrowser() } : { ok: false }));
 ipcMain.handle('prefs:get', () => ({ ...prefs, address: browserAddress(origin), addressNote }));
 ipcMain.handle('prefs:set', (_event, patch) => {

@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('quickAsk', {
   onAnswer: (fn) => { const h = (_e, event) => fn(event); ipcRenderer.on('quickask:answer', h); return () => ipcRenderer.removeListener('quickask:answer', h); },
   dropFile: () => ipcRenderer.invoke('quickask:dropFile'),
   // QUICK-UI 3: Esc is decided by the page: main sends one plain message, the page answers with close or "handled"
+  pcOpen: (ref) => ipcRenderer.invoke('pcsearch:open', ref),
+  pcShow: (ref) => ipcRenderer.invoke('pcsearch:show', ref),
+  pcCopy: (ref) => ipcRenderer.invoke('pcsearch:copy', ref),
   init: () => ipcRenderer.invoke('quickask:init'), // QUICK-UI 8 and 9: how Bunny looks and which model answers, as plain words
   close: () => ipcRenderer.invoke('quickask:close'),
   escHandled: () => ipcRenderer.invoke('quickask:escHandled'),
