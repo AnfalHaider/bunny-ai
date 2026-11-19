@@ -26,7 +26,7 @@ import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
 import { chooseLevel, everythingDevices, isSettingChange } from './device-access.js';
-import { newEvents, paintChip } from './remote-notice.js';
+import { newEvents, paintChip, shownEvents } from './remote-notice.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
@@ -2693,29 +2693,40 @@ function watchRemote() {
       if (entries.length) seenAt = entries[0].at > (seenAt ?? '') ? entries[0].at : seenAt;
       else if (seenAt === null) seenAt = '';
       for (const e of fresh.slice().reverse()) events.push({ kind: 'setting', device: e.device, label: e.label ?? 'A device' }); // oldest first; the chip says the newest (BN-8)
-      if (fresh.length && last) paintChip(document, last, chipOpts());
+      if (fresh.length && last) paint();
     } catch { /* not now */ }
   };
   // BANNER-NOTICE (the owner: "No banner on top is required"): no notification anywhere. The chip in the top bar says the state and, until it is clicked, the newest thing that happened. What waits is
   // a variable of this page and nothing else (BN-4): no setting, localStorage, cookie, file or route, so a reload shows the state words again and no device can hide anything.
   let last = null;      // the last status seen
   const events = [];    // new sign-ins, Everything raises and setting changes that wait for a click
+  let shutoffAck = false; // the internet shut-off was clicked on this page (a variable of the page: a reload shows it again until Settings clears it)
   const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  const chipOpts = () => ({
-    events, reducedMotion: reduced(),
+  let traySig = '';
+  const paint = () => {
+    const list = shownEvents(last, events, shutoffAck);
+    paintChip(document, last, chipOpts(list));
+    // the tray tooltip says what the chip says (fixed fields; the shell makes the words)
+    const top = list[list.length - 1];
+    const sig = top ? `${top.kind}|${top.label ?? ''}` : '';
+    if (sig !== traySig) { traySig = sig; window.bunnyDesktop?.setRemoteEvent?.(top ? { kind: top.kind, label: top.label } : null)?.catch?.(() => {}); }
+  };
+  const chipOpts = (list = events) => ({
+    events: list, reducedMotion: reduced(),
     onClick: () => {
-      const ev = events[events.length - 1];
+      const ev = list[list.length - 1];
       events.length = 0;
-      paintChip(document, last, chipOpts());
+      if (ev?.kind === 'shutoff') shutoffAck = true;
+      paint();
       if (ev?.kind === 'setting') openSettings('desktop', { activity: ev.device });
       else openSettings('desktop');
     },
   });
   const show = (s) => {
-    if (!s?.enabled) { events.length = 0; paintChip(document, s); seenAt = null; last = s ?? null; return; }
+    if (!s?.enabled) { events.length = 0; seenAt = null; last = s ?? null; paint(); return; }
     for (const e of newEvents(last, s)) events.push(e);
     last = s;
-    paintChip(document, s, chipOpts());
+    paint();
     askAboutDevices(s);
     announceChanges(s);
   };

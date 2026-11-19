@@ -135,6 +135,24 @@ for (const scheme of ['light', 'dark']) {
       expect(box.writes).toEqual([]);
     });
 
+    test('BN-7 hook: the internet shut-off stays on the chip with access closed until clicked on this page; a reload shows it again; the tray gets fixed fields only', async ({ page }) => {
+      const sent = [];
+      await page.addInitScript(() => { window.__tray = []; });
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { enabled: false, signedIn: 0, autoChats: [], devices: [], shutoffAt: '2026-11-19T10:00:00.000Z' } }) : r.continue()));
+      await page.route('**/api/remote/log', (r) => r.fulfill({ json: { entries: [] } }));
+      await page.addInitScript(() => { window.bunnyDesktop = { getPrefs: async () => ({}), setPrefs: async () => ({}), openInBrowser: async () => ({}), setRemoteEvent: async (e) => { window.__tray.push(e); return { ok: true }; } }; });
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page).locator('.lg')).toHaveText('Closed to the internet: too many wrong passcodes');
+      await expect(chip(page)).toHaveClass(/is-bad/);
+      await expect.poll(() => page.evaluate(() => window.__tray.at(-1))).toEqual({ kind: 'shutoff', label: undefined });
+      await chip(page).click();
+      await expect(chip(page)).toHaveCount(0);
+      await expect.poll(() => page.evaluate(() => window.__tray.at(-1))).toBeNull();
+      expect(sent).toEqual([]);
+      await page.reload();
+      await expect(chip(page).locator('.lg')).toHaveText('Closed to the internet: too many wrong passcodes');
+    });
+
     test('reduced motion: no pulse, and the words still change once per event', async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const box = { devices: [PIXEL] };

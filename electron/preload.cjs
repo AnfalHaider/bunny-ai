@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   quit: () => ipcRenderer.invoke('app:quit'),
   // BROWSER: open Bunny in the person's own browser (main opens its own address; nothing is taken from the page)
   openInBrowser: () => ipcRenderer.invoke('app:open-browser'),
+  // BANNER-NOTICE: the chip's newest event, for the tray tooltip (fixed fields: a kind and a device name; main makes the words)
+  setRemoteEvent: (event) => ipcRenderer.invoke('remote:tray-event', event && typeof event === 'object' ? { kind: event.kind, label: event.label } : null),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   // Security-relevant writes (permission rules and mode) are made by the main process, not by the page.
   secureWrite: (method, path, body) => ipcRenderer.invoke('secure:write', method, path, body),

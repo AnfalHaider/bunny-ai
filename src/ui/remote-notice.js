@@ -16,9 +16,10 @@ export function chipText(status) {
   return { text: n ? `Open to devices · ${n}` : 'Open to devices', short: n ? `Open · ${n}` : 'Open', bad: false };
 }
 
-/** What a waiting event says: { text, short, bad }. kinds: 'signin', 'everything', 'setting'. */
+/** What a waiting event says: { text, short, bad }. kinds: 'signin', 'everything', 'setting', and 'shutoff' (the internet route's flood shut-off; OPEN-SIGNIN supplies it, see below). */
 export function eventText(ev) {
   const who = ev?.label || 'A device';
+  if (ev?.kind === 'shutoff') return { text: 'Closed to the internet: too many wrong passcodes', short: 'Closed: wrong passcodes', bad: true };
   if (ev?.kind === 'setting') return { text: `${who} changed a setting`, short: 'Setting changed', bad: true };
   if (ev?.kind === 'everything') return { text: `${who} has Everything`, short: 'Everything', bad: true };
   return { text: `New: ${who} signed in`, short: 'New sign-in', bad: false };
@@ -41,6 +42,15 @@ export function newEvents(prev, now) {
   return out;
 }
 
+/**
+ * OPEN-SIGNIN hook (BN-7): the internet route's flood shut-off is an event that stays visible even when no access is open any more. It comes from the SAVED `status.shutoffAt` (a timestamp the server
+ * keeps), never from a saved dismissal: `acknowledged` is a variable of the page, so a click clears it for that page only and a reload shows it again until the window's Settings row clears it.
+ * Returns the events to show: the waiting ones, then the shut-off (the most important last, so it is the one the chip says).
+ */
+export function shownEvents(status, events = [], acknowledged = false) {
+  return status?.shutoffAt && !acknowledged ? [...events, { kind: 'shutoff' }] : events;
+}
+
 /** What the chip shows given the state and the waiting events: { text, short, bad, count, kind }. The newest event wins; the state words when nothing waits. */
 export function chipView(status, events = []) {
   if (!events.length) return { ...chipText(status), count: 0, kind: null };
@@ -53,7 +63,8 @@ export function chipView(status, events = []) {
 /** The chip, in the top bar (left of Export). Returns the chip, or null while access is off. Redrawn only when its words change, so a screen reader hears each event once. */
 export function paintChip(doc, status, { events = [], onClick, reducedMotion = false } = {}) {
   let chip = doc.getElementById('remote-chip');
-  if (!status?.enabled) { chip?.remove(); return null; }
+  const shut = events.some((e) => e.kind === 'shutoff');
+  if (!status?.enabled && !shut) { chip?.remove(); return null; } // a shut-off stays on the chip even with access closed
   const v = chipView(status, events);
   const sig = `${v.text}|${v.count}|${v.bad}|${v.kind}`;
   if (!chip) {

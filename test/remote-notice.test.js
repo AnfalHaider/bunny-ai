@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chipText, chipView, eventText, newEvents } from '../src/ui/remote-notice.js';
+import { chipText, chipView, eventText, newEvents, shownEvents } from '../src/ui/remote-notice.js';
+import { cleanTrayEvent, trayTooltip } from '../electron/tray-words.js';
 
 // BANNER-NOTICE (the owner: no banner anywhere; Security's BN-6 to BN-9): the chip's words, and which things count as new.
 const dev = (id, label, level = 'chats') => ({ id, label, level });
@@ -54,4 +55,39 @@ test('BN-4 and BN-5: the chip code stores nothing and calls no route: no localSt
     const text = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(text.replace(/\/\/.*$/gm, ''), /remote-note|device-note|device-notice|settingNotice|paintNote/, file + ' has no notice');
   }
+});
+
+test('BN-7 hook for OPEN-SIGNIN: the internet shut-off is an event made from the saved shutoffAt, shown even with access closed, and cleared for a page only by a click on that page', () => {
+  assert.equal(eventText({ kind: 'shutoff' }).text, 'Closed to the internet: too many wrong passcodes');
+  assert.equal(eventText({ kind: 'shutoff' }).bad, true);
+  const closed = { enabled: false, shutoffAt: '2026-11-19T10:00:00.000Z' };
+  assert.deepEqual(shownEvents(closed, []), [{ kind: 'shutoff' }]);
+  assert.deepEqual(shownEvents(closed, [], true), [], 'clicked on this page');
+  assert.deepEqual(shownEvents({ enabled: true }, []), [], 'no saved shut-off, nothing to show');
+  assert.equal(shownEvents(closed, [{ kind: 'signin', label: 'A' }]).at(-1).kind, 'shutoff', 'the shut-off is the one the chip says');
+  assert.equal(chipView(closed, [{ kind: 'shutoff' }]).text, 'Closed to the internet: too many wrong passcodes');
+});
+
+test('the tray tooltip mirrors the chip: fixed words made in the shell from a kind and a cleaned device name; a page cannot put its own sentence there', () => {
+  assert.equal(trayTooltip(true, null), 'Bunny AI: Open to other devices');
+  assert.equal(trayTooltip(false, null), 'Bunny AI');
+  assert.equal(trayTooltip(true, cleanTrayEvent({ kind: 'signin', label: 'Pixel 8' })), 'Bunny AI: Open to other devices · New: Pixel 8 signed in');
+  assert.equal(trayTooltip(true, cleanTrayEvent({ kind: 'setting', label: 'Pixel 8' })), 'Bunny AI: Open to other devices · Pixel 8 changed a setting');
+  assert.equal(trayTooltip(false, cleanTrayEvent({ kind: 'shutoff' })), 'Bunny AI · Closed to the internet: too many wrong passcodes');
+  assert.equal(cleanTrayEvent({ kind: 'run-this', label: 'x' }), null, 'a kind outside the list is dropped');
+  assert.equal(cleanTrayEvent('text'), null);
+  assert.equal(cleanTrayEvent(null), null);
+  const dirty = cleanTrayEvent({ kind: 'signin', label: ['Pi', 'xel', ' 8'].join(String.fromCharCode(10, 0x202e)).padEnd(80, 'x') });
+  assert.ok(dirty.label.length <= 40, 'cut to 40');
+  assert.ok(!dirty.label.includes(String.fromCharCode(10)) && !dirty.label.includes(String.fromCharCode(0x202e)), 'control and bidi characters gone');
+  assert.equal(cleanTrayEvent({ kind: 'signin', label: 5 }).label, 'A device');
+  assert.equal(cleanTrayEvent({ kind: 'signin', label: 'Pixel', text: 'extra' }).text, undefined, 'only fixed fields');
+});
+
+test('the tray IPC is window-only: the handler checks isOwn first, the preload sends only a kind and a label', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const main = await readFile(new URL('../electron/main.js', import.meta.url), 'utf8');
+  assert.match(main, /ipcMain\.handle\('remote:tray-event', \(event, raw\) => \{[^]*?if \(!isOwn\(event\.senderFrame\?\.url \?\? ''\)\) return \{ ok: false \};[^]*?cleanTrayEvent\(raw\)/);
+  const pre = await readFile(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
+  assert.match(pre, /setRemoteEvent: \(event\) => ipcRenderer\.invoke\('remote:tray-event', event && typeof event === 'object' \? \{ kind: event\.kind, label: event\.label \} : null\)/);
 });
