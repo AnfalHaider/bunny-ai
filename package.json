@@ -11,6 +11,7 @@
     "build:css": "node scripts/build-css.mjs",
     "test": "node --check src/providers/catalog.js && node --check src/providers/connections.js && node --check src/server/app.js && node scripts/unit-tests.mjs",
     "test:e2e": "playwright test",
+    "pictures": "playwright test --project=pictures --update-snapshots",
     "test:all": "npm test && npm run test:e2e",
     "build:icons": "node scripts/build-icons.mjs",
     "desktop": "electron .",
