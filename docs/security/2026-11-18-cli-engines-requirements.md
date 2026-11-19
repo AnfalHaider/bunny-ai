@@ -273,3 +273,17 @@ Security's recommendation to the owner: leave Cline out of v0.1.14. Look again a
 4. no process outliving the run.
 
 Claude Code (CE-1.7 to CE-1.11) and Codex (CE-1.12 to CE-1.17) are unaffected.
+
+### CE-1.15 met (2026-11-19, Builder C's 2675249, s2 "Addendum: CE-1.15")
+
+The evidence:
+- A deliberately broken project `.codex/rules` file is reported (read) when `config.toml` marks the project `trusted`.
+- It isn't read when `config.toml` says `trust_level = "untrusted"`, or on a first thread with no entry.
+- `thread/start` doesn't overwrite an existing `untrusted` entry, but **adds `trusted` when there's no entry**.
+- Under `approval_policy = "untrusted"`, every command still asked in all four allow and forbidden cases.
+
+**CE-1.15 is met with this wording, which replaces "no `trust_level` entry":**
+- Bunny's per-run rewrite of the isolated `config.toml` **writes `[projects.'<workspace real path>'] trust_level = "untrusted"`** for the chat's workspace, with the path canonicalised as Codex sees it, on every run before `thread/start`.
+- After the run, Bunny checks that the entry still says `untrusted`, and logs it if not. The next run's rewrite resets it anyway.
+
+**Builder C's note is also recorded:** Codex appears not to apply prefix exec-policy rules to its `powershell.exe -Command` wrapper on Windows. Bunny's own `checkCommand` on the command text (CE-1.13) stays the rule that decides.
