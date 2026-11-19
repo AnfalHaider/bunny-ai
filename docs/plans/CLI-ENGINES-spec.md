@@ -339,9 +339,11 @@ Every request must pass all of these, or it gets a 403 with no detail:
    - `features.view_image=false`, because it reads outside the folder with no ask (S2 d);
    - off as well: `apps`, `plugins`, `remote_plugin`, `plugin_sharing`, `tool_suggest`, `computer_use`, `image_generation`, `goals` and `hooks`, and `web_search="disabled"`. Without them S2 saw github.com, api.github.com and chatgpt.com contacted.
 4. **CE-1.15, configuration.**
-   - The isolated `CODEX_HOME/config.toml` is **rewritten at every run start**, with **no `trust_level`** for any project. The first run writes `trust_level = "trusted"` (S2); the project must stay untrusted, so its `.codex` config, hooks and exec-policy rules never load.
+   - The isolated `CODEX_HOME/config.toml` is **rewritten at every run start**, and the rewrite **writes `[projects.'<workspace real path>'] trust_level = "untrusted"`** for the chat's workspace. The path is canonicalised as Codex sees it, and this runs before every `thread/start` (Security 53cceb0, replacing "no `trust_level` entry").
+     - **Why:** `thread/start` adds `trusted` when there is no entry, but doesn't overwrite an existing `untrusted` one (S2 addendum, 2675249). An untrusted project's `.codex` config, hooks and exec-policy rules never load. Under `untrusted`, every command still asked, in all four allow and forbidden rule cases.
+     - **After the run,** Bunny checks the entry still says `untrusted`, and logs it if not. The next run's rewrite resets it anyway.
+     - Codex appears not to apply prefix exec-policy rules to its `powershell.exe -Command` wrapper on Windows (Builder C's note). Bunny's own `checkCommand` on the command text (CE-1.13) stays the rule that decides.
    - Also: `--ignore-user-config` where available, `check_for_update_on_startup=false`, `analytics.enabled=false`, and `thread/start {ephemeral: true}`.
-   - **Still owed by Builder C (§6.1):** a project `.codex/rules` with an `allow`, in an untrusted project, still gets asked for every command.
 5. **CE-1.16, second walls.**
    - `windows.sandbox="unelevated"` with `workspaceWrite`, and `readOnly` in Plan mode. It confines writes, not reads, and is never elevated (CE-5.6).
    - **A fixed model name per pin:** `gpt-5.5` for 0.170.0, from Codex's bundled catalog. An unknown name offers no `apply_patch`.
@@ -493,7 +495,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 | `test/engine-hook.test.js` | **CE-1.7:** `hook.mjs` prints a deny for an unreachable bridge, a garbage answer, an empty answer, a thrown exception and Bunny's own 150 s limit. Its sha256 is checked before a run. It is started by absolute path, with `ELECTRON_RUN_AS_NODE=1`. |
 | `test/engine-claude-args.test.js` | **CE-1.8, CE-1.9 and the extras:** the spawn always has `--permission-prompts none`, `--setting-sources user`, `--strict-mcp-config` with no MCP config, and `--disallowedTools` with the listed names. It never has `--dangerously-skip-permissions`, `bypassPermissions`, `acceptEdits`, `--permission-prompt-tool` or a `permissions.allow`. Plan mode adds `--permission-mode plan`. The `--settings` file holds `permissions.deny` for every listed kind **including read-Ask paths**, **no `permissions.ask`**, and the 300 s hook timeout. Restricted mode adds `--restricted`. A `system/init` tool list outside the expected set stops the run. The prompt is never in the arguments. |
 | `test/engine-claude-watchdog.test.js` | **CE-1.10:** with the hook disabled, a `tool_use` then a `tool_result` with no bridge request is tree-killed, marked "stopped: Bunny's check did not run", and offered restricted mode. A bridge request first keeps it going. A result for an unknown id also stops it. |
-| `test/engine-codex-args.test.js` | **CE-1.12 to CE-1.16:** `initialize` has no `experimentalApi`. `thread/start` has `untrusted`, `ephemeral: true` and the pinned model. Bunny never answers `acceptForSession`, and declines `permissions/requestApproval` and the legacy approvals. `config.toml` has every CE-1.14 feature off, `web_search="disabled"`, analytics off, the update check off, and **no `trust_level`**, and it is rewritten when a run left one. A tool list beyond the expected set stops the run. Restricted mode adds `shell_tool`, `unified_exec` and `view_image` off. A file change outside the workspace or in a protected path is declined. |
+| `test/engine-codex-args.test.js` | **CE-1.12 to CE-1.16:** `initialize` has no `experimentalApi`. `thread/start` has `untrusted`, `ephemeral: true` and the pinned model. Bunny never answers `acceptForSession`, and declines `permissions/requestApproval` and the legacy approvals. `config.toml` has every CE-1.14 feature off, `web_search="disabled"`, analytics off and the update check off, and holds **`[projects.'<workspace real path>'] trust_level = "untrusted"`** before every `thread/start`. A `trusted` entry left by a run is reset by the next rewrite, and is logged after the run. A tool list beyond the expected set stops the run. Restricted mode adds `shell_tool`, `unified_exec` and `view_image` off. A file change outside the workspace or in a protected path is declined. |
 | `test/engine-codex-watchdog.test.js` | **CE-1.17:** an `item/started` for `commandExecution` or `fileChange` with no accepted approval first is tree-killed and offered restricted mode. With one first, the run goes on. |
 | `test/engine-staging.test.js` | **CE-2:** the copy leaves out the listed paths, and skips links. Always-discarded paths are named. "Runs code later" files ask in Auto too. Renames, type changes and deletes are judged. Only allowed changes are applied, through the write path and checkpoints. Plan mode keeps nothing. The copy is removed afterwards. |
 | `test/engine-store.test.js` | **CE-5:** a hash or integrity mismatch, a wrong signer, an archive path-escape, an over-2 GB archive, a redirect off the host list, or a wrong `--version` is refused, and staging is removed. npm runs with `--ignore-scripts`. `current.json` is written atomically. Rollback works. An update waits during a run. Remove deletes everything. The engine record is written. A fake registry is used, with no network. |
@@ -531,7 +533,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 | Spike | Result |
 |---|---|
 | S1, Claude Code 2.1.311 (e1e568f, c532469, 7b1f864, 2a92e8f, 4b74686) | **Done.** Full mode with CE-1.7 to CE-1.11 (§3.2). Nothing owed. |
-| S2, Codex 0.170.0 (401bd92) | **Done.** Full mode with CE-1.12 to CE-1.17 (§3.2). **One line owed (CE-1.15):** in an untrusted project, a project `.codex/rules` with an `allow` still gets asked for every command. If it doesn't, Security rules again before Codex ships. |
+| S2, Codex 0.170.0 (401bd92, and the addendum 2675249) | **Done.** Full mode with CE-1.12 to CE-1.17 (§3.2). The CE-1.15 line is **settled** (Security 53cceb0): with an explicit `untrusted` entry, a project `.codex/rules` isn't read, and every command still asks. Nothing owed. |
 | S3, Cline (767c4ea) | Done, and failed: §11. |
 | S4, Aider | Not run. Aider is later (§11). |
 
@@ -541,7 +543,7 @@ The canary rule stays for every future pin: the canary's unique string is search
 
 1. `events.js`, `bridge.js` with `hook.mjs`, and `staging.js`, with their tests, on the fake engine.
 2. `endpoint.js` with the **Responses translator**, and its tests.
-3. **The Codex adapter**, full and restricted, with its argument and watchdog tests. Then S2's owed `.codex/rules` line.
+3. **The Codex adapter**, full and restricted, with its argument and watchdog tests.
 4. **The Claude Code adapter in account mode**, full and restricted, with its argument, hook and watchdog tests. Account mode needs no translator.
 5. **The Messages translator**, for Claude Code in local mode.
 6. `store.js`, `pins.json` and the `/api/engines` routes, plus the sign-in and sign-out flows (§7.1) and the CE-6 `isDeviceRefused` changes.
@@ -606,9 +608,7 @@ engines\<id>\<mode>\chat\<chat>\   per-chat session files
 | R21 | Each engine: a way to read the sign-in state without reading the credential | State known only from a run's error |
 | R22 | A per-chat session folder separate from the config home | A per-chat copy of the config |
 | R25 | The hosts GitHub redirects a release download through | The pin's `hosts` list is corrected at the first download |
-| CE-1.15 line | A project `.codex/rules` `allow` in an untrusted project still asks | Security rules again before Codex ships |
-
-**Settled:** R10, R12, R14, R18 and R23 are settled by S1 and S2. The owner accepted R23. The Aider and Cline items are in §11.
+**Settled:** R10, R12, R14, R18 and R23 are settled by S1 and S2, and the CE-1.15 line by S2's addendum (2675249, Security 53cceb0). The owner accepted R23. The Aider and Cline items are in §11.
 
 ## 9. The owner's questions
 
@@ -665,7 +665,28 @@ Bunny's own tools offered to an engine, as a Bunny MCP server behind the bridge;
 
 These are S4's plan, as it stood in revision 8.
 
-### 11.3 What adding either back would take
+### 11.3 New candidates: Gemini CLI, Qwen Code, OpenCode
+
+The owner has added these three as candidates (relayed by the Chief of Staff, 2026-11-19), **each only if it passes its own spike**:
+- S5: Gemini CLI;
+- S6: Qwen Code;
+- S7: OpenCode.
+
+The spikes are run by Builder B, after Researcher's report. Until a spike passes, Security rules and the owner gives the word, the candidate isn't in Settings → Engines.
+
+**What each spike must show, at the pinned version, on an invented profile, with the canary.** This is the same bar Claude Code and Codex met (§3.2, CE-1 to CE-9):
+1. **A per-call host approval** for every command, file write and fetch, before it runs. Or, for restricted mode only, file tools confined to the working folder, proven by the canary for both reads **and** writes. Cline failed on writes.
+2. **A second, engine-side layer** that holds if the hook or approval channel dies (CE-1.8), and a way to write Bunny's deny rules into it (CE-1.9).
+3. **The person's and the project's own configs, hooks and rules never load** (CE-3.3, the fake-home and hostile-project test).
+4. **Commands, web, MCP and subagents can be turned off** for restricted mode, with no child process starting (CE-2.4).
+5. **No network but the model endpoint**, with telemetry and self-update off (M5, CE-5.5, the proxy check).
+6. **No process outlives the run** (CE-8.2), and the prompt can go by stdin or the protocol, not the command line (CE-8.1).
+7. **A structured event stream** the adapter can read (jsonl or json-rpc), and **local mode with no account**, through the Messages or Responses wire or a new wire the endpoint would add.
+8. **The licence lets Bunny download and run it** for the person, and it installs from hash-pinned files with no install scripts (CE-5).
+
+**Adding a candidate that passes** takes a new adapter file, a `profile` (§1.2), a `pins.json` entry, its fixtures and argument tests, and a Security sign-off. Design adds a row. The shared parts (bridge, staging, endpoint, store) don't change, unless it needs a new transport, wire or runtime; §11.4 lists those as they would be for Aider and Cline.
+
+### 11.4 What adding Aider or Cline back would take
 
 **The adapter interface** stays open for them (§1.2):
 - **Aider** would need a `text` transport (steps built from the staged copy's diff), a `chat` wire on the endpoint (`POST /v1/chat/completions`, a pass-through), a `python` runtime managed through a pinned `uv`, and a "staged only" approval kind.
