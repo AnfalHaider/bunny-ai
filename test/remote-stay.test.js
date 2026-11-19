@@ -204,3 +204,69 @@ test('REMOTE-STAY RS4-a: on Windows, if the network could not be named when acce
   await put(named.base, { enabled: true, passcode: PASS });
   assert.equal((await status(named.base)).reopenNote, '');
 });
+
+// SW-1 (Security LOW, caused by START-WAIT): the resume runs alongside the first window, so Settings can be used while it looks up the network. What the person chose then stands.
+async function slowLookup() {
+  let release;
+  let entered;
+  const gate = new Promise((r) => { release = r; });
+  const started = new Promise((r) => { entered = r; });
+  return { networkProfile: async () => { entered(); await gate; return { name: 'Test network', category: 'Public' }; }, release, started };
+}
+
+test('SW-1: a Turn off during the network lookup of a resume stands: the resume does nothing, access stays off, and the saved state stays off', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bunny-stay-'));
+  const first = await start(t, dataDir);
+  assert.ok((await (await put(first.base, { enabled: true, passcode: PASS })).json()).url);
+  await stop(first);
+  const lookup = await slowLookup();
+  const second = await start(t, dataDir, { port: first.port, resume: false, networkProfile: lookup.networkProfile });
+  const resuming = second.app.resumeRemote(); // as the shell does, alongside the first window
+  await lookup.started; // it is in the 5 s lookup
+  const off = await put(second.base, { enabled: false }); // the person turns access off in Settings meanwhile
+  assert.equal(off.status, 200);
+  lookup.release();
+  const result = await resuming;
+  assert.equal(result.resumed, false, 'the resume was overtaken');
+  const now = await status(second.base);
+  assert.equal(now.enabled, false, 'access is still off');
+  assert.equal(now.url, null);
+  assert.equal(JSON.parse(await readFile(join(dataDir, 'remote-state.json'), 'utf8')).enabled, false, 'and the saved state still says off, so the next start stays closed too');
+  assert.equal(second.app.remote.enabled, false);
+});
+
+test('SW-1: a Turn on by the person during the lookup stands too: the resume steps aside, and the person\'s own address and passcode are the ones in use', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bunny-stay-'));
+  const first = await start(t, dataDir);
+  await put(first.base, { enabled: true, passcode: PASS });
+  await stop(first);
+  const lookup = await slowLookup();
+  const second = await start(t, dataDir, { port: first.port, resume: false, networkProfile: lookup.networkProfile });
+  const resuming = second.app.resumeRemote();
+  await lookup.started;
+  const NEW_PASS = 'another long passphrase 2026';
+  const putting = put(second.base, { enabled: true, passcode: NEW_PASS }); // the person's own On: it opens at once, then looks the network up through the same gate
+  await new Promise((r) => setTimeout(r, 150));
+  lookup.release();
+  const turnedOn = await (await putting).json();
+  const result = await resuming;
+  assert.equal(result.resumed, false, 'the resume did not also open it');
+  assert.ok(turnedOn.url, 'the person\'s On worked');
+  assert.equal((await signIn(turnedOn.url.replace(/\/$/, ''), NEW_PASS)).status, 200, 'their passcode is the one in use');
+  assert.equal((await status(second.base)).enabled, true);
+});
+
+test('SW-1: with nobody touching Settings the resume still works as before (the lookup is waited for, then it opens)', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bunny-stay-'));
+  const first = await start(t, dataDir);
+  await put(first.base, { enabled: true, passcode: PASS });
+  await stop(first);
+  const lookup = await slowLookup();
+  const second = await start(t, dataDir, { port: first.port, resume: false, networkProfile: lookup.networkProfile });
+  const resuming = second.app.resumeRemote();
+  await lookup.started;
+  assert.equal((await status(second.base)).enabled, false, 'not open before the lookup has finished (RS-5: never "open" early)');
+  lookup.release();
+  assert.equal((await resuming).resumed, true);
+  assert.equal((await status(second.base)).enabled, true);
+});

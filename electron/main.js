@@ -11,6 +11,7 @@ import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
 import { createBrowserViews, senderAllowed } from './browserViews.js';
+import { fromOwnFrame } from './own-ipc.js';
 import { createUpdater } from './updater.js';
 import { clearOldWorkersOnce } from './clear-old-workers.js';
 import { createQuickAsk } from './quick-ask.js';
@@ -211,7 +212,9 @@ ipcMain.handle('pcsearch:show', (event, ref) => pcOpen.show(event, ref));
 ipcMain.handle('pcsearch:copy', (event, ref) => pcOpen.copy(event, ref));
 ipcMain.handle('app:open-browser', (event) => (isOwn(event.senderFrame?.url ?? '') ? { ok: openInBrowser() } : { ok: false }));
 ipcMain.handle('prefs:get', () => ({ ...prefs, address: browserAddress(origin), addressNote }));
-ipcMain.handle('prefs:set', (_event, patch) => {
+ipcMain.handle('prefs:set', (event, patch) => {
+  // PREFS-OWN: only Bunny's own page may change the desktop preferences (as theme:set and app:open-browser already require): a page the window happens to show (a site in the panel, a pop-up) cannot
+  if (!fromOwnFrame(event, isOwn)) return { ok: false, error: 'Not allowed' };
   const clean = {};
   if (typeof patch?.launchAtLogin === 'boolean') clean.launchAtLogin = patch.launchAtLogin;
   if (typeof patch?.closeToTray === 'boolean') clean.closeToTray = patch.closeToTray;
@@ -349,7 +352,6 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
-  await resumeOpenToDevices(); // before the window loads, so its first look already shows the banner (RS-5)
   setInterval(syncTrayTooltip, 5000).unref();
   quickAsk = createQuickAsk({
     BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat,
@@ -361,6 +363,9 @@ app.whenReady().then(async () => {
     onAnswerFinished: (sessionId) => startQuickChat({ openChat: sessionId, refresh: true, quiet: true }),
   });
   createWindow();
+  // START-WAIT: the first window does not wait for the network lookup (it can take 5 s). Resuming runs alongside; RS-5 still holds because the banner and the tray text follow what
+  // is actually open (the page asks the server, the tray tooltip is synced when the resume ends and every 5 s), so neither says "open" before it is, and both say it as soon as it is.
+  void resumeOpenToDevices();
   applyQuickAsk();
   // Only the installed app updates itself (or a test pointing at its own feed).
   if (app.isPackaged || process.env.BUNNY_UPDATE_FEED) {

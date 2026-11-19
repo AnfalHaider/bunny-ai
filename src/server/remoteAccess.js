@@ -272,7 +272,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   }
   let record = null;       // the scrypt record of the saved passcode
   let loaded = false;
-  let on = false;          // never read back from a file: OFF after every restart
+  let on = false;          // whether access is open right now: it starts OFF, and is turned on again at start only by resumeRemote() (REMOTE-STAY), which saves nothing but the flag, the address and the network's name; sessions are never saved
   let host = '';           // exactly "<lan address>:<port>" while on
   let address = null;
   const ended = (deviceIds) => { try { onEnd(deviceIds); } catch { /* the sessions are gone either way */ } }; // R6: lets the app put a device's Auto chats back to Ask
