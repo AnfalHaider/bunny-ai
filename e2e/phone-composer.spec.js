@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { resetProfile } from './helpers.js';
 
 // v0.1.14 PHONE-LAYOUT (the owner: "the mobile view is not fixed and properly visible, the chat box is cut"): on a phone the whole composer stays inside the screen. The row under the box and
-// Send are not cut at the bottom or the right edge, the model chip ends before Send, and nothing scrolls. Cause found: a device's page carries a line across the top since v0.1.13
+// Send are not cut at the bottom or the right edge, the model chip ends before Send, and nothing scrolls. Cause found: a device page carried a line across the top in v0.1.13 (now a chip)
 // ("Chats access"/"Everything access"); the layout rule that keeps the window-high app inside the page knew only the window's own "Open to other devices" line, so on a phone the app
 // was pushed 30 px past the bottom. The sizes are the owner's (720 wide) and common phones; the short heights stand for the keyboard being open (the layout resizes with it).
 const row = (providerId, providerName, id, displayName, freeKind) => ({ providerId, providerName, id, displayName, freeKind, free: freeKind === 'free', contextLength: 128000 });
@@ -30,8 +30,8 @@ async function open(page, how) {
     await page.route('**/api/remote/me', (r) => r.fulfill({ json: { device: 'Phone', csrf: 'c', level: how === 'device-everything' ? 'everything' : 'chats' } }));
   }
   await page.goto(how.startsWith('device') ? '/src/ui/index.html' : '/');
-  if (how === 'window-line') await expect(page.locator('#remote-bar')).toBeVisible();
-  if (how.startsWith('device')) await expect(page.locator('#device-level-line')).toBeVisible();
+  if (how === 'window-line') await expect(page.locator('#remote-chip')).toBeVisible();
+  if (how.startsWith('device')) await expect(page.locator('#device-note, #device-chip').first()).toBeVisible();
   await expect(page.locator('#send')).toBeVisible();
 }
 

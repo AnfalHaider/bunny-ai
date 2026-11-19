@@ -74,14 +74,13 @@ for (const [w, h] of [[1280, 800], [390, 780]]) {
       await page.addInitScript(() => { window.bunnyDesktop = {}; /* the line is drawn only in the desktop app */ localStorage.setItem('bunny.workMode', 'code'); localStorage.setItem('bunny.modelAuto', '1'); });
       const made = await (await request.post('/api/sessions', { data: { title: 'Bar row', workMode: 'code', folder } })).json();
       await page.goto(`/?s=${made.id}`);
-      await expect(page.locator('#remote-bar')).toBeVisible();
+      await expect(page.locator('#remote-chip')).toBeVisible(); // the chip in the top bar; the notification floats over the window and pushes nothing down
       await expect(page.locator('#folder-chip')).toBeVisible();
       const m = await page.evaluate(() => {
         const box = (el) => { const b = el?.getBoundingClientRect(); return b ? { top: b.top, bottom: b.bottom } : null; };
-        return { vh: window.innerHeight, bar: box(document.getElementById('remote-bar')), app: box(document.getElementById('app')), under: box(document.querySelector('.composer-under')), foot: box(document.querySelector('.sidebar-foot')), docH: document.documentElement.scrollHeight };
+        return { vh: window.innerHeight, app: box(document.getElementById('app')), under: box(document.querySelector('.composer-under')), foot: box(document.querySelector('.sidebar-foot')), docH: document.documentElement.scrollHeight };
       });
-      expect(m.bar.top).toBeGreaterThanOrEqual(0);
-      expect(m.app.top).toBeGreaterThanOrEqual(m.bar.bottom - 1); // the app starts under the line
+      expect(m.app.top).toBeLessThanOrEqual(1); // nothing pushes the app down
       expect(m.app.bottom).toBeLessThanOrEqual(m.vh + 0.5);        // and ends inside the window
       expect(m.under.bottom).toBeLessThanOrEqual(m.vh + 0.5);
       if (m.foot && m.foot.bottom > 0 && w >= 600) expect(m.foot.bottom).toBeLessThanOrEqual(m.vh + 0.5); // the sidebar's profile row
