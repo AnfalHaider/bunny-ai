@@ -52,7 +52,7 @@ test('Code → Permission rules: one left edge for the heading, the text, the sw
   await page.waitForTimeout(600);
   const lefts = await page.evaluate(() => {
     const q = (sel) => { const el = document.querySelector(sel); return el ? Math.round(el.getBoundingClientRect().left) : null; };
-    return { h3: q('#perm-rules h3'), lead: q('#perm-rules .lead'), tabs: q('#perm-rules .tabs2'), lists: q('#rules-lists .rl') ?? q('#rules-lists'), add: q('#rules-add'), tryBox: q('#rules-try-box'), card: q('#perm-rules').parentElement ? Math.round(document.querySelector('#perm-rules').parentElement.getBoundingClientRect().left) : null };
+    return { h3: q('#perm-rules h3'), lead: q('#perm-rules .lead:not([hidden])'), tabs: q('#perm-rules .tabs2'), lists: q('#rules-lists .rl') ?? q('#rules-lists'), add: q('#rules-add'), tryBox: q('#rules-try-box'), card: q('#perm-rules').parentElement ? Math.round(document.querySelector('#perm-rules').parentElement.getBoundingClientRect().left) : null };
   });
   const edges = [lefts.h3, lefts.lead, lefts.tabs, lefts.add, lefts.tryBox].filter((x) => x !== null);
   expect(Math.max(...edges) - Math.min(...edges)).toBeLessThanOrEqual(1);
