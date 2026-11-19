@@ -28,6 +28,8 @@ function safeHref(raw) {
 }
 
 /** Inline formatting, applied to already-escaped text. */
+// SEARCH-PC SP-3: an answer that quotes file text from this PC loads nothing by itself: a picture shows as its address, and a link shows its full address beside it
+let noAutoLoad = false;
 function inline(text) {
   let out = escapeHtml(text);
 
@@ -45,6 +47,7 @@ function inline(text) {
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (whole, alt, src) => {
     const ok = /^https:\/\//i.test(src) || /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(src);
     if (!ok) return whole;
+    if (noAutoLoad) return `${alt} (${src})`;
     images.push(`<img class="md-image" src="${src}" alt="${alt}" loading="lazy" />`);
     return `\u0001${images.length - 1}\u0001`;
   });
@@ -52,7 +55,7 @@ function inline(text) {
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (whole, label, href) => {
     const safe = safeHref(href);
     if (!safe) return whole;
-    return `<a href="${escapeHtml(safe)}" target="_blank" rel="noreferrer noopener">${label}</a>`;
+    return `<a href="${escapeHtml(safe)}" target="_blank" rel="noreferrer noopener">${label}</a>${noAutoLoad ? ` <span class="md-address">(${escapeHtml(safe)})</span>` : ''}`;
   });
 
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -120,7 +123,13 @@ function codeBlock(language, code, { fold = false } = {}) {
  * @param {string} markdown
  * @returns {DocumentFragment}
  */
-export function renderMarkdown(markdown, { foldCode = false } = {}) {
+export function renderMarkdown(markdown, options = {}) {
+  const before = noAutoLoad;
+  noAutoLoad = options.noAutoLoad === true;
+  try { return renderMarkdownBody(markdown, options); } finally { noAutoLoad = before; }
+}
+
+function renderMarkdownBody(markdown, { foldCode = false } = {}) {
   const frag = document.createDocumentFragment();
   const lines = String(markdown ?? '').replace(/\r\n/g, '\n').split('\n');
 

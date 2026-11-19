@@ -56,15 +56,18 @@ export function createPcService({ dataDir, electronData = '', getSettings, run, 
    * Run one of the two tools. Returns what the model is told (a string); `send` shows steps to the person.
    * @param {{ name: string, parsed: object, turn: object, who: string, incognito?: boolean, gate: string, send: Function, logStep?: Function }} call
    */
-  async function runTool({ name, parsed, turn, who, incognito = false, gate, send, logStep = async () => {} }) {
+  async function runTool({ name, parsed, turn, who, incognito = false, gate, chat = gate, send, logStep = async () => {} }) {
     if (!enabled()) { send('tool', { tool: 'Search this PC', status: 'denied', result: 'Search this PC is off. Turn it on in Settings, Capabilities.' }); return 'Search this PC is off. The person can turn it on in Settings, Capabilities.'; }
     if (name === 'read_pc_file') {
+      // "Ask about this file" comes in a later reply of the same chat: a ref this chat's earlier search handed out is still its own
+      const earlier = refStore.get(String(parsed?.ref ?? ''));
+      if (earlier && earlier.chat === chat && !turn.refs.has(earlier.ref)) turn.refs.set(earlier.ref, earlier);
       const got = await readResult(turn, parsed?.ref, { readAllowed: (p, o) => exclusions.readAllowed(p, o), ...(readDocument ? { read: readDocument } : {}) });
       if (!got.ok) { send('tool', { tool: 'Read a file', status: 'failed', result: got.message }); return got.message; }
       activity.log({ who, kind: 'read', files: [{ name: got.entry.name, folder: got.entry.folder }] });
       const step = `Read 1 file: ${got.entry.name}`;
       await logStep({ role: 'assistant', kind: 'tool_call', tool: step, status: 'done', content: '', result: `${got.entry.name} (${got.part})`, fullResult: got.block, saveable: !incognito });
-      send('tool', { tool: step, status: 'done', result: `${got.entry.name} · ${got.entry.folder} · ${got.part}` });
+      send('tool', { tool: step, status: 'done', result: `${got.entry.name} · ${got.entry.folder} · ${got.part}`, pcTainted: true });
       return got.block;
     }
     // search_pc
@@ -89,11 +92,12 @@ export function createPcService({ dataDir, electronData = '', getSettings, run, 
       return 'No results.';
     }
     const entries = addRefs(turn, allowed);
+    for (const e of entries) e.chat = chat;
     remember(entries);
     activity.log({ who, kind: 'search', results: entries.length, label });
     const shown = entries.map((e) => ({ ref: e.ref, name: e.name, folder: e.folder, modified: e.modified, snippet: e.snippet, openable: canOpen(e.path) }));
     const step = `Searched this PC${said} · ${plural(entries.length, 'result', 'results')}`;
-    await logStep({ role: 'assistant', kind: 'tool_call', tool: step, status: 'done', content: '', result: entries.slice(0, SHOWN_ROWS).map((e) => `${e.name} (${e.folder})`).join('\n') });
+    await logStep({ role: 'assistant', kind: 'tool_call', tool: step, status: 'done', content: '', result: entries.slice(0, SHOWN_ROWS).map((e) => `${e.name} (${e.folder})`).join('\n'), pcResults: shown.map(({ snippet, ...rest }) => rest) }); // names, folders and dates are kept; a snippet is file text and is not (SP-8)
     send('tool', { tool: step, status: 'done', result: entries.slice(0, SHOWN_ROWS).map((e) => `${e.name}\n${e.folder}`).join('\n\n'), pcResults: shown, pcShown: SHOWN_ROWS });
     let text = `${plural(entries.length, 'result', 'results')} (names, folders and dates; read one with read_pc_file and its ref):\n${listForModel(entries.slice(0, 20))}`;
     if (after() === 'read') {
@@ -113,7 +117,7 @@ export function createPcService({ dataDir, electronData = '', getSettings, run, 
         const stepRead = `Read ${plural(readNames.length, 'file', 'files')}: ${readNames.map((f) => f.name).join(', ')}`;
         const joined = blocks.join('\n');
         await logStep({ role: 'assistant', kind: 'tool_call', tool: stepRead, status: 'done', content: '', result: readNames.map((f) => `${f.name} (${f.folder})`).join('\n'), fullResult: joined, saveable: !incognito });
-        send('tool', { tool: stepRead, status: 'done', result: readNames.map((f) => `${f.name} · ${f.folder}`).join('\n') });
+        send('tool', { tool: stepRead, status: 'done', result: readNames.map((f) => `${f.name} · ${f.folder}`).join('\n'), pcTainted: true });
         text += `\n\nBunny read the best ${plural(readNames.length, 'match', 'matches')} for you:\n${joined}`;
       }
       if (skipped.length) { send('tool', { tool: 'Some files were not read', status: 'done', result: skipped.join('\n') }); text += `\n\nNot read: ${skipped.join(' ')}`; }

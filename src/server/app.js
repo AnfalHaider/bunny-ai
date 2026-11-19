@@ -3014,7 +3014,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           return `${name} is not available in this reply, so it was not run.`;
         }
         // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
-        if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, send, logStep });
+        if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, chat: id, send, logStep });
         if (pcTurn.tainted && !textOnly && !PC_TAINT_FREE.includes(name) && !(workspace?.has(name) && TOOL_RISK[name] === 'read') && !planRefuses(riskOf(name), name)) {
           const said = JSON.stringify(parsed ?? {}).slice(0, 300);
           const okTainted = await askPermission(name, `This chat just read a file from this PC. Bunny asks before doing anything else.\n\n${said}`);
@@ -3361,9 +3361,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // A fallback model has answered: the failed attempts' "could not finish" notes are not left behind.
             if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
             closeThinking();
-            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
+            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, ...(pcTurn.tainted ? { noAutoLoad: true } : {}), attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
             session = await sessions.get(id);
-            send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
+            send('done', { sessionId: id, noAutoLoad: pcTurn.tainted || undefined, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
           await usage.record({
             providerId,
