@@ -25,7 +25,8 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
-import { chooseLevel, isSettingChange, paintStatus, settingNotice } from './device-access.js';
+import { chooseLevel, everythingDevices, isSettingChange, settingNotice } from './device-access.js';
+import { AUTO_HIDE_MS, bannerReturns, paintChip, paintNote } from './remote-notice.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
@@ -2667,7 +2668,6 @@ function startNewChat({ incognito = false } = {}) {
 /** A message from the quick-ask bar: a NEW chat in Chat mode with no folder, the text and the optional screenshot sent as the first message. */
 // BROWSER step 2: while Bunny is open to other devices, a line across the top of the window says so, with the off switch.
 function watchRemote() {
-  let bar = null;
   // DEVICE-FULL: a device that has just signed in is asked about, one at a time, over whatever the window is showing. It works as Chats meanwhile; Not now asks again only after a restart.
   const dismissed = new Set();
   let asking = false;
@@ -2696,30 +2696,45 @@ function watchRemote() {
       if (latest) settingNotice(document, { label: latest.label ?? 'A device', level: latest.level, at: latest.at, onActivity: () => openSettings('desktop', { activity: latest.device }) });
     } catch { /* not now */ }
   };
+  // BANNER-NOTICE: the banner is a notification the person can dismiss; the chip in the top bar stays while access is open (see remote-notice.js). A dismissal is a variable of this page and
+  // nothing else: no setting, no localStorage, no cookie, no file, no route (BN-4, BN-5), so a reload brings the notification back and no device can hide it.
+  let last = null;       // the last status seen
+  let noteOpen = false;  // is the notification showing?
+  let noteTimer = null;  // the plain banner's 10-second hide
+  const hideNote = () => { clearTimeout(noteTimer); noteTimer = null; noteOpen = false; document.getElementById('remote-note')?.remove(); };
+  const showNote = (s) => {
+    if (!s?.enabled) { hideNote(); return; }
+    clearTimeout(noteTimer);
+    noteOpen = true;
+    const every = everythingDevices(s);
+    const actions = [];
+    if (every.length) {
+      actions.push({ label: 'See Activity', run: () => { hideNote(); openSettings('desktop', { activity: every[0].id }); } });
+      actions.push({ label: 'Back to Chats', run: async () => { try { let r = s; for (const d of every) r = await sendJSON(`/api/remote/devices/${d.id}/level`, 'PATCH', { level: 'chats' }); show(r); } catch { /* it stays as it was */ } } });
+    } else actions.push({ label: 'Settings', run: () => { hideNote(); openSettings('desktop'); } });
+    actions.push({ label: 'Turn off', run: async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } } });
+    const autoHide = every.length === 0; // one that says a device has Everything never hides by itself
+    paintNote(document, s, { actions, onDismiss: hideNote, autoHide });
+    if (autoHide) noteTimer = setTimeout(hideNote, AUTO_HIDE_MS);
+  };
   const show = (s) => {
-    if (!s?.enabled) { bar?.remove(); bar = null; document.getElementById('device-notice')?.remove(); seenAt = null; return; }
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'remote-bar';
-      bar.setAttribute('role', 'status');
-      bar.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:center;padding:6px 12px;background:var(--warn-soft,rgba(192,122,18,.12));color:var(--warn,#c07a12);border-bottom:1px solid var(--warn,#c07a12);font-size:13px;font-weight:600';
-      document.body.prepend(bar);
+    if (!s?.enabled) { paintChip(document, s, {}); hideNote(); document.getElementById('device-notice')?.remove(); seenAt = null; last = s ?? null; return; }
+    const returns = bannerReturns(last, s);
+    last = s;
+    paintChip(document, s, { onClick: () => showNote(last) });
+    if (returns) showNote(s);
+    else if (noteOpen) { // what the notification says follows the state; one that now has Everything in it stops hiding by itself
+      const was = document.getElementById('remote-note')?.dataset.level;
+      if (was === 'everything' || everythingDevices(s).length) showNote(s);
     }
-    bar.replaceChildren();
-    const text = document.createElement('span');
-    paintStatus(document, text, s); // names the devices that have Everything, in bold
-    const off = document.createElement('button');
-    off.type = 'button';
-    off.textContent = 'Turn off';
-    off.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:8px;padding:1px 10px;cursor:pointer';
-    off.addEventListener('click', async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } });
-    bar.append(text, off);
     askAboutDevices(s);
     announceChanges(s);
   };
   const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
-  tick();
-  setInterval(tick, 10000);
+  // START-WAIT: once a second for the first 15 seconds (so the chip is there from the first moment), then every 10 seconds
+  let looks = 0;
+  const loop = () => { looks += 1; tick().finally(() => setTimeout(loop, looks <= 15 ? 1000 : 10000)); };
+  loop();
 }
 
 async function runQuickAsk() {
