@@ -2,6 +2,7 @@
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { createApp } from './app.js';
+import { createFakePcSearch } from './pcFake.js';
 
 const dataDir = process.env.BUNNY_DATA_DIR
   ?? join(process.env.LOCALAPPDATA ?? process.env.HOME ?? '.', 'BunnyAI');
@@ -17,7 +18,9 @@ if (process.env.BUNNY_RESET_PROFILE === '1') {
 
 // A fixed token only for the invented-profile test run, so the e2e `request` fixture can send it.
 const fixedToken = process.env.BUNNY_FAKE_UPSTREAM === '1' && process.env.BUNNY_API_TOKEN ? process.env.BUNNY_API_TOKEN : undefined;
-const app = await createApp({ dataDir, apiToken: fixedToken });
+// SEARCH-PC: the invented-profile run may search a stand-in index of invented files, never the real one
+const pcOptions = process.env.BUNNY_FAKE_UPSTREAM === '1' && process.env.BUNNY_PCSEARCH_FAKE === '1' ? createFakePcSearch() : {};
+const app = await createApp({ dataDir, apiToken: fixedToken, pcOptions });
 
 app.server.listen(port, '127.0.0.1', () => {
   // REMOTE-STAY: if the person left device access on, open it again (on the same network only)

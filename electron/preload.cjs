@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
     send: (msg) => ipcRenderer.invoke('browser:view', msg),
     onEvent: (fn) => { const h = (_e, event) => fn(event); ipcRenderer.on('browser:view-event', h); return () => ipcRenderer.removeListener('browser:view-event', h); },
   },
+  // SEARCH-PC: Open, Show in folder and Copy path for a search result, by its ref (the main process looks the path up and judges it)
+  pcSearch: {
+    open: (ref) => ipcRenderer.invoke('pcsearch:open', ref),
+    show: (ref) => ipcRenderer.invoke('pcsearch:show', ref),
+    copy: (ref) => ipcRenderer.invoke('pcsearch:copy', ref),
+  },
   // THEME-APPLY: the page tells the shell the theme it applied (light, dark or system): window colours, title bar and browser pane follow at once.
   setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
   // Zoom for the whole window (Ctrl++ / Ctrl+- / Ctrl+0 and the account menu).

@@ -110,7 +110,7 @@ test('the desktop shell wires the bridge: preload exposes secureWrite and main c
   assert.match(main, /isOwn\(from\)/);
   assert.match(main, /isWindowOnlyRoute\(method, path, body\)/);
   assert.match(main, /bunnyApp\.adminFetch/);
-  assert.match(main, /createApp\(\{ dataDir, folderPickerOnly: true \}\)/);
+  assert.match(main, /createApp\(\{ dataDir, electronData: app\.getPath\('userData'\), folderPickerOnly: true \}\)/);
 });
 
 // ---- W5-7 / W27c-1: every security-relevant write, in the desktop app, only from the window

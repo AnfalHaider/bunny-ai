@@ -27,11 +27,12 @@ async function setup(t, reply = 'Hello there.') {
 }
 const ask = async (base, id, extra) => (await fetch(`${base}/api/sessions/${id}/messages`, { method: 'POST', headers: jsonH, body: JSON.stringify({ content: 'what is 429?', providerId: 'openai', model: 'm1', workMode: 'chat', ...extra }) })).text();
 
-test('a text-only question offers the model NO tools and says why; a normal one still does', async (t) => {
+test('a text-only question offers the model only the two web look-ups and says why; a normal one still does', async (t) => {
   const { base, seen } = await setup(t);
   const { body: a } = await post(base, '/api/sessions', { title: 'q', workMode: 'chat', origin: 'quick-ask' });
   await ask(base, a.id, { textOnly: true });
-  assert.equal('tools' in seen.at(-1), false, 'no tools field at all');
+  // WEB-ACCESS: the two look-ups are the only tools (read-only, no permission); every other tool stays out
+  assert.deepEqual(seen.at(-1).tools.map((d) => d.function.name).sort(), ['read_url', 'web_search'], 'only the two web look-ups');
   assert.match(JSON.stringify(seen.at(-1).messages), /\[\[NEEDS_BUNNY_WINDOW\]\]/);
   // Security LOW: nothing in the text-only system text talks about tools, capabilities, helpers or plugins that are not there
   const system = seen.at(-1).messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');

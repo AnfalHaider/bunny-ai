@@ -40,7 +40,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, META_TOOLS, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -53,6 +53,9 @@ import { createToolInstaller } from './toolInstall.js';
 import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
 import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited } from './download.js';
+import { createPcService } from './pcService.js';
+import { FIXED_EXCLUSIONS } from './pcExclusions.js';
+import { PC_TOOLS, pcToolDefinitions, PC_SYSTEM_TEXT, createPcTurn, holdsPcFileText } from './pcTools.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
@@ -100,6 +103,13 @@ const MAX_BODY = 1024 * 1024;
 const MAX_MESSAGE_BODY = 48 * 1024 * 1024; // a message with its attachments: documents up to 30 MB (a third more as a data address) and pictures; the files themselves are limited one by one in attachments.js
 const MAX_BROWSER_ANSWER = 12 * 1024 * 1024; // W620-1: one screenshot from the browser panel; only the route that waits for it reads this much
 const MAX_IMPORT = 300 * 1024 * 1024;
+
+/** Quick ask is text only, with two look-ups added: they only read the web, change nothing and need nobody's OK. */
+export const QUICK_ASK_TOOLS = Object.freeze(['web_search', 'read_url']);
+/** Tools that ask nobody even after a file from this PC was read: they only look at this chat, ask the person, or read the chat's own folder. */
+const PC_TAINT_FREE = Object.freeze(['ask_user', 'update_tasks', 'request_capability', 'read_skill', 'list_models']);
+const PC_SETTING_KEYS = ['pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto'];
+export const QUICK_ASK_LOOKUPS = 5; // look-ups in one quick answer
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -209,7 +219,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
   // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
   const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
@@ -348,7 +358,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
   // Questions the model asked, waiting for the person's answer.
   const pendingQuestions = new Map();
   // PV-1: a model (on a provider, in a chat) that refused tools is not asked with them again in that chat
-  const toolsRefused = new Set();
+  const toolsRefused = new Map(); // WEB-ACCESS: chat|provider|model -> 'connectors' (answers with Bunny's own tools only) or 'all' (no tools)
   // How each chat's reply is going: working, needs you (a card is waiting), ready (finished,
   // not opened yet) or failed. Kept in memory: it describes this run of the app only.
   const replyStatus = new Map();
@@ -764,9 +774,36 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
+      // SEARCH-PC SP-1: no device, at any level, turns Search this PC on or changes what it may look at
+      if (PC_SETTING_KEYS.some((k) => Object.hasOwn(patch, k))) {
+        if (req.bunnyRemote ?? req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+        if (Object.hasOwn(patch, 'pcSearchEnabled') && typeof patch.pcSearchEnabled !== 'boolean') return sendJson(res, 400, { code: 'pcsearch.bad', message: 'Search this PC is on or off.' });
+        if (Object.hasOwn(patch, 'pcSearchBarAuto') && typeof patch.pcSearchBarAuto !== 'boolean') return sendJson(res, 400, { code: 'pcsearch.bad', message: 'Quick ask searches by itself or not.' });
+        if (Object.hasOwn(patch, 'pcSearchAfter') && !['read', 'show'].includes(patch.pcSearchAfter)) return sendJson(res, 400, { code: 'pcsearch.bad', message: 'After a search: read the files, or show what was found.' });
+        if (Object.hasOwn(patch, 'pcSearchExcluded')) {
+          const list = Array.isArray(patch.pcSearchExcluded) ? patch.pcSearchExcluded.slice(0, 50) : null;
+          if (!list) return sendJson(res, 400, { code: 'pcsearch.bad', message: 'The excluded folders are a list.' });
+          const resolved = [];
+          for (const f of list) { const real = await pc.exclusions.resolveFolder(f); if (!real) return sendJson(res, 400, { code: 'pcsearch.badFolder', message: `${String(f).slice(0, 120)} is not a folder on this computer.` }); if (!resolved.includes(real)) resolved.push(real); }
+          patch.pcSearchExcluded = resolved;
+        }
+      }
       settings = { ...settings, ...patch };
+      if (Object.hasOwn(patch, 'pcSearchExcluded')) pc.setPersonal(settings.pcSearchExcluded);
       await writeJson(settingsFile, settings);
       return sendJson(res, 200, settings);
+    }
+
+    // ---- SEARCH-PC: what Bunny looked at (SP-6), the fixed exclusions, and (main process only) the real path of a result ----
+    if (path.startsWith('/api/pcsearch/')) {
+      if (req.bunnyRemote ?? req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+      if (path === '/api/pcsearch/activity' && method === 'GET') { if (windowOnly(req, res)) return; return sendJson(res, 200, { entries: await pc.activity.list() }); }
+      if (path === '/api/pcsearch/fixed' && method === 'GET') { if (windowOnly(req, res)) return; return sendJson(res, 200, FIXED_EXCLUSIONS); }
+      if (path === '/api/pcsearch/resolve' && method === 'POST') {
+        if (!adminOk(req)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Only Bunny's window can open a result." });
+        const body = await readBody(req);
+        return sendJson(res, 200, await pc.resolveRef(body.ref));
+      }
     }
 
     // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
@@ -2167,7 +2204,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       // QA-ANSWERS: a question asked in the Quick ask bar is answered as text only: no tool is offered, whatever the person's settings say
       const textOnly = body.textOnly === true;
       const textOnlyText = textOnly
-        ? 'This is a quick answer shown in a small bar. You have no tools here and nobody can allow anything. Answer in plain text and simple Markdown. If the question needs a tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
+        ? 'This is a quick answer shown in a small bar. The only tools you have are web_search and read_url, which only look things up on the web: use them when the question needs current or outside facts (news, weather, prices, people, anything after your training), and say which sites the facts came from, with their links. read_url opens only an address the person typed or one web_search listed. Nobody can allow anything else. Answer in plain text and simple Markdown. If the question needs any other tool or anything on this computer (files, commands, the browser, the screen, a connector), do not try: reply with exactly [[NEEDS_BUNNY_WINDOW]] on the first line, then one plain sentence saying what you would have had to do.' : '';
       const scheduledText = scheduledTask
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
@@ -2188,8 +2225,17 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const googleOn = Boolean(googleAccount?.workspace);
       // W4-14e: a Code chat whose folder is missing says so to the person once, with the folder picker, instead of leaving it to the model.
       if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
+      // SEARCH-PC: the chat gets the two tools when the switch is on; the bar only for a request from the main process (the admin secret) that asks for them; a Chats device never (REMOTE_TOOLS_DENIED)
+      const pcWho = (req.bunnyRemote ?? req.bunnyDevice)?.label ?? (textOnly ? 'bar' : 'window');
+      const barPc = textOnly && (body.pcSearch === true || body.pcSearch === 'force') && adminOk(req) && pc.enabled() && !(req.bunnyRemote ?? req.bunnyDevice) && (body.pcSearch === 'force' || settings.pcSearchBarAuto !== false);
+      const chatPc = !textOnly && pc.enabled() && !scheduledTask && !req.bunnyRemote;
+      const pcTurn = createPcTurn();
+      pcTurn.tainted = holdsPcFileText(history); // file text from this PC still in what the model holds: the chat acts only with the person's click
+      if (chatPc || barPc) history.unshift({ role: 'system', content: PC_SYSTEM_TEXT });
+      if (barPc && body.pcSearch === 'force') history.unshift({ role: 'system', content: 'The person chose Search this PC for this question: call search_pc first with a few key words from the question, then answer from what you find.' });
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']),
+        ...(chatPc || barPc ? pcToolDefinitions() : []), // (the bar is offered only quickTools; this list is what may run)
         ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
@@ -2924,6 +2970,10 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
 
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
+        if (textOnly && !QUICK_ASK_TOOLS.includes(name) && !(barPc && PC_TOOLS.includes(name))) throw new Error(`${name} is not available in a quick answer. Only web_search and read_url are.`);
+        // the bar has no card to ask with: once it has read a file from this PC it looks nothing up on the web (a page or a file could make the answer carry the text away)
+        if (textOnly && pcTurn.tainted && QUICK_ASK_TOOLS.includes(name)) return 'Web look-ups are off in this answer because it has read a file from this PC.';
+        if (textOnly && (quickLookups += 1) > QUICK_ASK_LOOKUPS) throw new Error(`A quick answer may look things up ${QUICK_ASK_LOOKUPS} times. Answer with what you have, or tell the person to open this in Bunny's window.`);
         // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         if (req.bunnyRemote ?? req.bunnyDevice) remote.logAction(req.bunnyRemote ?? req.bunnyDevice, { kind: 'tool', tool: String(name) }); // R-DF2: the tool's name only, never its arguments
@@ -2937,6 +2987,10 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           send('tool', { tool: `${name}: arguments cut off`, status: 'failed' });
           return `Your call to ${name} could not be read: its arguments were not complete JSON, probably cut off because they were too long. `
             + 'Try again with shorter content (for an artifact, make it smaller, or create it and then add to it with update_artifact).';
+        }
+        if (textOnly && name === 'read_url' && !quickAllowed.has(quickKey(parsed.url))) {
+          send('tool', { tool: 'read_url', status: 'failed', result: 'A quick answer opens only addresses you typed or that its own search found.' });
+          return 'read_url refused: a quick answer opens only an address exactly as the person typed it or as web_search listed it, nothing else. Use web_search, or tell the person to open this in Bunny' + String.fromCharCode(39) + 's window.';
         }
         // PV-2: the two small tools that reach the connector tools not listed in the request
         if (name === 'list_connector_tools' && deferredTools.size > 0) return describeDeferred(deferredTools, parsed.match);
@@ -2959,6 +3013,13 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         if (!toolDefinitions.some((d) => d.function?.name === name) && !(viaMeta && deferredTools.has(name))) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not available in this reply, so it was not run.`;
+        }
+        // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
+        if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, chat: id, send, logStep });
+        if (pcTurn.tainted && !textOnly && !PC_TAINT_FREE.includes(name) && !(workspace?.has(name) && TOOL_RISK[name] === 'read') && !planRefuses(riskOf(name), name)) {
+          const said = JSON.stringify(parsed ?? {}).slice(0, 300);
+          const okTainted = await askPermission(name, `This chat just read a file from this PC. Bunny asks before doing anything else.\n\n${said}`);
+          if (!okTainted) { send('tool', { tool: name, status: 'denied' }); return 'The person did not allow this. Do not try it again; carry on without it or ask them.'; }
         }
         if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
@@ -3050,6 +3111,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
               const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha });
+              if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);
               if (!added) return said;
@@ -3157,6 +3219,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // Two things can be wrong with a first attempt, and both are worth one
       // more go: a model that is not provisioned for this account yet, and a
       // request that asks for more tokens than the balance covers.
+      // WEB-ACCESS: the tools of this request. A provider that refused the whole list once gets Bunny's own tools without the connectors', then none (see onToolsRefused).
+      let quickLookups = 0;
+      // WA-2 (Security): a page the quick answer reads could tell it to put an attached picture or file into a web address. So read_url opens only an address EXACTLY as the person typed it
+      // or as this answer's own web_search listed it (never one the model or a page made up or added data to), whatever is attached.
+      const quickKey = (u) => { try { const x = new URL(String(u).trim()); return x.protocol === 'http:' || x.protocol === 'https:' ? x.href : ''; } catch { return ''; } };
+      const quickAllowed = new Set(textOnly ? (String(body.content ?? '').match(/https?:\/\/[^\s<>"'`]+/g) ?? []).map((u) => quickKey(u.replace(/[.,;:!?)\]]+$/, ''))).filter(Boolean) : []);
+      const refusalKey = `${id}|${providerId}|${model}`;
+      const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
+      const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
+      const quickTools = [...appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)), ...(barPc ? pcToolDefinitions() : [])]; // Quick ask: look-ups only
+      const refusedLevel = textOnly ? undefined : toolsRefused.get(refusalKey);
+      const NO_TOOLS_NOTE = 'No tools are available in this reply (this model does not accept them), so you cannot search the web, read pages or use connectors, whatever was said before. If asked, say so plainly; never claim you did.';
+      if (refusedLevel === 'all') history.unshift({ role: 'system', content: NO_TOOLS_NOTE });
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
           if (attempt === 1 && compacted) send('compacted', { before: compacted.before, after: compacted.after });
@@ -3168,7 +3243,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // The stand-in upstream (tests) answers for built-in providers; a custom one is reached for real.
             fake: fake && !provider.custom,
             signal: controller.signal,
-            tools: textOnly || toolsRefused.has(`${id}|${providerId}|${model}`) ? null : (req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions),
+            tools: textOnly ? quickTools : refusedLevel === 'all' ? null : refusedLevel === 'connectors' ? coreOnly : fullTools,
+            coreTools: textOnly || refusedLevel || coreOnly.length === fullTools.length ? null : coreOnly,
+            noToolsNote: NO_TOOLS_NOTE,
             runTool,
             maxTokens,
             maxToolRounds: () => maxToolRounds,
@@ -3183,11 +3260,16 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             contextChars: workspace ? 240_000 : 0,
             tokenBudget: replyCaps.tokens,
             // PV-1: this model refused tools, so the reply goes on without them; the person is told once
-            onToolsRefused: () => { toolsRefused.add(`${id}|${providerId}|${model}`); send('tool', { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no connectors, skills or files). Pick another model to use them.' }); },
+            onToolsRefused: (_message, stage) => {
+              toolsRefused.set(refusalKey, stage === 'connectors' ? 'connectors' : 'all');
+              send('tool', stage === 'connectors'
+                ? { tool: 'Connector tools are off for this model', status: 'done', result: "This model refused the connectors' tools, so it answers with Bunny's own tools only (web search, reading pages, memory). Remove a connector or pick another model to use them." }
+                : { tool: 'Tools are off for this model', status: 'done', result: 'This model does not accept tools, so it answers without them (no web search, connectors, skills or files). Pick another model to use them.' });
+            },
             onThinkingRefused: () => send('tool', { tool: 'Thinking setting not used', status: 'done', result: 'This model does not take that setting, so it answered at its default. Choose Default under Thinking in the model\'s Details.' }),
             // The reply asks, in a card that waits, before it spends past its token budget or goes round in circles.
             onLimit: async ({ kind, inputTokens, step }) => {
-              if (scheduledTask) return false; // nobody is there to answer
+              if (scheduledTask || textOnly) return false; // nobody is there to answer (a scheduled task, or the quick bar: a repeated look-up must not wait for a card)
               const question = kind === 'tokens' ? `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`
                 : kind === 'repeat' ? `I have run the same step (${String(step).slice(0, 60)}) three times in a row. Keep trying, or stop here?`
                   : 'I have made no new progress in 25 steps. Keep going, or stop here?';
@@ -3280,9 +3362,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // A fallback model has answered: the failed attempts' "could not finish" notes are not left behind.
             if (body.retry === true) await sessions.dropTrailingErrors(id).catch(() => {});
             closeThinking();
-            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
+            const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, ...(pcTurn.tainted ? { noAutoLoad: true } : {}), ...(pcTurn.files.length ? { pcSources: pc.sourcesOf(pcTurn) } : {}), attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
             session = await sessions.get(id);
-            send('done', { sessionId: id, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
+            send('done', { sessionId: id, noAutoLoad: pcTurn.tainted || undefined, pcSources: pcTurn.files.length ? pc.sourcesOf(pcTurn) : undefined, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
           await usage.record({
             providerId,
@@ -3470,6 +3552,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   };
   const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), logFile: join(dataDir, 'remote-actions.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
   resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
+  // SEARCH-PC: the Windows Search index, the exclusions, the two tools and the activity record (src/server/pcService.js)
+  const pc = createPcService({ dataDir, electronData, getSettings: () => settings, ...pcOptions }); // pcOptions: a fake index, drives and home for tests
   const remoteSweep = setInterval(() => remote.sweep(), 60_000); // idle devices are signed out even if they never call again
   remoteSweep.unref();
   /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */

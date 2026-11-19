@@ -67,7 +67,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
   });
   if (!res.ok) throw new Error(`The search answered ${res.status}`);
   const html = await res.text();
-  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim(); // one line each: a title or snippet written by a page can never start a line of its own
   const out = [];
   const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
   for (let m = re.exec(html); m && out.length < 8; m = re.exec(html)) {
@@ -75,6 +75,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
     const real = /[?&]uddg=([^&]+)/.exec(link);
     if (real) link = decodeURIComponent(real[1]);
     if (link.startsWith('//')) link = `https:${link}`;
+    if (/[\s\u0000-\u001f\u007f]/.test(link)) continue; // a link with a line break or a space in it is not a link Bunny lists
     out.push(`- ${strip(m[2])}\n  ${link}\n  ${strip(m[3] ?? '').slice(0, 220)}`);
   }
   return out.length ? out.join('\n') : 'No results.';

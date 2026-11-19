@@ -17,6 +17,7 @@ import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
+import { pcResultsView, wordsOfStep, markSourceNumbers, sourcesRow } from './pc-results.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument, printDocument, PRINT_SANDBOX } from './artifact-content.js';
@@ -1462,6 +1463,7 @@ function renderMessage(m, { skipThinking = false } = {}) {
       res.textContent = `→ ${stepResultText(m).slice(0, resultLimit())}`;
       tc.append(res);
     }
+    if (m.pcResults?.length) tc.append(pcResultsView(document, m.pcResults, { terms: wordsOfStep(m.tool), bridge: window.bunnyDesktop ?? null, onAsk: askAboutPcFile, say: (text) => flashStatus(text) }));
     if (failedStep) {
       // The exact command and the error, in one click.
       const copy = button('Copy', { className: 'ghost small tool-call-copy' });
@@ -1548,9 +1550,11 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
   }
   if (m.role === 'assistant' && m.thinking && !skipThinking) wrap.append(thinkingBlock(m.thinking, { ms: m.thinkingMs }));
   const body = element('div', { className: 'body' });
-  if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
+  if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true, noAutoLoad: m.noAutoLoad === true }));
   else body.textContent = m.content;
+  if (m.role === 'assistant' && m.pcSources?.length) markSourceNumbers(body, m.pcSources.length); // [1], [2] marks for the files the answer used
   wrap.append(body);
+  if (m.role === 'assistant' && m.pcSources?.length) wrap.append(sourcesRow(document, m.pcSources, { bridge: window.bunnyDesktop ?? null, say: (text) => flashStatus(text) }));
 
   if (m.kind === 'summary' || m.kind === 'partial') {
     const meta = element('div', { className: 'meta' },
@@ -1924,7 +1928,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     requestAnimationFrame(() => {
       paintQueued = false;
       const opened = new Set([...bodyEl.querySelectorAll('pre.is-foldable')].map((pre, i) => (pre.classList.contains('is-folded') ? -1 : i)));
-      bodyEl.replaceChildren(renderMarkdown(stripToolMarkup(segment), { foldCode: true }));
+      bodyEl.replaceChildren(renderMarkdown(stripToolMarkup(segment), { foldCode: true, noAutoLoad: Boolean(state.noAutoLoad) }));
       bodyEl.classList.add('is-streaming');
       [...bodyEl.querySelectorAll('pre.is-foldable')].forEach((pre, i) => {
         if (opened.has(i)) setFolded(pre, false);
@@ -1964,6 +1968,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
     onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
+      if (info.pcTainted) state.noAutoLoad = true; // file text from this PC is in this reply: the answer loads nothing by itself
       settleThinking();
       flushNote();
       showLiveTool(bodyEl, info);
@@ -2059,6 +2064,7 @@ function showLiveTool(bodyEl, info) {
     if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }
     res.textContent = `→ ${String(info.result).slice(0, resultLimit())}`;
   }
+  if (info.pcResults?.length && !line.querySelector('.pc-results')) line.querySelector('.tool-call')?.append(pcResultsView(document, info.pcResults, { terms: wordsOfStep(info.tool), bridge: window.bunnyDesktop ?? null, onAsk: askAboutPcFile, say: (text) => flashStatus(text) }));
   if ((info.attachments ?? []).length && !line.querySelector('.attachments')) line.append(renderAttachments(info.attachments));
   if (info.linked && !line.querySelector('.linked-card')) {
     line.append(linkedChatCard(info.linked));
@@ -2725,7 +2731,7 @@ function watchRemote() {
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
   // QUICK-UI 10: the bar had no model to answer with: its button opens Bunny on the Providers page
-  if (request && request.openSettings === true) { openSettings('providers'); return; }
+  if (request && request.openSettings === true) { openSettings(request.section === 'capabilities' ? 'capabilities' : 'providers'); return; }
   // QA-ANSWERS: Open in Bunny carries a chat that began in the bar over to this window (and a later refresh when its answer finished).
   if (request && typeof request.openChat === 'string' && /^[a-f0-9-]{36}$/.test(request.openChat)) {
     if (request.refresh) { if (state.sessionId === request.openChat && !state.streaming) await openSession(request.openChat); await loadSessions(); return; }
@@ -2854,6 +2860,14 @@ window.addEventListener('online', async () => {
   if (online) resumeQueued();
 });
 
+/** Ask about this file, on a search result: a message that names it by its ref (the model reads it with read_pc_file). */
+function askAboutPcFile(row) {
+  const input = $('input');
+  if (!input) return;
+  input.value = `Read “${row.name}” (ref ${row.ref}) and tell me what it says.`;
+  send();
+}
+
 async function send() {
   const input = $('input');
   const text = input.value.trim();
@@ -2872,6 +2886,7 @@ async function send() {
   if (!state.selected && !(state.modelAuto && state.autoPick)) { $('error').textContent = 'Choose a model first.'; return; }
 
   input.value = '';
+  state.noAutoLoad = false;
   state.lastSent = text;
   if ($('prompt-suggestions')) $('prompt-suggestions').hidden = true;
   const files = state.pendingFiles;
@@ -3980,6 +3995,13 @@ function applyProfile(settings) {
 window.addEventListener('message', async (e) => {
   if (e.origin !== location.origin) return;
   if (e.data?.type === 'bunny:open-section' && typeof e.data.section === 'string') { showSettingsSection(e.data.section); return; }
+  // SEARCH-PC: Settings asks which model is in use, to name it in the one-time dialog (the model that will get file text)
+  if (e.data?.type === 'bunny:ask-model') {
+    const pick = state.selected ?? (state.modelAuto ? state.autoPick : null);
+    const row = pick ? state.models?.find((x) => x.id === (pick.model ?? pick.id) && (!pick.providerId || x.providerId === pick.providerId)) : null;
+    try { e.source?.postMessage({ type: 'bunny:model-info', model: row?.displayName ?? pick?.model ?? pick?.id ?? null, provider: row?.providerName ?? pick?.providerName ?? null }, location.origin); } catch { /* the frame is gone */ }
+    return;
+  }
   if (!['bunny:profile', 'bunny:appearance', 'bunny:settings'].includes(e.data?.type)) return;
   // THEME-APPLY: Settings says what it just chose; it is applied before anything is read back, so the page behind never lags the window in front.
   if (e.data.type === 'bunny:appearance' && e.data.patch && typeof e.data.patch === 'object') applyAppearanceNow({ ...state.settings, ...e.data.patch });
