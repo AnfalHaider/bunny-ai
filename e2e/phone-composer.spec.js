@@ -31,7 +31,7 @@ async function open(page, how) {
   }
   await page.goto(how.startsWith('device') ? '/src/ui/index.html' : '/');
   if (how === 'window-line') await expect(page.locator('#remote-chip')).toBeVisible();
-  if (how.startsWith('device')) await expect(page.locator('#device-note, #device-chip').first()).toBeVisible();
+  if (how === 'device-everything') await expect(page.locator('#device-chip')).toBeVisible(); // at Chats a device's page shows nothing (BN-9)
   await expect(page.locator('#send')).toBeVisible();
 }
 

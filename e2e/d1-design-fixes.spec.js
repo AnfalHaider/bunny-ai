@@ -26,15 +26,15 @@ test('the custom provider form comes before Popular providers', async ({ page })
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('the Settings section list is one sideways row of pills', async ({ page }) => {
+  test('the Settings section list is a list page, not a sideways row of pills (phone layout v3)', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => document.getElementById('settings-open').click());
     const list = page.locator('#settings-nav-list');
     await expect(list).toBeVisible();
-    expect(await list.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
-    expect(await page.locator('#settings-search').isVisible()).toBe(false);
+    expect(await list.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('column');
+    await expect(page.locator('#settings-search')).toBeVisible();
     const row = page.locator('#settings-nav-list .nav-row').first();
-    expect(await row.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('999px');
+    expect(await row.evaluate((el) => getComputedStyle(el).borderRadius)).not.toBe('999px');
   });
 
   test('every Add button on Automation is full width', async ({ page }) => {

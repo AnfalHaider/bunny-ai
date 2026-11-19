@@ -29,6 +29,7 @@ import { chooseLevel, everythingDevices, isSettingChange } from './device-access
 import { newEvents, paintChip, shownEvents } from './remote-notice.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { fitViewport } from './viewport-fit.js';
+import { bindPhoneBar } from './phone-bar.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -4034,13 +4035,23 @@ document.addEventListener('visibilitychange', followAppearance);
 // Sections that live on their own page rather than inside settings.html.
 const SETTINGS_PAGES = { providers: './providers.html', automation: './automation.html', customize: './customize.html' };
 
+// PHONE-LAYOUT: under 640 px Settings is a list page of the sections and a tap opens one full screen (CSS shows one or the other by data-page)
+const settingsNarrow = () => window.matchMedia?.('(max-width: 639px)').matches ?? false;
+function setSettingsPage(page, name = '') {
+  const win = $('settings-window');
+  if (win) win.dataset.page = page;
+  const label = $('settings-section-name');
+  if (label) label.textContent = name;
+}
+
 function openSettings(section = 'profile', extra = {}) {
   closeAccountMenu();
   const backdrop = $('settings-backdrop');
   if (!backdrop) return;
   backdrop.hidden = false;
   showSettingsSection(section, extra);
-  $('settings-search')?.focus();
+  if (extra.list && settingsNarrow()) setSettingsPage('list');
+  if (!extra.list || !settingsNarrow()) $('settings-search')?.focus(); // on a phone the list page is shown first for the gear: no keyboard
 }
 
 function showSettingsSection(section, extra = {}) {
@@ -4048,6 +4059,7 @@ function showSettingsSection(section, extra = {}) {
   const base = SETTINGS_PAGES[section] ?? './settings.html';
   const query = (SETTINGS_PAGES[section] ? '?embed=1' : `?embed=1&section=${encodeURIComponent(section)}`) + (typeof extra.activity === 'string' && /^[a-f0-9]{16}$/.test(extra.activity) ? `&activity=${extra.activity}` : '');
   if (frame) frame.src = base + query;
+  setSettingsPage('section', document.querySelector(`#settings-nav-list [data-section="${section}"]`)?.textContent?.trim() ?? '');
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     const on = b.dataset.section === section;
     b.classList.toggle('is-active', on);
@@ -4088,6 +4100,7 @@ function bindSettingsWindow() {
   const backdrop = $('settings-backdrop');
   if (!backdrop) return;
   $('settings-close')?.addEventListener('click', closeSettings);
+  $('settings-back')?.addEventListener('click', () => { setSettingsPage('list'); $('settings-nav-list')?.querySelector('.is-active')?.scrollIntoView?.({ block: 'nearest' }); });
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSettings(); });
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     b.addEventListener('click', () => showSettingsSection(b.dataset.section));
@@ -4117,7 +4130,8 @@ function bindSettingsWindow() {
     else if (href.includes('settings.html')) showSettingsSection('profile');
   });
   document.querySelectorAll('[data-settings]').forEach((b) => {
-    b.addEventListener('click', (e) => { e.stopPropagation(); openSettings(b.dataset.settings); });
+    // the gear and the account menu's own Settings row open the list page on a phone; Usage, Language and the like go straight to their section
+    b.addEventListener('click', (e) => { e.stopPropagation(); openSettings(b.dataset.settings, { list: b.id === 'settings-open' || (b.dataset.settings === 'profile' && Boolean(b.closest('#account-menu'))) }); });
   });
 }
 
@@ -4613,6 +4627,7 @@ async function boot() {
     runQuickAsk().catch((err) => { $('error').textContent = err.message; });
   }
 
+  bindPhoneBar(document);
   fitViewport(window); // a browser without dvh units: the app takes the visible height (v0.1.14)
   // The app can be installed as a desktop app, and opened in its own window.
   // Installing Bunny as a web app (a browser tab on this computer): a service worker at the root scope, only where the browser allows one (a secure context: 127.0.0.1 and
