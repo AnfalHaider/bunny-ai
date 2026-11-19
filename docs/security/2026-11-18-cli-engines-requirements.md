@@ -242,3 +242,34 @@ The spec makes this an owner question (§0.2, "the Chief of Staff goes back to t
 - the tools left are `apply_patch`, `request_user_input` and `tool_search`;
 - the canary stays closed (S2 `i-all-off-view-image`), and every patch asks, including ones outside the folder, which are declined;
 - CE-2's staged copy and diff review apply.
+
+## Ruling after S3 (2026-11-19, Builder C's 767c4ea): Cline is not offered in v0.1.14, in either mode
+
+I read `docs/spikes/cli-engines/s3/README.md` (Results and Verdict).
+
+**Full mode fails CE-1:**
+- `--auto-approve false` refuses every tool in headless mode, even what the hook allows.
+- `--acp` needs an account sign-in.
+- `--auto-approve true` leaves the hook as the only wall, and it fails open: a crash, exit 1, garbage, a kill, a missing runtime or no hook at all, and the tools run.
+- There is no engine-side second layer (CE-1.8). Under the CE-1 ruling, that means restricted at most.
+
+**Restricted mode fails too, for a reason beyond R24's open read:**
+- With `disabledTools`, `read_files` reads outside the folder, **and `editor` writes outside it**, with the hook allowing **and with the hook killed** (`y-off-tools-2`, `y-off-tools-2-killed`). No setting confines Cline's file tools to the folder.
+- Restricted mode (CE-2, spec §3.3) is safe only because every write lands in the staged copy, where Bunny judges it before anything reaches the real folder. A write that lands **outside** the copy skips that review completely. That breaks M2 and CE-2, not just R24's read question, so it isn't an owner trade-off on reads.
+
+**It also fails other musts:**
+- **M5 / CE-5.5:** `data.cline.bot` (PostHog) is contacted on every run, despite every opt-out found. There's no switch.
+- **CE-3.3:** the project's own `.cline/hooks` load and run on every call. CE-2.1's copy would leave them out, but in full mode nothing stops them.
+- **CE-8.2:** a hub daemon outlived a killed run.
+- **M3 note:** the key goes into `providers.json` in plain text. In local mode that would be only the per-run token, which is low risk; in account mode it would be the vendor's credential.
+- **CE-5.1:** the npm `postinstall` script writes to `~/.cline/data`. That's avoidable with `--ignore-scripts`, which the exe doesn't need.
+
+**Ruling:** Cline is **not offered** in v0.1.14: not in full mode, not in restricted mode, not behind a flag that ships.
+
+Security's recommendation to the owner: leave Cline out of v0.1.14. Look again at a later Cline version only if a spike shows all of:
+1. a host approval channel that works in local mode without an account, or file tools confined to the working folder;
+2. a way to turn off its network calls besides the model endpoint;
+3. a switch to stop the project's own hooks;
+4. no process outliving the run.
+
+Claude Code (CE-1.7 to CE-1.11) and Codex (CE-1.12 to CE-1.17) are unaffected.
