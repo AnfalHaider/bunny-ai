@@ -1,0 +1,177 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny phone layout</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--bad-soft:rgba(207,63,85,.10);--ok:#2f8f5b;--shadow:0 14px 40px rgba(0,0,0,.25);--scrim:rgba(20,20,25,.4)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--bad-soft:rgba(240,122,140,.13);--ok:#58c58a;--shadow:0 14px 40px rgba(0,0,0,.55);--scrim:rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--bad-soft:rgba(240,122,140,.13);--ok:#58c58a;--shadow:0 14px 40px rgba(0,0,0,.55);--scrim:rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px}.seg button{padding:2px 12px;font-size:13px}.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.shot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);width:fit-content;max-width:100%}
+.shot img{display:block;max-width:100%;height:auto}.shot .dk{display:none}
+:root[data-theme="dark"] .shot .lt{display:none}:root[data-theme="dark"] .shot .dk{display:block}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .shot .lt{display:none}:root:not([data-theme="light"]) .shot .dk{display:block}}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{font-size:12px;color:var(--dim);font-weight:600}
+.scroll{overflow-x:auto}
+/* phone mock */
+.fr{overflow-x:auto;max-width:100%;padding-bottom:2px}
+.phone{border:1px solid var(--line);border-radius:18px;background:var(--bg);position:relative;overflow:hidden;font-size:13px;display:flex;flex-direction:column}
+.tb{display:flex;align-items:center;gap:6px;padding:7px 8px;border-bottom:1px solid var(--line);background:var(--panel);min-height:48px}
+.ib{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--fg);flex:none;border:0;background:none;padding:0}
+.ib svg{width:19px;height:19px}
+.ib.hl{background:var(--soft)}
+.ttl{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.chip{display:inline-flex;gap:6px;align-items:center;border-radius:99px;padding:2px 9px;font-size:12px;font-weight:600;border:1px solid var(--warn);color:var(--warn);background:var(--warn-soft);white-space:nowrap;flex:none;height:26px}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.chip.bad{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+.txt{font-size:13px;color:var(--dim);padding:0 6px;flex:none}
+.sep{width:1px;height:18px;background:var(--line);flex:none}
+.msgs{flex:1;padding:12px;display:grid;gap:8px;align-content:start;min-height:120px}
+.msgs i{display:block;height:9px;border-radius:5px;background:var(--line)}
+.comp{margin:8px;border:1px solid var(--line);border-radius:16px;height:46px;background:var(--panel)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:var(--shadow);padding:8px 8px 12px;z-index:3;display:grid}
+.sheet .h{width:36px;height:4px;border-radius:3px;background:var(--line);margin:2px auto 6px}
+.si{display:flex;gap:12px;align-items:center;min-height:44px;padding:0 10px;border-radius:10px;font-size:14px}
+.si svg{width:19px;height:19px;color:var(--dim)}.si:hover{background:var(--soft)}
+.si .k{margin-left:auto;color:var(--dim);font-size:12px}
+.pop{position:absolute;right:8px;top:48px;width:250px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:4px;z-index:3;display:grid}
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:2}
+/* settings mocks */
+.sh{padding:12px 14px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:8px;align-items:center;min-height:50px}
+.sh b{font-size:16px;flex:1}
+.srch{margin:10px 12px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--dim);background:var(--soft)}
+.grp{margin:0 12px 10px;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.nr{display:flex;align-items:center;gap:8px;min-height:46px;padding:0 14px;border-top:1px solid var(--line);font-size:14px}
+.nr:first-child{border-top:0}.nr .c{margin-left:auto;color:var(--dim)}.nr small{color:var(--dim);margin-left:6px}
+.row{padding:10px 14px;border-top:1px solid var(--line);display:grid;gap:2px}.row:first-child{border-top:0}
+.two{display:grid;grid-template-columns:190px minmax(0,1fr);flex:1;min-height:0}
+.two .nav{border-right:1px solid var(--line);background:var(--soft);overflow:hidden}
+.two .nav .nr{border-top:0;min-height:38px;padding:0 12px;font-size:13px}.two .nav .nr.on{background:var(--accent-soft);font-weight:600}
+.two .nav .gap{height:8px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--accent);position:relative;flex:none}.sw::after{content:"";position:absolute;left:19px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}.sw.off{background:var(--line)}.sw.off::after{left:3px}
+.wd{font-size:12px;color:var(--dim)}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Bunny on a phone: the top bar and Settings</h1>
+   <p class="dim">v0.1.14 · PHONE-LAYOUT · from QA's partial list (360, 390, 412 and 720 px) · invented data only · from 900 px up nothing changes</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>Two things run off the screen on a phone, and both get a familiar fix. <b>The top bar</b> shows eight controls (Export as a word, seven icons) plus the new devices chip, so the right half is cut off and the chat title is pushed out entirely. <b>Settings</b> shows 16 sections as one sideways strip, with only three or four visible and a name cut in half.</p>
+  <div class="scroll"><table>
+   <tr><th></th><th>Today</th><th>Proposed</th></tr>
+   <tr><td>Top bar, under 480 px</td><td>8 controls and the chip; title width 0; Browser, Files, Tasks and Open-in-own-window off the edge</td><td>☰ · <b>title</b> · chip · ⋯ (4 things). Everything else is in the ⋯ sheet</td></tr>
+   <tr><td>Top bar, 480 to 899 px</td><td>same, still cut off below about 450</td><td>☰ · title · chip · Export · three key icons · ⋯</td></tr>
+   <tr><td>Settings, under 640 px</td><td>a sideways strip of 16 pills, 3 or 4 visible</td><td>a list page of the sections, grouped as on the desktop; tap one to open it, with ‹ Settings to go back</td></tr>
+   <tr><td>Settings, 640 to 899 px</td><td>the strip</td><td>two panes: a 190 px list on the left, the section on the right, as on the desktop</td></tr>
+  </table></div>
+  <p class="cap">The devices chip never goes into ⋯ (Security's BN-2: the state is never hidden). Touch targets are 34 px in the bar and 44 px in the sheet and the list.</p>
+ </section>
+
+ <section>
+  <h2>1 · The chat top bar</h2>
+  <div class="bar"><span class="wd">Width</span><div class="seg" id="w1" role="group" aria-label="Width"></div><span class="wd">Chip</span><div class="seg" id="c1" role="group" aria-label="Chip"><button type="button" data-c="open" aria-pressed="true">Open · 1</button><button type="button" data-c="every" aria-pressed="false">Everything</button></div><button class="tg" id="menu1" type="button">Open ⋯</button></div>
+  <div class="cols">
+   <div class="cell"><h3>Today</h3><div class="shot" id="t1"></div><p class="cap" id="t1c"></p></div>
+   <div class="cell"><h3>Proposed</h3><div class="fr"><div class="phone" id="p1"></div></div><p class="cap" id="p1c"></p></div>
+  </div>
+  <h3>What the ⋯ holds</h3>
+  <div class="cols">
+   <div class="cell"><div class="fr"><div class="phone" id="p2" style="width:390px;height:430px"></div></div><p class="cap"><b>Phone:</b> a bottom sheet, rows of 44 px, in the order the bar has today. "Open in its own window" is not offered on a phone, since it opens a second window the phone cannot show.</p></div>
+   <div class="cell"><div class="fr"><div class="phone" id="p3" style="width:720px;height:330px"></div></div><p class="cap"><b>720 px:</b> a small menu under the button, with what the bar did not have room for.</p></div>
+  </div>
+  <p class="cap">The title is the one thing that always keeps room: it is the middle, takes what is left, and shortens with "…". The chip shortens its words first ("Open · 1", "Everything"), never leaves. When the devices notice returns, it floats under the bar at the full width of the phone, 12 px in from each side.</p>
+ </section>
+
+ <section>
+  <h2>2 · Settings</h2>
+  <div class="bar"><span class="wd">Width</span><div class="seg" id="w2" role="group" aria-label="Width"></div></div>
+  <div class="cols">
+   <div class="cell"><h3>Today</h3><div class="shot" id="t2"></div><p class="cap" id="t2c"></p></div>
+   <div class="cell"><h3 id="p2h">Proposed · the list</h3><div class="fr"><div class="phone" id="s1" style="height:780px"></div></div></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Proposed · a section opened (phone)</h3><div class="fr"><div class="phone" id="s2" style="width:390px;height:430px"></div></div><p class="cap">Tap a row and the section fills the screen. <b>‹ Settings</b> goes back; the Settings window's ✕ closes everything. The search field stays on the list and filters the rows, as the desktop search does today.</p></div>
+   <div class="cell"><h3>Proposed · 720 px</h3><div class="fr"><div class="phone" id="s3" style="width:720px;height:700px"></div></div><p class="cap">From 640 px the desktop's two panes fit, so the list sits on the left and nothing is hidden.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>Still to come</h2>
+  <p class="dim">QA's full phone list lands soon. Anything on it that changes the look (for example the composer sitting under the phone's address bar, or the model chip) is added to this page, and I send the Chief the same link. The height of the composer is a build fix (the screen's real height, not a drawing); the emulated phones here do not show it.</p>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ function img(p,w){return '<img class="lt" alt="Today, light" src="today/today-'+p+'-'+w+'-light.png"><img class="dk" alt="Today, dark" src="today/today-'+p+'-'+w+'-dark.png">'}
+ var I={ham:'<path d="M4 7h16M4 12h16M4 17h16"/>',more:'<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/>',ov:'<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',term:'<path d="M4 7l5 5-5 5M12 18h8"/>',diff:'<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 8v6M9 11h6M9 17h6"/>',br:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5"/>',fi:'<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',tk:'<path d="M4 6l2 2 3-3M4 13l2 2 3-3M12 7h8M12 14h8M12 20h8"/>',po:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',ex:'<path d="M12 4v11M7 10l5 5 5-5M5 19h14"/>',ch:'<path d="M9 6l6 6-6 6"/>',bk:'<path d="M15 6l-6 6 6 6"/>'};
+ function ic(k,cls){return '<span class="ib'+(cls?' '+cls:'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+I[k]+'</svg></span>'}
+ var W1=360,CH='open',MENU=false;
+ function chip(w){var e=CH==='every';var t=e?(w>=720?'Pixel 8 has Everything':'Everything'):(w>=720?'Open to devices · 1':'Open · 1');return '<span class="chip'+(e?' bad':'')+'">'+t+'</span>'}
+ function bar(w){
+  if(w<480)return '<div class="tb">'+ic('ham')+'<span class="ttl">Fix the failing sync test</span>'+chip(w)+(w>=390?ic('ov'):'')+ic('more',MENU?'hl':'')+'</div>';
+  if(w<900)return '<div class="tb">'+ic('ham')+'<span class="ttl">Fix the failing sync test</span>'+chip(w)+'<span class="txt">Export</span><span class="sep"></span>'+ic('ov')+ic('term')+ic('diff')+ic('more',MENU?'hl':'')+'</div>';
+  return '';
+ }
+ function body(){return '<div class="msgs"><i style="width:55%"></i><i style="width:85%"></i><i style="width:70%"></i></div><div class="comp"></div>'}
+ function sheetItems(phone){
+  var L=[['ex','Export',''],['ov','Session overview',''],['term','Terminal',''],['diff','Changes',''],['br','Browser',''],['fi','Files',''],['tk','Tasks and plan','']];
+  if(!phone)L=[['br','Browser',''],['fi','Files',''],['tk','Tasks and plan',''],['po','Open in its own window','']];
+  if(phone&&W1<390)L=L; // 360: the same list
+  return L.map(function(x){return '<div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+I[x[0]]+'</svg>'+x[1]+'</div>'}).join('');
+ }
+ function p1(){
+  var host=document.getElementById('p1');host.style.width=W1+'px';host.style.height=(W1<720?420:330)+'px';
+  host.innerHTML=bar(W1)+body()+(MENU?(W1<480?'<div class="scrim"></div><div class="sheet"><div class="h"></div>'+sheetItems(true)+'</div>':'<div class="pop">'+sheetItems(false)+'</div>'):'');
+  document.getElementById('t1').innerHTML=img('chat',W1);
+  var cut={360:'Browser, Files, Tasks and plan and the window button are off the edge',390:'Files, Tasks and plan and the window button are off the edge',412:'Files, Tasks and plan and the window button are off the edge',720:'everything fits, but the title still has no room'}[W1];
+  document.getElementById('t1c').textContent='Real picture, invented profile, '+W1+' px: '+cut+'. The chat title is pushed out (width 0).';
+  document.getElementById('p1c').textContent=(W1<480?'☰, the title, the chip and ⋯'+(W1>=390?', with Session overview kept as the one key icon':'')+'.':'Export, Session overview, Terminal and Changes stay; Browser, Files, Tasks and plan and Open in its own window are under ⋯.');
+  [].forEach.call(document.querySelectorAll('#w1 button'),function(b){b.setAttribute('aria-pressed',b.getAttribute('data-w')==String(W1)?'true':'false')});
+  [].forEach.call(document.querySelectorAll('#c1 button'),function(b){b.setAttribute('aria-pressed',b.getAttribute('data-c')===CH?'true':'false')});
+  document.getElementById('menu1').textContent=MENU?'Close ⋯':'Open ⋯';
+ }
+ function mk(id,list,fn){var h=document.getElementById(id);list.forEach(function(w){var b=document.createElement('button');b.type='button';b.setAttribute('data-w',w);b.setAttribute('aria-pressed','false');b.textContent=w+' px';b.addEventListener('click',function(){fn(w)});h.appendChild(b)})}
+ mk('w1',[360,390,412,720],function(w){W1=w;p1()});
+ document.getElementById('c1').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;CH=b.getAttribute('data-c');p1();p23()});
+ document.getElementById('menu1').addEventListener('click',function(){MENU=!MENU;p1()});
+ function p23(){
+  document.getElementById('p2').innerHTML=bar(390).replace('class="ib hl"','class="ib hl"')+body()+'<div class="scrim"></div><div class="sheet"><div class="h"></div>'+sheetItems(true)+'</div>';
+  document.getElementById('p3').innerHTML=bar(720)+body()+'<div class="pop">'+sheetItems(false)+'</div>';
+ }
+ // settings
+ var G=[['Profile','Usage'],['Appearance','My Dear Bunny','Language','Notifications','Privacy','Capabilities'],['Providers and abilities','Models','Connection','Customize','Automation'],['Code','Desktop app','About']];
+ var W2=412;
+ function list(on){return G.map(function(g){return '<div class="grp">'+g.map(function(n){return '<div class="nr'+(on===n?' on':'')+'">'+n+'<span class="c">›</span></div>'}).join('')+'</div>'}).join('')}
+ function s(){
+  var h=document.getElementById('s1');
+  if(W2>=640){h.style.width=W2+'px';h.innerHTML='<div class="sh"><b>Settings</b><span class="ib">✕</span></div><div class="two"><div class="nav">'+G.map(function(g){return g.map(function(n){return '<div class="nr'+(n==='Appearance'?' on':'')+'">'+n+'</div>'}).join('')+'<div class="gap"></div>'}).join('')+'</div><div><div class="row"><b>Appearance</b></div><div class="row"><span>Theme</span><span class="dim">Follow the system, or force light or dark.</span></div><div class="row"><span>Text size</span><span class="dim">Medium</span></div></div></div>';document.getElementById('p2h').textContent='Proposed · two panes (720 px)';document.getElementById('t2c').textContent='Real picture, 720 px: the strip.'}
+  else{h.style.width=W2+'px';h.innerHTML='<div class="sh"><b>Settings</b><span class="ib">✕</span></div><div class="srch">Search settings</div><div style="overflow:hidden;flex:1">'+list()+'</div>';document.getElementById('p2h').textContent='Proposed · the list';document.getElementById('t2c').textContent='Real picture, '+W2+' px: 16 sections in one sideways strip; only 3 or 4 are on the screen, the rest need a sideways swipe nobody is told about.'}
+  document.getElementById('t2').innerHTML=img('settings',W2);
+  [].forEach.call(document.querySelectorAll('#w2 button'),function(b){b.setAttribute('aria-pressed',b.getAttribute('data-w')==String(W2)?'true':'false')});
+  document.getElementById('s2').innerHTML='<div class="sh"><span class="ib">'+'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">'+I.bk+'</svg></span><b style="flex:none">Settings</b><span class="dim" style="flex:1">Appearance</span><span class="ib">✕</span></div><div class="grp" style="margin-top:12px"><div class="row"><span>Theme</span><span class="dim">Follow the system, or force light or dark.</span></div><div class="row"><span>Text size</span><span class="dim">Medium</span></div><div class="row"><span>Reduce motion</span><span class="dim">Fewer animations.</span></div></div>';
+  document.getElementById('s3').innerHTML='<div class="sh"><b>Settings</b><span class="ib">✕</span></div><div class="two"><div class="nav">'+G.map(function(g){return g.map(function(n){return '<div class="nr'+(n==='Appearance'?' on':'')+'">'+n+'</div>'}).join('')+'<div class="gap"></div>'}).join('')+'</div><div><div class="row"><b>Appearance</b></div><div class="row"><span>Theme</span><span class="dim">Follow the system, or force light or dark.</span></div><div class="row"><span>Text size</span><span class="dim">Medium</span></div></div></div>';
+ }
+ mk('w2',[360,390,412,720],function(w){W2=w;s()});
+ p1();p23();s();
+})();
+</script>
