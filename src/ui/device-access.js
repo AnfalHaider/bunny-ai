@@ -168,18 +168,3 @@ export function activityView(doc, { label, entries, onBack }) {
 /** Is this log entry a device changing a setting? (The route and its method only: the value is never kept.) */
 export const isSettingChange = (e) => e?.kind === 'route' && e.method === 'PUT' && e.path === '/api/settings';
 
-/**
- * The notice in the bottom right of Bunny's window when a device changes a setting (Security's recommendation, in the approved drawing):
- * "<device> changed a setting", then "Everything access · 14:12 · See Activity". Names only, never the value. See Activity opens that device's Activity.
- */
-export function settingNotice(doc, { label, level = 'everything', at, onActivity }) {
-  doc.getElementById('device-notice')?.remove();
-  const box = make(doc, 'div', { id: 'device-notice', role: 'status', style: `position:fixed;right:14px;bottom:14px;z-index:2147481000;width:330px;max-width:calc(100vw - 28px);background:var(--surface,#fff);color:var(--text,#1f2023);border:1px solid ${BAD};border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,.3);padding:10px 12px;font-size:13px;display:grid;gap:4px;text-align:left` });
-  const head = make(doc, 'b', { style: `color:${BAD};display:flex;gap:6px;align-items:center` });
-  head.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2zM12 10v5M12 18v.1"/></svg>';
-  head.append(make(doc, 'span', { text: `${label} changed a setting` }));
-  const link = make(doc, 'button', { type: 'button', text: 'See Activity', style: 'all:unset;cursor:pointer;text-decoration:underline', onclick: () => { box.remove(); onActivity?.(); } });
-  box.append(head, make(doc, 'span', { style: `color:${DIM}` }, `${LEVEL_NAMES[level] ?? level} access · ${clock(at)} · `, link));
-  doc.body.append(box);
-  return box;
-}

@@ -2,9 +2,8 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-// BANNER-NOTICE (v0.1.14, the owner's go; Design's drawing v3; Security's BN-1 to BN-5): the "Open to other devices" banner is a notification the person can dismiss, and the STATE is
-// never hidden: a chip stays in the window's top bar while access is open (in the warning colour, in words, while a device has Everything); a device's page keeps a small "Everything" chip.
-// A dismissal is never remembered, and nothing on the server changes. These tests answer from a made-up server so each state is exact. BUNNY_SHOTS_DIR also writes the pictures.
+// BANNER-NOTICE (v0.1.14; the owner: "No banner on top is required", everywhere; Security's BN-6 to BN-9): NO notice anywhere. One chip in the top bar says the state while access is open, and
+// what is new (a sign-in, a raise to Everything, a setting changed from a device) until it is clicked. A device's page shows nothing but the red "Everything" chip. Nothing is stored.
 const SHOTS = process.env.BUNNY_SHOTS_DIR;
 const shot = async (page, name, scheme) => { if (SHOTS) { mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: join(SHOTS, `${name}-${scheme}.png`) }); } };
 
@@ -26,192 +25,169 @@ async function windowWith(page, box) {
   });
   await page.addInitScript(() => { window.bunnyDesktop = { getPrefs: async () => ({}), setPrefs: async () => ({}), openInBrowser: async () => ({}) }; });
 }
-const note = (page) => page.locator('#remote-note');
 const chip = (page) => page.locator('#remote-chip');
+const NO_NOTICE = '#remote-note, #device-note, #device-notice';
+const NEW = { id: 'c3c3c3c3c3c3c3c3', label: 'Living room TV', ip: '192.168.1.42', signedInAt: '2026-11-19T09:30:00.000Z', lastSeen: '2026-11-19T09:30:00.000Z', level: 'chats', asked: true };
 
 for (const scheme of ['light', 'dark']) {
   test.describe(`window, ${scheme}`, () => {
     test.use({ colorScheme: scheme, viewport: { width: 1100, height: 760 } });
 
-    test('BN-1 and BN-2: the banner shows when the window opens, can be dismissed with ×, and the chip stays: "Open to devices · N"', async ({ page }) => {
+    test('BN-6 and no banner: the window shows only the chip "Open to devices · N", nothing is over the page, and the app starts at the top', async ({ page }) => {
       const box = { devices: [PIXEL] };
       await windowWith(page, box);
       await page.goto('/src/ui/index.html');
-      await expect(note(page)).toBeVisible();
-      await expect(note(page)).toContainText('Open to other devices · 1 signed in');
-      await expect(note(page)).toContainText('Pixel 8 signed in. It works as Chats. Change this in Settings.');
       await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1');
       await expect(chip(page)).toHaveAttribute('role', 'status');
-      await shot(page, 'window-banner-open', scheme);
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
+      await expect(chip(page)).toHaveAttribute('aria-live', 'polite');
+      await page.waitForTimeout(1500);
+      await expect(page.locator(NO_NOTICE)).toHaveCount(0);
+      expect((await page.locator('.app').boundingBox()).y).toBeLessThanOrEqual(1);
+      await shot(page, 'window-chip-state', scheme);
+    });
+
+    test('BN-7: a new sign-in turns the chip to "New: <device> signed in" and it stays until clicked; the click opens the devices list; a reload shows the state words', async ({ page }) => {
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
       await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1');
-      await shot(page, 'window-chip-only', scheme);
-      // nothing in the layout moved: the notification floats over the window
-      const app = await page.locator('.app').boundingBox();
-      expect(app.y).toBeLessThanOrEqual(1);
-    });
-
-    test('BN-3: a device raised to Everything brings the banner back in red and in words, and the chip turns to the warning colour with its name; dismissed again, the chip stays', async ({ page }) => {
-      const box = { devices: [PIXEL] };
-      await windowWith(page, box);
-      await page.goto('/src/ui/index.html');
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
-      box.devices = [{ ...PIXEL, level: 'everything' }];
-      await expect(note(page)).toBeVisible({ timeout: 8000 });
-      await expect(note(page)).toHaveAttribute('data-level', 'everything');
-      await expect(note(page)).toContainText('Pixel 8 has Everything');
-      await expect(note(page)).toContainText('It can run programs and change settings. Ends after 30 minutes idle.');
-      await expect(note(page).getByRole('button', { name: 'See Activity' })).toBeVisible();
-      await expect(note(page).getByRole('button', { name: 'Back to Chats' })).toBeVisible();
-      await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 has Everything');
-      await expect(chip(page)).toHaveClass(/is-bad/);
-      await shot(page, 'window-banner-everything', scheme);
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
-      await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 has Everything'); // cannot be dismissed
-      await shot(page, 'window-chip-everything', scheme);
-      // two devices: in words too
-      box.devices = [{ ...PIXEL, level: 'everything' }, { ...TABLET, level: 'everything' }];
-      await expect(chip(page).locator('.lg')).toHaveText('Everything: 2 devices', { timeout: 8000 });
-    });
-
-    test('BN-3: a device that signs in after a dismissal brings the banner back; so does a click on the chip', async ({ page }) => {
-      const box = { devices: [PIXEL] };
-      await windowWith(page, box);
-      await page.goto('/src/ui/index.html');
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
-      box.devices = [PIXEL, TABLET];
-      await expect(note(page)).toBeVisible({ timeout: 8000 });
-      await expect(note(page)).toContainText('Open to other devices · 2 signed in');
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
+      box.devices = [PIXEL, NEW];
+      await expect(chip(page).locator('.lg')).toHaveText('New: Living room TV signed in', { timeout: 8000 });
+      await shot(page, 'window-chip-new-signin', scheme);
+      await page.waitForTimeout(3000); // not by itself
+      await expect(chip(page).locator('.lg')).toHaveText('New: Living room TV signed in');
+      await expect(page.locator(NO_NOTICE)).toHaveCount(0);
       await chip(page).click();
-      await expect(note(page)).toBeVisible();
-    });
-
-    test('BN-L1: one device signs out and another signs in between two looks (the count stays the same): the banner still comes back', async ({ page }) => {
-      const box = { devices: [PIXEL] };
-      await windowWith(page, box);
-      await page.goto('/src/ui/index.html');
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
-      box.devices = [TABLET];
-      await expect(note(page)).toBeVisible({ timeout: 8000 });
-      await expect(note(page)).toContainText('Kitchen tablet signed in');
-    });
-
-    test('BN-3: access turned on again (or reopened at start) brings the banner back; turning it off removes the chip', async ({ page }) => {
-      const box = { devices: [PIXEL], off: false };
-      await windowWith(page, box);
-      await page.unroute('**/api/remote');
-      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: box.off ? { enabled: false, devices: [], signedIn: 0, autoChats: [] } : status(box.devices) }) : r.continue()));
-      await page.goto('/src/ui/index.html');
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      box.off = true;
-      await expect(chip(page)).toHaveCount(0, { timeout: 8000 });
-      box.off = false;
-      await expect(note(page)).toBeVisible({ timeout: 8000 });
-      await expect(chip(page)).toBeVisible();
-    });
-
-    test('BN-4: a dismissal is never remembered: nothing is written anywhere, nothing is sent, and a reload brings the banner back', async ({ page }) => {
-      const box = { devices: [PIXEL] };
-      await windowWith(page, box);
-      const mutating = [];
-      page.on('request', (r) => { if (!['GET', 'HEAD'].includes(r.method()) && r.url().includes('/api/')) mutating.push(r.method() + ' ' + r.url().replace(/^.*\/api/, '/api')); });
-      await page.goto('/src/ui/index.html');
-      await expect(note(page)).toBeVisible();
-      const storage = () => page.evaluate(() => ({ local: JSON.stringify(Object.entries(localStorage).sort()), session: JSON.stringify(Object.entries(sessionStorage)), cookie: document.cookie }));
-      const before = await storage();
-      const writesBefore = mutating.length;
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
-      await page.waitForTimeout(1500); // a few polls later
-      expect(await storage(), 'nothing stored by the dismissal').toEqual(before);
-      expect(mutating.slice(writesBefore), 'nothing sent by the dismissal').toEqual([]);
-      expect(box.writes, 'no device-access write').toEqual([]);
+      await expect(page.locator('#settings-backdrop')).toBeVisible();
+      await expect(page.locator('#settings-frame')).toHaveAttribute('src', /section=desktop/);
+      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 2');
       await page.reload();
-      await expect(note(page)).toBeVisible(); // the window started again: the banner is back
-      const settings = await (await page.request.get('/api/settings')).json();
-      expect(JSON.stringify(settings)).not.toMatch(/dismiss|banner|notice/i);
+      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 2');
     });
 
-    test('BN-1: Esc dismisses the banner while it has focus; the plain banner hides itself after 10 seconds, one that says a device has Everything never does', async ({ page }) => {
-      await page.clock.install();
+    test('BN-L1, the swap case: one device signs out and another signs in between two looks (the count stays): the chip still says what happened', async ({ page }) => {
       const box = { devices: [PIXEL] };
       await windowWith(page, box);
       await page.goto('/src/ui/index.html');
-      await expect(note(page)).toBeVisible();
-      await note(page).getByRole('button', { name: 'Dismiss' }).focus();
-      await page.keyboard.press('Escape');
-      await expect(note(page)).toHaveCount(0);
-      await chip(page).click();
-      await expect(note(page)).toBeVisible();
-      await expect(note(page).locator('.rn-countdown')).toHaveCount(1); // the thin line that counts down
-      await page.clock.fastForward(9000);
-      await expect(note(page)).toBeVisible();
-      await page.clock.fastForward(2500);
-      await expect(note(page)).toHaveCount(0);
-      await expect(chip(page)).toBeVisible();
-      // Everything: it stays until the person dismisses it
-      box.devices = [{ ...PIXEL, level: 'everything' }];
-      await page.clock.fastForward(12000);
-      await expect(note(page)).toBeVisible();
-      await expect(note(page).locator('.rn-countdown')).toHaveCount(0);
-      await page.clock.fastForward(120000);
-      await expect(note(page)).toBeVisible();
+      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1');
+      box.devices = [TABLET];
+      await expect(chip(page).locator('.lg')).toHaveText('New: Kitchen tablet signed in', { timeout: 8000 });
     });
 
-    test('BN-3: a setting changed by a device at Everything is announced even after the banner was dismissed', async ({ page }) => {
+    test('BN-6 and BN-7: a device raised to Everything turns the chip to the warning colour, in words, with its name; it stays in the warning colour after a click', async ({ page }) => {
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page)).toHaveAttribute('data-level', 'open');
+      box.devices = [{ ...PIXEL, level: 'everything' }];
+      await expect(chip(page)).toHaveAttribute('data-level', 'everything', { timeout: 8000 });
+      await expect(chip(page)).toHaveClass(/is-bad/);
+      await shot(page, 'window-chip-everything', scheme);
+      await chip(page).click();
+      await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 has Everything');
+      await expect(page.locator(NO_NOTICE)).toHaveCount(0);
+    });
+
+    test("BN-8: a setting changed from a device shows on the chip; the click opens that device's Activity; two changes show a badge of 2; the chip is not cleared by time", async ({ page }) => {
       const box = { devices: [{ ...PIXEL, level: 'everything' }], log: [{ at: '2026-11-19T09:00:00.000Z', device: PIXEL.id, label: 'Pixel 8', level: 'everything', kind: 'signin' }] };
       await windowWith(page, box);
       await page.goto('/src/ui/index.html');
-      await note(page).getByRole('button', { name: 'Dismiss' }).click();
-      await expect(note(page)).toHaveCount(0);
-      box.log = [{ at: '2026-11-19T09:40:00.000Z', device: PIXEL.id, label: 'Pixel 8', level: 'everything', kind: 'route', method: 'PUT', path: '/api/settings' }, ...box.log];
-      await expect(page.locator('#device-notice')).toContainText('Pixel 8 changed a setting', { timeout: 8000 });
-      await expect(note(page)).toHaveCount(0); // it is its own notice; the banner is not suppressed by it nor brought back by it
+      await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 has Everything');
+      const change = (at) => ({ at, device: PIXEL.id, label: 'Pixel 8', level: 'everything', kind: 'route', method: 'PUT', path: '/api/settings' });
+      box.log = [change('2026-11-19T09:40:00.000Z'), ...box.log];
+      await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 changed a setting', { timeout: 8000 });
+      await expect(chip(page).locator('.rc-badge')).toHaveCount(0);
+      box.log = [change('2026-11-19T09:41:00.000Z'), ...box.log];
+      await expect(chip(page).locator('.rc-badge')).toHaveText('2', { timeout: 8000 });
+      await shot(page, 'window-chip-setting-badge', scheme);
+      await page.waitForTimeout(3000);
+      await expect(chip(page).locator('.rc-badge')).toHaveText('2');
+      await chip(page).click();
+      await expect(page.locator('#settings-frame')).toHaveAttribute('src', new RegExp(`activity=${PIXEL.id}`));
+      await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 has Everything');
+      await expect(page.locator(NO_NOTICE)).toHaveCount(0);
     });
 
-    test('Back to Chats puts every device with Everything back to Chats (the window\'s own control), and See Activity opens that device\'s Activity', async ({ page }) => {
-      const box = { devices: [{ ...PIXEL, level: 'everything' }], log: [] };
+    test('access turned off removes the chip; turned on again brings the state words back (no event)', async ({ page }) => {
+      const box = { devices: [PIXEL] };
       await windowWith(page, box);
       await page.goto('/src/ui/index.html');
-      await note(page).getByRole('button', { name: 'Back to Chats' }).click();
-      await expect.poll(() => box.devices[0].level).toBe('chats');
-      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1');
+      await expect(chip(page)).toBeVisible();
+      await page.unroute('**/api/remote');
+      box.off = true;
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: box.off ? { enabled: false, signedIn: 0, devices: [] } : status(box.devices) }) : r.continue()));
+      await expect(chip(page)).toHaveCount(0, { timeout: 8000 });
+      box.off = false;
+      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1', { timeout: 8000 });
     });
 
-    for (const [w, h] of [[360, 640], [390, 800], [720, 800], [1280, 800]]) {
-      test(`the chip is never hidden by the narrow layout (${w}x${h}), with and without Everything`, async ({ page }) => {
-        await page.setViewportSize({ width: w, height: h });
-        const box = { devices: [PIXEL] };
-        await windowWith(page, box);
-        await page.goto('/src/ui/index.html');
-        await note(page).getByRole('button', { name: 'Dismiss' }).click();
-        for (const level of ['chats', 'everything']) {
-          box.devices = [{ ...PIXEL, level }];
-          await expect(chip(page)).toHaveAttribute('data-level', level === 'everything' ? 'everything' : 'open', { timeout: 8000 });
-          await note(page).getByRole('button', { name: 'Dismiss' }).click({ timeout: 1000 }).catch(() => {});
-          const m = await chip(page).evaluate((el) => { const b = el.getBoundingClientRect(); const lg = el.querySelector('.lg'); const sh = el.querySelector('.sh'); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, vw: innerWidth, vh: innerHeight, lg: getComputedStyle(lg).display, sh: getComputedStyle(sh).display, text: el.innerText }; });
-          expect(m.width).toBeGreaterThan(20);
-          expect(m.left).toBeGreaterThanOrEqual(0);
-          expect(m.right).toBeLessThanOrEqual(m.vw + 0.5);
-          expect(m.bottom).toBeLessThanOrEqual(m.vh);
-          expect(m.text.trim().length, 'it says something').toBeGreaterThan(3);
-          if (w <= 760) expect([m.lg, m.sh !== 'none']).toEqual(['none', true]); else expect([m.lg !== 'none', m.sh]).toEqual([true, 'none']); // flex items compute as block, so "shown" is anything but none
-          if (level === 'everything') await shot(page, `window-chip-everything-${w}`, scheme);
-        }
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      });
-    }
+    test('BN-4: nothing about it is stored or sent: no localStorage, sessionStorage or cookie, and no write to the server', async ({ page }) => {
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1');
+      const storage = () => page.evaluate(() => JSON.stringify([Object.entries(localStorage).filter(([k]) => /remote|chip|banner|notice|device/i.test(k)), Object.entries(sessionStorage), document.cookie]));
+      const before = await storage();
+      box.devices = [PIXEL, NEW];
+      await expect(chip(page).locator('.lg')).toHaveText('New: Living room TV signed in', { timeout: 8000 });
+      await chip(page).click();
+      expect(await storage()).toBe(before);
+      expect(box.writes).toEqual([]);
+    });
+
+    test('BN-7 hook: the internet shut-off stays on the chip with access closed until clicked on this page; a reload shows it again; the tray gets fixed fields only', async ({ page }) => {
+      const sent = [];
+      await page.addInitScript(() => { window.__tray = []; });
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { enabled: false, signedIn: 0, autoChats: [], devices: [], shutoffAt: '2026-11-19T10:00:00.000Z' } }) : r.continue()));
+      await page.route('**/api/remote/log', (r) => r.fulfill({ json: { entries: [] } }));
+      await page.addInitScript(() => { window.bunnyDesktop = { getPrefs: async () => ({}), setPrefs: async () => ({}), openInBrowser: async () => ({}), setRemoteEvent: async (e) => { window.__tray.push(e); return { ok: true }; } }; });
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page).locator('.lg')).toHaveText('Closed to the internet: too many wrong passcodes');
+      await expect(chip(page)).toHaveClass(/is-bad/);
+      await expect.poll(() => page.evaluate(() => window.__tray.at(-1))).toEqual({ kind: 'shutoff', label: undefined });
+      await chip(page).click();
+      await expect(chip(page)).toHaveCount(0);
+      await expect.poll(() => page.evaluate(() => window.__tray.at(-1))).toBeNull();
+      expect(sent).toEqual([]);
+      await page.reload();
+      await expect(chip(page).locator('.lg')).toHaveText('Closed to the internet: too many wrong passcodes');
+    });
+
+    test('reduced motion: no pulse, and the words still change once per event', async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 1');
+      box.devices = [PIXEL, NEW];
+      await expect(chip(page).locator('.lg')).toHaveText('New: Living room TV signed in', { timeout: 8000 });
+      await expect(chip(page)).not.toHaveClass(/is-new/);
+      expect(await chip(page).evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+    });
   });
 }
 
-/** A page as a signed-in device is served it: the CSRF meta and remote.js, and the server's own answer about its level. */
+test.describe('the chip is never hidden by the narrow layout', () => {
+  for (const [w, h] of [[360, 640], [390, 800], [720, 800], [1280, 800]]) {
+    test(`${w}x${h}, with an event and with Everything`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page)).toBeVisible();
+      for (const devices of [[PIXEL, NEW], [{ ...PIXEL, level: 'everything' }, NEW]]) {
+        box.devices = devices;
+        await expect(chip(page)).toHaveAttribute('data-event', /signin|everything/, { timeout: 8000 });
+        const m = await chip(page).evaluate((el) => { const b = el.getBoundingClientRect(); return { left: b.left, right: b.right, width: b.width, shown: [...el.querySelectorAll('.lg,.sh')].some((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0) }; });
+        expect(m.width).toBeGreaterThan(20);
+        expect(m.left).toBeGreaterThanOrEqual(-0.5);
+        expect(m.right).toBeLessThanOrEqual(w + 0.5);
+        expect(m.shown, 'it says something at every width').toBe(true);
+      }
+    });
+  }
+});
+
 async function devicePage(page, level) {
   await page.route('**/src/ui/index.html*', async (route) => {
     const headers = { ...route.request().headers() };
@@ -226,52 +202,37 @@ for (const scheme of ['light', 'dark']) {
   test.describe(`a device, ${scheme}`, () => {
     for (const [w, h] of [[390, 800], [1000, 700]]) {
       test.describe(`${w}x${h}`, () => {
-        test.use({ colorScheme: scheme, viewport: { width: w, height: h }, serviceWorkers: 'block' }); // the page's service worker would answer a reload itself, past this test's stand-in for the device's page
+        test.use({ colorScheme: scheme, viewport: { width: w, height: h }, serviceWorkers: 'block' });
 
-        test('Chats: a notice on load that can be dismissed, and nothing is left behind', async ({ page }) => {
+        test('BN-9, Chats: no notice and no chip at all', async ({ page }) => {
           await devicePage(page, 'chats');
           await page.goto('/src/ui/index.html');
-          const n = page.locator('#device-note');
-          await expect(n).toBeVisible();
-          await expect(n).toContainText('You have Chats access');
-          await expect(n).toContainText('The PC can give this device more. Change it in Bunny, on the PC.');
-          await expect(page.locator('#device-chip')).toHaveCount(0);
-          if (w === 390) await shot(page, 'device-chats-notice', scheme);
-          await n.getByRole('button', { name: 'Dismiss' }).click();
-          await expect(n).toHaveCount(0);
-          await expect(page.locator('#device-chip')).toHaveCount(0);
-          if (w === 390) await shot(page, 'device-chats-dismissed', scheme);
+          await expect(page.locator('#send')).toBeVisible();
+          await page.waitForTimeout(1500);
+          await expect(page.locator(NO_NOTICE)).toHaveCount(0);
+          await expect(page.locator('#device-chip, #remote-chip')).toHaveCount(0);
+          if (w === 390) await shot(page, 'device-chats-nothing', scheme);
         });
 
-        test('Everything: the notice can be dismissed but the red "Everything" chip stays in the header; a tap on it brings the notice back; a new load shows it again; nothing is stored', async ({ page }) => {
+        test('BN-9, Everything: no notice, the red "Everything" chip is in the header, cannot be dismissed, and nothing is stored', async ({ page }) => {
           await devicePage(page, 'everything');
           await page.goto('/src/ui/index.html');
-          const n = page.locator('#device-note');
           const c = page.locator('#device-chip');
-          await expect(n).toBeVisible();
-          await expect(n).toContainText('Everything access');
-          await expect(n).toContainText('The PC gave this device every tool and setting. Ends after 30 minutes idle.');
           await expect(c).toHaveText('Everything');
           await expect(c).toHaveAttribute('role', 'status');
-          if (w === 390) await shot(page, 'device-everything-notice', scheme);
+          await expect(page.locator(NO_NOTICE)).toHaveCount(0);
           const storage = () => page.evaluate(() => JSON.stringify([Object.entries(localStorage).sort(), Object.entries(sessionStorage), document.cookie]));
           const before = await storage();
-          await n.getByRole('button', { name: 'Dismiss' }).click();
-          await expect(n).toHaveCount(0);
+          await c.click();
+          await page.keyboard.press('Escape');
           await expect(c).toBeVisible();
+          await expect(page.locator(NO_NOTICE)).toHaveCount(0);
           expect(await storage()).toBe(before);
-          if (w === 390) await shot(page, 'device-everything-dismissed', scheme);
           const box = await c.boundingBox();
           expect(box.x + box.width).toBeLessThanOrEqual(w + 0.5);
           expect(box.y).toBeGreaterThanOrEqual(0);
-          await c.click();
-          await expect(n).toBeVisible();
-          await n.focus().catch(() => {});
-          await n.getByRole('button', { name: 'Dismiss' }).focus();
-          await page.keyboard.press('Escape');
-          await expect(n).toHaveCount(0);
-          await page.reload(); // a new page load
-          await expect(page.locator('#device-note')).toBeVisible(); // it is back
+          if (w === 390) await shot(page, 'device-everything-chip', scheme);
+          await page.reload();
           await expect(page.locator('#device-chip')).toBeVisible();
         });
       });

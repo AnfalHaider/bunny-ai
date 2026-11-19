@@ -15,6 +15,7 @@ import { createUpdater } from './updater.js';
 import { clearOldWorkersOnce } from './clear-old-workers.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
+import { cleanTrayEvent, trayTooltip } from './tray-words.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
@@ -161,7 +162,8 @@ function showWindow() {
 }
 
 // REMOTE-STAY (RS-5): the tray says so while Bunny is open to other devices, even when it started hidden (tray or start at login).
-const syncTrayTooltip = () => { try { tray?.setToolTip(bunnyApp?.remote?.enabled ? 'Bunny AI: Open to other devices' : 'Bunny AI'); } catch { /* the tray is going away */ } };
+let trayEvent = null; // the newest thing the window's chip is saying (fixed fields, see tray-words.js); the window sets and clears it
+const syncTrayTooltip = () => { try { tray?.setToolTip(trayTooltip(bunnyApp?.remote?.enabled, trayEvent)); } catch { /* the tray is going away */ } };
 async function resumeOpenToDevices() {
   try {
     const result = await bunnyApp.resumeRemote(); // only on the network it was turned on with (RS-4); every device signs in again
@@ -198,6 +200,12 @@ ipcMain.handle('theme:set', (event, theme) => {
   paintWindows();
   if (prefs.theme !== theme) savePrefs({ theme });
   return { ok: true, dark: nativeTheme.shouldUseDarkColors };
+});
+ipcMain.handle('remote:tray-event', (event, raw) => { // window-only, fixed fields only
+  if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false };
+  trayEvent = cleanTrayEvent(raw);
+  syncTrayTooltip();
+  return { ok: true };
 });
 ipcMain.handle('app:open-browser', (event) => (isOwn(event.senderFrame?.url ?? '') ? { ok: openInBrowser() } : { ok: false }));
 ipcMain.handle('prefs:get', () => ({ ...prefs, address: browserAddress(origin), addressNote }));

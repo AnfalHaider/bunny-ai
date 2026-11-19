@@ -145,22 +145,20 @@ for (const scheme of ['light', 'dark']) {
       await expect(page.locator('.device-row')).toHaveCount(2);
     });
 
-    test('a device with Everything changes a setting: a notice (names only, never the value) says who and when, and See Activity opens that device Activity', async ({ page }) => {
+    test('a device with Everything changes a setting: the chip (names only, never the value) says who, and a click opens that device Activity', async ({ page }) => {
       const log = { entries: LOG };
       await windowWith(page, [{ ...PHONE, asked: true }, LAPTOP], { log });
       await page.goto('/src/ui/index.html');
       await expect(page.locator('#remote-chip')).toContainText('Kitchen laptop has Everything');
       await page.waitForTimeout(300);
-      await expect(page.locator('#device-notice')).toHaveCount(0); // what happened before the window looked is not announced
+      await expect(page.locator('#remote-chip')).toHaveAttribute('data-event', ''); // what happened before the window looked is not announced
       log.entries = [{ at: '2026-11-18T09:40:00.000Z', device: LAPTOP.id, label: LAPTOP.label, level: 'everything', kind: 'route', method: 'PUT', path: '/api/settings' }, ...LOG];
-      const notice = page.locator('#device-notice');
-      await expect(notice).toBeVisible({ timeout: 15000 });
-      await expect(notice).toContainText('Kitchen laptop changed a setting');
-      await expect(notice).toContainText(/Everything access · [0-9]{2}:[0-9]{2} · See Activity/);
-      await expect(notice).not.toContainText('/api/settings');
+      const chipEl = page.locator('#remote-chip');
+      await expect(chipEl).toContainText('Kitchen laptop changed a setting', { timeout: 15000 });
+      await expect(chipEl).not.toContainText('/api/settings');
+      await expect(page.locator('#device-notice')).toHaveCount(0);
       await shot(page, 'notice', scheme);
-      await notice.getByRole('button', { name: 'See Activity' }).click();
-      await expect(notice).toHaveCount(0);
+      await chipEl.click();
       const frame = page.frameLocator('#settings-frame');
       await expect(frame.locator('.device-activity')).toContainText('Activity · Kitchen laptop');
       await expect(frame.getByRole('listitem').first()).toContainText('Setting changed');
@@ -175,7 +173,7 @@ for (const scheme of ['light', 'dark']) {
       await expect(page.locator('#remote-chip')).toContainText('Kitchen laptop has Everything');
       log.entries = [{ at: '2026-11-18T09:40:00.000Z', device: LAPTOP.id, label: LAPTOP.label, level: 'everything', kind: 'route', method: 'PUT', path: '/api/settings' }, ...LOG];
       devices.splice(1, 1); // the laptop is signed out before the window next looks
-      await expect(page.locator('#device-notice')).toContainText('Kitchen laptop changed a setting', { timeout: 15000 });
+      await expect(page.locator('#remote-chip')).toContainText('Kitchen laptop changed a setting', { timeout: 15000 });
     });
 
     test('REMOTE-STAY: the row says it stays on until you turn it off, also after a restart; when Bunny stayed closed at start (another network) one plain sentence says why', async ({ page }) => {
@@ -228,9 +226,9 @@ for (const scheme of ['light', 'dark']) {
     test('Chats: the line says so, and the window-only controls stay locked as before', async ({ page }) => {
       await devicePage(page, '/src/ui/settings.html', 'chats');
       await page.goto('/src/ui/settings.html?section=code');
-      await expect(page.locator('#device-note')).toContainText('You have Chats access');
-      await expect(page.locator('#device-note')).toHaveAttribute('data-level', 'chats');
-      await expect(page.locator('#device-chip')).toHaveCount(0); // nothing is left behind at Chats once the notice is dismissed
+      await expect(page.locator('#default-permission')).toBeDisabled();
+      await expect(page.locator('#device-note')).toHaveCount(0); // BN-9: no notice on a device's page
+      await expect(page.locator('#device-chip')).toHaveCount(0); // and nothing at Chats
       await expect(page.locator('#default-permission')).toBeDisabled();
       await expect(page.locator('#device-access-note')).toBeHidden();
       await shot(page, 'device-chats', scheme);
@@ -239,10 +237,7 @@ for (const scheme of ['light', 'dark']) {
     test('Everything: the line says so (with the idle limit), nothing is locked, and device access says only Bunny\'s window can change it', async ({ page }) => {
       await devicePage(page, '/src/ui/settings.html', 'everything');
       await page.goto('/src/ui/settings.html?section=desktop');
-      const line = page.locator('#device-note');
-      await expect(line).toContainText('Everything access');
-      await expect(line).toContainText('The PC gave this device every tool and setting. Ends after 30 minutes idle.');
-      await expect(line).toHaveAttribute('data-level', 'everything');
+      await expect(page.locator('#device-note')).toHaveCount(0); // BN-9: no notice, only the chip
       await expect(page.locator('#device-chip')).toHaveText('Everything');
       await expect(page.locator('#default-permission')).toBeEnabled();
       await expect(page.locator('.window-only-note')).toHaveCount(0);
@@ -262,10 +257,11 @@ for (const scheme of ['light', 'dark']) {
       await devicePage(page, '/src/ui/settings.html', 'chats');
       await page.route('**/api/remote/me', (r) => r.fulfill({ json: { device: "Sam's phone", csrf: 'test-csrf', level } }));
       await page.goto('/src/ui/settings.html?section=code');
-      await expect(page.locator('#device-note')).toHaveAttribute('data-level', 'chats');
+      await expect(page.locator('#default-permission')).toBeDisabled();
+      await expect(page.locator('#device-chip')).toHaveCount(0);
       level = 'everything';
       await page.clock?.fastForward?.(11000).catch(() => {});
-      await expect(page.locator('#device-note')).toHaveAttribute('data-level', 'everything', { timeout: 15000 });
+      await expect(page.locator('#device-chip')).toHaveText('Everything', { timeout: 15000 });
     });
   });
 }
