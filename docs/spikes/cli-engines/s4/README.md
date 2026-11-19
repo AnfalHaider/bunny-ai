@@ -1,0 +1,8 @@
+# Spike S4: Aider 0.86.2: PAUSED, not finished (2026-11-19)
+
+Paused on the Chief of Staff's word (the owner: focus on Claude Code and Codex first; Aider resumes after that build and ships only if it passes the bar: restricted mode, canary closed, no writes outside the copy).
+
+What exists:
+- `install-aider.ps1`: the R8 install into a throwaway folder only (uv, a managed Python 3.12, a hash-locked venv; the person's profile is not used).
+- Verified so far: the Aider 0.86.2 wheel on PyPI is `aider_chat-0.86.2-py3-none-any.whl` (377,009 bytes, sha256 `64f6a0c66c9f4633ad9f479bca3e64ebcba02b9da03c6b604b74a44736b2416e`, `requires_python >=3.10,<3.13`). `uv` 0.13.9 (PyPI wheel `uv-0.13.9-py3-none-win_amd64.whl`, 15,662,317 bytes, sha256 `6a44b2ed8111d2f60d2b92627c5dccda3f7ed7570b18ce115e569cd68c28246b`, matches the PyPI digest); its `uv.exe` (32.6 MB, sha256 `7e6349bc24cfc7249f892c41298e4371826a19008c3cbcfe13eacd08ac398470`) has a valid Authenticode signature (signer `OpenAI OpCo, LLC`) and runs (`uv 0.13.9`).
+- Not done: the Python 3.12 download and hash-locked install result (size, Defender/SmartScreen), and S4 (a) R6, (b) no-TTY behaviour, (c) R19 canary. Planned checks: a `--message` turn with `--no-suggest-shell-commands --no-auto-commits --no-git --analytics-disable --no-check-update`; a prompt that starts with `/run` or `/read` (Aider executes slash commands found in `--message`); a model reply naming an absolute path outside the folder, and a reply that writes a file at such a path; the canary string searched for in every request at the stand-in endpoint (`../s3/stub-chat.mjs` speaks the wire Aider uses).
