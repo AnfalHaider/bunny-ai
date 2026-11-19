@@ -5,7 +5,7 @@
     "theme": "light",
     "scale": 1,
     "capture": "viewport",
-    "alt": "Bunny made a carrot-themed to-do app, opened it beside the chat and tested it",
+    "alt": "Bunny made a carrot-themed to-do app and opened it beside the chat",
     "usedBy": ["README.md"]
   },
   "blocked-asked.png": {
@@ -80,7 +80,7 @@
     "theme": "light",
     "scale": 1,
     "capture": "viewport",
-    "alt": "ModelScope, SiliconFlow, Gitee AI and more, each with a Connect button",
+    "alt": "Popular providers such as Nvidia and OpenCode Console, each with a Connect or Sign in button",
     "usedBy": ["README.md"]
   },
   "settings-wait.png": {
