@@ -248,14 +248,25 @@ export function deviceLabel(userAgent = '') {
 export function createScryptGate({ internet = 2, total = 4 } = {}) {
   let all = 0;
   let net = 0;
+  const queue = []; // home-network sign-ins wait their turn here (they are never refused: today's behaviour), served in order as slots free up
+  const take = (via) => {
+    all += 1;
+    if (via === 'internet') net += 1;
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true; all -= 1; if (via === 'internet') net -= 1;
+      while (queue.length && all < total) queue.shift()(take('lan'));
+    };
+  };
   return {
+    /** A slot now, or null (the internet listener answers 429 with a retry-after). */
     acquire(via = 'lan') {
       if (all >= total || (via === 'internet' && net >= internet)) return null;
-      all += 1;
-      if (via === 'internet') net += 1;
-      let done = false;
-      return () => { if (done) return; done = true; all -= 1; if (via === 'internet') net -= 1; };
+      return take(via);
     },
+    /** A slot, waiting for one if need be (the home network). */
+    wait(via = 'lan') { const now = all < total && (via !== 'internet' || net < internet) ? take(via) : null; return now ? Promise.resolve(now) : new Promise((resolve) => queue.push(resolve)); },
     get active() { return { all, internet: net }; },
   };
 }
@@ -289,10 +300,11 @@ export function readCookie(header, name = COOKIE) {
  *   globalLimit  null (lan) | INTERNET_GLOBAL_LIMIT
  *   scrypt       a createScryptGate() shared by both instances, or null
  *   onShutoff    called when the flood shut-off fires (the route must close)
+ *   logSink      null | (entry) => void: this instance's action-log entries go to another instance's log, so both listeners share ONE log file (each entry carries `via`)
  */
 export function createRemoteAccess({
   file = null, logFile = null, now = () => Date.now(), onEnd = () => {},
-  via = 'lan', cookieName = COOKIE, secureCookie = false, limits = null, persist = null, levels = LEVELS, globalLimit = null, scrypt: gate = null, onShutoff = () => {},
+  via = 'lan', cookieName = COOKIE, secureCookie = false, limits = null, persist = null, levels = LEVELS, globalLimit = null, scrypt: gate = null, onShutoff = () => {}, logSink = null,
 } = {}) {
   const limitsNow = () => ({ idleMs: SESSION_IDLE_MS, maxAgeMs: null, everythingIdleMs: EVERYTHING_IDLE_MS, keep: false, ...(limits ? limits() : {}) });
   const expired = (s) => {
@@ -324,6 +336,10 @@ export function createRemoteAccess({
     for (const key of ['kind', 'tool', 'method', 'path', 'why', 'route', 'name']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
     if (typeof entry.level === 'string') clean.level = entry.level;
     if (typeof entry.from === 'string') clean.from = entry.from;
+    if (logSink) { try { logSink(clean); } catch { /* a lost entry is not a reason to fail a request */ } return; }
+    addEntry(clean);
+  }
+  function addEntry(clean) {
     actions.push(clean);
     prune();
     if (logFile) saving = saving.then(loadActions).then(async () => { prune(); await mkdir(dirname(logFile), { recursive: true }); await writeFile(logFile, JSON.stringify(actions)); }).catch(() => {});
@@ -419,17 +435,18 @@ export function createRemoteAccess({
     if (flying >= budget) return { ok: false, status: 429, waitSeconds: 30, message: 'Too many tries. Wait 30 seconds and try again.' };
     // (the wrong tries of the last minutes count only while the last of them is under a minute old; tries in flight always count)
     if (recent.length + inflightAll > FLOOD_LIMIT && (inflightAll > 0 || recent.at(-1) + 60_000 > now())) return { ok: false, status: 429, waitSeconds: 60, message: 'Too many tries. Wait 60 seconds and try again.' };
-    // OS-3: a slot at the shared scrypt gate (at most 2 internet hashes at once, 4 overall). A refused slot takes no try.
-    const release = gate ? gate.acquire(via) : () => {};
-    if (!release) return { ok: false, status: 429, waitSeconds: 5, message: 'Bunny is busy checking other sign-ins. Try again in a few seconds.' };
+    // The try is RESERVED first (RA-1), then a slot at the shared scrypt gate is taken (OS-3: at most 2 internet hashes at once, 4 overall; the internet gets a 429 when there is none, the
+    // home network waits its turn). A refused slot gives the reserved try back.
     inflight.set(ip, flying + 1);
     inflightAll += 1;
+    const unreserve = () => { const left = (inflight.get(ip) ?? 1) - 1; if (left > 0) inflight.set(ip, left); else inflight.delete(ip); inflightAll -= 1; };
+    let release;
+    try { release = gate ? (via === 'internet' ? gate.acquire(via) : await gate.wait(via)) : () => {}; } catch (err) { unreserve(); throw err; }
+    if (!release) { unreserve(); return { ok: false, status: 429, waitSeconds: 5, message: 'Bunny is busy checking other sign-ins. Try again in a few seconds.' }; }
     let good;
     try { good = await verifyPasscode(typeof passcode === 'string' ? passcode.trim() : '', record); } finally {
       release();
-      const left = (inflight.get(ip) ?? 1) - 1;
-      if (left > 0) inflight.set(ip, left); else inflight.delete(ip);
-      inflightAll -= 1;
+      unreserve();
     }
     if (!on) return { ok: false, status: 403, message: 'Bunny is not open to other devices.' }; // turned off (or shut off) while the passcode was being checked
     if (!good) {
@@ -502,6 +519,8 @@ export function createRemoteAccess({
     get shutoffAt() { return shutoffAt; },
     /** The window's On / Keep it off: clears the saved shut-off (OS-3). Nothing else does. */
     clearShutoff() { shutoffAt = null; },
+    /** At start: the shut-off saved in remote-internet.json stands until the window clears it. */
+    setShutoff(at) { shutoffAt = Number(at) || null; },
     /** The window's Reset button: the global wait and the counts behind it (OS-3). Sessions are untouched. */
     resetWait() { globalWait = { until: 0, level: 0 }; globalFails = []; recent = []; logAction(null, { kind: 'wait-end', why: 'reset' }); },
     get waitSeconds() { return globalLimit && globalWait.until > now() ? Math.ceil((globalWait.until - now()) / 1000) : 0; },
@@ -550,6 +569,8 @@ export function createRemoteAccess({
     },
     /** R-DF2: record one thing a device did (a tool's name, a window-only route and its method, a sign-in or a level change). */
     logAction,
+    /** Another instance's entry, added to this log (its `via` is already on it). */
+    addEntry,
     flushLog: () => saving,
     /** R-DF2: the log, newest first. Only the window's route hands it out. */
     async actions() { await loadActions(); prune(); return [...actions].reverse(); },

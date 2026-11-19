@@ -86,7 +86,8 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE } from './remoteAccess.js';
+import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, createScryptGate, INTERNET_COOKIE, INTERNET_GLOBAL_LIMIT, INTERNET_IDLE_MS, INTERNET_MAX_AGE_MS, EVERYTHING_IDLE_MS, STRONG_KDF, needsStrongerHash } from './remoteAccess.js';
+import { checkClientIpHeader, checkHttpsName, internetPin, pinHost } from './internetPin.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -598,18 +599,37 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (windowOnly(req, res)) return;
       const body = await readBody(req);
       if (!LEVELS.includes(body?.level)) return sendJson(res, 400, { code: 'remote.invalid', message: 'Choose Chats or Everything.' });
-      if (!remote.setLevel(deviceLevel[1], body.level)) return sendJson(res, 404, { code: 'remote.noDevice', message: 'That device is not signed in.' });
+      if (!(remote.setLevel(deviceLevel[1], body.level) || internet.setLevel(deviceLevel[1], body.level))) return sendJson(res, 404, { code: 'remote.noDevice', message: 'That device is not signed in.' });
       return sendJson(res, 200, await remoteStatus());
     }
     const remoteDevice = path.match(/^\/api\/remote\/devices\/([a-f0-9]{16})\/signout$/);
     if (remoteDevice && method === 'POST') {
       if (windowOnly(req, res)) return;
-      return sendJson(res, remote.signOutDevice(remoteDevice[1]) ? 200 : 404, await remoteStatus());
+      return sendJson(res, (remote.signOutDevice(remoteDevice[1]) || internet.signOutDevice(remoteDevice[1])) ? 200 : 404, await remoteStatus());
     }
     if (path === '/api/remote/signout-all' && method === 'POST') {
       if (windowOnly(req, res)) return;
       remote.signOutAll();
+      internet.signOutAll();
       return sendJson(res, 200, await remoteStatus());
+    }
+    // OPEN-SIGNIN: the internet route. Under /api/remote/, so a device is refused at every level; the writes are window-only as well.
+    if (path === '/api/remote/internet' && method === 'GET') return sendJson(res, 200, await internetStatus());
+    if (path === '/api/remote/internet' && method === 'POST') {
+      if (windowOnly(req, res)) return;
+      return internetSet(res, await readBody(req));
+    }
+    if (path === '/api/remote/internet/reset-wait' && method === 'POST') {
+      if (windowOnly(req, res)) return;
+      internet.resetWait();
+      return sendJson(res, 200, await internetStatus());
+    }
+    if (path === '/api/remote/internet/keep-off' && method === 'POST') { // the shut-off notice: "Keep it off" clears it and leaves the route closed
+      if (windowOnly(req, res)) return;
+      internet.clearShutoff();
+      await writeJson(internetStateFile, { ...(await readJson(internetStateFile, {})), shutoffAt: null });
+      internet.logAction(null, { kind: 'option', name: 'shutoff', why: 'kept off' });
+      return sendJson(res, 200, await internetStatus());
     }
 
     if (path === '/api/health') return sendJson(res, 200, { ok: true, fake, windowOnlyLock: Boolean(folderPickerOnly) }); // BROWSER: a page in a browser can say "Change this in Bunny's window." early
@@ -764,8 +784,15 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
+      // OPEN-SIGNIN: the internet options are never changed by a device, even one at Everything (that counts as the window for the rest)
+      if (INTERNET_OPTION_KEYS.some((k) => Object.hasOwn(patch, k)) && (req.bunnyDevice || req.bunnyRemote)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
+      const bad = checkInternetSettings(patch);
+      if (bad) return sendJson(res, 400, { code: 'settings.internet', message: bad });
+      const before = settings;
+      if (typeof patch.internetHttpsHost === 'string' && patch.internetHttpsHost.trim()) { const c = checkHttpsName(patch.internetHttpsHost); patch.internetHttpsHost = pinHost(c.name, c.port); }
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
+      await internetOptionsChanged(before, settings);
       return sendJson(res, 200, settings);
     }
 
@@ -3468,9 +3495,24 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       }
     } catch { /* a chat that is gone needs nothing */ }
   };
-  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), logFile: join(dataDir, 'remote-actions.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
+  // OPEN-SIGNIN: two instances of one device-access type. The home network is today's (its limits change only with the two options); the internet one has its own sessions, cookie, limits and counters.
+  // They share ONE passcode record and ONE action log (every entry says `via`), and ONE scrypt gate (at most 2 internet hashes at once, 4 overall).
+  const scryptGate = createScryptGate({ internet: 2, total: 4 });
+  const limitsFor = (net) => () => {
+    const keep = settings.keepSignedIn === true;
+    const everythingIdleMs = settings.everythingStaysOn === true ? null : EVERYTHING_IDLE_MS;
+    if (keep) return { keep: true };
+    return net ? { idleMs: INTERNET_IDLE_MS, maxAgeMs: INTERNET_MAX_AGE_MS, everythingIdleMs } : { everythingIdleMs };
+  };
+  const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), logFile: join(dataDir, 'remote-actions.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); }, scrypt: scryptGate, limits: limitsFor(false), persist: { file: join(dataDir, 'remote-sessions-lan.json') } });
+  const internet = createRemoteAccess({
+    file: join(dataDir, 'remote-access.json'), via: 'internet', cookieName: INTERNET_COOKIE, secureCookie: true, scrypt: scryptGate, globalLimit: INTERNET_GLOBAL_LIMIT,
+    limits: limitsFor(true), persist: { file: join(dataDir, 'remote-sessions-internet.json') }, logSink: (entry) => remote.addEntry(entry),
+    onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); },
+    onShutoff: () => { setImmediate(() => { stopInternet('shutoff').catch(() => {}); }); }, // OS-3: the route closes itself; only the window turns it on again
+  });
   resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
-  const remoteSweep = setInterval(() => remote.sweep(), 60_000); // idle devices are signed out even if they never call again
+  const remoteSweep = setInterval(() => { remote.sweep(); internet.sweep(); }, 60_000); // idle devices are signed out even if they never call again
   remoteSweep.unref();
   /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */
   async function noteRemoteMode(req, session) {
@@ -3493,9 +3535,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     return {
       enabled: remote.enabled,
       url: lanUrl(),
-      signedIn: remote.count(),
-      devices: remote.list(),
-      anyEverything: remote.anyEverything(), // DEVICE-FULL: while a device has 'everything' the window says so
+      signedIn: remote.count() + internet.count(),
+      devices: [...remote.list(), ...internet.list()],
+      anyEverything: remote.anyEverything() || internet.anyEverything(), // DEVICE-FULL: while a device has 'everything' the window says so
+      internet: await internetStatus(),
       hasPasscode: await remote.hasPasscode(),
       networkAddress: lanAddressOverride ?? findLanAddress(),
       minPasscode: 12,
@@ -3505,6 +3548,118 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       autoChats: (await sessions.list()).filter((s) => s.remoteAuto).map((s) => ({ id: s.id, title: s.title })), // R6: chats a device has put on Auto
     };
   }
+  // ===== OPEN-SIGNIN: the internet listener (step 3: "your own HTTPS address"; Tailscale Funnel follows in step 4) =====
+  // A THIRD server, bound to 127.0.0.1 only and only while the route is on. A tunnel or the person's proxy forwards to it. It is never the window's server and never the home-network one.
+  const internetStateFile = join(dataDir, 'remote-internet.json');
+  const INTERNET_OPTION_KEYS = ['internetRoute', 'internetStayOpen', 'keepSignedIn', 'everythingStaysOn', 'internetHttpsHost', 'internetClientIpHeader', 'internetPort'];
+  let netServer = null;
+  let internetNow = { route: null, name: '', port: 443 };
+  let internetNotice = ''; // one sentence for the Settings row, until the route is turned on or off by the person
+  {
+    const saved = await readJson(internetStateFile, {});
+    if (saved.shutoffAt) internet.setShutoff(saved.shutoffAt); // the flood shut-off stands, across restarts, until the window clears it (OS-3)
+  }
+  /** Is each option value one the server accepts? Returns a plain sentence, or '' when fine. */
+  function checkInternetSettings(patch) {
+    if (Object.hasOwn(patch, 'internetRoute') && !['funnel', 'https'].includes(patch.internetRoute)) return 'Choose Tailscale Funnel or your own HTTPS address.';
+    for (const key of ['internetStayOpen', 'keepSignedIn', 'everythingStaysOn']) if (Object.hasOwn(patch, key) && typeof patch[key] !== 'boolean') return 'That option is on or off.';
+    if (Object.hasOwn(patch, 'internetHttpsHost') && String(patch.internetHttpsHost ?? '').trim()) { const c = checkHttpsName(patch.internetHttpsHost); if (!c.ok) return c.message; }
+    if (Object.hasOwn(patch, 'internetClientIpHeader')) { const c = checkClientIpHeader(patch.internetClientIpHeader); if (!c.ok) return c.message; }
+    if (Object.hasOwn(patch, 'internetPort')) {
+      const port = Number(patch.internetPort);
+      if (!Number.isInteger(port) || port < 1024 || port > 65535) return 'The port must be between 1024 and 65535.';
+      if (port === (server.address()?.port ?? 0)) return "That is Bunny's own port. Choose another.";
+    }
+    return '';
+  }
+  /** After a change to the options: end what the new limits end, save or forget the kept sessions, and say so in Activity. */
+  async function internetOptionsChanged(before, after) {
+    const changed = INTERNET_OPTION_KEYS.filter((k) => before[k] !== after[k]);
+    if (!changed.length) return;
+    for (const key of changed) internet.logAction(null, { kind: 'option', name: key, why: typeof after[key] === 'boolean' ? (after[key] ? 'on' : 'off') : 'changed' });
+    if (changed.some((k) => k === 'keepSignedIn' || k === 'everythingStaysOn')) {
+      for (const a of [remote, internet]) { a.sweep(); await a.saveSessions(); } // off: everything past today's limits ends and nothing stays saved; on: what is signed in now is kept
+    }
+  }
+  async function internetStatus() {
+    const on = internet.enabled;
+    const name = internetNow.name;
+    return {
+      on, route: on ? internetNow.route : null, choice: settings.internetRoute ?? 'funnel',
+      address: on && internetNow.route === 'https' ? `https://${pinHost(name, internetNow.port)}/` : null,
+      proxyTarget: netServer ? `http://127.0.0.1:${netServer.address().port}` : null,
+      port: settings.internetPort ?? null,
+      wait: internet.waitSeconds, failsToday: internet.failsToday,
+      shutoff: Boolean(internet.shutoffAt), notice: internetNotice,
+      hasPasscode: await internet.hasPasscode(), strongPasscode: await internet.hasPasscode() && !(await internet.needsStrongPasscode()),
+      options: { keepSignedIn: settings.keepSignedIn === true, everythingStaysOn: settings.everythingStaysOn === true, internetStayOpen: settings.internetStayOpen === true },
+    };
+  }
+  /** Close the listener. `why`: person, shutoff, passcode, quit. Quitting keeps the saved sessions (that is the point of "Keep devices signed in"); anything else ends them. */
+  async function stopInternet(why = 'person') {
+    const wasOn = internet.enabled;
+    if (why !== 'quit') internet.disable();
+    const old = netServer;
+    netServer = null;
+    if (old) { old.closeAllConnections?.(); await new Promise((r) => old.close(() => r())); }
+    if (wasOn && why !== 'quit') {
+      internet.logAction(null, { kind: 'route-off', route: internetNow.route ?? '', name: internetNow.name, why });
+      await writeJson(internetStateFile, { via: internetNow.route, port: internetNow.port, name: internetNow.name, on: false, shutoffAt: internet.shutoffAt });
+    }
+  }
+  async function internetSet(res, body) {
+    if (body?.on === false) { internetNotice = ''; await stopInternet('person'); return sendJson(res, 200, await internetStatus()); }
+    if (body?.on !== true) return sendJson(res, 400, { code: 'internet.invalid', message: 'Say whether to turn it on or off.' });
+    const route = body.route ?? settings.internetRoute ?? 'funnel';
+    if (!['funnel', 'https'].includes(route)) return sendJson(res, 400, { code: 'internet.invalid', message: 'Choose Tailscale Funnel or your own HTTPS address.' });
+    if (route === 'funnel') return sendJson(res, 400, { code: 'internet.funnelLater', message: 'Tailscale Funnel is not in this build yet. Use your own HTTPS address.' });
+    const named = checkHttpsName(settings.internetHttpsHost);
+    if (!named.ok) return sendJson(res, 400, { code: 'internet.name', message: named.message });
+    // 5.1: 16 characters or more on the internet route, and the stronger passcode record (N=65536). An older record asks for the passcode once and is rehashed.
+    let passcode = null;
+    let generated = null;
+    if (body.generate === true) { generated = generatePasscode(); passcode = generated; }
+    else if (typeof body.passcode === 'string') {
+      passcode = body.passcode.trim();
+      if (passcode.length < 16) return sendJson(res, 400, { code: 'internet.passcode', message: 'The internet route needs a passcode of at least 16 characters.' });
+      if (passcode.length > 200) return sendJson(res, 400, { code: 'internet.passcode', message: 'That passcode is too long.' });
+    } else if (!(await internet.hasPasscode()) || (await internet.needsStrongPasscode())) {
+      return sendJson(res, 400, { code: 'internet.passcodeNeeded', message: 'The internet route needs a passcode of at least 16 characters. Choose one, or let Bunny make one.' });
+    }
+    if (passcode !== null) {
+      const same = (await internet.hasPasscode()) && (await internet.verify(passcode));
+      await internet.setPasscode(passcode, STRONG_KDF); // rehashed at the new cost; a new passcode ends every session
+      await remote.reloadPasscode();
+      if (!same) remote.signOutAll(); // one passcode for both listeners: a change ends the home-network sessions too
+    }
+    // the port: chosen once at random and saved, so the person's proxy setting stays valid across restarts; never the window's port
+    let port = Number(settings.internetPort);
+    const windowPort = server.address()?.port ?? 0;
+    if (!(Number.isInteger(port) && port >= 1024 && port <= 65535) || port === windowPort) {
+      port = 20000 + (randomBytes(2).readUInt16BE(0) % 40000);
+      if (port === windowPort) port += 1;
+      settings = { ...settings, internetPort: port };
+      await writeJson(settingsFile, settings);
+    }
+    await stopInternet('restart');
+    const net = createServer((req, res2) => {
+      deviceRoute(internet, internetPinNow)(req, res2).catch((err) => { if (!res2.headersSent) sendJson(res2, 500, { code: 'server.error', message: 'Something went wrong.' }); res2.end(); void err; });
+    });
+    const listening = await new Promise((resolve) => { net.once('error', (err) => resolve(err)); net.listen(port, '127.0.0.1', () => resolve(null)); });
+    if (listening) return sendJson(res, 400, { code: 'internet.listen', message: `Bunny could not open port ${port} on this computer: ${listening.message}. Choose another port.` });
+    netServer = net;
+    registerOwnPort(port); // nothing the model or a page names may be fetched from this listener either (W610-1)
+    internetNow = { route: 'https', name: named.name, port: named.port };
+    internet.clearShutoff(); // only the window's On clears the saved shut-off
+    const started = await internet.enable({ lanHost: pinHost(named.name, named.port), lanAddress: null, passcode: null });
+    if (!started.ok) { await stopInternet('person'); return sendJson(res, 400, { code: 'internet.passcode', message: started.message }); }
+    internetNotice = '';
+    internet.logAction(null, { kind: 'route-on', route: 'https', name: named.name });
+    await writeJson(internetStateFile, { via: 'https', port, https: named.port, name: named.name, on: true, shutoffAt: null });
+    return sendJson(res, 200, { ...(await internetStatus()), ...(generated ? { generatedPasscode: generated } : {}) });
+  }
+  const internetPinNow = { check: (req) => internetPin({ route: 'https', name: () => internetNow.name, port: () => internetNow.port, clientIpHeader: () => settings.internetClientIpHeader ?? '' })(req) };
+
   async function stopRemote() {
     remote.disable();
     const old = lanServer;
@@ -3542,6 +3697,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     try { await listenAt(server.address()?.port ?? 0); } catch { await listenAt(0).catch((err) => { throw Object.assign(new Error('Bunny could not open to other devices: ' + err.message), { code: 'remote.listen' }); }); }
     lanServer = server2;
     const started = await remote.enable({ lanHost: lan + ':' + server2.address().port, lanAddress: lan, passcode });
+    if (passcode !== null) { await internet.reloadPasscode(); if (internet.enabled) await stopInternet('passcode'); } // one passcode for both listeners
     if (!started.ok) { await stopRemote(); return { ok: false, message: started.message }; }
     return { ok: true };
   }
@@ -3649,7 +3805,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   } };
   const remoteRoute = deviceRoute(remote, lanPin);
 
-  server.on('close', () => { clearInterval(remoteSweep); stopRemote().catch(() => {}); });
+  server.on('close', () => { clearInterval(remoteSweep); stopRemote().catch(() => {}); stopInternet('quit').catch(() => {}); });
 
   // W610-1: nothing the model or a page names may be fetched from this server (download_file, a page capture): its port is known to the fetcher
   server.on('listening', () => registerOwnPort(server.address().port));
@@ -3659,7 +3815,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
   return {
     server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
-    computer, terminals, remote, resumeRemote,
+    computer, terminals, remote, internet, resumeRemote,
     getSettings: () => settings,
     chooseFolder,
     dataDir,
