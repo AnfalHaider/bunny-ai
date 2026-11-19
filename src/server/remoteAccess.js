@@ -11,8 +11,8 @@
  *  - a remote device never gets a window-only route, and may only do the small allow-list in remotePolicy() below.
  * Pure of sockets and files except the passcode record (a salt and a scrypt hash: the passcode itself is never stored).
  */
-import { randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createHash, randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
+import { readFile, writeFile, mkdir, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { networkInterfaces } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -52,13 +52,19 @@ export function checkPasscodeChoice(value) {
   return { ok: true, passcode: text };
 }
 
-const scryptAsync = (secret, salt) => new Promise((resolve, reject) => scrypt(secret, salt, KDF.keylen, { N: KDF.N, r: KDF.r, p: KDF.p }, (err, key) => (err ? reject(err) : resolve(key))));
+/** OPEN-SIGNIN OS-4: the internet route needs a stronger passcode record: N=65536 (about 64 MB per hash). A record keeps its own cost, and the check reads it from the record. */
+export const STRONG_KDF = Object.freeze({ N: 65536, r: 8, p: 1, keylen: 32 });
+/** N=65536 with r=8 needs about 64 MB, and Node's default maxmem is 32 MB: every call passes this, or scrypt throws (OS-4). */
+export const SCRYPT_MAXMEM = 128 * 1024 * 1024;
+/** OS-4: a record is at least this strong to be used for the internet route. */
+export const needsStrongerHash = (record) => !record || !(Number(record.N) >= STRONG_KDF.N);
+const scryptAsync = (secret, salt, cost = KDF) => new Promise((resolve, reject) => scrypt(secret, salt, cost.keylen ?? KDF.keylen, { N: cost.N, r: cost.r, p: cost.p, maxmem: SCRYPT_MAXMEM }, (err, key) => (err ? reject(err) : resolve(key))));
 
-/** A salted scrypt record of a passcode. The passcode itself is never kept. */
-export async function hashPasscode(passcode) {
+/** A salted scrypt record of a passcode. The passcode itself is never kept. `cost` is the home network's today, or STRONG_KDF for the internet route. */
+export async function hashPasscode(passcode, cost = KDF) {
   const salt = randomBytes(16);
-  const hash = await scryptAsync(String(passcode), salt);
-  return { v: 1, kdf: 'scrypt', N: KDF.N, r: KDF.r, p: KDF.p, salt: salt.toString('hex'), hash: hash.toString('hex') };
+  const hash = await scryptAsync(String(passcode), salt, cost);
+  return { v: 1, kdf: 'scrypt', N: cost.N, r: cost.r, p: cost.p, salt: salt.toString('hex'), hash: hash.toString('hex') };
 }
 
 export async function verifyPasscode(passcode, record) {
@@ -66,7 +72,10 @@ export async function verifyPasscode(passcode, record) {
   try {
     const salt = Buffer.from(record.salt, 'hex');
     const want = Buffer.from(record.hash, 'hex');
-    const got = await scryptAsync(String(passcode ?? ''), salt);
+    // OS-4: the cost comes from the record itself (an older record keeps its cost until it is rehashed), within sane bounds
+    const cost = { N: Number(record.N) || KDF.N, r: Number(record.r) || KDF.r, p: Number(record.p) || KDF.p, keylen: want.length || KDF.keylen };
+    if (cost.N > 1 << 20 || cost.r > 16 || cost.p > 4) return false;
+    const got = await scryptAsync(String(passcode ?? ''), salt, cost);
     return got.length === want.length && timingSafeEqual(got, want);
   } catch { return false; }
 }
@@ -232,6 +241,35 @@ export function deviceLabel(userAgent = '') {
   return `${os} · ${browser}`;
 }
 
+/**
+ * OS-3 (5.3): at most `internet` sign-ins from the internet listener hash at once, and at most `total` hash at once overall, so 4 x 64 MB is the most scrypt holds.
+ * acquire(via) returns a release function, or null when there is no slot (the caller answers 429 with a retry-after).
+ */
+export function createScryptGate({ internet = 2, total = 4 } = {}) {
+  let all = 0;
+  let net = 0;
+  return {
+    acquire(via = 'lan') {
+      if (all >= total || (via === 'internet' && net >= internet)) return null;
+      all += 1;
+      if (via === 'internet') net += 1;
+      let done = false;
+      return () => { if (done) return; done = true; all -= 1; if (via === 'internet') net -= 1; };
+    },
+    get active() { return { all, internet: net }; },
+  };
+}
+
+/** OS-3: the internet listener's own limits: 10 wrong tries in 10 minutes pause every new sign-in (1, 2, 4 ... at most 60 minutes), 100 in 24 hours turn the route off. */
+export const INTERNET_GLOBAL_LIMIT = Object.freeze({ fails: 10, perMs: 10 * 60_000, waitMaxMs: 60 * 60_000, shutoff: Object.freeze({ fails: 100, perMs: 24 * 60 * 60_000 }) });
+/** OS-5 "Keep devices signed in": the cookie keeps for 400 days, the most browsers keep. */
+export const KEEP_MAX_AGE_SECONDS = 34_560_000;
+/** OS-5: the internet route's own limits while "Keep devices signed in" is off. */
+export const INTERNET_IDLE_MS = 30 * 60 * 1000;
+export const INTERNET_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+export const INTERNET_COOKIE = '__Host-bunny_remote';
+const sha256 = (text) => createHash('sha256').update(String(text)).digest('hex');
+
 export function readCookie(header, name = COOKIE) {
   for (const part of String(header ?? '').split(';')) {
     const at = part.indexOf('=');
@@ -240,8 +278,29 @@ export function readCookie(header, name = COOKIE) {
   return '';
 }
 
-export function createRemoteAccess({ file = null, logFile = null, now = () => Date.now(), onEnd = () => {} } = {}) {
-  const idleLimit = (s) => (s.level === 'everything' ? EVERYTHING_IDLE_MS : SESSION_IDLE_MS);
+/**
+ * One device-access type, two instances (OPEN-SIGNIN 2.2): the home network (today, the defaults below) and the internet listener. Each keeps its own sessions, tries and counters.
+ *   via          'lan' | 'internet': on every session and log entry
+ *   cookieName   COOKIE (lan) | INTERNET_COOKIE (internet)
+ *   secureCookie false (plain HTTP on the LAN) | true (HTTPS)
+ *   limits()     read at every check: { idleMs, maxAgeMs, everythingIdleMs, keep }; null for a limit means none; keep = "Keep devices signed in" (no limits, a 400-day cookie, sessions saved as hashes)
+ *   persist      null | { file }: where "keep" saves sessions. Only SHA-256 hashes of the secrets are ever written
+ *   levels       the levels a device may be given
+ *   globalLimit  null (lan) | INTERNET_GLOBAL_LIMIT
+ *   scrypt       a createScryptGate() shared by both instances, or null
+ *   onShutoff    called when the flood shut-off fires (the route must close)
+ */
+export function createRemoteAccess({
+  file = null, logFile = null, now = () => Date.now(), onEnd = () => {},
+  via = 'lan', cookieName = COOKIE, secureCookie = false, limits = null, persist = null, levels = LEVELS, globalLimit = null, scrypt: gate = null, onShutoff = () => {},
+} = {}) {
+  const limitsNow = () => ({ idleMs: SESSION_IDLE_MS, maxAgeMs: null, everythingIdleMs: EVERYTHING_IDLE_MS, keep: false, ...(limits ? limits() : {}) });
+  const expired = (s) => {
+    const l = limitsNow();
+    if (l.keep) return false;
+    const idle = s.level === 'everything' ? l.everythingIdleMs : l.idleMs;
+    return (idle != null && now() - s.lastSeen > idle) || (l.maxAgeMs != null && now() - s.signedInAt > l.maxAgeMs);
+  };
   // R-DF2: what devices did, for the person to read in Bunny's window only. Names and routes only: never arguments, bodies, text or secrets.
   let actions = [];
   let loading = null;
@@ -261,8 +320,8 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   if (logFile) loadActions().catch(() => {}); // read the saved log at once; every write waits for it
   let saving = Promise.resolve();
   function logAction(device, entry) {
-    const clean = { at: new Date(now()).toISOString(), device: device?.deviceId ?? null, label: device?.label ?? null, level: device?.level ?? null };
-    for (const key of ['kind', 'tool', 'method', 'path']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
+    const clean = { at: new Date(now()).toISOString(), device: device?.deviceId ?? null, label: device?.label ?? null, level: device?.level ?? null, via };
+    for (const key of ['kind', 'tool', 'method', 'path', 'why', 'route', 'name']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
     if (typeof entry.level === 'string') clean.level = entry.level;
     if (typeof entry.from === 'string') clean.from = entry.from;
     actions.push(clean);
@@ -275,11 +334,55 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   let host = '';           // exactly "<lan address>:<port>" while on
   let address = null;
   const ended = (deviceIds) => { try { onEnd(deviceIds); } catch { /* the sessions are gone either way */ } }; // R6: lets the app put a device's Auto chats back to Ask
-  const sessions = new Map(); // secret cookie value -> { deviceId, label, ip, csrf, signedInAt, lastSeen }
+  // sha256(cookie value) -> { deviceId, label, ip, csrf, signedInAt, lastSeen, level }. The raw cookie value is never kept (OS-5), so a saved session can be read back after a restart.
+  const sessions = new Map();
+  let shutoffAt = null;       // OS-3: when the flood shut-off fired; cleared only by clearShutoff() (the window)
+  let globalFails = [];       // times of wrong tries from anyone on this listener (internet only)
+  let globalWait = { until: 0, level: 0 };
+  const keyOf = (secret) => sha256(secret);
+  const findKey = (secret) => { // a compare over hashes of equal length that does not stop at the first match
+    const want = Buffer.from(keyOf(secret), 'hex');
+    let found = null;
+    for (const key of sessions.keys()) { const have = Buffer.from(key, 'hex'); if (have.length === want.length && timingSafeEqual(have, want) && found === null) found = key; }
+    return found;
+  };
   const failures = new Map(); // ip -> { count, until }
   let recent = [];            // times of recent failures from anyone
   const inflight = new Map(); // ip -> tries being checked right now (scrypt takes time, and tries that arrive together must count together)
   let inflightAll = 0;
+
+  // ---- "Keep devices signed in": only hashes are written (atomically), only while the option is on ----
+  let savingSessions = Promise.resolve();
+  const keeping = () => Boolean(persist?.file) && limitsNow().keep;
+  function saveSessions() {
+    if (!persist?.file) return savingSessions;
+    const snapshot = keeping() ? [...sessions.entries()].map(([hash, s]) => ({ sha256: hash, csrf: s.csrf, deviceId: s.deviceId, label: s.label, level: s.level, signedInAt: s.signedInAt, lastSeen: s.lastSeen })) : null;
+    savingSessions = savingSessions.then(async () => {
+      if (!snapshot || !snapshot.length) { await rm(persist.file, { force: true }); return; }
+      await mkdir(dirname(persist.file), { recursive: true });
+      const temp = `${persist.file}.tmp`;
+      await writeFile(temp, JSON.stringify({ v: 1, sessions: snapshot }), { mode: 0o600 });
+      await rename(temp, persist.file);
+    }).catch(() => {});
+    return savingSessions;
+  }
+  /** Read the saved sessions back (at the route's start). Anything over today's limits is dropped. */
+  async function restoreSessions() {
+    if (!keeping()) return 0;
+    let saved = null;
+    try { saved = JSON.parse(await readFile(persist.file, 'utf8')); } catch { return 0; }
+    let n = 0;
+    for (const e of Array.isArray(saved?.sessions) ? saved.sessions : []) {
+      if (typeof e?.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(e.sha256) || typeof e.csrf !== 'string' || typeof e.deviceId !== 'string') continue;
+      const s = { deviceId: e.deviceId, label: String(e.label ?? 'A device').slice(0, 80), ip: '', csrf: e.csrf, signedInAt: Number(e.signedInAt) || now(), lastSeen: Number(e.lastSeen) || now(), level: levels.includes(e.level) ? e.level : DEFAULT_LEVEL };
+      if (expired(s)) continue;
+      sessions.set(e.sha256, s);
+      n += 1;
+    }
+    return n;
+  }
+  /** Forget every saved session (sign out all, a passcode change, the route or access turned off, the shut-off, or a network that is not the saved one). */
+  const forgetSaved = () => { if (!persist?.file) return Promise.resolve(); savingSessions = savingSessions.then(() => rm(persist.file, { force: true })).catch(() => {}); return savingSessions; };
 
   async function load() {
     if (loaded) return;
@@ -287,8 +390,8 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     if (!file) return;
     try { record = JSON.parse(await readFile(file, 'utf8')); } catch { record = null; }
   }
-  async function savePasscode(passcode) {
-    record = await hashPasscode(passcode);
+  async function savePasscode(passcode, cost = KDF) {
+    record = await hashPasscode(passcode, cost);
     loaded = true;
     if (file) { await mkdir(dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(record)); }
   }
@@ -299,7 +402,8 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     const ownWait = own && own.until > t ? Math.ceil((own.until - t) / 1000) : 0;
     recent = recent.filter((x) => t - x < 10 * 60_000);
     const floodWait = recent.length > FLOOD_LIMIT && recent.at(-1) + 60_000 > t ? Math.ceil((recent.at(-1) + 60_000 - t) / 1000) : 0;
-    return Math.max(ownWait, floodWait);
+    const globalWaitSeconds = globalLimit && globalWait.until > t ? Math.ceil((globalWait.until - t) / 1000) : 0;
+    return Math.max(ownWait, floodWait, globalWaitSeconds);
   };
 
   async function signIn(ip, passcode, userAgent = '') {
@@ -315,18 +419,40 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     if (flying >= budget) return { ok: false, status: 429, waitSeconds: 30, message: 'Too many tries. Wait 30 seconds and try again.' };
     // (the wrong tries of the last minutes count only while the last of them is under a minute old; tries in flight always count)
     if (recent.length + inflightAll > FLOOD_LIMIT && (inflightAll > 0 || recent.at(-1) + 60_000 > now())) return { ok: false, status: 429, waitSeconds: 60, message: 'Too many tries. Wait 60 seconds and try again.' };
+    // OS-3: a slot at the shared scrypt gate (at most 2 internet hashes at once, 4 overall). A refused slot takes no try.
+    const release = gate ? gate.acquire(via) : () => {};
+    if (!release) return { ok: false, status: 429, waitSeconds: 5, message: 'Bunny is busy checking other sign-ins. Try again in a few seconds.' };
     inflight.set(ip, flying + 1);
     inflightAll += 1;
     let good;
     try { good = await verifyPasscode(typeof passcode === 'string' ? passcode.trim() : '', record); } finally {
+      release();
       const left = (inflight.get(ip) ?? 1) - 1;
       if (left > 0) inflight.set(ip, left); else inflight.delete(ip);
       inflightAll -= 1;
     }
+    if (!on) return { ok: false, status: 403, message: 'Bunny is not open to other devices.' }; // turned off (or shut off) while the passcode was being checked
     if (!good) {
       const entry = failures.get(ip) ?? { count: 0, until: 0 };
       entry.count += 1;
       recent.push(now());
+      if (globalLimit) {
+        globalFails.push(now());
+        globalFails = globalFails.filter((x) => now() - x < globalLimit.shutoff.perMs);
+        if (globalFails.length >= globalLimit.shutoff.fails) {
+          shutoffAt = now();
+          logAction(null, { kind: 'shutoff' });
+          try { onShutoff(); } catch { /* the route is closed below either way */ }
+          disable();
+          return { ok: false, status: 403, message: 'Bunny is not open to other devices.' };
+        }
+        const inWindow = globalFails.filter((x) => now() - x < globalLimit.perMs).length;
+        if (inWindow >= globalLimit.fails && globalWait.until <= now()) {
+          const ms = Math.min(globalLimit.waitMaxMs, 60_000 * 2 ** globalWait.level);
+          globalWait = { until: now() + ms, level: globalWait.level + 1 };
+          logAction(null, { kind: 'wait-start', why: `${Math.round(ms / 60_000)}` });
+        } else if (inWindow < globalLimit.fails) globalWait.level = 0;
+      }
       if (entry.count >= FAILS_BEFORE_WAIT) entry.until = now() + Math.min(15 * 60, 30 * 2 ** (entry.count - FAILS_BEFORE_WAIT)) * 1000; // 30 s, 60 s, 2 min ... at most 15 min
       failures.set(ip, entry);
       const w = waitFor(ip);
@@ -335,59 +461,91 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     failures.delete(ip);
     const secret = randomBytes(32).toString('hex');
     const session = { deviceId: randomBytes(8).toString('hex'), label: deviceLabel(userAgent), ip, csrf: randomBytes(24).toString('hex'), signedInAt: now(), lastSeen: now(), level: DEFAULT_LEVEL };
-    sessions.set(secret, session);
+    sessions.set(keyOf(secret), session);
     logAction(session, { kind: 'signin' });
+    saveSessions();
     return { ok: true, secret, session };
   }
 
   /** Drop every session idle for too long, and tell the app (so a device's Auto chats go back to Ask). Called on a timer and before any count or list. */
   function sweep() {
     const gone = [];
-    for (const [secret, s] of sessions) if (now() - s.lastSeen > idleLimit(s)) { sessions.delete(secret); gone.push(s.deviceId); logAction(s, { kind: 'idle-signout' }); }
-    if (gone.length) ended(gone);
+    for (const [key, s] of sessions) if (expired(s)) { sessions.delete(key); gone.push(s.deviceId); logAction(s, { kind: 'idle-signout' }); }
+    if (gone.length) { ended(gone); saveSessions(); }
     return gone.length;
   }
 
   /** The session behind a Cookie header, or null (expired ones are dropped). */
   function sessionFor(cookieHeader) {
-    const secret = readCookie(cookieHeader);
+    const secret = readCookie(cookieHeader, cookieName);
     if (!secret || !on) return null;
-    const s = sessions.get(secret);
+    const key = findKey(secret);
+    const s = key === null ? null : sessions.get(key);
     if (!s) return null;
-    if (now() - s.lastSeen > idleLimit(s)) { sessions.delete(secret); ended([s.deviceId]); logAction(s, { kind: 'idle-signout' }); return null; }
+    if (expired(s)) { sessions.delete(key); ended([s.deviceId]); logAction(s, { kind: 'idle-signout' }); saveSessions(); return null; }
     s.lastSeen = now();
     return s;
   }
 
+  /** Turn off: every session ends at once, and every saved one is forgotten. */
+  function disable() {
+    const ids = [...sessions.values()].map((s) => s.deviceId);
+    on = false; host = ''; address = null; sessions.clear(); failures.clear(); recent = []; globalFails = []; globalWait = { until: 0, level: 0 };
+    forgetSaved();
+    ended(ids.length ? ids : null);
+  }
+
   return {
     load,
+    via,
+    cookieName,
+    get shutoffAt() { return shutoffAt; },
+    /** The window's On / Keep it off: clears the saved shut-off (OS-3). Nothing else does. */
+    clearShutoff() { shutoffAt = null; },
+    /** The window's Reset button: the global wait and the counts behind it (OS-3). Sessions are untouched. */
+    resetWait() { globalWait = { until: 0, level: 0 }; globalFails = []; recent = []; logAction(null, { kind: 'wait-end', why: 'reset' }); },
+    get waitSeconds() { return globalLimit && globalWait.until > now() ? Math.ceil((globalWait.until - now()) / 1000) : 0; },
+    get failsToday() { globalFails = globalFails.filter((x) => globalLimit && now() - x < globalLimit.shutoff.perMs); return globalFails.length; },
+    /** Read the saved passcode again from its file (the other instance may have changed it) or take a record handed over. */
+    reloadPasscode() { loaded = false; record = null; return load(); },
+    get passcodeRecord() { return record; },
+    /** OS-4: has this record the internet route's cost? An older record is rehashed after one confirmation (setPasscode). */
+    async needsStrongPasscode() { await load(); return needsStrongerHash(record); },
+    /** Check a passcode against the saved record (the old cost is read from the record) without signing anyone in. */
+    async verify(passcode) { await load(); return verifyPasscode(String(passcode ?? '').trim(), record); },
+    /** Save a passcode at a cost, ending every session (a passcode change ends sessions, OS-5). */
+    async setPasscode(passcode, cost = KDF) { await load(); await savePasscode(passcode, cost); const ids = [...sessions.values()].map((x) => x.deviceId); sessions.clear(); await forgetSaved(); if (ids.length) ended(ids); },
+    restoreSessions,
+    forgetSaved,
+    saveSessions,
+    flushSessions: () => savingSessions,
     get enabled() { return on; },
     get host() { return host; },
     get address() { return address; },
     async hasPasscode() { await load(); return Boolean(record); },
     /** Turn on at this host. `passcode` is set (and hashed) now; with none, the saved one is kept (if there is none, that is an error). */
-    async enable({ lanHost, lanAddress, passcode = null }) {
+    async enable({ lanHost, lanAddress, passcode = null, cost = KDF, restore = true }) {
       await load();
-      if (passcode !== null) await savePasscode(passcode);
+      if (passcode !== null) { await savePasscode(passcode, cost); sessions.clear(); await forgetSaved(); } // a new passcode: nobody stays signed in on the old one
       else if (!record) return { ok: false, message: 'Choose a passcode first.' };
       host = String(lanHost).toLowerCase();
       address = lanAddress;
       on = true;
+      if (restore) await restoreSessions(); // "Keep devices signed in": saved sessions are valid again when it opens again
       return { ok: true };
     },
-    /** Turn off: every session ends at once. */
-    disable() { const ids = [...sessions.values()].map((s) => s.deviceId); on = false; host = ''; address = null; sessions.clear(); failures.clear(); recent = []; ended(ids.length ? ids : null); },
+    disable,
     signIn,
     sessionFor,
     /** The person's own browser sessions, for the list in the window (never the secrets). */
     sweep,
-    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString(), level: s.level, asked: Boolean(s.asked) })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
+    list() { sweep(); return [...sessions.values()].map((s) => ({ id: s.deviceId, via, label: s.label, ip: s.ip, signedInAt: new Date(s.signedInAt).toISOString(), lastSeen: new Date(s.lastSeen).toISOString(), level: s.level, asked: Boolean(s.asked) })).sort((a, b) => a.signedInAt.localeCompare(b.signedInAt)); },
     count() { sweep(); return sessions.size; },
     /** DEVICE-FULL: the level lives with the session, so it ends with sign-out, turning access off or the idle timeout. Returns the device, or null. */
     setLevel(deviceId, level) {
-      if (!LEVELS.includes(level)) return null;
+      if (!levels.includes(level)) return null;
       sweep();
-      for (const s of sessions.values()) if (s.deviceId === deviceId) { const from = s.level; s.level = level; s.asked = true; s.lastSeen = now(); if (from !== level) logAction(s, { kind: 'level', from }); return { id: s.deviceId, level: s.level }; }
+      for (const s of sessions.values()) if (s.deviceId === deviceId) { const from = s.level; s.level = level; s.asked = true; s.lastSeen = now(); if (from !== level) logAction(s, { kind: 'level', from }); saveSessions(); return { id: s.deviceId, level: s.level }; }
       return null;
     },
     /** R-DF2: record one thing a device did (a tool's name, a window-only route and its method, a sign-in or a level change). */
@@ -396,11 +554,16 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     /** R-DF2: the log, newest first. Only the window's route hands it out. */
     async actions() { await loadActions(); prune(); return [...actions].reverse(); },
     anyEverything() { sweep(); return [...sessions.values()].some((s) => s.level === 'everything'); },
-    signOutDevice(deviceId) { for (const [secret, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(secret); ended([deviceId]); return true; } return false; },
-    signOutSecret(secret) { const s = sessions.get(secret); const gone = sessions.delete(secret); if (gone && s) ended([s.deviceId]); return gone; },
-    signOutAll() { const ids = [...sessions.values()].map((s) => s.deviceId); const n = sessions.size; sessions.clear(); if (ids.length) ended(ids); return n; },
-    cookieFor(secret) { return `${COOKIE}=${secret}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_IDLE_MS / 1000)}`; },
-    clearCookie() { return `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`; },
+    signOutDevice(deviceId) { for (const [key, s] of sessions) if (s.deviceId === deviceId) { sessions.delete(key); ended([deviceId]); saveSessions(); return true; } return false; },
+    signOutSecret(secret) { const key = findKey(secret); const s = key === null ? null : sessions.get(key); const gone = key === null ? false : sessions.delete(key); if (gone && s) { ended([s.deviceId]); saveSessions(); } return gone; },
+    signOutAll() { const ids = [...sessions.values()].map((s) => s.deviceId); const n = sessions.size; sessions.clear(); forgetSaved(); if (ids.length) ended(ids); return n; },
+    /** The Set-Cookie value. Home network today: no Secure, Max-Age = the idle limit. Internet: Secure, __Host- name, no Domain. "Keep devices signed in": Max-Age = 400 days (OS-5). */
+    cookieFor(secret) {
+      const l = limitsNow();
+      const maxAge = l.keep ? KEEP_MAX_AGE_SECONDS : Math.floor((l.idleMs ?? SESSION_IDLE_MS) / 1000);
+      return `${cookieName}=${secret}; ${secureCookie ? 'Secure; ' : ''}HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+    },
+    clearCookie() { return `${cookieName}=; ${secureCookie ? 'Secure; ' : ''}HttpOnly; SameSite=Strict; Path=/; Max-Age=0`; },
   };
 }
 
