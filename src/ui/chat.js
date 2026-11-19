@@ -25,8 +25,8 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
-import { chooseLevel, everythingDevices, isSettingChange, settingNotice } from './device-access.js';
-import { AUTO_HIDE_MS, bannerReturns, paintChip, paintNote } from './remote-notice.js';
+import { chooseLevel, everythingDevices, isSettingChange } from './device-access.js';
+import { newEvents, paintChip } from './remote-notice.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
@@ -2682,7 +2682,7 @@ function watchRemote() {
       else show(await sendJSON(`/api/remote/devices/${device.id}/level`, 'PATCH', { level: choice }));
     } catch { dismissed.add(device.id); /* the device signed out meanwhile, or the write failed: Settings still has the choice */ } finally { asking = false; }
   };
-  // DEVICE-FULL: when a device with Everything changes a setting, a notice says so (from the same window-only log Activity reads: names only). Entries older than the first look are not announced.
+  // DEVICE-FULL: when a device with Everything changes a setting, the chip says so (from the same window-only log Activity reads: names only). Entries older than the first look are not announced.
   let seenAt = null;
   const announceChanges = async (s) => {
     // always while access is on: a device may change a setting and be signed out (or time out) before the next look, and that must still be announced
@@ -2692,48 +2692,38 @@ function watchRemote() {
       const fresh = entries.filter((e) => isSettingChange(e) && !first && e.at > seenAt);
       if (entries.length) seenAt = entries[0].at > (seenAt ?? '') ? entries[0].at : seenAt;
       else if (seenAt === null) seenAt = '';
-      const latest = fresh[0];
-      if (latest) settingNotice(document, { label: latest.label ?? 'A device', level: latest.level, at: latest.at, onActivity: () => openSettings('desktop', { activity: latest.device }) });
+      for (const e of fresh.slice().reverse()) events.push({ kind: 'setting', device: e.device, label: e.label ?? 'A device' }); // oldest first; the chip says the newest (BN-8)
+      if (fresh.length && last) paintChip(document, last, chipOpts());
     } catch { /* not now */ }
   };
-  // BANNER-NOTICE: the banner is a notification the person can dismiss; the chip in the top bar stays while access is open (see remote-notice.js). A dismissal is a variable of this page and
-  // nothing else: no setting, no localStorage, no cookie, no file, no route (BN-4, BN-5), so a reload brings the notification back and no device can hide it.
-  let last = null;       // the last status seen
-  let noteOpen = false;  // is the notification showing?
-  let noteTimer = null;  // the plain banner's 10-second hide
-  const hideNote = () => { clearTimeout(noteTimer); noteTimer = null; noteOpen = false; document.getElementById('remote-note')?.remove(); };
-  const showNote = (s) => {
-    if (!s?.enabled) { hideNote(); return; }
-    clearTimeout(noteTimer);
-    noteOpen = true;
-    const every = everythingDevices(s);
-    const actions = [];
-    if (every.length) {
-      actions.push({ label: 'See Activity', run: () => { hideNote(); openSettings('desktop', { activity: every[0].id }); } });
-      actions.push({ label: 'Back to Chats', run: async () => { try { let r = s; for (const d of every) r = await sendJSON(`/api/remote/devices/${d.id}/level`, 'PATCH', { level: 'chats' }); show(r); } catch { /* it stays as it was */ } } });
-    } else actions.push({ label: 'Settings', run: () => { hideNote(); openSettings('desktop'); } });
-    actions.push({ label: 'Turn off', run: async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } } });
-    const autoHide = every.length === 0; // one that says a device has Everything never hides by itself
-    paintNote(document, s, { actions, onDismiss: hideNote, autoHide });
-    if (autoHide) noteTimer = setTimeout(hideNote, AUTO_HIDE_MS);
-  };
+  // BANNER-NOTICE (the owner: "No banner on top is required"): no notification anywhere. The chip in the top bar says the state and, until it is clicked, the newest thing that happened. What waits is
+  // a variable of this page and nothing else (BN-4): no setting, localStorage, cookie, file or route, so a reload shows the state words again and no device can hide anything.
+  let last = null;      // the last status seen
+  const events = [];    // new sign-ins, Everything raises and setting changes that wait for a click
+  const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const chipOpts = () => ({
+    events, reducedMotion: reduced(),
+    onClick: () => {
+      const ev = events[events.length - 1];
+      events.length = 0;
+      paintChip(document, last, chipOpts());
+      if (ev?.kind === 'setting') openSettings('desktop', { activity: ev.device });
+      else openSettings('desktop');
+    },
+  });
   const show = (s) => {
-    if (!s?.enabled) { paintChip(document, s, {}); hideNote(); document.getElementById('device-notice')?.remove(); seenAt = null; last = s ?? null; return; }
-    const returns = bannerReturns(last, s);
+    if (!s?.enabled) { events.length = 0; paintChip(document, s); seenAt = null; last = s ?? null; return; }
+    for (const e of newEvents(last, s)) events.push(e);
     last = s;
-    paintChip(document, s, { onClick: () => showNote(last) });
-    if (returns) showNote(s);
-    else if (noteOpen) { // what the notification says follows the state; one that now has Everything in it stops hiding by itself
-      const was = document.getElementById('remote-note')?.dataset.level;
-      if (was === 'everything' || everythingDevices(s).length) showNote(s);
-    }
+    paintChip(document, s, chipOpts());
     askAboutDevices(s);
     announceChanges(s);
   };
-  const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
+  let refused = 0; // a device's page is refused /api/remote: after three refusals in a row outside Bunny's window it stops asking
+  const tick = async () => { try { show(await getJSON('/api/remote')); refused = 0; } catch { refused += 1; } };
   // START-WAIT: once a second for the first 15 seconds (so the chip is there from the first moment), then every 10 seconds
   let looks = 0;
-  const loop = () => { looks += 1; tick().finally(() => setTimeout(loop, looks <= 15 ? 1000 : 10000)); };
+  const loop = () => { looks += 1; tick().finally(() => { if (!window.bunnyDesktop && refused >= 3) return; setTimeout(loop, looks <= 15 ? 1000 : 10000); }); };
   loop();
 }
 
@@ -4605,7 +4595,7 @@ async function boot() {
   input.focus();
 
   // W4-8 quick ask: the bar over any app asks this window to start a new chat with its message.
-  if (window.bunnyDesktop) watchRemote();
+  watchRemote(); // the window, and Bunny in a browser on this PC; a device's page is refused /api/remote and shows nothing here (its own chip is in remote.js)
   if (window.bunnyDesktop?.quickAsk) {
     window.bunnyDesktop.quickAsk.onNewChat(() => { runQuickAsk().catch((err) => { $('error').textContent = err.message; }); });
     runQuickAsk().catch((err) => { $('error').textContent = err.message; });
