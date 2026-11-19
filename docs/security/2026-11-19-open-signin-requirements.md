@@ -197,3 +197,17 @@ The non-IP try limit and the shut-off (OS-3), the passcode length and cost (OS-4
 - An internet device raised to Everything by the window gets the dialog with the internet sentence. A level change from a device is refused at Everything.
 - At start with "Stay open" on, each failed check keeps the route closed with its sentence: a renamed DNS name, Tailscale stopped, no passcode record, an earlier shut-off. A leftover Funnel on another port is turned off. A good start reopens, shows the chip, and writes the Activity entry.
 - No device can change any of the three options.
+
+### Addendum: "Keep devices signed in" covers home-network devices too (2026-11-19)
+
+The Chief of Staff reads the owner's "there should be no time out" as covering every device. So the OS-5 option, and the OS-7 "Everything stays on" option, apply to **LAN devices as well**. This replaces "LAN sessions keep REMOTE-STAY's sign-in-again" above. It amends DEVICE-FULL's 30-minute Everything limit and BROWSER step 2's 2-hour Chats limit, **only while the option is on**.
+
+- **One option, both routes.** With "Keep devices signed in" on, a LAN session has no idle limit and no maximum, and survives a restart. As on the internet, Bunny saves only the SHA-256 of each session secret, never the secret. The LAN cookie keeps its current name and flags (plain HTTP, so no `Secure` or `__Host-`), with `Max-Age` of 400 days.
+- **"Everything stays on"** likewise removes the 30-minute drop for LAN devices at Everything.
+- Both stay on once the owner turns them on. Turning one off brings back today's limits, and ends every session older than those limits.
+- **What still ends a LAN session at once:** signing it out, "Sign out all devices", a passcode change, turning device access off, and REMOTE-STAY's network check failing at start (RS-4). A LAN session saved under one network isn't reopened on another network.
+- **Plain HTTP on the LAN:** a long-lived session over plain HTTP can be taken over by anyone on the same network who sees its traffic. That's the risk R-DF1 and the access warning already state. With this option on, the warning adds: "Devices stay signed in until you sign them out. On a network you don't fully trust, turn this off." It's the owner's choice and stays visible in Settings.
+- **The device list** in Settings shows each device's first and last seen, so a forgotten device can be found and signed out.
+- **No device can change either option**, Everything included.
+
+Tests: with the option on, a LAN Chats session is still valid after 3 simulated hours, and an Everything session after 45 simulated minutes. Both survive a restart, with only hashes saved. Each of the end-at-once events still ends them. With the option off, today's 2-hour and 30-minute limits hold.
