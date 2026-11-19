@@ -23,3 +23,15 @@ Run 2026-11-19 by Builder C with the pinned Codex 0.170.0 (win32-x64, Authentico
 ## Real-binary smoke: Claude Code local mode
 
 See `../s1/ER-4-prompt-tool.md`, finding 3: Bunny's Messages translator drove the real 2.1.311 binary end to end.
+
+## Why Codex's first command took 3 to 4 minutes, and the fix (measured 2026-11-19)
+
+| Run | First command | Second command |
+|---|---|---|
+| fresh `CODEX_HOME` (every chat today) | **188 s** | 1 s |
+| the same `CODEX_HOME` used again (a different project folder) | 1 s | 1 s |
+| a fresh `CODEX_HOME` seeded with `cap_sid` and `.sandbox_migration` from an earlier home | **1 s** | 1 s |
+
+Cause: the unelevated Windows sandbox makes a **capability SID per `CODEX_HOME`** (the `cap_sid` file) the first time a command runs and grants it access: `codex.exe` burns CPU (about 85 s of CPU in the first 90 s) while PowerShell itself starts in 0.3 s. Not PowerShell's cold start, and not Defender (`MsMpEng` was not the busy process). It is per home, not per project folder. Each chat's fresh SID also leaves its own grants on the project folder.
+
+Fix built (`src/server/engines/sandbox-seed.js`): after the first Codex run, the two identity files are kept once under `engines\codex\sandbox-seed` and copied into each new chat home. Nothing else is shared (no config, state, logs or sign-in), the seed goes with the engine on Remove, and a second home never replaces it. The very first Codex chat on a PC still waits once. **For Security:** the seed makes every Codex chat use one capability SID instead of one each. It is not a credential, but it is one shared identity for the sandbox of every chat: please say if that crosses CE-3. (A one-time warm-up at download time would remove even the first wait; not built.)

@@ -19,6 +19,7 @@ import { AUTH_COMMANDS, denyRules, startClaude } from './claude-code.js';
 import { loadSchema, startCodex } from './codex.js';
 import { loadPins } from './pins.js';
 import { createEngineStore } from './store.js';
+import { keepSeed, seedHome } from './sandbox-seed.js';
 import { cutResult } from './events.js';
 import { describeReview, diff, discard, review, stage, stageDirFor } from './staging.js';
 import { makeZipForFake } from './fake-registry.js';
@@ -338,6 +339,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
           upstream: auth === 'local' ? budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn) : null, onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       } else {
         const sch = await schema();
+        if (!fakeMode) await seedHome({ dataDir, codexHome: join(home, 'codex') }); // the first command of a chat is not a 3-minute sandbox set-up (see sandbox-seed.js)
         run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
           upstream: budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       }
@@ -374,6 +376,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
         assembled += `${assembled ? '\n\n' : ''}${said}`; turn.send('delta', { text: `${assembled === said ? '' : '\n\n'}${said}` });
       } finally { await discard(staged.dir); }
     }
+    if (id === 'codex' && !fakeMode) await keepSeed({ dataDir, codexHome: join(home, 'codex') });
     if (turn.incognito) await removeTree(home).catch(() => {});
     return { text: assembled, ok, stoppedForCheck };
   }
