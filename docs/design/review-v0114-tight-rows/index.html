@@ -1,0 +1,212 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny tight rows</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--soft)}
+.stat b{font-size:22px;display:block;line-height:1.2}.stat span{font-size:12px;color:var(--dim)}
+.stat.g b{color:var(--ok)}
+.shot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.shot img{display:block;width:100%;height:auto}
+.shot .dk{display:none}
+:root[data-theme="dark"] .shot .lt{display:none}:root[data-theme="dark"] .shot .dk{display:block}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .shot .lt{display:none}:root:not([data-theme="light"]) .shot .dk{display:block}}
+.phoneshot{max-width:330px}
+/* ---------- the proposed rows ---------- */
+.app{container-type:inline-size;border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:visible;position:relative}
+.ph{max-width:360px}
+.tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.tabs span{padding:2px 10px;border-radius:8px;font-size:13px;color:var(--dim)}.tabs .a{background:var(--soft);color:var(--fg)}
+.tabs .sp{flex:1}
+.addb{background:var(--fg);color:var(--panel);border-radius:8px;padding:2px 12px;font-size:13px;font-weight:600}
+.cnt{display:flex;gap:8px;align-items:center;padding:5px 12px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line)}
+.cb{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;opacity:.8}
+.rw{display:grid;grid-template-columns:15px 30px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);min-height:52px}
+.rw:last-child{border-bottom:0}
+.rw.front{grid-template-columns:auto 15px 30px minmax(0,1fr) auto}
+.rw.front .sw{order:-1}
+.tile{width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px}
+.nm{min-width:0}
+.l1{display:flex;gap:6px;align-items:center;line-height:1.3;min-width:0}
+.l1 b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.l2{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap;flex:none}
+.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}.chp.b{color:var(--bad);border-color:var(--bad)}
+.rt{display:flex;gap:8px;align-items:center}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.mn{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--dim);font-weight:700;letter-spacing:1px;border:0;background:none;cursor:pointer;font:inherit;flex:none}
+.mn:hover{background:var(--soft)}
+.sbtn{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--accent);color:var(--accent);background:var(--accent-soft);border-radius:8px;padding:2px 10px;cursor:pointer;white-space:nowrap}
+.menu{position:absolute;z-index:5;right:10px;width:230px;max-width:calc(100% - 20px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:4px;display:grid;font-size:13px}
+.menu div{padding:5px 10px;border-radius:7px;cursor:default;display:flex;justify-content:space-between;gap:8px}
+.menu div:hover{background:var(--soft)}.menu .d{color:var(--bad)}.menu hr{border:0;border-top:1px solid var(--line);margin:3px 0;width:100%}
+.menu small{color:var(--dim)}
+@container (max-width:420px){.rw{grid-template-columns:15px 28px minmax(0,1fr) auto;gap:8px;padding:8px 10px}.rw .rt .sbtn{display:none}.rw.front{grid-template-columns:auto 15px 28px minmax(0,1fr)}.rw.front .mn{display:none}.rw .tile{width:28px;height:28px}}
+.mini{display:grid;gap:3px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{font-size:12px;color:var(--dim);font-weight:600}
+.scroll{overflow-x:auto}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Tighter rows for plugins, connectors, skills and the lists like them</h1>
+   <p class="dim">v0.1.14 · TIGHT-ROWS · Customize (Connectors, Skills, Plugins) and Automation · invented profile only</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>The owner: "improve the layout of plugins and connections, skill etc, tighten the rows. The switch should be in front of each, not under it." Today a connector is a 95 px row with a column of words (Type, Status, Test, Trust read-only labels, Remove) and, on a phone, a 160 px card with the switch on a line of its own <i>under</i> the name. Proposed: <b>one row of about 52 px per item</b>, the same density as the Engines page: logo, name with a one-line dim description, the switch on the same line, and everything else folded into a <b>⋯</b> menu. Words that only say "Not checked" go away; a status shows only when something needs you.</p>
+  <div class="stats" id="stats"></div>
+ </section>
+
+ <section>
+  <h2>Customize: today beside proposed</h2>
+  <div class="bar"><div class="seg" id="kseg" role="group" aria-label="Tab"><button type="button" data-k="connectors" aria-pressed="true">Connectors</button><button type="button" data-k="skills" aria-pressed="false">Skills</button><button type="button" data-k="plugins" aria-pressed="false">Plugins</button></div>
+   <span class="dim">Where is the switch?</span><div class="seg" id="sseg" role="group" aria-label="Switch place"><button type="button" data-s="right" aria-pressed="true">At the right (drawn)</button><button type="button" data-s="front" aria-pressed="false">In front of the row</button></div></div>
+  <div class="cols">
+   <div class="cell"><h3>Today · desktop</h3><div class="shot" id="td"></div><p class="cap" id="tdc"></p></div>
+   <div class="cell"><h3>Proposed · desktop</h3><div class="app" id="pd"></div><p class="cap" id="pdc"></p></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Today · phone</h3><div class="shot phoneshot" id="tm"></div><p class="cap" id="tmc"></p></div>
+   <div class="cell"><h3>Proposed · phone</h3><div class="app ph" id="pm"></div><p class="cap" id="pmc"></p></div>
+  </div>
+  <p class="cap">Click the ⋯ on a row to see the menu. "In front of the row" puts the switch before the logo, if the owner means "in front" literally; I drew the right-hand side first because Settings and the Engines page already keep their switches there.</p>
+ </section>
+
+ <section>
+  <h2>What goes where</h2>
+  <div class="scroll"><table>
+   <tr><th></th><th>Stays on the row</th><th>Folded into ⋯</th></tr>
+   <tr><td>Connector</td><td>logo, name, URL in dim text, a chip only when it needs you ("Sign in needed", "Couldn't connect"), the switch</td><td>Test · Sign in / Sign out · Trust read-only labels (shows ✓ when on) · Only in a folder… · Remove</td></tr>
+   <tr><td>Skill</td><td>logo, name, one-line description, the switch</td><td>Only in a folder… · Remove</td></tr>
+   <tr><td>Plugin</td><td>logo, name, "N items" chip, description, the switch</td><td>Update (when it came from GitHub) · Only in a folder… · Uninstall</td></tr>
+   <tr><td>Provided by a plugin</td><td>same row, with a "Plugin" chip</td><td>no Remove (it goes with its plugin), as today</td></tr>
+   <tr><td>Where it applies</td><td>"Everywhere" is the default and says nothing; "Only in: bunny-ai" shows in the dim line</td><td>change it in ⋯</td></tr>
+   <tr><td>Select several</td><td>the small box at the left, and the bulk bar (Turn on, Turn off, Remove) above the list, as today</td><td>—</td></tr>
+  </table></div>
+ </section>
+
+ <section>
+  <h2>States</h2>
+  <div class="cols">
+   <div class="cell"><div class="app" id="st1"></div><p class="cap">A connector that needs you keeps one visible button; the chip says why. A failed check shows its reason in the dim line.</p></div>
+   <div class="cell"><div class="app" id="st2"></div><p class="cap">Discover: the same row, with Add at the right instead of the switch. "✓ Added" replaces it afterwards.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>Automation page and Settings → Capabilities</h2>
+  <p class="dim">Automation has the same pattern in MCP servers, Skills, Hooks and Schedules: a name over a URL over a status, then "on", Check tools and Delete in a row of words. Settings → Capabilities already has the right shape (name and description on the left, one switch at the right), so it is unchanged.</p>
+  <div class="cols">
+   <div class="cell"><h3>Today · MCP servers and Skills</h3><div class="shot" id="ta"></div><p class="cap" id="tac"></p></div>
+   <div class="cell"><h3>Proposed</h3><div class="app" id="pa"></div><p class="cap" id="pac"></p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>For the owner</h2>
+  <ol style="margin:0;padding-left:20px;display:grid;gap:4px">
+   <li>Switch at the <b>right</b> of each row (drawn, matches Settings and Engines), or <b>in front</b> of the row?</li>
+   <li>Status words hidden until something needs you. OK?</li>
+  </ol>
+  <p class="dim">Drawing only. Nothing is built. No data or setting changes: every action that is on a row today is still reachable, one tap further.</p>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ var kind='connectors',side='right';
+ var TODAY={connectors:{d:348,m:632,n:4},skills:{d:348,m:622,n:4},plugins:{d:95,m:160,n:1}};
+ var D={connectors:[
+  {t:'C',n:'Context7',d:'mcp.context7.com/mcp',on:1,menu:'c'},
+  {t:'D',n:'DeepWiki',d:'mcp.deepwiki.com/mcp',on:1,menu:'c'},
+  {t:'D',n:'DeepWiki docs',d:'Provided by the Developer docs pack plugin',on:1,chip:'Plugin',menu:'cp'},
+  {t:'T',n:'Team wiki',d:'wiki.example.com/mcp',on:0,menu:'c'}],
+ skills:[
+  {t:'C',n:'Cite sources',d:'Says where an answer came from',on:1,chip:'Plugin',menu:'sp'},
+  {t:'C',n:'Code reviewer',d:'Reviews a change for bugs before style',on:1,menu:'s'},
+  {t:'C',n:'Commit message writer',d:'Short, clear commit messages',on:1,menu:'s'},
+  {t:'P',n:'Plain-language explainer',d:'Explains without jargon',on:0,menu:'s'}],
+ plugins:[
+  {t:'D',n:'Developer docs pack',d:'DeepWiki and Context7 connectors plus a skill that cites its sources',on:1,chip:'2 items',menu:'p'}]};
+ var M={c:['Test','Sign out|Not signed in','Trust read-only labels|','Only in a folder…','-','Remove|d'],cp:['Test','Trust read-only labels|','-','Provided by its plugin|dim'],s:['Only in a folder…','-','Remove|d'],sp:['Provided by its plugin|dim'],p:['Update|From GitHub','Only in a folder…','-','Uninstall|d']};
+ function menuHtml(k,top){return '<div class="menu" style="top:'+top+'px">'+M[k].map(function(x){if(x==='-')return '<hr>';var p=x.split('|');var c=p[1]==='d'?' class="d"':'';return '<div'+c+'><span>'+p[0]+'</span>'+(p[1]&&p[1]!=='d'?'<small>'+(p[1]==='dim'?'':p[1])+'</small>':'')+'</div>'}).join('')+'</div>'}
+ function rows(list,sd,openIdx,hdr){
+  var h='<div class="tabs"><span class="'+(kind==='connectors'?'a':'')+'">Connectors</span><span class="'+(kind==='skills'?'a':'')+'">Skills</span><span class="'+(kind==='plugins'?'a':'')+'">Plugins</span><span class="sp"></span><span class="addb">＋ Add</span></div>'
+   +'<div class="cnt"><span class="cb"></span><span>'+list.length+' '+(list.length===1?kind.replace(/s$/,''):kind)+'</span></div>';
+  list.forEach(function(it,i){
+   h+='<div class="rw'+(sd==='front'?' front':'')+'"><span class="cb"></span><span class="tile">'+it.t+'</span><div class="nm"><div class="l1"><b>'+it.n+'</b>'+(it.chip?'<span class="chp">'+it.chip+'</span>':'')+'</div><div class="l2">'+it.d+'</div></div><div class="rt"><button class="sw" type="button" role="switch" aria-checked="'+(it.on?'true':'false')+'" aria-label="Use '+it.n+'"></button><button class="mn" type="button" data-i="'+i+'" aria-label="More for '+it.n+'">···</button></div></div>';
+   if(openIdx===i)h+=menuHtml(it.menu,0);
+  });
+  return h;
+ }
+ function img(p,kk,w){return '<img class="lt" alt="Today, light" src="today/today-'+p+'-'+w+'-light.png"><img class="dk" alt="Today, dark" src="today/today-'+p+'-'+w+'-dark.png">'}
+ var openD=-1,openM=-1;
+ function mountMenu(host,openIdx){
+  var m=host.querySelector('.menu');if(!m)return;var rowsEl=host.querySelectorAll('.rw');var row=rowsEl[openIdx];
+  m.style.top=(row.offsetTop+44)+'px';
+ }
+ function paint(){
+  var list=D[kind];
+  document.getElementById('td').innerHTML=img('cz-'+kind,kind,'d');document.getElementById('tm').innerHTML=img('cz-'+kind,kind,'m');
+  document.getElementById('ta').innerHTML=img('auto','','d');
+  var pd=document.getElementById('pd'),pm=document.getElementById('pm');
+  pd.innerHTML=rows(list,side,openD);pm.innerHTML=rows(list,side,openM);
+  if(openD>=0)mountMenu(pd,openD);if(openM>=0)mountMenu(pm,openM);
+  var t=TODAY[kind];
+  var hd=pd.querySelector('.cnt').offsetHeight,rd=[].slice.call(pd.querySelectorAll('.rw')).reduce(function(a,e){return a+e.offsetHeight},0);
+  var rm=[].slice.call(pm.querySelectorAll('.rw')).reduce(function(a,e){return a+e.offsetHeight},0);
+  var sD=Math.round((1-rd/t.d)*100),sM=Math.round((1-rm/t.m)*100);
+  document.getElementById('tdc').textContent='Real picture, invented profile: '+t.n+(t.n===1?' row':' rows')+', '+t.d+' px of list.';
+  document.getElementById('tmc').textContent='Real picture at 390 px wide: '+t.m+' px of list, the switch on a line of its own.';
+  document.getElementById('pdc').textContent=rd+' px of list ('+sD+'% less). Switch on the same line.';
+  document.getElementById('pmc').textContent=rm+' px of list ('+sM+'% less). The switch stays on the row.';
+  document.getElementById('stats').innerHTML='<div class="stat g"><b>'+sD+'% less</b><span>desktop list height, '+kind+' ('+t.d+' → '+rd+' px)</span></div><div class="stat g"><b>'+sM+'% less</b><span>phone list height ('+t.m+' → '+rm+' px)</span></div><div class="stat"><b>1 line</b><span>for the switch, on every row and every width</span></div><div class="stat"><b>0</b><span>actions lost: all are in ⋯</span></div>';
+ }
+ function bind(host,which){host.addEventListener('click',function(e){var b=e.target.closest('.mn');if(b){var i=+b.getAttribute('data-i');if(which==='d')openD=openD===i?-1:i;else openM=openM===i?-1:i;paint();return}var s=e.target.closest('.sw');if(s){s.setAttribute('aria-checked',s.getAttribute('aria-checked')==='true'?'false':'true');return}if(which==='d'&&openD>=0){openD=-1;paint()}if(which==='m'&&openM>=0){openM=-1;paint()}})}
+ bind(document.getElementById('pd'),'d');bind(document.getElementById('pm'),'m');
+ document.getElementById('kseg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;kind=b.getAttribute('data-k');openD=openM=-1;[].forEach.call(this.children,function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});paint()});
+ document.getElementById('sseg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;side=b.getAttribute('data-s');[].forEach.call(this.children,function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});paint()});
+ // states
+ function plain(items,addBtn){return items.map(function(it){return '<div class="rw"><span class="cb"></span><span class="tile">'+it.t+'</span><div class="nm"><div class="l1"><b>'+it.n+'</b>'+(it.chip||'')+'</div><div class="l2">'+it.d+'</div></div><div class="rt">'+(it.btn||'')+(it.sw===undefined?'':'<button class="sw" type="button" role="switch" aria-checked="'+(it.sw?'true':'false')+'" aria-label="Use '+it.n+'"></button>')+(it.mn===0?'':'<button class="mn" type="button">···</button>')+'</div></div>'}).join('')}
+ document.getElementById('st1').innerHTML=plain([
+  {t:'N',n:'Notion',chip:'<span class="chp w">Sign in needed</span>',d:'mcp.notion.example/mcp',btn:'<button class="sbtn" type="button">Sign in</button>',sw:0},
+  {t:'B',n:'Billing tools',chip:'<span class="chp b">Couldn’t connect</span>',d:'Timed out after 10 s · the address may be wrong',btn:'<button class="sbtn" type="button">Test again</button>',sw:1},
+  {t:'C',n:'Context7',chip:'<span class="chp">Checking…</span>',d:'mcp.context7.com/mcp',sw:1},
+  {t:'D',n:'DeepWiki',chip:'',d:'mcp.deepwiki.com/mcp · Only in: bunny-ai',sw:1}]);
+ document.getElementById('st2').innerHTML='<div class="tabs"><span>Yours</span><span class="a">Discover</span></div>'+plain([
+  {t:'D',n:'DeepWiki',chip:'<span class="chp">No sign-in</span>',d:'Ask questions about any public GitHub repository',btn:'<span style="color:var(--ok);font-size:12px;font-weight:600">✓ Added</span>',mn:0},
+  {t:'C',n:'Context7',chip:'<span class="chp">No sign-in</span>',d:'Up-to-date docs and code examples for libraries',btn:'<button class="sbtn" type="button">Add</button>',mn:0}]);
+ // automation
+ var A=[['M','Context7','https://mcp.context7.com/mcp',1],['M','DeepWiki','https://mcp.deepwiki.com/mcp',1],['M','Team wiki','https://wiki.example.com/mcp',0],['S','Code reviewer','Reviews a change for bugs before style',1],['S','Plain-language explainer','Explains without jargon',0]];
+ document.getElementById('pa').innerHTML='<div class="cnt" style="font-weight:600;color:var(--fg)">MCP servers</div>'+A.slice(0,3).map(function(a){return '<div class="rw"><span class="cb" style="visibility:hidden"></span><span class="tile">'+a[0]+'</span><div class="nm"><div class="l1"><b>'+a[1]+'</b></div><div class="l2">'+a[2]+'</div></div><div class="rt"><button class="sw" type="button" role="switch" aria-checked="'+(a[3]?'true':'false')+'" aria-label="Use '+a[1]+'"></button><button class="mn" type="button">···</button></div></div>'}).join('')+'<div class="cnt" style="font-weight:600;color:var(--fg)">Skills</div>'+A.slice(3).map(function(a){return '<div class="rw"><span class="cb" style="visibility:hidden"></span><span class="tile">'+a[0]+'</span><div class="nm"><div class="l1"><b>'+a[1]+'</b></div><div class="l2">'+a[2]+'</div></div><div class="rt"><button class="sw" type="button" role="switch" aria-checked="'+(a[3]?'true':'false')+'" aria-label="Use '+a[1]+'"></button><button class="mn" type="button">···</button></div></div>'}).join('');
+ document.getElementById('tac').textContent='Real picture: each server is 87 px (name, URL, status, and "on", Check tools and Delete in words); each skill 62 px.';
+ document.getElementById('pac').textContent='Five items in about '+(5*53)+' px; ⋯ holds Check tools and Delete. Hooks and Schedules get the same row.';
+ paint();
+})();
+</script>
