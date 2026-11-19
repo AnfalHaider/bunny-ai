@@ -3624,7 +3624,7 @@ const MODE_LABELS = { auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan:
 
 const WORK_MODES = ['chat', 'code'];
 const MODE_HINTS = {
-  chat: { placeholder: 'Send a message…', empty: 'Pick a model, then type below.' },
+  chat: { placeholder: 'Send a message…', empty: 'Type below to start.' }, // a model is always in effect (Auto or the one chosen), so the empty chat does not ask for one
   code: { placeholder: 'Ask about or change the code in your folder…', empty: 'Choose a folder below, then ask Bunny to read, change or run things in it.' },
 };
 
@@ -4563,7 +4563,7 @@ async function boot() {
       const connected = state.providers.some((p) => p.status === 'connected');
       if (connected && hiddenModelCount()) {
         const n = hiddenModelCount();
-        if ($('greeting')) $('greeting').hidden = true; // the hidden-models note replaces the "Pick a model…" greeting
+        if ($('greeting')) $('greeting').hidden = true; // the hidden-models note replaces the "Type below to start." line
         const show = element('button', { type: 'button', className: 'primary empty-cta', textContent: 'Show all models' });
         show.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
         empty.replaceChildren(element('span', { className: 'empty-note', textContent: `${n} ${n === 1 ? 'model is' : 'models are'} hidden by your "Show models" setting.` }), show);
