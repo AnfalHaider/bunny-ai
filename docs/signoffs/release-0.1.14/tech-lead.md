@@ -1,0 +1,9 @@
+---
+piece: release-0.1.14
+role: tech-lead
+sha: 0870bd2d
+verdict: PASS
+date: 2026-11-19
+---
+
+Structural pass of the v0.1.14 integration at 0870bd2d. Merge resolutions (remerge-diff of every merge since cb089ea) all keep both sides correctly: pluginImport.js (fetchLimited and bunnyText imports), customize.html (tight-rows skill row with BRAND-BUNNY shownDescription and the toggle), electron/main.js (SEARCH-PC pcOpen handlers and the tray-event handler, both imports present), chat.js (BANNER-NOTICE loop keeps START-WAIT: 1 s for 15 looks then 10 s, stops after 3 refusals off-window), app.css via bunny-app-bindings.css (engine, SEARCH-PC and phone rules all present; build-css --check passes), app.js settings PATCH (engine rulesWas plus SEARCH-PC SP-1 refusal), windowOnly.js and api.js (one list with the pcSearch and engine keys, kept equal by window-only.test.js), gate.mjs (engine pins, help pictures listed, css matches its build), playwright.config (BUNNY_FAKE_ENGINE and BUNNY_PCSEARCH_FAKE). Builder A's test updates since fbbe418 follow intended changes (17 Settings sections, barLook pcSearch key, answer sources key, tray-words tooltip, the loop wait, the visible engine lead) and weaken no security assertion. 0870bd2d: engine specs delete both stand-in engines and reset engine to bunny after each test (DELETE /api/engines/<id> is a real route; workers 1, not parallel). My two MEDIUMs from the structural pass are fixed: tokenBudget replyCaps.tokens (EN-6) and logTool via remote.logAction for devices (EN-7). Evidence: scratch extraction of 0870bd2d in a folder with a space, no-network preload: 194/194 (quick-ask, start-wait, window-only, css-check, engine-*); build-css --check, engine-pins and pictures-check pass; no conflict markers. LOW, not blocking: the afterEach ignores a refused remove (engine.inUse) so a still-running answer could leave the engine behind. Gate not run by me: the Chief's gate run is the evidence of record.
