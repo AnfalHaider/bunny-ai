@@ -7,7 +7,7 @@ const mount = document.getElementById('engines-list');
 const chooser = document.getElementById('engine-default');
 const noteEl = document.getElementById('engines-note');
 const recordEl = document.getElementById('engines-record');
-let state = null; let timer = null; let openMenu = null;
+let state = null; let timer = null; let openMenu = null; let unknownTries = 0;
 
 const mb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`);
 const TILES = { 'claude-code': 'CC', codex: 'CX' };
@@ -19,7 +19,7 @@ function dim(e) {
   if (e.downloading) { const p = e.progress; return p?.total ? `Downloading ${mb(p.bytes)} of ${mb(p.total)}…` : 'Downloading…'; }
   if (!e.downloaded) return `Not installed · ${SIZE_HINT[e.id]}`;
   // the version and the sign-in only: the mode is the switch beside it
-  const sign = e.auth === 'account' && typeof e.signedIn === 'boolean' ? (e.signedIn ? 'Signed in' : 'Not signed in') : null;
+  const sign = e.id === 'claude-code' && e.auth === 'account' && typeof e.signedIn === 'boolean' ? (e.signedIn ? 'Signed in' : 'Not signed in') : null;
   return [`v${e.version}`, e.updateAvailable ? `v${e.available} is ready (tested)` : null, sign].filter(Boolean).join(' · ');
 }
 
@@ -39,6 +39,7 @@ function mainButton(e) {
   if (e.error) return '<button type="button" class="btn2 pri" data-act="download">Try again</button>';
   if (!e.downloaded) return `<button type="button" class="btn2 pri" data-act="download">Download<span class="sh2"> (${SIZE_HINT[e.id]})</span></button>`;
   if (e.updateAvailable) return `<button type="button" class="btn2 pri" data-act="update">Update to v${esc(e.available)} (tested)</button>`;
+  if (e.id === 'claude-code' && e.auth === 'account' && e.signedIn === false) return '<button type="button" class="btn2 pri" data-act="signin">Sign in</button>';
   return '';
 }
 
@@ -46,6 +47,7 @@ function menu(e) {
   if (!e.downloaded && !e.previous) return '<span class="mn none"></span>';
   const items = [];
   if (e.previous) items.push(`<button type="button" role="menuitem" data-act="rollback">Roll back to v${esc(e.previous)}<small>kept</small></button>`);
+  if (e.id === 'claude-code' && e.downloaded && e.signedIn === true) items.push('<button type="button" role="menuitem" data-act="signout">Sign out<small>this account</small></button>');
   if (e.downloaded) items.push(`<button type="button" role="menuitem" data-act="remove">Remove<small>frees ${mb(e.sizeBytes)}</small></button>`);
   return `<span class="mnw"><button type="button" class="mn" aria-haspopup="menu" aria-label="More for ${esc(e.label)}" data-act="menu">···</button><div class="menu2" role="menu" hidden>${items.join('')}</div></span>`;
 }
@@ -73,8 +75,14 @@ function render() {
   }
   const busy = state.engines.some((e) => e.downloading);
   clearTimeout(timer);
-  if (busy) timer = setTimeout(load, 600);
+  const unknownSign = state.engines.some((e) => e.id === 'claude-code' && e.downloaded && e.auth === 'account' && e.signedIn === null) && (unknownTries += 1) <= 5;
+  if (!state.engines.some((e) => e.signedIn !== null)) { /* nothing to wait for */ }
+  if (busy) timer = setTimeout(load, 600); else if (unknownSign) timer = setTimeout(load, 1500); else if (!state.engines.some((e) => e.id === 'claude-code' && e.signedIn === null)) unknownTries = 0;
 }
+
+let watching = 0;
+/** After a sign-in starts: look again every 3 s for two minutes (the page also refreshes by itself). */
+function watchSignIn() { const run = (watching += 1); let n = 0; const tick = async () => { if (run !== watching || n >= 40) return; n += 1; await load(); if (state?.engines.find((e) => e.id === 'claude-code')?.signedIn === true) return; setTimeout(tick, 3000); }; setTimeout(tick, 3000); }
 
 async function load() {
   try { state = await getJSON('/api/engines'); render(); loadRecord(); } catch (err) { if (mount) mount.textContent = `Engines could not be loaded: ${err.message}`; }
@@ -122,6 +130,8 @@ const tell = (message) => ask({ title: 'Engines', body: message, action: 'OK', s
 async function act(id, what) {
   try {
     if (what === 'download' || what === 'update') await sendJSON(`/api/engines/${id}/download`, 'POST', {});
+    else if (what === 'signin') { await sendJSON(`/api/engines/${id}/signin`, 'POST', {}); await tell('A window opened with Claude Code\'s own sign-in. Finish it there and in your browser. Bunny never sees your sign-in. This page updates by itself.'); watchSignIn(); }
+    else if (what === 'signout') { if (!(await ask({ title: 'Sign out of Claude Code?', body: 'Claude Code signs out of this account. Chats on it will ask you to sign in again.', action: 'Sign out', danger: true }))) return; await sendJSON(`/api/engines/${id}/signout`, 'POST', {}); }
     else if (what === 'cancel') await sendJSON(`/api/engines/${id}/cancel`, 'POST', {});
     else if (what === 'rollback') { if (!(await ask({ title: 'Roll back?', body: 'Go back to the earlier version? New chats use it.', action: 'Roll back' }))) return; await sendJSON(`/api/engines/${id}/rollback`, 'POST', {}); }
     else if (what === 'remove') { if (!(await ask({ title: 'Remove this engine?', body: 'Remove this engine and everything it saved? You can download it again.', action: 'Remove', danger: true }))) return; await sendJSON(`/api/engines/${id}`, 'DELETE', {}); }

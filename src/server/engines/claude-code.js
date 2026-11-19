@@ -101,16 +101,19 @@ export function buildArgs({ mode = 'full', planMode = false, settingsPath, resum
   return args;
 }
 
+/** The vendor's own sign-in commands, run in the account config folder only (spec 7.1). Bunny reads only the answer 'signed in or not', never the credential. */
+export const AUTH_COMMANDS = Object.freeze({ status: ['auth', 'status', '--json'], login: ['auth', 'login'], logout: ['auth', 'logout'] });
+
 /**
  * Everything one run needs: { file, args, env, settings, expectedTools }. `home` is the isolated folder for this engine, mode and chat (CLAUDE_CONFIG_DIR, and HOME/USERPROFILE/APPDATA so the person's own
  * ~\.claude is never found). Local mode carries the endpoint's address and the run's token and nothing of a vendor; account mode carries no endpoint token (§7.3).
  */
-export function buildRun({ exe, home, hookPath, runtimePath, bridge, endpoint = null, auth = 'account', mode = 'full', planMode = false, resumeId = null, deny = [], model = null, usePowerShell = false }) {
+export function buildRun({ exe, home, hookPath, runtimePath, bridge, endpoint = null, auth = 'account', mode = 'full', planMode = false, resumeId = null, deny = [], model = null, usePowerShell = false, configDir = null }) {
   const settingsPath = join(home, 'bunny-settings.json');
   const settings = buildSettings({ hookCommand: hookCommandLine(runtimePath, hookPath), deny });
   const env = {
     ...QUIET_ENV,
-    CLAUDE_CONFIG_DIR: join(home, 'config'), HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
+    CLAUDE_CONFIG_DIR: configDir ?? join(home, 'config'), HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
     ELECTRON_RUN_AS_NODE: '1', BUNNY_BRIDGE_PORT: String(bridge.port), BUNNY_BRIDGE_TOKEN: bridge.token, BUNNY_HOOK_LIMIT_MS: String(HOOK_OWN_LIMIT_MS),
   };
   if (auth === 'local') {
@@ -221,17 +224,17 @@ import { createBridge } from './bridge.js';
  * through node). The prompt goes to stdin as one stream-json user message and never on the command line (CE-8). On stop, on a watchdog trip, on an error, and at the end the whole process tree is killed
  * and the bridge listener is closed: no engine process outlives its run.
  */
-export async function startClaude({ cwd, prompt, home, exe, runtimePath = process.execPath, auth = 'account', endpoint = null, mode = 'full', planMode = false, resumeId = null, deny = [], judge, onDecision = null, signal = null, usePowerShell = false, model = null, launcher = null, silenceMs = 0, extraEnv = {} }) {
+export async function startClaude({ cwd, prompt, home, exe, runtimePath = process.execPath, auth = 'account', endpoint = null, mode = 'full', planMode = false, resumeId = null, deny = [], judge, onDecision = null, signal = null, usePowerShell = false, model = null, launcher = null, silenceMs = 0, extraEnv = {}, configDir = null }) {
   const queue = createEventQueue();
   const bridgeServer = createBridgeServer({ judge, onDecision });
   const { port } = await bridgeServer.start();
   let run = null; let stopped = false;
   const finish = async () => { await bridgeServer.close().catch(() => {}); };
   try {
-    await mkdir(join(home, 'config'), { recursive: true });
+    await mkdir(configDir ?? join(home, 'config'), { recursive: true });
     const hook = await writeHook(join(home, 'hook'));
     if (!(await hookIntact(hook.path))) throw new Error('The check script could not be written.');
-    const plan = buildRun({ exe, home, hookPath: hook.path, runtimePath, bridge: { port, token: bridgeServer.token }, endpoint, auth, mode, planMode, resumeId, deny, model, usePowerShell });
+    const plan = buildRun({ exe, home, hookPath: hook.path, runtimePath, bridge: { port, token: bridgeServer.token }, endpoint, auth, mode, planMode, resumeId, deny, model, usePowerShell, configDir });
     await writeFile(plan.settingsPath, JSON.stringify(plan.settings, null, 1), { mode: 0o600 });
     const file = launcher ? launcher[0] : plan.file;
     const args = launcher ? [...launcher.slice(1), plan.file, ...plan.args] : plan.args;

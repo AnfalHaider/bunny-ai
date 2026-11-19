@@ -8,11 +8,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { spawnEngine, minimalEnv } from './process.js';
 import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
 import { createBridge, keyFolders } from './bridge.js';
-import { denyRules, startClaude } from './claude-code.js';
+import { AUTH_COMMANDS, denyRules, startClaude } from './claude-code.js';
 import { loadSchema, startCodex } from './codex.js';
 import { loadPins } from './pins.js';
 import { createEngineStore } from './store.js';
@@ -127,6 +130,70 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
   const progress = new Map(); const lastError = new Map(); let schemaPromise = null;
   const schema = () => (schemaPromise ??= loadSchema().catch(() => null));
 
+  // ------------------------------------------------------------ Claude Code account sign-in (spec 7.1): the vendor's own flow, in one account folder; Bunny reads only "signed in or not"
+  const accountHome = join(dataDir, 'engines', 'claude-code', 'account', 'home');
+  const accountConfig = join(accountHome, 'config');
+  const authCache = new Map(); // id -> { at, signedIn }
+  const AUTH_TTL_MS = 30_000;
+  const authEnv = () => ({ CLAUDE_CONFIG_DIR: accountConfig, HOME: accountHome, USERPROFILE: accountHome, APPDATA: join(accountHome, 'AppData', 'Roaming'), LOCALAPPDATA: join(accountHome, 'AppData', 'Local') });
+  const fakeFlag = () => join(accountConfig, 'fake-signed-in');
+
+  /** Ask the engine itself whether the account is signed in: true / false, or null when it cannot be told. The answer is the boolean only: nothing the engine prints is kept. */
+  async function readSignedIn(id) {
+    if (id !== 'claude-code') return null;
+    if (fakeMode) return existsSync(fakeFlag());
+    const found = await store.locate(id);
+    if (!found.ok) return null;
+    await mkdir(accountConfig, { recursive: true });
+    let run;
+    try { run = spawnEngine({ file: found.exe, args: AUTH_COMMANDS.status, cwd: accountHome, extraEnv: authEnv() }); } catch { return null; }
+    run.end();
+    let out = '';
+    const reader = (async () => { try { for await (const line of run.lines) out = (out + line).slice(0, 4000); } catch { /* unreadable: unknown */ } })();
+    const timer = setTimeout(() => run.kill(), 20_000);
+    const code = await run.exited; clearTimeout(timer); await reader;
+    try { const j = JSON.parse(out); if (typeof j.loggedIn === 'boolean') return j.loggedIn; } catch { /* not JSON */ }
+    return code === 0 ? true : code === 1 ? false : null;
+  }
+  async function refreshAuth(id) { const signedIn = await readSignedIn(id).catch(() => null); authCache.set(id, { at: Date.now(), signedIn }); return signedIn; }
+  function cachedAuth(id) {
+    const hit = authCache.get(id);
+    if (!hit || Date.now() - hit.at > (hit.signedIn === true ? AUTH_TTL_MS : 2000)) { if (!authCache.get(`${id}:busy`)) { authCache.set(`${id}:busy`, true); refreshAuth(id).finally(() => authCache.delete(`${id}:busy`)); } }
+    return hit?.signedIn ?? null;
+  }
+
+  /** Start the vendor's own sign-in in a visible window, with only the account folder set. The person finishes it in the vendor's browser page. */
+  async function signIn(id) {
+    if (id !== 'claude-code') throw Object.assign(new Error('Only Claude Code signs in with an account for now.'), { status: 400 });
+    const found = fakeMode ? { ok: true } : await store.locate(id);
+    if (!found.ok) throw Object.assign(new Error('Download Claude Code first.'), { status: 409 });
+    await mkdir(accountConfig, { recursive: true });
+    if (fakeMode) { setTimeout(() => writeFile(fakeFlag(), '1').catch(() => {}), 200); }
+    else {
+      const child = spawn(found.exe, AUTH_COMMANDS.login, { cwd: accountHome, env: { ...minimalEnv(), ...authEnv() }, detached: true, stdio: 'ignore', windowsHide: false, shell: false });
+      child.on('error', () => {}); child.unref();
+    }
+    authCache.delete(id);
+    await store.addRecord({ engine: id, action: 'signin', from: null, to: null, sha12: '' });
+    return { started: true };
+  }
+
+  /** Sign out: the vendor's own logout in the account folder, then the folder is deleted. */
+  async function signOut(id) {
+    if (id !== 'claude-code') throw Object.assign(new Error('Only Claude Code signs in with an account for now.'), { status: 400 });
+    if (running.has(id)) throw Object.assign(new Error('Claude Code is answering right now. Sign out when it has finished.'), { status: 409 });
+    if (!fakeMode) {
+      const found = await store.locate(id);
+      if (found.ok) {
+        try { const run = spawnEngine({ file: found.exe, args: AUTH_COMMANDS.logout, cwd: accountHome, extraEnv: authEnv() }); run.end(); const t = setTimeout(() => run.kill(), 20_000); await run.exited; clearTimeout(t); } catch { /* the folder is deleted anyway */ }
+      }
+    }
+    await removeTree(join(dataDir, 'engines', 'claude-code', 'account')).catch(() => {});
+    authCache.delete(id);
+    await store.addRecord({ engine: id, action: 'signout', from: null, to: null, sha12: '' });
+    return { ok: true };
+  }
+
   async function status(settings) {
     const st = await store.status();
     const cfg = engineSettings(settings);
@@ -138,6 +205,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
         downloading: s.downloading, progress: progress.get(id) ?? null, error: lastError.get(id) ?? null, enabled: cfg.engines[id].enabled, auth: cfg.engines[id].auth, recommendedAuth: AUTH_DEFAULTS[id],
         authModes: id === 'codex' ? { local: { available: true }, account: { available: false, note: CODEX_ACCOUNT_NOTE } } : { local: { available: true, note: LOCAL_NOTE_CLAUDE }, account: { available: true } },
         licence: pins[id]?.licence ?? '',
+        signedIn: id === 'claude-code' && s.downloaded ? cachedAuth(id) : null,
       });
     }
     return { engines: list, engine: cfg.engine, useBunnyEngine: cfg.useBunnyEngine, fake: fakeMode };
@@ -171,6 +239,14 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const home = join(dataDir, 'engines', id, auth, 'chat', String(turn.id).replace(/[^\w-]/g, '_'));
     await mkdir(home, { recursive: true });
     let assembled = ''; let stoppedForCheck = false; let ok = true;
+    if (id === 'claude-code' && auth === 'account' && (!fakeMode || process.env.BUNNY_FAKE_SIGNIN_REQUIRED)) {
+      if ((await refreshAuth(id)) === false) {
+        const why = 'Claude Code is not signed in. Sign in in Settings, Engines, or switch it to Local.';
+        turn.send('error', { code: 'engine.signin', message: why });
+        await turn.logStep({ role: 'assistant', kind: 'error', content: why });
+        return { text: '', ok: false };
+      }
+    }
 
     // where the program is
     let exe = null; let launcher = null;
@@ -220,7 +296,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     try {
       const deny = denyRules({ rules: rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
       if (id === 'claude-code') {
-        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000,
+        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null,
           endpoint: null, ...(auth === 'local' ? { endpoint: await localEndpoint(turn) } : {}) });
       } else {
         const sch = await schema();
@@ -268,5 +344,5 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
   async function localEndpoint(turn) { void turn; throw new Error('Claude Code in local mode needs the Messages translator, which is not available yet.'); }
 
   const busy = (id) => running.has(id);
-  return { store, pins, status, startDownload, runTurn, busy, progress, ids: ENGINE_IDS, fake: fakeMode, randomId: randomUUID };
+  return { store, pins, status, startDownload, signIn, signOut, refreshAuth, runTurn, busy, progress, ids: ENGINE_IDS, fake: fakeMode, randomId: randomUUID };
 }

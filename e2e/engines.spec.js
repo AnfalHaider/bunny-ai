@@ -79,3 +79,20 @@ for (const [scheme, width] of [['light', 1000], ['dark', 1000], ['light', 390], 
     expect(over).toBeLessThanOrEqual(1);
   });
 }
+
+test('Claude Code in Account mode: Sign in appears when signed out, opens the vendor flow after a notice, then the row says Signed in; Sign out is in the menu behind a confirm card', async ({ page, request }) => {
+  await request.post('/api/engines/claude-code/signout').catch(() => {});
+  await page.goto(PAGE);
+  const row = page.locator('#engines-list .er[data-id="claude-code"]');
+  await row.locator('[data-act="download"]').click();
+  await expect(row.locator('.seg')).toBeVisible({ timeout: 15_000 });
+  await expect(row.locator('[data-act="signin"]')).toBeVisible({ timeout: 10_000 });
+  await expect(row.locator('.l2')).toContainText('Not signed in');
+  await row.locator('[data-act="signin"]').click();
+  await page.locator('.engine-confirm').getByRole('button', { name: 'OK' }).click();
+  await expect(row.locator('.l2')).toContainText('Signed in', { timeout: 15_000 });
+  await row.locator('[data-act="menu"]').click();
+  await row.locator('[data-act="signout"]').click();
+  await page.locator('.engine-confirm').getByRole('button', { name: 'Sign out' }).click();
+  await expect(row.locator('[data-act="signin"]')).toBeVisible({ timeout: 10_000 });
+});

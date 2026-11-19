@@ -159,3 +159,21 @@ test('EN-6 (CE-4.5): the endpoint counts tokens per run; at the budget it asks t
   for (let i = 0; i < 5; i += 1) await drain(gd({}));
   assert.equal(d.calls(), 5);
 });
+
+test('Claude Code account sign-in: the state is signed out until the vendor flow finishes, sign-in starts it (window only, recorded), sign-out removes the account folder', async (t) => {
+  const keep = process.env.BUNNY_FAKE_SIGNIN_REQUIRED; process.env.BUNNY_FAKE_SIGNIN_REQUIRED = '1';
+  t.after(() => { if (keep === undefined) delete process.env.BUNNY_FAKE_SIGNIN_REQUIRED; else process.env.BUNNY_FAKE_SIGNIN_REQUIRED = keep; });
+  const { base } = await appWithEngines(t);
+  await downloaded(base, 'claude-code');
+  const stateOf = async () => { await new Promise((r) => setTimeout(r, 60)); const j = await (await fetch(`${base}/api/engines`)).json(); await new Promise((r) => setTimeout(r, 120)); return (await (await fetch(`${base}/api/engines`)).json()).engines.find((e) => e.id === 'claude-code').signedIn ?? j; };
+  assert.equal(await stateOf(), false);
+  const { status } = await post(base, '/api/engines/claude-code/signin', {}); assert.equal(status, 202);
+  for (let i = 0; i < 40 && (await stateOf()) !== true; i += 1) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await stateOf(), true);
+  const rec = (await (await fetch(`${base}/api/engines/record`)).json()).record;
+  assert.ok(rec.some((r) => r.action === 'signin'));
+  const out = await post(base, '/api/engines/claude-code/signout', {}); assert.equal(out.status, 200);
+  assert.equal(await stateOf(), false);
+  assert.ok((await (await fetch(`${base}/api/engines/record`)).json()).record.some((r) => r.action === 'signout'));
+  assert.equal((await post(base, '/api/engines/codex/signin', {})).status, 400, 'only Claude Code has an account sign-in for now');
+});
