@@ -75,3 +75,28 @@ On an extract of a77be4d with an invented profile:
 ## Verdict
 
 PASS at a77be4d. The **Sources chips and the bar's states are still to come**, and I'll read them when they land, with the same checks: text-only rendering, refs only, and nothing that loads by itself.
+
+## Re-review at c051ca5: PASS (supersedes a77be4d)
+
+Commits since a77be4d: 0b55f15 (the Sources chips, the [n] marks, the bar's states) and c051ca5 (the QA smoke script, Settings text). The tools' rules are unchanged: exclusions, taint, refs, devices and caps.
+
+- **Sources.**
+  - Each read block carries `source="n"`, a number from Bunny's own counter.
+  - The saved answer carries `pcSources` = `{n, name, folder, part, ref, openable}`: no text and no path beyond the folder SP-8 already keeps.
+  - `markSourceNumbers` walks text nodes, skipping `code`, `pre` and `a`. It turns only `[n]` with 1 ≤ n ≤ the number of sources into a `<b>` built with `textContent`. No HTML is inserted.
+  - Chips open by **ref** through the existing guarded IPC, and are plain spans where there's no desktop bridge, such as on a device.
+- **The bar's states.**
+  - The answerer passes only fixed fields with lengths cut. States outside the fixed list are dropped. No path or file text reaches the bar.
+  - Every state renders with `textContent`.
+  - The new bar target `search-settings` only opens Settings on Capabilities, and still sits behind `fromBar`.
+  - "Search this PC is off" is answered in the bar from a local pattern, with nothing sent.
+- **Devices.** `pcSources`, like `pcResults` before it, is part of the saved chat. A device the owner signed in can read chats, so it sees file names and folders from window searches. It can't open them (no bridge) or search itself at Chats. This is accepted as the same exposure the chat already has.
+- **The smoke script** (`scripts/pcsearch-smoke.mjs`, QA's, not run by Security):
+  - It writes three invented files into a new `Documents\bunny-pcsearch-smoke-<6 hex>` folder and queries the **real** index for a random unique word.
+  - It deletes only that folder, guarded by "direct child of Documents and matches the name".
+  - `--dry` prints the plan and touches nothing (checked).
+  - **Running it writes into the owner's real Documents folder and uses the real index.** That's outside the invented-profile rule, so QA should run it only with the owner's OK, on the owner's PC.
+- **My probe** on c051ca5 gives the same refusals as at a77be4d.
+- **Tests:** the pc-* files, `pc-smoke`, `window-only` and `quick-ask` pass 91 of 91 on an extract.
+
+Verdict: PASS at c051ca5. SP-L1 and SP-L2 still stand as LOW notes.
