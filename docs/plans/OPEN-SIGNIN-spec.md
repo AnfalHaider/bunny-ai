@@ -1,13 +1,21 @@
-# OPEN-SIGNIN: signing in from outside the home network (v0.1.14, HIGH), revision 2
+# OPEN-SIGNIN: signing in from outside the home network (v0.1.14, HIGH), revision 3
 
-Tech Lead, 2026-11-19. Revision 2 replaces 48b67ba.
+Tech Lead, 2026-11-19. Revision 3 replaces bacd595 (revision 2) and 48b67ba (revision 1).
 
-**What revision 2 changes:** two owner decisions, and Security's rewrite of OS-5, OS-7 and OS-8 (64374ea):
+**What revision 3 changes:** Security answered both of revision 2's questions.
+- **705e7cf (the LAN addendum):** "Keep devices signed in" and "Everything stays on" cover **home-network devices too**, since the owner said "there should be no time out". So one `keepSignedIn` covers both listeners, and `keepSignedInLan` is gone (§6.2, §8.1).
+- **08c6789 (BN-6 to BN-9):** the chip carries everything.
+  - Events show as the chip's words, with a count badge and `aria-live`.
+  - Nothing goes back on a timer. A click opens the devices list, or the device's Activity.
+  - The "<device> changed a setting" notice becomes a chip event.
+  - **No notification for a sign-in**, beyond the tray tooltip and the one-time start notification (§7).
+
+**What revision 2 changed:** two owner decisions, and Security's rewrite of OS-5, OS-7 and OS-8 (64374ea):
 1. **Internet devices are used as normal.** The owner's words, relayed by the Chief of Staff (a HIGH go; recorded on the Chief's main, quoted from 64374ea): "Internet devices should be allowed to use the application as normal, since every user will be signing into their own systems only, also there should be no time out, if security needs it then add options in settings to allow full use and no expiry, if enabled once it should remain enabled, this is supposed to be a refined version of claude's RC." So three window-only options are saved, and stay on once turned on (§8.1):
    - **Keep devices signed in** (OS-5): no expiry, and sessions survive a restart, with only hashes saved;
-   - **Everything stays on** (OS-7): Everything is allowed for internet devices, from the window, with the internet sentence, and has no idle drop;
+   - **Everything stays on** (OS-7): Everything is allowed for internet devices, from the window, with the internet sentence, and has no idle drop (on both listeners, 705e7cf);
    - **Stay open to the internet after a restart** (OS-8): the route reopens at start, only after the start-up checks.
-2. **No banner on top anywhere, only the devices chip** (relayed by the Chief of Staff). Wherever OS-8 or BN-3 says "the banner", this spec means **the chip and the tray**. Security is ruling on the chip's behaviour, and §7 follows that ruling when it lands.
+2. **No banner on top anywhere, only the devices chip.** The owner, relayed by the Chief of Staff: "No banner on top is required." Asked where: "Everywhere". Wherever OS-8 or BN-3 says "the banner", this spec means **the chip and the tray**, as BN-6 to BN-9 (08c6789) set out.
 
 What did not change: OS-1, OS-2, OS-3, OS-4, OS-5's cookie flags, OS-6, OS-9 and OS-10. **None of the new options can switch any of those off**, and **no device can change any of the options**.
 
@@ -28,7 +36,8 @@ The owner's decision 1 (above) allows each to be changed by its own option in Bu
 **Research and requirements:**
 - Researcher's details: 043f56f, `docs/research/2026-11-19-open-signin-details.md`.
 - Security's OS-1 to OS-10: b6f9a11, with OS-5, OS-7 and OS-8 rewritten at 64374ea, in `docs/security/2026-11-19-open-signin-requirements.md`. **These are binding.**
-- BN-1 to BN-5, which the chip builds on: `docs/security/2026-11-19-banner-notice-requirements.md`.
+- BN-2, BN-4 and BN-5, plus **BN-6 to BN-9** (08c6789), which replace BN-1 and BN-3: `docs/security/2026-11-19-banner-notice-requirements.md`.
+- The LAN addendum to OS-5 and OS-7: 705e7cf, in the OPEN-SIGNIN requirements.
 
 Every LAN rule stays: S-1, RA-1, R1–R9, DEVICE-FULL, REMOTE-STAY and WEBAPP-SIGNIN. Where a LAN rule and an OS rule differ, the stricter one wins on the internet route.
 
@@ -314,54 +323,87 @@ A try is reserved **before** taking a gate slot (RA-1 order), and released in `f
 - **The "Everything stays on" option** (window-only, saved):
   - **Off:** an Everything device drops back to Chats after 30 minutes idle (`EVERYTHING_IDLE_MS`, R-DF1).
   - **On:** Everything has no idle limit. With "Keep devices signed in", it also survives a restart (§6.2).
-  - **Scope, a question for Security:** 64374ea puts the option under OS-7, the internet section. This spec applies it to Everything devices on **both** listeners, because one switch named "Everything stays on" that covered only some devices would mislead. It needs Security's yes before the build. If Security says no, it is `internetEverythingStaysOn`, and the row says "for devices signed in over the internet".
+  - **Scope: both listeners** (Security's LAN addendum, 705e7cf). On the home network it removes DEVICE-FULL's 30-minute Everything drop, **only while the option is on**. Turning it off brings the 30-minute limit back, and drops to Chats every Everything device idle for longer.
 - **Activity** records each grant, and each drop to Chats (by a person, idle, sign-out), with `via`.
 
 ### 6.2 Sessions: "Keep devices signed in"
 
-**The cookie is unchanged:** `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/` on the internet listener, plus the CSRF header.
+**One option, both listeners** (705e7cf). The cookies are unchanged, except for `Max-Age` while the option is on:
+- **internet:** `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/`, plus the CSRF header;
+- **home network:** today's `bunny_remote; HttpOnly; SameSite=Strict; Path=/`. Because it is plain HTTP, there is no `Secure` and no `__Host-`.
 
 **The option** (window-only, saved):
-- **Off**, the default: an internet session ends after **30 minutes idle or 12 hours** from sign-in, whichever comes first. `sessionFor` checks `now - signedInAt > maxAgeMs` as well as idle time.
+- **Off**, the default: today's limits.
+  - **internet:** a session ends after **30 minutes idle or 12 hours** from sign-in, whichever comes first. `sessionFor` checks `now - signedInAt > maxAgeMs` as well as idle time;
+  - **home network:** BROWSER step 2's 2-hour idle for Chats, DEVICE-FULL's 30 minutes for Everything, and REMOTE-STAY's "every device signs in again after a restart".
 - **On:**
   - no idle limit and no maximum;
   - the cookie gets `Max-Age=34560000` (400 days, the most browsers keep);
-  - **sessions survive a restart.** `remote-sessions-internet.json` in the data folder holds, per session, `{ sha256(secret), csrf, deviceId, label, level, signedInAt, lastSeen }`. **The secret itself is never written.**
+  - **sessions survive a restart, on both listeners.** `remote-sessions-internet.json` and `remote-sessions-lan.json` in the data folder hold, per session, `{ sha256(secret), csrf, deviceId, label, level, signedInAt, lastSeen }`. **The secret itself is never written.**
     - On a request, Bunny hashes the cookie with SHA-256 and looks the hash up.
     - The lookup compares with `timingSafeEqual`, over hashes of equal length.
     - The file is written atomically (a temp file, then a rename), and is readable only by the data folder's owner, as `remote-access.json` is.
 - **Turning it on** shows one sentence: "Devices stay signed in until you sign them out here, change the passcode or turn this off."
+- **The access warning on the home-network row** adds, while the option is on (705e7cf): "Devices stay signed in until you sign them out. On a network you don't fully trust, turn this off." A long-lived session over plain HTTP can be taken over by anyone on the same network who sees its traffic. That is the risk R-DF1 already states. It is the owner's choice, and it stays visible in Settings.
 
 **Even with the option on, a session ends at once, and its saved hash is deleted, when:**
 - the window signs that device out, or uses **Sign out all devices**;
 - the passcode changes;
-- the option is turned **off**, which ends every session older than 12 hours;
-- the internet route is turned **off** by the person;
-- OS-3's shut-off fires.
+- the option is turned **off**, which ends every session older than today's limits: 12 hours on the internet, and the 2-hour or 30-minute idle on the home network;
+- **internet:** the internet route is turned **off** by the person, or OS-3's shut-off fires;
+- **home network:** device access is turned **off**, or REMOTE-STAY's network check fails at start (RS-4). A LAN session saved under one network is never reopened on another network.
 
 **Quitting Bunny does not end saved sessions.** That is the point of the option. They are valid again when the route reopens (§4.5).
-
-**The home network:** LAN sessions keep REMOTE-STAY's rule, that every device signs in again after a restart. There is a **separate** option, "Keep home-network devices signed in" (`keepSignedInLan`), recommended off. It uses the same hashed file mechanism (`remote-sessions-lan.json`) and the LAN's own idle limits.
 
 **The device list** in Settings shows each device with its `via` (Home network / Internet), its level, first seen and last seen.
 
 **Chats rules hold unchanged** for Chats devices: every Chats-level block, `REMOTE_TOOLS_DENIED`, SEARCH-PC's denial (SP-5) and engines (CE-6).
 
-## 7. The chip and the tray, with no banner (OS-9, BN-2; owner's decision 2)
+## 7. The chip and the tray, with no banner (OS-9; BN-6 to BN-9, 08c6789)
 
-**The owner's decision 2 applies everywhere:** no banner across the top, in Bunny's window or on a device page, **only the devices chip**. Wherever OS-8, OS-9 or BN-3 says "the banner", read **the chip and the tray**. Security is ruling on the chip's exact behaviour, and this section follows that ruling when it lands.
+**There is no banner or notice anywhere:** not in Bunny's window, not on a device page, and not in a browser page on the PC. The chip does the notice's job.
 
-**While the internet route is on:**
-- **The chip** reads **`Open to the internet · <address>`**, in the **warning colour, with words**. It sits in the window's top bar, `role="status"`.
-  - It **cannot be dismissed** and never hides by itself.
-  - It takes priority over "Open to devices · N".
-  - When a device also has Everything, the chip says both, for example "Open to the internet · Sam's phone has Everything". Design draws the exact form.
-  - A click opens Settings → Use Bunny in a browser.
-- **A new internet sign-in, a grant of Everything, and a reopen at start** each make the chip draw attention (Design: a pulse, with reduced motion respected), and send a system notification naming the device and "internet". The banner's job (BN-3) moves to these two.
-- **The tray tooltip** reads "Bunny AI: Open to the internet".
-- **A device page** shows no top line. If Security's chip ruling gives a device page a chip, it is BN-2's `Everything` chip in the page header, at Everything.
+**Removed:**
+- `#remote-note` (the window's banner);
+- `#device-note` (the device page's level line);
+- `#device-notice` (DEVICE-FULL's bottom-right "<device> changed a setting").
 
-Nothing about the chip's state is stored (BN-4).
+### 7.1 What the chip shows, always (BN-6)
+
+The chip appears on every Bunny page on the PC, in its top bar, while device access is open. It has `role="status"`, and the full words are in `aria-label`, so colour is never the only sign. At a narrow width it shortens its words, but it never disappears.
+
+| State | Chip |
+|---|---|
+| Open, no device at Everything | `Open to devices · N` (normal colour) |
+| Any device at Everything | warning colour: `Pixel 8 has Everything` / `Everything: 2 devices` |
+| The internet route is on | warning colour: `Open to the internet · N`, combined with Everything when both apply. The address is in its `aria-label` and in Settings |
+
+### 7.2 Events: the chip says what happened, until it's clicked (BN-7, BN-8)
+
+**An event is any of these, while the page is open:**
+- a device signs in, on either listener. This is compared **by device id, not by count**, so a sign-out and a sign-in between two looks still counts (BN-L1);
+- a device is raised to Everything;
+- the internet route reopens at start (§4.5);
+- a device changes a setting. The window reads this from the window-only log, as d46888a and f7caeb4 do today.
+
+**What the chip does with an event:**
+- It **switches to the event's words**: `New: Pixel 8 signed in (internet)`, `Pixel 8 has Everything`, `Reopened to the internet`, or `Pixel 8 changed a setting` (in the warning colour).
+- A **count badge** shows when more than one event is waiting.
+- Each event is announced **once** through `aria-live="polite"`.
+- A short pulse is allowed, but never as the only sign, and none with reduced motion.
+- **There is no timer.** The chip goes back to its state words only when it's clicked.
+- **A click** opens Settings → the devices list. For a setting change, it opens that device's Activity.
+- **Nothing is stored** (BN-4). A reload shows the state words, and Activity keeps the history.
+
+### 7.3 The tray, notifications, and device pages
+
+- **The tray tooltip** mirrors the chip, including the newest event's words: for example "Bunny AI: Open to the internet · New: Pixel 8 signed in".
+- **No notification is sent for a sign-in, a grant or a setting change.** The only system notification is the one-time start notification (RS-5). It says access reopened while Bunny may be hidden in the tray, and names the address for the internet route (§4.5).
+- **A device's own page shows no notice (BN-9).**
+  - At Everything, the red `Everything` chip in the page header stays, and can't be dismissed.
+  - At Chats, nothing is shown.
+  - Internet and home-network devices are treated the same.
+- **The first-sign-in dialog ("What may it do?") stays.** It isn't a banner: it's where Everything is granted with R-DF1's warning, plus the internet sentence for internet devices (§6.1). So do R-DF1's box in Settings and the Give Everything warning.
 
 ## 8. Settings and routes
 
@@ -373,9 +415,8 @@ All of these are window-only (`WINDOW_ONLY_SETTING_KEYS`) **and** in `isDeviceRe
 |---|---|---|
 | `internetRoute` | `'funnel'` \| `'https'` | Which route **On** uses. The on-state is saved in `remote-internet.json`, and read back only with `internetStayOpen` (§4.5) |
 | `internetStayOpen` | `true` / `false` (default `false`) | **Stay open to the internet after a restart** (OS-8 revised) |
-| `keepSignedIn` | `true` / `false` (default `false`) | **Keep devices signed in**, for internet devices (OS-5 revised) |
-| `keepSignedInLan` | `true` / `false` (default `false`, recommended off) | The same for home-network devices (§6.2) |
-| `everythingStaysOn` | `true` / `false` (default `false`) | **Everything stays on** (OS-7 revised). Its scope is Security's call (§6.1) |
+| `keepSignedIn` | `true` / `false` (default `false`) | **Keep devices signed in**, for **both** listeners (OS-5 revised, 705e7cf) |
+| `everythingStaysOn` | `true` / `false` (default `false`) | **Everything stays on**, for **both** listeners (OS-7 revised, 705e7cf) |
 | `internetHttpsHost` | hostname, plus an optional port | §3 checks |
 | `internetClientIpHeader` | `''` or one header name (letters, digits, `-`, at most 40) | Not `X-Forwarded-For` |
 | `internetPort` | 1024–65535 | Chosen once at random. It can be changed, but never to the window's port or the LAN port |
@@ -403,7 +444,7 @@ These go into the same window-only record as the device action log, with `via: '
 | `route-on` / `route-off` | the route, the public name, and why it went off (person, quit, Funnel stopped, shut-off) |
 | `reopened-at-start` / `not-reopened` | the time and the pinned name, or the check that failed (§4.5) |
 | `level` | `from` and `to`, and why (window grant, window change, idle drop, sign-out), with `via` |
-| `option` | which of the four options changed, and to what |
+| `option` | which of the three options changed (or the route choice), and to what |
 | `signout` | the device, and why (window, all devices, passcode change, option off, route off, shut-off) |
 | `name-warning` | the name confirmed (§4.2) |
 | `proxy-seen` | own-HTTPS only, the first request |
@@ -442,12 +483,28 @@ Then this spec is revised: R-1, R-2, the `X-Forwarded-For` decision, and SSE.
 | `test/open-signin-limits.test.js` | 60 parallel wrong passcodes give at most the allowed 401s, then waits (RA-1 on the internet listener). 10 wrong in 10 minutes pause every new internet sign-in, the wait doubles up to 1 hour, signed-in sessions keep working, **and the LAN listener still signs in**. Reset works from the window only. 100 in 24 hours shut the route off and record it. At most 2 internet scrypts run at once, and a 3rd gets 429 (OS-3). |
 | `test/open-signin-passcode.test.js` | Turning on is refused with a passcode under 16. An old N=16384 record is rehashed to N=65536 after one confirmation, and `verifyPasscode` uses the record's own cost. **The scrypt call passes `maxmem`**, so a sign-in at N=65536 does not throw (OS-4). |
 | `test/open-signin-cookie.test.js` | The internet listener sets `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/`, with no Domain. The LAN listener keeps today's cookie and flags, with no `Secure`. **With "Keep devices signed in" off**, the internet session ends after 30 minutes idle and after 12 hours even with activity (OS-5). |
-| `test/open-signin-keep.test.js` | **With "Keep devices signed in" on:** the cookie has `Max-Age=34560000`, and there is no idle or maximum end. **A restart keeps the session.** The saved file holds **no secret**: it is searched for the raw cookie value, which must not appear, only its SHA-256. The lookup uses `timingSafeEqual`. Each of these ends the session and deletes its hash: sign out, sign out all, a passcode change, the option off (only sessions older than 12 h), the route off, and the shut-off. LAN sessions still sign in again after a restart unless `keepSignedInLan` is on (64374ea, the test list). |
-| `test/open-signin-level.test.js` | **The window** raises an internet device to Everything, and the dialog includes the internet sentence, word for word. **A level change from any device** (Chats or Everything, LAN or internet) is refused. An internet device at Everything is refused `/api/remote*`, `/api/engines*`, SEARCH-PC's settings and Open, and the four options. "Everything stays on" off: the device drops to Chats after 30 minutes idle. On: no drop. Each grant and drop is in Activity with `via`. At Chats, an internet device is refused SEARCH-PC's tools and every `REMOTE_TOOLS_DENIED` tool (OS-7 revised). |
+| `test/open-signin-keep.test.js` | **With "Keep devices signed in" on:** the cookie has `Max-Age=34560000`, and there is no idle or maximum end. **A restart keeps the session.** The saved file holds **no secret**: it is searched for the raw cookie value, which must not appear, only its SHA-256. The lookup uses `timingSafeEqual`. Each of these ends the session and deletes its hash: sign out, sign out all, a passcode change, the option off (only sessions older than 12 h), the route off, and the shut-off. **Home network (705e7cf):**
+- with the option on, a LAN Chats session is still valid after 3 simulated hours, and an Everything session after 45 simulated minutes;
+- both survive a restart, with only hashes saved;
+- sign out, sign out all, a passcode change, access off, and RS-4's network check failing each end them;
+- a session saved under one network is not reopened on another;
+- with the option off, today's 2-hour and 30-minute limits hold, and the LAN cookie keeps its name and flags, with only `Max-Age` changing.
+
+The home-network warning sentence shows while the option is on. |
+| `test/open-signin-level.test.js` | **The window** raises an internet device to Everything, and the dialog includes the internet sentence, word for word. **A level change from any device** (Chats or Everything, LAN or internet) is refused. An internet device at Everything is refused `/api/remote*`, `/api/engines*`, SEARCH-PC's settings and Open, and the three options. "Everything stays on" off: the device drops to Chats after 30 minutes idle. On: no drop, for internet **and** home-network devices. Each grant and drop is in Activity with `via`. At Chats, an internet device is refused SEARCH-PC's tools and every `REMOTE_TOOLS_DENIED` tool (OS-7 revised). |
 | `test/open-signin-reopen.test.js` | With "Stay open" on, a restart reopens only when every §4.5 check passes. **Each failed check keeps the route closed, with its sentence:** no passcode record, an earlier shut-off, Tailscale stopped, a renamed DNS name, Funnel not allowed, an invalid own-HTTPS name. A leftover Funnel on another Bunny port is turned off, and a non-Bunny one is left alone. A good start reopens, the chip shows, and `reopened-at-start` is written. With the option off, nothing reopens (OS-8 revised). |
 | `test/funnel.test.js` | The fake runner checks: the absolute path and fixed arguments, and **never `--bg`, `reset`, `login` or `up`**. Each `status --json` state maps to its screen. Off is the targeted `--https=443 off`. **At start, a leftover Funnel pointing at the recorded port is turned off, and one pointing elsewhere is left alone.** The route reopens at start only through §4.5. The child ending closes the listener (OS-8). |
 | `test/open-signin-activity.test.js` | Every OS-10 entry is written, with `via: 'internet'`. **No entry holds an address**, even with `trustForwardedFor` on. The name-warning confirmation is recorded (OS-10). |
-| e2e `open-signin.spec.js` | Settings: the route choice, the Tailscale states (fake), the name-warning dialog before HTTPS, the own-HTTPS fields and hints. The chip reads "Open to the internet · <address>" in the warning colour and has no dismiss. **There is no banner anywhere.** A new internet sign-in pulses the chip and sends a notification. The three options, and the internet-device Everything dialog with its sentence. Both themes, at phone and desktop widths (O3, O8). |
+| e2e `open-signin.spec.js` | Settings: the route choice, the Tailscale states (fake), the name-warning dialog before HTTPS, the own-HTTPS fields and hints. **There is no banner anywhere:** no `#remote-note`, `#device-note` or `#device-notice`, in the window, a browser page or a device page, in any state (BN tests). The chip:
+- reads `Open to the internet · N` in the warning colour, with no dismiss;
+- for a new sign-in, reads `New: <device> signed in` until clicked, and the click opens the devices list;
+- after a reload, shows the state words;
+- catches the swap case (a sign-out and a sign-in between two looks) as an event;
+- for a raise to Everything, shows the warning colour with the device's name;
+- for a setting changed from a device, shows the event, and the click opens Activity. Two changes show a badge of 2;
+- with reduced motion, shows no pulse, and `aria-live` still announces once.
+
+**No notification for a sign-in.** A device page shows the Everything chip at Everything and nothing at Chats. Also covered: the three options, and the internet-device Everything dialog with its sentence. Both themes, at phone and desktop widths (O3, O8). |
 
 **Security signs on:**
 - Researcher's tests 1–5;
@@ -472,6 +529,4 @@ Then this spec is revised: R-1, R-2, the `X-Forwarded-For` decision, and SSE.
 
 **Owner questions:** none. Decisions 1 and 2 are recorded.
 
-**Security questions:**
-1. The scope of "Everything stays on": both listeners, as this spec recommends, or internet devices only (§6.1)?
-2. The chip's behaviour under decision 2, which Security is already ruling on (§7).
+**Security questions:** none open. The scope is answered (705e7cf: both listeners), and so is the chip (08c6789: BN-6 to BN-9).
