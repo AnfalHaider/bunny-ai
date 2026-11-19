@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app, opened it beside the chat and tested it" width="900" />
+  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app and opened it beside the chat" width="900" />
 </p>
 
 ---
@@ -151,7 +151,7 @@ Sign me in with the GitHub CLI you already use, or a token, and I'll search repo
 ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Alibaba Qwen, Groq, Together, Mistral, xAI, Fireworks, Cerebras, OpenAI, Anthropic, Google, OpenRouter, Nvidia, Vercel, GitHub Copilot, OpenCode and Ollama on your own machine, each with a **Get a key** link. Any other OpenAI-compatible server is one form away. When you first connect a provider, I tell you if my "free models only" filter is hiding some of its models, and show you all of them with one click.
 
 <p align="center">
-  <img src="docs/images/providers.png" alt="ModelScope, SiliconFlow, Gitee AI and more, each with a Connect button" width="440" />
+  <img src="docs/images/providers.png" alt="Popular providers such as Nvidia and OpenCode Console, each with a Connect or Sign in button" width="440" />
   <img src="docs/images/custom-provider.png" alt="The form to add a custom OpenAI-compatible provider" width="440" />
 </p>
 
