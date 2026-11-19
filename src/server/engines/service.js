@@ -94,6 +94,27 @@ export function makeUpstream({ provider, apiKey, model, fake, fetchImpl = global
   };
 }
 
+/**
+ * EN-6 (CE-4.5): an engine run counts against the chat's token budget at the endpoint. At the budget Bunny stops forwarding and asks through the existing limit card (`turn.onLimit`);
+ * no answer, or "stop", means the run stops. "Keep going" raises the budget by the same amount. Without a budget (0) nothing is counted.
+ */
+export function budgeted(upstream, turn) {
+  let budget = Number(turn.tokenBudget) || 0; const step = budget; let used = 0;
+  return async function* guarded(args) {
+    if (budget && used >= budget) {
+      let go = false;
+      try { go = Boolean(await turn.onLimit?.({ kind: 'tokens', inputTokens: used })); } catch { go = false; }
+      if (!go) { turn.limitHit = true; throw new Error('The token budget for this job was reached, so the run stopped.'); }
+      budget += step;
+    }
+    for await (const chunk of upstream(args)) {
+      if (chunk?.usage) used += Number(chunk.usage.prompt_tokens ?? 0) + Number(chunk.usage.completion_tokens ?? 0);
+      yield chunk;
+    }
+  };
+}
+
+
 // ---------------------------------------------------------------- the service
 
 export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false } = {}) {
@@ -204,13 +225,13 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
       } else {
         const sch = await schema();
         run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
-          upstream: makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
+          upstream: budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       }
       const steps = new Map();
       for await (const ev of run.events) {
         if (ev.type === 'text') { assembled += ev.delta; turn.send('delta', { text: ev.delta }); }
         else if (ev.type === 'thinking') turn.send('thinking', { text: ev.delta });
-        else if (ev.type === 'tool-start') { const tool = `${label}: ${ev.engineTool ?? ev.name}${ev.input?.command ? ` ${cutResult(ev.input.command, 80)}` : ev.input?.file_path ? ` ${ev.input.file_path}` : ev.input?.paths?.length ? ` ${ev.input.paths[0]}` : ''}`; steps.set(ev.callId, tool); turn.send('tool', { tool, status: 'running' }); }
+        else if (ev.type === 'tool-start') { turn.logTool?.(`${id}:${ev.name}`); const tool = `${label}: ${ev.engineTool ?? ev.name}${ev.input?.command ? ` ${cutResult(ev.input.command, 80)}` : ev.input?.file_path ? ` ${ev.input.file_path}` : ev.input?.paths?.length ? ` ${ev.input.paths[0]}` : ''}`; steps.set(ev.callId, tool); turn.send('tool', { tool, status: 'running' }); }
         else if (ev.type === 'tool-end') { const tool = steps.get(ev.callId) ?? `${label} tool`; const status = ev.ok ? 'done' : 'failed'; await turn.logStep({ role: 'assistant', kind: 'tool_call', tool, status, content: '', result: cutResult(ev.output ?? '', 1200), fullResult: ev.output ?? '' }); turn.send('tool', { tool, status, result: cutResult(ev.output ?? '', 1200) }); }
         else if (ev.type === 'session') await turn.onSession?.(ev.engineSessionId, pinVersion(id));
         else if (ev.type === 'usage') turn.noteUsage?.({ input: ev.input, output: ev.output });

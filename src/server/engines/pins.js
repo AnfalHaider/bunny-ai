@@ -23,6 +23,7 @@ export function checkPins(pins, { schemaExists = () => true } = {}) {
       if (u && !p.hosts.includes(u.hostname)) say(`${u.hostname} is not on the host list`);
       if (!/^[a-f0-9]{64}$/.test(String(f.sha256))) say(`${f.name ?? f.url} has no sha256`);
       if (!['zip', 'tgz', 'file'].includes(f.kind)) say(`${f.name ?? f.url} has no kind`);
+      if (f.integrity !== undefined && !/^sha512-[A-Za-z0-9+/]{86}==$/.test(String(f.integrity))) say(`${f.name ?? f.url} has an npm integrity value that is not sha512-<base64>`);
     }
     if (p.schema && !schemaExists(p.schema)) say(`schema file ${p.schema} is missing`);
     if (!p.licence) say('no licence text named');

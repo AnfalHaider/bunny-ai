@@ -3195,16 +3195,25 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         const wanted = session.engine?.id ?? (cfg.engine !== 'bunny' && cfg.engines[cfg.engine].enabled ? cfg.engine : null);
         if (wanted && wanted !== 'bunny' && workMode === 'code' && workspace && !req.bunnyRemote && !scheduledTask) {
           if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth } });
-          const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
+          const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
             id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
-            noteUsage: () => {}, // the engine's own token counts are not priced here (local mode counts at the endpoint)
+            noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
+            tokenBudget: replyCaps.tokens,
+            onLimit: async ({ inputTokens }) => {
+              if (scheduledTask) return false; // nobody is there to answer: no answer means stop
+              const q = cleanQuestion({ question: `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`, choices: [{ label: 'Keep going', recommended: true }, { label: 'Stop here', recommended: false }] });
+              const answer = await askQuestion(q);
+              const said = ((Array.isArray(answer.choices) ? answer.choices : []).join('') || String(answer.text ?? '')).trim();
+              return said === 'Keep going' && !answer.skipped;
+            },
+            logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
           if (outcome.stoppedForCheck) {
             session = await sessions.update(id, { engine: { ...session.engine, restricted: true } }).catch(() => session);
-            const note = "Stopped: Bunny's check did not run. Your next message continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder.";
+            const note = "Stopped: Bunny's check did not run. Your next message in this chat continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder. A new chat starts in full mode again.";
             send('delta', { text: `${outcome.text ? '\n\n' : ''}${note}` });
             outcome.text = `${outcome.text}${outcome.text ? '\n\n' : ''}${note}`;
           }

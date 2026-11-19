@@ -135,3 +135,27 @@ test('the chat\'s engine can be chosen before its first message (PATCH) and is t
   const refused = await patch({ engine: { id: 'codex', auth: 'local' } });
   assert.equal(refused.status, 409); assert.match(refused.body.message, /start a new chat/);
 });
+
+import { budgeted } from '../src/server/engines/service.js';
+
+test('EN-6 (CE-4.5): the endpoint counts tokens per run; at the budget it asks through the limit card, no answer means stop, "keep going" raises the budget by the same amount, no budget counts nothing', async () => {
+  const mkUp = () => { let calls = 0; return { calls: () => calls, up: async function* () { calls += 1; yield { choices: [{ delta: { content: 'x' }, finish_reason: 'stop' }], usage: { prompt_tokens: 60, completion_tokens: 40 } }; } }; };
+  const drain = async (g) => { const out = []; for await (const c of g) out.push(c); return out; };
+  // the budget 150: two calls of 100 pass the first check (0, then 100 < 150), the third finds 200 >= 150
+  const a = mkUp(); const asked = []; const turnA = { tokenBudget: 150, onLimit: async (info) => { asked.push(info); return false; } };
+  const guarded = budgeted(a.up, turnA);
+  await drain(guarded({})); await drain(guarded({}));
+  await assert.rejects(() => drain(guarded({})), /budget for this job was reached/);
+  assert.deepEqual(asked, [{ kind: 'tokens', inputTokens: 200 }]); assert.equal(a.calls(), 2, 'nothing was forwarded after the budget'); assert.equal(turnA.limitHit, true);
+  // keep going: the budget is raised by the same amount
+  const b = mkUp(); let n = 0; const turnB = { tokenBudget: 150, onLimit: async () => { n += 1; return true; } };
+  const gb = budgeted(b.up, turnB);
+  for (let i = 0; i < 4; i += 1) await drain(gb({}));
+  assert.equal(b.calls(), 4); assert.equal(n, 2, 'asked at 200 (budget then 300) and again at 300 (budget then 450)');
+  // no answer function: a stop; no budget: unlimited
+  const c = mkUp(); const gc = budgeted(c.up, { tokenBudget: 50 });
+  await drain(gc({})); await assert.rejects(() => drain(gc({})), /budget/);
+  const d = mkUp(); const gd = budgeted(d.up, { tokenBudget: 0 });
+  for (let i = 0; i < 5; i += 1) await drain(gd({}));
+  assert.equal(d.calls(), 5);
+});
