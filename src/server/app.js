@@ -53,6 +53,9 @@ import { createToolInstaller } from './toolInstall.js';
 import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
 import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited } from './download.js';
+import { createPcService } from './pcService.js';
+import { FIXED_EXCLUSIONS } from './pcExclusions.js';
+import { PC_TOOLS, pcToolDefinitions, PC_SYSTEM_TEXT, createPcTurn, holdsPcFileText } from './pcTools.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
@@ -103,6 +106,9 @@ const MAX_IMPORT = 300 * 1024 * 1024;
 
 /** Quick ask is text only, with two look-ups added: they only read the web, change nothing and need nobody's OK. */
 export const QUICK_ASK_TOOLS = Object.freeze(['web_search', 'read_url']);
+/** Tools that ask nobody even after a file from this PC was read: they only look at this chat, ask the person, or read the chat's own folder. */
+const PC_TAINT_FREE = Object.freeze(['ask_user', 'update_tasks', 'request_capability', 'read_skill', 'list_models']);
+const PC_SETTING_KEYS = ['pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto'];
 export const QUICK_ASK_LOOKUPS = 5; // look-ups in one quick answer
 
 const TYPES = {
@@ -213,7 +219,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
   // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
   const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
@@ -768,9 +774,36 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
+      // SEARCH-PC SP-1: no device, at any level, turns Search this PC on or changes what it may look at
+      if (PC_SETTING_KEYS.some((k) => Object.hasOwn(patch, k))) {
+        if (req.bunnyRemote ?? req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+        if (Object.hasOwn(patch, 'pcSearchEnabled') && typeof patch.pcSearchEnabled !== 'boolean') return sendJson(res, 400, { code: 'pcsearch.bad', message: 'Search this PC is on or off.' });
+        if (Object.hasOwn(patch, 'pcSearchBarAuto') && typeof patch.pcSearchBarAuto !== 'boolean') return sendJson(res, 400, { code: 'pcsearch.bad', message: 'Quick ask searches by itself or not.' });
+        if (Object.hasOwn(patch, 'pcSearchAfter') && !['read', 'show'].includes(patch.pcSearchAfter)) return sendJson(res, 400, { code: 'pcsearch.bad', message: 'After a search: read the files, or show what was found.' });
+        if (Object.hasOwn(patch, 'pcSearchExcluded')) {
+          const list = Array.isArray(patch.pcSearchExcluded) ? patch.pcSearchExcluded.slice(0, 50) : null;
+          if (!list) return sendJson(res, 400, { code: 'pcsearch.bad', message: 'The excluded folders are a list.' });
+          const resolved = [];
+          for (const f of list) { const real = await pc.exclusions.resolveFolder(f); if (!real) return sendJson(res, 400, { code: 'pcsearch.badFolder', message: `${String(f).slice(0, 120)} is not a folder on this computer.` }); if (!resolved.includes(real)) resolved.push(real); }
+          patch.pcSearchExcluded = resolved;
+        }
+      }
       settings = { ...settings, ...patch };
+      if (Object.hasOwn(patch, 'pcSearchExcluded')) pc.setPersonal(settings.pcSearchExcluded);
       await writeJson(settingsFile, settings);
       return sendJson(res, 200, settings);
+    }
+
+    // ---- SEARCH-PC: what Bunny looked at (SP-6), the fixed exclusions, and (main process only) the real path of a result ----
+    if (path.startsWith('/api/pcsearch/')) {
+      if (req.bunnyRemote ?? req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+      if (path === '/api/pcsearch/activity' && method === 'GET') { if (windowOnly(req, res)) return; return sendJson(res, 200, { entries: await pc.activity.list() }); }
+      if (path === '/api/pcsearch/fixed' && method === 'GET') { if (windowOnly(req, res)) return; return sendJson(res, 200, FIXED_EXCLUSIONS); }
+      if (path === '/api/pcsearch/resolve' && method === 'POST') {
+        if (!adminOk(req)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Only Bunny's window can open a result." });
+        const body = await readBody(req);
+        return sendJson(res, 200, await pc.resolveRef(body.ref));
+      }
     }
 
     // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
@@ -2192,8 +2225,16 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       const googleOn = Boolean(googleAccount?.workspace);
       // W4-14e: a Code chat whose folder is missing says so to the person once, with the folder picker, instead of leaving it to the model.
       if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
+      // SEARCH-PC: the chat gets the two tools when the switch is on; the bar only for a request from the main process (the admin secret) that asks for them; a Chats device never (REMOTE_TOOLS_DENIED)
+      const pcWho = (req.bunnyRemote ?? req.bunnyDevice)?.label ?? (textOnly ? 'bar' : 'window');
+      const barPc = textOnly && body.pcSearch === true && adminOk(req) && pc.enabled() && !(req.bunnyRemote ?? req.bunnyDevice);
+      const chatPc = !textOnly && pc.enabled() && !scheduledTask && !req.bunnyRemote;
+      const pcTurn = createPcTurn();
+      pcTurn.tainted = holdsPcFileText(history); // file text from this PC still in what the model holds: the chat acts only with the person's click
+      if (chatPc || barPc) history.unshift({ role: 'system', content: PC_SYSTEM_TEXT });
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']),
+        ...(chatPc ? pcToolDefinitions() : []),
         ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
@@ -2928,7 +2969,9 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
 
       const runTool = async ({ name, arguments: args }) => {
         closeThinking(); // a step ends the thinking that led to it
-        if (textOnly && !QUICK_ASK_TOOLS.includes(name)) throw new Error(`${name} is not available in a quick answer. Only web_search and read_url are.`);
+        if (textOnly && !QUICK_ASK_TOOLS.includes(name) && !(barPc && PC_TOOLS.includes(name))) throw new Error(`${name} is not available in a quick answer. Only web_search and read_url are.`);
+        // the bar has no card to ask with: once it has read a file from this PC it looks nothing up on the web (a page or a file could make the answer carry the text away)
+        if (textOnly && pcTurn.tainted && QUICK_ASK_TOOLS.includes(name)) return 'Web look-ups are off in this answer because it has read a file from this PC.';
         if (textOnly && (quickLookups += 1) > QUICK_ASK_LOOKUPS) throw new Error(`A quick answer may look things up ${QUICK_ASK_LOOKUPS} times. Answer with what you have, or tell the person to open this in Bunny's window.`);
         // R2: a chat from another device has no tool that drives the computer, builds or installs anything, adds a connector or a skill, or runs what the model built
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
@@ -2969,6 +3012,13 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         if (!toolDefinitions.some((d) => d.function?.name === name) && !(viaMeta && deferredTools.has(name))) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not available in this reply, so it was not run.`;
+        }
+        // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
+        if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, send, logStep });
+        if (pcTurn.tainted && !textOnly && !PC_TAINT_FREE.includes(name) && !(workspace?.has(name) && TOOL_RISK[name] === 'read') && !planRefuses(riskOf(name), name)) {
+          const said = JSON.stringify(parsed ?? {}).slice(0, 300);
+          const okTainted = await askPermission(name, `This chat just read a file from this PC. Bunny asks before doing anything else.\n\n${said}`);
+          if (!okTainted) { send('tool', { tool: name, status: 'denied' }); return 'The person did not allow this. Do not try it again; carry on without it or ask them.'; }
         }
         if (isAgentTool(name) || (name.startsWith(CUSTOM_PREFIX) && !toolIndex.has(name))) return runAgentTool(name, parsed);
         if (browserControl && isBrowserTool(name)) {
@@ -3177,7 +3227,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const refusalKey = `${id}|${providerId}|${model}`;
       const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
       const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
-      const quickTools = appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)); // Quick ask: look-ups only
+      const quickTools = [...appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)), ...(barPc ? pcToolDefinitions() : [])]; // Quick ask: look-ups only
       const refusedLevel = textOnly ? undefined : toolsRefused.get(refusalKey);
       const NO_TOOLS_NOTE = 'No tools are available in this reply (this model does not accept them), so you cannot search the web, read pages or use connectors, whatever was said before. If asked, say so plainly; never claim you did.';
       if (refusedLevel === 'all') history.unshift({ role: 'system', content: NO_TOOLS_NOTE });
@@ -3501,6 +3551,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   };
   const remote = createRemoteAccess({ file: join(dataDir, 'remote-access.json'), logFile: join(dataDir, 'remote-actions.json'), onEnd: (deviceIds) => { resetRemoteAuto(deviceIds); } });
   resetRemoteAuto(null); // nothing is open to other devices when Bunny starts
+  // SEARCH-PC: the Windows Search index, the exclusions, the two tools and the activity record (src/server/pcService.js)
+  const pc = createPcService({ dataDir, electronData, getSettings: () => settings, ...pcOptions }); // pcOptions: a fake index, drives and home for tests
   const remoteSweep = setInterval(() => remote.sweep(), 60_000); // idle devices are signed out even if they never call again
   remoteSweep.unref();
   /** After a change to a chat from a device: mark it (or unmark it) when its mode is Auto. */

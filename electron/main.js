@@ -69,7 +69,7 @@ let bunnyApp = null;
 let addressNote = '';
 
 async function startServer() {
-  const bunny = await createApp({ dataDir, folderPickerOnly: true });
+  const bunny = await createApp({ dataDir, electronData: app.getPath('userData'), folderPickerOnly: true });
   bunnyApp = bunny;
   // BROWSER: a free port, or the same one as last time when "Keep the same address after restart" is on (with a plain note when it is taken). Always 127.0.0.1.
   const listening = await listenWithFallback(bunny.server, '127.0.0.1', wantedPort(prefs));

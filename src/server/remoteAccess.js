@@ -198,6 +198,7 @@ export const REMOTE_TOOLS_DENIED = Object.freeze([
   'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill',
   'schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat',
   'call_connector_tool', 'list_connector_tools',
+  'search_pc', 'read_pc_file', // SEARCH-PC SP-5: a Chats device never searches this PC; an Everything device may, as the window can
 ]);
 const allowedTools = new Set(REMOTE_TOOLS_ALLOWED);
 export const remoteToolBlocked = (name) => !allowedTools.has(String(name ?? ''));
