@@ -135,3 +135,53 @@ Security signs each engine's adapter only with:
 - the fake-home test from CE-3.3;
 - the CE-6 test at Everything;
 - the store's tests (hash mismatch, path escape, redirect off-list, `--ignore-scripts`).
+
+## CE-1 ruling after spike S1 (2026-11-19): Claude Code may run in full mode, with these layers
+
+**Evidence:** Builder C's S1 on Claude Code 2.1.311, e1e568f on claude/builder-c-v0114-spikes (`docs/spikes/cli-engines/s1/`). I read the README and `e-killed-noprompts.txt`.
+- (a), (b) and (d) pass.
+- **(c) fails open, as CE-1.1 feared.** A hook that crashes, exits 1, prints garbage, times out, is killed, or has no runtime doesn't block, and the tool runs.
+- With the hook killed, `--permission-prompts none` denied Write, Bash, WebFetch, MCP and the canary outside the folder ("no approval surface"). A workspace `Read` still ran. A `permissions.deny` in Bunny's `--settings` kept `secret.txt` unread with the hook killed.
+
+**Ruling:** full mode is acceptable for Claude Code **only with every one of the layers below**. Each is a CE-1 requirement now, and each has a test or spike line. Without them, Claude Code runs restricted.
+
+**CE-1.7, the hook catches what it can.** The hook script wraps everything in a catch that prints a deny decision. That covers an unreachable bridge, a bad answer and any exception. It's the first layer, not the only one.
+
+**CE-1.8, the engine's own permissions stay on, as the second layer.**
+- Claude Code always runs with `--permission-prompts none`, or a `--permission-prompt-tool` that answers deny.
+- `--setting-sources user` with the isolated, empty `CLAUDE_CONFIG_DIR`.
+- **No `permissions.allow` rule anywhere** in Bunny's `--settings`.
+- Never `--dangerously-skip-permissions`, `bypassPermissions` or `acceptEdits`.
+- In Plan mode, also `--permission-mode plan`.
+
+With the hook dead, writes, commands, fetches, MCP and any read outside the folder are then refused by the engine itself (S1 `e-killed-noprompts` and `e-missing-noprompts`).
+
+**CE-1.9, Bunny's rules are copied into the engine's own settings.** Bunny writes `permissions.deny` rules into its `--settings` for:
+- every Bunny deny rule;
+- every read-deny (hidden) path, the data folder and every engine home;
+- the protected folders;
+- the key folders (CE-1.6).
+
+Each Bunny **read Ask** rule is written as a `permissions.ask` rule. With no approval surface, an ask turns into a deny when the hook is dead.
+
+**A spike line (S1 add-on) must show two things:**
+- with the hook alive, Bunny's "allow" from the hook lets an `ask`-covered read through;
+- with the hook killed, that read is refused.
+
+If the first doesn't hold, ask-covered paths go into `permissions.deny` instead. Then those reads are never allowed for Claude Code, which is safe and costs only convenience.
+
+**CE-1.10, a watchdog (M6).**
+- Every `tool_use` id in Claude Code's stream-json must match a bridge request from the hook for the same id, arriving before the matching `tool_result`.
+- A `tool_use` that reaches its result with no bridge request means the hook isn't working. Bunny stops the run at once (tree kill, CE-8.2), marks the reply "stopped: Bunny's check did not run", and offers to continue in restricted mode.
+- Test this with the fake engine, with the hook disabled.
+
+**CE-1.11, hook timeout and Asks.** Bunny sets the hook timeout above the longest an Ask card waits, and answers deny itself before that. S1 didn't test a long timeout, so add one spike line: a 5-minute hook timeout with a card answered after 2 minutes allows; one left unanswered past Bunny's limit denies. If a hook timeout does happen, CE-1.8 and CE-1.10 catch it.
+
+**The residual, accepted:** when the hook dies, Claude Code can still read workspace files that **no** Bunny rule covers, until CE-1.10's watchdog stops the run.
+- Those are the reads Bunny's own engine does without a card in every mode except Plan, inside the folder the person chose.
+- Nothing can be written, run, fetched or sent through MCP. Nothing outside the folder can be read.
+- Paths covered by Bunny's rules stay refused (CE-1.9).
+
+**`--restricted`** (removes command tools and WebFetch, ignores settings files, confines file tools to the working folders): use it for Claude Code's **restricted** fallback, together with CE-2's staged copy, not in full mode. Don't count it as a wall on its own until a spike shows its confinement holds against the canary.
+
+**Cline (S3) is held to the same layers**, in whatever form its CLI offers. If Cline has no equivalent of CE-1.8 (its own permissions as a second layer), it runs restricted.
