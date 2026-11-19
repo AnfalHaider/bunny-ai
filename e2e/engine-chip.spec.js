@@ -8,6 +8,12 @@ test.beforeEach(async ({ request }) => {
   await request.put('/api/settings', { data: { engine: 'bunny' } }).catch(() => {});
 });
 
+// leave nothing behind: a downloaded stand-in engine would show the engine chip in every later spec's Code chats (and in the help pictures)
+test.afterEach(async ({ request }) => {
+  for (const id of ['claude-code', 'codex']) await request.delete(`/api/engines/${id}`).catch(() => {});
+  await request.put('/api/settings', { data: { engine: 'bunny' } }).catch(() => {});
+});
+
 test('the engine chip is hidden with no engine downloaded; with one it lists Bunny and the engine, one line each, and the choice sticks for the new chat', async ({ page, request }) => {
   await page.goto('/src/ui/index.html');
   await page.evaluate(() => localStorage.setItem('bunny.workMode', 'code'));

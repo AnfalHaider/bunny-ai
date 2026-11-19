@@ -11,6 +11,12 @@ test.beforeEach(async ({ request }) => {
   await request.put('/api/settings', { data: { engine: 'bunny', engines: { 'claude-code': { auth: 'account' } } } }).catch(() => {});
 });
 
+// leave nothing behind: a downloaded stand-in engine would show the engine chip in every later spec's Code chats (and in the help pictures)
+test.afterEach(async ({ request }) => {
+  for (const id of ['claude-code', 'codex']) await request.delete(`/api/engines/${id}`).catch(() => {});
+  await request.put('/api/settings', { data: { engine: 'bunny' } }).catch(() => {});
+});
+
 test('Engines lists Bunny, Claude Code and Codex CLI and nothing else; each engine is one compact row', async ({ page }) => {
   await page.goto(PAGE);
   const rows = page.locator('#engines-list .er');
