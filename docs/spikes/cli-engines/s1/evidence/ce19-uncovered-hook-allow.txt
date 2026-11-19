@@ -1,4 +1,4 @@
-scenario: ce19-uncovered-hook-allow   exit code: 0   seconds: 1.2
+scenario: ce19-uncovered-hook-allow   exit code: 0   seconds: 1.3
 command: claude.exe -p "Spike: do the scripted tool calls." --output-format stream-json --verbose --no-session-persistence --model claude-sonnet-4-5 --mcp-config <SPIKE>\runs\ce19-uncovered-hook-allow\mcp.json --strict-mcp-config --settings <SPIKE>\runs\ce19-uncovered-hook-allow\bunny-settings.json --permission-mode default --permission-prompts none --setting-sources user
 hook mode: allow   timeout: default   setting sources: bunny
 scripted calls: Read
@@ -12,6 +12,6 @@ bash-ran.txt exists: false
 ps-ran.txt exists: false
 edit-me.txt now: "before"
 MCP tool ran: false
-hosts the engine contacted at the stand-in: 127.0.0.1:61045   (any other host would not appear here; see network note in README)
+hosts the engine contacted at the stand-in: 127.0.0.1:55646   (any other host would not appear here; see network note in README)
 tool results seen by the model (tool_result blocks in stub log, trimmed): 1
 tool_result texts the model got: ["\\\"1\\\\tSECRET-S1-9f3a1c\\\\n2\\\\n\\\\n<system-reminder>\\\\n<total_tokens>14999985 tokens left</total_tokens>\\\\n</system-reminder>\\\""]

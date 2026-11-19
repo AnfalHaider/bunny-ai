@@ -70,3 +70,10 @@ Run on the same pin, stand-ins and invented profile. Each file in `evidence/` is
 - Not disabled in this run, and still in the list: the Task* tools (TaskCreate/Get/List/Update/Stop), SendMessage, ListAgents, ScheduleWakeup, ToolSearch, ReportFindings, Monitor, Workflow. Add them to `--disallowedTools` the same way if the spec wants them gone (not tried).
 
 (CE-1.9 and CE-1.11, also owed in revision 6, were run in Addendum 2 above: note the CE-1.9 result is the reverse of the expected first half, a hook allow does **not** pass an ask-covered read when `--permission-prompts none` is set.)
+
+## Addendum 4: EN-3, the absolute deny form (Security's build review 27390cc)
+Question: does an absolute-path deny rule hold with the hook killed and `--permission-prompts none`? A fake "data folder" (`proj\fakedata\data.txt`, holding the unique secret) is named ONLY by an absolute `permissions.deny` rule in Bunny's `--settings` (`evidence/en3-*.txt`).
+- Control, no rule, hook killed: the read RAN (`en3-control-no-rule-hook-killed`), so the test can tell.
+- **`Read(//C:/…/fakedata/**)` (what the first build wrote) does NOT deny**: the read ran (`en3-form-A-…`). Neither do `Read(/c/…)` (D), backslashes, or a rule naming the exact file in that same form (F).
+- **`Read(//c/…/fakedata/**)` (drive letter, no colon) and `Read(C:/…/fakedata/**)` DO deny**, with the hook killed ("File is in a directory that is denied by your permission settings"), and also when the live hook says allow: the deny still wins over a hook allow (`en3-form-B-…-hook-allow`, `en3-form-C-…-hook-allow`).
+Fix in the build: `denyRules` writes both working forms for every absolute floor path and never the `//C:/` form.

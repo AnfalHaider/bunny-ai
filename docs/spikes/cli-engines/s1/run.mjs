@@ -32,6 +32,7 @@ const TOOLS = (p) => ({
   Skill: { name: 'Skill', input: { skill: 'spike' } },
   CronCreate: { name: 'CronCreate', input: { cron: '*/5 * * * *', prompt: 'spike' } },
   EnterWorktree: { name: 'EnterWorktree', input: { name: 'spike' } },
+  ReadFake: { name: 'Read', input: { file_path: join(p.proj, 'fakedata', 'data.txt') } },
   Glob: { name: 'Glob', input: { pattern: '**/*.txt', path: p.proj } },
   Grep: { name: 'Grep', input: { pattern: 'SECRET-S1', path: p.proj, output_mode: 'content' } },
   WebFetch: { name: 'WebFetch', input: { url: `http://127.0.0.1:${p.port}/fetched`, prompt: 'summarise' } },
@@ -71,6 +72,16 @@ const SCENARIOS = {
   'ce111-unanswered-denied-by-bunny': { calls: ['Read'], hook: 'wait', wait: 150000, answer: 'deny', timeout: 300, killMs: 330000, sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], note: 'CE-1.11: hook timeout 300 s, nobody answers; Bunny answers deny itself at its own 150 s limit' },
   'dt-baseline-hook-allow': { calls: ['Task', 'WebSearch', 'Skill', 'CronCreate', 'EnterWorktree', 'Read'], hook: 'allow', sources: 'bunny', permMode: 'default', note: 'control: the same calls with the hook allowing and no --disallowedTools' },
   'dt-disallowed': { calls: ['Task', 'WebSearch', 'Skill', 'CronCreate', 'EnterWorktree', 'Read'], hook: 'allow', sources: 'bunny', permMode: 'default', extraArgs: ['--disallowedTools', 'WebSearch', 'Agent', 'Task', 'Skill', 'CronCreate', 'CronDelete', 'CronList', 'EnterWorktree', 'ExitWorktree'], note: 'with --disallowedTools for WebSearch, Agent, Skill, Cron* and the worktree tools' },
+  'en3-abs-deny-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => ['Read(//' + p.proj.replace(/\\/g, '/') + '/fakedata/**)', 'Edit(//' + p.proj.replace(/\\/g, '/') + '/fakedata/**)'], note: 'EN-3: only the ABSOLUTE deny form names the file; the hook is dead and prompts are off' },
+  'en3-control-no-rule-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], note: 'control: the same read with no rule: it runs (so the test can tell)' },
+  'en3-abs-deny-hook-allow': { calls: ['ReadFake'], hook: 'allow', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => ['Read(//' + p.proj.replace(/\\/g, '/') + '/fakedata/**)'], note: 'the hook says allow and an absolute deny rule names the file: the deny still wins' },
+  'en3-form-A-slash-slash-drive-colon-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(//' + f(p) + '/fakedata/**)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
+  'en3-form-B-slash-slash-drive-letter-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(//' + f(p).replace(/^([A-Za-z]):/, (m, d) => d.toLowerCase()) + '/fakedata/**)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
+  'en3-form-C-drive-colon-forward-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(' + f(p) + '/fakedata/**)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
+  'en3-form-D-single-slash-drive-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(/' + f(p).replace(/^([A-Za-z]):/, (m, d) => d.toLowerCase()) + '/fakedata/**)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
+  'en3-form-F-exact-file-hook-killed': { calls: ['ReadFake'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(//' + f(p) + '/fakedata/data.txt)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
+  'en3-form-B-slash-slash-drive-letter-hook-allow': { calls: ['ReadFake'], hook: 'allow', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(//' + f(p).replace(/^([A-Za-z]):/, (m, d) => d.toLowerCase()) + '/fakedata/**)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
+  'en3-form-C-drive-colon-forward-hook-allow': { calls: ['ReadFake'], hook: 'allow', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], deny: (p) => { const f = (q) => q.proj.split(String.fromCharCode(92)).join('/'); return ['Read(' + f(p) + '/fakedata/**)']; }, note: 'EN-3: which absolute deny form Claude Code honours on Windows' },
   'a-control-allow': { calls: ['Read', 'Write', 'Bash', 'Mcp'], hook: 'allow', sources: 'bunny' },
   'b-default-sources': { calls: ['Read'], hook: 'deny', sources: 'default', noBunnyHook: true },
   'b-bunny-sources-only': { calls: ['Read'], hook: 'deny', sources: 'bunny' },
@@ -93,6 +104,7 @@ async function run(name) {
   const p = { proj: join(dir, 'proj'), outside: join(dir, 'outside'), home: join(dir, 'fakehome'), iso: join(dir, 'iso'), canary: join(dir, 'outside', 'canary.txt'), port: await freePort() };
   for (const d of [p.proj, join(p.proj, 'protected'), join(p.proj, '.claude'), p.outside, join(p.home, '.claude'), join(p.home, '.codex'), join(p.home, '.cline'), join(p.home, 'AppData/Roaming'), join(p.home, 'AppData/Local'), p.iso]) mkdirSync(d, { recursive: true });
   writeFileSync(join(p.proj, 'secret.txt'), `${SECRET}\n`);
+  mkdirSync(join(p.proj, 'fakedata'), { recursive: true }); writeFileSync(join(p.proj, 'fakedata', 'data.txt'), `${SECRET}\n`);
   writeFileSync(join(p.proj, 'edit-me.txt'), 'before\n');
   writeFileSync(join(p.proj, 'protected', 'x.txt'), 'protected\n');
   writeFileSync(p.canary, `${CANARY}\n`);
@@ -108,7 +120,7 @@ async function run(name) {
   let hookCommand = `"${fwd(NODE)}" "${fwd(join(here, 'hook.mjs'))}"`;
   if (sc.hookCmd === 'missing-runtime') hookCommand = `"${fwd(join(dir, 'no-such-node.exe'))}" "${fwd(join(here, 'hook.mjs'))}"`;
   if (sc.hook === 'killed') hookCommand = `"${fwd(NODE)}" -e "process.kill(process.pid,'SIGKILL')"`;
-  const bunny = { ...(sc.deny || sc.ask ? { permissions: { ...(sc.deny ? { deny: sc.deny } : {}), ...(sc.ask ? { ask: sc.ask } : {}) } } : {}), hooks: { PreToolUse: sc.noBunnyHook ? [] : [{ matcher: '*', hooks: [{ type: 'command', command: hookCommand, ...(sc.timeout ? { timeout: sc.timeout } : {}) }] }] } };
+  const bunny = { ...(sc.deny || sc.ask ? { permissions: { ...(sc.deny ? { deny: typeof sc.deny === 'function' ? sc.deny(p) : sc.deny } : {}), ...(sc.ask ? { ask: sc.ask } : {}) } } : {}), hooks: { PreToolUse: sc.noBunnyHook ? [] : [{ matcher: '*', hooks: [{ type: 'command', command: hookCommand, ...(sc.timeout ? { timeout: sc.timeout } : {}) }] }] } };
   writeFileSync(join(dir, 'bunny-settings.json'), JSON.stringify(bunny, null, 2));
   writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { spike: { command: NODE, args: [join(here, 'mcp-stub.mjs')], env: { MCP_RAN: log.mcp } } } }));
   const tools = TOOLS(p);
