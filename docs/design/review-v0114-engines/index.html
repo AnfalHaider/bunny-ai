@@ -100,14 +100,14 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 <div class="top">
   <div>
     <h1>Bunny engines</h1>
-    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p><p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p><p style="margin-top:8px"><span class="pill p-med">Updated 2026-11-19</span> <b>Cline is left out of 0.1.14</b> (the owner: "leave cline out of 0.1.14"; Security ruled it unsafe in any mode). The engines are Bunny, Claude Code, Codex CLI and Aider. <b>Codex runs in full mode</b> (the owner approved it), and <b>Aider is restricted until its trial run passes</b>.</p>
+    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p><p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p><p style="margin-top:8px"><span class="pill p-med">Updated 2026-11-19</span> <b>Only Claude Code and Codex CLI, besides Bunny, in 0.1.14.</b> The owner: "lets remove cline and other for now, just focus on codex and claude." Cline and Aider are left out (Security ruled Cline unsafe in any mode). <b>Codex runs in full mode</b> (the owner approved it). Nothing runs restricted in 0.1.14; the restricted screens are kept in section 5 only for a later engine.</p>
   </div>
   <div class="tops"><button class="t" id="theme" type="button">Show the other theme</button></div>
 </div>
 
 <section class="card">
   <h2>1. Rows saved: version 2 beside version 3</h2>
-  <p class="mute">The same engines, same width (version 2's picture still shows five, with Cline, which is no longer offered; version 3 shows four, and the comparison below is per engine). Version 2 gave each engine a header, a block for the choice and often a note. Version 3 gives each one row: name and version, status, the Local | Account control and the main button on one line, and one dim line for the note.</p>
+  <p class="mute">The same engines, same width (version 2's picture still shows five, with Cline and Aider, which are no longer offered; version 3 shows three, and the comparison below is per engine). Version 2 gave each engine a header, a block for the choice and often a note. Version 3 gives each one row: name and version, status, the Local | Account control and the main button on one line, and one dim line for the note.</p>
   <div class="stat" id="stat"></div>
   <div style="display:grid;gap:14px">
     <div><div class="lab">Version 2 (before)</div><img class="vimg l" id="v2l" alt="Version 2 Engines list, light" src="v2/v2-engines-light.png"><img class="vimg d" id="v2d" alt="Version 2 Engines list, dark" src="v2/v2-engines-dark.png"></div>
@@ -117,20 +117,20 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 
 <section class="card">
   <h2>Recommendations</h2>
-  <div class="rec first"><span class="n">1</span><div><b><span class="pill p-med">medium</span>A new Settings page, "Engines", under Code; one compact row per engine</b><span class="m">Bunny's engine first (always there, Default), then Claude Code, Codex CLI, Aider (Cline is not in 0.1.14). Window-only to change; a phone can read it. Notes are one dim line under the name (full text on hover or tap), never extra rows.</span></div></div>
+  <div class="rec first"><span class="n">1</span><div><b><span class="pill p-med">medium</span>A new Settings page, "Engines", under Code; one compact row per engine</b><span class="m">Bunny's engine first (always there, Default), then Claude Code and Codex CLI (Cline and Aider are not in 0.1.14). Window-only to change; a phone can read it. Notes are one dim line under the name (full text on hover or tap), never extra rows.</span></div></div>
   <div class="rec"><span class="n">2</span><div><b><span class="pill p-med">medium</span>The row's button and a ⋯ menu carry every action</b><span class="m">Main button by state: Download (size) · Cancel · Update to vY (tested) · Sign in again · Try again. The ⋯ menu holds Check for update, Roll back to vX, Sign out, Remove. Section 3.</span></div></div>
-  <div class="rec"><span class="n">3</span><div><b><span class="pill p-hi">high</span>Download on click, size first, checked before use</b><span class="m">About 380 MB for Claude Code and 390 MB for Codex CLI; Aider's size comes from the release file when built. Checksum and, for Claude Code, Anthropic's signature. Claude Code from Anthropic's official installer, unmodified.</span></div></div>
-  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>One Local | Account control on each installed engine's row</b><span class="m">Account opens the vendor's own sign-in in a visible window; Bunny never sees or stores the token. Back to Local keeps you signed in until Sign out. Aider is Local, fixed. Defaults: Claude Code Account; Codex Local; Aider Local only. The control is the two-option Local | Account control (approved by the owner).</span></div></div>
+  <div class="rec"><span class="n">3</span><div><b><span class="pill p-hi">high</span>Download on click, size first, checked before use</b><span class="m">About 380 MB for Claude Code and 390 MB for Codex CLI. Checksum and, for Claude Code, Anthropic's signature. Claude Code from Anthropic's official installer, unmodified.</span></div></div>
+  <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>One Local | Account control on each installed engine's row</b><span class="m">Account opens the vendor's own sign-in in a visible window; Bunny never sees or stores the token. Back to Local keeps you signed in until Sign out. Defaults: Claude Code Account; Codex Local. The control is the two-option Local | Account control (approved by the owner).</span></div></div>
   <div class="rec"><span class="n">5</span><div><b><span class="pill p-hi">high</span>The catch is in the row's dim line, not a block</b><span class="m">Claude Code on Local: "Anthropic does not support Claude Code with other models; it may stop working after an update." Codex on Local: OpenAI or OpenRouter only (Responses API). Same text, one line.</span></div></div>
-  <div class="rec"><span class="n">6</span><div><b><span class="pill p-hi">high</span>"Restricted" is a chip on the row</b><span class="m">Aider, until its trial run passes; Claude Code only if its check fails. Codex runs in full mode (the owner approved it), not restricted. Hover or tap the chip for what it means; the legend and the review at the end of a run are shown once in section 5.</span></div></div>
-  <div class="rec"><span class="n">7</span><div><b><span class="pill p-med">medium</span>Per chat: a one-line Engine menu and a short chip</b><span class="m">Code chats with a folder pick the engine before the first message; it is fixed after. The chip reads "Claude Code · Account", with an amber dot if restricted. Section 6.</span></div></div>
+  <div class="rec"><span class="n">6</span><div><b><span class="pill p-hi">high</span>"Restricted" is a chip on the row</b><span class="m">Not used in 0.1.14: Codex runs in full mode (the owner approved it) and Claude Code is checked before every action. The chip exists for a later engine. Hover or tap the chip for what it means; the legend and the review at the end of a run are shown once in section 5.</span></div></div>
+  <div class="rec"><span class="n">7</span><div><b><span class="pill p-med">medium</span>Per chat: a one-line Engine menu and a short chip</b><span class="m">Code chats with a folder pick the engine before the first message; it is fixed after. The chip reads "Claude Code · Account". Section 6.</span></div></div>
   <div class="rec"><span class="n">8</span><div><b><span class="pill p-hi">high</span>The engine's steps and prompts look like Bunny's</b><span class="m">Same step lines, Changes pane and permission prompt, a small engine tag; Bunny's rules decide first; if Bunny cannot check an action the run stops and says so. Section 7.</span></div></div>
   <div class="rec"><span class="n">9</span><div><b><span class="pill p-hi">high</span>Updates are Bunny's tested versions, with a way back</b><span class="m">An engine never updates itself. Update downloads and checks the new version, keeps the old one, offers Roll back in the ⋯ menu. A failed check leaves the old version in use. Section 3.</span></div></div>
 </section>
 
 <section class="card">
   <h2>2. The control: two-option Local | Account (approved)</h2>
-  <p class="mute">Both choices are written out and the chosen one is filled. "Account, sign-in expired" turns the Account half amber, Aider is Local and fixed (greyed), and each half is a radio button for a screen reader ("Account, selected"). The earlier labelled toggle (A) was not chosen and is not built.</p>
+  <p class="mute">Both choices are written out and the chosen one is filled. "Account, sign-in expired" turns the Account half amber, and each half is a radio button for a screen reader ("Account, selected"). The earlier labelled toggle (A) was not chosen and is not built.</p>
   <div class="app" id="alt-b"></div>
 </section>
 
@@ -158,29 +158,28 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     <tbody>
       <tr><td><b>Claude Code</b></td><td>Account</td><td>Local (with the Anthropic note)</td><td>Yes: a hook runs before every tool call and asks Bunny</td><td>Restricted (staged copy)</td></tr>
       <tr><td><b>Codex CLI</b></td><td>Local</td><td>Account (its own login, to confirm)</td><td>Yes, through its approval requests</td><td>Runs in full mode (approved by the owner)</td></tr>
-            <tr><td><b>Aider</b></td><td>Local only</td><td>none</td><td>No: no hook and no approval channel</td><td>Restricted until its trial run passes</td></tr>
     </tbody>
   </table></div>
-  <p class="mute">Rule kept: an engine is offered only if its check passes; "restricted" is the owner-approved fallback, not a weaker version of the rule. How a row looks if the check fails is in the states above (Aider, restricted). Cline is not offered in 0.1.14.</p>
+  <p class="mute">Rule kept: an engine is offered only if its check passes; "restricted" is the owner-approved fallback, not a weaker version of the rule. In 0.1.14 only Claude Code and Codex CLI are offered; Cline and Aider are left out.</p>
 </section>
 
 <section class="card">
-  <h2>5. Restricted, said once</h2>
+  <h2>5. Restricted, said once (held back: no engine in 0.1.14 runs restricted)</h2>
   <div class="twocol">
     <div><div class="lab">What the chip's tooltip says</div><div class="app"><div class="callout wr"><b>Restricted.</b> Bunny cannot ask before every step the way it does with its own engine, so this engine works in a copy of your folder, saves every edit as a commit you can undo, cannot run shell commands, and Bunny shows what changed before anything reaches your folder. It could still read a file outside the copy if the model names its path; Bunny blocks the known routes and tests this first.</div></div></div>
-    <div><div class="lab">When a restricted run ends</div><div class="app"><div class="perm"><h5>Aider changed 2 files in a copy of your folder</h5><div class="diff"><div>notes/summary.md</div><div class="a">+ Added a short summary of the meeting.</div><div class="r">- Old draft line removed.</div><div>todo.txt</div><div class="a">+ Call the accountant.</div></div><div class="acts"><span class="btn2 pri">Keep the changes</span><span class="btn2">Show all</span><span class="btn2">Discard</span></div></div></div></div>
+    <div><div class="lab">When a restricted run ends</div><div class="app"><div class="perm"><h5>The engine changed 2 files in a copy of your folder</h5><div class="diff"><div>notes/summary.md</div><div class="a">+ Added a short summary of the meeting.</div><div class="r">- Old draft line removed.</div><div>todo.txt</div><div class="a">+ Call the accountant.</div></div><div class="acts"><span class="btn2 pri">Keep the changes</span><span class="btn2">Show all</span><span class="btn2">Discard</span></div></div></div></div>
   </div>
 </section>
 
 <section class="card">
   <h2>6. Per chat: the Engine menu and the chip</h2>
   <div class="twocol">
-    <div><div class="lab">Version 2 (before): two lines per engine</div><div class="app"><div class="menu"><div class="mi f"><span>Bunny<br><small>Default · always there</small></span></div><div class="mi"><span>Claude Code<br><small>v2.1.311 · account</small></span></div><div class="mi"><span>Codex CLI<br><small>v0.170.0 · local</small></span></div><div class="mi dis"><span>Aider<br><small>Not installed · set up in Settings</small></span></div></div></div></div>
-    <div><div class="lab">Version 3 (now): one line per engine</div><div class="app"><div class="menu"><div class="mi f"><span>Bunny</span><small>Default</small></div><div class="mi"><span>Claude Code · Account</span><small>v2.1.311</small></div><div class="mi"><span>Codex CLI · Local</span><small>v0.170.0</small></div><div class="mi dis"><span>Aider</span><small>Not installed</small></div></div></div></div>
+    <div><div class="lab">Version 2 (before): two lines per engine</div><div class="app"><div class="menu"><div class="mi f"><span>Bunny<br><small>Default · always there</small></span></div><div class="mi"><span>Claude Code<br><small>v2.1.311 · account</small></span></div><div class="mi"><span>Codex CLI<br><small>v0.170.0 · local</small></span></div></div></div></div>
+    <div><div class="lab">Version 3 (now): one line per engine</div><div class="app"><div class="menu"><div class="mi f"><span>Bunny</span><small>Default</small></div><div class="mi"><span>Claude Code · Account</span><small>v2.1.311</small></div><div class="mi"><span>Codex CLI · Local</span><small>v0.170.0</small></div></div></div></div>
   </div>
   <div class="twocol">
     <div><div class="lab">Chip, version 2</div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="chipe">Claude Code · account</span></div><div class="d">This chat runs on Claude Code. To use another engine, start a new chat.</div><div class="acts"><span class="btn2">New chat with Bunny</span><span class="btn2">New chat…</span></div></div></div>
-    <div><div class="lab">Chip, version 3: one header line, the rest on hover</div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="acts"><span class="chipe">Claude Code · Account</span><span class="chipe">Aider · Local <i></i></span></span></div><div class="d">Hover the chip: "This chat runs on Claude Code (Account). To use another engine, start a new chat." The amber dot means restricted.</div></div></div>
+    <div><div class="lab">Chip, version 3: one header line, the rest on hover</div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="acts"><span class="chipe">Claude Code · Account</span></span></div><div class="d">Hover the chip: "This chat runs on Claude Code (Account). To use another engine, start a new chat."</div></div></div>
   </div>
 </section>
 
@@ -216,7 +215,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     </tbody>
   </table></div>
   <ul style="margin:6px 0 0;padding-left:20px;display:grid;gap:4px">
-    <li><b>Restricted Aider, pending its trial run:</b> offered in the restricted form drawn here. Cline is left out of 0.1.14, and Codex runs in full mode, both by the owner's word.</li>
+    <li><b>Left out of 0.1.14 by the owner's word:</b> Cline and Aider. Codex runs in full mode.</li>
     <li><b>Codex "Account":</b> drawn as its own login; confirm it exists before building.</li>
     <li><b>The go</b> to build, after Security's requirements.</li>
   </ul>
@@ -242,15 +241,14 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
   var MAIN=[
    {t:'B',name:'Bunny',ver:'built in',st:chip('Default','ac'),note:'Always there. Used for chats, Quick ask and every chat you do not give to another engine.'},
    {t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Signed in','ok'),note:'Account · every action checked first (hook). Switch to Local and the Anthropic note appears here.',mode:'account',btn:btn('Update to v2.1.327','pri'),mn:true},
-   {t:'CX',name:'Codex CLI',ver:'v0.170.0',st:chip('Ready','ok'),note:'Local · full mode (the owner approved it) · OpenAI or OpenRouter only (Responses API).',mode:'local',btn:'',mn:true},
-   {t:'AI',name:'Aider',ver:'not installed',st:chip('Restricted','wr'),note:'Local only · restricted until its trial run passes: a copy of your folder, edits are commits, no shell commands.',mode:'fixed',btn:btn('Download · size shown first','pri'),mn:false}
+   {t:'CX',name:'Codex CLI',ver:'v0.170.0',st:chip('Ready','ok'),note:'Local · full mode (the owner approved it) · OpenAI or OpenRouter only (Responses API).',mode:'local',btn:'',mn:true}
   ];
   function list(rows,v){return '<div class="grp">'+rows.map(function(r){return er(r,v);}).join('')+'</div>';}
   function paint(){
     document.getElementById('v3main').innerHTML='<h4>Engines</h4>'+list(MAIN,variant);
     
     
-    document.getElementById('alt-b').innerHTML=list(MAIN.slice(1,4),'seg');
+    document.getElementById('alt-b').innerHTML=list(MAIN.slice(1,3),'seg');
     var S=[
      ['Not installed',{t:'CC',name:'Claude Code',ver:'not installed',st:chip('Account by default','ac'),note:'Installed from Anthropic\'s official installer, unmodified. Needs your Anthropic account.',mode:null,btn:btn('Download · 380 MB','pri')}],
      ['Installing',{t:'CX',name:'Codex CLI',ver:'v0.170.0',st:chip('Installing','ac'),note:'112 of 390 MB · 29%',prog:29,mode:null,btn:btn('Cancel')}],
@@ -261,8 +259,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
      ['Could not install',{t:'CX',name:'Codex CLI',ver:'v0.170.0',st:chip('Failed','bad'),note:'The file did not match its checksum, so it was thrown away. Nothing was installed.',mode:null,btn:btn('Try again','pri')}],
      ['Turning Account on',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Waiting for sign-in','ac'),note:'A sign-in window is open. Finish there, or Cancel to stay on Local.',mode:'pending',btn:btn('Cancel'),mn:true}],
      ['Sign-in expired',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Sign-in expired','wr'),note:'Account needs you to sign in again.',mode:'warn',btn:btn('Sign in again…','pri'),mn:true}],
-     ['Window closed early',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Local','ok'),note:'Sign-in was not finished, so this engine is back on Local. '+CCN,wrap:true,mode:'local',mn:true}],
-     ['Aider, restricted (pending its trial run)',{t:'AI',name:'Aider',ver:'v0.86.0',st:chip('Restricted','wr'),note:'Works in a copy of your folder, edits are commits, no shell commands. Offered fully only after its trial run passes.',mode:'fixed',mn:true}]
+     ['Window closed early',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Local','ok'),note:'Sign-in was not finished, so this engine is back on Local. '+CCN,wrap:true,mode:'local',mn:true}]
     ];
     document.getElementById('states').innerHTML=S.map(function(s){return '<div class="c">'+s[0]+'</div><div class="grp">'+er(s[1],variant)+'</div>';}).join('');
     document.getElementById('p-set').innerHTML='<h4>Engines</h4><div class="d">Only Bunny\'s window can change these.</div><div class="grp">'+MAIN.map(function(r){var q=Object.assign({},r,{btn:'',mn:false});if(q.mode==='account'){q.note='Account · every action checked first';}return er(q,variant);}).join('')+'</div>';
@@ -272,8 +269,8 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     var v3=document.getElementById('v3main');var img=document.getElementById('v2l');
     var d=document.documentElement,dark=d.getAttribute('data-theme')?d.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
     var im=dark?document.getElementById('v2d'):img;var h2=im.getBoundingClientRect().height,h3=v3.getBoundingClientRect().height;
-    if(!h2||!h3)return;if(v3.getBoundingClientRect().width<700){document.getElementById('stat').innerHTML='<div><b>about half</b>the height per engine, measured at desktop width (open this page wider to see the numbers)</div><div><b>4 rows</b>one per engine, no extra blocks</div>';return;}var scale=im.naturalWidth?im.getBoundingClientRect().width/im.naturalWidth:1;
-    document.getElementById('stat').innerHTML='<div><b>'+Math.round(h2/5)+' px</b>per engine, version 2</div><div><b>'+Math.round(h3/4)+' px</b>per engine, version 3</div><div><b>'+Math.round((1-(h3/4)/(h2/5))*100)+'% less</b>less height for each engine (version 2 pictures five, version 3 four)</div><div><b>4 rows</b>one per engine, no extra blocks</div>';
+    if(!h2||!h3)return;if(v3.getBoundingClientRect().width<700){document.getElementById('stat').innerHTML='<div><b>about half</b>the height per engine, measured at desktop width (open this page wider to see the numbers)</div><div><b>3 rows</b>one per engine, no extra blocks</div>';return;}var scale=im.naturalWidth?im.getBoundingClientRect().width/im.naturalWidth:1;
+    document.getElementById('stat').innerHTML='<div><b>'+Math.round(h2/5)+' px</b>per engine, version 2</div><div><b>'+Math.round(h3/3)+' px</b>per engine, version 3</div><div><b>'+Math.round((1-(h3/3)/(h2/5))*100)+'% less</b>less height for each engine (version 2 pictures five, version 3 three)</div><div><b>3 rows</b>one per engine, no extra blocks</div>';
   }
   
   document.getElementById('theme').addEventListener('click',function(){var r=document.documentElement,d=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',d?'light':'dark');setTimeout(fitStat,60);});
