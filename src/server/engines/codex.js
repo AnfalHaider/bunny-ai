@@ -126,6 +126,8 @@ const IGNORED_NOTIFICATIONS = /^(configWarning|warning|remoteControl\/|thread\/(
 export function createCodexDriver({ send, judgeCommand, judgeChanges, schema, queue = createEventQueue(), onWatchdog = () => {}, planMode = false } = {}) {
   const pending = new Map(); let nextId = 1;
   const items = new Map(); const accepted = new Set(); const declined = new Set();
+  const granted = new Set(); // EN-9 (proven on 0.170.0): after acceptForSession Codex does not ask again for the SAME command text for the rest of the session; nothing else
+
   let tripped = false; let finished = false; let usage = { input: 0, output: 0 }; let threadId = null; let turnId = null; const textOpen = new Map();
 
   const request = (method, params) => new Promise((resolve, reject) => { const id = nextId++; pending.set(id, { resolve, reject, method }); send({ jsonrpc: '2.0', id, method, params }); });
@@ -141,14 +143,16 @@ export function createCodexDriver({ send, judgeCommand, judgeChanges, schema, qu
     if (method === 'item/commandExecution/requestApproval') {
       const verdict = await judgeCommand(params ?? {});
       if (verdict.allow) accepted.add(params?.itemId); else declined.add(params?.itemId);
+      const forSession = verdict.allow && verdict.forSession === true && typeof params?.command === 'string' && params.command.length > 0;
+      if (forSession) granted.add(params.command);
       queue.push({ type: 'approval', requestId: String(params?.itemId ?? id), name: 'run_command' });
-      reply(id, { decision: verdict.allow ? (verdict.forSession === true ? 'acceptForSession' : 'accept') : 'decline' }); // acceptForSession only when the person clicked "Allow for this chat" (ENGINE-RULES); the bridge never sets it otherwise
+      reply(id, { decision: verdict.allow ? (forSession ? 'acceptForSession' : 'accept') : 'decline' }); // acceptForSession only when the person clicked "Allow for this chat" (ENGINE-RULES); the bridge never sets it otherwise
     } else if (method === 'item/fileChange/requestApproval') {
       const item = items.get(params?.itemId);
       const verdict = item?.changes ? await judgeChanges(item.changes) : { allow: false, reason: 'The file change could not be read.' };
       if (verdict.allow) accepted.add(params?.itemId); else declined.add(params?.itemId);
       queue.push({ type: 'approval', requestId: String(params?.itemId ?? id), name: 'edit_file' });
-      reply(id, { decision: verdict.allow ? (verdict.forSession === true ? 'acceptForSession' : 'accept') : 'decline' });
+      reply(id, { decision: verdict.allow ? 'accept' : 'decline' }); // a file change is never granted for the session (Codex asks for every patch anyway: proven)
     } else if (method === 'applyPatchApproval' || method === 'execCommandApproval') {
       reply(id, { decision: 'denied' });
     } else if (method === 'mcpServer/elicitation/request') {
@@ -165,6 +169,7 @@ export function createCodexDriver({ send, judgeCommand, judgeChanges, schema, qu
     if (type === 'commandExecution' || type === 'fileChange') {
       if (kind === 'started') {
         items.set(item.id, item);
+        if (type === 'commandExecution' && granted.has(String(item.command ?? ''))) accepted.add(item.id); // the person allowed this exact command for the chat: Codex runs it without asking, and that is not a missing check
         const mapped = type === 'fileChange' ? mapCodexChanges(item.changes) : [{ name: 'run_command', command: item.command }];
         queue.push({ type: 'tool-start', callId: item.id, name: mapped[0]?.name ?? 'run_command', input: type === 'fileChange' ? { paths: (item.changes ?? []).map((c) => c?.path).filter(Boolean) } : { command: String(item.command ?? '') }, engineTool: type });
         return;

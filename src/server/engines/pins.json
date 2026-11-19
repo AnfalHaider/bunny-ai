@@ -27,6 +27,7 @@
       "version": "0.170.0",
       "label": "Codex CLI",
       "licenceName": "Apache-2.0",
+      "sessionAllow": true,
       "licence": "Apache-2.0",
       "entry": "codex-x86_64-pc-windows-msvc.exe",
       "signature": "OpenAI OpCo, LLC",

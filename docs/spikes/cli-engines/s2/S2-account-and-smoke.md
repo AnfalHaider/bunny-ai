@@ -35,3 +35,23 @@ See `../s1/ER-4-prompt-tool.md`, finding 3: Bunny's Messages translator drove th
 Cause: the unelevated Windows sandbox makes a **capability SID per `CODEX_HOME`** (the `cap_sid` file) the first time a command runs and grants it access: `codex.exe` burns CPU (about 85 s of CPU in the first 90 s) while PowerShell itself starts in 0.3 s. Not PowerShell's cold start, and not Defender (`MsMpEng` was not the busy process). It is per home, not per project folder. Each chat's fresh SID also leaves its own grants on the project folder.
 
 Fix built (`src/server/engines/sandbox-seed.js`): after the first Codex run, the two identity files are kept once under `engines\codex\sandbox-seed` and copied into each new chat home. Nothing else is shared (no config, state, logs or sign-in), the seed goes with the engine on Remove, and a second home never replaces it. The very first Codex chat on a PC still waits once. **For Security:** the seed makes every Codex chat use one capability SID instead of one each. It is not a credential, but it is one shared identity for the sandbox of every chat: please say if that crosses CE-3. (A one-time warm-up at download time would remove even the first wait; not built.)
+
+## EN-9: what `acceptForSession` does on Codex 0.170.0 (measured 2026-11-19, `cx-grant.mjs`)
+
+Real binary, no watchdog (so the whole session could be watched), Bunny's own endpoint and Responses translator, a scripted model, invented project and data folders, `untrusted`. The first command approval was answered `acceptForSession`; every later approval `accept`. Nine scripted calls:
+
+| Call | Asked again? |
+|---|---|
+| the same command text again (`echo ONE > one.txt`) | **No: it ran with no request** (twice, also at the very end) |
+| same program, other arguments (`echo TWO > two.txt`) | Yes |
+| another program (`dir`) | Yes |
+| a command that names the (invented) data folder | Yes |
+| `apply_patch` adding a file in the project | **Yes** |
+| `apply_patch` adding a file in the data folder (absolute path) | **Yes** (reached the bridge) |
+| `apply_patch` with a `../data/...` path | **Yes** (reached the bridge) |
+
+So the grant is **the exact command text, for the rest of the session (thread)**, and nothing else. Every patch, including a patch to a floor path, still reaches Bunny. The approval request itself also carries `proposedExecpolicyAmendment` and `availableDecisions`: not used (a prefix rule would be wider than the person's click).
+
+Built to match: the watchdog treats an item whose command text is exactly one the person granted as covered (it does not trip); any other unasked item still trips; `acceptForSession` is sent only for a command approval, never for a patch; a card for a patch, or for a command flagged as naming a floor path, does not offer "Allow for this chat". The button is offered only where the pin says it is proven (`pins.json`: `codex.sessionAllow`, true for 0.170.0; a new pin reruns this).
+
+Limit: a floor-flagged command is never offered the session grant, but a command whose text does not name a floor path and reads one through a script can still be granted for the session. That is the same limit as Codex's one-off Allow (Bunny cannot see what a command reads).

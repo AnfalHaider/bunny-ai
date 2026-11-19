@@ -229,7 +229,7 @@ export function createBridge(ctx) {
     const summary = summaryOf(call);
     if (f.deny) return { allow: false, reason: f.deny, name: call.name ?? 'unknown', risk: RISK[call.name] ?? 'run', summary };
     const detail = `${call.command ?? call.path ?? call.engineTool ?? ''}${f.flag ? `\n\n${f.flag}` : ''}`.trim();
-    if (offerSession) { const a = await askedSession(summary, detail); return a.ok ? { allow: true, ...(a.session ? { forSession: true } : {}), reason: 'Allowed by the person.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true }; }
+    if (offerSession && !f.flag) { const a = await askedSession(summary, detail); return a.ok ? { allow: true, ...(a.session ? { forSession: true } : {}), reason: 'Allowed by the person.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true }; }
     const ok = await asked(summary, detail);
     return ok ? { allow: true, reason: 'Allowed by the person.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true };
   }
@@ -250,9 +250,8 @@ export function createBridge(ctx) {
       for (const c of calls) { const f = await floor(c); if (f.deny) return { allow: false, reason: f.deny, name: c.name ?? 'unknown', risk: 'edit', summary: summaryOf(c) }; }
       const first = calls[0];
       const list = calls.map((c) => c.path).filter(Boolean).slice(0, 8).join('\n');
-      const a = await askedSession(calls.length === 1 ? summaryOf(first) : `Change ${calls.length} files`, list);
-      const ok = a.ok;
-      return ok ? { allow: true, ...(a.session ? { forSession: true } : {}), reason: 'Allowed by the person.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true } : { allow: false, reason: 'The person did not allow this.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true };
+      const ok = await asked(calls.length === 1 ? summaryOf(first) : `Change ${calls.length} files`, list); // no session answer on a patch: Codex asks for every patch whatever was granted
+      return ok ? { allow: true, reason: 'Allowed by the person.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true } : { allow: false, reason: 'The person did not allow this.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true };
     },
     /** The engine's own question (its prompt tool): the floor, then a card. */
     async claudeAsk({ tool, input }) { return relay(mapClaudeCall(tool, input)); },

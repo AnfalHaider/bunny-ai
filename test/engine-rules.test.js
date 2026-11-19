@@ -289,3 +289,36 @@ test('Allow for this chat, through the app: the card carries forSession only for
   const saved = (await json(base, `/api/sessions/${made.id}`)).body;
   assert.ok(saved.messages.some((m) => /asked/.test(m.tool ?? '') && /allowed it for this chat/i.test(m.result ?? '')), 'the answer is a step in the chat');
 });
+
+test('EN-9 (proven on Codex 0.170.0): a session grant covers only the SAME command text: the watchdog lets that command run without a new ask and still trips for any other unasked item; a patch is never granted; a card for a patch or a floor-flagged command does not offer it', async () => {
+  const { createEventQueue } = await import('../src/server/engines/events.js');
+  const sent = []; const q = createEventQueue(); let tripped = null;
+  const d = createCodexDriver({ queue: q, send: (m) => sent.push(m), onWatchdog: (why) => { tripped = why; }, judgeCommand: async () => ({ allow: true, forSession: true }), judgeChanges: async () => ({ allow: true, forSession: true }) });
+  const feed = (o) => d.feed(JSON.stringify({ jsonrpc: '2.0', ...o }));
+  const cmd = 'powershell.exe -Command \'echo ONE\'';
+  await feed({ id: 1, method: 'item/commandExecution/requestApproval', params: { itemId: 'a', command: cmd } });
+  assert.equal(sent.at(-1).result.decision, 'acceptForSession');
+  await feed({ method: 'item/started', params: { item: { id: 'a', type: 'commandExecution', command: cmd } } });
+  await feed({ method: 'item/completed', params: { item: { id: 'a', type: 'commandExecution', command: cmd, status: 'completed' } } });
+  // the same text again: Codex runs it with no ask (proven), and that is not a missing check
+  await feed({ method: 'item/started', params: { item: { id: 'b', type: 'commandExecution', command: cmd } } });
+  await feed({ method: 'item/completed', params: { item: { id: 'b', type: 'commandExecution', command: cmd, status: 'completed' } } });
+  assert.equal(tripped, null, 'the granted command does not trip the watchdog');
+  // another command with no ask (a different program or other arguments): the check did not run
+  await feed({ method: 'item/started', params: { item: { id: 'c', type: 'commandExecution', command: 'powershell.exe -Command \'echo TWO\'' } } });
+  await feed({ method: 'item/completed', params: { item: { id: 'c', type: 'commandExecution', command: 'x', status: 'completed' } } });
+  assert.match(tripped ?? '', /check did not run/);
+  // a patch is never granted for the session, even if the verdict says so
+  const sent2 = []; const d2 = createCodexDriver({ queue: createEventQueue(), send: (m) => sent2.push(m), judgeCommand: async () => ({ allow: true }), judgeChanges: async () => ({ allow: true, forSession: true }) });
+  await d2.feed(JSON.stringify({ jsonrpc: '2.0', method: 'item/started', params: { item: { id: 'p', type: 'fileChange', changes: [{ path: 'a.txt', kind: { type: 'add' } }] } } }));
+  await d2.feed(JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'item/fileChange/requestApproval', params: { itemId: 'p' } }));
+  assert.equal(sent2.at(-1).result.decision, 'accept');
+  // the bridge: no third answer on a patch card or on a command that names the floor
+  const { dataDir, bridge } = await world();
+  const offered = []; const b2 = createBridge({ mode: 'auto', rules: [], root: await mkdtemp(join(tmpdir(), 'bunny-sess-')), protect: [dataDir], keyFolders: [], ask: async (_s, _d, o) => { offered.push(Boolean(o?.forSession)); return true; } });
+  await b2.codexChangesRelay([{ path: 'new.txt', kind: { type: 'add' } }]);
+  await b2.codexCommandRelay({ command: `type "${join(dataDir, 'keys.bin')}"` });
+  await b2.codexCommandRelay({ command: 'dir' });
+  assert.deepEqual(offered, [false, false, true]);
+  void bridge;
+});
