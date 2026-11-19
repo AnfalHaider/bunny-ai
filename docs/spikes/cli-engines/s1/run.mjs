@@ -44,6 +44,10 @@ const SCENARIOS = {
   'e-killed-baseline': { calls: ['Write', 'Bash', 'WebFetch', 'Mcp', 'ReadCanary', 'Read'], hook: 'killed', sources: 'bunny', note: 'same calls, hook killed, no extra layer' },
   'e-killed-denyrule': { calls: ['Read', 'Glob', 'Grep'], hook: 'killed', sources: 'bunny', extraArgs: ['--permission-prompts', 'none'], deny: ['Read(./secret.txt)', 'Read(./protected/**)'], note: 'hook killed, but Bunny wrote deny rules for its protected paths into its own settings' },
   'f-network-proxy': { calls: ['Read'], hook: 'deny', sources: 'bunny', proxy: true, note: 'every outbound HTTP(S) attempt that honours the proxy variables is logged; only the stand-in (127.0.0.1) should be contacted directly' },
+  'r-restricted-hook-allow': { calls: ['Bash', 'PowerShell', 'Mcp', 'Task', 'ReadCanary', 'Read', 'Write', 'WebFetch', 'Glob', 'Grep'], hook: 'allow', sources: 'bunny', extraArgs: ['--restricted'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' }, note: 'the hook ALLOWS everything, so any denial is the engine itself (--restricted)' },
+  'r-restricted-hook-deny': { calls: ['Read', 'ReadCanary'], hook: 'deny', sources: 'bunny', extraArgs: ['--restricted'], note: 'restricted plus the hook: the hook still fires and denies' },
+  'r-restricted-canary-allow': { calls: ['ReadCanary'], hook: 'allow', sources: 'bunny', extraArgs: ['--restricted'] },
+  'r-restricted-killed': { calls: ['Bash', 'PowerShell', 'Mcp', 'Task', 'ReadCanary', 'Read', 'Write', 'WebFetch', 'Glob', 'Grep'], hook: 'killed', sources: 'bunny', extraArgs: ['--restricted', '--permission-prompts', 'none'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } },
   'a-control-allow': { calls: ['Read', 'Write', 'Bash', 'Mcp'], hook: 'allow', sources: 'bunny' },
   'b-default-sources': { calls: ['Read'], hook: 'deny', sources: 'default', noBunnyHook: true },
   'b-bunny-sources-only': { calls: ['Read'], hook: 'deny', sources: 'bunny' },
@@ -123,6 +127,8 @@ async function run(name) {
   lines.push(`command: claude.exe ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`);
   lines.push(`hook mode: ${sc.hook}${sc.hookCmd ? ` (${sc.hookCmd})` : ''}   timeout: ${sc.timeout ?? 'default'}   setting sources: ${sc.sources}`);
   lines.push(`scripted calls: ${sc.calls.join(', ')}`);
+  const init = stdout.split(String.fromCharCode(10)).filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).find((e) => e?.type === 'system' && e.subtype === 'init');
+  lines.push(`system/init tools: ${init ? JSON.stringify(init.tools) : '(no init event)'}   mcp_servers: ${init ? JSON.stringify((init.mcp_servers ?? []).map((m) => `${m.name}:${m.status}`)) : ''}   permissionMode: ${init?.permissionMode}`);
   lines.push(`bunny hook saw (${hookLines.length}): ${hookLines.map((h) => h.tool + (h.agent ? `[sub:${h.agent}]` : '')).join(', ') || '(nothing)'}`);
   lines.push(`project .claude hook fired: ${read(log.projHook).split('\n').filter(Boolean).length} times; fake-home ~/.claude hook fired: ${read(log.userHook).split('\n').filter(Boolean).length} times`);
   lines.push(`secret.txt content reached the model endpoint (the tool RAN): ${stubText.includes(SECRET)}`);
