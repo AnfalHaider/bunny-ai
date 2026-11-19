@@ -16,6 +16,7 @@ Risk: **HIGH**: a new execution engine, a permission bridge, third-party code do
 6. "yes run the real test, codex approved, leave cline out of 0.1.14" (ca501c9): R23 is accepted for Codex, and Cline is out.
 7. **"lets remove cline and other for now, just focus on codex and claude."** (2026-11-19, relayed by the Chief of Staff.) This is the scope of v0.1.14.
 8. "also i am thinking we have this option in settings in engines, where we disable bunny engine if done we follow the enabled engines rules, bunny stays on by default." (2026-11-19, relayed by the Chief of Staff.) This is ENGINE-RULES (§3.7).
+9. "there should be an option to use all engines both signed in and out. with recomendations where applicable." (2026-11-19, relayed by the Chief of Staff.) This means both auth modes for every engine, and `recommendedAuth` (§7, §7.4).
 
 **What follows:**
 - **Two engines:** Claude Code and Codex CLI, in full mode. Restricted mode stays as each engine's fallback (§0.2).
@@ -112,7 +113,9 @@ export const profile = {
   transport: 'jsonl' | 'json-rpc',          // how events arrive (1.3)
   wire: 'messages' | 'responses',           // what it sends to the local endpoint (2.1), local mode only
   auth: ['account', 'local'],               // both engines support both (7)
-  defaultAuth: 'account' | 'local',         // Claude Code: account; Codex: local
+  recommendedAuth: 'account' | 'local',     // shown as "Recommended" with recommendedReason (7); Claude Code: account; Codex: local
+  recommendedReason: string,                // the one line Settings shows beside it
+  authAvailable: { account: true | 'greyed: <reason>', local: true | 'greyed: <reason>' },  // e.g. Codex account greyed until S2-account passes (7.4)
   resume: true,                             // both can resume their own session (1.5)
   expectedTools: { full: [...], restricted: [...] },  // the tool-list check (CE-1.16, and §3.2 for Claude Code)
 };
@@ -608,7 +611,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 
 ### 5.3 End-to-end (Playwright, invented profile, fake engine)
 
-- **Settings → Engines lists exactly two engines**, Claude Code and Codex CLI. For each: the auth-mode choice (Sign in with an account, or Operate locally); the local-mode note on Claude Code; download with progress and Cancel; update; rollback; Remove; the size on disk; the record. Both themes, at phone and desktop widths (O3, O8).
+- **Settings → Engines lists exactly two engines**, Claude Code and Codex CLI. For each: the two-way auth choice (Signed in / Signed out), with "Recommended" and its reason on the right one (Claude Code: signed in; Codex: signed out); Codex's signed-in option greyed with its reason while S2-account is open, and the device-auth button with its ChatGPT-settings note once it isn't; the local-mode note on Claude Code; download with progress and Cancel; update; rollback; Remove; the size on disk; the record. Both themes, at phone and desktop widths (O3, O8).
 - **A Code-mode chat on each fake engine:** steps, Verbose results, the Changes pane and Stop work; an Ask card is answered; Plan mode refuses.
 - **The watchdog:** a run stopped by it offers restricted mode. Accepting shows the restricted line and Bunny's file review.
 - Switching engine applies to new chats only. Help text and pictures ship with the screen (O7, PICTURE-CHECK).
@@ -636,6 +639,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 
 | Spike | Result |
 |---|---|
+| **S2-account line** (Builder C) | **Owed:** Codex app-server with a ChatGPT login, six checks in §7.4. If it fails, Codex account mode is greyed out. |
 | S1, Claude Code 2.1.311 (e1e568f, c532469, 7b1f864, 2a92e8f, 4b74686) | **Done.** Full mode with CE-1.7 to CE-1.11 (§3.2). Nothing owed. |
 | S2, Codex 0.170.0 (401bd92, and the addendum 2675249) | **Done.** Full mode with CE-1.12 to CE-1.17 (§3.2). The CE-1.15 line is **settled** (Security 53cceb0): with an explicit `untrusted` entry, a project `.codex/rules` isn't read, and every command still asks. Nothing owed. |
 | S3, Cline (767c4ea) | Done, and failed: §11. |
@@ -652,6 +656,7 @@ The canary rule stays for every future pin: the canary's unique string is search
 4. **The Claude Code adapter in account mode**, full and restricted, with its argument, hook and watchdog tests. Account mode needs no translator.
 5. **The Messages translator**, for Claude Code in local mode.
 6. `store.js`, `pins.json` and the `/api/engines` routes, plus the sign-in and sign-out flows (§7.1) and the CE-6 `isDeviceRefused` changes.
+   - Also here: the per-engine auth choice with `recommendedAuth`, and Codex account mode (§7.4) once the S2-account line passes. Until then, Codex's signed-in option is greyed out.
 7. **The Settings → Engines screens**, from Design's drawing (v7: two engines, with the fallback flow): the auth-mode choice, the restricted line, the sign-in states, download, update, rollback and Remove, the record, and the local-mode note.
 8. The "engine pins" gate step, `engine-smoke.mjs`, help text and pictures.
 9. **ENGINE-RULES (§3.7)**, after the S1 prompt-tool line:
@@ -668,14 +673,22 @@ The canary rule stays for every future pin: the canary's unique string is search
 
 ## 7. Auth modes: account or local (owner's word 4)
 
-**The choice.** Settings → Engines shows, in front of each engine, **Sign in with an account** or **Operate locally**.
-- It is kept per engine as `engines.<id>.auth`: window-only, and device-refused.
+**The owner:** "there should be an option to use all engines both signed in and out. with recomendations where applicable." (2026-11-19, relayed by the Chief of Staff.)
+
+**The choice.** Settings → Engines shows, in front of each engine, **Signed in: your <vendor> account** or **Signed out: Bunny's models**.
+- **Every engine offers both** where it can work at all.
+- The **recommended** one is marked "Recommended", with its one-line reason from the table below. The person may pick either.
+- It is kept per engine as `engines.<id>.auth`: window-only, and device-refused. Until the person chooses, it is `recommendedAuth`.
 - A chat records the engine and mode it started with.
 
-| Engine | local | account | Default |
+| Engine | Signed out (local) | Signed in (account) | `recommendedAuth`, and the reason shown |
 |---|---|---|---|
-| Claude Code | `/v1/messages` through the Messages translator, with the note in §7.2 | `claude auth login` in a visible terminal, in the account-mode `CLAUDE_CONFIG_DIR` (report §7a). Claude models on the owner's Anthropic plan | account |
-| Codex CLI | `/v1/responses` through the Responses translator, with `requires_openai_auth = false` | Codex's own login, in the account-mode `CODEX_HOME` **[R20]** | local |
+| Claude Code | `/v1/messages` through the Messages translator, with the note in §7.2 | `claude auth login` in a visible terminal, in the account-mode `CLAUDE_CONFIG_DIR` (report §7a). Claude models on the owner's Anthropic plan | **account**: "Anthropic supports Claude Code with your own Claude account. Bunny's models work too, but aren't supported by Anthropic." |
+| Codex CLI | `/v1/responses` through the Responses translator, with `requires_openai_auth = false` | Codex's own ChatGPT sign-in, in the account-mode `CODEX_HOME` (§7.4) | **local**: "Works with your own providers through Bunny, with no paid plan." |
+
+**Why Codex recommends local.** Researcher's 070623f recommends local only where the provider serves the Responses API natively. But Bunny's endpoint **translates Responses to Chat Completions** (§2.1), so local works with any provider Bunny has, which is what R4 (free only) asks for. Account mode depends on a ChatGPT plan's Codex allowance, and the Free and Go plans' limits are UNKNOWN (070623f).
+
+**A provider that can't do tools** still fails the run with Bunny's existing message, in either engine's local mode (§2.3).
 
 ### 7.1 Account mode: what Bunny does and does not do
 
@@ -711,6 +724,35 @@ engines\<id>\<mode>\chat\<chat>\   per-chat session files
 - The two modes never share a folder.
 - Incognito chats get a temporary chat folder that is removed after the reply.
 
+
+### 7.4 Codex account mode: signing in with ChatGPT (Researcher 070623f)
+
+- **The home:** the account-mode `CODEX_HOME` (`engines\codex\account\shared`). Bunny's per-run `config.toml` there always sets **`cli_auth_credentials_store = "file"`**, so the login lands in `auth.json` inside that home.
+  - With `keyring` or `auto`, it would go to the Windows credential store. There, Bunny couldn't keep the modes apart, and it might collide with the person's own Codex login. Whether a keyring entry is keyed by `CODEX_HOME` is UNKNOWN (R27), so the file store is required.
+- **Signing in:**
+  - From Bunny's window: a visible terminal runs the pinned `codex.exe login`, by absolute path, with only `CODEX_HOME` set, and the owner finishes in the browser.
+  - For a PC where the browser can't be reached: `codex login --device-auth`, offered as a second button. It must first be enabled in the person's ChatGPT security settings, and the button says so.
+  - Bunny never copies an `auth.json` in from anywhere.
+- **Bunny never opens `auth.json`** (CE-3.1). ChatGPT tokens refresh in place, so the file changes during runs. Bunny's per-run rewrite touches only `config.toml` by name, never `auth.json`.
+- **Sign-in state** comes from the CLI's own status output **[R21]**, or a run's error.
+- **Sign out** runs `codex logout` in that home, then deletes the home.
+- **The layers don't change.** Account mode still runs through `codex app-server` with CE-1.12 to CE-1.17. Only the model provider differs: no `model_providers.bunny`, no endpoint token, and Codex talks to OpenAI itself.
+  - `codex exec --json` is **not** used. It works with a ChatGPT login, but it has no approval channel, so it can't meet CE-1.12.
+- **The network check in account mode** (CE-1.14, `engine-smoke`) allows OpenAI's own hosts **[R28]**, and nothing else: no github.com, no plugin hosts.
+- **Usage:** the run shows as "billed by OpenAI (your ChatGPT plan)", with no token cost. Settings says plainly that the plan's Codex limits apply. Free and Go plan limits are UNKNOWN (070623f).
+
+**The spike line, S2-account (Builder C), owed before Codex account mode ships:**
+1. With `cli_auth_credentials_store = "file"` and a ChatGPT login in an isolated `CODEX_HOME`, `codex app-server` **reads that `auth.json`** and runs a turn under `untrusted`. This is UNKNOWN in the docs (R26).
+2. CE-1.12 to CE-1.17 hold unchanged: every command and patch asks, the tool list matches, the watchdog fires, and the untrusted project entry holds.
+3. **No Windows credential-store entry** is written, checked with `cmdkey /list` before and after.
+4. The hosts contacted, at a logging proxy, are OpenAI's only, with plugins and apps off (R28).
+5. The status command, and its output for signed in, signed out and expired (R21).
+6. `codex logout` removes the login, and the next run reports "Sign in again".
+
+**If (1) fails,** Codex account mode isn't offered. The signed-in option is greyed out with "needs a Codex update". Codex stays local only, which is its recommended mode anyway.
+
+**For an invented profile:** the spike uses a throwaway ChatGPT account the owner provides for testing, signed in by the owner themselves in the visible terminal. It is never the owner's real account, and no credential is ever handled by Builder C.
+
 ---
 
 ## 8. Open facts
@@ -718,7 +760,10 @@ engines\<id>\<mode>\chat\<chat>\   per-chat session files
 | Mark | Fact | If it comes back wrong |
 |---|---|---|
 | R13 | Which of Bunny's providers serve `/v1/responses` or `/v1/messages` natively | Always translate |
-| R20 | Codex's own login command, and where it writes the credential under `CODEX_HOME` | Codex is local only |
+| R20 | ~~Codex's own login command, and where it writes the credential~~ **Answered by 070623f:** `codex login` (or `--device-auth`), writing `auth.json` under `CODEX_HOME` with `cli_auth_credentials_store = "file"` | |
+| R26 | Whether `codex app-server` reads a CLI-saved ChatGPT `auth.json` and runs turns with it (S2-account, §7.4) | Codex account mode is greyed out; local only |
+| R27 | Whether a keyring credential entry is keyed by `CODEX_HOME` (moot while Bunny forces the file store) | The file store stays required |
+| R28 | OpenAI's hosts in Codex account mode, for the network allow-list | Set from the S2-account proxy log |
 | R21 | Each engine: a way to read the sign-in state without reading the credential | State known only from a run's error |
 | R22 | A per-chat session folder separate from the config home | A per-chat copy of the config |
 | R25 | The hosts GitHub redirects a release download through | The pin's `hosts` list is corrected at the first download |
@@ -797,6 +842,25 @@ The spikes are run by Builder B, after Researcher's report. Until a spike passes
 6. **No process outlives the run** (CE-8.2), and the prompt can go by stdin or the protocol, not the command line (CE-8.1).
 7. **A structured event stream** the adapter can read (jsonl or json-rpc), and **local mode with no account**, through the Messages or Responses wire or a new wire the endpoint would add.
 8. **The licence lets Bunny download and run it** for the person, and it installs from hash-pinned files with no install scripts (CE-5).
+
+**Recommended mode per candidate** (Researcher 070623f; each offers both modes where it can, as owner's word 9 asks):
+
+| Candidate | Recommended | Why | The other mode |
+|---|---|---|---|
+| Gemini CLI | **account** (Google sign-in) **until the Gemini wire exists**, then for the owner to choose again | Its free sign-in tier has 1,000 requests a day, and local mode needs a new translator (below). The owner should read the data-use terms of both free routes first (UNKNOWN in 070623f) | local, through the Gemini wire, later; greyed with "needs a Gemini adapter (not built)" until then |
+| OpenCode | **local** | It takes an OpenAI-compatible endpoint with a key from the environment; no account is needed | account: not offered unless its spike finds a reason |
+| Goose | **local** | Its providers are OpenAI-compatible, telemetry is off by default, and no account is part of its design | account: not needed |
+| Qwen Code | **local** | `modelProviders` takes a `baseUrl` and an `envKey`; its own sign-in is now a paid subscription, so there's no R4 case | account: paid, prices UNKNOWN |
+
+**The Gemini wire, a later translator for Gemini CLI's local mode.** Built only if S5 passes.
+- **How Gemini CLI reaches Bunny:** `GOOGLE_GEMINI_BASE_URL` set to Bunny's loopback endpoint selects its **`gateway`** auth type, with no Google account. The run's token travels as the `x-goog-api-key` header, through `GEMINI_API_KEY` in the environment. CE-4's checks apply unchanged, reading the token from that header.
+- **What Bunny serves:** `translate/gemini.js` answers `POST /v1beta/models/{model}:generateContent` and `:streamGenerateContent`.
+  - In: `contents`, `systemInstruction`, `tools[].functionDeclarations`, `generationConfig`.
+  - Out: `candidates[].content.parts` (text, or `functionCall` with `name`, `id` and `args`), `usageMetadata`.
+  - It maps both ways to Chat Completions, tool calls and results included, plus streaming and token counts.
+  - The model name in the path is ignored (§2.3).
+- **What S5 must log:** every path the CLI requests at the fake upstream, including `countTokens`, `embedContent` and any second "router" model call. Each is answered or refused cleanly.
+- **The profile:** `wire: 'gemini'` joins the union in §1.2, with an isolated `GEMINI_CLI_HOME` for each mode (CE-3.3).
 
 **Adding a candidate that passes** takes a new adapter file, a `profile` (§1.2), a `pins.json` entry, its fixtures and argument tests, and a Security sign-off. Design adds a row. The shared parts (bridge, staging, endpoint, store) don't change, unless it needs a new transport, wire or runtime; §11.4 lists those as they would be for Aider and Cline.
 
