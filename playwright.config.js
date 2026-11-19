@@ -27,6 +27,7 @@ export default defineConfig({
     env: {
       PORT: String(PORT),
       BUNNY_FAKE_UPSTREAM: '1',
+      BUNNY_FAKE_ENGINE: '1', // the engines page and chats use a scripted stand-in engine and a fake download, never a real CLI
       BUNNY_RESET_PROFILE: '1',
       BUNNY_DATA_DIR: dataDir,
       BUNNY_API_TOKEN: E2E_TOKEN,
