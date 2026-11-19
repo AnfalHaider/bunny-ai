@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
+import { dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
@@ -80,6 +80,7 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
 import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
@@ -322,6 +323,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  const engines = createEngineService({ dataDir }); // CLI-ENGINES: Claude Code and Codex, downloaded on the person's click (src/server/engines)
   // W2-9: a chat's own copy of its project (ADR-002)
   const worktrees = createWorktrees({ dataDir });
   /**
@@ -764,6 +766,22 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
     if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
+    // ---- CLI-ENGINES: what is downloaded, and the window's buttons (device access is refused for all of these: remoteRoute, route's belt and windowOnly) ----
+    if (path === '/api/engines' && method === 'GET') return sendJson(res, 200, await engines.status(settings));
+    if (path === '/api/engines/record' && method === 'GET') return sendJson(res, 200, { record: await engines.store.record() });
+    const engineMatch = path.match(/^\/api\/engines\/(claude-code|codex)(?:\/(download|cancel|rollback))?$/);
+    if (engineMatch && ['POST', 'DELETE'].includes(method)) {
+      if (windowOnly(req, res)) return;
+      const [, engineId, action] = engineMatch;
+      try {
+        if (method === 'DELETE' && !action) { await engines.store.remove(engineId); return sendJson(res, 200, { ok: true }); }
+        if (method === 'POST' && action === 'download') return sendJson(res, 202, engines.startDownload(engineId));
+        if (method === 'POST' && action === 'cancel') return sendJson(res, 200, { cancelled: engines.store.cancel(engineId) });
+        if (method === 'POST' && action === 'rollback') return sendJson(res, 200, await engines.store.rollback(engineId));
+      } catch (err) { return sendJson(res, err.status ?? 409, { code: err.code ?? 'engine.failed', message: err.message }); }
+      return sendJson(res, 404, { code: 'engine.route', message: 'No such engine action.' });
+    }
+
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
@@ -773,6 +791,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
       if (deviceRefusedBody(req, res, method, path, patch)) return;
+      { const bad = validateEngineSettings(patch); if (bad) return sendJson(res, 400, { code: 'settings.badEngine', message: bad }); }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
@@ -3167,6 +3186,37 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const closeThinking = () => { if (thinkingSince) { thinkingMs += Date.now() - thinkingSince; thinkingSince = 0; } };
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
+
+      // CLI-ENGINES: a Code chat with a folder may run on an engine (Claude Code or Codex). The engine and its auth mode are fixed at the chat's first message.
+      // A device at the Chats level never runs one (req.bunnyRemote); schedules, Quick ask and Chat mode stay on Bunny's own engine.
+      {
+        const cfg = engineSettings(settings);
+        const wanted = session.engine?.id ?? (cfg.engine !== 'bunny' && cfg.engines[cfg.engine].enabled ? cfg.engine : null);
+        if (wanted && workMode === 'code' && workspace && !req.bunnyRemote && !scheduledTask) {
+          if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth } });
+          const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
+          const outcome = await engines.runTurn({
+            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
+            onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
+            noteUsage: () => {}, // the engine's own token counts are not priced here (local mode counts at the endpoint)
+          });
+          if (outcome.stoppedForCheck) {
+            session = await sessions.update(id, { engine: { ...session.engine, restricted: true } }).catch(() => session);
+            const note = "Stopped: Bunny's check did not run. Your next message continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder.";
+            send('delta', { text: `${outcome.text ? '\n\n' : ''}${note}` });
+            outcome.text = `${outcome.text}${outcome.text ? '\n\n' : ''}${note}`;
+          }
+          if (clientGone) { if (outcome.text.trim()) await sessions.append(id, { role: 'assistant', content: outcome.text, kind: 'partial', ...undoInfo() }); }
+          else if (outcome.text.trim()) {
+            const saved = await sessions.append(id, { role: 'assistant', content: outcome.text, ...undoInfo() });
+            session = await sessions.get(id);
+            send('done', { sessionId: id, model: cfg.engines[wanted] ? `${wanted}` : model, messageId: saved.messages.at(-1)?.id, context: sessions.context(session) });
+          }
+          res.end();
+          return;
+        }
+      }
 
       // Two things can be wrong with a first attempt, and both are worth one
       // more go: a model that is not provisioned for this account yet, and a

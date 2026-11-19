@@ -1,0 +1,251 @@
+/**
+ * CLI-ENGINES §1.4, §4.4, §7: what app.js talks to. One object per app: the store (downloads, versions), the settings rules for engines, the routes' data, and `runTurn`, which runs one
+ * Code-mode reply on an engine and turns its events into the events the page already understands (delta, thinking, tool, done, error), so the page needs nothing new.
+ *
+ * Fake mode (BUNNY_FAKE_ENGINE set): the gate and the end-to-end tests use a scripted stand-in engine and a fake download registry; no real CLI, no network, no account.
+ */
+import { createHash, randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdir } from 'node:fs/promises';
+import { removeTree } from '../toolInstall.js';
+import { rulesFor } from '../permissionRules.js';
+import { createBridge, keyFolders } from './bridge.js';
+import { denyRules, startClaude } from './claude-code.js';
+import { loadSchema, startCodex } from './codex.js';
+import { loadPins } from './pins.js';
+import { createEngineStore } from './store.js';
+import { cutResult } from './events.js';
+import { describeReview, diff, discard, review, stage, stageDirFor } from './staging.js';
+import { makeZipForFake } from './fake-registry.js';
+
+export const ENGINE_IDS = Object.freeze(['claude-code', 'codex']);
+export const AUTH_DEFAULTS = Object.freeze({ 'claude-code': 'account', codex: 'local' });
+const LABELS = { 'claude-code': 'Claude Code', codex: 'Codex CLI' };
+export const CODEX_ACCOUNT_NOTE = 'Not available yet: signing in to Codex is still being tested.';
+export const LOCAL_NOTE_CLAUDE = 'Not supported by Anthropic. Claude Code may stop working with your models after an update.';
+const FAKE_ENGINE_PATH = fileURLToPath(new URL('./fake-engine.mjs', import.meta.url));
+
+/** The engine choices in the settings, with defaults. */
+export function engineSettings(settings = {}) {
+  const engines = {};
+  for (const id of ENGINE_IDS) {
+    const s = settings.engines?.[id] ?? {};
+    engines[id] = { auth: ['account', 'local'].includes(s.auth) ? s.auth : AUTH_DEFAULTS[id], enabled: s.enabled !== false };
+  }
+  const engine = ['bunny', ...ENGINE_IDS].includes(settings.engine) ? settings.engine : 'bunny';
+  return { engine, engines, useBunnyEngine: settings.useBunnyEngine !== false };
+}
+
+/** A sentence if the engine settings in a patch are not acceptable, else null. */
+export function validateEngineSettings(patch = {}) {
+  if (Object.hasOwn(patch, 'engine') && !['bunny', ...ENGINE_IDS].includes(patch.engine)) return 'Choose Bunny, Claude Code or Codex CLI.';
+  if (Object.hasOwn(patch, 'useBunnyEngine') && typeof patch.useBunnyEngine !== 'boolean') return 'Use Bunny\'s engine is on or off.';
+  if (Object.hasOwn(patch, 'engines')) {
+    const e = patch.engines;
+    if (!e || typeof e !== 'object' || Array.isArray(e)) return 'The engine settings are not valid.';
+    for (const [id, v] of Object.entries(e)) {
+      if (!ENGINE_IDS.includes(id)) return `Bunny has no engine called ${JSON.stringify(id.slice(0, 30))}.`;
+      if (!v || typeof v !== 'object') return 'The engine settings are not valid.';
+      for (const k of Object.keys(v)) if (!['auth', 'enabled'].includes(k)) return `An engine has no setting called ${JSON.stringify(k.slice(0, 30))}.`;
+      if (v.auth !== undefined && !['account', 'local'].includes(v.auth)) return 'Choose Sign in with an account, or Operate locally.';
+      if (id === 'codex' && v.auth === 'account') return CODEX_ACCOUNT_NOTE;
+      if (v.enabled !== undefined && typeof v.enabled !== 'boolean') return 'An engine is on or off.';
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- the fake pieces (gate and e2e)
+
+function fakePins() {
+  const archive = makeZipForFake();
+  const sha = createHash('sha256').update(archive).digest('hex');
+  const mk = (id, label) => ({ version: '1.0.0', entry: 'fake.exe', label, licence: 'test', hosts: ['fake.test'], signature: 'Fake Co', files: [{ name: `${id}.zip`, url: `https://fake.test/${id}.zip`, sha256: sha, kind: 'zip', size: archive.length }] });
+  return { pins: { 'claude-code': mk('claude-code', 'Claude Code'), codex: { ...mk('codex', 'Codex CLI'), model: 'gpt-5.5' } }, archive };
+}
+
+/** The Chat Completions stream for the model endpoint: the chat's own provider, through fetch (the stand-in answers in fake mode). */
+export function makeUpstream({ provider, apiKey, model, fake, fetchImpl = globalThis.fetch }) {
+  return async function* upstream({ chat, signal }) {
+    if (fake && !provider.custom) {
+      yield { choices: [{ delta: { role: 'assistant', content: 'This is the stand-in model answering for the engine.' }, finish_reason: null }] };
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 9 } };
+      return;
+    }
+    const headers = { 'content-type': 'application/json', accept: 'text/event-stream' };
+    if (apiKey) { headers.authorization = `Bearer ${apiKey}`; if (provider.auth?.header) headers[provider.auth.header] = apiKey; if (provider.auth?.extra) Object.assign(headers, provider.auth.extra); }
+    const body = { ...chat, model, stream: true, stream_options: { include_usage: true } };
+    const res = await fetchImpl(`${String(provider.baseUrl).replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    if (!res.ok) throw new Error(`The model provider answered ${res.status}: ${cutResult(await res.text().catch(() => ''), 300)}`);
+    const decoder = new TextDecoder(); let buf = '';
+    for await (const part of res.body) {
+      buf += decoder.decode(part, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        try { yield JSON.parse(data); } catch { /* a comment or a broken line */ }
+      }
+    }
+  };
+}
+
+// ---------------------------------------------------------------- the service
+
+export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false } = {}) {
+  const fakeMode = Boolean(fake);
+  const fp = fakeMode ? fakePins() : null;
+  const pins = pinsOverride ?? (fakeMode ? fp.pins : loadPins());
+  const registry = fetchImpl ?? (fakeMode ? async () => ({ status: 200, ok: true, headers: { get: (k) => (k.toLowerCase() === 'content-length' ? String(fp.archive.length) : null) }, body: new ReadableStream({ async start(c) { for (let o = 0; o < fp.archive.length; o += 4096) { c.enqueue(new Uint8Array(fp.archive.subarray(o, o + 4096))); await new Promise((r) => setTimeout(r, 15)); } c.close(); } }) }) : globalThis.fetch);
+  const running = new Set(); // engine ids with a reply going
+  const store = createEngineStore({ dataDir, pins, fetchImpl: registry, busy: (id) => running.has(id) || busyCheck(id), ...(fakeMode ? { versionOf: async () => 'fake 1.0.0', signatureOf: async () => ({ ok: true }) } : {}), ...(versionOf ? { versionOf } : {}), ...(signatureOf ? { signatureOf } : {}) });
+  const progress = new Map(); const lastError = new Map(); let schemaPromise = null;
+  const schema = () => (schemaPromise ??= loadSchema().catch(() => null));
+
+  async function status(settings) {
+    const st = await store.status();
+    const cfg = engineSettings(settings);
+    const list = [];
+    for (const id of ENGINE_IDS) {
+      const s = st[id];
+      list.push({
+        id, label: LABELS[id], downloaded: s.downloaded, version: s.version, available: s.available, updateAvailable: s.updateAvailable, previous: s.previous, sizeBytes: s.sizeBytes,
+        downloading: s.downloading, progress: progress.get(id) ?? null, error: lastError.get(id) ?? null, enabled: cfg.engines[id].enabled, auth: cfg.engines[id].auth, recommendedAuth: AUTH_DEFAULTS[id],
+        authModes: id === 'codex' ? { local: { available: true }, account: { available: false, note: CODEX_ACCOUNT_NOTE } } : { local: { available: true, note: LOCAL_NOTE_CLAUDE }, account: { available: true } },
+        licence: pins[id]?.licence ?? '',
+      });
+    }
+    return { engines: list, engine: cfg.engine, useBunnyEngine: cfg.useBunnyEngine, fake: fakeMode };
+  }
+
+  /** Start a download in the background (progress through status); resolves at once. */
+  function startDownload(id) {
+    if (!ENGINE_IDS.includes(id)) throw Object.assign(new Error('Bunny does not know that engine.'), { status: 404 });
+    lastError.delete(id);
+    progress.set(id, { bytes: 0, total: 0 });
+    store.download(id, { onProgress: (p) => progress.set(id, { bytes: p.bytes, total: p.total, file: p.file, files: p.files }) })
+      .catch((err) => { lastError.set(id, err.message); })
+      .finally(() => { progress.delete(id); });
+    return { started: true };
+  }
+
+  // ------------------------------------------------------------ one reply on an engine
+
+  /**
+   * Run one Code-mode reply. `turn`: { id (the chat), session, content, workspace root `root`, permissionMode, send, logStep, askPermission, signal, provider, apiKey, model,
+   * incognito, beforeWrite, rules (the folder's rules), hidden, settings, onSession(engineSessionId), usageRecord(text) }.
+   * Resolves { text, ok, stoppedForCheck }.
+   */
+  async function runTurn(turn) {
+    const { session, settings } = turn;
+    const choice = session.engine ?? { id: engineSettings(settings).engine, auth: null };
+    const id = choice.id;
+    const label = LABELS[id] ?? id;
+    const auth = choice.auth ?? engineSettings(settings).engines[id].auth;
+    let mode = choice.restricted ? 'restricted' : 'full';
+    const home = join(dataDir, 'engines', id, auth, 'chat', String(turn.id).replace(/[^\w-]/g, '_'));
+    await mkdir(home, { recursive: true });
+    let assembled = ''; let stoppedForCheck = false; let ok = true;
+
+    // where the program is
+    let exe = null; let launcher = null;
+    if (fakeMode) {
+      const script = process.env.BUNNY_FAKE_ENGINE_SCRIPT ?? '{"steps":[{"say":"Done."}]}';
+      launcher = [process.execPath, FAKE_ENGINE_PATH, id];
+      exe = 'fake';
+      turn.extraEnv = { BUNNY_FAKE_SCRIPT: script };
+    } else {
+      const found = await store.locate(id);
+      if (!found.ok) {
+        const why = found.reason === 'not-downloaded' ? `${label} is not downloaded yet. Download it in Settings, Engines, or use Bunny's engine.` : `${label} cannot run (${found.reason}). ${found.canRollBack ? 'Roll back to the earlier version in Settings, Engines, ' : 'Download it again in Settings, Engines, '}or use Bunny's engine.`;
+        turn.send('error', { code: 'engine.missing', message: why });
+        await turn.logStep({ role: 'assistant', kind: 'error', content: why });
+        return { text: '', ok: false };
+      }
+      exe = found.exe;
+    }
+
+    // the one judge
+    const root = turn.root;
+    const planMode = turn.permissionMode === 'plan';
+    const ctx = {
+      mode: () => turn.permissionMode, rules: () => rulesFor(settings.permissionRules, root), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      ask: async (summary, detail) => turn.askPermission(`${label} asks: ${summary}`, detail),
+    };
+    const bridge = createBridge(ctx);
+    const checked = async (res, paths) => { if (res.allow && res.name !== 'run_command' && res.name !== 'read_file') for (const p of paths) await turn.beforeWrite?.(p).catch(() => {}); return res; };
+    const judgeClaude = async (req) => { const r = await bridge.claude(req); const p = req.input?.file_path ?? req.input?.path; return checked(r, p ? [p] : []); };
+    const bridgeForCodex = {
+      codexCommand: (params) => bridge.codexCommand(params),
+      codexChanges: async (changes) => { const r = await bridge.codexChanges(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
+    };
+
+    // restricted mode works in a copy and Bunny reviews the diff at the end
+    let cwd = root; let staged = null;
+    if (mode === 'restricted') {
+      const dir = stageDirFor(dataDir, id, turn.id);
+      staged = await stage({ root, dir, hidden: turn.hidden ?? (() => false), keepOut: [dataDir] });
+      cwd = dir;
+    }
+
+    running.add(id);
+    const control = new AbortController();
+    turn.signal?.addEventListener?.('abort', () => control.abort(), { once: true });
+    let run;
+    try {
+      const deny = denyRules({ rules: rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
+      if (id === 'claude-code') {
+        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000,
+          endpoint: null, ...(auth === 'local' ? { endpoint: await localEndpoint(turn) } : {}) });
+      } else {
+        const sch = await schema();
+        run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
+          upstream: makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
+      }
+      const steps = new Map();
+      for await (const ev of run.events) {
+        if (ev.type === 'text') { assembled += ev.delta; turn.send('delta', { text: ev.delta }); }
+        else if (ev.type === 'thinking') turn.send('thinking', { text: ev.delta });
+        else if (ev.type === 'tool-start') { const tool = `${label}: ${ev.engineTool ?? ev.name}${ev.input?.command ? ` ${cutResult(ev.input.command, 80)}` : ev.input?.file_path ? ` ${ev.input.file_path}` : ev.input?.paths?.length ? ` ${ev.input.paths[0]}` : ''}`; steps.set(ev.callId, tool); turn.send('tool', { tool, status: 'running' }); }
+        else if (ev.type === 'tool-end') { const tool = steps.get(ev.callId) ?? `${label} tool`; const status = ev.ok ? 'done' : 'failed'; await turn.logStep({ role: 'assistant', kind: 'tool_call', tool, status, content: '', result: cutResult(ev.output ?? '', 1200), fullResult: ev.output ?? '' }); turn.send('tool', { tool, status, result: cutResult(ev.output ?? '', 1200) }); }
+        else if (ev.type === 'session') await turn.onSession?.(ev.engineSessionId, pinVersion(id));
+        else if (ev.type === 'usage') turn.noteUsage?.({ input: ev.input, output: ev.output });
+        else if (ev.type === 'error') {
+          ok = false;
+          if (ev.code === 'watchdog' || ev.code === 'engine.tools') stoppedForCheck = true;
+          turn.send('error', { code: `engine.${ev.code ?? 'failed'}`, message: ev.message });
+          await turn.logStep({ role: 'assistant', kind: 'error', content: `${label} stopped: ${ev.message}` });
+        }
+      }
+    } catch (err) {
+      ok = false;
+      turn.send('error', { code: 'engine.start', message: `${label} could not start: ${cutResult(err.message, 300)}` });
+      await turn.logStep({ role: 'assistant', kind: 'error', content: `${label} could not start: ${err.message}` });
+    } finally {
+      running.delete(id);
+      try { await run?.stop?.(); } catch { /* ended */ }
+    }
+
+    if (staged) {
+      try {
+        const changes = await diff({ root, dir: staged.dir, manifest: staged.manifest });
+        const collector = createBridge({ ...ctx, ask: async (summary, detail) => { void summary; void detail; return false; } });
+        const result = await review({ root, dir: staged.dir, changes, mode: turn.permissionMode, judge: (c) => collector.judge(c), ask: (summary, detail) => turn.askPermission(summary, detail), writeReal: (rel, buf) => turn.writeReal(rel, buf) });
+        const said = describeReview(result);
+        assembled += `${assembled ? '\n\n' : ''}${said}`; turn.send('delta', { text: `${assembled === said ? '' : '\n\n'}${said}` });
+      } finally { await discard(staged.dir); }
+    }
+    if (turn.incognito) await removeTree(home).catch(() => {});
+    return { text: assembled, ok, stoppedForCheck };
+  }
+
+  const pinVersion = (id) => pins[id]?.version ?? null;
+  async function localEndpoint(turn) { void turn; throw new Error('Claude Code in local mode needs the Messages translator, which is not available yet.'); }
+
+  const busy = (id) => running.has(id);
+  return { store, pins, status, startDownload, runTurn, busy, progress, ids: ENGINE_IDS, fake: fakeMode, randomId: randomUUID };
+}
