@@ -2,7 +2,7 @@
  * SEARCH-PC: asking the Windows Search index for files (SP-1, SP-7). Read-only, the index only, never a scan of the disk.
  *
  * The question never becomes query text: the caller gives at most 8 terms, each is cleaned to letters, digits, spaces and - _ . (64 characters at most), has the
- * LIKE wildcards escaped and its quotes doubled, and goes into a FIXED template with fixed columns. The kind and the date come from fixed choices only.
+ * quotes doubled, and goes into a FIXED template with fixed columns. The kind and the date come from fixed choices only.
  * The query reaches PowerShell in an environment variable, never on the command line, and PowerShell runs a script that is a fixed string in this file.
  */
 import { execFile } from 'node:child_process';
@@ -41,7 +41,6 @@ export function cleanTerms(terms) {
 }
 
 const quote = (s) => `'${String(s).replace(/'/g, "''")}'`;
-const likeEscape = (s) => String(s).replace(/[%_[\]]/g, (c) => `[${c}]`);
 const pad = (n) => String(n).padStart(2, '0');
 const day = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} 00:00:00`;
 
@@ -50,7 +49,10 @@ export function buildQuery({ terms, kind = 'any', modified = 'any', now = new Da
   const clean = cleanTerms(terms);
   if (!clean.length) return null;
   if (!Object.hasOwn(KINDS, kind)) throw new Error('That kind of file is not one of the choices.');
-  const parts = clean.map((t) => `(CONTAINS(${quote(`"${t}"`)}) OR System.ItemName LIKE ${quote(`%${likeEscape(t)}%`)})`);
+  // A term matches the words in a file (CONTAINS) or the start of a word in its name (CONTAINS on System.ItemName with a trailing *). Both use the full-text index. The earlier
+  // `System.ItemName LIKE '%term%'` (a leading wildcard) cannot use it: for a word found in no file Windows Search scanned the whole index (over 18 s measured, QA's 10 s timeouts; the
+  // same query with CONTAINS took 0.5 s). The price: a name is matched from the start of a word ("rep" finds "Report 2024"), not from the middle of one ("port" does not).
+  const parts = clean.map((t) => `(CONTAINS(${quote(`"${t}"`)}) OR CONTAINS(System.ItemName, ${quote(`"${t}*"`)}))`);
   let where = `SCOPE='file:' AND ${parts.join(' AND ')}`;
   const exts = KINDS[kind];
   if (exts) where += ` AND (${exts.map((e) => `System.FileExtension = ${quote(e)}`).join(' OR ')})`;
@@ -76,6 +78,7 @@ export const SEARCH_SCRIPT = [
   '  $c.Open()',
   '  $m = $c.CreateCommand()',
   '  $m.CommandText = $env:BUNNY_PCSEARCH_SQL',
+  '  $m.CommandTimeout = 8', // the provider gives up by itself a little before Bunny's 10 s, and the process ends cleanly
   '  $r = $m.ExecuteReader()',
   '  while ($r.Read()) {',
   '    [pscustomobject]@{ p = [string]$r[0]; n = [string]$r[1]; m = [string]$r[2]; s = [string]$r[3]; a = [string]$r[4] } | ConvertTo-Json -Compress',

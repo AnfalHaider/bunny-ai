@@ -12,7 +12,7 @@ const NOW = new Date('2026-11-19T12:00:00Z');
 test('the query is the fixed template plus quoted terms, byte for byte', () => {
   assert.equal(
     buildQuery({ terms: ['tax', 'return 2025'], now: NOW }),
-    "SELECT TOP 50 System.ItemPathDisplay, System.ItemName, System.DateModified, System.Size, System.Search.AutoSummary FROM SystemIndex WHERE SCOPE='file:' AND (CONTAINS('\"tax\"') OR System.ItemName LIKE '%tax%') AND (CONTAINS('\"return 2025\"') OR System.ItemName LIKE '%return 2025%') ORDER BY System.Search.Rank DESC",
+    "SELECT TOP 50 System.ItemPathDisplay, System.ItemName, System.DateModified, System.Size, System.Search.AutoSummary FROM SystemIndex WHERE SCOPE='file:' AND (CONTAINS('\"tax\"') OR CONTAINS(System.ItemName, '\"tax*\"')) AND (CONTAINS('\"return 2025\"') OR CONTAINS(System.ItemName, '\"return 2025*\"')) ORDER BY System.Search.Rank DESC",
   );
 });
 
@@ -36,7 +36,8 @@ test('a quote in a term causes no query error and finds nothing it should not (t
 
 test('wildcards are escaped, and characters outside letters, digits, space and - _ . become spaces', () => {
   assert.deepEqual(cleanTerms(['100%_[x]*?\\/:;<>|"`~!@#$^&()=+{}']), ['100 _ x']);
-  assert.match(buildQuery({ terms: ['a_b'], now: NOW }), /LIKE '%a\[_\]b%'/);
+  assert.match(buildQuery({ terms: ['a_b'], now: NOW }), /CONTAINS\(System\.ItemName, '"a_b\*"'\)/);
+  assert.doesNotMatch(buildQuery({ terms: ['tax'], now: NOW }), /LIKE/, 'a leading-wildcard LIKE scans the whole index (measured: 18 s for a word in no file); never used');
   assert.deepEqual(cleanTerms(['  Übung für Köln – 2025  ']), ['Übung für Köln 2025'], 'Unicode letters stay');
   assert.deepEqual(cleanTerms(['', '   ', '%%', "'''"]), []);
   assert.equal(buildQuery({ terms: ['%%'], now: NOW }), null, 'nothing left means no search');
@@ -81,4 +82,11 @@ test('the terms reach PowerShell by environment, never on the command line; Powe
 test('the code reads only the index: no directory listing or file scan', async () => {
   const text = await readFile(new URL('../src/server/pcSearch.js', import.meta.url), 'utf8');
   assert.doesNotMatch(text, /readdir|opendir|glob|Get-ChildItem|dir \/s/i);
+});
+
+test('SEARCH-PC timeout fix: no LIKE with a leading wildcard (it scanned the whole index: over 18 s for a word in no file, measured 2026-11-19), and the provider has its own 8 s command timeout', async () => {
+  const { SEARCH_SCRIPT, SEARCH_TIMEOUT_MS } = await import('../src/server/pcSearch.js');
+  for (const terms of [['tax'], ['tax', 'return 2025'], ['zqxjvkwpl123456'], ['a_b.c']]) assert.doesNotMatch(buildQuery({ terms, now: NOW }), /LIKE|%/);
+  assert.match(SEARCH_SCRIPT, /CommandTimeout = 8/);
+  assert.ok(SEARCH_TIMEOUT_MS === 10_000, 'the user-facing limit stays 10 s');
 });
