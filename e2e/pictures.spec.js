@@ -28,6 +28,8 @@ async function begin(page, request, entry) {
     transcriptSize: 'medium', transcriptWidth: 'narrow', language: 'en',
   } });
   await page.clock.setFixedTime(new Date(FIXED_TIME));
+  // the app's own random picks (the working-line words, greetings) come from a fixed sequence: the same screen every run
+  await page.addInitScript(() => { let seed = 20260115; Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }; });
   await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'chat'); localStorage.setItem('bunny.modelAuto', '1'); localStorage.setItem('bunny.rail', '1'); } catch { /* storage blocked */ } });
 }
 
@@ -38,18 +40,24 @@ for (const [name, entry] of entries) {
       const scene = scenes[entry.scene];
       expect(scene, `${name}: the scene "${entry.scene}" is not in e2e/pictures/scenes.mjs`).toBeTruthy();
       await begin(page, request, entry);
+      const cleanups = [];
       const api = {
         request,
+        cleanup: (fn) => cleanups.push(fn),
         base: baseURL,
         seed: async (chat) => (await (await request.post('/api/sessions', { data: chat })).json()),
         open: async (url) => { await page.goto(url); await page.evaluate(() => document.fonts?.ready); },
       };
-      await scene(page, api, entry);
+      try { await scene(page, api, entry);
       await page.evaluate(() => document.fonts?.ready);
       const cap = entry.capture ?? 'viewport';
       const target = cap === 'viewport' || cap.clip ? page : page.locator(cap.locator).first();
       const options = { maxDiffPixelRatio: entry.tolerance ?? 0.0001, threshold: 0.2, animations: 'disabled', caret: 'hide', scale: 'css', ...(cap.clip ? { clip: { x: cap.clip[0], y: cap.clip[1], width: cap.clip[2], height: cap.clip[3] } } : {}) };
       await expect(target, `${name}: this picture no longer matches its screen (${entry.alt})`).toHaveScreenshot(name, options);
+      } catch (error) {
+        await page.screenshot({ path: `test-results/pictures-failed-${name}`, fullPage: false }).catch(() => {}); // what the page showed when the scene failed (never committed)
+        throw error;
+      } finally { for (const fn of cleanups.reverse()) await fn().catch(() => {}); }
     });
   });
 }

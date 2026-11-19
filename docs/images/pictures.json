@@ -9,12 +9,20 @@
     "usedBy": ["README.md"]
   },
   "blocked-asked.png": {
-    "exempt": "a live screen (a held stream, a running program): its scene is not written yet, so this picture is still the one made by hand (PICTURE-CHECK follow-up, Builder)",
+    "scene": "blocked-asked",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
     "alt": "A step Blocked by a rule in amber, then a card Asked because of your rule git push",
     "usedBy": ["README.md"]
   },
   "capability.png": {
-    "exempt": "a live screen (a held stream, a running program): its scene is not written yet, so this picture is still the one made by hand (PICTURE-CHECK follow-up, Builder)",
+    "scene": "capability",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
     "alt": "A card asking to switch to Code mode so Bunny can read the project folder",
     "usedBy": ["README.md"]
   },
@@ -52,7 +60,11 @@
     "exempt": "hand-made art (Design); not a screen"
   },
   "keep-going.png": {
-    "exempt": "a live screen (a held stream, a running program): its scene is not written yet, so this picture is still the one made by hand (PICTURE-CHECK follow-up, Builder)",
+    "scene": "keep-going",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
     "alt": "A long job: task list ticking, a failed test fixed, \"Still working · step 13\" in the top bar",
     "usedBy": ["README.md"]
   },
@@ -61,7 +73,9 @@
     "viewport": [1600, 1000],
     "theme": "light",
     "scale": 1,
-    "capture": "viewport",
+    "capture": {
+      "locator": "section[data-section=\"code\"]"
+    },
     "alt": "Settings, Code: permission rules with Deny, Ask and Allow lists",
     "usedBy": ["README.md"]
   },
@@ -89,7 +103,7 @@
     "theme": "light",
     "scale": 1,
     "capture": {
-      "locator": ".group:has(#wait-row)"
+      "locator": "section[data-section=\"models\"]"
     },
     "alt": "Settings: Try another model when yours is busy, with Wait for a first reply under it",
     "usedBy": ["README.md"]
@@ -104,12 +118,20 @@
     "usedBy": ["README.md"]
   },
   "terminal.png": {
-    "exempt": "a live screen (a held stream, a running program): its scene is not written yet, so this picture is still the one made by hand (PICTURE-CHECK follow-up, Builder)",
+    "scene": "terminal",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
     "alt": "A preview server started by Bunny, with its own tab and live output in the Terminal pane",
     "usedBy": ["README.md"]
   },
   "working-line.png": {
-    "exempt": "a live screen (a held stream, a running program): its scene is not written yet, so this picture is still the one made by hand (PICTURE-CHECK follow-up, Builder)",
+    "scene": "working-line",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
     "alt": "The working line: the hopping bunny, \"Whisker-wiggling… thinking · 1s\", opened to show the thinking",
     "usedBy": ["README.md"]
   }
