@@ -116,9 +116,9 @@ test('3: the bridge lists exactly the functions the redesign needs, and the page
 
 test('8 and 9: what the bar is told about Bunny\'s looks is cleaned to fixed keys: a theme name, a font key from the list, reduced motion, and a plain model name', async () => {
   const { barLook, BAR_FONT_KEYS } = await import('../electron/quick-ask-logic.js');
-  assert.deepEqual(barLook({ theme: 'dark', interfaceFont: 'lexend', motion: 'reduced', model: 'meta/llama-3-70b' }), { theme: 'dark', font: 'lexend', motion: 'reduced', model: 'llama-3-70b' });
-  assert.deepEqual(barLook({}), { theme: 'system', font: 'system', motion: '', model: '' });
-  assert.deepEqual(barLook(null), { theme: 'system', font: 'system', motion: '', model: '' });
+  assert.deepEqual(barLook({ theme: 'dark', interfaceFont: 'lexend', motion: 'reduced', model: 'meta/llama-3-70b' }), { theme: 'dark', font: 'lexend', motion: 'reduced', pcSearch: false, model: 'llama-3-70b' });
+  assert.deepEqual(barLook({}), { theme: 'system', font: 'system', motion: '', pcSearch: false, model: '' });
+  assert.deepEqual(barLook(null), { theme: 'system', font: 'system', motion: '', pcSearch: false, model: '' });
   // anything that is not on the list becomes the safe default: a url, a path, a style, markup
   const evil = barLook({ theme: 'url(http://x)', interfaceFont: '../../secrets/x', motion: '<b>', model: '<img src=x onerror=alert(1)> gpt\nnext' });
   assert.deepEqual([evil.theme, evil.font, evil.motion], ['system', 'system', '']);
@@ -136,7 +136,7 @@ test('8 and 9: the bar gets its look through one call that only its own page may
   createQuickAsk({ ...e, onSubmit: () => true, getSettings: () => ({ theme: 'dark', interfaceFont: 'nunito', model: 'a/b-model', motion: 'reduced', providerKey: 'sk-should-never-travel' }) }).open();
   const win = e.windows[0];
   const init = e.handlers.get('quickask:init');
-  assert.deepEqual(await init(fromBar(win)), { theme: 'dark', font: 'nunito', motion: 'reduced', model: 'b-model' });
+  assert.deepEqual(await init(fromBar(win)), { theme: 'dark', font: 'nunito', motion: 'reduced', pcSearch: false, model: 'b-model' });
   assert.deepEqual(await init(stranger), {}, 'not the bar: nothing');
   const e2 = fakes();
   createQuickAsk({ ...e2, onSubmit: () => true, getSettings: () => { throw new Error('settings are not readable'); } }).open();

@@ -59,7 +59,7 @@ test('only plain data reaches the bar: a reply is text, never an object with any
   const c = collect();
   await createAnswerer({ adminFetch: s.adminFetch, emit: c.emit }).ask({ text: 'q' });
   for (const e of c.got) assert.ok(['start', 'delta', 'done', 'error', 'needs-window', 'stopped'].includes(e.type));
-  assert.deepEqual(Object.keys(c.got.at(-1)).sort(), ['finished', 'model', 'type']);
+  assert.deepEqual(Object.keys(c.got.at(-1)).sort(), ['finished', 'model', 'sources', 'type']);
   assert.equal(c.got[1].text, '<img src=x onerror=alert(1)>', 'kept as text: the bar shows it through the sanitiser');
 });
 
