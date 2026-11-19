@@ -82,3 +82,10 @@ test('this repository: the real manifest passes, from the command line, with a o
   assert.equal(r.status, 0, r.stdout);
   assert.match(r.stdout, /help pictures: \d+ listed, each shown and described the same way/);
 });
+
+test('the scene an entry names must be in e2e/pictures/scenes.mjs (checked once that file exists)', (t) => {
+  const scenes = "export const scenes = {\n  'settings-wait': async (page) => {},\n  plain: async () => {},\n};\n";
+  assert.deepEqual(checkPictures(repo(t, { extra: { 'e2e/pictures/scenes.mjs': scenes } })), []);
+  says(checkPictures(repo(t, { manifest: { 'a.png': entry({ scene: 'nope' }) }, extra: { 'e2e/pictures/scenes.mjs': scenes } })), /the scene "nope" is not in e2e\/pictures\/scenes\.mjs/);
+  assert.deepEqual(checkPictures(repo(t, { manifest: { 'a.png': entry({ scene: 'plain' }) }, extra: { 'e2e/pictures/scenes.mjs': scenes } })), []);
+});

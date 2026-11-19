@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const PICTURES_DIR = 'docs/images';
 export const MANIFEST = 'docs/images/pictures.json';
+export const SCENES = 'e2e/pictures/scenes.mjs';
 export const DEFAULT_TOLERANCE = 0.002;
 export const MAX_TOLERANCE = 0.01;
 const EXTENSIONS = /\.(png|jpe?g|gif|webp|svg)$/i;
@@ -92,6 +93,12 @@ export function checkPictures(root = '.') {
     }
     if (typeof entry.alt !== 'string' || !entry.alt.trim()) problems.push(`${name}: alt (the words that describe the picture) is missing.`);
     if (!(Array.isArray(entry.usedBy) && entry.usedBy.length && entry.usedBy.every((f) => typeof f === 'string'))) problems.push(`${name}: usedBy must list the files that show it.`);
+  }
+
+  // the scene each entry names is in e2e/pictures/scenes.mjs (only checked once that file exists)
+  if (existsSync(join(root, SCENES))) {
+    const names = new Set([...readFileSync(join(root, SCENES), 'utf8').matchAll(/^ {2}(?:'([\w-]+)'|([\w]+)):\s*async\b/gm)].map((m) => m[1] ?? m[2]));
+    for (const [name, entry] of Object.entries(manifest)) if (entry && typeof entry.scene === 'string' && !names.has(entry.scene)) problems.push(`${name}: the scene "${entry.scene}" is not in ${SCENES}.`);
   }
 
   // 2 and 3. every reference has an entry, every usedBy really refers to the picture, and the alt is the same words
