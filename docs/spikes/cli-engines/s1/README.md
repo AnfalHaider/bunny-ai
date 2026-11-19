@@ -61,3 +61,12 @@ Run on the same pin, stand-ins and invented profile. Each file in `evidence/` is
 **CE-1.11 (long hook timeout).** Hook `timeout` set to 300 s in Bunny's `--settings`:
 - the hook holds the call for 120 s then answers allow (`ce111-answered-after-2min-allow`, 121.7 s): the tool **ran** (secret read): the engine waited the whole 2 minutes.
 - the hook holds the call and, with nobody answering, Bunny's own limit (150 s) makes it print deny (`ce111-unanswered-denied-by-bunny`, 151.6 s): the tool **did not run**. The 300 s engine timeout was not reached; earlier, a 3 s timeout failed open (`c-timeout`).
+
+## Addendum 3: `--disallowedTools` (asked for by Tech Lead, spec revision 6)
+`dt-disallowed` (command: `--disallowedTools WebSearch Agent Task Skill CronCreate CronDelete CronList EnterWorktree ExitWorktree`, default permission mode, the hook allowing everything) against its control `dt-baseline-hook-allow` (same calls, no flag):
+- The control's `system/init` tools list has Task, WebSearch, Skill, CronCreate/Delete/List, EnterWorktree/ExitWorktree; the hook saw Agent, WebSearch (from the subagent), CronCreate and Read.
+- With the flag, **all of them are absent from `system/init`** (the list has Bash, Edit, Glob, Grep, Read, Write, WebFetch, Monitor, the Task* tools, the MCP tool and the rest, but none of the nine). A scripted call to each got `No such tool available: <name>. <name> is disabled for this session, in subagents as well as here.` and the hook was never reached for them (it saw only the Read). The flag works for subagents too ("in subagents as well as here").
+- Note: the tool called `Agent` by the hook is `Task` in the tools list; naming both removed it.
+- The Task* tools (TaskCreate/Get/List/Update/Stop), SendMessage, ListAgents, ScheduleWakeup, ToolSearch, ReportFindings, Monitor and Workflow were not in this list to disable; add them to `--disallowedTools` the same way if the spec wants them gone.
+
+(CE-1.9 and CE-1.11, also owed in revision 6, were run in Addendum 2 above: note the CE-1.9 result is the reverse of the expected first half, a hook allow does **not** pass an ask-covered read when `--permission-prompts none` is set.)

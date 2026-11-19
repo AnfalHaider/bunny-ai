@@ -1,0 +1,17 @@
+scenario: dt-baseline-hook-allow   exit code: 0   seconds: 1.7
+command: claude.exe -p "Spike: do the scripted tool calls." --output-format stream-json --verbose --no-session-persistence --model claude-sonnet-4-5 --mcp-config <SPIKE>\runs\dt-baseline-hook-allow\mcp.json --strict-mcp-config --settings <SPIKE>\runs\dt-baseline-hook-allow\bunny-settings.json --permission-mode default --setting-sources user
+hook mode: allow   timeout: default   setting sources: bunny
+scripted calls: Task, WebSearch, Skill, CronCreate, EnterWorktree, Read
+system/init tools: ["Task","Bash","CronCreate","CronDelete","CronList","Edit","EnterWorktree","ExitWorktree","Glob","Grep","ListAgents","Monitor","NotebookEdit","Read","ReportFindings","ScheduleWakeup","SendMessage","Skill","TaskCreate","TaskGet","TaskList","TaskStop","TaskUpdate","ToolSearch","WebFetch","WebSearch","Workflow","Write","mcp__spike__ping"]   mcp_servers: ["spike:connected"]   permissionMode: default
+bunny hook saw (4): Agent, WebSearch[sub:ade462dcbe138f430], CronCreate, Read[sub:ade462dcbe138f430]
+project .claude hook fired: 0 times; fake-home ~/.claude hook fired: 0 times
+secret.txt content reached the model endpoint (the tool RAN): true
+canary content reached the model endpoint: false   canary content in engine stdout: false
+written.txt exists: false
+bash-ran.txt exists: false
+ps-ran.txt exists: false
+edit-me.txt now: "before"
+MCP tool ran: false
+hosts the engine contacted at the stand-in: 127.0.0.1:57785   (any other host would not appear here; see network note in README)
+tool results seen by the model (tool_result blocks in stub log, trimmed): 12
+tool_result texts the model got: ["[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of ","[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of ","\\\"<tool_use_error>Unknown skill: spike</tool_use_error>\\\\n\\\\n<system-reminder>\\\\n<total_tokens>14999985 tokens left</total_tokens>\\\\n</syste","\\\"Web search results for query: \\\\\\\"spike\\\\\\\"\\\\n\\\\n\\\\nREMINDER: You MUST include the sources above in your response to the user using markdo","[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of ","\\\"<tool_use_error>Unknown skill: spike</tool_use_error>\\\\n\\\\n<system-reminder>\\\\n<total_tokens>14999985 tokens left</total_tokens>\\\\n</syste","\\\"Scheduled recurring job 9a0381ed (Every 5 minutes). Next run: Nov 19 1:50pm. Session-only (not written to disk, dies when Claude exits). A","\\\"Web search results for query: \\\\\\\"spike\\\\\\\"\\\\n\\\\n\\\\nREMINDER: You MUST include the sources above in your response to the user using markdo","\\\"1\\\\tSECRET-S1-9f3a1c\\\\n2\\\\n\\\\n<system-reminder>\\\\n<total_tokens>14999985 tokens left</total_tokens>\\\\n</system-reminder>\\\"","[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of ","\\\"<tool_use_error>Unknown skill: spike</tool_use_error>\\\\n\\\\n<system-reminder>\\\\n<total_tokens>14999985 tokens left</total_tokens>\\\\n</syste","\\\"Scheduled recurring job 9a0381ed (Every 5 minutes). Next run: Nov 19 1:50pm. Session-only (not written to disk, dies when Claude exits). A"]
