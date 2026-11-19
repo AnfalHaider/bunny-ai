@@ -214,7 +214,7 @@ Then open the address I print.
 npm run test:all
 ```
 
-More than 700 unit tests and about 150 end-to-end tests check what I can do, and `node scripts/gate.mjs` runs them together with a dependency audit and a secret scan. `docs/FEATURE-TALLY.md` lists features with the test that proves each one. Trust, but verify. I insist.
+About 1,440 unit tests (1,244 run in parallel, plus 198 guard and kit tests) and 403 end-to-end tests check what I can do (the gate at 07d6d2f: 9 of 9 checks passed), and `node scripts/gate.mjs` runs them together with a dependency audit and a secret scan. `docs/FEATURE-TALLY.md` lists features with the test that proves each one. Trust, but verify. I insist.
 
 ---
 
@@ -222,7 +222,8 @@ More than 700 unit tests and about 150 end-to-end tests check what I can do, and
 
 - Your chats, artifacts, memories and settings are stored in your user folder on this computer.
 - Keys and sign-in tokens are encrypted with Windows' own protection and never shown again in full.
-- What I send out: your requests to the model provider you chose; the pages you or I open; GitHub or Google when you sign in; a check for updates on GitHub Releases; and, when the network seems down, a tiny "am I online?" check to Google, Cloudflare or Apple connectivity addresses (no data, cookies or identifiers).
+- What I send out: your requests to the model provider you chose; the pages you or I open; the search words I send to DuckDuckGo when I run a web search; the mail, calendar and Drive requests I make when you allow Google (see above); GitHub or Google when you sign in; a check for updates on GitHub Releases; and, when the network seems down, a tiny "am I online?" check to Google, Cloudflare or Apple connectivity addresses (no data, cookies or identifiers).
+- A phone or other computer signed in over your home network talks to me on that network only. Its chats go to the model provider you chose, the same as chats in my window.
 - Pages I build run in a sandbox and can't reach the app, and only my own windows can talk to my local server.
 
 <p align="center"><sub>Made with love for people who want a capable AI on their own terms. Now go connect a model. I'm waiting. 🐰</sub></p>

@@ -4042,6 +4042,12 @@ async function closeSettings() {
   const backdrop = $('settings-backdrop');
   if (!backdrop || backdrop.hidden) return;
   backdrop.hidden = true;
+  // A change made just before closing is still being saved: wait for it (a few seconds at most) before the page is taken away and the settings are read back,
+  // otherwise the page is gone mid-save and the chat is redrawn with the old value.
+  try {
+    const pending = [...($('settings-frame')?.contentWindow?.bunnyPendingSaves ?? [])];
+    if (pending.length) await Promise.race([Promise.allSettled(pending), new Promise((resolve) => setTimeout(resolve, 4000))]);
+  } catch { /* a frame from another page has nothing to wait for */ }
   $('settings-frame')?.removeAttribute('src');
   // Settings may have changed underneath: theme, language, name, defaults, models.
   try {

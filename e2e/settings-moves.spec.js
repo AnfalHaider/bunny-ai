@@ -97,6 +97,8 @@ test.describe('what the chat shows', () => {
   });
 
   async function ask(page, text) {
+    // a save that takes a while (a busy PC): the change must still be there after the window closes
+    await page.route('**/api/settings', async (r) => { if (r.request().method() === 'PUT') await new Promise((x) => setTimeout(x, 1200)); await r.continue(); });
     await page.goto('/');
     await page.evaluate(() => { localStorage.setItem('bunny.modelAuto', '0'); });
     await page.goto('/');
@@ -108,28 +110,36 @@ test.describe('what the chat shows', () => {
     await expect(page.locator('.msg.assistant .body').last()).toContainText('Option two it is.');
   }
   /** Change one control of the Settings window, the way a person does, and close it. */
-  async function change(page, section, selector, how) {
+  /**
+   * `shows` is what the control must show before it is changed: the Settings page fills its controls from the saved settings once it has loaded, and a choice made before
+   * that is lost (choosing what a select already shows sends nothing). Waiting for the saved value is what tells the test the page is ready.
+   */
+  async function change(page, section, selector, how, shows) {
     await page.locator('#settings-open').click();
     await page.locator(`#settings-nav-list [data-section="${section}"]`).click();
     const control = page.frameLocator('#settings-frame').locator(selector);
     await expect(control).toBeVisible();
+    await expect(page.frameLocator('#settings-frame').locator('html')).toHaveAttribute('data-settings-filled', '1'); // the page has filled its controls from the saved settings
+    if (typeof shows === 'boolean') { if (shows) await expect(control).toBeChecked(); else await expect(control).not.toBeChecked(); } else if (shows !== undefined) await expect(control).toHaveValue(shows);
     await how(control);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(150); // a person closes the window right after choosing
     await page.locator('#settings-close').click();
     await expect(page.locator('#settings-backdrop')).toBeHidden();
   }
 
   test('Default transcript view: Thinking and Verbose open the model\'s thinking in the chat, Normal folds it', async ({ page }) => {
     await ask(page, 'which option');
-    const box = page.locator('details.thinking').first();
-    await expect(box).toHaveCount(1);
-    expect(await box.evaluate((el) => el.open)).toBe(false);
-    await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('thinking'));
-    await expect.poll(() => page.locator('details.thinking').first().evaluate((el) => el.open), { message: 'Thinking' }).toBe(true);
-    await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('normal'));
-    await expect.poll(() => page.locator('details.thinking').first().evaluate((el) => el.open), { message: 'back to Normal' }).toBe(false);
-    await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('verbose'));
-    await expect.poll(() => page.locator('details.thinking').first().evaluate((el) => el.open), { message: 'Verbose' }).toBe(true);
+    // the reply is over (the working line is gone), so nothing redraws the chat behind the Settings window while it is looked at
+    await expect(page.locator('.bunny-working')).toHaveCount(0);
+    const open = () => page.locator('details.thinking').first().evaluate((el) => el.open);
+    await expect(page.locator('details.thinking')).toHaveCount(1);
+    await expect.poll(open, { message: 'Normal at first' }).toBe(false);
+    await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('thinking'), 'normal');
+    await expect.poll(open, { message: 'Thinking' }).toBe(true);
+    await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('normal'), 'thinking');
+    await expect.poll(open, { message: 'back to Normal' }).toBe(false);
+    await change(page, 'appearance', '[data-key="transcriptView"]', (c) => c.selectOption('verbose'), 'normal');
+    await expect.poll(open, { message: 'Verbose' }).toBe(true);
   });
 
   test('Label chats by status: the sidebar marks a chat as Ready (or Working, Needs you, Failed) when on, and says nothing when off', async ({ page }) => {
@@ -142,9 +152,9 @@ test.describe('what the chat shows', () => {
     await page.reload(); // draws the list again, now with that status
     const tag = page.locator('#sessions .status-tag').first();
     await expect(tag).toHaveText('Needs you');
-    await change(page, 'appearance', '[data-key="statusLabels"]', (c) => c.evaluate((el) => el.click()));
+    await change(page, 'appearance', '[data-key="statusLabels"]', (c) => c.evaluate((el) => el.click()), true);
     await expect(page.locator('#sessions .status-tag')).toHaveCount(0);
-    await change(page, 'appearance', '[data-key="statusLabels"]', (c) => c.evaluate((el) => el.click()));
+    await change(page, 'appearance', '[data-key="statusLabels"]', (c) => c.evaluate((el) => el.click()), false);
     await expect(page.locator('#sessions .status-tag').first()).toHaveText('Needs you');
   });
 
@@ -153,13 +163,13 @@ test.describe('what the chat shows', () => {
     const size = () => page.locator('.msg.assistant .body').last().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const width = () => page.locator('.thread-col').first().evaluate((el) => el.getBoundingClientRect().width);
     const [size0, width0] = [await size(), await width()];
-    await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('large'));
+    await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('large'), 'medium');
     await expect.poll(size, { message: 'large text' }).toBeGreaterThan(size0);
-    await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('small'));
+    await change(page, 'appearance', '[data-key="transcriptSize"]', (c) => c.selectOption('small'), 'large');
     await expect.poll(size, { message: 'small text' }).toBeLessThan(size0);
-    await change(page, 'appearance', '[data-key="transcriptWidth"]', (c) => c.selectOption('wide'));
+    await change(page, 'appearance', '[data-key="transcriptWidth"]', (c) => c.selectOption('wide'), 'medium');
     await expect.poll(width, { message: 'wide' }).toBeGreaterThan(width0);
-    await change(page, 'appearance', '[data-key="transcriptWidth"]', (c) => c.selectOption('narrow'));
+    await change(page, 'appearance', '[data-key="transcriptWidth"]', (c) => c.selectOption('narrow'), 'wide');
     await expect.poll(width, { message: 'narrow' }).toBeLessThan(width0);
   });
 });
