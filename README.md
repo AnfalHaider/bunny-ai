@@ -71,7 +71,7 @@ How long I wait before trying another model is yours to set: **Settings → Mode
 ### You can watch me think. On one tidy line.
 While I work, one little line at the bottom of my reply shows me hopping along ("Snuggling the code… thinking · 12s"). Open it and read my thoughts as they happen. Go on, I don't mind. When I move on, it settles into a quiet "Thought for 12s" you can open later. And if a model is being slow, I'll tell you exactly who's keeping us waiting. Hmph.
 
-<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Whisker-wiggling… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
+<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Binkying… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
 
 ### I build apps you can use straight away
 Ask for a to-do app, a game or a landing page and I build it as an **artifact**: a live page that opens right beside our chat, in its own sandbox. You get a short summary, not a wall of code. Then I open it in my browser and click around to make sure it actually works, because I have standards. Every change is kept as a new version.
@@ -146,7 +146,7 @@ You decide what I may do. I'll grumble, but I'll obey.
 
 <p align="center">
   <img src="docs/images/permission-rules.png" alt="Settings, Code: permission rules with Deny, Ask and Allow lists" width="440" />
-  <img src="docs/images/blocked-asked.png" alt="A step Blocked by a rule in amber, then a card Asked because of your rule git push" width="440" />
+  <img src="docs/images/blocked-asked.png" alt="A step denied by a rule, tagged in amber, then a card Asked because of your rule git push" width="440" />
 </p>
 
 This is how I decide, every single time I'm about to edit, read or run something:
