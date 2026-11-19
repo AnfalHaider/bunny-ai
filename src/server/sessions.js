@@ -286,6 +286,12 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.incognito !== undefined) session.incognito = Boolean(patch.incognito);
     if (patch.remoteAuto !== undefined) { if (patch.remoteAuto) session.remoteAuto = String(patch.remoteAuto); else delete session.remoteAuto; } // R6: set to Auto by another device (its id)
     if (patch.agentStatus !== undefined) session.agentStatus = patch.agentStatus;
+    if (patch.engine !== undefined) { // CLI-ENGINES: the chat's engine, its auth mode and its own session, fixed at the first message (only the server sets it)
+      const e = patch.engine;
+      if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny' }; // the person chose Bunny's own engine for this chat, explicitly
+      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...(e.restricted ? { restricted: true } : {}), ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
+      else delete session.engine;
+    }
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;

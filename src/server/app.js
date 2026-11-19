@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { dirname, extname, isAbsolute, join, normalize, sep } from 'node:path';
+import { dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
@@ -84,13 +84,14 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
 import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, deviceRefusal, ENGINE_REFUSED_MESSAGE, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -238,11 +239,20 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (req.bunnyDevice) {
       let decoded = '/api/remote'; // R-DF3: the decoded path (/api/%72emote is /api/remote); one that cannot be decoded is refused
       try { decoded = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { /* refused below */ }
-      if (isRemoteAdminPath(decoded)) { sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE }); return true; }
+      const refusal = deviceRefusal(req.method, decoded); // CE-6: device access and every engines route, even at Everything
+      if (refusal) { sendJson(res, 403, { code: 'request.windowOnly', message: refusal }); return true; }
       return false;
     }
     if (!folderPickerOnly || adminOk(req)) return false;
     sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+    return true;
+  };
+  // CE-6: some writes are judged by their body (the `engine` and `engines` settings, `session.engine`): a device, at Everything too, never makes them
+  const deviceRefusedBody = (req, res, method, path, body) => {
+    if (!req.bunnyDevice && !req.bunnyRemote) return false;
+    const refusal = deviceRefusal(method, path, body);
+    if (!refusal) return false;
+    sendJson(res, 403, { code: 'request.windowOnly', message: refusal });
     return true;
   };
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true, validConnectorState: (state) => connectorSignIn?.flowKnown(state) === true });
@@ -324,6 +334,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  const engines = createEngineService({ dataDir }); // CLI-ENGINES: Claude Code and Codex, downloaded on the person's click (src/server/engines)
   // W2-9: a chat's own copy of its project (ADR-002)
   const worktrees = createWorktrees({ dataDir });
   /**
@@ -585,7 +596,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
-    if (req.bunnyDevice && isRemoteAdminPath(path)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE }); // belt: remoteRoute already refused it
+    if (req.bunnyDevice && deviceRefusal(method, path)) return sendJson(res, 403, { code: 'request.windowOnly', message: deviceRefusal(method, path) }); // belt: remoteRoute already refused it (device access and the engines, CE-6)
     // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
     if (isWindowOnlyRoute(method, path) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
 
@@ -766,6 +777,24 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
     if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
+    // ---- CLI-ENGINES: what is downloaded, and the window's buttons (device access is refused for all of these: remoteRoute, route's belt and windowOnly) ----
+    if (path === '/api/engines' && method === 'GET') return sendJson(res, 200, await engines.status(settings));
+    if (path === '/api/engines/record' && method === 'GET') return sendJson(res, 200, { record: await engines.store.record() });
+    const engineMatch = path.match(/^\/api\/engines\/(claude-code|codex)(?:\/(download|cancel|rollback|signin|signout))?$/);
+    if (engineMatch && ['POST', 'DELETE'].includes(method)) {
+      if (windowOnly(req, res)) return;
+      const [, engineId, action] = engineMatch;
+      try {
+        if (method === 'DELETE' && !action) { await engines.store.remove(engineId); return sendJson(res, 200, { ok: true }); }
+        if (method === 'POST' && action === 'download') return sendJson(res, 202, engines.startDownload(engineId));
+        if (method === 'POST' && action === 'cancel') return sendJson(res, 200, { cancelled: engines.store.cancel(engineId) });
+        if (method === 'POST' && action === 'rollback') return sendJson(res, 200, await engines.store.rollback(engineId));
+        if (method === 'POST' && action === 'signin') return sendJson(res, 202, await engines.signIn(engineId));
+        if (method === 'POST' && action === 'signout') return sendJson(res, 200, await engines.signOut(engineId));
+      } catch (err) { return sendJson(res, err.status ?? 409, { code: err.code ?? 'engine.failed', message: err.message }); }
+      return sendJson(res, 404, { code: 'engine.route', message: 'No such engine action.' });
+    }
+
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
@@ -774,7 +803,11 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (Object.hasOwn(patch, 'firstReplyWaitSeconds') && validWaitSeconds(patch.firstReplyWaitSeconds) === null) {
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
+      if (deviceRefusedBody(req, res, method, path, patch)) return;
+      { const bad = validateEngineSettings(patch); if (bad) return sendJson(res, 400, { code: 'settings.badEngine', message: bad }); }
+      if (patch.useBunnyEngine === false && !(await engines.status(settings)).engines.some((e) => e.enabled && e.downloaded && e.ownRules)) return sendJson(res, 409, { code: 'settings.noEngine', message: 'Download an engine first: chats need one to run on while Bunny\'s engine is off.' });
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
+      const rulesWas = engineSettings(settings).useBunnyEngine;
       // SEARCH-PC SP-1: no device, at any level, turns Search this PC on or changes what it may look at
       if (PC_SETTING_KEYS.some((k) => Object.hasOwn(patch, k))) {
         if (req.bunnyRemote ?? req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
@@ -792,6 +825,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       settings = { ...settings, ...patch };
       if (Object.hasOwn(patch, 'pcSearchExcluded')) pc.setPersonal(settings.pcSearchExcluded);
       await writeJson(settingsFile, settings);
+      if (Object.hasOwn(patch, 'useBunnyEngine') && engineSettings(settings).useBunnyEngine !== rulesWas) await engines.store.addRecord({ engine: 'bunny', action: engineSettings(settings).useBunnyEngine ? 'rules-on' : 'rules-off', from: null, to: null, sha12: '' }).catch(() => {}); // ENGINE-RULES (ER-1): every change is in the record, from Bunny's window
       return sendJson(res, 200, settings);
     }
 
@@ -940,7 +974,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       return sendJson(res, 200, rows.map((r) => (replyStatus.has(r.id) ? { ...r, replyStatus: replyStatus.get(r.id) } : r)));
     }
     if (path === '/api/sessions' && method === 'POST') {
-      const body = req.bunnyRemote ? remoteBody(path, await readBody(req)) : await readBody(req); // another device may send only the few things remoteBody keeps
+      const raw = await readBody(req);
+      if (deviceRefusedBody(req, res, method, path, raw)) return; // CE-6: a device never starts a chat on an engine (remoteBody drops the key for a Chats device; an Everything device is refused here)
+      const body = req.bunnyRemote ? remoteBody(path, raw) : raw; // another device may send only the few things remoteBody keeps
       if (isWindowOnlyRoute(method, path, body) && !(req.bunnyRemote && remoteException(method, path, body)) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
@@ -1480,7 +1516,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (!pending || pending.sessionId !== permissionMatch[1]) {
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
-      pending.resolve((await readBody(req)).allowed === true);
+      const answer = await readBody(req);
+      pending.resolve(answer.allowed === true && answer.forSession === true && pending.forSession ? 'session' : answer.allowed === true);
       return sendJson(res, 200, { ok: true });
     }
 
@@ -1724,7 +1761,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     }
     if (sessionMatch && method === 'PATCH') {
       try {
-        const patch = req.bunnyRemote ? remotePatch(await readBody(req)) : await readBody(req); // from a device: only the chat's own title, modes, effort, model and provider
+        const rawPatch = await readBody(req);
+        if (deviceRefusedBody(req, res, method, path, rawPatch)) return;
+        if (rawPatch?.engine !== undefined) { const current = await sessions.get(sessionMatch[1]); if (current?.messages?.length && current.engine) return sendJson(res, 409, { code: 'engine.fixed', message: 'This chat already runs on an engine. To use another, start a new chat.' }); } // CE-6: a device never moves a chat to another engine
+        const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
@@ -2368,15 +2408,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return { stop: () => clearTimeout(timer) };
       };
       // Ask the person, and wait for the answer (or for them to leave).
-      const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
+      // `opts.forSession` offers a third answer, "Allow for this chat" (Codex's acceptForSession, only with Bunny's engine off): the answer is the text 'session', and only when this card offered it
+      const askPermission = (summary, detail, opts = {}) => new Promise((resolveAnswer) => {
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
         if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
         const timer = waitNudges({ kind: 'permission', title: summary });
-        pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
-        send('permission', { id: pid, title: summary, detail: cardText(detail) });
+        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}) });
       });
 
       // Ask the window to do a browser action, and wait for what happened.
@@ -3218,6 +3259,49 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
       const apiKey = await secrets.get(`provider:${providerId}`);
 
+      // CLI-ENGINES: a Code chat with a folder may run on an engine (Claude Code or Codex). The engine and its auth mode are fixed at the chat's first message.
+      // A device at the Chats level never runs one (req.bunnyRemote); schedules, Quick ask and Chat mode stay on Bunny's own engine.
+      {
+        const cfg = engineSettings(settings);
+        const wanted = session.engine?.id ?? (cfg.engine !== 'bunny' && cfg.engines[cfg.engine].enabled ? cfg.engine : null);
+        if (wanted && wanted !== 'bunny' && workMode === 'code' && workspace && !req.bunnyRemote && !scheduledTask) {
+          // the rules this chat follows are fixed at its first message: Bunny's (the default) or the engine's own (ENGINE-RULES, when the person turned Bunny's engine off)
+          const wantRules = cfg.useBunnyEngine === false ? 'engine' : 'bunny';
+          if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth, rules: wantRules, rulesFixed: true } });
+          else if (!session.engine.rulesFixed) session = await sessions.update(id, { engine: { ...session.engine, rules: wantRules, rulesFixed: true } });
+          const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
+          const outcome = await engines.runTurn({
+            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
+            onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
+            noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
+            tokenBudget: replyCaps.tokens,
+            onLimit: async ({ inputTokens }) => {
+              if (scheduledTask) return false; // nobody is there to answer: no answer means stop
+              const q = cleanQuestion({ question: `This job has used about ${Math.round(inputTokens / 1_000_000 * 10) / 10}M tokens. Keep going?`, choices: [{ label: 'Keep going', recommended: true }, { label: 'Stop here', recommended: false }] });
+              const answer = await askQuestion(q);
+              const said = ((Array.isArray(answer.choices) ? answer.choices : []).join('') || String(answer.text ?? '')).trim();
+              return said === 'Keep going' && !answer.skipped;
+            },
+            logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
+          });
+          if (outcome.stoppedForCheck) {
+            session = await sessions.update(id, { engine: { ...session.engine, restricted: true } }).catch(() => session);
+            const note = "Stopped: Bunny's check did not run. Your next message in this chat continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder. A new chat starts in full mode again.";
+            send('delta', { text: `${outcome.text ? '\n\n' : ''}${note}` });
+            outcome.text = `${outcome.text}${outcome.text ? '\n\n' : ''}${note}`;
+          }
+          if (clientGone) { if (outcome.text.trim()) await sessions.append(id, { role: 'assistant', content: outcome.text, kind: 'partial', ...undoInfo() }); }
+          else if (outcome.text.trim()) {
+            const saved = await sessions.append(id, { role: 'assistant', content: outcome.text, ...undoInfo() });
+            session = await sessions.get(id);
+            send('done', { sessionId: id, model: cfg.engines[wanted] ? `${wanted}` : model, messageId: saved.messages.at(-1)?.id, context: sessions.context(session) });
+          }
+          res.end();
+          return;
+        }
+      }
+
       // Two things can be wrong with a first attempt, and both are worth one
       // more go: a model that is not provisioned for this account yet, and a
       // request that asks for more tokens than the balance covers.
@@ -3730,11 +3814,13 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     // DEVICE-FULL: a device the person gave 'everything' may do all the window can, except /api/remote* (the person's own switches for device access)
     const logWindowOnly = () => { if (writes && (isWindowOnlyRoute(method, path) || (method === 'PUT' && path === '/api/settings'))) remote.logAction(session, { kind: 'route', method, path }); }; // R-DF2: route and method, never the body
     if (session.level === 'everything') {
-      if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', DEVICE_ACCESS_MESSAGE);
+      const refusal = deviceRefusal(method, path); // device access and every engines route (CE-6)
+      if (refusal) return refuse(403, 'request.windowOnly', refusal);
       logWindowOnly();
       req.bunnyDevice = session;
       return route(req, res);
     }
+    if (deviceRefusal(method, path) === ENGINE_REFUSED_MESSAGE) return refuse(403, 'request.windowOnly', ENGINE_REFUSED_MESSAGE); // a Chats device is told the engines sentence; every other refusal keeps the window sentence it always had
     if (!remotePolicy(method, path) || (isWindowOnlyRoute(method, path) && !remoteException(method, path))) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
     logWindowOnly(); // the few window-only routes a Chats device may use (its own chat's cards and mode)
     req.bunnyRemote = session;

@@ -34,6 +34,29 @@ export const DEFAULT_LEVEL = 'chats';
 /** What a device at Everything is told when it reaches for device access (the drawn sentence). */
 export const DEVICE_ACCESS_MESSAGE = "Only Bunny's window can change device access.";
 export const isRemoteAdminPath = (path) => /^\/api\/remote(\/|$)/.test(String(path));
+/** CLI-ENGINES (CE-6): what a device at ANY level is told when it reaches for the engines. */
+export const ENGINE_REFUSED_MESSAGE = "Only Bunny's window can change engines.";
+const UUID_ = '[a-f0-9-]{36}';
+const ENGINE_PATH = /^\/api\/engines(\/|$)/;
+/**
+ * CLI-ENGINES (CE-6): is this request one a device must NEVER make, even at Everything (which otherwise counts as the window)?
+ * It is true for device access itself (/api/remote*), every engines route (download, update, rollback, remove, sign-in, sign-out, status),
+ * the `engine` and `engines` settings, and `session.engine`. Returns the sentence to tell the device, or null. `body` is the parsed JSON body (may be null).
+ * The path is the DECODED path. A device at Chats is refused by remotePolicy already; this is checked for it as well.
+ */
+export function deviceRefusal(method, path, body = null) {
+  const m = String(method).toUpperCase();
+  const p = String(path);
+  if (isRemoteAdminPath(p)) return DEVICE_ACCESS_MESSAGE;
+  if (ENGINE_PATH.test(p)) return ENGINE_REFUSED_MESSAGE;
+  const has = (...keys) => Boolean(body) && typeof body === 'object' && keys.some((k) => Object.hasOwn(body, k));
+  if (p === '/api/settings' && m === 'PUT' && has('engine', 'engines', 'useBunnyEngine')) return ENGINE_REFUSED_MESSAGE;
+  if (p === '/api/sessions' && m === 'POST' && has('engine')) return ENGINE_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('engine')) return ENGINE_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}/setting/engine$`).test(p) && m === 'PATCH') return ENGINE_REFUSED_MESSAGE;
+  return null;
+}
+export const isDeviceRefused = (method, path, body = null) => deviceRefusal(method, path, body) !== null;
 export const FLOOD_LIMIT = 30; // wrong tries from anyone in 10 minutes before everyone waits a minute
 const KDF = { N: 16384, r: 8, p: 1, keylen: 32 };
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I: readable aloud

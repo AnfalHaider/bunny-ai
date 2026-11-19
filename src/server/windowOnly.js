@@ -14,10 +14,10 @@
  */
 
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine'];
 
 /** A session setting that decides the same. */
-export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode'];
+export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine'];
 
 const WRITES = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const UUID = '[a-f0-9-]{36}';
@@ -46,6 +46,7 @@ export const WINDOW_ONLY_ROUTES = [
   [WRITES, '^/api/account/(github|google)(/.*)?$'],         // sign-ins and sign-outs
   [['POST'], '^/api/oauth/[a-z0-9-]+/(start|finish)$'],     // provider sign-in
   [['GET'], '^/api/remote/log$'],                           // DEVICE-FULL R-DF2: what devices did; read only in Bunny's window
+  [WRITES, '^/api/engines(/.*)?$'],                         // CLI-ENGINES: download, update, switch, roll back, remove, sign in and out of an engine
   [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];
 
@@ -56,8 +57,8 @@ export function isWindowOnlyRoute(method, path, body = null) {
   const has = (...keys) => Boolean(body) && typeof body === 'object' && keys.some((k) => Object.hasOwn(body, k));
   if (path === '/api/permission-rules' && m === 'PUT') return true;
   if (path === '/api/settings' && m === 'PUT') return has(...WINDOW_ONLY_SETTING_KEYS);
-  if (path === '/api/sessions' && m === 'POST') return has('permissionMode');
-  if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode');
+  if (path === '/api/sessions' && m === 'POST') return has('permissionMode', 'engine');
+  if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode', 'engine');
   // a project's instructions steer the model in every chat that uses it
   if (path === '/api/projects' && m === 'POST') return has('instructions');
   if (new RegExp(`^/api/projects/${UUID}$`).test(path) && m === 'PATCH') return has('instructions');

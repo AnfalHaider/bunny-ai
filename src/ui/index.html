@@ -219,6 +219,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>
           <span id="branch-text" data-i18n="composer.noBranch">No branch</span>
         </button>
+        <button id="engine-chip" class="ctx-chip code-only" title="Engine for this chat" hidden aria-haspopup="menu"><span class="engine-text">Bunny</span></button>
+        <div class="menu up" id="engine-menu" role="menu" hidden></div>
         <span class="under-sep code-only">|</span>
 
         <button class="picker-btn" id="mode-button" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu" title="Permission mode">
@@ -453,6 +455,7 @@
         <button class="nav-row" data-section="automation" data-keywords="memory mcp schedules hooks skills">Automation</button>
         <div class="settings-sep"></div>
         <button class="nav-row" data-section="code" data-keywords="permission mode effort defaults branch prefix long jobs keep going steps minutes helpers suggestions unrelated">Code</button>
+        <button class="nav-row" data-section="engines" data-keywords="claude code codex cli engine account local download update">Engines</button>
         <button class="nav-row" data-section="desktop" data-keywords="startup login tray install app browser">Desktop app</button>
         <button class="nav-row" data-section="about" data-keywords="version updates">About</button>
       </div>

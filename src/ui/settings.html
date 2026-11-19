@@ -506,6 +506,7 @@
       </div>
       <div class="rules" id="perm-rules">
         <h3>Permission rules</h3>
+        <p class="lead" id="rules-engine-off" hidden></p>
         <p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say. A command pattern like <code>npm test*</code> matches what Bunny is about to run; a path pattern like <code>secrets/**</code> matches the files Bunny's own tools read or edit (not what a command does). Simple wildcards only: <code>*</code> and <code>**</code>.</p>
         <p class="lead"><b>Only from Bunny's window.</b> In the desktop app, the rules, the permission mode, connectors, schedules, hooks, skills, sign-ins, providers, automatic updates, "use another model when busy" and the other settings that decide what Bunny may do change only from this window. Anything else on this computer that tries gets "Change this in Bunny's window.", which means the request was refused and nothing was changed.</p>
         <p class="lead"><b>A guard rail, not a sandbox.</b> Command rules read the command Bunny is about to run; they do not cover custom tools, MCP or local connectors, computer-use typing, the browser tools or schedules, and a wrapper such as <code>cmd /c</code> or <code>powershell -Command</code> can hide what it runs (Bunny asks about those when you have a Deny or Ask rule).</p>
@@ -599,6 +600,22 @@
         </select></div>
       </div>
     </div>
+  </section>
+
+  <section data-section="engines" id="engines-section">
+    <h2>Engines</h2>
+    <div class="group" id="engines-list" aria-live="polite">Loading…</div>
+    <div class="group">
+      <div class="row"><div class="meta-col"><div class="name">Engine for new chats</div><div class="desc">A Code chat with a folder runs on this engine. It is fixed when the chat's first message is sent; a change here applies to new chats.</div></div><div class="right"><select id="engine-default" aria-label="Engine for new chats"><option value="bunny">Bunny</option></select></div></div>
+      <div class="row"><div class="meta-col"><div class="name">Use Bunny's engine</div><div class="desc">On: your Bunny rules decide each step. Off: new chats follow the engine's own rules, which you set here.</div></div><div class="right"><label class="switch"><input type="checkbox" id="engine-bunny-rules" checked aria-label="Use Bunny's engine" /><span id="engine-bunny-rules-state">on</span></label></div></div>
+    </div>
+    <p class="lead warn" id="engines-warning" hidden></p>
+    <div class="group" id="engine-rules" hidden></div>
+    <p class="lead" id="engines-note" hidden><b>Local mode for Claude Code.</b> Not supported by Anthropic. Claude Code may stop working with your models after an update.</p>
+    <p class="lead" id="engines-window-only" hidden>Only Bunny's window can change engines.</p>
+    <h3>What was done</h3>
+    <div id="engines-record" class="d"></div>
+    <script type="module" src="./engines.js"></script>
   </section>
 
   <section data-section="usage">
@@ -744,6 +761,12 @@
           <div class="name">Licences</div>
           <div class="desc">The fonts bundled with Bunny are free under the SIL Open Font License 1.1 and are not modified.</div>
           <details id="licences"><summary>Fonts and their licences</summary><ul id="licence-list" class="licence-list"></ul></details>
+        </div>
+      </div>
+      <div class="row" id="engine-licences-row">
+        <div class="meta-col">
+          <div class="name">Engine licences</div>
+          <div class="desc">Engines are not part of Bunny: each is downloaded on your click, unmodified. Claude Code is used under the Anthropic Commercial Terms. Codex CLI is Apache-2.0.</div>
         </div>
       </div>
     </div>
