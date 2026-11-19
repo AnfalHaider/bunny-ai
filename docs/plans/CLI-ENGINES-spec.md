@@ -317,6 +317,14 @@ Every request must pass all of these, or it gets a 403 with no detail:
    - **every Bunny read-Ask path**, because a hook allow doesn't pass a `permissions.ask` read (S1 addendum 2).
 
    There is **no `permissions.ask`**. The cost is that Claude Code never reads those paths, even when the person would say yes, and the chat says so in one line.
+
+   **The form of an absolute deny rule on Windows (S1 addendum 4, 84eaaea; Security's EN-3).** Every absolute path is written in **both** forms Claude Code 2.1.311 honours, for `Read` and for `Edit`, each with and without `/**`:
+   - `//c/Users/…`: the drive letter in lower case, with no colon;
+   - `C:/Users/…`: the drive letter in upper case, with a colon.
+
+   **Never `//C:/Users/…`.** S1 showed it doesn't deny with the hook dead. Neither do `/c/…`, backslashes, or an exact-file rule in that form. Both working forms held with the hook killed, **and** against a live hook allow.
+
+   Workspace-relative rules stay `./<pattern>`. The form is re-checked at every pin change (`engine-smoke`): a deny rule naming a canary folder must hold with the hook killed.
 4. **CE-1.10, the stream watchdog (M6).**
    - Every `tool_use` id must have a bridge request for the same id **before** its `tool_result`.
    - If one doesn't, the hook isn't working. The run is tree-killed at once and marked "stopped: Bunny's check did not run", and restricted mode is offered.
@@ -640,7 +648,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 | Spike | Result |
 |---|---|
 | **S2-account line** (Builder C) | **Owed:** Codex app-server with a ChatGPT login, six checks in §7.4. If it fails, Codex account mode is greyed out. |
-| S1, Claude Code 2.1.311 (e1e568f, c532469, 7b1f864, 2a92e8f, 4b74686) | **Done.** Full mode with CE-1.7 to CE-1.11 (§3.2). Nothing owed. |
+| S1, Claude Code 2.1.311 (e1e568f, c532469, 7b1f864, 2a92e8f, 4b74686, 84eaaea) | **Done.** Full mode with CE-1.7 to CE-1.11 (§3.2). Addendum 4: the absolute deny form (§3.2, CE-1.9). Nothing owed. |
 | S2, Codex 0.170.0 (401bd92, and the addendum 2675249) | **Done.** Full mode with CE-1.12 to CE-1.17 (§3.2). The CE-1.15 line is **settled** (Security 53cceb0): with an explicit `untrusted` entry, a project `.codex/rules` isn't read, and every command still asks. Nothing owed. |
 | S3, Cline (767c4ea) | Done, and failed: §11. |
 | S4, Aider | Not run. Aider is later (§11). |
