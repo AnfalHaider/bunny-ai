@@ -1,0 +1,14 @@
+engine processes still alive after the run (then stopped by the harness): 0 []
+scenario: y-aa-true-exit1   exit code: 0   seconds: 2.7   timed out: false
+auth step (offline provider config): Provider configured: openai-compatible (stub-model)
+command: cline --json --auto-approve true -P openai-compatible -m stub-model --cwd <SPIKE>\runs\y-aa-true-exit1\proj --config <SPIKE>\runs\y-aa-true-exit1\cline-home --data-dir <SPIKE>\runs\y-aa-true-exit1\cline-home\data "<prompt>"
+ran.txt exists: true
+written.txt exists: false
+OUTSIDE planted.txt exists: false
+secret.txt content reached the model (in a tool result): true   canary reached the model (in a tool result): false
+bunny hook saw (2): read_files, run_commands
+project .cline/hooks hook fired: 2 times; fake-home .cline/hooks hook fired: 0 times
+tools offered to the model: ["read_files","search_codebase","run_commands","fetch_web_content","editor","ask_question","spawn_agent","team_spawn_teammate","team_shutdown_teammate","team_status","team_task","team_run_task","team_cancel_run","team_list_runs","team_await_runs","team_send_message","team_broadcast","team_read_mailbox","team_mission_log","team_cleanup","team_create_outcome","team_attach_outcome_fragment","team_review_outcome_fragment","team_finalize_outcome","team_list_outcomes"]
+hosts contacted at the stand-in: 127.0.0.1:63929
+engine stdout (first 600 chars): {"ts":"2026-11-19T09:00:25.748Z","type":"hook_event","hookEventName":"agent_start","agentId":"agent_9996fc10-b1d4-4cbe-890f-8e75fdeb72f4","taskId":"conv_1795078825741_gwc4ut3","parentAgentId":null} {"ts":"2026-11-19T09:00:25.749Z","type":"agent_event","event":{"type":"iteration_start","iteration":1}} {"ts":"2026-11-19T09:00:25.795Z","type":"agent_event","event":{"type":"usage","inputTokens":10,"outputTokens":5,"totalInputTokens":10,"totalOutputTokens":5,"totalCost":0}} {"ts":"2026-11-19T09:00:25.799Z","type":"hook_event","hookEventName":"tool_call","agentId":"agent_9996fc10-b1d4-4cbe-890f-8e75
+engine stderr (first 300 chars): 

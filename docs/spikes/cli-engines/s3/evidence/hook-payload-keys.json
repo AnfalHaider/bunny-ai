@@ -1,0 +1,19 @@
+{
+ "topLevelKeys": [
+  "clineVersion",
+  "timestamp",
+  "taskId",
+  "sessionContext",
+  "workspaceRoots",
+  "workspaceInfo",
+  "userId",
+  "agent_id",
+  "parent_agent_id",
+  "hookName",
+  "iteration",
+  "tool_call",
+  "preToolUse"
+ ],
+ "note": "payload text is cut at 1500 chars in the spike log; paths are redacted",
+ "payloadStart": "{\"clineVersion\":\"\",\"timestamp\":\"2026-11-19T09:00:10.324Z\",\"taskId\":\"conv_1795078810260_3ib1z73\",\"sessionContext\":{\"rootSessionId\":\"1795078810168_x7rlz\"},\"workspaceRoots\":[\"<PATH>\"],\"workspaceInfo\":{\"rootPath\":\"<PATH>\",\"hint\":\"proj\"},\"userId\":\"unknown\",\"agent_id\":\"agent_cce10962-060a-4368-bc40-42536f733bb3\",\"parent_agent_id\":null,\"hookName\":\"tool_call\",\"iteration\":1,\"tool_call\":{\"id\":\"call_1\",\"name"
+}

@@ -1,0 +1,102 @@
+[
+ {
+  "name": "read_files",
+  "description": "Read the content of text or image files at the provided absolute paths, or return only an inclusive one-based line range when start_line/end_line are provided o"
+ },
+ {
+  "name": "search_codebase",
+  "description": "Perform regex pattern searches across the codebase. Supports multiple parallel searches. When several search patterns could be useful and do not depend on each "
+ },
+ {
+  "name": "run_commands",
+  "description": "Run non-interactive shell commands from the root of the workspace in Windows environment. Use for listing files, checking git status, running builds, executing "
+ },
+ {
+  "name": "fetch_web_content",
+  "description": "Fetch content from URLs and analyze them using the provided prompts. Use for retrieving documentation, API references, or any web content. Each request includes"
+ },
+ {
+  "name": "editor",
+  "description": "An editor for controlled filesystem edits on the text file at the provided path. Provide `insert_line` to insert `new_text` at a specific line number. Otherwise"
+ },
+ {
+  "name": "ask_question",
+  "description": "Ask user a question for clarifying or gathering information needed to complete the task. For example, ask the user clarifying questions about a key implementati"
+ },
+ {
+  "name": "spawn_agent",
+  "description": "Spawn a sub-agent with custom instructions for a specialized task. Waits for the sub-agent to finish and returns its result before your next step."
+ },
+ {
+  "name": "team_spawn_teammate",
+  "description": "Spawn a teammate with a required agentId and rolePrompt."
+ },
+ {
+  "name": "team_shutdown_teammate",
+  "description": "Shutdown a teammate by agentId."
+ },
+ {
+  "name": "team_status",
+  "description": "Return a snapshot of team members, task counts, mailbox, and mission log stats."
+ },
+ {
+  "name": "team_task",
+  "description": "Manage shared team tasks with action-specific payloads. create requires title and description, with optional dependsOn and assignee. list accepts optional statu"
+ },
+ {
+  "name": "team_run_task",
+  "description": "Route a delegated task to a teammate. Choose sync (wait) or async (run in background)."
+ },
+ {
+  "name": "team_cancel_run",
+  "description": "Cancel one async teammate run."
+ },
+ {
+  "name": "team_list_runs",
+  "description": "List teammate runs started with team_run_task in async mode, including live activity/progress fields when available."
+ },
+ {
+  "name": "team_await_runs",
+  "description": "Wait for async teammate runs. Provide runId to wait for one run, or omit it to wait for all active async runs. Uses a long timeout for legitimate teammate work."
+ },
+ {
+  "name": "team_send_message",
+  "description": "Send a mailbox message to a specific teammate."
+ },
+ {
+  "name": "team_broadcast",
+  "description": "Broadcast a message to all teammates."
+ },
+ {
+  "name": "team_read_mailbox",
+  "description": "Read the current agent mailbox."
+ },
+ {
+  "name": "team_mission_log",
+  "description": "Append a mission log update for your team."
+ },
+ {
+  "name": "team_cleanup",
+  "description": "Clean up the team runtime. Fails if teammates are still running."
+ },
+ {
+  "name": "team_create_outcome",
+  "description": "Create a converged team outcome."
+ },
+ {
+  "name": "team_attach_outcome_fragment",
+  "description": "Attach a fragment to an outcome section."
+ },
+ {
+  "name": "team_review_outcome_fragment",
+  "description": "Review one outcome fragment."
+ },
+ {
+  "name": "team_finalize_outcome",
+  "description": "Finalize one outcome."
+ },
+ {
+  "name": "team_list_outcomes",
+  "description": "List team outcomes."
+ }
+]
