@@ -64,7 +64,7 @@ flowchart LR
     M2 --> R["One quiet line tells you<br/>who answered and why"]
 ```
 
-How long I wait before trying another model is yours to set: **Settings → Capabilities → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
+How long I wait before trying another model is yours to set: **Settings → Models → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
 
 <p align="center"><img src="docs/images/settings-wait.png" alt="Settings: Try another model when yours is busy, with Wait for a first reply under it" width="820" /></p>
 
@@ -128,6 +128,11 @@ Link your GitHub or Google account if you want. There's still no cloud account: 
 - **Projects, branches, search, incognito chats, voice input, read-aloud, import and export.**
 - **Connectors (MCP), skills and plugins** for even more of me, including local connectors that run as a program on your PC (you confirm the exact command).
 - **Gmail, Calendar and Drive** when you allow them at Google sign-in: I search and read mail, write drafts (sending always asks), see and add events, and read Docs and Sheets.
+- **Your phone or another computer:** with **Allow other devices to open Bunny** on, a device you sign in can reach me on your network. You give each signed-in device a level, set only from my window: **Chats** (the default) or **Everything**, which lets it use every tool and setting, as if it were my window. A device at Everything is signed out after 30 minutes idle (Chats: 2 hours), and **Activity** lists what each device did (tool names and setting changes, never the details) for the last 500 entries or 30 days. The setting stays on after a restart, and on a different network, such as a café's Wi-Fi, I don't open myself again on my own.
+- **Quick ask:** a light floating bar for a quick question, with the answer opening below it. Esc does one thing at a time (closes a menu, then stops the answer, then closes the bar), **Ctrl+Enter** opens the chat in Bunny, and with no model connected it offers **Open Bunny settings**.
+- **13 fonts and instant themes:** Inter, Source Sans 3, IBM Plex Sans, Atkinson Hyperlegible, Lexend, Nunito, Quicksand, Lora, Literata, Source Serif 4, Noto Serif, JetBrains Mono and IBM Plex Mono are built in, so they look the same on every PC. Changing the theme applies at once everywhere, with no flash. Their licences are under **Settings → About**.
+- **Chats open without a reload:** opening another chat, even in another project, doesn't reload me. Back and Forward work, and Ctrl-click opens a chat in a new window.
+- **Settings stay put:** what you change is kept after a restart, and each Settings tab shows only its own settings. A few settings moved to where they belong: **Try another model when yours is busy** and **Wait for a first reply** to **Models**, **Keep going on long jobs** and **Longest long job** to **Code**, and **Default transcript view** and **Label chats by status** to **Appearance**.
 
 ---
 
@@ -224,6 +229,6 @@ About 1,440 unit tests (1,244 run in parallel, plus 198 guard and kit tests) and
 - Keys and sign-in tokens are encrypted with Windows' own protection and never shown again in full.
 - What I send out: your requests to the model provider you chose; the pages you or I open; the search words I send to DuckDuckGo when I run a web search; the mail, calendar and Drive requests I make when you allow Google (see above); GitHub or Google when you sign in; a check for updates on GitHub Releases; and, when the network seems down, a tiny "am I online?" check to Google, Cloudflare or Apple connectivity addresses (no data, cookies or identifiers).
 - A phone or other computer signed in over your home network talks to me on that network only. Its chats go to the model provider you chose, the same as chats in my window.
-- Pages I build run in a sandbox and can't reach the app, and only my own windows can talk to my local server.
+- Pages I build run in a sandbox and can't reach the app. Only my own windows talk to my local server, unless you allow other devices (see above).
 
 <p align="center"><sub>Made with love for people who want a capable AI on their own terms. Now go connect a model. I'm waiting. 🐰</sub></p>
