@@ -48,6 +48,8 @@ export async function resetProfile(request) {
       language: 'en', theme: 'system', allowlist: [], aliases: {}, notifications: false,
       // the run limits and the wait are Settings too (0 means Off): back to the defaults, so a chat that runs past its step limit behaves the same in every spec
       autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true,
+      // the code colours too (a spec that tries other code colour sets must not leave them for the next one)
+      codeThemeLight: 'bunny-light', codeThemeDark: 'bunny-dark',
       // The tests chat through a test Anthropic provider, so every model is shown.
       modelFilter: 'all',
     },

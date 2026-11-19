@@ -3,6 +3,8 @@ import { resetProfile } from './helpers.js';
 
 // v0.1.13 THEME-APPLY: switching the theme while Settings is open reaches everything at once, with no reload: the chat page, the Settings frame and the pages
 // opened in it afterwards, the browser-bar colour, the code colours, the desktop shell (told once), and another copy of Bunny on its next look.
+// the spec below tries other code colour sets: put them back so a later spec (and the help pictures) draw code the usual way
+test.afterEach(async ({ request }) => { await request.put('/api/settings', { data: { theme: 'system', codeThemeLight: 'bunny-light', codeThemeDark: 'bunny-dark' } }).catch(() => {}); });
 const DARK = '#141518';
 const LIGHT = '#faf9f6';
 
