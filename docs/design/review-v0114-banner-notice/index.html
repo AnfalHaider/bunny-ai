@@ -82,155 +82,161 @@ th{font-size:12px;color:var(--dim);font-weight:600}
 .demo button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--soft);color:var(--fg);border-radius:8px;padding:3px 10px;cursor:pointer}
 @media (max-width:520px){.body{grid-template-columns:80px minmax(0,1fr)}.note{width:calc(100% - 24px)}}
 </style>
+<style>
+.chip.n{border-color:var(--line);color:var(--fg);background:var(--soft)}
+.chip.n::before{background:var(--warn)}
+.chip.bad::before{background:var(--bad)}
+.chip .sh{display:none}
+.nar .chip .lg{display:none}.nar .chip .sh{display:inline}
+.nar{max-width:300px}
+.autobar{height:2px;background:var(--warn);opacity:.5;border-radius:2px;margin:3px -4px -6px}
+.badge-new{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:99px;padding:0 7px}
+</style>
 <div class="wrap">
  <div class="top">
   <div><h1>The "open to other devices" banner becomes a notification</h1>
-   <p class="dim">v0.1.14 · BANNER-NOTICE · drawn for the owner's request of 2026-11-19 · invented data only</p></div>
+   <p class="dim">v0.1.14 · BANNER-NOTICE · version 2, drawn to Security's rules BN-1 to BN-4 (366821a) · invented data only</p></div>
   <div style="display:flex;gap:8px;align-items:center"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
  </div>
 
  <section>
-  <h2>What I drew, in short</h2>
-  <p>Today the amber banner takes a full row across the top of Bunny's window for as long as device access is on, and a coloured line does the same on the device's own page. Proposed: the loud part, the banner, becomes a <b>notification you can dismiss</b>. What stays is one <b>small chip</b> that cannot be dismissed, so the open state is always findable (this keeps RS-5 and R-DF1 in spirit: open and Everything are never hidden, only the big bar goes). The chip turns red when a device has Everything. A notification comes back by itself when something new happens.</p>
-  <p class="dim"><b>Security decides the rule.</b> Everything below is a proposal for them to accept or change. The table marks what may be dismissed and what must stay.</p>
+  <h2>In short</h2>
+  <p>Security's principle: <b>the notice may go away, but the state never does.</b> The banner and the device's line can be dismissed. A small status chip stays in the window's top bar for as long as access is open, and a device page at Everything keeps a small "Everything" chip. A click on the window's chip brings the banner back. Nothing about a dismissal is saved anywhere: a reload or restart shows the banner again.</p>
  </section>
 
  <section>
-  <h2>Proposed rule: what may be dismissed, what must stay</h2>
+  <h2>The rule, as drawn (Security's BN-1 to BN-4)</h2>
   <div class="scroll"><table>
-   <tr><th>State</th><th>Notification</th><th>Chip in the top bar (and tray)</th><th>The notification comes back when</th></tr>
-   <tr><td>Device access off</td><td>none</td><td>none</td><td>access is turned on</td></tr>
-   <tr><td>On, no device signed in</td><td><span class="y">may be dismissed</span></td><td><span class="n">stays</span>, amber "Open"</td><td>a device signs in; Bunny starts again with access on (shown from the first moment, as RS-5 asks)</td></tr>
-   <tr><td>A device signed in, Chats</td><td><span class="y">may be dismissed</span></td><td><span class="n">stays</span>, amber "Open · N"</td><td>another device signs in; Bunny starts again</td></tr>
-   <tr><td>A device has Everything</td><td><span class="y">may be dismissed</span></td><td><span class="n">stays</span>, <b style="color:var(--bad)">red</b> "Everything · N"; tray dot red</td><td>another device is given Everything; Bunny starts again. <i>Question for Security: also once more when it has been shown 10 minutes?</i></td></tr>
-   <tr><td>A device with Everything changed a setting</td><td><span class="y">may be dismissed</span> (it already is a notice, built in v0.1.13)</td><td>unchanged</td><td>each change, one notice per change</td></tr>
-   <tr><td>The device's own page: its level</td><td><span class="y">may be dismissed</span></td><td><span class="n">stays</span>: "Chats" (purple) or "Everything" (red) chip in its header</td><td>the page loads again; the PC changes its level (the page starts over today)</td></tr>
+   <tr><th>State</th><th>Banner / line</th><th>Chip that stays</th><th>Banner comes back when</th></tr>
+   <tr><td>Access off</td><td>none</td><td>none</td><td>access is turned on</td></tr>
+   <tr><td>Open, nobody or only Chats</td><td><span class="y">× to dismiss</span>; also hides itself after 10 s</td><td><span class="n">stays</span>: "Open to devices · N", normal colour</td><td>a device signs in · access opened or reopened · reload or restart</td></tr>
+   <tr><td>A device has Everything</td><td><span class="y">× to dismiss</span>; <b>never hides itself</b></td><td><span class="n">stays</span>: warning colour, in words: "Pixel 8 has Everything" (or "Everything: 2 devices")</td><td>a device is raised to Everything · a new sign-in · reload or restart</td></tr>
+   <tr><td>A device with Everything changed a setting</td><td>its own notice: dismissing the banner never hides it; it never hides itself</td><td>unchanged</td><td>every new change</td></tr>
+   <tr><td>Device page at Chats</td><td><span class="y">line may be dismissed</span>; nothing is left behind</td><td>none</td><td>a new page load</td></tr>
+   <tr><td>Device page at Everything</td><td><span class="y">line may be dismissed</span></td><td><span class="n">stays</span>: "Everything" chip in the page header</td><td>a new page load; the level changes (the page starts over)</td></tr>
   </table></div>
-  <p class="cap">Turn off is not lost: it sits in the chip's panel (picture 4) as well as in Settings.</p>
+  <p class="cap">Unchanged and not dismissible: the tray tooltip "Bunny AI: Open to other devices", the one-time notification at start, the red box in Settings while a device has Everything, and the warning in the Give Everything dialog. A dismissal lives only in the page's memory (BN-4).</p>
  </section>
 
  <section>
   <h2>1 · Bunny's window</h2>
-  <p class="dim">Try it: the buttons below drive the picture on the right.</p>
   <div class="cols">
    <div class="cell"><h3>Today</h3>
     <div class="win"><div class="rb"><span>Open to other devices · 2 signed in · <b>Pixel 8 has Everything</b></span><button type="button">Turn off</button></div>
      <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span><span class="ic"></span></div>
      <div class="body"><div class="side"><i></i><i style="width:70%"></i><i style="width:85%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i><i style="width:40%"></i><div class="comp"></div></div></div></div>
-    <p class="cap">A full row, always there, no way to put it away, and it pushes the whole window down.</p></div>
+    <p class="cap">A full row, always there, with no way to put it away. It pushes the whole window down.</p></div>
    <div class="cell"><h3>Proposed · try it</h3>
     <div class="win" id="dw"></div>
     <div class="demo">
      <button type="button" data-a="signin">A device signs in</button>
-     <button type="button" data-a="every">Give Everything</button>
+     <button type="button" data-a="every">Raise to Everything</button>
      <button type="button" data-a="change">Device changes a setting</button>
      <button type="button" data-a="dismiss">Dismiss</button>
-     <button type="button" data-a="chip">Open the chip</button>
-     <button type="button" data-a="restart">Restart Bunny</button>
+     <button type="button" data-a="chip">Click the chip</button>
+     <button type="button" data-a="restart">Reload the window</button>
     </div>
     <p class="cap" id="dcap"></p></div>
   </div>
   <h3>The states, drawn out</h3>
   <div class="cols">
    <div class="cell"><div class="win">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip">Open · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
-     <div class="note"><div class="h"><span>Pixel 8 signed in</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">Open to other devices. It works as Chats. Change this in Settings.</span><div class="a"><button type="button">Settings</button><button type="button">Turn off</button></div></div>
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip n">Open to devices · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
+     <div class="note"><div class="h"><span>Open to other devices · 1 signed in</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">Pixel 8 signed in. It works as Chats. Change this in Settings.</span><div class="a"><button type="button">Settings</button><button type="button">Turn off</button></div><div class="autobar"></div></div>
      <div class="body" style="min-height:140px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i></div></div></div>
-    <p class="cap"><b>1 · A device signs in.</b> The notification, with the chip already in the top bar. It stays until dismissed.</p></div>
+    <p class="cap"><b>1 · A device signs in, or access is opened.</b> The banner shows as a notification and hides itself after 10 s (the thin line is the countdown). The chip is already in the top bar.</p></div>
    <div class="cell"><div class="win">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip">Open · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip n">Open to devices · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
      <div class="body" style="min-height:140px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i></div></div></div>
-    <p class="cap"><b>2 · Dismissed.</b> Only the chip is left. No row, nothing pushed down.</p></div>
+    <p class="cap"><b>2 · Dismissed, or hidden after 10 s.</b> Only the chip is left: no row, nothing pushed down. A click on it brings the banner back.</p></div>
    <div class="cell"><div class="win">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Everything · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
-     <div class="note bad"><div class="h"><span>Pixel 8 has Everything</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">It can run programs and change settings, and ends after 30 minutes idle.</span><div class="a"><button type="button">See Activity</button><button type="button">Back to Chats</button></div></div>
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Pixel 8 has Everything</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
+     <div class="note bad"><div class="h"><span>Pixel 8 has Everything</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">It can run programs and change settings. Ends after 30 minutes idle.</span><div class="a"><button type="button">See Activity</button><button type="button">Back to Chats</button><button type="button">Turn off</button></div></div>
+     <div class="body" style="min-height:150px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i></div></div></div>
+    <p class="cap"><b>3 · A device is raised to Everything.</b> The banner returns in red and <b>never hides itself</b>; the person dismisses it. The chip turns red and says it in words.</p></div>
+   <div class="cell"><div class="win">
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Pixel 8 has Everything</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
      <div class="body" style="min-height:140px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i></div></div></div>
-    <p class="cap"><b>3 · Everything is given.</b> The notification comes back, red, and the chip turns red. It can still be dismissed; the red chip cannot.</p></div>
+    <p class="cap"><b>4 · Everything, dismissed.</b> The red chip stays and cannot be dismissed. With two devices it reads "Everything: 2 devices".</p></div>
    <div class="cell"><div class="win">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Everything · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
-     <div class="pop"><b>Open to other devices</b>
-      <div class="r"><span>Pixel 8 · Chrome</span><span style="color:var(--bad);font-weight:600">Everything</span></div>
-      <div class="r"><span>Sam's laptop · Edge</span><span class="dim">Chats</span></div><hr>
-      <div class="r"><button class="btn" type="button" style="color:var(--warn)">Turn off</button><span class="dim">Settings → Desktop</span></div></div>
-     <div class="body" style="min-height:190px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i></div></div></div>
-    <p class="cap"><b>4 · The chip's panel.</b> Click the chip: who is signed in at which level, Turn off, and the way to Settings.</p></div>
-   <div class="cell"><div class="win">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Everything · 1</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Pixel 8 has Everything</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>
      <div class="note bad"><div class="h"><span>Pixel 8 changed a setting</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">Everything access · 14:32 · <u>See Activity</u></span></div>
-     <div class="body" style="min-height:120px"><div class="side"><i></i></div><div class="chat"><i style="width:60%"></i></div></div></div>
-    <p class="cap"><b>5 · A device changes a setting.</b> This is the notice built in v0.1.13, unchanged.</p></div>
-   <div class="cell"><div class="tray"><span class="tip">Bunny AI · open to 2 devices · Pixel 8 has Everything</span><span>EN</span><span class="ti dot bad"></span><span>14:32</span></div>
-    <p class="cap"><b>6 · The tray.</b> The Bunny icon gets a dot (amber for open, red when a device has Everything) and its tooltip says it in words. Even with the window closed, the open state shows.</p></div>
+     <div class="body" style="min-height:110px"><div class="side"><i></i></div><div class="chat"><i style="width:60%"></i></div></div></div>
+    <p class="cap"><b>5 · A device changes a setting.</b> Its own notice (built in v0.1.13), unchanged: shown even when the banner was dismissed, never hides itself.</p></div>
+   <div class="cell"><div class="win nar">
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad"><span class="lg">Pixel 8 has Everything</span><span class="sh">Everything</span></span><span class="ic"></span></div>
+     <div class="body" style="min-height:110px;grid-template-columns:50px minmax(0,1fr)"><div class="side"><i></i></div><div class="chat"><i style="width:60%"></i></div></div></div>
+    <p class="cap"><b>6 · A narrow window.</b> The chip is never hidden by the layout: its words shorten ("Everything", "Open · 1") but it stays, and the top bar's other controls give way before it does.</p></div>
   </div>
+  <div class="tray" style="max-width:520px"><span class="tip">Bunny AI: Open to other devices</span><span>EN</span><span class="ti"></span><span>14:32</span></div>
+  <p class="cap"><b>Tray, unchanged.</b> The tooltip says the same words as today.</p>
  </section>
 
  <section>
   <h2>2 · The device's own page (phone and browser)</h2>
-  <p class="dim">Same idea: the coloured line becomes a notification; a small level chip stays in the header. The page shows what the PC gave this device, so the chip is the only thing that must stay.</p>
+  <p class="dim">The coloured line becomes a notification the person can dismiss. At Chats nothing is left. At Everything a small red "Everything" chip stays in the header, because a phone gets passed around.</p>
   <div class="cmp">
    <div class="cell"><h3>Today · Chats</h3><div class="ph"><div class="lvl c"><span>🔒 <b>Chats access</b> · the PC can give this device more</span></div>
      <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="dim">Export</span></div><div class="chatp"><i style="width:60%"></i><i style="width:80%"></i></div><div class="compp"></div></div></div>
    <div class="cell"><h3>Today · Everything</h3><div class="ph"><div class="lvl e"><span>⚠ <b>Everything access</b> · ends after 30 min idle</span></div>
      <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="dim">Export</span></div><div class="chatp"><i style="width:60%"></i><i style="width:80%"></i></div><div class="compp"></div></div></div>
-   <div class="cell"><h3>Proposed · on load</h3><div class="ph">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip acc">Chats</span><span class="ic"></span></div>
+   <div class="cell"><h3>Proposed · Chats, on load</h3><div class="ph">
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="ic"></span></div>
      <div class="toast" style="top:52px"><div class="h"><span>You have Chats access</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="dim">The PC can give this device more. Change it in Bunny, on the PC.</span></div>
      <div class="chatp"><i style="width:60%"></i><i style="width:80%"></i></div><div class="compp"></div></div>
-     <p class="cap">The line is gone from the layout, so the page is one row shorter and the chat box is not pushed.</p></div>
-   <div class="cell"><h3>Proposed · dismissed</h3><div class="ph">
-     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip acc">Chats</span><span class="ic"></span></div>
+     <p class="cap">One row shorter than today, so the chat box is not pushed.</p></div>
+   <div class="cell"><h3>Proposed · Chats, dismissed</h3><div class="ph">
+     <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="ic"></span></div>
      <div class="chatp"><i style="width:60%"></i><i style="width:80%"></i></div><div class="compp"></div></div>
-     <p class="cap">Only the chip stays.</p></div>
-   <div class="cell"><h3>Proposed · Everything given</h3><div class="ph">
+     <p class="cap">Nothing left behind at Chats (BN-2).</p></div>
+   <div class="cell"><h3>Proposed · Everything, on load</h3><div class="ph">
      <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Everything</span><span class="ic"></span></div>
      <div class="toast bad" style="top:52px"><div class="h"><span>Everything access</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="dim">The PC gave this device every tool and setting. Ends after 30 minutes idle.</span></div>
      <div class="chatp"><i style="width:60%"></i><i style="width:80%"></i></div><div class="compp"></div></div>
-     <p class="cap">The page starts over when the level changes, as today, so the notification shows again.</p></div>
+     <p class="cap">Shows again when the level changes (the page starts over) and on every load.</p></div>
    <div class="cell"><h3>Proposed · Everything, dismissed</h3><div class="ph">
      <div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Everything</span><span class="ic"></span></div>
      <div class="chatp"><i style="width:60%"></i><i style="width:80%"></i></div><div class="compp"></div></div>
-     <p class="cap">The red chip cannot be dismissed. A tap on it opens a one-line panel: what Everything means, and when it ends.</p></div>
+     <p class="cap">The chip stays. A tap on it brings the notification back.</p></div>
   </div>
-  <p class="cap">On a wide browser the chip and the notification are the same, the notification sitting top-right under the header, as on the desktop window.</p>
+  <p class="cap">On a wide browser the same: the notification top-right under the header, the "Everything" chip in the header.</p>
  </section>
 
  <section>
-  <h2>Questions for Security</h2>
+  <h2>Two small choices for the owner</h2>
   <ol style="margin:0;padding-left:20px;display:grid;gap:4px">
-   <li>Is a chip that always stays, in the top bar and as a tray dot, enough to keep "open and Everything are never hidden" (RS-5, R-DF1) now that the banner can be dismissed?</li>
-   <li>Should the Everything notification come back by itself (for example after 10 minutes), or only on a new event?</li>
-   <li>Should "dismissed" last until the window is restarted (proposed), or forever for one device?</li>
-   <li>Is the tray tooltip and dot wanted, or only the chip?</li>
+   <li>The plain "Open" banner hides itself after <b>10 s</b> (Security left the time to Design). Longer, shorter, or only by the ×?</li>
+   <li>The window's chip sits in the <b>top bar</b>, left of Export (drawn). The other place Security allowed is the sidebar footer.</li>
   </ol>
-  <p class="dim">Nothing here is built. Builder A builds only after the owner's go and Security's rule.</p>
+  <p class="dim">Nothing here is built. No new setting and no new server route (BN-5). Builder A builds only on the owner's go.</p>
  </section>
 </div>
 <script>
 (function(){
  var r=document.documentElement,tb=document.getElementById('theme');
  tb.addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
- var S={sign:false,every:false,note:null,pop:false},dw=document.getElementById('dw'),cap=document.getElementById('dcap');
- function chip(){if(!S.sign)return '<span class="chip">Open</span>';return S.every?'<span class="chip bad">Everything · 1</span>':'<span class="chip">Open · 1</span>'}
- function paint(){
-  var n='';
-  if(S.note==='sign')n='<div class="note"><div class="h"><span>Pixel 8 signed in</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">Open to other devices. It works as Chats.</span></div>';
-  if(S.note==='every')n='<div class="note bad"><div class="h"><span>Pixel 8 has Everything</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">Ends after 30 minutes idle.</span></div>';
-  if(S.note==='open')n='<div class="note"><div class="h"><span>Open to other devices</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">No device is signed in yet.</span></div>';
-  if(S.note==='change')n='<div class="note bad"><div class="h"><span>Pixel 8 changed a setting</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">Everything access · 14:32</span></div>';
-  var p=S.pop?'<div class="pop"><b>Open to other devices</b>'+(S.sign?'<div class="r"><span>Pixel 8 · Chrome</span><span style="color:'+(S.every?'var(--bad)':'var(--dim)')+';font-weight:600">'+(S.every?'Everything':'Chats')+'</span></div>':'<span class="dim">No device signed in.</span>')+'<hr><div class="r"><button class="btn" type="button" style="color:var(--warn)">Turn off</button><span class="dim">Settings → Desktop</span></div></div>':'';
-  dw.innerHTML='<div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chipwrap" data-a="chip" style="display:inline-flex">'+chip()+'</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>'+n+p+'<div class="body" style="min-height:190px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i><i style="width:40%"></i><div class="comp"></div></div></div>';
-  cap.textContent=S.note?'The notification is showing. The chip is already in the top bar.':(S.pop?'The chip opened its panel.':'Dismissed or quiet: only the chip is left.');
+ var S={sign:false,every:false,note:null,timer:null},dw=document.getElementById('dw'),cap=document.getElementById('dcap');
+ function chip(){if(!S.every)return '<span class="chip n">Open to devices'+(S.sign?' · 1':'')+'</span>';return '<span class="chip bad">Pixel 8 has Everything</span>'}
+ function banner(){
+  if(S.every)return '<div class="note bad"><div class="h"><span>Pixel 8 has Everything</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">It can run programs and change settings. Ends after 30 minutes idle.</span><div class="a"><button type="button">See Activity</button><button type="button">Turn off</button></div></div>';
+  return '<div class="note"><div class="h"><span>Open to other devices'+(S.sign?' · 1 signed in':'')+'</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">'+(S.sign?'Pixel 8 signed in. It works as Chats.':'No device is signed in yet.')+'</span><div class="a"><button type="button">Settings</button><button type="button">Turn off</button></div><div class="autobar"></div></div>';
+ }
+ function paint(msg){
+  var n=S.note==='banner'?banner():(S.note==='change'?'<div class="note bad" style="top:'+(S.banner2?'150px':'52px')+'"><div class="h"><span>Pixel 8 changed a setting</span><button class="x" data-a="dismiss" type="button" aria-label="Dismiss">×</button></div><span class="m">Everything access · 14:32</span></div>':'');
+  dw.innerHTML='<div class="tb"><span class="ic"></span><span class="t">New chat</span><span data-a="chip" style="display:inline-flex">'+chip()+'</span><span class="dim">Export</span><span class="ic"></span><span class="ic"></span></div>'+n+'<div class="body" style="min-height:190px"><div class="side"><i></i><i style="width:70%"></i></div><div class="chat"><i style="width:60%"></i><i style="width:80%"></i><i style="width:40%"></i><div class="comp"></div></div></div>';
+  cap.textContent=msg||'';
+  clearTimeout(S.timer);
+  if(S.note==='banner'&&!S.every)S.timer=setTimeout(function(){S.note=null;paint('The plain banner hid itself after 10 s. The chip stays.')},10000);
  }
  document.getElementById('dw').parentNode.parentNode.addEventListener('click',function(e){
   var t=e.target.closest('[data-a]');if(!t)return;var a=t.getAttribute('data-a');
-  if(a==='signin'){S.sign=true;S.note='sign';S.pop=false}
-  else if(a==='every'){S.sign=true;S.every=true;S.note='every';S.pop=false}
-  else if(a==='change'){if(!S.every){S.sign=true;S.every=true}S.note='change';S.pop=false}
-  else if(a==='dismiss'){S.note=null}
-  else if(a==='chip'){S.pop=!S.pop;S.note=null}
-  else if(a==='restart'){S.note='open';if(S.sign)S.note=S.every?'every':'sign';S.pop=false}
-  paint();
+  if(a==='signin'){S.sign=true;S.note='banner';paint('A device signed in: the banner returns (and hides itself in 10 s while nobody has Everything).')}
+  else if(a==='every'){S.sign=true;S.every=true;S.note='banner';paint('Raised to Everything: the banner returns in red and stays until dismissed. The chip is red, in words.')}
+  else if(a==='change'){if(!S.every){S.sign=true;S.every=true}S.note='change';paint('A setting-change notice shows whatever happened to the banner, and never hides itself.')}
+  else if(a==='dismiss'){S.note=null;paint('Dismissed. The chip stays.')}
+  else if(a==='chip'){S.note='banner';paint('The chip brought the banner back.')}
+  else if(a==='restart'){S.note='banner';paint('Reload or restart: the dismissal was never saved, so the banner is back.')}
  });
- S.note='open';paint();
+ S.note='banner';paint('Access was just opened: the banner shows once, with the chip.');
 })();
 </script>
