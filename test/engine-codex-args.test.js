@@ -146,3 +146,15 @@ test('CE-1.15 / EN-2: the project entry names the REAL folder: a short 8.3 name 
   assert.equal(await canonicalRoot(join(base, 'does-not-exist')), join(base, 'does-not-exist'), 'a missing folder is returned as it is');
   assert.match(configToml({ root: await canonicalRoot(long), model: 'm', auth: 'account' }), /a rather long project name/i);
 });
+
+test('EN-2 / CE-1.15 after the run: if Codex wrote trust_level = "trusted" for the project while it ran, Bunny puts the untrusted entry back at once', async () => {
+  const w = await world();
+  const r = await startCodex({ cwd: w.root, prompt: 'x', home: w.home, exe: 'x', launcher, model: 'gpt-5.5', bridge: bridgeFor(w), upstream: noUpstream, extraEnv: { BUNNY_FAKE_SCRIPT: JSON.stringify({ trustProject: true, steps: [{ say: 'hi' }] }) } });
+  for await (const e of r.events) void e;
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const config = await readFile(join(w.home, 'codex', 'config.toml'), 'utf8');
+  assert.doesNotMatch(config, /trust_level = "trusted"/); assert.match(config, /trust_level = "untrusted"/);
+  const { ensureUntrusted } = await import('../src/server/engines/codex.js');
+  assert.deepEqual(await ensureUntrusted(join(w.home, 'codex', 'config.toml'), config), { fixed: false }, 'nothing to fix when it is already untrusted');
+  assert.deepEqual(await ensureUntrusted(join(w.home, 'codex', 'nope.toml'), 'x'), { fixed: false });
+});

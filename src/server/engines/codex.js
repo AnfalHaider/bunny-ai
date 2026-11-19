@@ -79,6 +79,18 @@ export function configToml({ root, model, auth = 'local', mode = 'full', baseUrl
   return lines.join('\n');
 }
 
+/**
+ * EN-2 / CE-1.15, after the run: Codex may have written `trust_level = "trusted"` for the project into config.toml (a writable thread does when there is no entry). If it did, put the
+ * untrusted entry back at once (so the project's own config, hooks and rules never load next time) and say so. Returns { fixed: boolean }.
+ */
+export async function ensureUntrusted(configPath, rewrite) {
+  let text = '';
+  try { text = await readFile(configPath, 'utf8'); } catch { return { fixed: false }; }
+  if (!/trust_level\s*=\s*"trusted"/.test(text)) return { fixed: false };
+  await writeFile(configPath, rewrite, { mode: 0o600 });
+  return { fixed: true };
+}
+
 /** The run's command line and environment. The token goes by environment only (CE-4.3); the home is isolated; the person's own ~\.codex is never found. */
 export function buildRun({ exe, home, root, model, auth = 'local', mode = 'full', endpoint = null }) {
   const config = configToml({ root, model, auth, mode, baseUrl: endpoint?.base ?? null });
@@ -238,6 +250,7 @@ export function createCodexDriver({ send, judgeCommand, judgeChanges, schema, qu
  */
 export async function startCodex({ cwd, prompt, home, exe, auth = 'local', mode = 'full', planMode = false, model, bridge, upstream = null, endpointOptions = {}, signal = null, launcher = null, silenceMs = 0, extraEnv = {}, schema = null, onEndpointUsage = null }) {
   const queue = createEventQueue();
+  let plan = null;
   let stopped = false; let endpoint = null; let run = null; let driver = null; let started = null;
   const closeEndpoint = async () => { await endpoint?.close().catch(() => {}); };
   try {
@@ -245,7 +258,7 @@ export async function startCodex({ cwd, prompt, home, exe, auth = 'local', mode 
       endpoint = createEndpoint({ upstream, label: model ?? 'bunny', onUsage: onEndpointUsage, onToolList: (names) => { const v = toolListCheck(mode)(names); if (v !== true && driver) { driver.queue.push({ type: 'error', code: 'engine.tools', message: v }); stopRun(); } return v; }, ...endpointOptions });
       started = await endpoint.start();
     }
-    const plan = buildRun({ exe, home, root: await canonicalRoot(cwd), model, auth, mode, endpoint: started ? { base: started.base, token: started.token } : null });
+    plan = buildRun({ exe, home, root: await canonicalRoot(cwd), model, auth, mode, endpoint: started ? { base: started.base, token: started.token } : null });
     await mkdir(join(home, 'codex'), { recursive: true });
     await writeFile(plan.configPath, plan.config, { mode: 0o600 });
     const file = launcher ? launcher[0] : plan.file;
@@ -281,6 +294,7 @@ export async function startCodex({ cwd, prompt, home, exe, auth = 'local', mode 
     await Promise.race([run.exited, new Promise((r) => setTimeout(r, 3000))]);
     if (!queue.ended) queue.end();
     await closeEndpoint();
+    try { const fixed = await ensureUntrusted(plan.configPath, plan.config); if (fixed.fixed) queue.afterNote = 'Codex marked the project as trusted while it ran. Bunny set it back to untrusted, so the project own Codex settings are still never loaded.'; } catch { /* the next run rewrites it anyway */ }
   })();
 
   return { events: queue, stop: stopRun, endpoint, pid: run.child.pid, get stopped() { return stopped; } };

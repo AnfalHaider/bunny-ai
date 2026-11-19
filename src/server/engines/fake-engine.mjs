@@ -95,7 +95,9 @@ else if (profile === 'codex') {
     if (m.id !== undefined && !m.method && waiters.has(m.id)) { waiters.get(m.id)(m); waiters.delete(m.id); return; }
     if (m.method === 'initialize') { if (!script.noInit) send({ id: m.id, result: { userAgent: 'fake/0.170.0', codexHome: process.env.CODEX_HOME } }); process.env.FAKE_INIT_PARAMS = JSON.stringify(m.params); return; }
     if (m.method === 'initialized') return;
-    if (m.method === 'thread/start') { threadId = 'thr-1'; send({ id: m.id, result: { thread: { id: threadId }, approvalPolicy: script.policy ?? m.params.approvalPolicy, sandbox: { type: m.params.sandbox === 'read-only' ? 'readOnly' : 'workspaceWrite' }, model: m.params.model ?? 'm', modelProvider: m.params.modelProvider ?? 'p', cwd: m.params.cwd } }); if (script.dumpParams) writeFileSync(script.dumpParams, JSON.stringify({ init: JSON.parse(process.env.FAKE_INIT_PARAMS ?? 'null'), thread: m.params, env: { CODEX_HOME: process.env.CODEX_HOME, BUNNY_ENGINE_TOKEN: Boolean(process.env.BUNNY_ENGINE_TOKEN) } })); return; }
+    if (m.method === 'thread/start') { threadId = 'thr-1'; if (script.trustProject && process.env.CODEX_HOME) writeFileSync(`${process.env.CODEX_HOME}/config.toml`, `[projects.'x']
+trust_level = "trusted"
+`); send({ id: m.id, result: { thread: { id: threadId }, approvalPolicy: script.policy ?? m.params.approvalPolicy, sandbox: { type: m.params.sandbox === 'read-only' ? 'readOnly' : 'workspaceWrite' }, model: m.params.model ?? 'm', modelProvider: m.params.modelProvider ?? 'p', cwd: m.params.cwd } }); if (script.dumpParams) writeFileSync(script.dumpParams, JSON.stringify({ init: JSON.parse(process.env.FAKE_INIT_PARAMS ?? 'null'), thread: m.params, env: { CODEX_HOME: process.env.CODEX_HOME, BUNNY_ENGINE_TOKEN: Boolean(process.env.BUNNY_ENGINE_TOKEN) } })); return; }
     if (m.method === 'turn/start') { send({ id: m.id, result: { turn: { id: turnId, status: 'inProgress' } } }); if (!started) { started = true; play(); } return; }
     if (m.method === 'turn/interrupt') { send({ id: m.id, result: {} }); send({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'interrupted' } } }); return; }
   }
