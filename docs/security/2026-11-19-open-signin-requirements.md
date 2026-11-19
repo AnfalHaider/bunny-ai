@@ -110,3 +110,90 @@ RA-1 stays: a try is reserved before scrypt. On top of the per-visitor limit (on
   - OS-6's Host, Origin and rebinding cases;
   - OS-7's refused level change;
   - OS-8's quit, start and leftover-Funnel cleanup.
+
+## Revision after the owner's decision (2026-11-19): OS-5, OS-7 and OS-8 rewritten
+
+The owner's words, relayed by the Chief of Staff (HIGH go; main records it), after seeing OS-7 and OS-8 in Design's drawing:
+
+> "Internet devices should be allowed to use the application as normal, since every user will be signing into their own systems only, also there should be no time out, if security needs it then add options in settings to allow full use and no expiry, if enabled once it should remain enabled, this is supposed to be a refined version of claude's RC."
+
+This revision **replaces** OS-5's expiry, OS-7 and OS-8's "off at every start".
+
+**Unchanged:**
+- OS-1: a separate loopback listener with its own sessions;
+- OS-2: header trust;
+- OS-3: the non-IP try limit, the shut-off after 100 wrong tries, at most 2 scrypt checks at once;
+- OS-4: 16 or more characters, the stronger scrypt;
+- OS-5's cookie flags;
+- OS-6: the Host and Origin pin;
+- OS-9: the chip, made explicit below;
+- OS-10: Activity.
+
+### OS-5 (revised): sessions, and an option for no expiry
+
+**The cookie** stays `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/` on the internet listener, with the CSRF header as now.
+
+**A new Settings option, "Keep devices signed in" (window-only, saved).**
+- **Off:** 30 minutes idle and 12 hours at most, as before.
+- **On:**
+  - no idle limit and no maximum;
+  - the cookie gets `Max-Age` of 400 days, the most browsers keep;
+  - sessions survive a restart: Bunny saves **only the SHA-256 of each session secret** (never the secret itself), with its CSRF value, device label, level and last seen, in a file in the data folder. On a request, Bunny hashes the cookie and looks it up, comparing with `timingSafeEqual`.
+- Turning it on shows one sentence: "Devices stay signed in until you sign them out here, change the passcode or turn this off."
+- It stays on until the owner turns it off.
+
+**Even with the option on, a session ends at once when the owner:**
+- signs that device out, or uses "Sign out all devices";
+- changes the passcode;
+- turns the option off, which ends every session older than 12 hours;
+- turns off the internet route;
+- or when OS-3's shut-off fires.
+
+Every one of these deletes the saved hashes. The device list in Settings shows each internet device with its first and last seen.
+
+**LAN sessions** follow the same option, but keep REMOTE-STAY's "every device signs in again after a restart" unless the owner turns on the same option for the home network separately. This is recommended off.
+
+### OS-7 (revised): internet devices may have Everything
+
+- An internet device starts at **Chats**, the default, as on the LAN. The first-sign-in dialog asks, as DEVICE-FULL does.
+- **Only Bunny's window can raise it to Everything**, per device, through the existing window-only level route. The server still refuses a level change from any device, Everything included.
+- **The dialog shows R-DF1's warning, plus one internet sentence:** "This device signed in over the internet. Anyone who has your passcode, anywhere, could sign in the same way. Give Everything only to a device you own."
+- The R-DF1 box in Settings stays while any device has Everything.
+- **A new Settings option, "Everything stays on" (window-only, saved).**
+  - **Off:** an Everything device drops back to Chats after 30 minutes idle, as now.
+  - **On:** Everything has no idle limit. With "Keep devices signed in", it also survives a restart.
+  - It stays on until the owner turns it off.
+- **Activity** records each grant and each drop to Chats, saying "internet" for internet devices, alongside R-DF2's tool and route record.
+
+### OS-8 (revised): the route stays on after a restart, with start-up checks
+
+**A Settings option, "Stay open to the internet after a restart"** (window-only, saved; on once the owner turns it on). At each start, Bunny reopens the internet route **only if all of these pass.** Otherwise it stays closed and the row says which check failed, in one sentence.
+
+1. **The saved passcode record** exists with the OS-4 scrypt cost.
+2. **OS-3's shut-off hasn't fired.** After a shut-off the route stays closed across restarts until the owner turns it on in the window.
+3. **For Funnel:**
+   - `tailscale status --json` shows the backend running (`BackendState`);
+   - `Self.DNSName` (trailing dot removed) equals **the saved pinned name**. A renamed machine or another tailnet means closed;
+   - the Funnel capability is present.
+   - Tailscale is started by absolute path with `safeEnv`, as OS-8 already says.
+4. **Leftovers:** `tailscale funnel status --json` is read first. Any Funnel pointing at a port that isn't this start's internet listener is turned off with the targeted `off`, never `reset`. Only then does Bunny start its own Funnel, **as a child process**. A `--bg` Funnel is still never left behind on purpose.
+5. **For own HTTPS:** the saved host name passes OS-6's hostname check. The listener reopens on loopback. Bunny can't check the owner's proxy, so the row says "Open through your own address".
+
+**Every reopen is visible:**
+- the chip reads `Open to the internet`, in the warning colour and impossible to dismiss (OS-9);
+- the banner comes back (BN-3);
+- the tray tooltip says so, and the start notification names the address;
+- Activity records "reopened at start" with the time and the pinned name.
+
+**Quitting Bunny** ends its child Funnel. Saved sessions (OS-5) stay valid only if "Keep devices signed in" is on.
+
+### What these options can't switch off
+
+The non-IP try limit and the shut-off (OS-3), the passcode length and cost (OS-4), the Host and Origin pin (OS-6), the header-trust rules (OS-2), the visible chip (OS-9), and the record (OS-10) apply whatever the options say. **None of the options can be changed by any device, Everything included.** They join the device-refused set, like `isRemoteAdminPath`.
+
+### Tests Security will look for (added)
+
+- With "Keep devices signed in" on, a restart keeps a session. The saved file holds no secret, only hashes. Sign out, sign out all, a passcode change and turning the option off each end it.
+- An internet device raised to Everything by the window gets the dialog with the internet sentence. A level change from a device is refused at Everything.
+- At start with "Stay open" on, each failed check keeps the route closed with its sentence: a renamed DNS name, Tailscale stopped, no passcode record, an earlier shut-off. A leftover Funnel on another port is turned off. A good start reopens, shows the chip, and writes the Activity entry.
+- No device can change any of the three options.
