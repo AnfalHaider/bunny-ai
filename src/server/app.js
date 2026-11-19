@@ -86,7 +86,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, deviceRefusal, ENGINE_REFUSED_MESSAGE, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -227,11 +227,20 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (req.bunnyDevice) {
       let decoded = '/api/remote'; // R-DF3: the decoded path (/api/%72emote is /api/remote); one that cannot be decoded is refused
       try { decoded = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { /* refused below */ }
-      if (isRemoteAdminPath(decoded)) { sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE }); return true; }
+      const refusal = deviceRefusal(req.method, decoded); // CE-6: device access and every engines route, even at Everything
+      if (refusal) { sendJson(res, 403, { code: 'request.windowOnly', message: refusal }); return true; }
       return false;
     }
     if (!folderPickerOnly || adminOk(req)) return false;
     sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+    return true;
+  };
+  // CE-6: some writes are judged by their body (the `engine` and `engines` settings, `session.engine`): a device, at Everything too, never makes them
+  const deviceRefusedBody = (req, res, method, path, body) => {
+    if (!req.bunnyDevice && !req.bunnyRemote) return false;
+    const refusal = deviceRefusal(method, path, body);
+    if (!refusal) return false;
+    sendJson(res, 403, { code: 'request.windowOnly', message: refusal });
     return true;
   };
   const guard = createRequestGuard({ token: apiToken ?? makeToken(), validCallbackState: (state) => accounts?.googleFlowKnown?.(state) === true, validConnectorState: (state) => connectorSignIn?.flowKnown(state) === true });
@@ -574,7 +583,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     const url = new URL(req.url, 'http://localhost');
     const path = decodeURIComponent(url.pathname);
     const method = req.method ?? 'GET';
-    if (req.bunnyDevice && isRemoteAdminPath(path)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE }); // belt: remoteRoute already refused it
+    if (req.bunnyDevice && deviceRefusal(method, path)) return sendJson(res, 403, { code: 'request.windowOnly', message: deviceRefusal(method, path) }); // belt: remoteRoute already refused it (device access and the engines, CE-6)
     // W5-7: in the desktop app, writes that change what Bunny may do or run come only from Bunny's window (see windowOnly.js)
     if (isWindowOnlyRoute(method, path) && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
 
@@ -763,6 +772,7 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (Object.hasOwn(patch, 'firstReplyWaitSeconds') && validWaitSeconds(patch.firstReplyWaitSeconds) === null) {
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
+      if (deviceRefusedBody(req, res, method, path, patch)) return;
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
@@ -902,7 +912,9 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       return sendJson(res, 200, rows.map((r) => (replyStatus.has(r.id) ? { ...r, replyStatus: replyStatus.get(r.id) } : r)));
     }
     if (path === '/api/sessions' && method === 'POST') {
-      const body = req.bunnyRemote ? remoteBody(path, await readBody(req)) : await readBody(req); // another device may send only the few things remoteBody keeps
+      const raw = await readBody(req);
+      if (deviceRefusedBody(req, res, method, path, raw)) return; // CE-6: a device never starts a chat on an engine (remoteBody drops the key for a Chats device; an Everything device is refused here)
+      const body = req.bunnyRemote ? remoteBody(path, raw) : raw; // another device may send only the few things remoteBody keeps
       if (isWindowOnlyRoute(method, path, body) && !(req.bunnyRemote && remoteException(method, path, body)) && windowOnly(req, res)) return; // a chat that starts in Auto
       // The desktop app: a chat's folder is one the person picked (see /api/folder/check), never one a script names.
       if (body.folder) {
@@ -1685,7 +1697,9 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
     if (sessionMatch && method === 'PATCH') {
       try {
-        const patch = req.bunnyRemote ? remotePatch(await readBody(req)) : await readBody(req); // from a device: only the chat's own title, modes, effort, model and provider
+        const rawPatch = await readBody(req);
+        if (deviceRefusedBody(req, res, method, path, rawPatch)) return; // CE-6: a device never moves a chat to another engine
+        const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
@@ -3626,11 +3640,13 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     // DEVICE-FULL: a device the person gave 'everything' may do all the window can, except /api/remote* (the person's own switches for device access)
     const logWindowOnly = () => { if (writes && (isWindowOnlyRoute(method, path) || (method === 'PUT' && path === '/api/settings'))) remote.logAction(session, { kind: 'route', method, path }); }; // R-DF2: route and method, never the body
     if (session.level === 'everything') {
-      if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', DEVICE_ACCESS_MESSAGE);
+      const refusal = deviceRefusal(method, path); // device access and every engines route (CE-6)
+      if (refusal) return refuse(403, 'request.windowOnly', refusal);
       logWindowOnly();
       req.bunnyDevice = session;
       return route(req, res);
     }
+    if (deviceRefusal(method, path) === ENGINE_REFUSED_MESSAGE) return refuse(403, 'request.windowOnly', ENGINE_REFUSED_MESSAGE); // a Chats device is told the engines sentence; every other refusal keeps the window sentence it always had
     if (!remotePolicy(method, path) || (isWindowOnlyRoute(method, path) && !remoteException(method, path))) return refuse(403, 'request.windowOnly', "Change this in Bunny's window.");
     logWindowOnly(); // the few window-only routes a Chats device may use (its own chat's cards and mode)
     req.bunnyRemote = session;
