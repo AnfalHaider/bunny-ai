@@ -100,3 +100,13 @@ Commits since a77be4d: 0b55f15 (the Sources chips, the [n] marks, the bar's stat
 - **Tests:** the pc-* files, `pc-smoke`, `window-only` and `quick-ask` pass 91 of 91 on an extract.
 
 Verdict: PASS at c051ca5. SP-L1 and SP-L2 still stand as LOW notes.
+
+## Re-stamp at b5c3c72: PASS (supersedes c051ca5)
+
+- b5c3c72 touches only `scripts/pcsearch-smoke.mjs` and adds `test/pc-smoke.test.js`.
+- Without `--i-have-the-owners-ok`, the script names the exact folder it would create and delete, then exits 2. The check runs after `--dry` and before any write (line 31, ahead of `mkdirSync` at line 41).
+- Run here without the flag, it printed "REFUSED: … needs the owner's own OK", exited 2, and created nothing.
+- `pc-smoke` passes 2 of 2.
+- The flag is the script's own guard. The owner's OK still has to be asked for, and recorded, before QA passes it.
+
+Verdict: PASS at b5c3c72.
