@@ -70,3 +70,72 @@ The banner comes back, even after it was dismissed, when:
 - A device at Everything changes a setting after the banner was dismissed: the setting-change notice appears.
 - A device page at Everything: dismiss the line, and the `Everything` chip stays.
 - Both themes, phone and desktop widths. The chip is never hidden by the narrow layout.
+
+## Revision after the owner's decision (2026-11-19): no banner anywhere, the chip carries everything
+
+The owner's words, relayed by the Chief of Staff (main records it):
+
+> "No banner on top is required."
+
+Asked where: "Everywhere".
+
+So there's no devices notice or banner in Bunny's window, on a device's page, or in a browser page on the PC. This **replaces BN-1** (dismissable notices) **and BN-3** (the returning notice). Unchanged: BN-2 (the chip that can't be dismissed), BN-4 (nothing about it is stored) and BN-5 (no server change). The chip now has to do the notice's job.
+
+### BN-6: what the chip shows, always
+
+Every Bunny page on the PC (the window, and Bunny opened in a browser on this PC) shows the chip in its top bar for as long as device access is open. On a narrow width it shortens its words, but it never disappears.
+
+| State | Chip |
+|---|---|
+| Open, no device at Everything | `Open to devices · N` (normal colour) |
+| Any device at Everything | warning colour, in words: `Pixel 8 has Everything` / `Everything: 2 devices` |
+| The internet route is on (OPEN-SIGNIN) | warning colour: `Open to the internet · N` (combined with Everything when both apply) |
+
+It's `role="status"`, with the full words in `aria-label`, never colour alone.
+
+### BN-7: new events make the chip say what happened, until it's clicked
+
+Something new happens while the page is open when:
+- a device signs in (compared by device id, not count; this closes BN-L1);
+- a device is raised to Everything;
+- the internet route reopens at start;
+- a device changes a setting (see BN-8).
+
+For each, the chip **switches to the event's words**, for example `New: Pixel 8 signed in` or `Pixel 8 changed a setting`. It shows a small count badge when more than one event is waiting, and is **announced once** through `aria-live="polite"`.
+
+- **A short pulse is allowed**, but never as the only sign, and none with reduced motion.
+- **It doesn't go back by itself on a timer.** It goes back to the state words (BN-6) only when the person clicks it. The click opens the devices list in Settings, or that device's Activity for a setting change.
+- **It's never stored (BN-4):** a reload shows the state words, and Activity keeps the history.
+
+### BN-8: "<device> changed a setting" becomes a chip event
+
+The separate bottom-right notice from DEVICE-FULL is removed, because it's a banner under the owner's word. It becomes a BN-7 event:
+- the chip turns to the warning colour with `Pixel 8 changed a setting`;
+- clicking opens that device's Activity;
+- it's never cleared by time;
+- when several changes wait, the badge counts them.
+
+This keeps R-DF2's purpose (the person at the PC notices a change made from a device) without a notice.
+
+### BN-9: on a device's own page
+
+- No notice at all.
+- At Everything, the red `Everything` chip in the page's header stays (BN-2) and can't be dismissed.
+- At Chats, nothing is shown.
+
+### What's not a banner, and stays
+
+- The tray tooltip mirrors the chip, including the newest event's words.
+- The one-time start notification (RS-5) is Windows' own, not a banner in Bunny. It stays, to say access reopened while Bunny may be hidden in the tray.
+- **The first-sign-in dialog ("What may it do?") stays.** It's the place where Everything is granted with R-DF1's warning, not a banner. If the owner wants it gone too, that's a separate question, because without it the window would grant levels only from Settings.
+- R-DF1's box in Settings and the Give Everything warning stay.
+
+### Tests Security will look for (replacing BN-1 and BN-3's)
+
+- **No banner:** no `#remote-note`, `#device-note` or `#device-notice` element in the window, a browser page or a device page, in any state.
+- **New sign-in:** the chip reads `New: <device> signed in` and stays until clicked. The click opens the devices list. After a reload it reads the state words.
+- **The swap case:** a sign-out and a sign-in between two looks (BN-L1) still produce the event.
+- **Raise to Everything:** the chip goes to the warning colour with the device's name.
+- **A setting changed from a device:** the chip shows the event, and the click opens Activity. Two changes show a badge of 2.
+- **Reduced motion:** no pulse. The `aria-live` announcement still happens once per event.
+- **Device page:** the Everything chip at Everything, nothing at Chats.
