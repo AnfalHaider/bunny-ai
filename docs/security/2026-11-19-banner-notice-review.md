@@ -59,3 +59,29 @@ Commits 25e2a92 (BN-L1, device ids) and 05ed44b, on claude/builder-a-banner-noti
 **Line endings:** this commit rewrites `src/ui/chat.js`, `src/ui/app.css`, `src/ui/device-access.js` and `src/ui/remote.js` with CRLF. The real change is about 140 lines; without `--ignore-cr-at-eol` it shows as about 15,000. Builder A should restore LF in the next commit, as was done for WEB-ACCESS. It's not a security finding, but it hides real changes from review and blame.
 
 Verdict: PASS at 05ed44b (pictures e3cf644).
+
+## Re-stamp at 3a76dc9 (tray mirroring 73bf9c2 + LF 3a76dc9): PASS (supersedes 05ed44b)
+
+**Order:** 73bf9c2 sits on e3cf644, and 3a76dc9 on 73bf9c2. 3a76dc9 is the branch tip.
+
+**73bf9c2, the tray** (read with `--ignore-cr-at-eol`, 7 files, 119 lines):
+- A new `ipcMain.handle('remote:tray-event')` refuses unless `isOwn(event.senderFrame.url)`, so it works from Bunny's window only. Artifact and plain windows have no bridge (SB-1).
+- `cleanTrayEvent` keeps only a `kind` from a fixed set (`signin`, `everything`, `setting`, `shutoff`) and a label:
+  - control, C1 and bidi-override characters are replaced;
+  - whitespace is collapsed;
+  - the label is cut to 40 characters;
+  - anything else becomes null.
+- **The tooltip's words are made in the shell** (`trayTooltip`), so a page can't put its own sentence in the tray. The preload sends only `{kind, label}`.
+
+**The shut-off hook:**
+- `shownEvents` adds a `shutoff` event from the **server's saved `status.shutoffAt`** (window-only `/api/remote`), never from a stored dismissal.
+- A click sets a page variable (`shutoffAck`), so a reload shows it again. The chip stays even with access closed while a shut-off is shown.
+- Clearing it in Settings belongs to OPEN-SIGNIN (Tech Lead's 702aa96 §7.2, already agreed).
+
+**3a76dc9:**
+- `git diff --ignore-cr-at-eol 73bf9c2 3a76dc9` is empty.
+- `chat.js`, `app.css`, `device-access.js` and `remote.js` are LF again at the tip.
+
+**Tests:** `remote-notice` passes 7 of 7 at 3a76dc9 on an extract.
+
+Verdict: PASS at 3a76dc9.
