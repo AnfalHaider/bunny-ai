@@ -185,3 +185,60 @@ If the first doesn't hold, ask-covered paths go into `permissions.deny` instead.
 **`--restricted`** (removes command tools and WebFetch, ignores settings files, confines file tools to the working folders): use it for Claude Code's **restricted** fallback, together with CE-2's staged copy, not in full mode. Don't count it as a wall on its own until a spike shows its confinement holds against the canary.
 
 **Cline (S3) is held to the same layers**, in whatever form its CLI offers. If Cline has no equivalent of CE-1.8 (its own permissions as a second layer), it runs restricted.
+
+## Rulings after S1 addendum 2 and S2 (2026-11-19, Builder C's 7b1f864)
+
+### CE-1.9 for Claude Code: ask-covered reads go into `permissions.deny`
+
+- **Confirmed.** With `--permission-prompts none`, a hook "allow" doesn't pass a `permissions.ask` read. So every Bunny **read Ask** path goes into `permissions.deny` in Bunny's `--settings`, alongside the deny, hidden, protected, data, engine-home and key paths.
+- **The cost:** Claude Code never reads those paths, even when the person would have said yes. That's safe, and only a convenience loss. The chat says so in one line when it's refused.
+- **`--permission-prompt-tool` is not to be used** in place of this until a spike shows two things: that it answers through Bunny's bridge; and that an unreachable or crashed prompt tool means deny.
+
+### Codex CLI 0.170.0: full mode accepted, with `untrusted` and these layers
+
+S2 (I read `docs/spikes/cli-engines/s2/README.md`) shows:
+- `approval_policy = "untrusted"` asks for **every** command and **every** patch, and a decline stops each;
+- `on-request` and `granular` ask for nothing once the sandbox is on;
+- the unelevated sandbox confines writes, not reads;
+- `view_image` reads outside the folder with **no** ask, even under `untrusted`;
+- Codex reaches github.com, api.github.com and chatgpt.com until its plugin and app features are off;
+- the first run writes `trust_level = "trusted"` into `config.toml`.
+
+**Ruling:** full mode is acceptable for Codex **only with all of CE-1.12 to CE-1.17.** Without them, it runs restricted.
+
+**CE-1.12, the policy.**
+- Always `approval_policy = "untrusted"`; never `on-request`, `never` or `granular`. Don't send `capabilities.experimentalApi`.
+- Bunny answers each request with `accept` or `decline` (or `cancel` on Stop). **Never `acceptForSession`**, which would stop later asks.
+- `item/permissions/requestApproval` is always declined.
+
+**CE-1.13, what Bunny judges.**
+- `item/commandExecution/requestApproval`: judged as `run_command` on its command text (`checkCommand`, deny rules, mode: Ask in Ask mode, refused in Plan), exactly as Bunny's own engine.
+- `item/fileChange/requestApproval`: judged per path as `write_file` or `edit_file`, with every path canonicalised. Any path outside the workspace, or in a protected, hidden, data or engine-home folder, is declined.
+- Any request with input Bunny can't read is declined.
+
+**CE-1.14, tools off in full mode too.**
+- `features.view_image=false`: it's a read with no ask.
+- Off as well: `apps`, `plugins`, `remote_plugin`, `plugin_sharing`, `tool_suggest`, `computer_use`, `image_generation`, `goals` and `hooks`, plus `web_search="disabled"`.
+- The S2 network check (0 connections besides Bunny's endpoint) is the test, repeated at every pin change (CE-5.4).
+
+**CE-1.15, configuration.**
+- The isolated `CODEX_HOME/config.toml` is **rewritten at every run start**, with no `trust_level` entry for any project. The project stays untrusted, so its `.codex` config, hooks and exec-policy rules are never loaded.
+- Add a spike line: a project `.codex/rules` with an `allow`, in an untrusted project, still gets asked for every command.
+- Plus `--ignore-user-config` where available, `check_for_update_on_startup=false`, `analytics.enabled=false` and `thread/start {ephemeral:true}`.
+
+**CE-1.16, second walls.**
+- `windows.sandbox="unelevated"` with `workspaceWrite`, and `readOnly` in Plan mode, for write confinement.
+- It's never elevated (CE-5.6).
+- The model name Bunny sends is fixed per pin, since it decides which tools Codex offers. Bunny re-checks the tool list at `thread/start` against the expected set (`exec_command`, `write_stdin`, `apply_patch`, `request_user_input`, `tool_search`), and stops the run if anything else appears.
+
+**CE-1.17, a watchdog (as CE-1.10).** Every `item/started` of type `commandExecution` or `fileChange` must follow an approval request Bunny accepted for that item. One that doesn't stops the run at once (tree kill) and offers restricted mode. Test it with the fake engine.
+
+**The residual, accepted by Security:** a command Bunny **accepts** can read files outside the folder (R23 for full mode). Bunny judges only the command text, and the sandbox doesn't confine reads. That's the same exposure as Bunny's own `run_command` today: in Ask mode the person sees the command before it runs, and in Auto it runs under the same deny rules.
+
+The spec makes this an owner question (§0.2, "the Chief of Staff goes back to the owner before that engine ships"). **Security's recommendation to the owner is: accept for Codex full mode, as it matches Bunny's own engine.** Record the owner's answer before Codex ships in full mode.
+
+**Restricted mode for Codex**, if chosen or as the fallback:
+- `features.shell_tool=false`, `features.unified_exec=false`, `features.view_image=false`, plus everything in CE-1.14;
+- the tools left are `apply_patch`, `request_user_input` and `tool_search`;
+- the canary stays closed (S2 `i-all-off-view-image`), and every patch asks, including ones outside the folder, which are declined;
+- CE-2's staged copy and diff review apply.
