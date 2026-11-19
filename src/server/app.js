@@ -54,6 +54,7 @@ import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
 import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited } from './download.js';
 import { createAppTools, appToolDefinitions, describeAppTool, APP_TOOL_RISK } from './appTools.js';
+import { bunnyText } from './bunnyText.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
 import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
@@ -1267,7 +1268,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     }
 
     // ---- skills ----
-    if (path === '/api/skills' && method === 'GET') return sendJson(res, 200, await skills.list());
+    // BRAND-BUNNY: the description as the list shows it is said in Bunny's words (shownDescription); the stored one stays as it was imported
+    if (path === '/api/skills' && method === 'GET') return sendJson(res, 200, (await skills.list()).map((s) => ({ ...s, shownDescription: bunnyText(s.description ?? '') })));
     if (path === '/api/skills' && method === 'POST') {
       try {
         return sendJson(res, 200, await skills.add(await readBody(req)));

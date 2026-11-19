@@ -63,7 +63,7 @@
       <button type="submit" class="btn btn-primary btn-sm">Install</button>
       <button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button>
     </div>
-    <span class="field-help">Skills (SKILL.md, with their reference files) and remote connectors (.mcp.json) are added. Hooks and scripts made for other apps are skipped.</span>
+    <span class="field-help">Skills (with their reference files) and remote connectors are added. Hooks and scripts made for other apps are not imported: they don't run in Bunny yet.</span>
     <span class="err" data-err></span>
   </form>
   <form class="card card-form cz-form" id="cz-skill-form" hidden>
@@ -253,7 +253,7 @@
         const plugin = pluginOf('skills', s.id);
         list.append(row({
           id: s.id,
-          name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.description,
+          name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : (s.shownDescription ?? s.description),
           type: 'Skill', typeTag: plugin ? 'Plugin' : 'Custom',
           status: s.enabled ? 'On' : 'Off', statusClass: s.enabled ? 'text-ok' : '',
           extra: plugin ? null : scopeNode(`/api/skills/${s.id}`, s),
