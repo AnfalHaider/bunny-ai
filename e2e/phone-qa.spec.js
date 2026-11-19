@@ -83,6 +83,19 @@ test.describe('F8: on a touch screen the controls are at least 32 px high', () =
   }
 });
 
+test.describe('F8: the Settings switches', () => {
+  test.use({ hasTouch: true, isMobile: true });
+  test('a tap lands on a label at least 32 px high, inside the Settings frame', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto('/src/ui/settings.html?embed=1&section=appearance');
+    await expect(page.locator('html[data-settings-filled="1"]')).toBeAttached();
+    const labels = page.locator('label.switch:visible');
+    const n = await labels.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) { const b = await labels.nth(i).evaluate((e) => e.getBoundingClientRect().height); expect(b).toBeGreaterThanOrEqual(31.5); }
+  });
+});
+
 test('the visualViewport fallback: a browser without dvh takes the visible height, a browser with it is left alone', async () => {
   const { fitViewport } = await import('../src/ui/viewport-fit.js');
   const listeners = {};

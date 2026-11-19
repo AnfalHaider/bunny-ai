@@ -2248,6 +2248,9 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
   .mode-tab { min-height: 32px; }
   .side-projects #new-project, #new-project { min-height: 32px; }
   .toggle { min-height: 32px; }
+  /* the Settings switches are a checkbox inside a label: the label (what a tap lands on) is 32 px high and the box a little larger, the look is the same */
+  label.switch, label.account-check, .row .right > label { display: inline-flex; align-items: center; gap: var(--sp-3); min-height: 32px; min-width: 32px; }
+  label.account-check input[type="checkbox"] { width: 20px; height: 20px; }
 }
 /* F6 + F7: a short screen (a phone on its side, or the keyboard open): the chat gets the room */
 @media (max-height: 480px) {
