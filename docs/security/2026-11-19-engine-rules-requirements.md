@@ -103,3 +103,30 @@ While it's on, the **engine's own rules decide allow, ask and deny**, and the en
   - a command naming the data folder is flagged;
   - "Allow for this chat" happens only from a click.
 - With the option on (the default), everything behaves as before this change.
+
+## Revision after the owner's answer (2026-11-19): Bunny's deny rules follow the engine
+
+The Chief of Staff asked: "Should your Bunny Deny rules stay in force when Bunny's engine is off? Yes, keep them (recommended), or have them follow the engine." The owner answered, typed in the Chief of Staff's chat:
+
+> "Follow the engine"
+
+**ER-3.1, revised.** While "Use Bunny's engine" is off, **the person's Bunny deny rules aren't carried** into the engine's settings, and Bunny doesn't enforce them on engine tools. The engine's own rules, set in Settings → Engines (ER-2), decide.
+
+**The fixed floor stays, because it isn't the person's rules.** It protects Bunny itself and the other engines' sign-ins:
+- Bunny's data folder and DPAPI key store;
+- every engine home and its credentials;
+- the person's real `~/.claude`, `~/.codex`, `~/.cline` and `~/.aider*`;
+- the key folders (CE-1.6);
+- `%APPDATA%` and `%LOCALAPPDATA%`.
+
+It's still written as the engine's deny rules, and enforced by Bunny where it sees the call.
+
+**Following from that:**
+- **ER-5, Claude Code.** CE-1.7's hook enforces the floor only. CE-1.9 copies only the floor into `permissions.deny`.
+- **ER-5, Codex.** CE-1.13: Bunny auto-declines a patch only to a **floor** path, and flags in red a command naming a floor path. Patches to paths in the person's own deny rules go to the person's card like any other.
+- **ER-6, the warning, revised** (shown when the option is turned off, and kept on the Engines page):
+
+  > **Bunny's engine is off.** Chats run on <engine> and follow <engine>'s rules, which you set here. Bunny no longer checks each step against your Bunny rules, including your Deny rules: <engine> asks you itself, and Bunny shows its questions. Bunny still blocks its own data, its keys and the engines' sign-ins. A command you allow can read any file on this PC that you can.
+
+- **Settings → Rules** (Bunny's own rules page) shows one line while the option is off: "Not used while Bunny's engine is off. <engine>'s rules apply." That way the person isn't left believing a deny rule still protects a file.
+- **ER-7, tests, revised:** with the option off, a path covered only by a Bunny deny rule reaches the engine's own decision (an allow or a card), and a floor path is still refused. With the option on, Bunny's deny rules apply as before.
