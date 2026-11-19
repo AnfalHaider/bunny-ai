@@ -1,0 +1,20 @@
+d light connectors {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Context7 | mcp.context7.com/mcp | ···","D | DeepWiki | mcp.deepwiki.com/mcp | ···"]}
+d light skills {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Cite sources | Plugin | Provided by the Developer docs pack plugin | ···","C | Code reviewer | Reviews a change for bugs before style | ···"]}
+d light plugins {"n":1,"total":52,"each":[52],"switchSameLine":true,"menuBtn":true,"text":["D | Developer docs pack | 2 items | DeepWiki and Context7 connectors plus a skill that cites its sources | ···"]}
+d light menu: Test / Trust read-only labels / Only in a folder… / Remove
+d light automation rows: [41,52,53,53,53,52,79,41,52,41,54,53]
+d dark connectors {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Context7 | mcp.context7.com/mcp | ···","D | DeepWiki | mcp.deepwiki.com/mcp | ···"]}
+d dark skills {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Cite sources | Plugin | Provided by the Developer docs pack plugin | ···","C | Code reviewer | Reviews a change for bugs before style | ···"]}
+d dark plugins {"n":1,"total":52,"each":[52],"switchSameLine":true,"menuBtn":true,"text":["D | Developer docs pack | 2 items | DeepWiki and Context7 connectors plus a skill that cites its sources | ···"]}
+d dark menu: Test / Trust read-only labels / Only in a folder… / Remove
+d dark automation rows: [41,52,53,53,53,52,79,41,52,41,54,53]
+m light connectors {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Context7 | mcp.context7.com/mcp | ···","D | DeepWiki | mcp.deepwiki.com/mcp | ···"]}
+m light skills {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Cite sources | Plugin | Provided by the Developer docs pack plugin | ···","C | Code reviewer | Reviews a change for bugs before style | ···"]}
+m light plugins {"n":1,"total":52,"each":[52],"switchSameLine":true,"menuBtn":true,"text":["D | Developer docs pack | 2 items | DeepWiki and Context7 connectors plus a skill that cites its sources | ···"]}
+m light menu: Test / Trust read-only labels / Only in a folder… / Remove
+m light automation rows: [41,92,53,53,53,52,41,41,53,53,53,52]
+m dark connectors {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Context7 | mcp.context7.com/mcp | ···","D | DeepWiki | mcp.deepwiki.com/mcp | ···"]}
+m dark skills {"n":4,"total":210,"each":[53,53,53,52],"switchSameLine":true,"menuBtn":true,"text":["C | Cite sources | Plugin | Provided by the Developer docs pack plugin | ···","C | Code reviewer | Reviews a change for bugs before style | ···"]}
+m dark plugins {"n":1,"total":52,"each":[52],"switchSameLine":true,"menuBtn":true,"text":["D | Developer docs pack | 2 items | DeepWiki and Context7 connectors plus a skill that cites its sources | ···"]}
+m dark menu: Test / Trust read-only labels / Only in a folder… / Remove
+m dark automation rows: [41,92,53,53,53,52,41,41,53,53,53,52]

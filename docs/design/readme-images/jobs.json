@@ -1,0 +1,5 @@
+[
+ {"kind":"hero","theme":"dark","img":"C:/Users/anfal/AppData/Local/Temp/readme-shots/keep-going3-dark-1440.png","out":"hero-dark.png"},
+ {"kind":"feat","theme":"light","img":"C:/Users/anfal/AppData/Local/Temp/readme-shots/keep-going3-light-1440.png","out":"keep-going.png","q":{"x":"109","w":"1262"}},
+ {"kind":"feat","theme":"light","img":"C:/Users/anfal/AppData/Local/Temp/readme-shots/permission-rules2-light-1440.png","out":"permission-rules.png","q":{"x":"77","w":"1325"}}
+]

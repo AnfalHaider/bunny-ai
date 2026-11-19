@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>README images</title>
+<link rel="stylesheet" href="../bunny-design-system.css">
+<style>
+/* Source for the README pictures: open compose.html?kind=hero|feat&theme=light|dark&img=<path>&x=&y=&w=
+   Rendered to PNG by render.mjs. Tokens only; no fake numbers. */
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.5 var(--font-sans,system-ui,"Segoe UI",sans-serif);overflow:hidden}
+.hero{width:1800px;height:600px;position:relative;overflow:hidden;background:
+ radial-gradient(900px 500px at 12% 0%,var(--accent-soft),transparent 70%),var(--bg)}
+.hero .mark{position:absolute;left:96px;top:96px;width:112px;height:112px;color:var(--accent)}
+.hero h1{position:absolute;left:96px;top:236px;margin:0;font-size:92px;line-height:1;font-weight:700;letter-spacing:-.02em}
+.hero p{position:absolute;left:100px;top:352px;width:760px;margin:0;font-size:30px;line-height:1.35;color:var(--text-dim)}
+.hero .shot{position:absolute;left:980px;top:70px;width:1100px;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-pop,0 20px 60px rgba(0,0,0,.18));background:var(--surface)}
+.hero .shot img{display:block;width:100%}
+.feat{width:1600px;height:1000px;position:relative;overflow:hidden;background:var(--bg-sidebar)}
+.feat .shot{position:absolute;left:60px;top:40px;width:1480px;height:920px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);box-shadow:0 18px 50px rgba(0,0,0,.14)}
+.feat .shot img{position:absolute}
+</style></head><body>
+<script>
+const P=new URLSearchParams(location.search);
+const theme=P.get('theme')||'light';document.documentElement.dataset.theme=theme;
+const img=P.get('img')||'',kind=P.get('kind')||'hero';
+const MARK='MARK_SVG';
+const num=(k,d)=>P.has(k)?Number(P.get(k)):d;
+if(kind==='hero'){
+ document.body.innerHTML=`<div class="hero"><div class="mark" id="mk"></div><h1>Hi, I\u2019m Bunny.</h1><p>An AI that lives on your computer, works with any model, and does the work.</p>${img?`<div class="shot" style="left:${num('x',980)}px;top:${num('y',70)}px;width:${num('w',1100)}px"><img src="${img}" alt=""></div>`:''}</div>`;
+}else{
+ document.body.innerHTML=`<div class="feat"><div class="shot"><img src="${img}" alt="" style="left:${num('x',0)}px;top:${num('y',0)}px;width:${num('w',1480)}px"></div></div>`;
+}
+Promise.resolve("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" role=\"img\" aria-label=\"Bunny AI\">\r\n  <defs>\r\n    <mask id=\"bunny-cut\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"48\" height=\"48\">\r\n      <rect width=\"48\" height=\"48\" fill=\"#fff\"/>\r\n      <g fill=\"#000\" stroke=\"#000\" stroke-width=\"5\" stroke-linejoin=\"round\">\r\n        <path d=\"M20 8h8l1.5 16h-11Z\" stroke=\"none\"/>\r\n        <rect x=\"16.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(-9 19.5 25)\"/>\r\n        <rect x=\"25.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(9 28.5 25)\"/>\r\n      </g>\r\n    </mask>\r\n  </defs>\r\n  <path fill=\"currentColor\" mask=\"url(#bunny-cut)\" d=\"M24 16.5c8.6 0 15 5.9 15 13.4C39 37.6 32.6 43 24 43S9 37.6 9 29.9C9 22.4 15.4 16.5 24 16.5Z\"/>\r\n  <g fill=\"currentColor\">\r\n    <rect x=\"16.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(-9 19.5 25)\"/>\r\n    <rect x=\"25.4\" y=\"4\" width=\"6.2\" height=\"21\" rx=\"3.1\" transform=\"rotate(9 28.5 25)\"/>\r\n  </g>\r\n</svg>\r\n").then(t=>{const m=document.getElementById('mk');if(m)m.innerHTML=t.replace('<svg ','<svg width="112" height="112" ');document.title='ready'}).catch(()=>{document.title='ready'});
+if(kind!=='hero')document.title='ready';
+</script></body></html>

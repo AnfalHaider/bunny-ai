@@ -1,0 +1,46 @@
+d light open, nobody signed in: {"chip":"Open to devices","chipBad":false,"note":"Open to other devices × No device is signed in yet. Settings Turn off","noteBox":[748,54,340],"bar":false,"chipBox":[383,12,123]}
+d light after 11 s, note: null
+d dark open, nobody signed in: {"chip":"Open to devices","chipBad":false,"note":"Open to other devices × No device is signed in yet. Settings Turn off","noteBox":[748,54,340],"bar":false,"chipBox":[383,12,123]}
+m light open, nobody signed in: {"chip":"Open","chipBad":false,"note":"Open to other devices × No device is signed in yet. Settings Turn off","noteBox":[38,54,340],"bar":false,"chipBox":[64,12,65]}
+m dark open, nobody signed in: {"chip":"Open","chipBad":false,"note":"Open to other devices × No device is signed in yet. Settings Turn off","noteBox":[38,54,340],"bar":false,"chipBox":[64,12,65]}
+d light signed in: sign-in question shown: true
+d light after Keep Chats: {"chip":"Open to devices · 1","chipBad":false,"note":"Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off","noteBox":[748,54,340],"bar":false,"chipBox":[383,12,137]}
+d light after dismiss: {"chip":"Open to devices · 1","chipBad":false,"note":null,"noteBox":null,"bar":false,"chipBox":[383,12,137]}
+d light chip click brings the note: "Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off"
+d light after reload, note back: true
+d dark signed in: sign-in question shown: false
+d dark after Keep Chats: {"chip":"Open to devices · 1","chipBad":false,"note":"Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off","noteBox":[748,54,340],"bar":false,"chipBox":[383,12,137]}
+d dark after dismiss: {"chip":"Open to devices · 1","chipBad":false,"note":null,"noteBox":null,"bar":false,"chipBox":[383,12,137]}
+d dark chip click brings the note: "Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off"
+d dark after reload, note back: true
+m light signed in: sign-in question shown: false
+m light after Keep Chats: {"chip":"Open · 1","chipBad":false,"note":"Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off","noteBox":[38,54,340],"bar":false,"chipBox":[64,12,79]}
+m light after dismiss: {"chip":"Open · 1","chipBad":false,"note":null,"noteBox":null,"bar":false,"chipBox":[64,12,79]}
+m light chip click brings the note: "Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off"
+m light after reload, note back: true
+m dark signed in: sign-in question shown: false
+m dark after Keep Chats: {"chip":"Open · 1","chipBad":false,"note":"Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off","noteBox":[38,54,340],"bar":false,"chipBox":[64,12,79]}
+m dark after dismiss: {"chip":"Open · 1","chipBad":false,"note":null,"noteBox":null,"bar":false,"chipBox":[64,12,79]}
+m dark chip click brings the note: "Open to other devices · 1 signed in × Android · Chrome signed in. It works as Chats. Change this in Settings. Settings Turn off"
+m dark after reload, note back: true
+d light EVERYTHING: {"chip":"Android · Chrome has Everything","chipBad":true,"note":"Android · Chrome has Everything × It can run programs and change settings. Ends after 30 minutes idle. See Activity Back to Chats Turn off","noteBox":[748,54,340],"bar":false,"chipBox":[383,12,215]}
+d light Everything after 11 s, note still there: true
+d light Everything dismissed: {"chip":"Android · Chrome has Everything","chipBad":true,"note":null,"noteBox":null,"bar":false,"chipBox":[383,12,215]}
+d dark EVERYTHING: {"chip":"Android · Chrome has Everything","chipBad":true,"note":"Android · Chrome has Everything × It can run programs and change settings. Ends after 30 minutes idle. See Activity Back to Chats Turn off","noteBox":[748,54,340],"bar":false,"chipBox":[383,12,215]}
+d dark Everything dismissed: {"chip":"Android · Chrome has Everything","chipBad":true,"note":null,"noteBox":null,"bar":false,"chipBox":[383,12,215]}
+n light EVERYTHING: {"chip":"Everything","chipBad":true,"note":"Android · Chrome has Everything × It can run programs and change settings. Ends after 30 minutes idle. See Activity Back to Chats Turn off","noteBox":[368,54,340],"bar":false,"chipBox":[64,12,93]}
+n light Everything dismissed: {"chip":"Everything","chipBad":true,"note":null,"noteBox":null,"bar":false,"chipBox":[64,12,93]}
+n dark EVERYTHING: {"chip":"Everything","chipBad":true,"note":"Android · Chrome has Everything × It can run programs and change settings. Ends after 30 minutes idle. See Activity Back to Chats Turn off","noteBox":[368,54,340],"bar":false,"chipBox":[64,12,93]}
+n dark Everything dismissed: {"chip":"Everything","chipBad":true,"note":null,"noteBox":null,"bar":false,"chipBox":[64,12,93]}
+m light EVERYTHING: {"chip":"Everything","chipBad":true,"note":"Android · Chrome has Everything × It can run programs and change settings. Ends after 30 minutes idle. See Activity Back to Chats Turn off","noteBox":[38,54,340],"bar":false,"chipBox":[64,12,93]}
+m light Everything dismissed: {"chip":"Everything","chipBad":true,"note":null,"noteBox":null,"bar":false,"chipBox":[64,12,93]}
+m dark EVERYTHING: {"chip":"Everything","chipBad":true,"note":"Android · Chrome has Everything × It can run programs and change settings. Ends after 30 minutes idle. See Activity Back to Chats Turn off","noteBox":[38,54,340],"bar":false,"chipBox":[64,12,93]}
+m dark Everything dismissed: {"chip":"Everything","chipBad":true,"note":null,"noteBox":null,"bar":false,"chipBox":[64,12,93]}
+device page everything m light: {"line":false,"ids":"device-chip,folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"Everything | No folder | No branch | Low\nMedium\nHigh\nMax | Offline | Everything access\n×\nThe PC gave this device every tool and setting. Ends after 30 minutes "}
+device page everything m dark: {"line":false,"ids":"device-chip,folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"Everything | No folder | No branch | Low\nMedium\nHigh\nMax | Offline | Everything access\n×\nThe PC gave this device every tool and setting. Ends after 30 minutes "}
+device page everything d light: {"line":false,"ids":"device-chip,folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"Everything | No folder | No branch | Low\nMedium\nHigh\nMax | Offline | Everything access\n×\nThe PC gave this device every tool and setting. Ends after 30 minutes "}
+device page everything d dark: {"line":false,"ids":"device-chip,folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"Everything | No folder | No branch | Low\nMedium\nHigh\nMax | Offline | Everything access\n×\nThe PC gave this device every tool and setting. Ends after 30 minutes "}
+device page chats m light: {"line":false,"ids":"folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"No folder | No branch | Low\nMedium\nHigh\nMax | Offline | You have Chats access\n×\nThe PC can give this device more. Change it in Bunny, on the PC."}
+device page chats m dark: {"line":false,"ids":"folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"No folder | No branch | Low\nMedium\nHigh\nMax | Offline | You have Chats access\n×\nThe PC can give this device more. Change it in Bunny, on the PC."}
+device page chats d light: {"line":false,"ids":"folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"No folder | No branch | Low\nMedium\nHigh\nMax | Offline | You have Chats access\n×\nThe PC can give this device more. Change it in Bunny, on the PC."}
+device page chats d dark: {"line":false,"ids":"folder-chip,branch-chip,effort-level,offline-chip,device-note","text":"No folder | No branch | Low\nMedium\nHigh\nMax | Offline | You have Chats access\n×\nThe PC can give this device more. Change it in Bunny, on the PC."}
