@@ -27,6 +27,9 @@ export const FAILS_BEFORE_WAIT = 5;
 export const EVERYTHING_IDLE_MS = 30 * 60 * 1000;
 /** R-DF2: the action log keeps the last 500 entries or 30 days, whichever is fewer. */
 export const LOG_MAX_ENTRIES = 500;
+export const LOG_MAX_REFUSED = 50; // of those, at most this many are refusals (the newest)
+/** Why a device that is not signed in was refused (WEBAPP-SIGNIN): shown in Activity, never an address or a value. */
+export const REFUSAL_REASONS = Object.freeze(['passcode', 'wait', 'address', 'origin']);
 export const LOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export const LEVELS = Object.freeze(['chats', 'everything']);
 export const DEFAULT_LEVEL = 'chats';
@@ -271,7 +274,11 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   let loading = null;
   const prune = () => {
     const t = now();
-    actions = actions.filter((a) => t - Date.parse(a.at) <= LOG_MAX_AGE_MS).slice(-LOG_MAX_ENTRIES);
+    actions = actions.filter((a) => t - Date.parse(a.at) <= LOG_MAX_AGE_MS);
+    // Refusals (anyone on the network can cause them) have a small share of their own, so a flood can never push out sign-ins, tools or changes.
+    let refused = actions.filter((a) => a.kind === 'refused').length - LOG_MAX_REFUSED;
+    if (refused > 0) actions = actions.filter((a) => a.kind !== 'refused' || (refused -= 1) < 0);
+    actions = actions.slice(-LOG_MAX_ENTRIES);
   };
   // The saved log is read once, and ANYTHING that writes or reads waits for it, so a new entry after a restart is added to the old ones, never written over them.
   function loadActions() {
@@ -286,12 +293,29 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   let saving = Promise.resolve();
   function logAction(device, entry) {
     const clean = { at: new Date(now()).toISOString(), device: device?.deviceId ?? null, label: device?.label ?? null, level: device?.level ?? null };
-    for (const key of ['kind', 'tool', 'method', 'path']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
+    for (const key of ['kind', 'tool', 'method', 'path', 'reason']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
     if (typeof entry.level === 'string') clean.level = entry.level;
     if (typeof entry.from === 'string') clean.from = entry.from;
     actions.push(clean);
     prune();
     if (logFile) saving = saving.then(loadActions).then(async () => { prune(); await mkdir(dirname(logFile), { recursive: true }); await writeFile(logFile, JSON.stringify(actions)); }).catch(() => {});
+  }
+  // WEBAPP-SIGNIN: a device that is refused is named in Activity: WHY (one of REFUSAL_REASONS) and what kind of device ("iPhone or iPad · Safari"). Never an address, a passcode or a path.
+  // The same reason from the same kind of device is written once a minute, and at most 20 in a minute, so someone who is not signed in cannot fill the log.
+  const refusedAt = new Map();
+  let refusedBurst = [];
+  function logRefusal(reason, userAgent = '') {
+    if (!on || !REFUSAL_REASONS.includes(reason)) return;
+    const label = deviceLabel(userAgent);
+    const t = now();
+    const key = reason + '|' + label;
+    if (t - (refusedAt.get(key) ?? -Infinity) < 60_000) return;
+    refusedBurst = refusedBurst.filter((x) => t - x < 60_000);
+    if (refusedBurst.length >= 20) return;
+    refusedBurst.push(t);
+    if (refusedAt.size > 200) refusedAt.clear();
+    refusedAt.set(key, t);
+    logAction({ label }, { kind: 'refused', reason });
   }
   let record = null;       // the scrypt record of the saved passcode
   let loaded = false;
@@ -327,6 +351,12 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   };
 
   async function signIn(ip, passcode, userAgent = '') {
+    const result = await signInChecked(ip, passcode, userAgent);
+    if (!result.ok && result.status === 401) logRefusal('passcode', userAgent);
+    else if (!result.ok && result.status === 429) logRefusal('wait', userAgent);
+    return result;
+  }
+  async function signInChecked(ip, passcode, userAgent = '') {
     await load();
     if (!on) return { ok: false, status: 403, message: 'Bunny is not open to other devices.' };
     const wait = waitFor(ip);
@@ -402,6 +432,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
     /** Turn off: every session ends at once. */
     disable() { const ids = [...sessions.values()].map((s) => s.deviceId); on = false; host = ''; address = null; sessions.clear(); failures.clear(); recent = []; ended(ids.length ? ids : null); },
     signIn,
+    logRefusal,
     sessionFor,
     /** The person's own browser sessions, for the list in the window (never the secrets). */
     sweep,

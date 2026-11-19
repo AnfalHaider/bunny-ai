@@ -36,12 +36,16 @@ export function clock(iso) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+/** Why a device that was not signed in was refused (the server's reasons; no address, no value). */
+export const REFUSAL_WORDS = { passcode: 'wrong passcode', wait: 'too many tries, made to wait', address: 'address not allowed or changed', origin: "request not from Bunny's own page" };
+
 /** One log entry, said in the drawing's words: { when, what, note, bad }. Never an argument or a value: the server never keeps them. */
 export function describeAction(e) {
   const when = clock(e.at);
   const level = LEVEL_NAMES[e.level] ?? e.level ?? '';
   if (e.kind === 'signin') return { when, what: 'Signed in', note: `At the ${LEVEL_NAMES.chats} level`, bad: false };
   if (e.kind === 'idle-signout') return { when, what: 'Signed out', note: e.level === 'everything' ? 'Ended: 30 minutes idle' : 'Ended: idle for 2 hours', bad: false };
+  if (e.kind === 'refused') return { when, what: 'Refused a device', note: `${e.label ?? 'A device'}: ${REFUSAL_WORDS[e.reason] ?? 'not allowed'}`, bad: false };
   if (e.kind === 'level') return { when, what: `Level changed to ${level}`, note: "By Bunny's window", bad: e.level === 'everything' };
   if (e.kind === 'tool') return { when, what: `Tool: ${e.tool ?? 'unknown'}`, note: 'Run by this device', bad: e.tool === 'run_command' };
   if (e.kind === 'route') {

@@ -708,6 +708,7 @@
         <div class="desc" id="remote-address"></div>
         <div class="desc" id="remote-generated" hidden></div>
         <div id="remote-devices"></div>
+        <div id="remote-refused" class="desc" role="status" hidden></div>
         <div><button type="button" id="remote-signout-all" class="btn">Sign out all devices</button></div>
       </div>
     </div>
@@ -778,7 +779,7 @@
 <script type="module">
   import { getJSON, sendJSON, applyTheme, applyAppearance, CODE_THEMES, codeThemeVars, desktopBridge } from './api.js';
   import { installContext, installRowState, installRowText, runInstall } from './install-app.js';
-  import { activityView, chooseLevel, levelPill, paintStatus, warningBox, everythingDevices, IDLE_SHORT, DEVICE_ACCESS_SENTENCE } from './device-access.js';
+  import { describeAction, activityView, chooseLevel, levelPill, paintStatus, warningBox, everythingDevices, IDLE_SHORT, DEVICE_ACCESS_SENTENCE } from './device-access.js';
   import { deviceLevel } from './browser-mode.js';
   import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
@@ -1499,7 +1500,16 @@
     const err = (text) => { $('remote-error').textContent = text || ''; $('remote-error').hidden = !text; };
     const when = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return ''; } };
     let generated = '';
+    // WEBAPP-SIGNIN: devices that were refused (not signed in): when, what kind of device and why, from the same Activity log. Names only.
+    const paintRefused = async (on) => {
+      const holder = $('remote-refused');
+      let rows = [];
+      if (on) { try { rows = ((await getJSON('/api/remote/log')).entries ?? []).filter((e) => e.kind === 'refused').slice(0, 5); } catch { /* none shown */ } }
+      holder.hidden = !rows.length;
+      holder.replaceChildren(...(rows.length ? [Object.assign(document.createElement('b'), { textContent: 'Refused lately' })] : []), ...rows.map((e) => { const a = describeAction(e); const line = document.createElement('div'); line.textContent = a.when + ' · ' + a.note; return line; }));
+    };
     const render = (s) => {
+      paintRefused(Boolean(s.enabled));
       box.checked = Boolean(s.enabled);
       $('remote-state').textContent = s.enabled ? 'on' : 'off';
       $('remote-setup').hidden = s.enabled || !$('remote-setup').dataset.open;

@@ -12,7 +12,7 @@
     if (method !== 'GET' && method !== 'HEAD') headers.set('x-bunny-csrf', meta.content);
     const res = await nativeFetch(input, { ...init, headers });
     // the session ended (signed out from the computer, or idle too long): back to the sign-in page
-    if (res.status === 401) { location.replace('/'); }
+    if (res.status === 401) { location.replace('/?signedout=1'); }
     return res;
   };
 

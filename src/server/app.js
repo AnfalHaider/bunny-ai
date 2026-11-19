@@ -3658,6 +3658,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   let remoteChanges = 0; // SW-1: counts the person's own On and Off; a resume that was started before one of them must not undo it
   let notOpened = ''; // why Bunny did not open it again at start (one plain sentence for the Settings row), until it is turned on or off
   const NOT_BUNNY_REMOTE = 'That request did not come from a device signed in to Bunny AI.';
+  // WEBAPP-SIGNIN: a refusal before sign-in says why, in words that give nothing away (no address, no setting): the codes stay as they were.
+  const REFUSED_OFF = 'Bunny is not open to other devices right now. Turn it on in Bunny on the computer.';
+  const REFUSED_HOST = 'This address is not the one Bunny is open on. It may have changed: open the address shown in Bunny on the computer.';
+  const REFUSED_ORIGIN = "That request did not come from Bunny's own page. Open the address shown in Bunny on the computer and sign in there.";
 
   const lanUrl = () => (remote.enabled ? 'http://' + remote.host + '/' : null);
   async function remoteStatus() {
@@ -3764,14 +3768,15 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     const method = req.method ?? 'GET';
     const headers = req.headers ?? {};
     const security = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
-    const refuse = (status, code, message, extra = {}) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...security, ...extra }); res.end(JSON.stringify({ code, message })); };
+    const refuse = (status, code, message, extra = {}) => { const { reason, ...more } = extra; res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...security, ...more }); res.end(JSON.stringify(reason ? { code, message, reason } : { code, message })); };
     // 1. Host: exactly the local-network address and port. Nothing wider (not localhost, not another address, not a name).
     const host = typeof headers.host === 'string' ? headers.host.trim().toLowerCase() : '';
-    if (!remote.enabled || !host || host !== remote.host) return refuse(403, 'request.badHost', NOT_BUNNY_REMOTE);
+    if (!remote.enabled) return refuse(403, 'request.badHost', REFUSED_OFF, { reason: 'off' });
+    if (!host || host !== remote.host) { remote.logRefusal('address', String(headers['user-agent'] ?? '')); return refuse(403, 'request.badHost', REFUSED_HOST, { reason: 'address' }); }
     // 2. Origin (when sent) exactly this origin, and fetch metadata only from this site or a typed address.
-    if (headers.origin !== undefined && headers.origin !== 'http://' + host) return refuse(403, 'request.badOrigin', NOT_BUNNY_REMOTE);
+    if (headers.origin !== undefined && headers.origin !== 'http://' + host) { remote.logRefusal('origin', String(headers['user-agent'] ?? '')); return refuse(403, 'request.badOrigin', REFUSED_ORIGIN, { reason: 'origin' }); }
     const site = headers['sec-fetch-site'];
-    if (site !== undefined && !['same-origin', 'none'].includes(site)) return refuse(403, 'request.badOrigin', NOT_BUNNY_REMOTE);
+    if (site !== undefined && !['same-origin', 'none'].includes(site)) { remote.logRefusal('origin', String(headers['user-agent'] ?? '')); return refuse(403, 'request.badOrigin', REFUSED_ORIGIN, { reason: 'origin' }); }
     const ip = String(req.socket?.remoteAddress ?? 'unknown');
     const secret = readCookie(headers.cookie, REMOTE_COOKIE);
     const session = remote.sessionFor(headers.cookie);
@@ -3781,7 +3786,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       if (method === 'POST' && path === '/api/remote/signin') {
         const body = await readBody(req, 4096).catch(() => ({}));
         const result = await remote.signIn(ip, body?.passcode, String(headers['user-agent'] ?? ''));
-        if (!result.ok) return refuse(result.status, result.status === 429 ? 'remote.wait' : 'remote.passcode', result.message, result.waitSeconds ? { 'retry-after': String(result.waitSeconds) } : {});
+        if (!result.ok) return refuse(result.status, result.status === 429 ? 'remote.wait' : 'remote.passcode', result.message, { reason: result.status === 429 ? 'wait' : 'passcode', ...(result.waitSeconds ? { 'retry-after': String(result.waitSeconds) } : {}) });
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': remote.cookieFor(result.secret) });
         return res.end(JSON.stringify({ ok: true }));
       }
