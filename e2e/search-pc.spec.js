@@ -102,3 +102,41 @@ for (const scheme of ['light', 'dark']) {
     });
   });
 }
+
+// ---- in a chat, with the stand-in index over invented files (BUNNY_PCSEARCH_FAKE) ----
+import { resetProfile, connectAnthropic, pickFirstModel } from './helpers.js';
+
+for (const [label, size] of [['desktop', { width: 1280, height: 800 }], ['phone', { width: 390, height: 780 }]]) {
+  test(`in a chat (${label}): the search step lists the invented files with the match marked, the files are read and named, and the answer carries on`, async ({ page, request }) => {
+    await resetProfile(request);
+    await request.put('/api/settings', { data: { pcSearchEnabled: true, pcSearchAfter: 'read' } });
+    await page.setViewportSize(size);
+    await connectAnthropic(page);
+    await page.goto('/');
+    await pickFirstModel(page);
+    await page.locator('#input').fill('find my tax returns [[call search_pc {"terms":["tax"]}]]');
+    await page.locator('#send').click();
+    const step = page.locator('.tool-call-header', { hasText: 'Searched this PC for “tax” · 3 results' });
+    await expect(step).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+    for (const line of await page.locator('.tool-group-line').all()) { if ((await line.getAttribute('aria-expanded')) !== 'true') await line.click(); } // the steps are folded into a group: open it
+    await expect(step).toBeVisible();
+    await expect(page.locator('.tool-call-header', { hasText: /^Read \d+ files?: / }).first()).toBeVisible();
+    await step.click();
+    const rows = page.locator('.pc-results .pc-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.first().locator('.pc-name')).toContainText('tax');
+    await expect(rows.first().locator('.pc-folder')).toContainText('Documents'); // a saved chat keeps names, folders and dates; a snippet (file text) is shown live only (SP-8)
+    await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    // a browser tab has no desktop bridge: the list has no Open, Show in folder or Copy path
+    await expect(page.locator('.pc-results button', { hasText: /^(Open|Show in folder|Copy path)$/ })).toHaveCount(0);
+    await expect(page.locator('.pc-results button', { hasText: 'Ask about this file' }).first()).toBeVisible();
+    await page.screenshot({ path: `test-results/search-pc-chat-${label}.png` });
+    // the Activity record names what was done, by name
+    const entries = (await (await request.get('/api/pcsearch/activity')).json()).entries;
+    expect(entries.some((e) => e.kind === 'search' && e.results === 3 && e.who === 'window')).toBe(true);
+    expect(entries.some((e) => e.kind === 'read' && e.files.length === 3)).toBe(true);
+    await request.put('/api/settings', { data: { pcSearchEnabled: false } });
+  });
+}
