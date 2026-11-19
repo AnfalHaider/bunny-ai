@@ -14,7 +14,7 @@
     "theme": "light",
     "scale": 1,
     "capture": "viewport",
-    "alt": "A step Blocked by a rule in amber, then a card Asked because of your rule git push",
+    "alt": "A step denied by a rule, tagged in amber, then a card Asked because of your rule git push",
     "usedBy": ["README.md"]
   },
   "capability.png": {
@@ -132,7 +132,7 @@
     "theme": "light",
     "scale": 1,
     "capture": "viewport",
-    "alt": "The working line: the hopping bunny, \"Whisker-wiggling… thinking · 1s\", opened to show the thinking",
+    "alt": "The working line: the hopping bunny, \"Binkying… thinking · 1s\", opened to show the thinking",
     "usedBy": ["README.md"]
   }
 }
