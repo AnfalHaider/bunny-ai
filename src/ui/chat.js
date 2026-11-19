@@ -27,6 +27,7 @@ import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
 import { chooseLevel, everythingDevices, isSettingChange } from './device-access.js';
 import { newEvents, paintChip, shownEvents } from './remote-notice.js';
+import { closePanel, openPanel } from './remote-panel.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
 import { fitViewport } from './viewport-fit.js';
 import { bindPhoneBar } from './phone-bar.js';
@@ -2716,12 +2717,18 @@ function watchRemote() {
   const chipOpts = (list = events) => ({
     events: list, reducedMotion: reduced(),
     onClick: () => {
-      const ev = list[list.length - 1];
+      if (closePanel(document)) return; // a second tap closes it
+      const ev = list[list.length - 1] ?? null;
       events.length = 0;
       if (ev?.kind === 'shutoff') shutoffAck = true;
       paint();
-      if (ev?.kind === 'setting') openSettings('desktop', { activity: ev.device });
-      else openSettings('desktop');
+      // the tap panel (Design's drawing): the devices, their levels and last seen, Activity, Turn off and Settings; a setting change offers that device's Activity
+      openPanel(document, last, {
+        event: ev,
+        onActivity: (id) => openSettings('desktop', id ? { activity: id } : {}),
+        onSettings: () => openSettings('desktop'),
+        onTurnOff: async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } },
+      });
     },
   });
   const show = (s) => {
@@ -2732,6 +2739,8 @@ function watchRemote() {
     askAboutDevices(s);
     announceChanges(s);
   };
+  document.addEventListener('click', (e) => { if (e.target.isConnected && !e.target.closest('#remote-panel, #remote-chip')) closePanel(document); }); // (a chip tap redraws the chip: its old child is gone by now, and is not "elsewhere")
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && closePanel(document)) { e.stopPropagation(); document.getElementById('remote-chip')?.focus(); } }, true);
   let refused = 0; // a device's page is refused /api/remote: after three refusals in a row outside Bunny's window it stops asking
   const tick = async () => { try { show(await getJSON('/api/remote')); refused = 0; } catch { refused += 1; } };
   // START-WAIT: once a second for the first 15 seconds (so the chip is there from the first moment), then every 10 seconds

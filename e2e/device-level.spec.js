@@ -159,6 +159,7 @@ for (const scheme of ['light', 'dark']) {
       await expect(page.locator('#device-notice')).toHaveCount(0);
       await shot(page, 'notice', scheme);
       await chipEl.click();
+      await page.locator('#remote-panel').getByRole('button', { name: 'See Activity' }).click();
       const frame = page.frameLocator('#settings-frame');
       await expect(frame.locator('.device-activity')).toContainText('Activity · Kitchen laptop');
       await expect(frame.getByRole('listitem').first()).toContainText('Setting changed');

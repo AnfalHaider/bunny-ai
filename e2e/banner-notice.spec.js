@@ -58,6 +58,8 @@ for (const scheme of ['light', 'dark']) {
       await expect(chip(page).locator('.lg')).toHaveText('New: Living room TV signed in');
       await expect(page.locator(NO_NOTICE)).toHaveCount(0);
       await chip(page).click();
+      await expect(page.locator('#remote-panel')).toContainText('Living room TV');
+      await page.locator('#remote-panel').getByRole('button', { name: 'Settings' }).click();
       await expect(page.locator('#settings-backdrop')).toBeVisible();
       await expect(page.locator('#settings-frame')).toHaveAttribute('src', /section=desktop/);
       await expect(chip(page).locator('.lg')).toHaveText('Open to devices · 2');
@@ -103,6 +105,8 @@ for (const scheme of ['light', 'dark']) {
       await page.waitForTimeout(3000);
       await expect(chip(page).locator('.rc-badge')).toHaveText('2');
       await chip(page).click();
+      await expect(page.locator('#remote-panel')).toContainText('Pixel 8 changed a setting');
+      await page.locator('#remote-panel').getByRole('button', { name: 'See Activity' }).click();
       await expect(page.locator('#settings-frame')).toHaveAttribute('src', new RegExp(`activity=${PIXEL.id}`));
       await expect(chip(page).locator('.lg')).toHaveText('Pixel 8 has Everything');
       await expect(page.locator(NO_NOTICE)).toHaveCount(0);
@@ -151,6 +155,59 @@ for (const scheme of ['light', 'dark']) {
       expect(sent).toEqual([]);
       await page.reload();
       await expect(chip(page).locator('.lg')).toHaveText('Closed to the internet: too many wrong passcodes');
+    });
+
+    test('the tap panel: who is signed in at which level and last seen, Activity for each, Turn off and Settings; the second tap, Esc and a tap elsewhere close it', async ({ page }) => {
+      const box = { devices: [PIXEL, { ...TABLET, level: 'everything' }] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await expect(chip(page).locator('.lg')).toHaveText('Kitchen tablet has Everything');
+      await chip(page).click();
+      const panel = page.locator('#remote-panel');
+      await expect(panel).toBeVisible();
+      await expect(panel.locator('.rp-title')).toHaveText('Open to devices');
+      await expect(panel.locator('.rp-dev')).toHaveCount(2);
+      await expect(panel.locator('.rp-dev').nth(0)).toContainText('Pixel 8');
+      await expect(panel.locator('.rp-dev').nth(0).locator('.rp-level')).toHaveText('Chats');
+      await expect(panel.locator('.rp-dev').nth(1).locator('.rp-level')).toHaveText('Everything');
+      await expect(panel.locator('.rp-dev').nth(1).locator('.rp-level')).toHaveClass(/is-bad/);
+      await expect(panel.locator('.rp-dev').nth(0)).toContainText(/Last seen [0-9]{2}:[0-9]{2}/);
+      await expect(chip(page)).toHaveAttribute('aria-expanded', 'true');
+      await shot(page, 'window-chip-panel', scheme);
+      await chip(page).click();
+      await expect(panel).toHaveCount(0);
+      await chip(page).click();
+      await page.keyboard.press('Escape');
+      await expect(panel).toHaveCount(0);
+      await chip(page).click();
+      await page.locator('.thread').click({ position: { x: 5, y: 5 } }).catch(() => {});
+      await page.mouse.click(600, 400);
+      await expect(panel).toHaveCount(0);
+      await chip(page).click();
+      await panel.locator('.rp-dev').nth(1).getByRole('button', { name: 'Activity' }).click();
+      await expect(page.locator('#settings-frame')).toHaveAttribute('src', new RegExp(`activity=${TABLET.id}`));
+    });
+
+    test('the tap panel: Turn off is the own call of the window (PUT /api/remote with enabled false) and nothing else is written', async ({ page }) => {
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await chip(page).click();
+      await page.locator('#remote-panel').getByRole('button', { name: 'Turn off' }).click();
+      await expect(page.locator('#remote-panel')).toHaveCount(0);
+      expect(box.writes).toEqual(['PUT /api/remote']);
+    });
+
+    test('the tap panel for the internet shut-off says why, and offers Settings', async ({ page }) => {
+      await page.route('**/api/remote', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { enabled: false, signedIn: 0, autoChats: [], devices: [], shutoffAt: '2026-11-19T10:00:00.000Z' } }) : r.continue()));
+      await page.route('**/api/remote/log', (r) => r.fulfill({ json: { entries: [] } }));
+      await page.addInitScript(() => { window.bunnyDesktop = { getPrefs: async () => ({}), setPrefs: async () => ({}), openInBrowser: async () => ({}) }; });
+      await page.goto('/src/ui/index.html');
+      await chip(page).click();
+      const panel = page.locator('#remote-panel');
+      await expect(panel).toContainText('Closed to the internet: too many wrong passcodes');
+      await expect(panel.getByRole('button', { name: 'Turn off' })).toHaveCount(0);
+      await expect(panel.getByRole('button', { name: 'Settings' })).toBeVisible();
     });
 
     test('reduced motion: no pulse, and the words still change once per event', async ({ page }) => {
@@ -239,3 +296,22 @@ for (const scheme of ['light', 'dark']) {
     }
   });
 }
+
+test.describe('the tap panel on a phone', () => {
+  for (const w of [360, 390]) {
+    test(`${w} px: it is 12 px in from each side, under the bar, and inside the screen`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: 740 });
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await chip(page).click();
+      const b = await page.locator('#remote-panel').boundingBox();
+      expect(Math.round(b.x)).toBe(12);
+      expect(Math.round(b.x + b.width)).toBe(w - 12);
+      const bar = await page.locator('.topbar').boundingBox();
+      expect(b.y).toBeGreaterThanOrEqual(bar.y + bar.height - 1);
+      expect(b.y + b.height).toBeLessThanOrEqual(740);
+      await shot(page, `window-chip-panel-${w}`, 'light');
+    });
+  }
+});
