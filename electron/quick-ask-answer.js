@@ -40,11 +40,12 @@ export function classifyFailure({ status = 0, code = '', reason = '', message = 
  * @param {(event: object) => void} o.emit  plain data to the bar
  * @param {(sessionId: string) => void} [o.onFinishedDetached]  an answer that finished after the person pressed Open in Bunny
  */
-export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {} }) {
+export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}, getSettings = () => ({}) }) {
   let sessionId = null;
   let controller = null;
   let detached = false;
   const out = (event) => { if (!detached) emit(event); };
+  const pcFlag = (pc) => { const s = getSettings() ?? {}; if (s.pcSearchEnabled !== true) return {}; return pc ? { pcSearch: 'force' } : (s.pcSearchBarAuto === false ? {} : { pcSearch: true }); };
 
   async function ensureSession(title) {
     if (sessionId) return sessionId;
@@ -56,7 +57,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
   }
 
   /** Ask (or follow up). Resolves when the answer has ended, one way or another. Never throws: every failure is an event. */
-  async function ask({ text, files = [] }) {
+  async function ask({ text, files = [], pc = false }) {
     if (controller) return { ok: false, message: 'Bunny is still answering.' };
     controller = new AbortController();
     const signal = controller.signal;
@@ -73,7 +74,8 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
       const res = await adminFetch(`/api/sessions/${id}/messages`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, signal,
         // text only: the server offers the model no tools; a screenshot or file goes as an ordinary attachment
-        body: JSON.stringify({ content: text, workMode: 'chat', textOnly: true, attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) }),
+        // SEARCH-PC: with the switch on, the bar may search this PC by itself (unless turned off in Settings) or when the person chose it in the + menu; the server honours it for this process only
+        body: JSON.stringify({ content: text, workMode: 'chat', textOnly: true, ...pcFlag(pc), attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -99,6 +101,8 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
         buffer = parsed.rest;
         for (const ev of parsed.events) {
           if (ev.name === 'delta' && typeof ev.data?.text === 'string') push(ev.data.text);
+          else if (ev.name === 'tool' && Array.isArray(ev.data?.pcResults)) out({ type: 'results', title: String(ev.data.tool ?? '').slice(0, 200), rows: ev.data.pcResults.slice(0, 50).map((r) => ({ ref: String(r.ref ?? '').slice(0, 80), name: String(r.name ?? '').slice(0, 260), folder: String(r.folder ?? '').slice(0, 400), modified: String(r.modified ?? '').slice(0, 40), snippet: String(r.snippet ?? '').slice(0, 220), openable: r.openable === true })) });
+          else if (ev.name === 'tool' && ev.data?.pcTainted === true) out({ type: 'step', text: String(ev.data.tool ?? '').slice(0, 300) });
           else if (ev.name === 'done') { model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; }
           else if (ev.name === 'error') {
             out({ type: 'error', kind: classifyFailure({ code: ev.data?.code, reason: ev.data?.reason, message: ev.data?.message }), message: String(ev.data?.message ?? 'Bunny could not answer.').slice(0, 400) });

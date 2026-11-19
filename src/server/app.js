@@ -2227,11 +2227,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
       // SEARCH-PC: the chat gets the two tools when the switch is on; the bar only for a request from the main process (the admin secret) that asks for them; a Chats device never (REMOTE_TOOLS_DENIED)
       const pcWho = (req.bunnyRemote ?? req.bunnyDevice)?.label ?? (textOnly ? 'bar' : 'window');
-      const barPc = textOnly && body.pcSearch === true && adminOk(req) && pc.enabled() && !(req.bunnyRemote ?? req.bunnyDevice);
+      const barPc = textOnly && (body.pcSearch === true || body.pcSearch === 'force') && adminOk(req) && pc.enabled() && !(req.bunnyRemote ?? req.bunnyDevice) && (body.pcSearch === 'force' || settings.pcSearchBarAuto !== false);
       const chatPc = !textOnly && pc.enabled() && !scheduledTask && !req.bunnyRemote;
       const pcTurn = createPcTurn();
       pcTurn.tainted = holdsPcFileText(history); // file text from this PC still in what the model holds: the chat acts only with the person's click
       if (chatPc || barPc) history.unshift({ role: 'system', content: PC_SYSTEM_TEXT });
+      if (barPc && body.pcSearch === 'force') history.unshift({ role: 'system', content: 'The person chose Search this PC for this question: call search_pc first with a few key words from the question, then answer from what you find.' });
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']),
         ...(chatPc || barPc ? pcToolDefinitions() : []), // (the bar is offered only quickTools; this list is what may run)

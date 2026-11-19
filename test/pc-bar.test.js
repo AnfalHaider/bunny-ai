@@ -53,3 +53,58 @@ test('the bar keeps nothing: its activity entry says "bar", with no file text', 
   assert.equal(entries[0].who, 'bar');
   assert.ok(!JSON.stringify(entries).includes('104,250'));
 });
+
+// ---- the bar's side: what it asks for, and what it passes to the list ----
+import { createAnswerer } from '../electron/quick-ask-answer.js';
+import { barLook } from '../electron/quick-ask-logic.js';
+
+const sse = (...frames) => frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
+async function answererWith(settings, frames = [['delta', { text: 'ok' }], ['done', { model: 'm1' }]]) {
+  const sent = [];
+  const events = [];
+  const adminFetch = async (path, init) => {
+    if (path === '/api/sessions') return new Response(JSON.stringify({ id: 'aaaaaaaa-1111-4111-8111-111111111111' }), { status: 200 });
+    sent.push(JSON.parse(init.body));
+    return new Response(sse(...frames), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  };
+  const a = createAnswerer({ adminFetch, emit: (e) => events.push(e), getSettings: () => settings });
+  return { a, sent, events };
+}
+
+test('the bar asks for Search this PC only with the switch on: by itself (unless turned off) or when chosen in the + menu', async () => {
+  const off = await answererWith({});
+  await off.a.ask({ text: 'find my tax return', pc: true });
+  assert.equal('pcSearch' in off.sent[0], false, 'switch off: nothing asked for, even from the menu');
+  const auto = await answererWith({ pcSearchEnabled: true });
+  await auto.a.ask({ text: 'find my tax return' });
+  assert.equal(auto.sent[0].pcSearch, true);
+  const manualOnly = await answererWith({ pcSearchEnabled: true, pcSearchBarAuto: false });
+  await manualOnly.a.ask({ text: 'find my tax return' });
+  assert.equal('pcSearch' in manualOnly.sent[0], false, 'by itself is off: not asked for');
+  const chosen = await answererWith({ pcSearchEnabled: true, pcSearchBarAuto: false });
+  await chosen.a.ask({ text: 'find my tax return', pc: true });
+  assert.equal(chosen.sent[0].pcSearch, 'force');
+  assert.equal(chosen.sent[0].textOnly, true, 'still text only');
+});
+
+test('the bar passes the list on as plain data (names, folders, dates, snippets, refs) and the "Read N files" line, nothing it could run', async () => {
+  const results = [{ ref: 'f1-aaa', name: 'tax.txt', folder: 'C:\docs', modified: '2025-03-01', snippet: 'Income <b>x</b>', openable: true, extra: () => 1, path: 'C:\docs\tax.txt' }];
+  const { a, events } = await answererWith({ pcSearchEnabled: true }, [['tool', { tool: 'Searched this PC for “tax” · 1 result', status: 'done', pcResults: results }], ['tool', { tool: 'Read 1 file: tax.txt', status: 'done', pcTainted: true }], ['delta', { text: 'ok' }], ['done', { model: 'm1' }]]);
+  await a.ask({ text: 'find my tax return' });
+  const list = events.find((e) => e.type === 'results');
+  assert.deepEqual(Object.keys(list.rows[0]).sort(), ['folder', 'modified', 'name', 'openable', 'ref', 'snippet']);
+  assert.equal(list.rows[0].snippet, 'Income <b>x</b>', 'text, to be shown as text');
+  assert.ok(!JSON.stringify(list).includes('C:\\docs\\tax.txt'), 'no full path goes to the bar');
+  assert.ok(events.some((e) => e.type === 'step' && /Read 1 file/.test(e.text)));
+});
+
+test('the + menu offers Search this PC only when the switch is on; the server also honours "by itself: off"', async (t) => {
+  assert.equal(barLook({ pcSearchEnabled: true }).pcSearch, true);
+  assert.equal(barLook({}).pcSearch, false);
+  const w = await pcWorld(t, { files, settings: { pcSearchEnabled: true, pcSearchBarAuto: false }, calls: [] });
+  await barAsk(w, 'find my tax return', { pcSearch: true });
+  assert.deepEqual(w.toolNames(w.requests[0]).sort(), ['read_url', 'web_search'], 'by itself is off and nothing was chosen');
+  await barAsk(w, 'find my tax return', { pcSearch: 'force' });
+  assert.deepEqual(w.toolNames(w.requests[1]).sort(), ['read_pc_file', 'read_url', 'search_pc', 'web_search']);
+  assert.match(JSON.stringify(w.requests[1].messages), /chose Search this PC for this question: call search_pc first/);
+});

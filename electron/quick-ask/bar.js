@@ -126,6 +126,69 @@ function renderChip() {
   host.append(chip);
 }
 
+// ---- SEARCH-PC: the + menu's Search this PC, and the list of what was found (built with textContent only; the buttons name a result by its ref) ----
+let forcePc = false;
+let pcRows = [];
+let pcChosen = 0;
+const pcRowsEl = () => [...$('pc-list').querySelectorAll('.pcr')];
+function pcChoose(i) {
+  const rows = pcRowsEl();
+  if (!rows.length) return;
+  pcChosen = (i + rows.length) % rows.length;
+  rows.forEach((r, k) => r.classList.toggle('chosen', k === pcChosen));
+  rows[pcChosen].scrollIntoView({ block: 'nearest' });
+}
+function pcMarked(parent, textValue, words) {
+  const source = String(textValue ?? '');
+  const lower = source.toLowerCase();
+  const spans = [];
+  for (const w of words) for (let at = lower.indexOf(w); at !== -1 && w; at = lower.indexOf(w, at + w.length)) spans.push([at, at + w.length]);
+  spans.sort((a, b) => a[0] - b[0]);
+  let pos = 0;
+  for (const [from, to] of spans) {
+    if (from < pos) continue;
+    if (from > pos) parent.append(document.createTextNode(source.slice(pos, from)));
+    const m = document.createElement('mark'); m.textContent = source.slice(from, to); parent.append(m);
+    pos = to;
+  }
+  if (pos < source.length) parent.append(document.createTextNode(source.slice(pos)));
+}
+function pcShowResults(event) {
+  const list = $('pc-list');
+  pcRows = Array.isArray(event.rows) ? event.rows : [];
+  list.replaceChildren();
+  const words = [...new Set((/“([^”]*)”/.exec(String(event.title ?? ''))?.[1] ?? '').toLowerCase().split(/\s+/).filter((w) => w.length > 1))];
+  const head = document.createElement('div'); head.className = 'pcs'; head.textContent = String(event.title ?? 'Searched this PC'); list.append(head);
+  pcRows.slice(0, 8).forEach((r) => {
+    const row = document.createElement('div'); row.className = 'pcr'; row.dataset.ref = r.ref;
+    const n = document.createElement('div'); n.className = 'n'; n.textContent = r.name;
+    const f = document.createElement('div'); f.className = 'f'; f.textContent = r.folder;
+    row.append(n, f);
+    if (r.snippet) { const sn = document.createElement('div'); sn.className = 'sn'; pcMarked(sn, r.snippet, words); row.append(sn); }
+    const acts = document.createElement('div'); acts.className = 'pa';
+    const add = (label, run) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', () => { run(); }); acts.append(b); };
+    add(r.openable ? 'Open' : 'Show in folder', () => (r.openable ? window.quickAsk.pcOpen(r.ref) : window.quickAsk.pcShow(r.ref)).then((x) => { if (x && x.ok === false) message(x.message || 'That did not work.'); }).catch(() => message('That did not work.')));
+    add('Ask about this file', () => pcAsk(r));
+    add('Copy path', () => window.quickAsk.pcCopy(r.ref).catch(() => message('That did not work.')));
+    row.append(acts);
+    list.append(row);
+  });
+  if (pcRows.length > 8) { const more = document.createElement('div'); more.className = 'pcs'; more.textContent = (pcRows.length - 8) + ' more: ask Bunny to narrow it (for example "only the PDFs", "from last year").'; list.append(more); }
+  list.hidden = false;
+  pcChoose(0);
+  scheduleFit();
+}
+function pcAsk(r) { if (!answering) ask('Read “' + r.name + '” (ref ' + r.ref + ') and tell me what it says.', []); }
+function pcKey(e) {
+  if (!pcRowsEl().length || answering) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pcChoose(pcChosen + (e.key === 'ArrowDown' ? 1 : -1)); return true; }
+  const r = pcRows[pcChosen];
+  if (!r) return false;
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); pcAsk(r); return true; }
+  if (e.key === 'Enter' && !e.shiftKey && !$('follow').value.trim()) { e.preventDefault(); (r.openable ? window.quickAsk.pcOpen(r.ref) : window.quickAsk.pcShow(r.ref)).catch(() => {}); return true; }
+  return false;
+}
+
 function closeMenu() {
   $('menu').hidden = true;
   plus.setAttribute('aria-expanded', 'false');
@@ -154,6 +217,8 @@ $('shot-item').addEventListener('click', async () => {
   }
   text.focus(NOSCROLL);
 });
+
+$('pc-item').addEventListener('click', () => { closeMenu(); forcePc = true; message('Search this PC is on for this question.'); text.focus(NOSCROLL); });
 
 $('file-item').addEventListener('click', async () => {
   closeMenu();
@@ -267,6 +332,7 @@ function enterPanel(q) {
   $('panel').hidden = false;
   $('panel-wrap').classList.add('on');
   $('ans').replaceChildren();
+  $('pc-list').replaceChildren(); $('pc-list').hidden = true; pcRows = [];
   $('latest').hidden = true;
   $('card').hidden = true; $('card').replaceChildren();
   cardKind = '';
@@ -317,6 +383,8 @@ function ended() { answering = false; chatReady = true; $('busy')?.remove(); set
 function onAnswer(event) {
   if (!event || typeof event !== 'object') return;
   if (event.type === 'start') return;
+  if (event.type === 'results') { $('busy')?.remove(); pcShowResults(event); return; }
+  if (event.type === 'step') { const l = $('pc-list'); const s2 = document.createElement('div'); s2.className = 'pcs'; s2.textContent = String(event.text ?? ''); l.append(s2); l.hidden = false; scheduleFit(); return; }
   if (event.type === 'delta' && typeof event.text === 'string') { $('busy')?.remove(); answerText += event.text; showAnswer(true); return; }
   if (event.type === 'done' || event.type === 'stopped') {
     ended(); showAnswer(false); showCopy(true);
@@ -350,7 +418,9 @@ async function ask(q, attachments, retry = false) {
   answering = true;
   enterPanel(q);
   try {
-    const result = await window.quickAsk.ask(q, attachments);
+    const mode = forcePc ? 'search-pc' : undefined;
+    forcePc = false;
+    const result = await window.quickAsk.ask(q, attachments, mode);
     if (!(result && result.ok)) { ended(); card('bad', 'Bunny could not answer', (result && result.message) || 'Bunny could not start the answer.', [again, openBunny]); }
   } catch {
     ended(); card('bad', 'Bunny could not answer', 'Bunny could not start the answer.', [again, openBunny]);
@@ -374,6 +444,7 @@ async function send() {
 }
 
 $('follow').addEventListener('keydown', (e) => {
+  if (pcKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.isComposing) {
     e.preventDefault();
     const q = $('follow').value.trim();
@@ -402,6 +473,7 @@ document.addEventListener('click', (e) => { if (e.target.closest?.('a')) e.preve
 
 // Ctrl+Enter opens the chat in Bunny, once there is one (an answer or an error)
 document.addEventListener('keydown', (e) => {
+  if (pcRowsEl().length && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) return; // with a list shown, Ctrl+Enter asks about the chosen file
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && chatReady) { e.preventDefault(); openInBunny(); }
 });
 
@@ -454,6 +526,7 @@ function applyLook(look) {
     root.style.setProperty('--font', FONT_STACKS[key]);
   }
   const model = look && typeof look.model === 'string' ? look.model.trim().slice(0, 60) : '';
+  $('pc-item').hidden = !(look && look.pcSearch === true);
   modelLine = model ? `Answers with ${model} · text only` : '';
   refreshButtons();
 }

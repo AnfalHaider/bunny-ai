@@ -47,6 +47,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   let barHeight = MIN_BAR_HEIGHT;
   const answerer = adminFetch ? createAnswerer({
     adminFetch,
+    getSettings: () => getSettings() ?? {},
     emit: (event) => { if (alive()) bar.webContents.send('quickask:answer', event); },
     onFinishedDetached: (sessionId) => onAnswerFinished(sessionId),
   }) : null;
@@ -205,7 +206,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   ipcMain.handle('quickask:dropFile', (event) => { if (fromBar(event)) held = null; return { ok: true }; });
   ipcMain.handle('quickask:capture', async (event) => (fromBar(event) ? capture() : { ok: false, message: 'Not allowed' }));
   // QA-ANSWERS: the question is answered in the bar. Same checks as a submission (one screenshot or one held file, the text limits), then text only.
-  ipcMain.handle('quickask:ask', async (event, text, attachments) => {
+  ipcMain.handle('quickask:ask', async (event, text, attachments, mode) => {
     if (!fromBar(event)) return { ok: false, message: 'Not allowed' };
     if (!answerer) return { ok: false, message: 'Bunny could not answer here.' };
     if (answerer.answering) return { ok: false, message: 'Bunny is still answering.' };
@@ -213,7 +214,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     if (!checked.ok) return checked;
     const request = buildNewChatRequest(checked.text, checked.shot, checked.file);
     held = null; // the file or screenshot lives only in this message
-    answerer.ask({ text: request.text, files: request.files }); // events come back through quickask:answer
+    answerer.ask({ text: request.text, files: request.files, pc: mode === 'search-pc' }); // events come back through quickask:answer
     return { ok: true };
   });
   ipcMain.handle('quickask:stop', (event) => { if (fromBar(event) && answerer) answerer.stop(); return { ok: true }; });

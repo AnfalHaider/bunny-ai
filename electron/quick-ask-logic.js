@@ -15,6 +15,7 @@ export function barLook(settings = {}) {
     theme: BAR_THEMES.includes(settings?.theme) ? settings.theme : 'system',
     font: BAR_FONT_KEYS.includes(settings?.interfaceFont) ? settings.interfaceFont : 'system',
     motion: settings?.motion === 'reduced' ? 'reduced' : '',
+    pcSearch: settings?.pcSearchEnabled === true, // SEARCH-PC: the + menu offers Search this PC only when the switch is on
     model,
   };
 }
