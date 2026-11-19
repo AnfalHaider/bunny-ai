@@ -1,0 +1,136 @@
+{
+  "artifact.png": {
+    "scene": "artifact",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "Bunny made a carrot-themed to-do app, opened it beside the chat and tested it",
+    "usedBy": ["README.md"]
+  },
+  "blocked-asked.png": {
+    "scene": "blocked-asked",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "A step Blocked by a rule in amber, then a card Asked because of your rule git push",
+    "usedBy": ["README.md"]
+  },
+  "capability.png": {
+    "scene": "capability",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "A card asking to switch to Code mode so Bunny can read the project folder",
+    "usedBy": ["README.md"]
+  },
+  "custom-provider.png": {
+    "scene": "custom-provider",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "The form to add a custom OpenAI-compatible provider",
+    "usedBy": ["README.md"]
+  },
+  "folded-code.png": {
+    "scene": "folded-code",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "A 253-line script folded to a few lines with a Show all button",
+    "usedBy": ["README.md"]
+  },
+  "helpers.png": {
+    "scene": "helpers",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "Two helpers reviewed the code and wrote a product blurb; their chats are nested in the sidebar",
+    "usedBy": ["README.md"]
+  },
+  "hero-dark.png": {
+    "exempt": "hand-made art (Design); not a screen"
+  },
+  "hero.png": {
+    "exempt": "hand-made art (Design); not a screen"
+  },
+  "keep-going.png": {
+    "scene": "keep-going",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "A long job: task list ticking, a failed test fixed, \"Still working · step 13\" in the top bar",
+    "usedBy": ["README.md"]
+  },
+  "permission-rules.png": {
+    "scene": "permission-rules",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "Settings, Code: permission rules with Deny, Ask and Allow lists",
+    "usedBy": ["README.md"]
+  },
+  "plan-undo.png": {
+    "scene": "plan-undo",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "A checklist ticked off step by step, tests passing, and an Undo button",
+    "usedBy": ["README.md"]
+  },
+  "providers.png": {
+    "scene": "providers",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "ModelScope, SiliconFlow, Gitee AI and more, each with a Connect button",
+    "usedBy": ["README.md"]
+  },
+  "settings-wait.png": {
+    "scene": "settings-wait",
+    "viewport": [860, 900],
+    "theme": "light",
+    "scale": 1,
+    "capture": {
+      "locator": ".group:has(#wait-row)"
+    },
+    "alt": "Settings: Try another model when yours is busy, with Wait for a first reply under it",
+    "usedBy": ["README.md"]
+  },
+  "sign-in.png": {
+    "scene": "sign-in",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "GitHub and Google sign-in in Settings",
+    "usedBy": ["README.md"]
+  },
+  "terminal.png": {
+    "scene": "terminal",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "A preview server started by Bunny, with its own tab and live output in the Terminal pane",
+    "usedBy": ["README.md"]
+  },
+  "working-line.png": {
+    "scene": "working-line",
+    "viewport": [1600, 1000],
+    "theme": "light",
+    "scale": 1,
+    "capture": "viewport",
+    "alt": "The working line: the hopping bunny, \"Whisker-wiggling… thinking · 1s\", opened to show the thinking",
+    "usedBy": ["README.md"]
+  }
+}
