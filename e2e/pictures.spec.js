@@ -48,7 +48,7 @@ for (const [name, entry] of entries) {
       await page.evaluate(() => document.fonts?.ready);
       const cap = entry.capture ?? 'viewport';
       const target = cap === 'viewport' || cap.clip ? page : page.locator(cap.locator).first();
-      const options = { maxDiffPixelRatio: entry.tolerance ?? 0.002, threshold: 0.2, animations: 'disabled', caret: 'hide', scale: 'css', ...(cap.clip ? { clip: { x: cap.clip[0], y: cap.clip[1], width: cap.clip[2], height: cap.clip[3] } } : {}) };
+      const options = { maxDiffPixelRatio: entry.tolerance ?? 0.0001, threshold: 0.2, animations: 'disabled', caret: 'hide', scale: 'css', ...(cap.clip ? { clip: { x: cap.clip[0], y: cap.clip[1], width: cap.clip[2], height: cap.clip[3] } } : {}) };
       await expect(target, `${name}: this picture no longer matches its screen (${entry.alt})`).toHaveScreenshot(name, options);
     });
   });

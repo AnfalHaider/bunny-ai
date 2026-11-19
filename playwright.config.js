@@ -23,7 +23,7 @@ export default defineConfig({
   // which IS the reference (`npm run pictures` draws them again). Everything else is the e2e project.
   projects: [
     { name: 'e2e', testIgnore: /pictures.spec.js/ },
-    { name: 'pictures', testMatch: /pictures.spec.js/, snapshotPathTemplate: '{testDir}/../docs/images/{arg}{ext}', expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.002 } } },
+    { name: 'pictures', testMatch: /pictures.spec.js/, snapshotPathTemplate: '{testDir}/../docs/images/{arg}{ext}', expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.0001 } } },
   ],
   webServer: {
     command: 'node src/server/main.js',

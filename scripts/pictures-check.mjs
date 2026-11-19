@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const PICTURES_DIR = 'docs/images';
 export const MANIFEST = 'docs/images/pictures.json';
 export const SCENES = 'e2e/pictures/scenes.mjs';
-export const DEFAULT_TOLERANCE = 0.002;
+export const DEFAULT_TOLERANCE = 0.0001; // about 120 pixels of a 1424 x 861 picture: re-drawing on one PC differs by none (measured), and one changed word differs by hundreds
 export const MAX_TOLERANCE = 0.01;
 const EXTENSIONS = /\.(png|jpe?g|gif|webp|svg)$/i;
 
