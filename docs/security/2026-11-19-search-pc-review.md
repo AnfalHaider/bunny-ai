@@ -110,3 +110,23 @@ Verdict: PASS at c051ca5. SP-L1 and SP-L2 still stand as LOW notes.
 - The flag is the script's own guard. The owner's OK still has to be asked for, and recorded, before QA passes it.
 
 Verdict: PASS at b5c3c72.
+
+## Re-stamp at 000bfd8 (the timeout fix): PASS (supersedes b5c3c72)
+
+000bfd8 changes `src/server/pcSearch.js`, its test, and a timing note.
+
+**The change:** names are now matched with `CONTAINS(System.ItemName, '"<term>*"')` instead of `LIKE '%<term>%'`, and the provider gets `CommandTimeout = 8` (Bunny's limit stays 10 s, then the tree is killed).
+
+**SP-7 still holds:**
+- `cleanTerms` reduces each term to letters, digits, space and `- _ .`, so no `'`, `"`, `*`, `(` or `%` can reach the query. The only `*` is the one the template adds, after the term inside the phrase quotes.
+- Search words like `NEAR`, `AND` and `OR` sit inside the double-quoted phrase, so they're literal words.
+- The outer single quotes are doubled anyway, and the template, columns, `SCOPE`, `TOP 50` and the fixed kinds and dates are unchanged.
+
+**My probe on 000bfd8:**
+- the exclusions give the same refusals;
+- the query for `tax' OR 1=1 --`, `a"b` and `x) UNION SELECT` comes out as plain quoted phrases;
+- a term of `NEAR AND OR "x" *` becomes the phrase `"NEAR AND OR x"` and `"NEAR AND OR x*"`.
+
+**Tests:** `pc-query` and `pc-run` pass 13 of 13 on an extract. The new test bans `LIKE` and `%` from the query.
+
+Verdict: PASS at 000bfd8. A name is now matched only from the start of a word ("rep" finds "Report", "port" doesn't). That's a behaviour change, not a security one.

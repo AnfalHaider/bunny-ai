@@ -1,9 +1,9 @@
 ---
 piece: search-pc
 role: security
-sha: b5c3c72
+sha: 000bfd8
 verdict: PASS
 date: 2026-11-19
 ---
 
-b5c3c72: smoke script refuses without --i-have-the-owners-ok before any write (checked: exit 2, nothing created); no app code change; pc-smoke 2/2
+000bfd8: name match via CONTAINS(System.ItemName,'"term*"'), CommandTimeout 8; terms still cleaned so no quote or wildcard reaches the query; probe same; pc-query/pc-run 13/13
