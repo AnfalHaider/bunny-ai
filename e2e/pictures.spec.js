@@ -57,6 +57,7 @@ for (const [name, entry] of entries) {
   test.describe(name, () => {
     test.use({ viewport: { width: entry.viewport[0], height: entry.viewport[1] }, colorScheme: entry.theme, deviceScaleFactor: 1 });
     test(`${name} matches its screen`, async ({ page, request, baseURL }) => {
+      test.setTimeout(120_000); // a busy PC (the gate runs this after 590 other tests) can need more than 30 s to start a scene; every wait inside still returns as soon as its condition holds
       const scene = scenes[entry.scene];
       expect(scene, `${name}: the scene "${entry.scene}" is not in e2e/pictures/scenes.mjs`).toBeTruthy();
       await begin(page, request, entry);

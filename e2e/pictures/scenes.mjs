@@ -200,7 +200,7 @@ export const scenes = {
     await live(api, [tasks(0), { tool: ['list_files', {}] }, read('test.js'), run('node test.js'), tasks(1), read('src/add.js'), tasks(2), { tool: ['edit_file', { path: 'src/add.js', old_text: 'a - b', new_text: 'a + b' }] }, tasks(3), run('node test.js'), tasks(4), run('node test.js'), { say: 'All four steps are done. Running the whole suite one more time.' }]);
     await codeChat(page, api, 'notes-app', NOTES_APP, 'Fix the failing test', { effort: 'low' }); // a low effort allows 12 steps: the 13th says "Still working"
     await ask(page, 'The test fails. Fix it and keep going until it passes.');
-    await page.locator('#status').filter({ hasText: 'Still working · step 13' }).waitFor({ timeout: 20_000 });
+    await page.locator('#status').filter({ hasText: 'Still working · step 13' }).waitFor({ timeout: 90_000 }); // an event wait: it returns the moment the line shows; the long limit is only for a busy PC
   },
 
   terminal: async (page, api) => {
