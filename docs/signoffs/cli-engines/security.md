@@ -1,7 +1,7 @@
 ---
 piece: cli-engines
 role: security
-sha: 02fae7a
+sha: 37746e5
 verdict: FAIL
 date: 2026-11-19
 ---
@@ -66,3 +66,38 @@ Probe (`docs/security/engines-probe/codex-declined-ran.mjs` on 02fae7a):
 ## Verdict
 
 **FAIL at 02fae7a, for EN-1.** EN-3 must close before Claude Code ships. EN-2 is LOW. Commits 02808a5 to a24599e pass.
+
+## Re-review at 37746e5 (fixes 656d66c and 37746e5; also new: pins 498025d, app integration cc231ad, Settings UI 6a35533): FAIL, for EN-6 and EN-7
+
+**Fixed:**
+- **EN-1:** `onItem` now trips on `ran && !accepted.has(id)`. My probe on 37746e5 says `declined command reported as completed: watchdog TRIPPED`, and `engine-codex-watchdog` has the case.
+- **EN-3, a real bug the spike found** (S1 addendum 4, 84eaaea, I read it):
+  - `Read(//C:/…)`, the form the first build wrote, **doesn't** deny on Windows, even with the hook killed;
+  - `Read(//c/…)` and `Read(C:/…)` do, and still win over a live hook's allow.
+  - `denyRules` now writes both working forms for every absolute floor path, and never `//C:/`. The proof used a folder inside the project, named only by its absolute path, so it tests the form itself.
+- **CE-1.7 hardened:** the hook's write timers now exit **2**, which blocks, with the reason on stderr. It exits 0 only after its answer is written. There's a test with a stdout that never drains.
+- **CE-1.11:** the timeouts are the proven 300 s for the hook and 150 s for an Ask. The Ask still ends before the hook does.
+- **Codex:** the project key uses `realpath` (8.3 names and case). Account mode keeps its credential in a file inside the isolated home (`cli_auth_credentials_store = "file"`), never the system store.
+- **Tests:** on an extract of 37746e5, the `engine-*` files (now with `engine-events`, `engine-env`, `engine-app` and `engine-pins`) pass **121 of 121**.
+
+**New findings in the app integration (cc231ad):**
+
+**EN-6 (MEDIUM, required, CE-4.5): engine runs aren't held to the owner's spending limit.**
+- In `app.js`, `engines.runTurn` gets `noteUsage: () => {}`, and `service.js` passes no `replyCaps`, `tokenBudget` or `onLimit` to the endpoint or adapters.
+- CE-4.5 requires an engine run to count against the chat's `replyCaps` token budget and to show the existing `onLimit` card when it's reached, so an engine can't spend past what Bunny's own engine could in the same chat.
+- **Fix:** have the endpoint count tokens per run. When the budget is reached, stop forwarding and ask through the existing `onLimit` card (no answer means stop). Test it with the fake engine.
+
+**EN-7 (MEDIUM, required, CE-6.2 / CE-7.2 / R-DF2): an Everything device's engine tools aren't logged.**
+- The engine branch runs for `req.bunnyDevice` (an Everything device), but nothing calls `remote.logAction` for the engine's tools. Bunny's own `runTool` does.
+- **Fix:** for a device chat, log every engine tool the bridge sees (and each restricted-mode change applied) as `{kind: 'tool', tool: '<engine id>:<mapped name>'}`, by name only. Test it at Everything over HTTP.
+
+**Notes (not blocking):**
+- After a watchdog trip, the chat continues in restricted mode automatically (`session.engine.restricted`). That's the safer default and is said in the reply, so it's accepted in place of the "offer" CE-1.10 described.
+- `keyFolders` names `~/.aider`. Aider's own files are `~/.aider*` (for example `.aider.conf.yml`). Cover the prefix when Aider is built.
+- The pins file and gate step (498025d) and the Settings UI (6a35533) have no security issues on a first read. I'll read the UI fully with the ENGINE-RULES option (EN-5).
+
+**Still to come, as the Chief of Staff said:** EN-2 (the CE-1.15 check after the run) and EN-5 (the ENGINE-RULES option key inside `deviceRefusal`).
+
+## Verdict
+
+**FAIL at 37746e5, for EN-6 and EN-7**, both in the integration. EN-1 and EN-3 are fixed, and the engine core passes.
