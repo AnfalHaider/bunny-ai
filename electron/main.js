@@ -357,7 +357,7 @@ app.whenReady().then(async () => {
     adminFetch: (path, init) => bunnyApp.adminFetch(path, init),
     getSettings: () => bunnyApp?.getSettings() ?? {},
     onOpenChat: (sessionId) => startQuickChat({ openChat: sessionId }),
-    onOpenSettings: () => startQuickChat({ openSettings: true }),
+    onOpenSettings: (section) => startQuickChat({ openSettings: true, ...(section === 'capabilities' ? { section } : {}) }),
     onAnswerFinished: (sessionId) => startQuickChat({ openChat: sessionId, refresh: true, quiet: true }),
   });
   createWindow();

@@ -61,6 +61,9 @@
   .pcr .sn { font-size: 13px; overflow-wrap: anywhere; }
   .pcr mark { background: var(--hover); color: inherit; border-radius: 3px; padding: 0 2px; }
   .pcr .pa { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .pcs.src { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pcchip { border: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 8px; cursor: pointer; text-align: left; }
+  .pcchip b { color: var(--accent, var(--text)); }
   .pcr .pa button { border: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 8px; cursor: pointer; }
   /* the answer opens downward from the same pill: no divider lines, no filled boxes */
   .collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease-out; }
@@ -135,7 +138,7 @@
   <div class="menu" id="menu" role="menu" hidden>
     <button type="button" role="menuitem" id="shot-item">Add a screenshot<small>Takes a picture of this screen when you choose it</small></button>
     <button type="button" role="menuitem" id="file-item">Add a file…<small>A picture, a PDF or a text file, up to 8 MB</small></button>
-    <button type="button" role="menuitem" id="pc-item" hidden>Search this PC<small>Look for a file on this computer and tell you about it</small></button>
+    <button type="button" role="menuitem" id="pc-item" hidden>Search this PC<small>Looks for this in files on this computer</small></button>
   </div>
 </div>
 <script type="module" src="bar.js"></script>

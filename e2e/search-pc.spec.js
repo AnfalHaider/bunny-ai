@@ -132,6 +132,10 @@ for (const [label, size] of [['desktop', { width: 1280, height: 800 }], ['phone'
     // a browser tab has no desktop bridge: the list has no Open, Show in folder or Copy path
     await expect(page.locator('.pc-results button', { hasText: /^(Open|Show in folder|Copy path)$/ })).toHaveCount(0);
     await expect(page.locator('.pc-results button', { hasText: 'Ask about this file' }).first()).toBeVisible();
+    const chips = page.locator('.pc-sources .pc-chip');
+    await expect(chips).toHaveCount(3); // the three files read are named under the answer, numbered
+    await expect(chips.first().locator('b')).toHaveText('1');
+    await expect(page.locator('.pc-sources-label')).toHaveText('Sources');
     await page.screenshot({ path: `test-results/search-pc-chat-${label}.png` });
     // the Activity record names what was done, by name
     const entries = (await (await request.get('/api/pcsearch/activity')).json()).entries;
@@ -140,3 +144,30 @@ for (const [label, size] of [['desktop', { width: 1280, height: 800 }], ['phone'
     await request.put('/api/settings', { data: { pcSearchEnabled: false } });
   });
 }
+
+test('answer marks: [1] and [2] become marks only for the sources the reply used, never inside code or a link; chips need the desktop bridge to open', async ({ page }) => {
+  await page.goto('/src/ui/settings.html?embed=1&section=capabilities');
+  const out = await page.evaluate(async () => {
+    const { markSourceNumbers, sourcesRow } = await import('/src/ui/pc-results.js');
+    const root = document.createElement('div');
+    root.innerHTML = '<p>Filed in April [1], total income $84,200 [2]. Not a source [7] or [0]. <code>a[1]</code> <a href="https://x.example/">link [2]</a></p>';
+    document.body.append(root);
+    markSourceNumbers(root, 2);
+    const sources = [{ n: 1, name: 'Tax return 2025 - signed.pdf', folder: 'C:\docs', part: '3 pages', ref: 'f1-a', openable: true }, { n: 2, name: 'Accountant letter.docx', folder: 'C:\docs', part: 'whole file', ref: 'f2-b', openable: false }];
+    const calls = [];
+    const bare = sourcesRow(document, sources);
+    const wired = sourcesRow(document, sources, { bridge: { pcSearch: { open: async (r) => { calls.push(['open', r]); return { ok: true }; }, show: async (r) => { calls.push(['show', r]); return { ok: true }; } } } });
+    document.body.append(bare, wired);
+    wired.querySelectorAll('button')[0].click();
+    wired.querySelectorAll('button')[1].click();
+    await new Promise((r) => setTimeout(r, 20));
+    return { marks: [...root.querySelectorAll('b.pc-mark')].map((m) => m.textContent), text: root.textContent, codeMarks: root.querySelectorAll('code b, a b').length, bareButtons: bare.querySelectorAll('button').length, chips: wired.querySelectorAll('.pc-chip').length, calls, label: wired.querySelector('.pc-sources-label').textContent };
+  });
+  expect(out.marks).toEqual(['[1]', '[2]']);
+  expect(out.text).toContain('Not a source [7] or [0]');
+  expect(out.codeMarks).toBe(0);
+  expect(out.bareButtons).toBe(0);
+  expect(out.chips).toBe(2);
+  expect(out.calls).toEqual([['open', 'f1-a'], ['show', 'f2-b']]);
+  expect(out.label).toBe('Sources');
+});

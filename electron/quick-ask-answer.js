@@ -45,6 +45,20 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
   let controller = null;
   let detached = false;
   const out = (event) => { if (!detached) emit(event); };
+  // SEARCH-PC: what the bar is told about a search, as plain data (never a path, never file text)
+  const num = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : 0);
+  const txt = (v, n) => String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, n);
+  const sourcesOf = (list) => (Array.isArray(list) ? list : []).slice(0, 3).map((x) => ({ n: num(x?.n), name: txt(x?.name, 260), folder: txt(x?.folder, 400), part: txt(x?.part, 120), ref: txt(x?.ref, 80), openable: x?.openable === true }));
+  const pcEvent = (d) => {
+    const state = ['searching', 'results', 'none', 'unavailable', 'timeout', 'reading', 'unreadable', 'read'].includes(d.pcState) ? d.pcState : null;
+    if (!state) return null;
+    const base = { type: 'pc', state, excluded: num(d.pcExcluded) };
+    if (state === 'results') return { ...base, title: txt(d.tool, 200), total: num(d.pcTotal), rows: (Array.isArray(d.pcResults) ? d.pcResults : []).slice(0, 50).map((r) => ({ ref: txt(r.ref, 80), name: txt(r.name, 260), folder: txt(r.folder, 400), modified: txt(r.modified, 40), snippet: txt(r.snippet, 220), openable: r.openable === true })) };
+    if (state === 'reading') return { ...base, files: (Array.isArray(d.files) ? d.files : []).slice(0, 3).map((f) => txt(f, 260)) };
+    if (state === 'unreadable') return { ...base, name: txt(d.name, 260), why: txt(d.why, 200) };
+    if (state === 'read') return { ...base, sources: sourcesOf(d.pcSources) };
+    return base;
+  };
   const pcFlag = (pc) => { const s = getSettings() ?? {}; if (s.pcSearchEnabled !== true) return {}; return pc ? { pcSearch: 'force' } : (s.pcSearchBarAuto === false ? {} : { pcSearch: true }); };
 
   async function ensureSession(title) {
@@ -68,6 +82,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
     let needsText = '';
     let model = null;
     let finished = false;
+    let doneSources = null;
     try {
       const id = await ensureSession(text);
       out({ type: 'start', sessionId: id });
@@ -101,9 +116,8 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
         buffer = parsed.rest;
         for (const ev of parsed.events) {
           if (ev.name === 'delta' && typeof ev.data?.text === 'string') push(ev.data.text);
-          else if (ev.name === 'tool' && Array.isArray(ev.data?.pcResults)) out({ type: 'results', title: String(ev.data.tool ?? '').slice(0, 200), rows: ev.data.pcResults.slice(0, 50).map((r) => ({ ref: String(r.ref ?? '').slice(0, 80), name: String(r.name ?? '').slice(0, 260), folder: String(r.folder ?? '').slice(0, 400), modified: String(r.modified ?? '').slice(0, 40), snippet: String(r.snippet ?? '').slice(0, 220), openable: r.openable === true })) });
-          else if (ev.name === 'tool' && ev.data?.pcTainted === true) out({ type: 'step', text: String(ev.data.tool ?? '').slice(0, 300) });
-          else if (ev.name === 'done') { model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; }
+          else if (ev.name === 'tool' && typeof ev.data?.pcState === 'string') { const p = pcEvent(ev.data); if (p) out(p); }
+          else if (ev.name === 'done') { doneSources = ev.data?.pcSources; model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; }
           else if (ev.name === 'error') {
             out({ type: 'error', kind: classifyFailure({ code: ev.data?.code, reason: ev.data?.reason, message: ev.data?.message }), message: String(ev.data?.message ?? 'Bunny could not answer.').slice(0, 400) });
             return { ok: true };
@@ -117,7 +131,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
       }
       if (!shown && !needs && held) { shown = true; out({ type: 'delta', text: held }); held = ''; }
       if (needs) out({ type: 'needs-window', text: needsText.replace(/^\s+/, '').slice(0, 600) });
-      else out({ type: 'done', model, finished });
+      else out({ type: 'done', model, finished, sources: sourcesOf(doneSources) });
       return { ok: true };
     } catch (err) {
       if (signal.aborted) { out({ type: 'stopped' }); return { ok: true }; }

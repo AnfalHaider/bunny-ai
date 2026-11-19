@@ -226,6 +226,7 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
     if (!fromBar(event) || !answerer) return { ok: false, message: 'Not allowed' };
     // QUICK-UI 10: "No model connected" leads with Open Bunny settings: the window comes forward on its Providers page; the bar closes (nothing is carried over: there is no chat worth keeping)
     if (target === 'settings') { onOpenSettings(); destroyBar(); return { ok: true }; }
+    if (target === 'search-settings') { onOpenSettings('capabilities'); destroyBar(); return { ok: true }; } // SEARCH-PC: the Search this PC rows
     const id = answerer.sessionId;
     if (!id) return { ok: false, message: 'There is no chat to open yet.' };
     answerer.detach();

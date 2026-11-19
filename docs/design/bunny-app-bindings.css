@@ -1271,3 +1271,10 @@ body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 .pc-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-3); }
 .pc-more { justify-self: start; }
 .md-address { color: var(--text-dim); font-size: .92em; overflow-wrap: anywhere; }
+.pc-mark { color: var(--accent); font-weight: var(--fw-medium); }
+.pc-sources { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-top: var(--sp-4); }
+.pc-sources-label { color: var(--text-faint); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.pc-chip { display: inline-flex; gap: var(--sp-2); align-items: baseline; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-sm); padding: 2px var(--sp-4); max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+button.pc-chip { cursor: pointer; }
+button.pc-chip:hover { background: var(--hover); }
+.pc-chip b { color: var(--accent); }

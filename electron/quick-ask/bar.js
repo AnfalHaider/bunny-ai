@@ -104,8 +104,15 @@ function refresh() {
 function renderChip() {
   const host = $('chips');
   host.replaceChildren();
-  host.hidden = !shot;
+  host.hidden = !shot && !forcePc;
   refreshButtons();
+  if (forcePc) {
+    const c = document.createElement('span'); c.className = 'chip'; c.id = 'pc-chip';
+    const l = document.createElement('span'); l.textContent = 'Search this PC';
+    const x = document.createElement('button'); x.type = 'button'; x.setAttribute('aria-label', 'Do not search this PC'); x.textContent = '×';
+    x.addEventListener('click', () => { forcePc = false; renderChip(); message(''); text.focus(NOSCROLL); });
+    c.append(l, x); host.append(c);
+  }
   if (!shot) return;
   const chip = document.createElement('span');
   chip.className = 'chip';
@@ -178,6 +185,68 @@ function pcShowResults(event) {
   pcChoose(0);
   scheduleFit();
 }
+// the drawn states: searching, results (with the line that says where it looked), reading, nothing found, not available, a file that could not be read
+function pcLine(text, className = 'pcs') { const d = document.createElement('div'); d.className = className; d.textContent = text; return d; }
+function pcBusy(headline, sub) {
+  const b = $('busy');
+  if (!b) return;
+  b.replaceChildren();
+  const spin = document.createElement('span'); spin.className = 'spin';
+  b.append(spin, document.createTextNode(headline));
+  if (sub) b.append(pcLine(sub));
+  scheduleFit();
+}
+const foldersText = (n) => n + ' folder' + (n === 1 ? '' : 's') + ' excluded';
+function pcState(e) {
+  const list = $('pc-list');
+  if (e.state === 'searching') { pcBusy('Searching this PC…', 'Windows Search · ' + foldersText(e.excluded)); return; }
+  if (e.state === 'reading') { pcBusy('Reading ' + e.files.length + ' file' + (e.files.length === 1 ? '' : 's') + ': ' + e.files.join(', '), 'The text of these files is sent to the model.'); return; }
+  if (e.state === 'results') {
+    $('busy')?.remove();
+    pcShowResults(e);
+    list.append(pcLine(Math.min(8, e.rows.length) + ' of ' + e.total + ' result' + (e.total === 1 ? '' : 's') + ' · Windows Search · ' + foldersText(e.excluded)));
+    list.append(pcLine('Narrow it down, or ask about a file?'));
+    scheduleFit();
+    return;
+  }
+  if (e.state === 'read') { list.hidden = false; list.append(pcLine('Read ' + e.sources.length + ' file' + (e.sources.length === 1 ? '' : 's') + ' · ' + e.sources.map((s) => s.name + ' (' + s.part + ')').join(', '))); scheduleFit(); return; }
+  if (e.state === 'unreadable') {
+    list.hidden = false;
+    const box = document.createElement('div'); box.className = 'pcr';
+    const n = document.createElement('div'); n.className = 'n'; n.textContent = 'Could not read “' + e.name + '”: ' + (e.why || 'it could not be read') + '.';
+    box.append(n, pcLine('Only the file name and folder were used'), pcLine('Open it yourself, or ask for another file. Other reasons a file is skipped: over 8 MB, in an excluded folder, locked by another program.'));
+    list.append(box);
+    scheduleFit();
+    return;
+  }
+  // nothing came back
+  ended(); showCopy(false); $('ans').replaceChildren(); $('follow').disabled = false; $('follow').placeholder = 'Type to search again';
+  const settingsAct = ['Excluded folders', () => openInBunny('search-settings'), 'plain'];
+  if (e.state === 'none') card('warn', 'Nothing found', 'Windows has nothing indexed that matches. ' + foldersText(e.excluded).replace(' excluded', ' are excluded') + ', and files Windows has not indexed are not searched. Try another word, or check the excluded folders.', [settingsAct]);
+  else if (e.state === 'timeout') card('warn', 'Windows Search did not answer in time', 'Nothing was changed. Try again in a moment.', [again, openBunny]);
+  else card('bad', 'Windows Search is not available', 'The Windows Search service is off or still building its index. Bunny does not search the disk itself. Start the service in Windows, then ask again.', [again, openBunny]);
+}
+function pcSourcesLine(sources) {
+  if (!Array.isArray(sources) || !sources.length) return;
+  const list = $('pc-list');
+  list.hidden = false;
+  const row = document.createElement('div'); row.className = 'pcs src';
+  const label = document.createElement('span'); label.textContent = 'Sources '; row.append(label);
+  for (const s of sources) {
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'pcchip';
+    const n = document.createElement('b'); n.textContent = String(s.n);
+    chip.append(n, document.createTextNode(' ' + s.name + ' · ' + s.part));
+    chip.title = s.folder;
+    chip.addEventListener('click', () => (s.openable ? window.quickAsk.pcOpen(s.ref) : window.quickAsk.pcShow(s.ref)).then((x) => { if (x && x.ok === false) message(x.message || 'That did not work.'); }).catch(() => message('That did not work.')));
+    row.append(chip);
+  }
+  list.append(row);
+  scheduleFit();
+}
+// Search this PC is off: a question about a file is answered here with the way to turn it on (nothing was searched, nothing was sent)
+const FILE_QUESTION = /\b(find|search|look for|locate|where is|where's|where are)\b[\s\S]{0,60}\b(file|files|document|documents|folder|pdf|spreadsheet|on my (pc|computer)|on this (pc|computer))\b/i;
+let pcAvailable = false;
+
 function pcAsk(r) { if (!answering) ask('Read “' + r.name + '” (ref ' + r.ref + ') and tell me what it says.', []); }
 function pcKey(e) {
   if (!pcRowsEl().length || answering) return false;
@@ -218,7 +287,7 @@ $('shot-item').addEventListener('click', async () => {
   text.focus(NOSCROLL);
 });
 
-$('pc-item').addEventListener('click', () => { closeMenu(); forcePc = true; message('Search this PC is on for this question.'); text.focus(NOSCROLL); });
+$('pc-item').addEventListener('click', () => { closeMenu(); forcePc = true; renderChip(); message('Enter searches. Searches files Windows has indexed.', 'busy'); text.focus(NOSCROLL); });
 
 $('file-item').addEventListener('click', async () => {
   closeMenu();
@@ -383,12 +452,12 @@ function ended() { answering = false; chatReady = true; $('busy')?.remove(); set
 function onAnswer(event) {
   if (!event || typeof event !== 'object') return;
   if (event.type === 'start') return;
-  if (event.type === 'results') { $('busy')?.remove(); pcShowResults(event); return; }
-  if (event.type === 'step') { const l = $('pc-list'); const s2 = document.createElement('div'); s2.className = 'pcs'; s2.textContent = String(event.text ?? ''); l.append(s2); l.hidden = false; scheduleFit(); return; }
+  if (event.type === 'pc') { pcState(event); return; }
   if (event.type === 'delta' && typeof event.text === 'string') { $('busy')?.remove(); answerText += event.text; showAnswer(true); return; }
   if (event.type === 'done' || event.type === 'stopped') {
     ended(); showAnswer(false); showCopy(true);
-    if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = `Answered by ${event.model} · text only`; $('meta').hidden = false; }
+    pcSourcesLine(event.sources);
+    if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = (Array.isArray(event.sources) && event.sources.length) ? `Answered by ${event.model} · files read on this PC, sent to the model` : `Answered by ${event.model} · text only`; $('meta').hidden = false; }
     $('follow').disabled = false; $('follow').focus(NOSCROLL); scheduleFit();
     return;
   }
@@ -413,6 +482,7 @@ window.quickAsk.onAnswer(onAnswer);
 async function ask(q, attachments, retry = false) {
   // the earlier turn stays, folded, when a follow-up is asked (not when the same question is asked again)
   if (asked && !retry && (answerText || question)) { turns.push({ q: question, a: answerText }); renderEarlier(); }
+  if (!pcAvailable && !retry && FILE_QUESTION.test(q)) { question = q; answerText = ''; enterPanel(q); ended(); $('busy')?.remove(); showCopy(false); card('warn', 'Search this PC is off', 'Turn it on in Settings › Capabilities to let Bunny look for files on this computer. Nothing was searched.', [['Open Bunny settings', () => openInBunny('search-settings'), 'plain']]); return; }
   question = q;
   answerText = '';
   answering = true;
@@ -526,7 +596,8 @@ function applyLook(look) {
     root.style.setProperty('--font', FONT_STACKS[key]);
   }
   const model = look && typeof look.model === 'string' ? look.model.trim().slice(0, 60) : '';
-  $('pc-item').hidden = !(look && look.pcSearch === true);
+  pcAvailable = Boolean(look && look.pcSearch === true);
+  $('pc-item').hidden = !pcAvailable;
   modelLine = model ? `Answers with ${model} · text only` : '';
   refreshButtons();
 }

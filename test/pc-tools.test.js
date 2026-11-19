@@ -103,3 +103,33 @@ test('SP-8: in a normal chat the text read is kept for the model (8,000 characte
   const listed = session.messages.find((m) => m.pcResults);
   assert.deepEqual(Object.keys(listed.pcResults[0]).sort(), ['folder', 'modified', 'name', 'openable', 'ref']);
 });
+
+test('sources: each file read is numbered in its block, the model is told to cite [n], and the saved answer carries names and parts (no text, no path) for the chips', async (t) => {
+  const w = await pcWorld(t, { files: { 'Documents/tax return 2025.txt': 'Income was 104,250 dollars.', 'Documents/tax return 2024.txt': 'Income was 98,100 dollars.' }, settings: { pcSearchEnabled: true, pcSearchAfter: 'read' }, calls: [['search_pc', { terms: ['tax'] }]] });
+  const { events, id } = await w.say('summarise my tax returns');
+  const told = w.toolAnswers()[0];
+  assert.match(told, /source="1" name="/);
+  assert.match(told, /source="2" name="/);
+  assert.match(w.requests[0].messages.map((m) => m.content).filter(Boolean).join('\n'), /cite each with its source number in square brackets, like \[1\]/);
+  const done = events.find((e) => e.event === 'done');
+  assert.deepEqual(done.data.pcSources.map((s) => s.n), [1, 2]);
+  assert.deepEqual(Object.keys(done.data.pcSources[0]).sort(), ['folder', 'n', 'name', 'openable', 'part', 'ref']);
+  const saved = (await (await fetch(`${w.base}/api/sessions/${id}`)).json()).messages.filter((m) => m.role === 'assistant' && m.pcSources);
+  assert.equal(saved.length, 1);
+  assert.ok(!JSON.stringify(saved[0].pcSources).includes('104,250'), 'no file text');
+});
+
+test('the states the bar and the chat draw: a search shows "searching" first, then the list with the excluded count; an unreadable file says why; nothing found says how many folders are excluded', async (t) => {
+  const w = await pcWorld(t, { files: { 'Documents/blank scan.txt': '   ', 'Documents/ordinary notes.txt': 'plain' }, settings: { pcSearchEnabled: true, pcSearchAfter: 'read' }, calls: [['search_pc', { terms: ['scan'] }], ['search_pc', { terms: ['zzzz'] }]] });
+  const { events } = await w.say('find scan, then zzzz');
+  const states = events.filter((e) => e.event === 'tool' && e.data.pcState).map((e) => e.data.pcState);
+  assert.deepEqual(states.slice(0, 2), ['searching', 'results']);
+  const results = events.find((e) => e.event === 'tool' && e.data.pcState === 'results').data;
+  assert.ok(results.pcExcluded >= 9, 'the fixed folders are counted');
+  assert.equal(results.pcTotal, 1);
+  const unreadable = events.find((e) => e.event === 'tool' && e.data.pcState === 'unreadable').data;
+  assert.equal(unreadable.name, 'blank scan.txt');
+  assert.equal(unreadable.why, 'it is a scanned picture with no text');
+  const none = events.find((e) => e.event === 'tool' && e.data.pcState === 'none').data;
+  assert.ok(none.pcExcluded >= 9);
+});

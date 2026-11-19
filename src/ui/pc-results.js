@@ -101,3 +101,59 @@ export function pcResultsView(doc, rows, { terms = [], bridge = null, onAsk = nu
   }
   return root;
 }
+
+/**
+ * Numbered marks in an answer: "[1]" becomes a mark when 1 is one of the sources the reply used (and only then). Text nodes are cut and rebuilt, never put in as HTML.
+ */
+export function markSourceNumbers(root, count) {
+  if (!root || !(count > 0)) return;
+  const doc = root.ownerDocument;
+  const walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
+  const found = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!n.parentElement?.closest('code, pre, a, .pc-mark')) found.push(n);
+  for (const node of found) {
+    const text = node.nodeValue;
+    if (!/\[\d{1,2}\]/.test(text)) continue;
+    const parts = [];
+    let pos = 0;
+    for (const m of text.matchAll(/\[(\d{1,2})\]/g)) {
+      const n = Number(m[1]);
+      if (n < 1 || n > count) continue;
+      if (m.index > pos) parts.push(doc.createTextNode(text.slice(pos, m.index)));
+      const mark = doc.createElement('b');
+      mark.className = 'pc-mark';
+      mark.textContent = m[0];
+      mark.title = 'Source ' + n;
+      parts.push(mark);
+      pos = m.index + m[0].length;
+    }
+    if (!parts.length) continue;
+    if (pos < text.length) parts.push(doc.createTextNode(text.slice(pos)));
+    node.replaceWith(...parts);
+  }
+}
+
+/** The Sources line under an answer: a chip for each file the reply used (number, name, which part was read); a chip opens the file as a result row does, where the desktop bridge is. */
+export function sourcesRow(doc, sources, { bridge = null, say = () => {} } = {}) {
+  const row = doc.createElement('div');
+  row.className = 'pc-sources';
+  const label = doc.createElement('span');
+  label.className = 'pc-sources-label';
+  label.textContent = 'Sources';
+  row.append(label);
+  const act = bridge?.pcSearch ?? null;
+  for (const s of sources) {
+    const chip = doc.createElement(act ? 'button' : 'span');
+    chip.className = 'pc-chip';
+    if (act) chip.type = 'button';
+    chip.title = s.folder + ' · ' + s.part;
+    const n = doc.createElement('b');
+    n.textContent = String(s.n);
+    const text = doc.createElement('span');
+    text.textContent = ' ' + s.name + ' · ' + s.part;
+    chip.append(n, text);
+    if (act) chip.addEventListener('click', async () => { try { const r = await (s.openable ? act.open(s.ref) : act.show(s.ref)); if (r && r.ok === false) say(r.message ?? 'That did not work.'); } catch { say('That did not work.'); } });
+    row.append(chip);
+  }
+  return row;
+}

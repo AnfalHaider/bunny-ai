@@ -17,7 +17,7 @@ import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
-import { pcResultsView, wordsOfStep } from './pc-results.js';
+import { pcResultsView, wordsOfStep, markSourceNumbers, sourcesRow } from './pc-results.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument, printDocument, PRINT_SANDBOX } from './artifact-content.js';
@@ -1552,7 +1552,9 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
   const body = element('div', { className: 'body' });
   if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true, noAutoLoad: m.noAutoLoad === true }));
   else body.textContent = m.content;
+  if (m.role === 'assistant' && m.pcSources?.length) markSourceNumbers(body, m.pcSources.length); // [1], [2] marks for the files the answer used
   wrap.append(body);
+  if (m.role === 'assistant' && m.pcSources?.length) wrap.append(sourcesRow(document, m.pcSources, { bridge: window.bunnyDesktop ?? null, say: (text) => flashStatus(text) }));
 
   if (m.kind === 'summary' || m.kind === 'partial') {
     const meta = element('div', { className: 'meta' },
@@ -2729,7 +2731,7 @@ function watchRemote() {
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
   // QUICK-UI 10: the bar had no model to answer with: its button opens Bunny on the Providers page
-  if (request && request.openSettings === true) { openSettings('providers'); return; }
+  if (request && request.openSettings === true) { openSettings(request.section === 'capabilities' ? 'capabilities' : 'providers'); return; }
   // QA-ANSWERS: Open in Bunny carries a chat that began in the bar over to this window (and a later refresh when its answer finished).
   if (request && typeof request.openChat === 'string' && /^[a-f0-9-]{36}$/.test(request.openChat)) {
     if (request.refresh) { if (state.sessionId === request.openChat && !state.streaming) await openSession(request.openChat); await loadSessions(); return; }

@@ -87,15 +87,30 @@ test('the bar asks for Search this PC only with the switch on: by itself (unless
   assert.equal(chosen.sent[0].textOnly, true, 'still text only');
 });
 
-test('the bar passes the list on as plain data (names, folders, dates, snippets, refs) and the "Read N files" line, nothing it could run', async () => {
+test('the bar is told each state as plain data: searching, the list (with the count of excluded folders), reading, a file it could not read, nothing found, not available, and the sources', async () => {
   const results = [{ ref: 'f1-aaa', name: 'tax.txt', folder: 'C:\docs', modified: '2025-03-01', snippet: 'Income <b>x</b>', openable: true, extra: () => 1, path: 'C:\docs\tax.txt' }];
-  const { a, events } = await answererWith({ pcSearchEnabled: true }, [['tool', { tool: 'Searched this PC for “tax” · 1 result', status: 'done', pcResults: results }], ['tool', { tool: 'Read 1 file: tax.txt', status: 'done', pcTainted: true }], ['delta', { text: 'ok' }], ['done', { model: 'm1' }]]);
+  const sources = [{ n: 1, name: 'tax.txt', folder: 'C:\docs', part: 'all of it', ref: 'f1-aaa', openable: true, path: 'C:\docs\tax.txt' }];
+  const { a, events } = await answererWith({ pcSearchEnabled: true }, [
+    ['tool', { tool: 'Searching this PC…', status: 'running', pcState: 'searching', pcExcluded: 9 }],
+    ['tool', { tool: 'Searched this PC for “tax” · 1 result', status: 'done', pcState: 'results', pcTotal: 6, pcExcluded: 9, pcResults: results }],
+    ['tool', { tool: 'Reading 2 files…', status: 'running', pcState: 'reading', files: ['a.pdf', 'b.docx'] }],
+    ['tool', { tool: 'Could not read “scan.pdf”', status: 'failed', pcState: 'unreadable', name: 'scan.pdf', why: 'it is a scanned picture with no text' }],
+    ['tool', { tool: 'Read 1 file: tax.txt', status: 'done', pcState: 'read', pcTainted: true, pcSources: sources }],
+    ['tool', { tool: 'x', status: 'done', pcState: 'something-new' }],
+    ['delta', { text: 'ok [1]' }], ['done', { model: 'm1', pcSources: sources }],
+  ]);
   await a.ask({ text: 'find my tax return' });
-  const list = events.find((e) => e.type === 'results');
+  const by = (state) => events.find((e) => e.type === 'pc' && e.state === state);
+  assert.deepEqual([by('searching').excluded, by('reading').files], [9, ['a.pdf', 'b.docx']]);
+  const list = by('results');
+  assert.deepEqual([list.total, list.excluded], [6, 9]);
   assert.deepEqual(Object.keys(list.rows[0]).sort(), ['folder', 'modified', 'name', 'openable', 'ref', 'snippet']);
   assert.equal(list.rows[0].snippet, 'Income <b>x</b>', 'text, to be shown as text');
-  assert.ok(!JSON.stringify(list).includes('C:\\docs\\tax.txt'), 'no full path goes to the bar');
-  assert.ok(events.some((e) => e.type === 'step' && /Read 1 file/.test(e.text)));
+  assert.deepEqual([by('unreadable').name, by('unreadable').why], ['scan.pdf', 'it is a scanned picture with no text']);
+  assert.equal(events.filter((e) => e.type === 'pc').length, 5, 'a state the bar does not know is dropped');
+  const done = events.find((e) => e.type === 'done');
+  assert.deepEqual(Object.keys(done.sources[0]).sort(), ['folder', 'n', 'name', 'openable', 'part', 'ref'], 'sources: names and parts, never a path or text');
+  assert.ok(!JSON.stringify(events).includes('C:\\docs\\tax.txt'), 'no full path goes to the bar');
 });
 
 test('the + menu offers Search this PC only when the switch is on; the server also honours "by itself: off"', async (t) => {
