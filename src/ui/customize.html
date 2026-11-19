@@ -83,8 +83,8 @@
     <button class="btn btn-ghost btn-sm" data-bulk="clear">Clear</button>
   </div>
   <div class="cz-table" role="table" aria-label="Items">
-    <div class="cz-row cz-head" role="row">
-      <span role="columnheader" class="cz-name"><input type="checkbox" id="cz-all" aria-label="Select all shown" /><span id="cz-col-name">Connector</span></span><span role="columnheader">Type</span><span role="columnheader">Status</span><span></span>
+    <div class="cz-head" role="row">
+      <input type="checkbox" id="cz-all" aria-label="Select all shown" /><span id="cz-col-name" role="columnheader">Connectors</span>
     </div>
     <div id="cz-list" role="rowgroup"></div>
   </div>
@@ -97,7 +97,8 @@
 <script type="module">
   import { getJSON, sendJSON, applyTheme, applyAppearance, desktopBridge } from './api.js';
   import { applyEmbed } from './embed.js';
-  import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
+  import { connectorStatus, createSignInFlows } from './connectorStatus.js';
+  import { tightRow } from './tight-rows.js';
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);
@@ -161,7 +162,6 @@
     return { on: false, label: on ? 'Partly on' : 'Off' };
   }
   const pluginOf = (kind, id) => data.plugins.find((p) => (p[kind] ?? []).includes(id));
-  const initial = (name) => (String(name).match(/\p{L}|\p{N}/u)?.[0] ?? '?').toUpperCase();
   const matches = (...fields) => !view.q || fields.join(' ').toLowerCase().includes(view.q);
 
   function el(tag, props = {}, ...kids) {
@@ -176,7 +176,8 @@
     return n;
   }
 
-  function row({ id, name, sub, type, typeTag, status, statusClass, statusNode = null, actions = [], extra = null }) {
+  // TIGHT-ROWS: one tight row per item (tight-rows.js): logo, name over one dim line, the switch at the right, everything else in the "..." menu
+  function row({ id = null, name, dim = '', chips = [], extra = null, primary = null, status = null, toggle = null, items = [] }) {
     let box = null;
     if (id && view.scope === 'yours') {
       shownIds.push(id);
@@ -184,67 +185,57 @@
       box.checked = picked.has(id);
       box.addEventListener('change', () => { if (box.checked) picked.add(id); else picked.delete(id); paintBulk(); });
     }
-    return el('div', { className: `cz-row${id && picked.has(id) ? ' is-picked' : ''}`, role: 'row' },
-      el('span', { className: 'cz-name', role: 'cell' },
-        box,
-        el('span', { className: 'cz-logo', 'aria-hidden': 'true', text: initial(name) }),
-        el('span', { className: 'cz-text' }, el('b', { text: name }), sub ? el('small', { text: sub }) : null, extra)),
-      el('span', { className: 'cz-type', role: 'cell' }, document.createTextNode(type), typeTag ? el('span', { className: 'badge', text: typeTag }) : null),
-      statusNode ?? el('span', { className: `cz-status ${statusClass ?? ''}`, role: 'cell', text: status }),
-      el('span', { className: 'cz-actions', role: 'cell' }, ...actions));
+    return tightRow(document, { className: `cz-row${id && picked.has(id) ? ' is-picked' : ''}`, checkbox: box, name, chips, dim, extra, primary, status, toggle, items });
   }
 
   // W6-16: where a skill, connector or plugin applies: everywhere, or only in some folders. The server accepts only a folder picked in this launch.
+  // "Everywhere" is the default and says nothing; "Only in: <folder>" is part of the dim line; changing it is in the menu.
   const folderName = (f) => String(f).split(/[\\/]/).filter(Boolean).pop() ?? String(f);
-  function scopeNode(path, item) {
+  const scopeDim = (item) => ((item.folders ?? []).length ? `Only in: ${item.folders.map(folderName).join(', ')}` : '');
+  const dimLine = (...parts) => parts.filter(Boolean).join(' · ');
+  function scopeItems(path, item) {
     const folders = item.folders ?? [];
-    const change = async (next, picked) => {
+    const change = async (next) => {
       try { notice = ''; await sendJSON(path, 'PATCH', { folders: next }); } catch (err) { notice = err.message; }
       await load();
     };
     const pick = async () => {
       const desk = desktopBridge(); // the Settings pages run in an iframe: the bridge is the parent's
-      const picked = desk?.pickFolder ? await desk.pickFolder() : window.prompt('The full path of a folder');
-      if (!picked) return;
-      await sendJSON('/api/folder/check', 'POST', { folder: picked }).catch(() => {}); // in the browser a typed path is a chosen path; in the app the picker already did this
-      await change([...folders, picked]);
+      const chosen = desk?.pickFolder ? await desk.pickFolder() : window.prompt('The full path of a folder');
+      if (!chosen) return;
+      await sendJSON('/api/folder/check', 'POST', { folder: chosen }).catch(() => {}); // in the browser a typed path is a chosen path; in the app the picker already did this
+      await change([...folders, chosen]);
     };
-    return el('span', { className: 'cz-scope' },
-      el('small', { className: 'cz-scope-label', text: folders.length ? `Only in: ${folders.map(folderName).join(', ')}` : 'Everywhere', title: folders.join('\n') }),
-      act(folders.length ? 'Add a folder' : 'Only in a folder…', pick),
-      folders.length ? act('Everywhere', () => change([])) : null);
+    return [{ label: folders.length ? 'Add a folder' : 'Only in a folder…', run: pick }, folders.length ? { label: 'Everywhere', run: () => change([]) } : null];
   }
-
-  function toggle(on, label, change) {
-    return el('button', { className: 'toggle', role: 'switch', 'aria-checked': String(on), 'aria-label': label,
-      onclick: async (e) => { e.currentTarget.disabled = true; await change(!on); await load(); } });
-  }
-  const act = (text, onclick, cls = 'btn btn-ghost btn-sm') => el('button', { className: cls, text, onclick });
 
   function paintYours() {
     const list = $('cz-list');
+    const provided = { label: 'Provided by its plugin', disabled: true };
     if (view.kind === 'connectors') {
       for (const s of data.connectors.filter((s) => matches(s.name, s.url))) {
         const plugin = pluginOf('connectors', s.id);
         const flow = flows.get(s.id);
         const signedIn = s.oauth?.signedIn === true;
         const st = connectorStatus(s, flow);
-        const statusNode = renderStatus(st, document);
-        statusNode.setAttribute('role', 'cell');
+        const needs = st.tone === 'warn' || st.tone === 'bad' || st.wait; // a chip shows only when something needs the person
+        const primary = st.wait ? { label: 'Cancel', run: () => { flows.clear(s.id); paint(); } } : st.canSignIn ? { label: st.signInLabel, run: () => startSignIn(s) } : null;
         list.append(row({
           id: s.id,
-          name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : s.url,
-          type: 'Remote', typeTag: plugin ? 'Plugin' : 'Custom',
-          statusNode,
-          extra: el('span', { className: 'cz-extra' }, plugin ? null : scopeNode(`/api/mcp/${s.id}`, s), flows.clientIdBox(s)),
-          actions: [
-            st.wait ? act('Cancel', () => { flows.clear(s.id); paint(); }) : null,
-            st.canSignIn ? act(st.signInLabel, () => startSignIn(s)) : null,
-            signedIn ? act('Sign out', () => signOut(s)) : null,
-            act('Test', async (e) => { e.currentTarget.textContent = 'Testing…'; notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); }),
-            act(s.trustReadOnly ? 'Read-only labels trusted' : 'Trust read-only labels', async () => { try { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { trustReadOnly: !s.trustReadOnly }); notice = ''; } catch (err) { notice = err.message; } await load(); }),
-            toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on })),
-            plugin ? null : act('Remove', async () => { await sendJSON(`/api/mcp/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
+          name: s.name,
+          chips: [plugin ? { text: 'Plugin' } : null, needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
+          dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : hostOrUrl(s.url), needs ? st.detail : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : '', plugin ? '' : scopeDim(s)),
+          extra: flows.clientIdBox(s),
+          primary,
+          toggle: { on: s.enabled, label: `Use ${s.name}`, change: async (on) => { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on }); await load(); } },
+          items: [
+            primary ? { label: primary.label, run: primary.run } : null,
+            { label: 'Test', run: async () => { notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); } },
+            signedIn ? { label: 'Sign out', run: () => signOut(s) } : null,
+            { label: s.trustReadOnly ? 'Read-only labels trusted' : 'Trust read-only labels', checked: Boolean(s.trustReadOnly), run: async () => { try { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { trustReadOnly: !s.trustReadOnly }); notice = !s.trustReadOnly ? `${s.name}: tools that call themselves read-only now run without asking.` : ''; } catch (err) { notice = err.message; } await load(); } },
+            '-',
+            ...(plugin ? [] : scopeItems(`/api/mcp/${s.id}`, s)),
+            plugin ? provided : { label: 'Remove', danger: true, run: async () => { await sendJSON(`/api/mcp/${s.id}`, 'DELETE'); await load(); } },
           ],
         }));
       }
@@ -253,29 +244,39 @@
         const plugin = pluginOf('skills', s.id);
         list.append(row({
           id: s.id,
-          name: s.name, sub: plugin ? `Provided by the ${plugin.name} plugin` : (s.shownDescription ?? s.description),
-          type: 'Skill', typeTag: plugin ? 'Plugin' : 'Custom',
-          status: s.enabled ? 'On' : 'Off', statusClass: s.enabled ? 'text-ok' : '',
-          extra: plugin ? null : scopeNode(`/api/skills/${s.id}`, s),
-          actions: [
-            toggle(s.enabled, `Use ${s.name}`, (on) => sendJSON(`/api/skills/${s.id}`, 'PATCH', { enabled: on })),
-            plugin ? null : act('Remove', async () => { await sendJSON(`/api/skills/${s.id}`, 'DELETE'); await load(); }, 'btn btn-danger btn-sm'),
+          name: s.name,
+          chips: plugin ? [{ text: 'Plugin' }] : [],
+          dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : (s.shownDescription ?? s.description), plugin ? '' : scopeDim(s)),
+          toggle: { on: s.enabled, label: `Use ${s.name}`, change: async (on) => { await sendJSON(`/api/skills/${s.id}`, 'PATCH', { enabled: on }); await load(); } },
+          items: [
+            ...(plugin ? [] : scopeItems(`/api/skills/${s.id}`, s)),
+            plugin ? provided : '-',
+            plugin ? null : { label: 'Remove', danger: true, run: async () => { await sendJSON(`/api/skills/${s.id}`, 'DELETE'); await load(); } },
           ],
         }));
       }
     } else {
       for (const p of data.plugins.filter((p) => matches(p.name, p.description))) {
         const n = (p.connectors?.length ?? 0) + (p.skills?.length ?? 0);
+        const state = pluginState(p);
         list.append(row({
           id: p.id,
-          name: p.name, sub: p.description, type: 'Plugin', typeTag: `${n} items`,
-          status: pluginState(p).label, statusClass: pluginState(p).on ? 'text-ok' : '',
-          extra: scopeNode(`/api/plugins/${p.id}`, p),
-          actions: [p.source ? act('Update', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Updating…'; try { const r = await sendJSON(`/api/plugins/${p.id}/update`, 'POST'); notice = `Updated ${p.name}: ${r.skillsUpdated} skill(s) refreshed, ${r.skillsAdded} added, ${r.skillsRemoved} removed; ${r.connectorsAdded} new connector(s) added switched off.${r.message ? ` ${r.message}` : ''}`; } catch (err) { notice = err.message; } await load(); }) : null, toggle(pluginState(p).on, `Use ${p.name}`, (on) => sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on })), act('Uninstall', async (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Removing…'; await uninstall(p); }, 'btn btn-danger btn-sm')],
+          name: p.name,
+          chips: [{ text: `${n} items` }, state.label === 'Partly on' ? { text: 'Partly on', tone: 'warn' } : null].filter(Boolean),
+          dim: dimLine(p.description, scopeDim(p)),
+          toggle: { on: state.on, label: `Use ${p.name}`, change: async (on) => { await sendJSON(`/api/plugins/${p.id}`, 'PATCH', { enabled: on }); await load(); } },
+          items: [
+            p.source ? { label: 'Update', hint: 'From GitHub', run: async () => { try { const r = await sendJSON(`/api/plugins/${p.id}/update`, 'POST'); notice = `Updated ${p.name}: ${r.skillsUpdated} skill(s) refreshed, ${r.skillsAdded} added, ${r.skillsRemoved} removed; ${r.connectorsAdded} new connector(s) added switched off.${r.message ? ` ${r.message}` : ''}`; } catch (err) { notice = err.message; } await load(); } } : null,
+            ...scopeItems(`/api/plugins/${p.id}`, p),
+            '-',
+            { label: 'Uninstall', danger: true, run: async () => { await uninstall(p); } },
+          ],
         }));
       }
     }
   }
+
+  const hostOrUrl = (url) => String(url ?? '').replace(/^https?:\/\//, '');
 
   function paintDiscover() {
     const list = $('cz-list');
@@ -288,16 +289,15 @@
       else if (view.kind === 'skills') { added = haveSkill(item.name); add = () => sendJSON('/api/skills', 'POST', { ...item, enabled: true }); }
       else { added = havePlugin(item.name); add = () => install(item); }
       list.append(row({
-        name: item.name, sub: item.desc ?? item.description,
-        type: view.kind === 'connectors' ? 'Remote' : view.kind === 'skills' ? 'Skill' : 'Plugin', typeTag: 'No sign-in',
-        status: added ? '✓ Added' : '', statusClass: added ? 'text-ok' : '',
-        actions: [added ? null : act('Add', async (e) => {
+        name: item.name, chips: [{ text: 'No sign-in' }], dim: item.desc ?? item.description,
+        status: added ? el('span', { className: 'tr-chip is-ok', text: '✓ Added' }) : null,
+        primary: added ? null : { label: 'Add', run: async (e) => {
           const button = e.currentTarget;
           if (button.disabled) return;
           button.disabled = true; button.textContent = 'Adding…'; showError('');
           try { await add(); } catch (err) { showError(`${item.name} could not be added: ${err.message}`); }
           await load();
-        }, 'btn btn-sm')],
+        } },
       }));
     }
   }
@@ -307,8 +307,9 @@
     list.replaceChildren();
     shownIds = [];
     $('cz-all').hidden = view.scope !== 'yours';
-    $('cz-col-name').textContent = { connectors: 'Connector', skills: 'Skill', plugins: 'Plugin' }[view.kind];
     if (view.scope === 'yours') paintYours(); else paintDiscover();
+    const count = list.children.length;
+    $('cz-col-name').textContent = `${count} ${count === 1 ? { connectors: 'connector', skills: 'skill', plugins: 'plugin' }[view.kind] : view.kind}`;
     const empty = !list.children.length;
     $('cz-note').textContent = notice ? notice : empty
       ? (view.q ? 'Nothing matches that search.'
