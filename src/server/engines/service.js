@@ -88,7 +88,7 @@ function fakePins() {
   const archive = makeZipForFake();
   const sha = createHash('sha256').update(archive).digest('hex');
   const mk = (id, label) => ({ version: '1.0.0', entry: 'fake.exe', label, licence: 'test', hosts: ['fake.test'], signature: 'Fake Co', files: [{ name: `${id}.zip`, url: `https://fake.test/${id}.zip`, sha256: sha, kind: 'zip', size: archive.length }] });
-  return { pins: { 'claude-code': { ...mk('claude-code', 'Claude Code'), promptTool: true }, codex: { ...mk('codex', 'Codex CLI'), model: 'gpt-5.5' } }, archive };
+  return { pins: { 'claude-code': { ...mk('claude-code', 'Claude Code'), promptTool: true }, codex: { ...mk('codex', 'Codex CLI'), model: 'gpt-5.5', sessionAllow: true } }, archive };
 }
 
 /** The Chat Completions stream for the model endpoint: the chat's own provider, through fetch (the stand-in answers in fake mode). */
@@ -298,7 +298,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
       mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(settings.permissionRules, root)), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
       ask: async (summary, detail, opts = {}) => {
         // "Allow for this chat" is offered on Codex's cards only, and only with Bunny's engine off
-        const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true ? { forSession: true } : {});
+        const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true && pins.codex?.sessionAllow === true ? { forSession: true } : {});
         const ok = answer === true || answer === 'session';
         if (ownRules) await turn.logStep({ role: 'assistant', kind: 'tool_call', tool: `${label} asked: ${summary}`, status: ok ? 'allowed' : 'denied', content: '', result: answer === 'session' ? 'You allowed it for this chat.' : ok ? 'You allowed it.' : 'You did not allow it.' }).catch(() => {});
         return ownRules && id === 'codex' && answer === 'session' ? 'session' : ok;
@@ -339,7 +339,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
           upstream: auth === 'local' ? budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn) : null, onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       } else {
         const sch = await schema();
-        if (!fakeMode) await seedHome({ dataDir, codexHome: join(home, 'codex') }); // the first command of a chat is not a 3-minute sandbox set-up (see sandbox-seed.js)
+        if (!fakeMode) await seedHome({ dataDir, root: turn.root, codexHome: join(home, 'codex') }); // the first command of a chat is not a 3-minute sandbox set-up (see sandbox-seed.js)
         run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
           upstream: budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       }
@@ -376,7 +376,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
         assembled += `${assembled ? '\n\n' : ''}${said}`; turn.send('delta', { text: `${assembled === said ? '' : '\n\n'}${said}` });
       } finally { await discard(staged.dir); }
     }
-    if (id === 'codex' && !fakeMode) await keepSeed({ dataDir, codexHome: join(home, 'codex') });
+    if (id === 'codex' && !fakeMode) await keepSeed({ dataDir, root: turn.root, codexHome: join(home, 'codex') });
     if (turn.incognito) await removeTree(home).catch(() => {});
     return { text: assembled, ok, stoppedForCheck };
   }
