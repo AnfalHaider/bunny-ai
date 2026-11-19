@@ -26,6 +26,10 @@ test('BN-3: the notification comes back at the first look, when access is turned
   assert.equal(bannerReturns({ enabled: false }, one), true, 'access turned on, or reopened at start');
   assert.equal(bannerReturns(one, open([dev('a', 'Pixel 8'), dev('b', 'Tablet')])), true, 'a device signed in');
   assert.equal(bannerReturns(one, open([dev('a', 'Pixel 8', 'everything')])), true, 'raised to Everything');
+  // BN-L1: one signs out and another signs in between two looks: the count is the same, the notice still comes back
+  assert.equal(bannerReturns(one, open([dev('b', 'Tablet')])), true, 'a different device, the same count');
+  assert.equal(bannerReturns(open([dev('a', 'Pixel 8'), dev('b', 'Tablet')]), open([dev('b', 'Tablet'), dev('c', 'TV')])), true, 'one out, one in');
+  assert.equal(bannerReturns({ enabled: true, signedIn: 1 }, { enabled: true, signedIn: 2 }), true, 'a status with only a count');
   assert.equal(bannerReturns(one, one), false, 'nothing new');
   assert.equal(bannerReturns(open([dev('a', 'Pixel 8', 'everything')]), open([dev('a', 'Pixel 8', 'everything')])), false, 'still the same Everything');
   assert.equal(bannerReturns(open([dev('a', 'Pixel 8'), dev('b', 'Tablet')]), one), false, 'a device signed out');

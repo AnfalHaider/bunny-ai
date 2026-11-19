@@ -92,6 +92,17 @@ for (const scheme of ['light', 'dark']) {
       await expect(note(page)).toBeVisible();
     });
 
+    test('BN-L1: one device signs out and another signs in between two looks (the count stays the same): the banner still comes back', async ({ page }) => {
+      const box = { devices: [PIXEL] };
+      await windowWith(page, box);
+      await page.goto('/src/ui/index.html');
+      await note(page).getByRole('button', { name: 'Dismiss' }).click();
+      await expect(note(page)).toHaveCount(0);
+      box.devices = [TABLET];
+      await expect(note(page)).toBeVisible({ timeout: 8000 });
+      await expect(note(page)).toContainText('Kitchen tablet signed in');
+    });
+
     test('BN-3: access turned on again (or reopened at start) brings the banner back; turning it off removes the chip', async ({ page }) => {
       const box = { devices: [PIXEL], off: false };
       await windowWith(page, box);

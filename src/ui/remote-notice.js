@@ -34,7 +34,10 @@ export function bannerText(status) {
 export function bannerReturns(prev, now) {
   if (!now?.enabled) return false;
   if (!prev?.enabled) return true;
-  if ((now.signedIn ?? 0) > (prev.signedIn ?? 0)) return true;
+  // BN-L1: a new sign-in is a device id that was not there before (not a higher count: one signing out and another signing in between two looks keeps the count the same)
+  const known = new Set((prev.devices ?? []).map((d) => d.id));
+  if ((now.devices ?? []).some((d) => !known.has(d.id))) return true;
+  if ((now.signedIn ?? 0) > (prev.signedIn ?? 0) && !(now.devices ?? []).length) return true; // a status that carries no list: the count is all there is
   const before = new Set(everythingDevices(prev).map((d) => d.id));
   return everythingDevices(now).some((d) => !before.has(d.id));
 }
