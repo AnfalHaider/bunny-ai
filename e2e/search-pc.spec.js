@@ -1,0 +1,104 @@
+import { test, expect } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// SEARCH-PC: the Settings rows (off until turned on, with the one-time dialog), the fixed and own excluded folders, and the result list in a browser. Invented data only.
+test.describe.configure({ mode: 'serial' });
+test.afterEach(async ({ request }) => { await request.put('/api/settings', { data: { pcSearchEnabled: false, pcSearchAfter: 'read', pcSearchExcluded: [], pcSearchBarAuto: true } }); });
+
+for (const scheme of ['light', 'dark']) {
+  test.describe(scheme, () => {
+    test.use({ colorScheme: scheme });
+
+    test('Search this PC is off until turned on; a dialog names what happens; Cancel leaves it off; Turn on saves the switch and the choice together', async ({ page, request }) => {
+      await page.goto('/src/ui/settings.html?embed=1&section=capabilities');
+      const sw = page.locator('#pc-on');
+      await expect(sw).not.toBeChecked();
+      await expect(page.locator('#pc-after')).toBeDisabled();
+      await sw.check();
+      const dlg = page.locator('dialog.pc-dialog');
+      await expect(dlg).toBeVisible();
+      await expect(dlg).toContainText('Turn on Search this PC?');
+      await expect(dlg).toContainText('never changes, moves or deletes');
+      await expect(dlg).toContainText('the model of the chat you are in'); // not in a chat frame: it says so plainly
+      await dlg.getByRole('button', { name: 'Cancel' }).click();
+      await expect(sw).not.toBeChecked();
+      expect((await (await request.get('/api/settings')).json()).pcSearchEnabled).not.toBe(true);
+      await sw.check();
+      await page.locator('dialog.pc-dialog').getByRole('button', { name: 'Turn on' }).click();
+      await expect(sw).toBeChecked();
+      await expect(page.locator('#pc-after')).toBeEnabled();
+      const saved = await (await request.get('/api/settings')).json();
+      expect([saved.pcSearchEnabled, saved.pcSearchAfter]).toEqual([true, 'read']);
+    });
+
+    test('Excluded folders: the fixed list is read-only, the person adds and removes their own, and a path that is not a folder is refused', async ({ page, request }) => {
+      await request.put('/api/settings', { data: { pcSearchEnabled: true } });
+      await page.goto('/src/ui/settings.html?embed=1&section=capabilities');
+      await page.locator('#pc-excl-open').click();
+      await expect(page.locator('#pc-fixed li')).not.toHaveCount(0);
+      expect(await page.locator('#pc-fixed button').count()).toBe(0);
+      await expect(page.locator('#pc-fixed')).toContainText('.ssh');
+      await expect(page.locator('#pc-fixed')).toContainText('AppData');
+      const folder = mkdtempSync(join(tmpdir(), 'bunny-e2e-pc-'));
+      await page.locator('#pc-add-path').fill(folder);
+      await page.locator('#pc-add-go').click();
+      await expect(page.locator('#pc-excl-count')).toHaveText('1');
+      await expect(page.locator('#pc-mine li').first()).toContainText('bunny-e2e-pc-');
+      await page.locator('#pc-add-path').fill('C:\\no\\such\\folder-xyz');
+      await page.locator('#pc-add-go').click();
+      await expect(page.locator('#pc-excl-msg')).toContainText('not a folder');
+      await expect(page.locator('#pc-excl-count')).toHaveText('1');
+      await page.locator('#pc-mine').getByRole('button', { name: /Remove/ }).click();
+      await expect(page.locator('#pc-excl-count')).toHaveText('0');
+    });
+
+    test('Activity says nothing yet when nothing was searched, and the Quick ask line tells the truth about its tools', async ({ page }) => {
+      await page.goto('/src/ui/settings.html?embed=1&section=capabilities');
+      await page.locator('#pc-act-open').click();
+      await expect(page.locator('#pc-act')).toContainText('Nothing yet.');
+      await page.goto('/src/ui/settings.html?embed=1&section=desktop');
+      await expect(page.locator('body')).toContainText('It uses no tools except reading the web');
+      await expect(page.locator('body')).not.toContainText('it never uses tools or asks for permissions in the bar');
+    });
+
+    test('the result list: marked snippets are text (never HTML), 8 rows then Show more, the buttons only where the desktop bridge is, no sideways scroll on a phone', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 780 });
+      await page.goto('/src/ui/settings.html?embed=1&section=capabilities');
+      const result = await page.evaluate(async () => {
+        const { pcResultsView, markedNodes } = await import('/src/ui/pc-results.js');
+        const rows = Array.from({ length: 11 }, (_, i) => ({ ref: `f${i}-abc`, name: `tax return ${i}.pdf`, folder: 'C:\\Users\\me\\Documents\\a-very-long-folder-name-for-the-tax-returns', modified: '2025-03-01 10:00:00', snippet: i === 0 ? 'Income <img src=x onerror="window.pwned=1"> and the TAX return' : 'plain tax text', openable: i % 2 === 0 }));
+        const calls = [];
+        const host = document.createElement('div');
+        document.body.append(host);
+        host.append(pcResultsView(document, rows, { terms: ['tax'], bridge: { pcSearch: { open: async (r) => { calls.push(['open', r]); return { ok: true }; }, show: async (r) => { calls.push(['show', r]); return { ok: true }; }, copy: async (r) => { calls.push(['copy', r]); return { ok: true }; } } }, onAsk: (row) => calls.push(['ask', row.ref]) }));
+        const bare = document.createElement('div');
+        document.body.append(bare);
+        bare.append(pcResultsView(document, rows.slice(0, 2), { terms: ['tax'] }));
+        const first = host.querySelector('.pc-row');
+        host.querySelector('.pc-row button')?.click();
+        await new Promise((r) => setTimeout(r, 20));
+        return {
+          visible: [...host.querySelectorAll('.pc-row')].filter((r) => !r.hidden).length,
+          more: host.querySelector('.pc-more')?.textContent,
+          marks: [...first.querySelectorAll('mark')].map((m) => m.textContent),
+          imgs: first.querySelectorAll('img').length, pwned: window.pwned ?? null, snippet: first.querySelector('.pc-snippet').textContent,
+          buttons: [...first.querySelectorAll('button')].map((b) => b.textContent), bareButtons: bare.querySelectorAll('button').length, calls,
+          overflow: document.documentElement.scrollWidth > window.innerWidth + 1, nodes: markedNodes(document, 'a TAX b tax', ['tax']).map((n) => n.nodeName),
+        };
+      });
+      expect(result.visible).toBe(8);
+      expect(result.more).toBe('Show more (3)');
+      expect(result.marks).toEqual(['TAX']);
+      expect(result.imgs).toBe(0);
+      expect(result.pwned).toBeNull();
+      expect(result.snippet).toContain('<img src=x onerror=');
+      expect(result.buttons).toEqual(['Open', 'Show in folder', 'Ask about this file', 'Copy path']);
+      expect(result.bareButtons).toBe(0, 'a page without the desktop bridge draws the list without Open, Show in folder and Copy path');
+      expect(result.calls[0]).toEqual(['open', 'f0-abc']);
+      expect(result.overflow).toBe(false);
+      expect(result.nodes).toEqual(['#text', 'MARK', '#text', 'MARK']);
+    });
+  });
+}

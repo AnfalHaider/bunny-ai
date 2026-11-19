@@ -1249,3 +1249,25 @@ body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 @font-face { font-family: "Bunny JetBrains Mono"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/jetbrains-mono-400-700.woff2") format("woff2"); }
 @font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-400.woff2") format("woff2"); }
 @font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/ibm-plex-mono-600.woff2") format("woff2"); }
+
+/* ---------- SEARCH-PC: the result list, the Settings rows and the one-time dialog (tokens only) ---------- */
+.linklike { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+.group .row.is-off .meta-col, .group .row.is-off .right { opacity: .55; }
+.pc-add { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-top: var(--sp-4); }
+.pc-add input { flex: 1 1 220px; min-width: 0; }
+.pc-dialog { max-width: min(440px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); color: var(--text); padding: var(--sp-8); box-shadow: var(--shadow-modal); }
+.pc-dialog::backdrop { background: var(--scrim); }
+.pc-dialog h3 { margin: 0 0 var(--sp-4); font-size: var(--fs-lg); }
+.pc-dialog p { margin: 0 0 var(--sp-4); color: var(--text-dim); font-size: var(--fs-md); line-height: var(--lh-base); }
+.pc-dialog .actions { display: flex; justify-content: flex-end; gap: var(--sp-4); margin-top: var(--sp-6); }
+.pc-results { display: grid; gap: var(--sp-3); margin-top: var(--sp-4); min-width: 0; }
+.pc-row { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: var(--sp-4) var(--sp-5); min-width: 0; }
+.pc-row-top { display: flex; justify-content: space-between; gap: var(--sp-4); align-items: baseline; }
+.pc-name { overflow-wrap: anywhere; }
+.pc-when { color: var(--text-faint); font-size: var(--fs-xs); white-space: nowrap; }
+.pc-folder { color: var(--text-dim); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.pc-snippet { margin-top: var(--sp-2); font-size: var(--fs-sm); color: var(--text); overflow-wrap: anywhere; }
+.pc-snippet mark, .pc-results mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 2px; }
+.pc-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-3); }
+.pc-more { justify-self: start; }
+.md-address { color: var(--text-dim); font-size: .92em; overflow-wrap: anywhere; }

@@ -3993,6 +3993,13 @@ function applyProfile(settings) {
 window.addEventListener('message', async (e) => {
   if (e.origin !== location.origin) return;
   if (e.data?.type === 'bunny:open-section' && typeof e.data.section === 'string') { showSettingsSection(e.data.section); return; }
+  // SEARCH-PC: Settings asks which model is in use, to name it in the one-time dialog (the model that will get file text)
+  if (e.data?.type === 'bunny:ask-model') {
+    const pick = state.selected ?? (state.modelAuto ? state.autoPick : null);
+    const row = pick ? state.models?.find((x) => x.id === (pick.model ?? pick.id) && (!pick.providerId || x.providerId === pick.providerId)) : null;
+    try { e.source?.postMessage({ type: 'bunny:model-info', model: row?.displayName ?? pick?.model ?? pick?.id ?? null, provider: row?.providerName ?? pick?.providerName ?? null }, location.origin); } catch { /* the frame is gone */ }
+    return;
+  }
   if (!['bunny:profile', 'bunny:appearance', 'bunny:settings'].includes(e.data?.type)) return;
   // THEME-APPLY: Settings says what it just chose; it is applied before anything is read back, so the page behind never lags the window in front.
   if (e.data.type === 'bunny:appearance' && e.data.patch && typeof e.data.patch === 'object') applyAppearanceNow({ ...state.settings, ...e.data.patch });
