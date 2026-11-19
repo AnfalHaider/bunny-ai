@@ -4,13 +4,24 @@
 // Why: those files start the real guard, whose own 6 second deadline refuses commands when the PC is busy with the other test files,
 // and with CLAUDE_PROJECT_DIR set to a worktree the guard judges the tests' throwaway repositories by that worktree.
 // Nothing is skipped and no assertion or deadline is changed: the same files run, in the same way as before, apart from the order.
-import { readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { waitingFor } from './test-progress.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const testDir = join(root, 'test');
+// BUNNY_TEST_DIR and BUNNY_TEST_SILENT_MS exist for test/test-progress.test.js only: it runs this runner on a folder of its own with a short silence limit.
+const testDir = process.env.BUNNY_TEST_DIR ? resolve(process.env.BUNNY_TEST_DIR) : join(root, 'test');
+
+// TEST-DNS: the unit tests never touch the real network (test/support/no-network.mjs), and the gate must not depend on it. A person may try one file with
+// BUNNY_TEST_NETWORK=1; this runner, which is the gate's, refuses to start with it set.
+if (process.env.BUNNY_TEST_NETWORK === '1') {
+  console.error('BUNNY_TEST_NETWORK=1 turns the no-network guard off, for one file a person runs on purpose. The unit-test runner and the gate never run with it: unset it and run again.');
+  process.exit(2);
+}
+const preload = join(root, 'test', 'support', 'no-network.mjs');
 
 /** Every *.test.js file under test/ (node_modules left out). The helpers, fixtures and probes beside them define no tests, and some are servers that never exit. */
 function files(dir) {
@@ -24,7 +35,7 @@ function files(dir) {
   return found.sort();
 }
 
-const all = files(testDir).map((f) => relative(root, f).replace(/\\/g, '/'));
+const all = files(testDir).map((f) => (f.startsWith(root) ? relative(root, f).replace(/\\/g, '/') : f));
 const isGuardFile = (f) => /^test\/(guard-[^/]*|kit-next-[^/]*)\.test\.js$/.test(f);
 const guard = all.filter(isGuardFile);
 const others = all.filter((f) => !isGuardFile(f));
@@ -36,17 +47,33 @@ if (process.argv.includes('--list')) {
 }
 
 // A step that prints nothing for SILENT_MS is stopped and named, so a hang is a failure that says where it stopped, not silence.
-const SILENT_MS = 4 * 60_000;
+const SILENT_MS = Number(process.env.BUNNY_TEST_SILENT_MS) || 4 * 60_000;
 function run(label, args, env) {
-  console.log(`\n# ${label}: ${args.filter((a) => a.startsWith('test/')).length} files`);
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['--test', '--test-timeout=120000', ...args], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const fileArgs = args.filter((a) => /\.test\.js$/.test(a));
+  console.log(`\n# ${label}: ${fileArgs.length} files`);
+  // TEST-DNS: every test process (and a node a test starts) loads the no-network preload first; a second reporter notes which test started and ended, for the HUNG report
+  const progressFile = join(tmpdir(), `bunny-test-progress-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jsonl`);
+  const nodeOptions = `${env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(preload).href}`.trim();
+  return new Promise((resolveRun) => {
+    const child = spawn(process.execPath, [
+      '--test', '--test-timeout=120000', '--import', pathToFileURL(preload).href,
+      '--test-reporter=spec', '--test-reporter-destination=stdout',
+      `--test-reporter=${pathToFileURL(join(root, 'scripts', 'test-progress.mjs')).href}`, `--test-reporter-destination=${progressFile}`,
+      ...args,
+    ], { cwd: root, env: { ...env, NODE_OPTIONS: nodeOptions }, stdio: ['ignore', 'pipe', 'pipe'] });
     let last = '';
     let timer;
     const arm = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        console.error(`\nHUNG: "${label}" printed nothing for ${SILENT_MS / 60_000} minutes. The last thing it printed:\n${last.slice(-600)}`);
+        // the run reports files in the order given and only when a file has ended: the first file it has not heard of is the one everything waits for
+        let still = '';
+        try {
+          const { heard, waiting } = waitingFor(readFileSync(progressFile, 'utf8'), fileArgs.map((f) => resolve(root, f)));
+          still = `  Waiting for (the run reports files in order, so this one holds the rest back): ${waiting[0] ? relative(root, waiting[0]).replace(/\\/g, '/') : '(none: every file has reported)'}\n  Files finished and reported: ${heard} of ${fileArgs.length}\n`;
+          if (waiting.length > 1) still += `  Not yet reported after it: ${waiting.slice(1, 6).map((f) => relative(root, f).replace(/\\/g, '/')).join(', ')}${waiting.length > 6 ? ', ...' : ''}\n`;
+        } catch { still = '  (no progress file to read)\n'; }
+        console.error(`\nHUNG: "${label}" printed nothing for ${SILENT_MS / 60_000} minutes.\n${still}  The last thing it printed:\n${last.slice(-600)}`);
         child.kill('SIGKILL');
       }, SILENT_MS);
     };
@@ -54,11 +81,16 @@ function run(label, args, env) {
     pass(child.stdout, process.stdout);
     pass(child.stderr, process.stderr);
     arm();
-    child.on('close', (code, signal) => { clearTimeout(timer); resolve(signal ? 1 : code ?? 1); });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      try { rmSync(progressFile, { force: true }); } catch { /* a temp file */ }
+      if (code !== 0) console.error(`\nEXIT: "${label}" ended with code ${code ?? 'none'}, signal ${signal ?? 'none'}`);
+      resolveRun(signal ? 1 : code ?? 1);
+    });
   });
 }
 
 const first = await run('all other unit tests, in parallel', others, process.env);
 const { CLAUDE_PROJECT_DIR, ...withoutProjectDir } = process.env;
-const second = await run('guard and kit tests, one at a time', ['--test-concurrency=1', ...guard], withoutProjectDir);
+const second = guard.length ? await run('guard and kit tests, one at a time', ['--test-concurrency=1', ...guard], withoutProjectDir) : 0; // (no guard files: only in test/test-progress.test.js's own folder, where node --test with no file would run everything)
 process.exit(first || second ? 1 : 0);
