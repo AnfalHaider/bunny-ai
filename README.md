@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app, opened it beside the chat and tested it" width="900" />
+  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app and opened it beside the chat" width="900" />
 </p>
 
 ---
@@ -64,7 +64,7 @@ flowchart LR
     M2 --> R["One quiet line tells you<br/>who answered and why"]
 ```
 
-How long I wait before trying another model is yours to set: **Settings → Capabilities → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
+How long I wait before trying another model is yours to set: **Settings → Models → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
 
 <p align="center"><img src="docs/images/settings-wait.png" alt="Settings: Try another model when yours is busy, with Wait for a first reply under it" width="820" /></p>
 
@@ -108,7 +108,7 @@ Sign me in with the GitHub CLI you already use, or a token, and I'll search repo
 ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Alibaba Qwen, Groq, Together, Mistral, xAI, Fireworks, Cerebras, OpenAI, Anthropic, Google, OpenRouter, Nvidia, Vercel, GitHub Copilot, OpenCode and Ollama on your own machine, each with a **Get a key** link. Any other OpenAI-compatible server is one form away. When you first connect a provider, I tell you if my "free models only" filter is hiding some of its models, and show you all of them with one click.
 
 <p align="center">
-  <img src="docs/images/providers.png" alt="ModelScope, SiliconFlow, Gitee AI and more, each with a Connect button" width="440" />
+  <img src="docs/images/providers.png" alt="Popular providers such as Nvidia and OpenCode Console, each with a Connect or Sign in button" width="440" />
   <img src="docs/images/custom-provider.png" alt="The form to add a custom OpenAI-compatible provider" width="440" />
 </p>
 
