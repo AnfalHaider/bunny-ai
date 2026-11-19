@@ -134,3 +134,15 @@ test('the pinned schema file lists the method names the adapter relies on (the a
   for (const m of ['item/started', 'item/completed', 'item/agentMessage/delta', 'item/commandExecution/outputDelta', 'turn/started', 'turn/completed', 'thread/tokenUsage/updated', 'error']) assert.ok(schema.notifications.has(m), m);
   for (const m of ['initialize', 'thread/start', 'turn/start', 'turn/interrupt']) assert.ok(schema.clientRequests.has(m), m);
 });
+
+test('CE-1.15 / EN-2: the project entry names the REAL folder: a short 8.3 name resolves to the long path before the config is written', async () => {
+  const { canonicalRoot } = await import('../src/server/engines/codex.js');
+  const { execFileSync } = await import('node:child_process');
+  const base = await mkdtemp(join(tmpdir(), 'bunny-canon-'));
+  const long = join(base, 'A Rather Long Project Name'); await mkdir(long, { recursive: true });
+  let short = null;
+  try { short = execFileSync(join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-Command', '(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:CANON_DIR).ShortPath'], { encoding: 'utf8', windowsHide: true, env: { ...process.env, CANON_DIR: long } }).trim(); } catch { /* no short names */ }
+  if (short && short.toLowerCase() !== long.toLowerCase()) assert.equal((await canonicalRoot(short)).toLowerCase(), long.toLowerCase(), 'the 8.3 name resolves');
+  assert.equal(await canonicalRoot(join(base, 'does-not-exist')), join(base, 'does-not-exist'), 'a missing folder is returned as it is');
+  assert.match(configToml({ root: await canonicalRoot(long), model: 'm', auth: 'account' }), /a rather long project name/i);
+});

@@ -17,17 +17,20 @@ export const HOOK_SOURCE = `'use strict';
 // Bunny AI: PreToolUse hook. Written by Bunny at every run start. Do not edit: a changed file is not run.
 const http = require('http');
 let done = false;
+// Exit 0 only from the write callback, after the answer was written. If the write does not finish in time, exit 2 with the reason on stderr: exit 2 blocks the tool, exit 0 with no answer would not.
+const finish = (text, reason) => {
+  const bail = () => { try { process.stderr.write(String(reason)); } catch (e) { /* nothing more */ } process.exit(2); };
+  const timer = setTimeout(bail, 1500);
+  try { process.stdout.write(text, (err) => { clearTimeout(timer); if (err) bail(); else process.exit(0); }); } catch (e) { bail(); }
+};
 const deny = (why) => {
   if (done) return; done = true;
-  const text = JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: String(why || 'Bunny did not allow this.').slice(0, 400) } });
-  setTimeout(() => process.exit(0), 1500);
-  try { process.stdout.write(text, () => process.exit(0)); } catch (e) { process.exit(0); }
+  const reason = String(why || 'Bunny did not allow this.').slice(0, 400);
+  finish(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }), reason);
 };
 const allow = () => {
-  if (done) return; done = true;
-  const text = JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'Allowed by Bunny.' } });
-  setTimeout(() => process.exit(0), 1500);
-  try { process.stdout.write(text, () => process.exit(0)); } catch (e) { done = false; deny('could not answer'); }
+  finish(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'Allowed by Bunny.' } }), 'Bunny could not finish its answer, so this was not allowed.');
+  done = true;
 };
 process.on('uncaughtException', () => deny('Bunny check failed'));
 process.on('unhandledRejection', () => deny('Bunny check failed'));
@@ -55,7 +58,7 @@ try {
         if (res.statusCode !== 200) { deny('Bunny check refused'); return; }
         let ans;
         try { ans = JSON.parse(text); } catch (e) { deny('bad answer from Bunny'); return; }
-        if (ans && ans.allow === true) allow(); else deny(ans && typeof ans.reason === 'string' ? ans.reason : 'Bunny did not allow this.');
+        if (ans && ans.allow === true) { if (done) return; allow(); } else deny(ans && typeof ans.reason === 'string' ? ans.reason : 'Bunny did not allow this.');
       });
       res.on('error', () => deny('Bunny check failed'));
     });

@@ -23,7 +23,7 @@ const schema = await loadSchema();
 async function world() { const base = await mkdtemp(join(tmpdir(), 'bunny-cxw-')); const root = join(base, 'proj'); await mkdir(root, { recursive: true }); return { base, root, home: join(base, 'home') }; }
 const bridgeFor = (w, extra = {}) => createBridge({ mode: 'auto', rules: [], root: w.root, protect: [], keyFolders: [], ask: async () => true, ...extra });
 async function run(w, script, opts = {}) {
-  const r = await startCodex({ cwd: w.root, prompt: 'x', home: w.home, exe: 'x', launcher, model: 'gpt-5.5', bridge: bridgeFor(w), upstream: noUpstream, extraEnv: { BUNNY_FAKE_SCRIPT: JSON.stringify(script) }, schema, ...opts });
+  const r = await startCodex({ cwd: w.root, prompt: 'x', home: w.home, exe: 'x', launcher, model: 'gpt-5.5', bridge: opts.bridge ?? bridgeFor(w), upstream: noUpstream, extraEnv: { BUNNY_FAKE_SCRIPT: JSON.stringify(script) }, schema, ...opts });
   const events = []; for await (const e of r.events) events.push(e);
   return { r, events };
 }
@@ -125,4 +125,21 @@ test('the endpoint check function itself (used by the real run) refuses a bad to
     const bad = await post(port, token, { input: 'x', tools: [{ type: 'function', name: 'view_image', parameters: {} }] });
     assert.equal(bad.status, 400);
   } finally { await ep.close(); }
+});
+
+test('EN-1: a command Bunny DECLINED that Codex reports as completed (it ran anyway) stops the run: tree-killed, marked "Bunny\'s check did not run"', async () => {
+  const w = await world(); const marker = join(w.base, 'ran-anyway.txt');
+  const bridge = createBridge({ mode: 'auto', rules: [], root: w.root, protect: [w.base], keyFolders: [], ask: async () => false });
+  const { r, events } = await run(w, { steps: [{ command: `type ${join(w.base, 'secret.json')}`, ignoreDecline: true, marker }, { say: 'never' }] }, { bridge });
+  const err = events.find((e) => e.type === 'error');
+  assert.equal(err.code, 'watchdog'); assert.match(err.message, /Bunny's check did not run/);
+  assert.equal(types(events).includes('done'), false);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(await alive(r.pid), false);
+});
+
+test('a line over 1 MB from Codex ends the run with an error (the reader\'s cap)', async () => {
+  const w = await world();
+  const { events } = await run(w, { steps: [{ rawLine: JSON.stringify({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'x'.repeat(1_100_000) } }) }] });
+  assert.match(events.find((e) => e.type === 'error').message, /longer than 1 MB/);
 });

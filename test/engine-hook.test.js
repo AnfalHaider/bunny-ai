@@ -171,3 +171,26 @@ test('after close the bridge no longer answers, and a pending Ask is ended', asy
   assert.ok((await pending) instanceof Error || true);
   await assert.rejects(() => raw(port, { token: bridge.token }), /ECONNREFUSED|ECONNRESET/);
 });
+
+test('CE-1.7: a stdout that never drains: both the deny and the allow path exit 2 with the reason on stderr (never exit 0 without a finished write)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-hook-'));
+  const file = (await writeHook(dir)).path;
+  const preload = join(dir, 'never-drain.cjs');
+  await writeFile(preload, "process.stdout.write = function () { return true; }; // a write whose callback never comes\n");
+  const run = (stdin, env) => new Promise((resolve) => {
+    const child = spawn(process.execPath, ['--require', preload, file], { env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...env }, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    let err = ''; child.stderr.on('data', (c) => { err += c; });
+    const started = Date.now();
+    child.on('close', (code) => resolve({ code, err, ms: Date.now() - started }));
+    child.stdin.on('error', () => {}); child.stdin.end(stdin);
+  });
+  // deny: bad stdin
+  const d = await run('not json', envFor(1));
+  assert.equal(d.code, 2); assert.match(d.err, /could not read the request/); assert.ok(d.ms < 5000);
+  // allow: a bridge that says allow
+  const b = await fakeBridge((req, res) => { res.writeHead(200); res.end('{"allow":true}'); });
+  try {
+    const a = await run(event(), envFor(b.port));
+    assert.equal(a.code, 2, 'an allow that could not be written is not an allow'); assert.match(a.err, /not allowed/);
+  } finally { await b.close(); }
+});

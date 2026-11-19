@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const profile = process.argv[2];
+if (process.env.BUNNY_FAKE_SCRIPT || process.env.BUNNY_FAKE_SCRIPT_FILE) { try { const sc0 = JSON.parse(process.env.BUNNY_FAKE_SCRIPT_FILE ? readFileSync(process.env.BUNNY_FAKE_SCRIPT_FILE, 'utf8') : process.env.BUNNY_FAKE_SCRIPT); if (sc0.dumpEnv) writeFileSync(sc0.dumpEnv, JSON.stringify({ env: process.env, argv: process.argv.slice(2) })); } catch { /* no script */ } }
 const args = process.argv.slice(3);
 const script = JSON.parse(process.env.BUNNY_FAKE_SCRIPT_FILE ? readFileSync(process.env.BUNNY_FAKE_SCRIPT_FILE, 'utf8') : (process.env.BUNNY_FAKE_SCRIPT || '{"steps":[]}'));
 const out = (o) => process.stdout.write(`${typeof o === 'string' ? o : JSON.stringify(o)}\n`);
@@ -121,7 +122,7 @@ else if (profile === 'codex') {
         let ans = { result: { decision: 'accept' } };
         if (!step.skipApproval) ans = await askServer('item/commandExecution/requestApproval', { kind: 'command', threadId, turnId, itemId: id, command: step.command, cwd: process.cwd() });
         if (step.recordTo) writeFileSync(step.recordTo, JSON.stringify(ans));
-        if (ans.result?.decision === 'accept') {
+        if (ans.result?.decision === 'accept' || step.ignoreDecline) {
           if (step.marker) writeFileSync(step.marker, 'the command ran');
           send({ method: 'item/commandExecution/outputDelta', params: { threadId, turnId, itemId: id, delta: step.output ?? 'ok' } });
           send({ method: 'item/completed', params: { threadId, turnId, item: { ...item, status: 'completed', aggregatedOutput: step.output ?? 'ok', exitCode: 0 } } });

@@ -16,7 +16,12 @@ import { createEventQueue, EngineEventError, cutResult } from './events.js';
 import { HOOK_OWN_LIMIT_MS, HOOK_TIMEOUT_SECONDS } from './bridge-server.js';
 import { mapClaudeCall } from './bridge.js';
 
-export const profile = Object.freeze({ id: 'claude-code', label: 'Claude Code', transport: 'jsonl', approvals: 'per-call', wire: 'messages', auth: ['account', 'local'], resume: true, runtime: 'native' });
+export const profile = Object.freeze({
+  id: 'claude-code', label: 'Claude Code', transport: 'jsonl', approvals: 'per-call', wire: 'messages', auth: ['account', 'local'], resume: true, runtime: 'native',
+  recommendedAuth: 'account', recommendedReason: 'Sign in with your own Anthropic account: it is the way Anthropic supports Claude Code. Local mode is not supported by Anthropic.',
+  authAvailable: Object.freeze({ account: true, local: true }),
+  get expectedTools() { return EXPECTED_TOOLS; },
+});
 
 /** The tools Bunny turns off in BOTH modes (S1 addendum 3, proven; plus the agent-control tools named the same way). The subagent tool is `Agent` to the hook and `Task` in the tools list. */
 export const DISALLOWED_TOOLS = Object.freeze([

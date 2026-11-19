@@ -21,7 +21,12 @@ import { killTree, spawnEngine } from './process.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-export const profile = Object.freeze({ id: 'codex', label: 'Codex CLI', transport: 'json-rpc', approvals: 'per-call', wire: 'responses', auth: ['local', 'account'], resume: true, runtime: 'native' });
+export const profile = Object.freeze({
+  id: 'codex', label: 'Codex CLI', transport: 'json-rpc', approvals: 'per-call', wire: 'responses', auth: ['local', 'account'], resume: true, runtime: 'native',
+  recommendedAuth: 'local', recommendedReason: 'Local uses your own models through Bunny. Signing in with a ChatGPT account is not available yet.',
+  authAvailable: Object.freeze({ local: true, account: false }),
+  get expectedTools() { return EXPECTED_TOOLS; },
+});
 
 /** What config.toml turns off in BOTH modes (CE-1.14). */
 export const FEATURES_OFF = Object.freeze(['apps', 'plugins', 'remote_plugin', 'plugin_sharing', 'tool_suggest', 'computer_use', 'image_generation', 'goals', 'hooks', 'view_image']);
@@ -47,12 +52,20 @@ const tomlKey = (p) => `'${String(p).toLowerCase().replace(/\\/g, '\\').replace(
  * The text of CODEX_HOME/config.toml for one run. Local mode points Codex at Bunny's endpoint (`[model_providers.bunny]`, the token read from the environment by name, no OpenAI account);
  * account mode leaves the model alone (Codex's own sign-in). Never a `trust_level = "trusted"`: the project is written as untrusted.
  */
+/** The real path of the project (links, short 8.3 names and case resolved), so the config's project entry names the folder Codex will really see. */
+export async function canonicalRoot(root) {
+  const { realpath } = await import('node:fs/promises');
+  try { return await realpath(root); } catch { return root; }
+}
+
 export function configToml({ root, model, auth = 'local', mode = 'full', baseUrl = null }) {
   const lines = ['# Written by Bunny AI at every run start. Do not edit.'];
   if (auth === 'local') {
     lines.push(`model_provider = ${toml('bunny')}`, `model = ${toml(model)}`);
   }
-  lines.push('check_for_update_on_startup = false', `web_search = ${toml('disabled')}`, '');
+  lines.push('check_for_update_on_startup = false', `web_search = ${toml('disabled')}`);
+  if (auth === 'account') lines.push(`cli_auth_credentials_store = ${toml('file')}`); // the sign-in stays in a file inside the isolated CODEX_HOME, never the system credential store
+  lines.push('');
   lines.push('[analytics]', 'enabled = false', '');
   lines.push('[windows]', `sandbox = ${toml('unelevated')}`, '');
   lines.push('[features]');
@@ -145,7 +158,7 @@ export function createCodexDriver({ send, judgeCommand, judgeChanges, schema, qu
         return;
       }
       const ran = item.status === 'completed' || item.status === 'failed';
-      if (ran && !accepted.has(item.id) && !declined.has(item.id)) { trip("stopped: Bunny's check did not run."); return; }
+      if (ran && !accepted.has(item.id)) { trip("stopped: Bunny's check did not run."); return; } // EN-1: also an item Bunny DECLINED that Codex reports as completed
       if (item.status === 'declined' || declined.has(item.id)) { queue.push({ type: 'tool-end', callId: item.id, ok: false, output: 'Not allowed.' }); return; }
       if (type === 'fileChange') for (const c of item.changes ?? []) if (typeof c?.path === 'string') queue.push({ type: 'edit', path: c.path });
       queue.push({ type: 'tool-end', callId: item.id, ok: item.status === 'completed' && !(item.exitCode > 0), output: cutResult(item.aggregatedOutput ?? item.output ?? '', 8000) });
@@ -232,7 +245,7 @@ export async function startCodex({ cwd, prompt, home, exe, auth = 'local', mode 
       endpoint = createEndpoint({ upstream, label: model ?? 'bunny', onUsage: onEndpointUsage, onToolList: (names) => { const v = toolListCheck(mode)(names); if (v !== true && driver) { driver.queue.push({ type: 'error', code: 'engine.tools', message: v }); stopRun(); } return v; }, ...endpointOptions });
       started = await endpoint.start();
     }
-    const plan = buildRun({ exe, home, root: cwd, model, auth, mode, endpoint: started ? { base: started.base, token: started.token } : null });
+    const plan = buildRun({ exe, home, root: await canonicalRoot(cwd), model, auth, mode, endpoint: started ? { base: started.base, token: started.token } : null });
     await mkdir(join(home, 'codex'), { recursive: true });
     await writeFile(plan.configPath, plan.config, { mode: 0o600 });
     const file = launcher ? launcher[0] : plan.file;

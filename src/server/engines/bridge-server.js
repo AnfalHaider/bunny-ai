@@ -9,9 +9,9 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 
-export const BRIDGE_ASK_LIMIT_MS = 10 * 60_000; // the longest an Ask card waits before Bunny answers deny itself
-export const HOOK_TIMEOUT_SECONDS = 12 * 60;     // Claude Code's hook timeout in Bunny's settings: above the Ask limit
-export const HOOK_OWN_LIMIT_MS = 11 * 60_000;    // the hook script's own limit: above the Ask limit, below Claude Code's
+export const BRIDGE_ASK_LIMIT_MS = 150_000; // the longest an Ask card waits before Bunny answers deny itself (S1 proved a 300 s hook timeout with a card answered at 120 s and Bunny's own deny at 150 s; nothing longer is proven)
+export const HOOK_TIMEOUT_SECONDS = 300;     // Claude Code's hook timeout in Bunny's settings: above the Ask limit
+export const HOOK_OWN_LIMIT_MS = 200_000;    // the hook script's own limit: above the Ask limit, below Claude Code's
 const MAX_BODY = 1024 * 1024;
 const SECURITY_HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
 
