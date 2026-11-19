@@ -82,7 +82,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
    <tr><td>Settings, under 640 px</td><td>a sideways strip of 16 pills, 3 or 4 visible</td><td>a list page of the sections, grouped as on the desktop; tap one to open it, with ‹ Settings to go back</td></tr>
    <tr><td>Settings, 640 to 899 px</td><td>the strip</td><td>two panes: a 190 px list on the left, the section on the right, as on the desktop</td></tr>
   </table></div>
-  <p class="cap">The devices chip never goes into ⋯ (Security's BN-2: the state is never hidden). Touch targets are 34 px in the bar and 44 px in the sheet and the list.</p>
+  <p class="cap">The devices chip never goes into ⋯ (Security's BN-2: the state is never hidden), and nothing floats over the chat: no banner on top. Touch targets are 34 px in the bar and 44 px in the sheet and the list.</p>
  </section>
 
  <section>
@@ -97,7 +97,8 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
    <div class="cell"><div class="fr"><div class="phone" id="p2" style="width:390px;height:430px"></div></div><p class="cap"><b>Phone:</b> a bottom sheet, rows of 44 px, in the order the bar has today. "Open in its own window" is not offered on a phone, since it opens a second window the phone cannot show.</p></div>
    <div class="cell"><div class="fr"><div class="phone" id="p3" style="width:720px;height:330px"></div></div><p class="cap"><b>720 px:</b> a small menu under the button, with what the bar did not have room for.</p></div>
   </div>
-  <p class="cap">The title is the one thing that always keeps room: it is the middle, takes what is left, and shortens with "…". The chip shortens its words first ("Open · 1", "Everything"), never leaves. When the devices notice returns, it floats under the bar at the full width of the phone, 12 px in from each side.</p>
+  <div class="cols"><div class="cell"><h3>The chip tapped</h3><div class="fr"><div class="phone" id="p4" style="width:390px;height:330px"></div></div><p class="cap">The chip opens a panel under the bar, 12 px in from each side: who is signed in at which level, Turn off, and the way to Settings. (Proposed.)</p></div></div>
+  <p class="cap">The title is the one thing that always keeps room: it is the middle, takes what is left, and shortens with "…". The chip shortens its words first ("Open · 1", "Everything"), never leaves. There is no banner or notice on top (the owner's decision of 2026-11-19): only the chip. Tapping it opens the small panel below. How the chip shows a new sign-in or an Everything grant is Security's ruling and is not drawn yet.</p>
  </section>
 
  <section>
@@ -152,7 +153,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
  }
  function mk(id,list,fn){var h=document.getElementById(id);list.forEach(function(w){var b=document.createElement('button');b.type='button';b.setAttribute('data-w',w);b.setAttribute('aria-pressed','false');b.textContent=w+' px';b.addEventListener('click',function(){fn(w)});h.appendChild(b)})}
  mk('w1',[360,390,412,720],function(w){W1=w;p1()});
- document.getElementById('c1').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;CH=b.getAttribute('data-c');p1();p23()});
+ document.getElementById('c1').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;CH=b.getAttribute('data-c');p1();p23();p4()});
  document.getElementById('menu1').addEventListener('click',function(){MENU=!MENU;p1()});
  function p23(){
   document.getElementById('p2').innerHTML=bar(390).replace('class="ib hl"','class="ib hl"')+body()+'<div class="scrim"></div><div class="sheet"><div class="h"></div>'+sheetItems(true)+'</div>';
@@ -172,6 +173,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
   document.getElementById('s3').innerHTML='<div class="sh"><b>Settings</b><span class="ib">✕</span></div><div class="two"><div class="nav">'+G.map(function(g){return g.map(function(n){return '<div class="nr'+(n==='Appearance'?' on':'')+'">'+n+'</div>'}).join('')+'<div class="gap"></div>'}).join('')+'</div><div><div class="row"><b>Appearance</b></div><div class="row"><span>Theme</span><span class="dim">Follow the system, or force light or dark.</span></div><div class="row"><span>Text size</span><span class="dim">Medium</span></div></div></div>';
  }
  mk('w2',[360,390,412,720],function(w){W2=w;s()});
- p1();p23();s();
+ function p4(){document.getElementById('p4').innerHTML=bar(390)+body()+'<div class="pop" style="left:12px;right:12px;width:auto;top:54px;padding:10px 12px;gap:6px"><b>Open to devices</b><div style="display:flex;justify-content:space-between"><span>Pixel 8 · Chrome</span><span style="color:'+(CH==='every'?'var(--bad)':'var(--dim)')+';font-weight:600">'+(CH==='every'?'Everything':'Chats')+'</span></div><div class="dim" style="font-size:12px">Settings → Use Bunny in a browser</div><div style="display:flex;gap:8px;margin-top:2px"><span class="chip" style="height:auto;padding:3px 12px;font-weight:600">Turn off</span><span class="dim" style="align-self:center">Settings</span></div></div>';}
+ p1();p23();s();p4();
 })();
 </script>

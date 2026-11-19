@@ -78,23 +78,24 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
 .act{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:5px 12px;border-top:1px solid var(--line);font-size:12.5px;align-items:baseline}
 .act time{color:var(--dim);font-variant-numeric:tabular-nums}
 .act .v{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 6px;color:var(--dim);margin-left:6px}
+.pp{margin:8px 8px 0 auto;width:min(100%,310px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px 12px;display:grid;gap:6px;position:relative;z-index:2}.pp .pr{display:flex;justify-content:space-between;gap:8px;align-items:center}.pp .pa{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}.warnbox{background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;padding:8px 10px;display:grid;gap:5px;font-size:12.5px}.warnbox b:first-child{color:var(--bad)}.bd{font:inherit;font-size:12.5px;border-radius:8px;padding:3px 12px;cursor:pointer;border:1px solid var(--bad);background:var(--panel);color:var(--bad);font-weight:600}.opts{border-top:1px solid var(--line)}.orow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);min-height:50px}.tg2{width:38px;height:22px;border-radius:99px;background:var(--line);position:relative;flex:none}.tg2::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}.tg2.on{background:var(--accent)}.tg2.on::after{left:19px}
 </style>
 <div class="wrap">
  <div class="top">
   <div><h1>Signing in from outside the home network</h1>
-   <p class="dim">v0.1.14 · OPEN-SIGNIN · drawn to Tech Lead's spec 48b67ba (§1, §4.2, §7) and Security's OS-1 to OS-10 · invented data only: the tailnet name below is made up</p></div>
+   <p class="dim">v0.1.14 · OPEN-SIGNIN · version 2, with the owner's decisions of 2026-11-19 (Everything allowed, the route stays on, no banner on top) · Tech Lead's spec 48b67ba · Security's OS-1 to OS-10 and 64374ea · invented data only: the tailnet name is made up</p></div>
   <div style="display:flex;gap:8px;align-items:center"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
  </div>
 
  <section>
   <h2>In short</h2>
-  <p>A new block in Settings → Use Bunny in a browser, <b>Outside your home network</b>, with three choices: <b>Off</b> (always the state at start), <b>Tailscale Funnel</b> (recommended) and <b>Your own HTTPS address</b>. Everything from the internet stays at <b>Chats</b>, there is no Everything choice for those devices, and while the route is on a warning chip in the top bar says so and <b>cannot be dismissed</b>. Rows use the TIGHT-ROWS density. Click the state buttons in section 1 to see every state.</p>
+  <p>A new block in Settings → Use Bunny in a browser, <b>Outside your home network</b>: three routes (<b>Off</b>, <b>Tailscale Funnel</b> recommended, <b>Your own HTTPS address</b>) and three switches the owner asked for: <b>Keep devices signed in</b>, <b>Everything stays on</b> and <b>Stay open to the internet after a restart</b>. Internet devices start at Chats like any device and can be given Everything from the window. There is <b>no banner on top</b>: only the chip in the top bar, in the warning colour with words, with no ×. Rows use the TIGHT-ROWS density. Click the state buttons in section 1 to see every state.</p>
   <div class="scroll"><table>
    <tr><th>What is drawn</th><th>Section</th></tr>
-   <tr><td>Route choice and each route's states (Tailscale not installed, not signed in, HTTPS or Funnel not enabled, consent link, on, stopped), the 16+ passcode, wait and shut-off</td><td>1</td></tr>
+   <tr><td>The three switches, the start checks and every route state; route choice and each route's states (Tailscale not installed, not signed in, HTTPS or Funnel not enabled, consent link, on, stopped), the 16+ passcode, wait and shut-off</td><td>1</td></tr>
    <tr><td>The device-name warning dialog (Rename in Tailscale / Continue / Cancel)</td><td>2</td></tr>
-   <tr><td>The "Open to the internet · address" chip and its banner, which take priority over the home-network chip</td><td>3</td></tr>
-   <tr><td>Internet devices: first sign-in dialog and device row, with no Everything</td><td>4</td></tr>
+   <tr><td>The "Open to the internet · address" chip (no banner), which takes priority over the home-network chip, and its panel</td><td>3</td></tr>
+   <tr><td>Internet devices: the sign-in question with Chats or Everything, the warning with the internet sentence, the device list</td><td>4</td></tr>
    <tr><td>Activity entries</td><td>5</td></tr>
   </table></div>
  </section>
@@ -105,13 +106,13 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
    <div class="cell"><h3>Today · desktop</h3><div class="shot" id="td"></div><p class="cap">Real picture, invented profile. The block ends at "Allow other devices"; nothing speaks of the internet.</p></div>
    <div class="cell"><h3>Proposed · desktop</h3><div class="app" id="pd"></div></div>
   </div>
-  <div><div class="lbl">Show state</div><div class="seg" id="ss" role="group" aria-label="State"></div></div>
+  <div><div class="lbl">Show state (Funnel, own HTTPS, and the checks at a restart)</div><div class="seg" id="ss" role="group" aria-label="State"></div></div>
   <p class="cap" id="scap"></p>
   <div class="cols">
    <div class="cell"><h3>Today · phone</h3><div class="shot phoneshot" id="tm"></div></div>
    <div class="cell"><h3>Proposed · phone</h3><div class="app ph" id="pm"></div></div>
   </div>
-  <p class="cap">The route is <b>off every time Bunny starts</b>, and the block says so in words (OS-8). The address is never typed into Bunny for Funnel: Bunny reads it from Tailscale. Under "Your own HTTPS address" the person types a name and, if their proxy needs one, a port.</p>
+  <p class="cap">The address is never typed into Bunny for Funnel: Bunny reads it from Tailscale. Under "Your own HTTPS address" the person types a name and, if their proxy needs one, a port. The three switches and the route cannot be changed by any device, Everything included; only this window changes them.</p>
  </section>
 
  <section>
@@ -133,47 +134,58 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
  </section>
 
  <section>
-  <h2>3 · The chip and the banner, while the route is on</h2>
+  <h2>3 · The chip, while the route is on (no banner on top)</h2>
+  <p class="dim">The owner's decision: no banner on top, anywhere. Only the chip stays, in the window's top bar. It is in the warning colour with words, has no ×, and takes priority over the home-network chip (OS-9). Security is still ruling on how the chip shows a new sign-in or an Everything grant; until then it is drawn as the chip alone.</p>
   <div class="cols">
-   <div class="cell"><h3>Today</h3><div class="shot crop" id="tc"></div><p class="cap">Real picture: today there is only the home-network banner, and nothing at all about the internet.</p></div>
+   <div class="cell"><h3>Today</h3><div class="shot crop" id="tc"></div><p class="cap">Real picture: today's top banner, nothing about the internet. In the proposal there is no such row.</p></div>
    <div class="cell"><h3>Proposed · internet route on</h3>
     <div class="win"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip">Open to the internet · pc-4821.tail7c3d9.ts.net</span><span class="ic"></span></div>
-     <div class="note"><div class="h"><span>Open to the internet</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">Anyone with the address and the passcode can try to sign in. Devices from here can only use Chats.</span><div class="a"><button class="b2" type="button">Turn off the internet route</button><button class="b0" type="button">Settings</button></div></div>
-     <div class="body"><i style="width:60%"></i><i style="width:80%"></i></div></div></div>
+     <div class="body"><i style="width:60%"></i><i style="width:80%"></i></div></div>
+    <p class="cap">Nothing is pushed down and nothing floats over the chat. The chip never hides by itself.</p></div>
   </div>
   <div class="cols">
-   <div class="cell"><div class="win"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip">Open to the internet · pc-4821.tail7c3d9.ts.net</span><span class="ic"></span></div>
+   <div class="cell"><div class="win"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Open to the internet · Pixel 8 has Everything</span><span class="ic"></span></div>
      <div class="body"><i style="width:60%"></i><i style="width:80%"></i></div></div>
-    <p class="cap"><b>Banner dismissed.</b> The chip stays. It has <b>no ×</b>, never hides by itself, and a click brings the banner back. A new internet sign-in brings the banner back too (BN-3).</p></div>
-   <div class="cell"><div class="win"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Open to the internet · Kitchen laptop has Everything</span><span class="ic"></span></div>
-     <div class="body"><i style="width:60%"></i><i style="width:80%"></i></div></div>
-    <p class="cap"><b>Both at once.</b> The internet words come first. If a home-network device has Everything, the chip says both and turns red. An internet device itself can never have Everything.</p></div>
+    <p class="cap"><b>An internet device has Everything.</b> The internet words come first, then who has Everything; the chip turns red. A home-network device at Everything reads the same way ("… · Kitchen laptop has Everything").</p></div>
    <div class="cell"><div class="win nar"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip"><span class="lg">Open to the internet · pc-4821.tail7c3d9.ts.net</span><span class="sh">Open to the internet</span></span><span class="ic"></span></div>
      <div class="body" style="min-height:60px"><i style="width:60%"></i></div></div>
     <p class="cap"><b>Narrow window or phone.</b> The address drops first; "Open to the internet" always stays. The tray tooltip says "Bunny AI: Open to the internet".</p></div>
+   <div class="cell"><div class="win"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="chip bad">Open to the internet · Pixel 8 has Everything</span><span class="ic"></span></div>
+     <div class="pp"><b>Open to the internet</b>
+      <div class="l2">https://pc-4821.tail7c3d9.ts.net</div>
+      <div class="pr"><span>Pixel 8 · Chrome <span class="chp w">Internet</span></span><span style="color:var(--bad);font-weight:600">Everything</span></div>
+      <div class="pr"><span>Kitchen laptop · Edge <span class="chp">Home network</span></span><span class="dim">Chats</span></div>
+      <div class="pa"><button class="b1" type="button">Turn off the internet route</button><button class="b0" type="button">Settings</button></div></div>
+     <div class="body" style="min-height:130px"></div></div>
+    <p class="cap"><b>A click on the chip</b> opens this small panel: where it is open, who is signed in at which level, and the way to turn it off or to Settings. (Proposed, pending Security's ruling.)</p></div>
    <div class="cell"><div class="win"><div class="tb"><span class="ic"></span><span class="t">New chat</span><span class="ic"></span></div>
-     <div class="note bad"><div class="h"><span>Bunny closed the internet route</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">100 wrong passcodes today. Only you can turn it back on, here in Settings.</span><div class="a"><button class="b2" type="button">Settings</button><button class="b0" type="button">See Activity</button></div></div>
-     <div class="body" style="min-height:40px"></div></div>
-    <p class="cap"><b>After the shut-off or when Tailscale stops.</b> The chip is gone because the route is closed, and a notice says why. Nothing reopens by itself.</p></div>
+     <div class="body" style="min-height:90px"></div>
+     <div class="note bad" style="position:absolute;right:8px;bottom:8px;margin:0;width:300px;max-width:calc(100% - 16px)"><div class="h"><span>Bunny closed the internet route</span><button class="x" type="button" aria-label="Dismiss">×</button></div><span class="m">100 wrong passcodes today. It stays closed, also after a restart, until you turn it on here.</span><div class="a"><button class="b2" type="button">Settings</button><button class="b0" type="button">See Activity</button></div></div></div>
+    <p class="cap"><b>After the shut-off, or when Tailscale stops.</b> The chip is gone because the route is closed. A one-time notice appears at the bottom right, where the setting-change notice already appears, never on top.</p></div>
   </div>
  </section>
 
  <section>
   <h2>4 · Devices that signed in from the internet</h2>
+  <p class="dim">The owner's decision: internet devices may be given Everything. They start at Chats, as on the home network, and only Bunny's window can raise one. Nothing is shown on the device itself that lets it raise its own level.</p>
   <div class="cols">
    <div class="cell"><h3>Today · the sign-in question</h3><div class="shot" id="tdg"></div><p class="cap">Real picture: a device that signs in is asked Chats or Everything.</p></div>
    <div class="cell"><h3>Proposed · from the internet</h3><div class="dl"><div class="dg">
-     <h4>Pixel 8 · Chrome signed in from the internet</h4>
-     <div class="opt sel"><b>Chats</b> <span class="chp a">Only choice</span><div class="l2">Chats with tools. Not computer control, installs, connectors, schedules, memory or settings.</div></div>
-     <p class="dim">Devices from outside your home network can only use Chats. It signs out after 30 minutes idle, or after 12 hours.</p>
-     <div class="bt"><button class="b0" type="button">Sign it out</button><button class="b1" type="button">OK</button></div></div></div>
-    <p class="cap">No Everything option exists on this dialog, so there is nothing to select wrongly. Esc is OK, since the device already works as Chats.</p></div>
+     <h4>Pixel 8 · Chrome signed in from the internet. What may it do?</h4>
+     <div class="opt sel"><b>Chats</b> <span class="chp a">Default</span><div class="l2">Chats with tools. Not computer control, installs, connectors, schedules, memory or settings.</div></div>
+     <div class="opt"><b>Everything</b> <span class="chp b">Full access</span><div class="l2">The same as this window: every tool and every setting.</div></div>
+     <div class="bt"><button class="b0" type="button">Not now</button><button class="b1" type="button">Keep Chats</button></div></div></div>
+    <p class="cap">Like today's question, with "from the internet" in the title.</p></div>
   </div>
   <div class="cols">
-   <div class="cell"><h3>The device list in Settings (TIGHT-ROWS)</h3><div class="app" id="devs"></div><p class="cap">Each device says where it came from: <span class="chp">Home network</span> or <span class="chp w">Internet</span>. Activity and Sign out move into ⋯. For an internet device, Change offers no Everything and says why in one line.</p></div>
-   <div class="cell"><h3>Change, for an internet device</h3><div class="app"><div class="dev" style="border-top:0"><span class="tile">P</span><div class="nm"><div class="l1"><b>Pixel 8 · Chrome</b><span class="chp w">Internet</span><span class="chp a">Chats</span></div><div class="l2">signed in 11:50</div></div><span class="mn">···</span></div>
-     <div class="pn"><div class="pt"><b>What may it do?</b></div><div class="opt sel"><b>Chats</b> <span class="chp a">Default</span></div><div class="l2">Devices from outside your home network can only use Chats.</div></div></div>
-    <p class="cap">The device's own page keeps its level line (Chats), which it may dismiss as today (BN-1).</p></div>
+   <div class="cell"><div class="dl"><div class="dg">
+     <h4>Pixel 8 · Chrome signed in from the internet. What may it do?</h4>
+     <div class="opt"><b>Chats</b> <span class="chp a">Default</span></div>
+     <div class="opt sel" style="border-color:var(--bad);background:var(--bad-soft)"><b>Everything</b> <span class="chp b">Full access</span></div>
+     <div class="warnbox"><b>Before you give Everything</b><p>Everything lets this device do anything you can do on this PC: run programs, change settings, read your files and saved keys. Signing the device out stops it, but does not undo what it already did.</p><p><b>This device signed in over the internet.</b> Anyone who has your passcode, anywhere, could sign in the same way. Give Everything only to a device you own.</p></div>
+     <div class="bt"><button class="b0" type="button">Not now</button><button class="bd" type="button">Give Everything</button></div></div></div>
+    <p class="cap"><b>Everything chosen.</b> The warning from the home-network dialog, plus one sentence for the internet. "Give Everything" is the red-outlined button, never filled, as already approved.</p></div>
+   <div class="cell"><h3>The device list (TIGHT-ROWS)</h3><div class="app" id="devs"></div><p class="cap">Each device says where it came from, its level, and when it was first and last seen. Activity, Change and Sign out are in ⋯; Change offers Chats and Everything for both kinds of device.</p></div>
   </div>
  </section>
 
@@ -181,19 +193,18 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
   <h2>5 · Activity</h2>
   <div class="cols">
    <div class="cell"><div class="app" id="act"></div></div>
-   <div class="cell"><p class="cap"><b>Names, never addresses.</b> A visitor's address is used to count tries and is never stored or shown (OS-10), so no row holds one. The tailnet name appears only on route-on, route-off and name-confirmed rows. Each row carries "Internet" when it came from outside; home-network rows are unchanged.</p>
-    <p class="cap"><b>Passcode.</b> 16 or more characters is needed to turn the route on. If the saved passcode is shorter, the passcode field opens first (state "Passcode too short" above) with a made-up 20-character suggestion; the same passcode then applies at home too. The words under the field: "Anyone on the internet can try this. Use the made-up one, or a long phrase."</p></div>
+   <div class="cell"><p class="cap"><b>Names, never addresses.</b> A visitor's address is used to count tries and is never stored or shown (OS-10). The tailnet name appears on route-on, route-off, reopened-at-start and name-confirmed rows. Each row carries "Internet" when it came from outside; home-network rows are unchanged. Each grant of Everything and each drop back to Chats is recorded, for internet devices too.</p>
+    <p class="cap"><b>Passcode.</b> 16 or more characters is needed to turn the route on. If the saved passcode is shorter, the passcode field opens first (state "Passcode too short" above) with a made-up 20-character suggestion; the same passcode then applies at home too.</p></div>
   </div>
  </section>
 
  <section>
-  <h2>Questions for the owner</h2>
+  <h2>Drawn to the owner's two decisions</h2>
   <ol style="margin:0;padding-left:20px;display:grid;gap:4px">
-   <li>Is the route list right: <b>Off</b>, <b>Tailscale Funnel</b> (recommended), <b>Your own HTTPS address</b>?</li>
-   <li>Is the warning in the name dialog, with Rename focused first, the way you want it?</li>
-   <li>Should the chip say the full address on a wide window ("Open to the internet · pc-4821.tail7c3d9.ts.net"), or just "Open to the internet"?</li>
+   <li>Internet devices may be given Everything, with the three options in Settings: <b>Keep devices signed in</b>, <b>Everything stays on</b> and <b>Stay open to the internet after a restart</b>. Each is a switch on one row, and the route stays on after a restart once the owner turns the option on.</li>
+   <li>No banner on top. Only the chip stays. How the chip shows a new sign-in or an Everything grant is Security's ruling and is not drawn here yet.</li>
   </ol>
-  <p class="dim">Drawing only. The safe defaults stay as Security set them: internet devices at Chats, the route off at every start. Raising either needs the owner's own go.</p>
+  <p class="dim">Drawing only. The three options and the route cannot be changed by any device, Everything included (Security's revision 64374ea). At every start with "Stay open" on, Bunny checks that Tailscale is running, the name is unchanged, the passcode record exists and no shut-off fired, and says which check failed (state buttons "Start check…" above).</p>
  </section>
 </div>
 <script>
@@ -206,34 +217,40 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
  var NAME='pc-4821.tail7c3d9.ts.net';
  function pn(cls,title,text,btns){return '<div class="pn '+(cls||'')+'"><div class="pt"><b>'+title+'</b>'+(text?'<span class="l2">'+text+'</span>':'')+'</div>'+(btns?'<div class="pa">'+btns+'</div>':'')+'</div>'}
  var B=function(c,t){return '<button class="'+c+'" type="button">'+t+'</button>'};
- var KEEP='Devices from outside can only use Chats. Each signs out after 30 minutes idle, or 12 hours.';
+ var KEEP='Devices start at Chats. Give one Everything from the list below.';
  var S=[
- {k:'off',g:'Off',route:'off',cap:'Off, the state at every start. Nothing listens for the internet.',p:function(){return pn('','Off','Nothing listens for the internet. This is how Bunny starts every time.','')}},
+ {k:'off',g:'Off',route:'off',cap:'Off. Nothing listens for the internet. It stays off until the owner turns it on, and once on with "Stay open" it stays on after a restart.',p:function(){return pn('','Off','Nothing listens for the internet.','')}},
  {k:'ni',g:'Funnel',n:'Tailscale not installed',route:'funnel',cap:'Funnel, Tailscale missing: a link, opened in the browser on a click.',p:function(){return pn('','Tailscale is not installed on this PC','Funnel needs Tailscale (free Personal plan). Bunny opens its page in your browser; you install it.',B('b1','Install Tailscale ↗'))}},
  {k:'ns',g:'Funnel',n:'Not signed in',route:'funnel',cap:'Tailscale present but signed out. Sign in opens Tailscale\'s own page, on a click only; Bunny never signs in for you or keeps a Tailscale key.',p:function(){return pn('','Tailscale is not signed in','Open Tailscale and sign in, then come back.',B('b1','Sign in ↗')+B('b0','Check again'))}},
  {k:'https',g:'Funnel',n:'HTTPS not on',route:'funnel',cap:'Funnel, HTTPS or Funnel not allowed for the tailnet yet. Turn on opens the name warning first (section 2).',p:function(){return pn('','HTTPS is not on for your tailnet yet','Bunny will show the name that becomes public before it asks Tailscale for anything.',B('b1','Turn on…'))}},
  {k:'consent',g:'Funnel',n:'Finish in browser',route:'funnel',cap:'Tailscale\'s first-time consent link, opened only when the person clicks.',p:function(){return pn('w','Finish in your browser','Tailscale asks you to allow HTTPS and Funnel, once. Come back here afterwards.',B('b1','Finish in your browser ↗')+B('b0','Cancel'))}},
  {k:'pass',g:'Funnel',n:'Passcode too short',route:'funnel',cap:'Turning it on with a passcode under 16 characters asks for a new one first. The suggestion is made up.',p:function(){return '<div class="pn"><div class="pt"><b>Choose a passcode of 16 or more characters</b><span class="l2">Anyone on the internet can try this. Use the made-up one, or a long phrase.</span></div><div class="fld"><label>Passcode</label><input class="inp mono" value="m4k7-ZpQe-9vTn-Wd2L" readonly aria-label="Passcode, 16 or more characters"></div><div class="pa">'+B('b1','Use this and turn on')+B('b2','Make another')+B('b0','Cancel')+'</div></div>'}},
  {k:'start',g:'Funnel',n:'Starting',route:'funnel',cap:'A moment while Tailscale starts; the person can cancel.',p:function(){return pn('','Starting the internet route…','Asking Tailscale for your address.',B('b0','Cancel'))}},
- {k:'on',g:'Funnel',n:'On',route:'funnel',on:1,cap:'On. The address is read from Tailscale. Always in the warning colour, with words.',p:function(){return pn('w','On · https://'+NAME,KEEP,B('b1','Turn off')+B('b2','Copy address')+B('b0','Passcode…'))}},
+ {k:'on',g:'Funnel',n:'On',route:'funnel',on:1,opt:[1,1,0],cap:'On. The address is read from Tailscale. Always in the warning colour, with words.',p:function(){return pn('w','On · https://'+NAME,KEEP,B('b1','Turn off')+B('b2','Copy address')+B('b0','Passcode…'))}},
  {k:'stopped',g:'Funnel',n:'Funnel stopped',route:'funnel',cap:'Tailscale\'s process ended by itself. The route is closed; Bunny does not restart it.',p:function(){return pn('b','Tailscale Funnel stopped','The internet route is closed. Nobody can reach Bunny from outside until you turn it on again.',B('b1','Turn on again')+B('b0','See Activity'))}},
  {k:'wait',g:'Funnel',n:'Sign-ins paused',route:'funnel',on:1,cap:'10 wrong passcodes in 10 minutes pause new internet sign-ins (1, 2, 4… minutes, up to an hour). Signed-in devices and the home network are not affected.',p:function(){return pn('w','On · https://'+NAME,'Sign-ins from the internet are paused for 4 min after too many wrong passcodes. Devices already signed in keep working.',B('b1','Reset the wait')+B('b2','Turn off'))}},
- {k:'shut',g:'Funnel',n:'Shut off',route:'funnel',cap:'100 wrong passcodes in a day close the route by itself. Only this window turns it back on.',p:function(){return pn('b','Bunny closed the internet route','100 wrong passcodes today. Pick a new passcode before turning it on again.',B('b1','Turn on again…')+B('b0','See Activity'))}},
+ {k:'shut',g:'Funnel',n:'Shut off',route:'funnel',cap:'100 wrong passcodes in a day close the route by itself. Only this window turns it back on.',p:function(){return pn('b','Bunny closed the internet route','100 wrong passcodes today. It stays closed, also after a restart, until you turn it on here.',B('b1','Turn on again…')+B('b0','See Activity'))}},
+ {k:'re',g:'Funnel',n:'Start check: reopened',route:'funnel',on:1,opt:[1,0,1],cap:'With "Stay open" on, every check passed at start, so the route reopened. It is visible: the chip, the tray tooltip, a start notification naming the address, and an Activity row.',p:function(){return pn('w','On · https://'+NAME,'Reopened when Bunny started: Tailscale is running and the name is unchanged. '+KEEP,B('b1','Turn off')+B('b2','Copy address'))}},
+ {k:'c1',g:'Funnel',n:'Start check: name changed',route:'funnel',opt:[1,0,1],cap:'Closed at start: the PC\'s Tailscale name is not the saved one. The row says which check failed, in one sentence.',p:function(){return pn('b','Closed at start: the name changed','This PC\'s Tailscale name is now pc-9937.tail7c3d9.ts.net, not pc-4821.tail7c3d9.ts.net. Turn it on again to confirm the new name.',B('b1','Turn on…')+B('b0','See Activity'))}},
+ {k:'c2',g:'Funnel',n:'Start check: Tailscale stopped',route:'funnel',opt:[1,0,1],cap:'Closed at start: Tailscale is not running.',p:function(){return pn('b','Closed at start: Tailscale is not running','Open Tailscale and sign in, then turn the route on again.',B('b1','Check again')+B('b0','See Activity'))}},
+ {k:'c3',g:'Funnel',n:'Start check: no passcode',route:'funnel',opt:[1,0,1],cap:'Closed at start: the passcode record is missing or too weak.',p:function(){return pn('b','Closed at start: no passcode saved','Choose a passcode of 16 or more characters to open the route.',B('b1','Choose a passcode…'))}},
+ {k:'c4',g:'Funnel',n:'Start check: earlier shut-off',route:'funnel',opt:[1,0,1],cap:'After a shut-off the route stays closed across restarts until the owner turns it on in this window.',p:function(){return pn('b','Closed at start: it was shut off','Bunny closed it after 100 wrong passcodes. It stays closed until you turn it on here.',B('b1','Turn on again…')+B('b0','See Activity'))}},
  {k:'hf',g:'Your own HTTPS address',n:'Fields',route:'https',cap:'Own HTTPS: a name, an optional port and an optional header. Bunny listens on 127.0.0.1 only; the person\'s proxy points at it.',p:function(){return '<div class="pn"><div class="fld"><label>Public name</label><input class="inp" value="bunny.example.com" aria-label="Public name"></div><div class="fld"><label>Port (only if not 443)</label><input class="inp" placeholder="443" aria-label="Public port" style="max-width:120px"></div><div class="fld"><label>Header that carries the visitor\'s address (optional)</label><input class="inp mono" placeholder="CF-Connecting-IP" aria-label="Client address header"><span class="l2">Your proxy must replace this header, not add to it. X-Forwarded-For can\'t be used.</span></div><span class="l2">Point your proxy at <code>http://127.0.0.1:49731</code> and keep the Host header.</span><div class="pa">'+B('b1','Turn on')+'</div></div>'}},
  {k:'he',g:'Your own HTTPS address',n:'Name refused',route:'https',cap:'A wildcard, an address, localhost or a path is refused when saved, in words.',p:function(){return '<div class="pn"><div class="fld"><label>Public name</label><input class="inp err" value="192.168.1.20" aria-label="Public name" aria-invalid="true"><span class="err">Use a name like bunny.example.com, not an address, a * or localhost.</span></div><div class="pa">'+B('b1','Turn on')+'</div></div>'}},
- {k:'hw',g:'Your own HTTPS address',n:'Waiting for a request',route:'https',on:1,cap:'On. Bunny does not call its own address; it waits for the first request that arrives through the name.',p:function(){return pn('w','On · https://bunny.example.com','Open https://bunny.example.com/ on your phone to check it. Waiting for the first request. '+KEEP,B('b1','Turn off')+B('b2','Copy address'))}},
- {k:'hs',g:'Your own HTTPS address',n:'Request seen',route:'https',on:1,cap:'The first correctly addressed request arrived.',p:function(){return pn('w','On · https://bunny.example.com','Seen a request through bunny.example.com. '+KEEP,B('b1','Turn off')+B('b2','Copy address'))}}
+ {k:'hw',g:'Your own HTTPS address',n:'Waiting for a request',route:'https',on:1,opt:[0,0,1],cap:'On. Bunny does not call its own address; it waits for the first request that arrives through the name.',p:function(){return pn('w','On · https://bunny.example.com','Open https://bunny.example.com/ on your phone to check it. Waiting for the first request. '+KEEP,B('b1','Turn off')+B('b2','Copy address'))}},
+ {k:'hs',g:'Your own HTTPS address',n:'Request seen',route:'https',on:1,opt:[0,0,1],cap:'The first correctly addressed request arrived.',p:function(){return pn('w','On · https://bunny.example.com','Seen a request through bunny.example.com. '+KEEP,B('b1','Turn off')+B('b2','Copy address'))}}
  ];
  var cur='off';
+ function optsHtml(st){var o=st.opt||[0,0,0];function r(n,d,on){return '<div class="orow"><div class="nm"><div class="l1"><b>'+n+'</b></div><div class="l2">'+d+'</div></div><span class="tg2'+(on?' on':'')+'" role="switch" aria-checked="'+(on?'true':'false')+'" aria-label="'+n+'"></span></div>'}return '<div class="opts">'+r('Keep devices signed in','Until you sign them out here, change the passcode or turn this off. No 30-minute limit.',o[0])+r('Everything stays on','A device you gave Everything keeps it, with no 30-minute limit.',o[1])+r('Stay open to the internet after a restart','Reopens at start if Tailscale is ready and nothing changed. Off: it starts closed.',o[2])+'</div>'}
  function settings(){
   var st=S.filter(function(x){return x.k===cur})[0];
   var rt=st.route;
   function row(id,name,desc,chip){return '<div class="rr"><span class="rd'+(rt===id?' on':'')+'"></span><div class="nm"><div class="l1"><b>'+name+'</b>'+(chip||'')+'</div><div class="l2">'+desc+'</div></div></div>'}
-  return '<div class="gh"><b>Outside your home network</b><span class="l2">Reach Bunny from mobile data or another place. It is off every time Bunny starts. Devices from outside can only use Chats.</span></div>'
+  return '<div class="gh"><b>Outside your home network</b><span class="l2">Reach Bunny from mobile data or another place. Devices from outside start at Chats; you choose what each may do.</span></div>'
    +row('off','Off','Nothing listens for the internet.')
    +row('funnel','Tailscale Funnel','Free Tailscale account. Bunny shows the public address.','<span class="chp a">Recommended</span>')
    +row('https','Your own HTTPS address','You already have a name, a certificate and a proxy on this PC.')
-   +st.p();
+   +st.p()+optsHtml(st);
  }
  function paint(){
   document.getElementById('pd').innerHTML=settings();document.getElementById('pm').innerHTML=settings();
@@ -245,10 +262,10 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
  ss.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;cur=b.getAttribute('data-k');paint()});
  paint();
  // devices
- function dev(t,n,via,lvl,time){return '<div class="dev"><span class="tile">'+t+'</span><div class="nm"><div class="l1"><b>'+n+'</b><span class="chp'+(via==='Internet'?' w':'')+'">'+via+'</span><span class="chp a">'+lvl+'</span></div><div class="l2">signed in '+time+'</div></div><span class="mn">···</span></div>'}
- document.getElementById('devs').innerHTML='<div class="gh"><b>Signed in</b></div>'+dev('P','Pixel 8 · Chrome','Internet','Chats','11:50')+dev('K','Kitchen laptop · Edge','Home network','Chats','10:12')+dev('S','Sam\'s tablet · Safari','Internet','Chats','09:41');
+ function dev(t,n,via,lvl,time){return '<div class="dev"><span class="tile">'+t+'</span><div class="nm"><div class="l1"><b>'+n+'</b><span class="chp'+(via==='Internet'?' w':'')+'">'+via+'</span><span class="chp '+(lvl==='Everything'?'b':'a')+'">'+lvl+'</span></div><div class="l2">first seen '+time+'</div></div><span class="mn">···</span></div>'}
+ document.getElementById('devs').innerHTML='<div class="gh"><b>Signed in</b></div>'+dev('P','Pixel 8 · Chrome','Internet','Everything','Nov 18 · last seen 11:50')+dev('K','Kitchen laptop · Edge','Home network','Chats','Nov 19 · last seen 10:12')+dev('S','Sam\'s tablet · Safari','Internet','Chats','Nov 19 · last seen 09:41');
  // activity
- var A=[['11:52','Pixel 8 signed in','Internet'],['11:51','Sign-in refused: wrong passcode','Internet'],['11:49','Sign-ins from the internet paused for 4 min','Internet'],['11:49','Pause ended','Internet'],['11:40','Internet route on · '+NAME,'Internet'],['11:39','Name confirmed before HTTPS: '+NAME,'Internet'],['11:20','Internet route off · you turned it off','Internet'],['10:58','Internet route off · Bunny stopped Tailscale Funnel','Internet'],['09:15','Internet route off · 100 wrong passcodes in a day','Internet'],['09:02','First request through bunny.example.com','Internet']];
+ var A=[['11:52','Pixel 8 signed in','Internet'],['11:51','Sign-in refused: wrong passcode','Internet'],['11:49','Sign-ins from the internet paused for 4 min','Internet'],['11:49','Pause ended','Internet'],['11:45','Everything given to Pixel 8 · you, in this window','Internet'],['11:44','Pixel 8 back to Chats · Everything ended','Internet'],['11:41','Internet route reopened at start · '+NAME,'Internet'],['11:40','Internet route on · '+NAME,'Internet'],['11:39','Name confirmed before HTTPS: '+NAME,'Internet'],['11:20','Internet route off · you turned it off','Internet'],['10:58','Internet route off · Bunny stopped Tailscale Funnel','Internet'],['09:15','Internet route off · 100 wrong passcodes in a day','Internet'],['09:02','First request through bunny.example.com','Internet']];
  document.getElementById('act').innerHTML='<div class="gh"><b>Activity</b><span class="l2">Window only. No addresses.</span></div>'+A.map(function(a){return '<div class="act"><time>'+a[0]+'</time><span>'+a[1]+'<span class="v">'+a[2]+'</span></span></div>'}).join('');
 })();
 </script>
