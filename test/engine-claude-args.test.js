@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DISALLOWED_TOOLS, EXPECTED_TOOLS, QUIET_ENV, buildArgs, buildRun, buildSettings, createClaudeReader, denyRules, hookCommandLine, profile } from '../src/server/engines/claude-code.js';
 import { createEventQueue } from '../src/server/engines/events.js';
+import { BRIDGE_ASK_LIMIT_MS } from '../src/server/engines/bridge-server.js';
 import { checkRule } from '../src/server/permissionRules.js';
 
 // CLI-ENGINES §5.2: CE-1.8 and CE-1.9 for Claude Code: what the spawn always has and never has, what the generated settings hold, the tool-list check.
@@ -55,10 +56,12 @@ test('CE-1.9: the settings hold the hook on every tool and a deny list, and NOTH
   assert.ok(deny.includes('Read(./secrets)') && deny.includes('Read(./secrets/**)'), 'a read-deny path, and what is under it');
   assert.ok(deny.includes('Read(./notes/**)'), 'a read-ASK path is denied (CE-1.9: a hook allow does not pass an ask read)');
   assert.ok(deny.includes('Edit(./src/locked/**)'), 'an edit-deny path');
-  assert.ok(deny.includes('Read(//C:/Users/p/AppData/Local/BunnyAI/**)') && deny.includes('Edit(//C:/Users/p/AppData/Local/BunnyAI/**)'), 'the data folder, for reading and editing');
+  assert.ok(deny.includes('Read(//c/Users/p/AppData/Local/BunnyAI/**)') && deny.includes('Edit(//c/Users/p/AppData/Local/BunnyAI/**)'), 'the data folder, for reading and editing (the //c/ form)');
+  assert.ok(deny.includes('Read(C:/Users/p/AppData/Local/BunnyAI/**)'), 'and the C:/ form');
+  assert.equal(deny.some((d) => d.includes('//C:')), false, 'the //C:/ form is not honoured by Claude Code on Windows (S1 EN-3), so it is never written');
   assert.ok(deny.some((d) => d.includes('engines/claude-code/local')), 'an engine home');
-  assert.ok(deny.includes('Read(//C:/Users/p/.ssh/**)') && deny.includes('Read(//C:/Users/p/.claude/**)'), 'key folders');
-  assert.ok(deny.includes('Read(//C:/proj/.env)'), 'a hidden path');
+  assert.ok(deny.includes('Read(//c/Users/p/.ssh/**)') && deny.includes('Read(//c/Users/p/.claude/**)'), 'key folders');
+  assert.ok(deny.includes('Read(//c/proj/.env)'), 'a hidden path');
   for (const not of ['Bash(git status*)', 'Read(./docs/**)', 'Bash(npm publish*)', 'Edit(./src/other/**)']) assert.equal(deny.includes(not), false, `${not} is not a deny`);
   const settings = buildSettings({ hookCommand: 'x', deny });
   assert.deepEqual(Object.keys(settings).sort(), ['hooks', 'permissions']);
@@ -73,7 +76,7 @@ test('the hook is on every tool (matcher *), its command is absolute (Bunny\'s r
   assert.equal(h.matcher, '*'); assert.equal(h.hooks[0].type, 'command');
   assert.equal(h.hooks[0].command, '"C:/Program Files/Bunny/Bunny.exe" "C:/h/bunny-pretooluse.cjs"');
   assert.match(h.hooks[0].command, /^"[A-Za-z]:\//, 'an absolute path, never a bare node');
-  assert.ok(h.hooks[0].timeout > 10 * 60, 'longer than 10 minutes (the Ask limit)');
+  assert.equal(h.hooks[0].timeout, 300, 'the proven 300 s (S1: a card answered at 120 s, Bunny own deny at 150 s)'); assert.ok(h.hooks[0].timeout * 1000 > BRIDGE_ASK_LIMIT_MS, 'above the longest an Ask card waits');
 });
 
 test('buildRun: local mode carries the endpoint and the run token and no vendor credential; account mode carries no endpoint and no token; both are quiet and isolated; the bridge token is by environment only', () => {

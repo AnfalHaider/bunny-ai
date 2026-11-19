@@ -11,7 +11,7 @@
  *     CE-1.11  a hook timeout above the longest an Ask card waits, and the bridge answers deny itself before that
  *   restricted mode: --restricted (no command tools, no WebFetch, file tools confined to the working folders), the same --disallowedTools, no MCP config; the staged copy and the diff review judge writes.
  */
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createEventQueue, EngineEventError, cutResult } from './events.js';
 import { HOOK_OWN_LIMIT_MS, HOOK_TIMEOUT_SECONDS } from './bridge-server.js';
 import { mapClaudeCall } from './bridge.js';
@@ -52,10 +52,15 @@ const bashRule = (pattern) => `Bash(${String(pattern).trim()})`;
  */
 export function denyRules({ rules = [], root, protect = [], keyFolders = [], hidden = [] } = {}) {
   const out = new Set();
-  const abs = (p) => `//${forward(p).replace(/^\/+/, '')}`;
+  // EN-3 (spike S1): on Windows Claude Code honours an absolute deny rule written as `//c/Users/...` (drive letter, no colon) or `C:/Users/...`; the form `//C:/Users/...` is NOT honoured. Both working forms are written.
+  const absForms = (p) => {
+    const f = forward(resolve(p));
+    const m = /^([A-Za-z]):(\/.*)?$/.exec(f);
+    return m ? [`//${m[1].toLowerCase()}${m[2] ?? ''}`, `${m[1].toUpperCase()}:${m[2] ?? '/'}`] : [`//${f.replace(/^\/+/, '')}`];
+  };
   for (const p of [...protect, ...keyFolders, ...hidden]) {
     if (!p) continue;
-    for (const tool of ['Read', 'Edit']) { out.add(`${tool}(${abs(p)})`); out.add(`${tool}(${abs(p)}/**)`); }
+    for (const form of absForms(p)) for (const tool of ['Read', 'Edit']) { out.add(`${tool}(${form})`); out.add(`${tool}(${form.replace(/\/$/, '')}/**)`); }
   }
   for (const r of rules) {
     if (!r || (r.effect !== 'deny' && !(r.effect === 'ask' && r.kind === 'path' && r.ops === 'reads'))) continue;
