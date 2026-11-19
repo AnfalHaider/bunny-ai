@@ -175,15 +175,15 @@ test('Session: folder, branch, model, permissions, effort, tokens and messages a
 test.describe('on a 390 px phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('the Changes and Files buttons are in the top bar with 40 px targets, and open their pane', async ({ page }) => {
+  test('the Changes and Files rows are in the ⋯ sheet with 44 px rows (phone layout v3), and open their pane', async ({ page }) => {
     await page.goto('/');
     for (const view of ['diff', 'file']) {
-      const button = page.locator(`.toolbar [data-view="${view}"]`);
-      await expect(button).toBeVisible();
-      const box = await button.boundingBox();
-      expect(box.width).toBeGreaterThanOrEqual(39);
-      expect(box.height).toBeGreaterThanOrEqual(39);
-      await button.click();
+      await page.locator('#more-button').click();
+      const row = page.locator('#more-menu').getByRole('menuitem', { name: view === 'diff' ? 'Changes' : 'Files' });
+      await expect(row).toBeVisible();
+      const box = await row.boundingBox();
+      expect(box.height).toBeGreaterThanOrEqual(43.5);
+      await row.click();
       await expect(page.locator(view === 'diff' ? '#pane-diff' : '#pane-file')).toBeVisible();
       await page.locator('#pane [data-close]:visible').first().click(); // the pane replaces the thread; Close returns to it
       await expect(page.locator('#pane')).not.toHaveClass(/is-open/);
@@ -192,7 +192,7 @@ test.describe('on a 390 px phone', () => {
 
   test('Q2-32: every top-bar button, the sidebar toggle and Export included, is at least 40 px tall and wide', async ({ page }) => {
     await page.goto('/');
-    for (const selector of ['#sidebar-toggle', '#export', '.toolbar [data-view="diff"]', '.toolbar [data-view="file"]']) {
+    for (const selector of ['#sidebar-toggle', '#more-button']) {
       const box = await page.locator(selector).first().boundingBox();
       expect(box, selector).toBeTruthy();
       expect(box.height, `${selector} height`).toBeGreaterThanOrEqual(39.5);

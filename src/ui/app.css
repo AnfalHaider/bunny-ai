@@ -1433,11 +1433,6 @@ body:not(.is-desktop) .desktop-only { display: none !important; }
 .settings-sep { height: 1px; background: var(--line); margin: var(--sp-4) var(--sp-5); }
 .settings-body { min-height: 0; }
 .settings-body iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--surface); }
-@media (max-width: 760px) {
-  .settings-backdrop { padding: 0; }
-  .settings-window { height: 100%; border-radius: 0; grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); }
-  .settings-nav { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
-}
 
 /* panel mode: a settings-style page shown inside the Settings window */
 html.embedded body { background: var(--surface); }
@@ -1998,14 +1993,6 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .empty-cta { display: inline-block; margin-top: 12px; padding: 8px 16px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: var(--fs-sm); font-weight: var(--fw-medium); text-decoration: none; }
 .empty-cta:hover { opacity: .88; }
 
-/* 2. Phone: the Settings section list is one sideways row of pills. */
-@media (max-width: 760px) {
-  .settings-nav { max-height: none; padding: 8px 12px; gap: 0; }
-  .settings-search, .settings-sep { display: none; }
-  .settings-nav-list { flex-direction: row; overflow-x: auto; gap: 4px; scrollbar-width: none; }
-  .settings-nav-list::-webkit-scrollbar { display: none; }
-  .settings-nav-list .nav-row { width: auto; white-space: nowrap; flex: none; border-radius: 999px; padding: 7px 14px; }
-}
 
 /* 4. Phone: every Add button on Automation is full width. */
 @media (max-width: 760px) {
@@ -2206,11 +2193,28 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
   .picker-handle { display: block; flex: none; width: 40px; height: 5px; margin: 2px auto var(--sp-4); border: 0; border-radius: 999px; background: var(--line-strong, var(--line)); padding: 0; cursor: pointer; }
 }
 
-/* v0.1.11: the "Open to other devices" line is part of the page's layout, not a layer over a window-high app: the app takes the height that is left,
-   so the row under the composer and the sidebar's profile row are never pushed off the bottom (the owner's report) */
-body:has(> #remote-bar) { display: flex; flex-direction: column; }
-body:has(> #remote-bar) > #remote-bar { flex: none; }
-body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
+/* v0.1.14 BANNER-NOTICE (Design's drawing v3): the "Open to other devices" banner is a notification over the window (it pushes nothing down: no row, no layout to keep), and a small chip
+   in the top bar says the state for as long as access is open. In the warning colour, and in words, while a device has Everything. */
+.remote-chip {
+  display: inline-flex; gap: 6px; align-items: center; flex: none;
+  border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px;
+  font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  color: var(--text); background: var(--bg-sidebar);
+}
+.remote-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
+.remote-chip.is-bad { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+.remote-chip.is-bad::before { background: var(--bad); }
+.remote-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.remote-chip .sh { display: none; }
+@media (max-width: 760px) { .remote-chip .lg { display: none; } .remote-chip .sh { display: inline; } } /* a narrow window shortens the words; the chip itself never goes */
+.remote-chip { position: relative; }
+.remote-chip.is-new { animation: rc-pulse 1.6s ease-out 2; } /* a short pulse, twice; never the only sign (the words change too) */
+.rc-badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--bad); color: #fff; font-size: 11px; line-height: 1; }
+.remote-chip:not(.is-bad) .rc-badge { background: var(--accent); }
+@keyframes rc-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 55%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+.remote-chip.is-bad.is-new { animation-name: rc-pulse-bad; }
+@keyframes rc-pulse-bad { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+@media (prefers-reduced-motion: reduce) { .remote-chip.is-new { animation: none; } }
 
 
 /* Bundled fonts (v0.1.13). SIL OFL 1.1, unmodified Latin woff2, see src/ui/fonts/manifest.json. Named "Bunny ..." so the default font stack is not changed by them. */
@@ -2258,3 +2262,142 @@ body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 button.pc-chip { cursor: pointer; }
 button.pc-chip:hover { background: var(--hover); }
 .pc-chip b { color: var(--accent); }
+/* v0.1.14 PHONE-LAYOUT, QA's walk (F2, F3, F6, F7, F8). The look is unchanged: the same rows and menus, kept on the screen and made easy to hit. */
+@media (max-width: 600px) {
+  /* F3: the row under the box is one line at 360 (the separators go, the labels shorten instead of wrapping) */
+  .composer-under { flex-wrap: nowrap; gap: var(--sp-2); }
+  .composer-under .under-sep { display: none; }
+  .composer-under .picker-btn, .composer-under .ctx-chip { flex: 0 1 auto; min-width: 0; padding: 0 var(--sp-3); }
+  .composer-under .picker-btn .value, .composer-under .ctx-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer-under #effort-level { flex: 0 1 auto; min-width: 0; }
+  .composer-under .job-wrap { min-width: 0; flex: 0 1 auto; }
+  /* F2: the menus of this row open upward across the row (anchored to the row, not to the button), never past the screen's edge */
+  .composer-under .job-wrap { position: static; }
+  .composer-under .menu { left: 0; right: 0; min-width: 0; width: auto; max-height: min(60vh, 420px); max-height: min(60dvh, 420px); }
+}
+/* F8: on a touch screen every control of the composer and the lists is at least 32 px high */
+@media (pointer: coarse) {
+  .composer-under .picker-btn, .composer-under .ctx-chip, .composer-under .select { min-height: 32px; height: 32px; }
+  .mode-tab { min-height: 32px; }
+  .side-projects #new-project, #new-project { min-height: 32px; }
+  .toggle { min-height: 32px; }
+  /* the Settings switches are a checkbox inside a label: the label (what a tap lands on) is 32 px high and the box a little larger, the look is the same */
+  label.switch, label.account-check, .row .right > label { display: inline-flex; align-items: center; gap: var(--sp-3); min-height: 32px; min-width: 32px; }
+  label.account-check input[type="checkbox"] { width: 20px; height: 20px; }
+}
+/* F6 + F7: a short screen (a phone on its side, or the keyboard open): the chat gets the room */
+@media (max-height: 480px) {
+  :root { --topbar-h: 40px; }
+  .dock { padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px)); }
+  .composer { padding: var(--sp-3) var(--sp-5) var(--sp-3); }
+  .composer-input { padding-bottom: var(--sp-5); max-height: 28vh; max-height: 28dvh; }
+  .composer-under { margin-top: var(--sp-2); }
+  .composer-under .picker-btn, .composer-under .ctx-chip, .composer-under .select { height: 28px; min-height: 28px; }
+  /* the sidebar's foot stays on the screen: the sidebar scrolls above it, the foot is pinned to the bottom and compact (Import and Archived side by side) */
+  .sidebar { padding-bottom: 0; }
+  .sidebar-foot { position: sticky; bottom: 0; z-index: 1; margin-top: auto; padding: var(--sp-2) 0 calc(var(--sp-2) + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 1fr 1fr; background: var(--bg-sidebar); border-top: 1px solid var(--line); }
+  .sidebar-foot .account-wrap { grid-column: 1 / -1; }
+  .sidebar-foot .nav-row { height: 30px; }
+  /* the account menu fits the screen, its rows closer together; a long one scrolls */
+  .account-menu { max-height: calc(100vh - 56px); max-height: calc(100dvh - 56px); overflow-y: auto; }
+  .account-menu .menu-item { padding-top: var(--sp-2); padding-bottom: var(--sp-2); min-height: 30px; }
+  .menu-title { padding-top: var(--sp-1); padding-bottom: var(--sp-1); }
+}
+html.no-dvh .app { height: var(--vv-h, 100vh); }
+
+/* v0.1.14 PHONE-LAYOUT, the top bar (the owner approved Design's drawing, phone layout v3): under 900 px it is  ☰ · title · chip · ⋯ ; the ⋯ menu holds what does not fit.
+   Under 480 px a bottom sheet (44 px rows); from 480 to 899 px a small menu under the button. The chip never goes into it. From 900 px nothing changes. */
+.more-button, .more-scrim, .more-menu { display: none; }
+@media (max-width: 899px) {
+  .crumbs { display: flex; flex: 1 1 0; min-width: 0; }
+  .crumbs .current { display: block; min-width: 0; }
+  .topbar { gap: var(--sp-2); }
+  .topbar .toolbar { margin-left: 0; flex: none; overflow: visible; }
+  .more-button { display: inline-grid; flex: none; width: 40px; height: 40px; place-items: center; }
+  .more-button svg { width: 19px; height: 19px; }
+  .more-button[aria-expanded="true"] { background: var(--hover); }
+  /* 480 to 899: Export, the overview, Terminal and Changes stay on the bar; Browser, Files, Tasks and the window button go under the menu */
+  .toolbar [data-view="browser"], .toolbar [data-view="file"], .toolbar [data-view="tasks"], .toolbar #popout, .toolbar .tool-sep:nth-of-type(2) { display: none; }
+  .more-menu:not([hidden]) {
+    display: grid; position: fixed; z-index: var(--z-menu); right: 8px; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + 4px); width: 250px; max-width: calc(100vw - 16px);
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl); box-shadow: var(--shadow-pop); padding: var(--sp-2);
+  }
+  .more-handle, .more-item.mi-sheet { display: none; }
+}
+@media (max-width: 479px) {
+  /* a phone: only the session overview (from 390 px) stays beside the chip */
+  .toolbar > *:not(#rail-toggle) { display: none; }
+  .more-item.mi-sheet { display: flex; }
+  .more-item.mi-menu { display: none; }
+  .more-scrim:not([hidden]) { display: block; position: fixed; inset: 0; z-index: calc(var(--z-menu) - 1); background: rgba(0, 0, 0, .4); }
+  .more-menu:not([hidden]) {
+    left: 0; right: 0; top: auto; bottom: 0; width: auto; max-width: none; border-radius: var(--r-xl) var(--r-xl) 0 0; border-bottom: 0;
+    padding: var(--sp-3) var(--sp-3) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px)); max-height: 80vh; max-height: 80dvh; overflow-y: auto;
+  }
+  .more-handle { display: block; width: 36px; height: 4px; border-radius: 3px; background: var(--line-strong, var(--line)); margin: 2px auto var(--sp-3); }
+}
+@media (max-width: 389px) { .toolbar #rail-toggle { display: none; } }
+.more-item { display: flex; align-items: center; gap: var(--sp-6); width: 100%; min-height: 44px; padding: 0 var(--sp-5); border-radius: var(--r-md); text-align: left; font-size: var(--fs-base); color: var(--text); }
+.more-item svg { width: 19px; height: 19px; color: var(--text-dim); flex: none; }
+.more-item:hover, .more-item:focus-visible { background: var(--hover); }
+
+/* v0.1.14 PHONE-LAYOUT, Settings (phone layout v3): from 640 to 899 px two panes (a 190 px list, the section beside it, as on the desktop); under 640 px a LIST PAGE of the sections, grouped as on the
+   desktop, a tap opens the section full screen and "‹ Settings" goes back. The search stays on the list page and filters its rows as before. From 900 px nothing changes. */
+.settings-back { display: none; }
+@media (max-width: 899px) {
+  .settings-backdrop { padding: 0; }
+  .settings-window { height: 100%; width: 100%; border-radius: 0; grid-template-columns: 190px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .settings-nav { border-right: 1px solid var(--line); border-bottom: 0; max-height: none; padding: var(--sp-4) var(--sp-3); gap: var(--sp-3); }
+  .settings-search { display: block; }
+  .settings-nav-list { flex-direction: column; overflow: visible; gap: 1px; }
+  .settings-nav-list .nav-row { width: 100%; white-space: normal; flex: none; border-radius: var(--r-md); padding: 7px var(--sp-4); font-size: var(--fs-md); }
+  .settings-sep { display: block; margin: var(--sp-2) var(--sp-4); }
+}
+@media (max-width: 639px) {
+  .settings-window { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); border: 0; }
+  .settings-head { padding: var(--sp-3) var(--sp-4); min-height: 52px; gap: var(--sp-3); }
+  .settings-head h2 { flex: 1; }
+  .settings-back { display: none; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-4) 0 var(--sp-2); border-radius: var(--r-md); font-size: var(--fs-base); font-weight: var(--fw-medium); color: var(--text); }
+  .settings-back svg { width: 18px; height: 18px; }
+  .settings-section-name { display: none; flex: 1; min-width: 0; color: var(--text-dim); font-size: var(--fs-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the list page */
+  .settings-window[data-page="list"] .settings-body { display: none; }
+  .settings-window[data-page="list"] .settings-nav { grid-column: 1; border-right: 0; padding: var(--sp-5) var(--sp-5) var(--sp-8); gap: var(--sp-5); background: var(--bg); }
+  .settings-window[data-page="list"] .settings-search { min-height: 40px; border-color: var(--line); background: var(--bg-sidebar); }
+  .settings-window[data-page="list"] .settings-nav-list { gap: 0; border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--surface); overflow: hidden; }
+  .settings-window[data-page="list"] .settings-nav-list .nav-row { min-height: 46px; border-radius: 0; border-top: 1px solid var(--line); padding: 0 var(--sp-6); font-size: var(--fs-base); display: flex; align-items: center; }
+  .settings-window[data-page="list"] .settings-nav-list .nav-row:first-child { border-top: 0; }
+  .settings-window[data-page="list"] .settings-nav-list .nav-row::after { content: "›"; margin-left: auto; color: var(--text-dim); font-size: 18px; }
+  .settings-window[data-page="list"] .settings-nav-list .nav-row.is-active { background: transparent; font-weight: var(--fw-regular, 400); }
+  .settings-window[data-page="list"] .settings-nav-list .is-filtered { display: none; }
+  .settings-window[data-page="list"] .settings-sep { height: 10px; margin: 0; border-top: 1px solid var(--line); background: var(--bg); }
+  /* a section opened */
+  .settings-window[data-page="section"] .settings-nav { display: none; }
+  .settings-window[data-page="section"] .settings-body { grid-column: 1; }
+  .settings-window[data-page="section"] .settings-back { display: inline-flex; }
+  .settings-window[data-page="section"] .settings-head h2 { display: none; }
+  .settings-window[data-page="section"] .settings-section-name { display: block; }
+}
+
+/* BANNER-NOTICE, the chip's tap panel (Design's drawing, approved): under the top bar, 12 px in from each side on a phone, 320 px under the chip on a wider window. */
+.remote-panel {
+  position: fixed; z-index: var(--z-menu); right: 12px; width: 320px; max-width: calc(100vw - 24px);
+  top: calc(var(--topbar-h, 48px) + env(safe-area-inset-top, 0px) + 6px);
+  background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-pop);
+  padding: 10px 12px; display: grid; gap: 6px; font-size: 13px; text-align: left;
+}
+@media (max-width: 479px) { .remote-panel { left: 12px; right: 12px; width: auto; max-width: none; } }
+.rp-title { font-size: 14px; }
+.rp-event { color: var(--text-dim); }
+.rp-event.is-bad { color: var(--bad); font-weight: 600; }
+.rp-list { display: grid; gap: 6px; }
+.rp-line { display: flex; justify-content: space-between; gap: 8px; }
+.rp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-level { color: var(--text-dim); font-weight: 600; flex: none; }
+.rp-level.is-bad { color: var(--bad); }
+.rp-sub { color: var(--text-dim); font-size: 12px; }
+.rp-link { all: unset; cursor: pointer; color: var(--accent); text-decoration: underline; font-size: inherit; }
+.rp-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rp-actions { display: flex; gap: 8px; margin-top: 2px; }
+.rp-btn { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--bg-sidebar); color: var(--text); border-radius: 99px; padding: 3px 14px; min-height: 32px; cursor: pointer; }
+.rp-btn.rp-quiet { background: none; border-color: transparent; color: var(--text-dim); }
