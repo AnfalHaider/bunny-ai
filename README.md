@@ -24,8 +24,6 @@
 
 ---
 
-> **Draft: not for release.** This is the v0.1.14 section, written from the builder branches before the combined build is on main. Placeholders mark what is still being built.
-
 ## What's new in v0.1.14
 
 ### Your devices, at a glance
@@ -47,10 +45,25 @@ When a question needs the internet, Quick ask searches the web and reads pages, 
 Plugins, skills and downloads from other apps are shown in Bunny's words. A skill's `SKILL.md` is the skill file, a `CLAUDE.md` is Bunny's instructions, and the model is told these are Bunny's skills. Plugins made in another app's layout install and work in Bunny. Hooks and scripts made for other apps are listed, and say plainly that they do not run in Bunny yet.
 
 ### Engines
-*Placeholder: this section comes when CLI-ENGINES lands (Claude Code and Codex CLI, each with Account or Local).*
+A Code chat can run on Bunny's own engine, which is the default, or on another coding engine: **Claude Code** or **Codex CLI**. Each is downloaded on your click, unmodified and pinned to a version Bunny has tested. Nothing is installed with Bunny itself.
 
-### Sign in from outside your home network
-*Placeholder: this section comes when OPEN-SIGNIN lands.*
+**Settings → Engines** lists both. Each row has a **Local | Account** switch, with the recommended one marked:
+- **Claude Code**: Account is recommended. You sign in with your own Anthropic account, and Bunny never sees or stores that sign-in. Local runs it on Bunny's endpoint and your models, and is not supported by Anthropic: Claude Code may stop working with your models after an update.
+- **Codex CLI**: Local is recommended. Account is greyed out for now, because signing in to Codex is still being tested.
+
+Each row also updates and rolls back:
+- **Update to v… (tested)** appears when a tested newer version is ready.
+- **···** → **Roll back to v…** goes back to the earlier version, which Bunny keeps. New chats use it.
+
+**Choosing an engine for a chat.** **Engine for new chats** in Settings → Engines sets the default for new Code chats. In a chat, the engine chip in the composer row lists the downloaded engines before your first message. Once you send it, the chat's engine is fixed. To use another engine, start a new chat.
+
+**Use Bunny's engine.** This switch is on by default: your Bunny rules decide each step. Turn it off and new chats follow the engine's own rules, which you set in Settings → Engines. Bunny asks before it turns the switch off, and this is what the warning says:
+
+> Bunny's engine is off. Chats run on Claude Code and follow Claude Code's rules, which you set here. Bunny no longer checks each step against your Bunny rules, including your Deny rules: Claude Code asks you itself, and Bunny shows its questions. Bunny still blocks its own data, its keys and the engines' sign-ins. A command you allow can read any file on this PC that you can.
+
+**Restricted mode.** An engine that cannot send every action through Bunny first runs in restricted mode. It works in a copy of your folder, without the shell or git tools, and leaves out the folders Bunny hides. When it finishes, Bunny checks every changed file against your rules, and asks **Keep N changes from the engine?** before anything reaches your folder.
+
+**The first Codex chat in a project can take a few minutes to start.** Windows' sandbox sets up its identity for each project folder the first time a command runs there. The first command in that folder can take minutes; later chats in the same project start in seconds.
 
 ---
 
