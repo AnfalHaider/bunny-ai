@@ -1,5 +1,6 @@
 // SEARCH-PC smoke test for QA: the REAL Windows Search index, with INVENTED files only.
-//   node scripts/pcsearch-smoke.mjs            run it (needs Windows, the Windows Search service, and Documents in the index, which is the default)
+//   node scripts/pcsearch-smoke.mjs --i-have-the-owners-ok   run it (needs Windows, the Windows Search service, and Documents in the index, which is the default).
+//                                              It writes into the owner's real Documents folder, so it refuses to start without that flag: only with the owner's own OK.
 //   node scripts/pcsearch-smoke.mjs --dry      print what it would do and touch nothing
 // It makes one new folder under your Documents named bunny-pcsearch-smoke-<random>, with three invented files and a .ssh folder holding a fourth, waits for Windows to index them,
 // then checks with the real index and the real code that: the ordinary file is found and allowed; the .ssh file is found by the index but refused by Bunny; the text is read; and a
@@ -12,6 +13,7 @@ import { createPcSearch } from '../src/server/pcSearch.js';
 import { createExclusions } from '../src/server/pcExclusions.js';
 
 const dry = process.argv.includes('--dry');
+const ok = process.argv.includes('--i-have-the-owners-ok');
 const word = `smokeword${randomBytes(4).toString('hex')}`;
 const documents = join(homedir(), 'Documents');
 const folder = join(documents, `bunny-pcsearch-smoke-${randomBytes(3).toString('hex')}`);
@@ -25,6 +27,11 @@ const plan = [
 ];
 
 if (dry) { console.log(['SEARCH-PC smoke (dry run, nothing touched):', ...plan.map((p) => `  - ${p}`)].join('\n')); process.exit(0); }
+// It writes into the owner's real Documents folder: it names exactly what it would create and delete, and does nothing without the flag.
+if (!ok) {
+  console.log(['REFUSED: this script writes into the real Documents folder of this user, so it needs the owner' + String.fromCharCode(39) + 's own OK.', 'It would create, and later delete, exactly this folder (and nothing else):', '  ' + folder, 'To run it anyway, with the owner' + String.fromCharCode(39) + 's OK: node scripts/pcsearch-smoke.mjs --i-have-the-owners-ok', 'To see the plan without touching anything: node scripts/pcsearch-smoke.mjs --dry'].join(String.fromCharCode(10)));
+  process.exit(2);
+}
 if (process.platform !== 'win32') { console.log('SKIP: this needs Windows and the Windows Search index.'); process.exit(0); }
 
 const results = [];
