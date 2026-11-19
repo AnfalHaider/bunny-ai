@@ -58,10 +58,11 @@ export function createBridgeServer({ judge, limitMs = BRIDGE_ASK_LIMIT_MS, onDec
     try { verdict = await Promise.race([Promise.resolve(judge({ tool: body.tool, input: body.input, id: String(body.id ?? ''), agent: String(body.agent ?? '') })), limit]); } catch (err) { verdict = { allow: false, reason: `Bunny could not judge this call (${String(err?.message ?? err).slice(0, 80)}), so it was not allowed.` }; }
     controllers.delete(control); answered = true;
     const allow = verdict?.allow === true;
+    const abstain = !allow && verdict?.abstain === true; // ENGINE-RULES: the floor holds and Bunny has no opinion: the engine's own rules decide
     stats[allow ? 'allowed' : 'denied'] += 1;
     try { onDecision?.({ tool: body.tool, id: body.id, agent: body.agent, allow, reason: verdict?.reason, name: verdict?.name, summary: verdict?.summary }); } catch { /* a log only */ }
     res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'application/json' });
-    res.end(JSON.stringify({ allow, reason: String(verdict?.reason ?? (allow ? 'Allowed.' : 'Not allowed.')).slice(0, 400) }));
+    res.end(JSON.stringify({ allow, ...(abstain ? { abstain: true } : {}), reason: String(verdict?.reason ?? (allow ? 'Allowed.' : 'Not allowed.')).slice(0, 400) }));
     return undefined;
   }
 

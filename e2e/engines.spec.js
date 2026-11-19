@@ -96,3 +96,31 @@ test('Claude Code in Account mode: Sign in appears when signed out, opens the ve
   await page.locator('.engine-confirm').getByRole('button', { name: 'Sign out' }).click();
   await expect(row.locator('[data-act="signin"]')).toBeVisible({ timeout: 10_000 });
 });
+
+test('Use Bunny\'s engine: turning it off asks first with the warning, then the warning stays on the page, the Rules page says it is not used, and Claude Code\'s own rules can be saved', async ({ page }) => {
+  await page.goto(PAGE);
+  const row = page.locator('#engines-list .er[data-id="claude-code"]');
+  await row.locator('[data-act="download"]').click();
+  await expect(row.locator('.seg')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#engines-warning')).toBeHidden();
+  await page.locator('#engine-bunny-rules').uncheck({ force: true });
+  await expect(page.locator('.engine-confirm')).toContainText("Bunny's engine is off.");
+  await expect(page.locator('.engine-confirm')).toContainText('A command you allow can read any file on this PC that you can.');
+  await page.locator('.engine-confirm').getByRole('button', { name: 'Turn it off' }).click();
+  await expect(page.locator('#engines-warning')).toBeVisible();
+  await expect(page.locator('#engines-warning')).toContainText("Claude Code's rules, which you set here");
+  await expect(page.locator('#rules-engine-off')).toContainText("Not used while Bunny's engine is off. Claude Code's rules apply.");
+  await page.locator('#engine-rules textarea[data-kind="allow"]').fill('Bash(npm test:*)');
+  await page.locator('#engine-rules textarea[data-kind="deny"]').fill('Read(./secret/**)');
+  await page.locator('#engine-rules-save').click();
+  await expect(page.locator('#engine-rules-said')).toContainText('Saved');
+  await page.locator('#engine-rules textarea[data-kind="allow"]').fill('not a rule!');
+  await page.locator('#engine-rules-save').click();
+  await expect(page.locator('#engine-rules-said')).toContainText("not in Claude Code's rule form");
+  await page.reload();
+  await expect(page.locator('#engine-bunny-rules')).not.toBeChecked();
+  await expect(page.locator('#engine-rules textarea[data-kind="deny"]')).toHaveValue('Read(./secret/**)');
+  await page.locator('#engine-bunny-rules').check({ force: true });
+  await expect(page.locator('#engines-warning')).toBeHidden();
+  await expect(page.locator('#engines-record')).toContainText("Bunny's engine turned on");
+});

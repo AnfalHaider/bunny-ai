@@ -12,6 +12,7 @@
 // Options in the script object: { tools: [...] } overrides the init tool list; { noInit: true }.
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 
 const profile = process.argv[2];
 if (process.env.BUNNY_FAKE_SCRIPT || process.env.BUNNY_FAKE_SCRIPT_FILE) { try { const sc0 = JSON.parse(process.env.BUNNY_FAKE_SCRIPT_FILE ? readFileSync(process.env.BUNNY_FAKE_SCRIPT_FILE, 'utf8') : process.env.BUNNY_FAKE_SCRIPT); if (sc0.dumpEnv) writeFileSync(sc0.dumpEnv, JSON.stringify({ env: process.env, argv: process.argv.slice(2) })); } catch { /* no script */ } }
@@ -37,11 +38,32 @@ if (profile === 'claude-code') {
     child.on('close', (code) => {
       // Claude Code's rule: exit 0 with a JSON decision is honoured; any other exit code is a NON-blocking error and the tool runs
       if (code !== 0) { resolve({ decision: 'allow', note: `the hook exited with ${code}` }); return; }
-      try { const d = JSON.parse(text).hookSpecificOutput; resolve({ decision: d.permissionDecision === 'deny' ? 'deny' : 'allow', reason: d.permissionDecisionReason }); } catch { resolve({ decision: 'allow', note: 'no decision printed' }); }
+      try { const j = JSON.parse(text); if (j && typeof j === 'object' && !j.hookSpecificOutput) { resolve({ decision: 'abstain' }); return; } const d = j.hookSpecificOutput; resolve({ decision: d.permissionDecision === 'deny' ? 'deny' : 'allow', reason: d.permissionDecisionReason }); } catch { resolve({ decision: 'allow', note: 'no decision printed' }); }
     });
     child.on('error', () => resolve({ decision: 'allow', note: 'the hook could not start' }));
     child.stdin.on('error', () => {}); child.stdin.end(JSON.stringify(payload));
   });
+
+  // Bunny's engine off: the hook has no opinion, so the engine's own rules (the settings' permissions) decide, and a question goes to the per-run prompt tool, as Claude Code does.
+  const matches = (rule, tool, input) => {
+    const m = /^([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?$/.exec(rule); if (!m || m[1] !== tool) return false;
+    if (m[2] === undefined) return true;
+    const pat = m[2].replace(/:?\*+$/, ''); const subject = String(input?.command ?? input?.file_path ?? input?.path ?? '');
+    return subject.startsWith(pat);
+  };
+  const ownDecision = async (tool, input, id) => {
+    const perms = settings?.permissions ?? {};
+    if ((perms.deny ?? []).some((r) => matches(r, tool, input))) return { decision: 'deny', reason: 'Denied by a rule.' };
+    if ((perms.allow ?? []).some((r) => matches(r, tool, input)) && !(perms.ask ?? []).some((r) => matches(r, tool, input))) return { decision: 'allow' };
+    if (!args.includes('--permission-prompt-tool')) return { decision: 'deny', reason: 'It requires approval, and this session has no approval surface.' };
+    try {
+      const cfg = JSON.parse(readFileSync(args[args.indexOf('--mcp-config') + 1], 'utf8')); const url = new URL(cfg.mcpServers.bunny.url);
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'approve', arguments: { tool_name: tool, input, tool_use_id: id } } });
+      const text = await new Promise((resolve, reject) => { const r = http.request({ host: url.hostname, port: url.port, path: url.pathname, method: 'POST', headers: { host: url.host, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), authorization: `Bearer ${process.env.BUNNY_APPROVE_TOKEN}` } }, (res) => { let t = ''; res.on('data', (c) => { t += c; }); res.on('end', () => resolve(t)); }); r.on('error', reject); r.end(body); });
+      const verdict = JSON.parse(JSON.parse(text).result.content[0].text);
+      return verdict.behavior === 'allow' ? { decision: 'allow' } : { decision: 'deny', reason: verdict.message };
+    } catch { return { decision: 'deny', reason: 'The prompt tool could not be reached.' }; }
+  };
 
   let stdin = '';
   process.stdin.setEncoding('utf8');
@@ -67,6 +89,7 @@ if (profile === 'claude-code') {
         out({ type: 'assistant', session_id: sessionId, message: { id: `msg_${n}`, role: 'assistant', content: [{ type: 'tool_use', id, name: step.tool, input: step.input ?? {} }] } });
         let verdict = { decision: 'allow' };
         if (!step.skipHook && !step.noResultId) verdict = await runHook({ hook_event_name: 'PreToolUse', tool_name: step.tool, tool_input: step.input ?? {}, tool_use_id: id, session_id: sessionId, cwd: process.cwd() });
+        if (verdict.decision === 'abstain') verdict = await ownDecision(step.tool, step.input ?? {}, id);
         if (verdict.decision === 'deny') out({ type: 'user', session_id: sessionId, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: `PreToolUse:${step.tool} hook error: ${verdict.reason ?? 'denied'}` }] } });
         else {
           if (step.marker) writeFileSync(step.marker, 'the tool ran');

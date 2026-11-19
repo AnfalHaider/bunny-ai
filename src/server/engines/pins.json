@@ -6,6 +6,7 @@
       "channel": "stable",
       "label": "Claude Code",
       "licenceName": "Anthropic Commercial Terms",
+      "promptTool": true,
       "licence": "Anthropic Commercial Terms (all rights reserved): the official package, unmodified, downloaded on the person's click",
       "entry": "claude.exe",
       "signature": "Anthropic, PBC",

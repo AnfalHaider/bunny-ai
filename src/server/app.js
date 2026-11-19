@@ -794,9 +794,12 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       }
       if (deviceRefusedBody(req, res, method, path, patch)) return;
       { const bad = validateEngineSettings(patch); if (bad) return sendJson(res, 400, { code: 'settings.badEngine', message: bad }); }
+      if (patch.useBunnyEngine === false && !(await engines.status(settings)).engines.some((e) => e.enabled && e.downloaded && e.ownRules)) return sendJson(res, 409, { code: 'settings.noEngine', message: 'Download an engine first: chats need one to run on while Bunny\'s engine is off.' });
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
+      const rulesWas = engineSettings(settings).useBunnyEngine;
       settings = { ...settings, ...patch };
       await writeJson(settingsFile, settings);
+      if (Object.hasOwn(patch, 'useBunnyEngine') && engineSettings(settings).useBunnyEngine !== rulesWas) await engines.store.addRecord({ engine: 'bunny', action: engineSettings(settings).useBunnyEngine ? 'rules-on' : 'rules-off', from: null, to: null, sha12: '' }).catch(() => {}); // ENGINE-RULES (ER-1): every change is in the record, from Bunny's window
       return sendJson(res, 200, settings);
     }
 
@@ -3196,7 +3199,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         const cfg = engineSettings(settings);
         const wanted = session.engine?.id ?? (cfg.engine !== 'bunny' && cfg.engines[cfg.engine].enabled ? cfg.engine : null);
         if (wanted && wanted !== 'bunny' && workMode === 'code' && workspace && !req.bunnyRemote && !scheduledTask) {
-          if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth } });
+          // the rules this chat follows are fixed at its first message: Bunny's (the default) or the engine's own (ENGINE-RULES, when the person turned Bunny's engine off)
+          const wantRules = cfg.useBunnyEngine === false ? 'engine' : 'bunny';
+          if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth, rules: wantRules, rulesFixed: true } });
+          else if (!session.engine.rulesFixed) session = await sessions.update(id, { engine: { ...session.engine, rules: wantRules, rulesFixed: true } });
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
             id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,

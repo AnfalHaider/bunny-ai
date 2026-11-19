@@ -41,7 +41,7 @@ async function downloaded(base, id) {
 
 test('engine settings: defaults, Codex account refused with its note, bad values refused', () => {
   const d = engineSettings({});
-  assert.deepEqual([d.engine, d.useBunnyEngine, d.engines['claude-code'], d.engines.codex], ['bunny', true, { auth: 'account', enabled: true }, { auth: 'local', enabled: true }]);
+  assert.deepEqual([d.engine, d.useBunnyEngine, d.engines['claude-code'], d.engines.codex], ['bunny', true, { auth: 'account', enabled: true, rules: { allow: [], ask: [], deny: [] } }, { auth: 'local', enabled: true, rules: { allow: [], ask: [], deny: [] } }]);
   assert.equal(validateEngineSettings({ engine: 'codex' }), null);
   assert.equal(validateEngineSettings({ engines: { 'claude-code': { auth: 'local' } } }), null);
   assert.equal(validateEngineSettings({ engines: { codex: { auth: 'account' } } }), CODEX_ACCOUNT_NOTE);

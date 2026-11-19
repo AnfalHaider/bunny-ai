@@ -58,7 +58,7 @@ try {
         if (res.statusCode !== 200) { deny('Bunny check refused'); return; }
         let ans;
         try { ans = JSON.parse(text); } catch (e) { deny('bad answer from Bunny'); return; }
-        if (ans && ans.allow === true) { if (done) return; allow(); } else deny(ans && typeof ans.reason === 'string' ? ans.reason : 'Bunny did not allow this.');
+        if (ans && ans.allow === true) { if (done) return; allow(); } else if (ans && ans.abstain === true && ans.allow === false) { if (done) return; done = true; finish('{}', 'Bunny could not finish its answer, so this was not allowed.'); } else deny(ans && typeof ans.reason === 'string' ? ans.reason : 'Bunny did not allow this.');
       });
       res.on('error', () => deny('Bunny check failed'));
     });

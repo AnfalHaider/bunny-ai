@@ -186,12 +186,70 @@ export function createBridge(ctx) {
     }
   }
 
+
+  // ---------------------------------------------------------------- ENGINE-RULES (spec 3.7, ER-3): with Bunny's engine off, only the fixed floor is enforced here
+
+  /** The floor: Bunny's data folder and every engine home (`protect`), the person's key folders, and the engine's own prompt tool. Returns { deny: reason } when the floor refuses, or { flag } / {} otherwise. Never asks. */
+  async function floor(call) {
+    try {
+      if (call.bad) return { deny: call.bad };
+      if (String(call.engineTool ?? '').startsWith('mcp__bunny__')) return { deny: 'That is Bunny\'s own tool: the model may not use it.' };
+      if (call.name === 'run_command') {
+        if (call.command !== undefined) {
+          const lowText = String(call.command).replace(/[`'"^]/g, '').replace(/\\/g, '/').toLowerCase();
+          if (protect.some((p) => lowText.includes(p))) return { flag: 'This command names Bunny\'s data folder.' };
+          if (keys.some((k) => lowText.includes(k))) return { flag: 'This command names one of your private folders (keys, sign-ins or app data).' };
+        }
+        return {};
+      }
+      const place = await placeOf(call.path, ctx.root);
+      if (place.unresolved) return { deny: 'Where that path leads could not be worked out.' };
+      const real = lower(place.real);
+      if (protect.some((p) => within(real, p) || within(lower(place.abs), p))) return { deny: 'That is a folder Bunny keeps private.' };
+      if (!place.inside && keys.some((k) => within(real, k) || within(lower(place.abs), k))) return { deny: 'That is one of your private folders (keys, sign-ins or app data): an engine never reaches it.' };
+      return {};
+    } catch (err) { return { deny: `Bunny could not judge this call (${short(err?.message, 80)}), so it was refused.` }; }
+  }
+
+  /** The hook's verdict with the option off: the floor denies, anything else is "no opinion" (the engine's own rules decide). A command that names a floor path is NOT denied here: Bunny cannot see what it reads. */
+  async function floorOnly(call) {
+    const f = await floor(call);
+    const summary = summaryOf(call);
+    if (f.deny) return { allow: false, reason: f.deny, name: call.name ?? 'unknown', risk: RISK[call.name] ?? 'run', summary };
+    return { allow: false, abstain: true, reason: 'Bunny has no opinion: the engine\'s own rules apply.', name: call.name ?? 'unknown', risk: RISK[call.name] ?? 'run', summary, ...(f.flag ? { flag: f.flag } : {}) };
+  }
+
+  /** A question the engine itself asked (its own ask rule or its mode): the floor first, then the person's card. No answer is a deny. */
+  async function relay(call) {
+    const f = await floor(call);
+    const summary = summaryOf(call);
+    if (f.deny) return { allow: false, reason: f.deny, name: call.name ?? 'unknown', risk: RISK[call.name] ?? 'run', summary };
+    const detail = `${call.command ?? call.path ?? call.engineTool ?? ''}${f.flag ? `\n\n${f.flag}` : ''}`.trim();
+    const ok = await asked(summary, detail);
+    return ok ? { allow: true, reason: 'Allowed by the person.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true };
+  }
+
   const summaryOf = (call) => (call.command !== undefined ? `Run: ${short(call.command, 120)}` : call.path ? `${call.name === 'read_file' ? 'Read' : call.name === 'write_file' ? 'Write' : call.name === 'edit_file' ? 'Edit' : call.name === 'find_files' ? 'List' : 'Search'} ${short(call.path, 120)}` : `Engine tool: ${short(call.engineTool, 80)}`);
 
   return {
-    judge,
+    judge, floor, floorOnly, relay,
     /** A Claude Code hook request: { tool, input } -> judge. */
     async claude({ tool, input }) { return judge(mapClaudeCall(tool, input)); },
+    /** The same request with Bunny's engine off: the floor only (no opinion on the rest). */
+    async claudeFloor({ tool, input }) { return floorOnly(mapClaudeCall(tool, input)); },
+    /** ENGINE-RULES, Codex: every command is the person's to decide on a card; a command that names a floor path is flagged on the card, never decided by Bunny. */
+    async codexCommandRelay(params) { return relay(mapCodexCommand(params)); },
+    /** ENGINE-RULES, Codex: a patch to a floor path is declined at once; any other goes to a card (one question for the whole change). */
+    async codexChangesRelay(changes) {
+      const calls = mapCodexChanges(changes);
+      for (const c of calls) { const f = await floor(c); if (f.deny) return { allow: false, reason: f.deny, name: c.name ?? 'unknown', risk: 'edit', summary: summaryOf(c) }; }
+      const first = calls[0];
+      const list = calls.map((c) => c.path).filter(Boolean).slice(0, 8).join('\n');
+      const ok = await asked(calls.length === 1 ? summaryOf(first) : `Change ${calls.length} files`, list);
+      return ok ? { allow: true, reason: 'Allowed by the person.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true } : { allow: false, reason: 'The person did not allow this.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true };
+    },
+    /** The engine's own question (its prompt tool): the floor, then a card. */
+    async claudeAsk({ tool, input }) { return relay(mapClaudeCall(tool, input)); },
     /** A Codex command approval. */
     async codexCommand(params) { return judge(mapCodexCommand(params)); },
     /** A Codex file change: every path must be allowed; the first refusal stops it. */

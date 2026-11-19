@@ -7,6 +7,10 @@ const mount = document.getElementById('engines-list');
 const chooser = document.getElementById('engine-default');
 const noteEl = document.getElementById('engines-note');
 const recordEl = document.getElementById('engines-record');
+const bunnyRules = document.getElementById('engine-bunny-rules');
+const warningEl = document.getElementById('engines-warning');
+const rulesBox = document.getElementById('engine-rules');
+const rulesNote = document.getElementById('rules-engine-off');
 let state = null; let timer = null; let openMenu = null; let unknownTries = 0;
 
 const mb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`);
@@ -58,6 +62,39 @@ function row(e) {
     + `<div class="act2"><div class="cc">${e.downloaded ? authSwitch(e) : ''}</div><div class="bt">${mainButton(e)}</div></div>${menu(e)}</div>`;
 }
 
+/** ER-6: the warning, word for word, with the engine's name. */
+const engineNames = () => {
+  const list = state.engines.filter((e) => e.downloaded && e.enabled !== false && e.ownRules);
+  const chosen = state.engine !== 'bunny' ? list.find((e) => e.id === state.engine) : null;
+  return (chosen ? [chosen] : list).map((e) => e.label);
+};
+const warningText = (names) => { const n = names.length ? names.join(' or ') : 'the engine'; return `Bunny's engine is off. Chats run on ${n} and follow ${n}'s rules, which you set here. Bunny no longer checks each step against your Bunny rules, including your Deny rules: ${n} asks you itself, and Bunny shows its questions. Bunny still blocks its own data, its keys and the engines' sign-ins. A command you allow can read any file on this PC that you can.`; };
+
+const rulesLines = (list) => (Array.isArray(list) ? list : []).join('\n');
+function paintRules() {
+  const off = state.useBunnyEngine === false;
+  if (bunnyRules) { bunnyRules.checked = !off; const st = document.getElementById('engine-bunny-rules-state'); if (st) st.textContent = off ? 'off' : 'on'; bunnyRules.disabled = deviceView; }
+  const names = engineNames();
+  if (warningEl) { warningEl.hidden = !off; if (off) { const t = warningText(names); warningEl.innerHTML = `<b>${esc(t.slice(0, t.indexOf('.') + 1))}</b>${esc(t.slice(t.indexOf('.') + 1))}`; } }
+  if (rulesNote) { rulesNote.hidden = !off; rulesNote.textContent = off ? `Not used while Bunny's engine is off. ${names.length ? names.join(' or ') : 'The engine'}'s rules apply.` : ''; }
+  if (!rulesBox) return;
+  rulesBox.hidden = !off || deviceView;
+  if (rulesBox.hidden) return;
+  const cc = state.engines.find((e) => e.id === 'claude-code');
+  const cx = state.engines.find((e) => e.id === 'codex');
+  const keepOpen = rulesBox.querySelector('details')?.open;
+  let html = '';
+  if (cc?.downloaded && cc.ownRules) {
+    html += `<div class="row stack"><div class="meta-col"><div class="name">Claude Code's rules</div><div class="desc">In Claude Code's own form, one per line, for example <code>Bash(npm test:*)</code> or <code>Read(./docs/**)</code>. Allow runs with no question, Ask shows a card, Deny always stops. Bunny never loads rules from a folder or from your own Claude Code.</div></div>`
+      + ['allow', 'ask', 'deny'].map((k) => `<label class="rl">${k[0].toUpperCase()}${k.slice(1)}<textarea data-kind="${k}" rows="3" maxlength="40000" spellcheck="false" aria-label="${k} rules">${esc(rulesLines(cc.rules?.[k]))}</textarea></label>`).join('')
+      + `<div><button type="button" class="btn2 pri" id="engine-rules-save">Save rules</button> <span class="d" id="engine-rules-said" role="status"></span></div></div>`;
+  } else if (cc?.downloaded) html += `<div class="row"><div class="desc">Claude Code stays on Bunny's rules: its permission question has not been checked for this version.</div></div>`;
+  if (cx?.downloaded) html += `<div class="row"><div class="desc">Codex asks you about every command and file change, and you answer on a card. Its own rules are not offered yet.</div></div>`;
+  if (!html) html = `<div class="row"><div class="desc">Download an engine to set its rules.</div></div>`;
+  rulesBox.innerHTML = html;
+  void keepOpen;
+}
+
 function render() {
   if (!state || !mount) return;
   const bunny = '<div class="er"><span class="ti">B</span><div class="nm"><div class="l1"><b>Bunny</b></div><div class="l2">Built in · Default · always there</div></div><div class="act2"><div class="cc"></div><div class="bt"></div></div><span class="mn none"></span></div>';
@@ -69,6 +106,7 @@ function render() {
     chooser.innerHTML = '<option value="bunny">Bunny</option>' + state.engines.filter((e) => e.downloaded).map((e) => `<option value="${e.id}">${esc(e.label)}</option>`).join('');
     chooser.value = [...chooser.options].some((o) => o.value === state.engine) ? state.engine : (keep || 'bunny');
   }
+  paintRules();
   if (noteEl) {
     const cc = state.engines.find((e) => e.id === 'claude-code');
     noteEl.hidden = !(cc?.downloaded && cc.auth === 'local');
@@ -84,17 +122,23 @@ let watching = 0;
 /** After a sign-in starts: look again every 3 s for two minutes (the page also refreshes by itself). */
 function watchSignIn() { const run = (watching += 1); let n = 0; const tick = async () => { if (run !== watching || n >= 40) return; n += 1; await load(); if (state?.engines.find((e) => e.id === 'claude-code')?.signedIn === true) return; setTimeout(tick, 3000); }; setTimeout(tick, 3000); }
 
+const parseLines = (box) => box.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
 async function load() {
   try { state = await getJSON('/api/engines'); render(); loadRecord(); } catch (err) { if (mount) mount.textContent = `Engines could not be loaded: ${err.message}`; }
 }
 
-const NAMES = { 'claude-code': 'Claude Code', codex: 'Codex CLI' };
+const NAMES = { 'claude-code': 'Claude Code', codex: 'Codex CLI', bunny: 'Bunny\'s engine' };
 function said(r) {
   const n = NAMES[r.engine] ?? r.engine;
   if (r.action === 'download') return `${n} downloaded${r.to ? ` v${r.to}` : ''}`;
   if (r.action === 'update') return `${n} updated${r.from ? ` from v${r.from}` : ''}${r.to ? ` to v${r.to}` : ''}`;
   if (r.action === 'rollback') return `${n} rolled back${r.to ? ` to v${r.to}` : ''}`;
   if (r.action === 'remove') return `${n} removed`;
+  if (r.action === 'rules-off') return 'Bunny\'s engine turned off (from Bunny\'s window)';
+  if (r.action === 'rules-on') return 'Bunny\'s engine turned on (from Bunny\'s window)';
+  if (r.action === 'signin') return `${n} sign-in started`;
+  if (r.action === 'signout') return `${n} signed out`;
   return `${n}: ${r.action}`;
 }
 async function loadRecord() {
@@ -152,6 +196,24 @@ mount?.addEventListener('click', async (ev) => {
   }
 });
 document.addEventListener('click', (ev) => { if (openMenu && !ev.target.closest('.mnw')) { openMenu.hidden = true; openMenu = null; } });
+bunnyRules?.addEventListener('change', async () => {
+  if (deviceView || !state) return;
+  const wantOff = !bunnyRules.checked;
+  if (wantOff) {
+    const t = warningText(engineNames());
+    if (!(await ask({ title: 'Turn off Bunny\'s engine?', body: t, action: 'Turn it off', danger: true }))) { bunnyRules.checked = true; return; }
+  }
+  try { await sendJSON('/api/settings', 'PUT', { useBunnyEngine: !wantOff }); } catch (err) { bunnyRules.checked = wantOff; await tell(err.message); }
+  await load();
+});
+rulesBox?.addEventListener('click', async (ev) => {
+  const b = ev.target.closest('#engine-rules-save');
+  if (!b || deviceView) return;
+  const rules = {};
+  for (const ta of rulesBox.querySelectorAll('textarea[data-kind]')) rules[ta.dataset.kind] = parseLines(ta);
+  const said = document.getElementById('engine-rules-said');
+  try { await sendJSON('/api/settings', 'PUT', { engines: { 'claude-code': { rules } } }); await load(); const again = document.getElementById('engine-rules-said'); if (again) again.textContent = 'Saved. New runs use these rules.'; } catch (err) { if (said) said.textContent = err.message; }
+});
 chooser?.addEventListener('change', async () => { try { await sendJSON('/api/settings', 'PUT', { engine: chooser.value }); } catch (err) { tell(err.message); } await load(); });
 
 load();

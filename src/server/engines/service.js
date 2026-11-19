@@ -30,12 +30,32 @@ export const CODEX_ACCOUNT_NOTE = 'Not available yet: signing in to Codex is sti
 export const LOCAL_NOTE_CLAUDE = 'Not supported by Anthropic. Claude Code may stop working with your models after an update.';
 const FAKE_ENGINE_PATH = fileURLToPath(new URL('./fake-engine.mjs', import.meta.url));
 
+/** The person's own rules for an engine (ENGINE-RULES, Claude Code's pattern syntax): { allow, ask, deny }, each a list of short strings. Anything else is dropped. */
+const RULE_SHAPE = /^[A-Za-z_][A-Za-z0-9_]*(\([^\r\n]*\))?$/;
+const cleanRules = (r) => { const out = { allow: [], ask: [], deny: [] }; for (const k of Object.keys(out)) out[k] = (Array.isArray(r?.[k]) ? r[k] : []).filter((x) => typeof x === 'string' && x.length <= 200 && RULE_SHAPE.test(x) && !x.startsWith('mcp__bunny__')).slice(0, 200); return out; };
+/** A sentence if a rules object is not acceptable, else null: at most 200 rules of at most 200 characters, in Claude Code's pattern syntax (`Bash(npm test:*)`, `Read(./docs/**)`). */
+export function validateRules(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return 'The rules are not valid.';
+  for (const k of Object.keys(r)) if (!['allow', 'ask', 'deny'].includes(k)) return `A rule list is allow, ask or deny, not ${JSON.stringify(k.slice(0, 20))}.`;
+  for (const k of ['allow', 'ask', 'deny']) {
+    if (r[k] === undefined) continue;
+    if (!Array.isArray(r[k]) || r[k].length > 200) return 'A rule list holds at most 200 rules.';
+    for (const x of r[k]) {
+      if (typeof x !== 'string' || !x.trim()) return 'A rule is a line of text.';
+      if (x.length > 200) return 'A rule is at most 200 characters.';
+      if (!RULE_SHAPE.test(x)) return `"${x.slice(0, 40)}" is not in Claude Code's rule form, for example Bash(npm test:*) or Read(./docs/**).`;
+      if (x.startsWith('mcp__bunny__')) return 'That tool is Bunny\'s own and cannot be given a rule.';
+    }
+  }
+  return null;
+}
+
 /** The engine choices in the settings, with defaults. */
 export function engineSettings(settings = {}) {
   const engines = {};
   for (const id of ENGINE_IDS) {
     const s = settings.engines?.[id] ?? {};
-    engines[id] = { auth: ['account', 'local'].includes(s.auth) ? s.auth : AUTH_DEFAULTS[id], enabled: s.enabled !== false };
+    engines[id] = { auth: ['account', 'local'].includes(s.auth) ? s.auth : AUTH_DEFAULTS[id], enabled: s.enabled !== false, rules: cleanRules(s.rules) };
   }
   const engine = ['bunny', ...ENGINE_IDS].includes(settings.engine) ? settings.engine : 'bunny';
   return { engine, engines, useBunnyEngine: settings.useBunnyEngine !== false };
@@ -51,10 +71,11 @@ export function validateEngineSettings(patch = {}) {
     for (const [id, v] of Object.entries(e)) {
       if (!ENGINE_IDS.includes(id)) return `Bunny has no engine called ${JSON.stringify(id.slice(0, 30))}.`;
       if (!v || typeof v !== 'object') return 'The engine settings are not valid.';
-      for (const k of Object.keys(v)) if (!['auth', 'enabled'].includes(k)) return `An engine has no setting called ${JSON.stringify(k.slice(0, 30))}.`;
+      for (const k of Object.keys(v)) if (!['auth', 'enabled', 'rules'].includes(k)) return `An engine has no setting called ${JSON.stringify(k.slice(0, 30))}.`;
       if (v.auth !== undefined && !['account', 'local'].includes(v.auth)) return 'Choose Sign in with an account, or Operate locally.';
       if (id === 'codex' && v.auth === 'account') return CODEX_ACCOUNT_NOTE;
       if (v.enabled !== undefined && typeof v.enabled !== 'boolean') return 'An engine is on or off.';
+      if (v.rules !== undefined) { if (id !== 'claude-code') return 'Only Claude Code has rules to edit: Codex asks about every step.'; const bad = validateRules(v.rules); if (bad) return bad; }
     }
   }
   return null;
@@ -66,7 +87,7 @@ function fakePins() {
   const archive = makeZipForFake();
   const sha = createHash('sha256').update(archive).digest('hex');
   const mk = (id, label) => ({ version: '1.0.0', entry: 'fake.exe', label, licence: 'test', hosts: ['fake.test'], signature: 'Fake Co', files: [{ name: `${id}.zip`, url: `https://fake.test/${id}.zip`, sha256: sha, kind: 'zip', size: archive.length }] });
-  return { pins: { 'claude-code': mk('claude-code', 'Claude Code'), codex: { ...mk('codex', 'Codex CLI'), model: 'gpt-5.5' } }, archive };
+  return { pins: { 'claude-code': { ...mk('claude-code', 'Claude Code'), promptTool: true }, codex: { ...mk('codex', 'Codex CLI'), model: 'gpt-5.5' } }, archive };
 }
 
 /** The Chat Completions stream for the model endpoint: the chat's own provider, through fetch (the stand-in answers in fake mode). */
@@ -206,6 +227,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
         authModes: id === 'codex' ? { local: { available: true }, account: { available: false, note: CODEX_ACCOUNT_NOTE } } : { local: { available: true, note: LOCAL_NOTE_CLAUDE }, account: { available: true } },
         licence: pins[id]?.licence ?? '',
         signedIn: id === 'claude-code' && s.downloaded ? cachedAuth(id) : null,
+        rules: cfg.engines[id].rules, rulesEditable: id === 'claude-code', ownRules: ownRulesOk(id),
       });
     }
     return { engines: list, engine: cfg.engine, useBunnyEngine: cfg.useBunnyEngine, fake: fakeMode };
@@ -236,6 +258,8 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const label = LABELS[id] ?? id;
     const auth = choice.auth ?? engineSettings(settings).engines[id].auth;
     let mode = choice.restricted ? 'restricted' : 'full';
+    // ENGINE-RULES: with Bunny's engine off the chat follows the engine's own rules, fixed at its first message; restricted mode keeps Bunny's diff review, and an engine whose prompt tool is unproven stays on Bunny's rules
+    const ownRules = choice.rules === 'engine' && mode === 'full' && ownRulesOk(id);
     const home = join(dataDir, 'engines', id, auth, 'chat', String(turn.id).replace(/[^\w-]/g, '_'));
     await mkdir(home, { recursive: true });
     let assembled = ''; let stoppedForCheck = false; let ok = true;
@@ -270,13 +294,25 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const root = turn.root;
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
-      mode: () => turn.permissionMode, rules: () => rulesFor(settings.permissionRules, root), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
-      ask: async (summary, detail) => turn.askPermission(`${label} asks: ${summary}`, detail),
+      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(settings.permissionRules, root)), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      ask: async (summary, detail) => {
+        const ok = await turn.askPermission(`${label} asks: ${summary}`, detail);
+        if (ownRules) await turn.logStep({ role: 'assistant', kind: 'tool_call', tool: `${label} asked: ${summary}`, status: ok ? 'allowed' : 'denied', content: '', result: ok ? 'You allowed it.' : 'You did not allow it.' }).catch(() => {});
+        return ok;
+      },
     };
     const bridge = createBridge(ctx);
     const checked = async (res, paths) => { if (res.allow && res.name !== 'run_command' && res.name !== 'read_file') for (const p of paths) await turn.beforeWrite?.(p).catch(() => {}); return res; };
-    const judgeClaude = async (req) => { const r = await bridge.claude(req); const p = req.input?.file_path ?? req.input?.path; return checked(r, p ? [p] : []); };
-    const bridgeForCodex = {
+    const judgeClaude = async (req) => {
+      const p = req.input?.file_path ?? req.input?.path ?? req.input?.notebook_path;
+      if (ownRules) { const r = await bridge.claudeFloor(req); if (r.abstain && p && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(req.tool)) await turn.beforeWrite?.(p).catch(() => {}); return r; } // the checkpoint is taken before a write the engine may then do
+      const r = await bridge.claude(req); return checked(r, p ? [p] : []);
+    };
+    const decideClaude = async (req) => { const r = await bridge.claudeAsk(req); const p = req.input?.file_path ?? req.input?.path; return checked(r, p ? [p] : []); };
+    const bridgeForCodex = ownRules ? {
+      codexCommand: (params) => bridge.codexCommandRelay(params),
+      codexChanges: async (changes) => { const r = await bridge.codexChangesRelay(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
+    } : {
       codexCommand: (params) => bridge.codexCommand(params),
       codexChanges: async (changes) => { const r = await bridge.codexChanges(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     };
@@ -294,9 +330,9 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     turn.signal?.addEventListener?.('abort', () => control.abort(), { once: true });
     let run;
     try {
-      const deny = denyRules({ rules: rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
+      const deny = denyRules({ rules: ownRules ? [] : rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
       if (id === 'claude-code') {
-        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null,
+        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null, rules: ownRules ? 'engine' : 'bunny', engineRules: ownRules ? cleanRules(engineSettings(settings).engines['claude-code'].rules) : null, decide: ownRules ? decideClaude : null,
           upstream: auth === 'local' ? budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn) : null, onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       } else {
         const sch = await schema();
@@ -340,6 +376,8 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     return { text: assembled, ok, stoppedForCheck };
   }
 
+  /** Can this engine follow its own rules while Bunny's engine is off? Claude Code only where the prompt-tool spike passed for the pinned version (pins.json: promptTool); Codex always asks. */
+  const ownRulesOk = (id) => id === 'codex' || (id === 'claude-code' && pins['claude-code']?.promptTool === true);
   const pinVersion = (id) => pins[id]?.version ?? null;
 
   const busy = (id) => running.has(id);

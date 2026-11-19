@@ -24,6 +24,9 @@ export const profile = Object.freeze({
 });
 
 /** The tools Bunny turns off in BOTH modes (S1 addendum 3, proven; plus the agent-control tools named the same way). The subagent tool is `Agent` to the hook and `Task` in the tools list. */
+/** With the engine's own rules (Bunny's engine off) the prompt tool is on, and with it three interactive tools appear in system/init (S1 spike line ER-4): they are not offered. */
+export const ENGINE_RULES_DISALLOWED = Object.freeze(['AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode']);
+
 export const DISALLOWED_TOOLS = Object.freeze([
   'WebSearch', 'Agent', 'Task', 'Skill', 'CronCreate', 'CronDelete', 'CronList', 'EnterWorktree', 'ExitWorktree',
   'TaskCreate', 'TaskGet', 'TaskList', 'TaskUpdate', 'TaskStop', 'SendMessage', 'ListAgents', 'ScheduleWakeup', 'Workflow', 'ReportFindings', 'Monitor',
@@ -77,10 +80,14 @@ export function denyRules({ rules = [], root, protect = [], keyFolders = [], hid
 }
 
 /** Bunny's `--settings` file content: the hook on every tool and the deny list. No allow, no ask, no other key. */
-export function buildSettings({ hookCommand, deny }) {
+export function buildSettings({ hookCommand, deny, engineRules = null }) {
+  // With Bunny's engine ON no allow and no ask ever goes in. With it OFF (ENGINE-RULES) the person's own engine rules are written: they are the engine's rules, set in Bunny.
+  const permissions = { deny: [...new Set([...deny, ...(engineRules?.deny ?? [])])] };
+  if (engineRules?.ask?.length) permissions.ask = [...engineRules.ask];
+  if (engineRules?.allow?.length) permissions.allow = [...engineRules.allow];
   return {
     hooks: { PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: hookCommand, timeout: HOOK_TIMEOUT_SECONDS }] }] },
-    permissions: { deny: [...deny] },
+    permissions,
   };
 }
 
@@ -91,9 +98,11 @@ export function hookCommandLine(runtimePath, hookPath) {
 }
 
 /** The command line (no prompt in it): the prompt goes to stdin as stream-json. */
-export function buildArgs({ mode = 'full', planMode = false, settingsPath, resumeId = null, model = null }) {
+export function buildArgs({ mode = 'full', planMode = false, settingsPath, resumeId = null, model = null, rules = 'bunny', mcpConfigPath = null }) {
+  // Bunny's engine ON: the engine may not ask anyone (an ask is a deny). OFF: its questions go to Bunny's per-run prompt tool, which shows a card (ER-4).
+  const prompts = rules === 'engine' ? ['--permission-prompt-tool', 'mcp__bunny__approve'] : ['--permission-prompts', 'none'];
   const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-    '--permission-prompts', 'none', '--setting-sources', 'user', '--settings', settingsPath, '--strict-mcp-config', '--disallowedTools', ...DISALLOWED_TOOLS];
+    ...prompts, '--setting-sources', 'user', '--settings', settingsPath, ...(rules === 'engine' && mcpConfigPath ? ['--mcp-config', mcpConfigPath] : []), '--strict-mcp-config', '--disallowedTools', ...DISALLOWED_TOOLS, ...(rules === 'engine' ? ENGINE_RULES_DISALLOWED : [])];
   if (planMode) args.push('--permission-mode', 'plan');
   if (mode === 'restricted') args.push('--restricted');
   if (resumeId) args.push('--resume', resumeId);
@@ -108,9 +117,10 @@ export const AUTH_COMMANDS = Object.freeze({ status: ['auth', 'status', '--json'
  * Everything one run needs: { file, args, env, settings, expectedTools }. `home` is the isolated folder for this engine, mode and chat (CLAUDE_CONFIG_DIR, and HOME/USERPROFILE/APPDATA so the person's own
  * ~\.claude is never found). Local mode carries the endpoint's address and the run's token and nothing of a vendor; account mode carries no endpoint token (§7.3).
  */
-export function buildRun({ exe, home, hookPath, runtimePath, bridge, endpoint = null, auth = 'account', mode = 'full', planMode = false, resumeId = null, deny = [], model = null, usePowerShell = false, configDir = null }) {
+export function buildRun({ exe, home, hookPath, runtimePath, bridge, endpoint = null, auth = 'account', mode = 'full', planMode = false, resumeId = null, deny = [], model = null, usePowerShell = false, configDir = null, rules = 'bunny', engineRules = null, approve = null }) {
   const settingsPath = join(home, 'bunny-settings.json');
-  const settings = buildSettings({ hookCommand: hookCommandLine(runtimePath, hookPath), deny });
+  const mcpConfigPath = rules === 'engine' ? join(home, 'bunny-mcp.json') : null;
+  const settings = buildSettings({ hookCommand: hookCommandLine(runtimePath, hookPath), deny, engineRules: rules === 'engine' ? engineRules : null });
   const env = {
     ...QUIET_ENV,
     CLAUDE_CONFIG_DIR: configDir ?? join(home, 'config'), HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
@@ -120,10 +130,12 @@ export function buildRun({ exe, home, hookPath, runtimePath, bridge, endpoint = 
     if (!endpoint) throw new Error('Local mode needs the endpoint.');
     env.ANTHROPIC_BASE_URL = endpoint.base.replace(/\/v1$/, ''); env.ANTHROPIC_API_KEY = endpoint.token; env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS = '1';
   }
+  // The spike (ER-4) showed Claude Code ends a waiting MCP tool at 60 s ("The operation timed out", a deny): the card needs up to Bunny's 150 s limit, so the engine's MCP tool timeout is set above it.
+  if (rules === 'engine' && approve) { env.BUNNY_APPROVE_TOKEN = approve.token; env.MCP_TOOL_TIMEOUT = String(MCP_TOOL_TIMEOUT_MS); }
   if (usePowerShell) env.CLAUDE_CODE_USE_POWERSHELL_TOOL = '1';
   const tools = [...EXPECTED_TOOLS[mode === 'restricted' ? 'restricted' : 'full']];
   if (usePowerShell && mode !== 'restricted') tools.push('PowerShell');
-  return { file: exe, args: buildArgs({ mode, planMode, settingsPath, resumeId, model }), env, settings, settingsPath, expectedTools: tools };
+  return { file: exe, args: buildArgs({ mode, planMode, settingsPath, resumeId, model, rules, mcpConfigPath }), env, settings, settingsPath, mcpConfigPath, mcpConfig: rules === 'engine' && approve ? mcpConfig(approve.url) : null, expectedTools: tools };
 }
 
 // ---------------------------------------------------------------- reading the stream
@@ -216,6 +228,9 @@ import { createBridgeServer } from './bridge-server.js';
 import { hookIntact, writeHook } from './hook-script.js';
 import { killTree, spawnEngine } from './process.js';
 import { createEndpoint } from './endpoint.js';
+import { createApproveServer, mcpConfig } from './approve-server.js';
+
+export const MCP_TOOL_TIMEOUT_MS = 200_000;
 import { createBridge } from './bridge.js';
 
 /**
@@ -225,12 +240,12 @@ import { createBridge } from './bridge.js';
  * through node). The prompt goes to stdin as one stream-json user message and never on the command line (CE-8). On stop, on a watchdog trip, on an error, and at the end the whole process tree is killed
  * and the bridge listener is closed: no engine process outlives its run.
  */
-export async function startClaude({ cwd, prompt, home, exe, runtimePath = process.execPath, auth = 'account', upstream = null, onEndpointUsage = null, endpointOptions = {}, mode = 'full', planMode = false, resumeId = null, deny = [], judge, onDecision = null, signal = null, usePowerShell = false, model = null, launcher = null, silenceMs = 0, extraEnv = {}, configDir = null }) {
+export async function startClaude({ cwd, prompt, home, exe, runtimePath = process.execPath, auth = 'account', upstream = null, onEndpointUsage = null, endpointOptions = {}, mode = 'full', planMode = false, resumeId = null, deny = [], judge, onDecision = null, signal = null, usePowerShell = false, model = null, launcher = null, silenceMs = 0, extraEnv = {}, configDir = null, rules = 'bunny', engineRules = null, decide = null, onQuestion = null, approveLimitMs = undefined }) {
   const queue = createEventQueue();
   const bridgeServer = createBridgeServer({ judge, onDecision });
   const { port } = await bridgeServer.start();
-  let run = null; let stopped = false; let endpoint = null; let started = null;
-  const finish = async () => { await bridgeServer.close().catch(() => {}); await endpoint?.close().catch(() => {}); };
+  let run = null; let stopped = false; let endpoint = null; let started = null; let approveServer = null; let approve = null;
+  const finish = async () => { await bridgeServer.close().catch(() => {}); await endpoint?.close().catch(() => {}); await approveServer?.close().catch(() => {}); };
   try {
     if (auth === 'local') {
       if (!upstream) throw new Error('Local mode needs a model to talk to.');
@@ -238,11 +253,17 @@ export async function startClaude({ cwd, prompt, home, exe, runtimePath = proces
       endpoint = createEndpoint({ upstream, label: model ?? 'bunny', onUsage: onEndpointUsage, onToolList: (names) => { const extra = names.filter((n) => !allowed.has(n)); return extra.length ? `Claude Code offered a tool Bunny does not allow: ${extra.slice(0, 3).join(', ')}.` : true; }, ...endpointOptions });
       started = await endpoint.start();
     }
+    if (rules === 'engine') {
+      if (!decide) throw new Error('The engine\'s own rules need a way to ask the person.');
+      approveServer = createApproveServer({ decide, onQuestion, ...(approveLimitMs ? { limitMs: approveLimitMs } : {}) });
+      approve = await approveServer.start();
+    }
     await mkdir(configDir ?? join(home, 'config'), { recursive: true });
     const hook = await writeHook(join(home, 'hook'));
     if (!(await hookIntact(hook.path))) throw new Error('The check script could not be written.');
-    const plan = buildRun({ exe, home, hookPath: hook.path, runtimePath, bridge: { port, token: bridgeServer.token }, endpoint: started ? { base: started.base, token: started.token } : null, auth, mode, planMode, resumeId, deny, model, usePowerShell, configDir });
+    const plan = buildRun({ exe, home, hookPath: hook.path, runtimePath, bridge: { port, token: bridgeServer.token }, endpoint: started ? { base: started.base, token: started.token } : null, auth, mode, planMode, resumeId, deny, model, usePowerShell, configDir, rules, engineRules, approve });
     await writeFile(plan.settingsPath, JSON.stringify(plan.settings, null, 1), { mode: 0o600 });
+    if (plan.mcpConfigPath && plan.mcpConfig) await writeFile(plan.mcpConfigPath, JSON.stringify(plan.mcpConfig, null, 1), { mode: 0o600 });
     const file = launcher ? launcher[0] : plan.file;
     const args = launcher ? [...launcher.slice(1), plan.file, ...plan.args] : plan.args;
     run = spawnEngine({ file, args, cwd, extraEnv: { ...plan.env, ...extraEnv } });
@@ -277,7 +298,7 @@ export async function startClaude({ cwd, prompt, home, exe, runtimePath = proces
     await finish();
   })();
 
-  return { events: queue, stop, bridge: bridgeServer, pid: run.child.pid, get stopped() { return stopped; } };
+  return { events: queue, stop, bridge: bridgeServer, approve: approveServer, pid: run.child.pid, get stopped() { return stopped; } };
 }
 
 const planExpected = (mode, usePowerShell) => { const t = [...EXPECTED_TOOLS[mode === 'restricted' ? 'restricted' : 'full']]; if (usePowerShell && mode !== 'restricted') t.push('PowerShell'); return t; };

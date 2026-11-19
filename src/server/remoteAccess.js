@@ -50,7 +50,7 @@ export function deviceRefusal(method, path, body = null) {
   if (isRemoteAdminPath(p)) return DEVICE_ACCESS_MESSAGE;
   if (ENGINE_PATH.test(p)) return ENGINE_REFUSED_MESSAGE;
   const has = (...keys) => Boolean(body) && typeof body === 'object' && keys.some((k) => Object.hasOwn(body, k));
-  if (p === '/api/settings' && m === 'PUT' && has('engine', 'engines')) return ENGINE_REFUSED_MESSAGE;
+  if (p === '/api/settings' && m === 'PUT' && has('engine', 'engines', 'useBunnyEngine')) return ENGINE_REFUSED_MESSAGE;
   if (p === '/api/sessions' && m === 'POST' && has('engine')) return ENGINE_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('engine')) return ENGINE_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}/setting/engine$`).test(p) && m === 'PATCH') return ENGINE_REFUSED_MESSAGE;
