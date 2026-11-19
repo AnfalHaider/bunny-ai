@@ -547,7 +547,7 @@ The canary rule stays for every future pin: the canary's unique string is search
 4. **The Claude Code adapter in account mode**, full and restricted, with its argument, hook and watchdog tests. Account mode needs no translator.
 5. **The Messages translator**, for Claude Code in local mode.
 6. `store.js`, `pins.json` and the `/api/engines` routes, plus the sign-in and sign-out flows (§7.1) and the CE-6 `isDeviceRefused` changes.
-7. **The Settings → Engines screens**, from Design's drawing (it's to be redrawn for two engines): the auth-mode choice, the restricted line, the sign-in states, download, update, rollback and Remove, the record, and the local-mode note.
+7. **The Settings → Engines screens**, from Design's drawing (v7: two engines, with the fallback flow): the auth-mode choice, the restricted line, the sign-in states, download, update, rollback and Remove, the record, and the local-mode note.
 8. The "engine pins" gate step, `engine-smoke.mjs`, help text and pictures.
 
 ---
