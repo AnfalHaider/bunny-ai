@@ -96,27 +96,42 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .vimg.l{display:none}:root:not([data-theme="light"]) .vimg.d{display:block}}
 .btn2 .sh{display:none}
 .rc{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-left:5px;vertical-align:middle}.rc.t{background:none;border:1.5px solid var(--mute)}.seg b.on .rc{box-shadow:0 0 0 1.5px rgba(255,255,255,.55)}.seg b.on .rc.t{border-color:#fff;box-shadow:none}
+.onoff{width:40px;height:23px;border-radius:99px;background:var(--line);position:relative;display:inline-block;cursor:pointer;flex:none}.onoff i{position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#fff;transition:left .15s}.onoff.on{background:var(--accent)}.onoff.on i{left:20px}.onoff.dis{opacity:.55;cursor:not-allowed}.er.bn .cc{display:flex;justify-content:flex-end}
+@container (max-width:620px){.er.bn{grid-template-columns:32px minmax(0,1fr) auto}.er.bn .act2{grid-column:3;grid-row:1}.er.bn .mn{display:none}}
 </style>
 
 <main>
 <div class="top">
   <div>
     <h1>Bunny engines</h1>
-    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p><p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p><p style="margin-top:8px"><span class="pill p-med">Updated 2026-11-19</span> <b>Version 9: every engine offers both sides, signed in or out, with a small mark on the recommended side</b> (the owner: "there should be an option to use all engines both signed in and out, with recommendations where applicable"; the mark is a dot inside the same row, no extra row). <b>Version 8: tighter rows</b> (the owner: "improve the layout, tighten the rows"): one line per engine, the version in the dim line, no "Signed in" or "Update ready" chip, the actions in ⋯. <b>Only Claude Code and Codex CLI, besides Bunny, in 0.1.14.</b> The owner: "lets remove cline and other for now, just focus on codex and claude." Cline and Aider are left out (Security ruled Cline unsafe in any mode). <b>Codex runs in full mode</b> (the owner approved it). <b>Restricted mode stays in 0.1.14 as the fallback</b> for Claude Code and Codex: when Bunny's check does not run, the chat stops and offers it (section 5).</p>
+    <p class="mute">v0.1.14 drawing, version 10. One row per engine. Invented data only. Nothing here is built.</p>
   </div>
   <div class="tops"><button class="t" id="theme" type="button">Show the other theme</button></div>
 </div>
 
 <section class="card">
-  <h2>1. Rows saved: version 2 beside version 3</h2>
-  <p class="mute">The same engines, same width (version 2's picture still shows five, with Cline and Aider, which are no longer offered; version 3 shows three, and the comparison below is per engine). Version 2 gave each engine a header, a block for the choice and often a note. Version 3 gives each one row: name and version, status, the Local | Account control and the main button on one line, and one dim line for the note.</p>
-  <div class="stat" id="stat"></div>
-  <div style="display:grid;gap:14px">
-    <div><div class="lab">Today: the shape in the owner's screenshot (version 2, replaced; it shows the labelled toggle A, which is not built)</div><img class="vimg l" id="v2l" alt="Version 2 Engines list, light" src="v2/v2-engines-light.png"><img class="vimg d" id="v2d" alt="Version 2 Engines list, dark" src="v2/v2-engines-dark.png"></div>
-    <div><div class="lab">Proposed: one row per engine, with the approved two-option Local | Account control (B)</div><div class="app" id="v3main"></div><div class="mute" style="font-size:12px;margin-top:4px"><i class="rc"></i> Recommended side &nbsp;·&nbsp; <i class="rc t"></i> recommendation to be confirmed &nbsp;·&nbsp; hover a side for its one-line reason</div></div>
+  <h2>Engines</h2>
+  <p class="mute">One row per engine: <b>tile · name and dim line · Local | Account switch · main button · ⋯</b>, all on one line. The first row is the new option "Use Bunny's engine" (click its switch to see it off).</p>
+  <div class="app" id="v3main"></div>
+  <div class="mute" style="font-size:12px;margin-top:4px"><i class="rc"></i> Recommended side &nbsp;·&nbsp; <i class="rc t"></i> recommendation to be confirmed &nbsp;·&nbsp; hover a side for its one-line reason</div>
+  <div class="twocol">
+    <div><div class="lab">On a phone</div><div class="phone"><div class="app" id="pr-ph"></div></div></div>
+    <div><div class="lab">What is in each row</div><p class="mute">Tile, name, one dim line ("v2.1.311 · Signed in · Anthropic"), the Local | Account switch (both sides always offered; a dot marks the recommended one), the one main button (Update to vY (tested), Download, Sign in again), and a ⋯ menu with Check for update, Roll back, Sign out and Remove. "Signed in" lives only in the dim line, and a chip appears only when something needs you (installing, failed, sign-in expired, stopped). On a phone the name and ⋯ keep the first line; the switch and the button share the second.</p></div>
   </div>
-  <div class="twocol"><div><div class="lab">Today on a phone (the same shape)</div><div class="phone"><div class="app" id="t-ph"></div></div></div><div><div class="lab">Proposed on a phone</div><div class="phone"><div class="app" id="pr-ph"></div></div></div></div>
-  <p class="mute">Per row: tile, name, one dim line ("v2.1.311 · Signed in · Anthropic"), the Local | Account switch, the one main button (Update to vY (tested), Download, Sign in again), and a ⋯ menu with Check for update, Roll back, Sign out and Remove. "Signed in" lives only in the dim line, and a chip appears only when something needs you (installing, failed, sign-in expired, stopped). On a phone the name and ⋯ keep the first line; the switch and the button share the second, so an engine is two short lines at most, never four.</p>
+</section>
+
+<section class="card">
+  <h2>Use Bunny's engine (new option)</h2>
+  <p class="mute">The owner's option, the first row of Settings → Engines. <b>On by default.</b> When it is off, chats run on the enabled engines and follow that engine's own rules. It cannot be turned off while no engine is installed.</p>
+  <div class="twocol">
+    <div><div class="lab"><b>On</b> (the default)</div><div class="app" id="bn-on"></div></div>
+    <div><div class="lab"><b>Off</b>, with its warning</div><div class="app" id="bn-off"></div></div>
+  </div>
+  <div class="twocol">
+    <div><div class="lab"><b>No engine installed</b>: the switch stays on and says why</div><div class="app" id="bn-none"></div></div>
+    <div><div class="lab">On a phone, off</div><div class="phone"><div class="app" id="bn-ph"></div></div></div>
+  </div>
+  <p class="mute">The warning is Security's to word; what is drawn says what the owner asked it to say. The row stays on one line, and the warning sits directly under it, never in a dialog, so it is seen where the switch is.</p>
 </section>
 
 <section class="card">
@@ -233,6 +248,17 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     <li><b>The go</b> to build, after Security's requirements.</li>
   </ul>
 </section>
+<section class="card">
+  <h2>Before (replaced, shown small)</h2>
+  <p class="mute">Version 2, with five engines and the labelled toggle (A). Replaced by the one-row design above; it is here only for the record.</p>
+  <div class="twocol">
+    <div><div class="lab">Desktop, version 2</div><div style="max-width:460px"><img class="vimg l" id="v2l" alt="Version 2 Engines list, light" src="v2/v2-engines-light.png"><img class="vimg d" id="v2d" alt="Version 2 Engines list, dark" src="v2/v2-engines-dark.png"></div></div>
+    <div><div class="lab">Phone, the same shape</div><div class="phone" style="max-width:330px"><div class="app" id="t-ph"></div></div></div>
+  </div>
+  <h3 style="margin:14px 0 4px">Notes and history</h3>
+  <p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p>
+  <p style="margin-top:8px"><span class="pill p-med">Updated 2026-11-19</span> <b>Version 9: every engine offers both sides, signed in or out, with a small mark on the recommended side</b> (the owner: "there should be an option to use all engines both signed in and out, with recommendations where applicable"; the mark is a dot inside the same row, no extra row). <b>Version 8: tighter rows</b> (the owner: "improve the layout, tighten the rows"): one line per engine, the version in the dim line, no "Signed in" or "Update ready" chip, the actions in ⋯. <b>Only Claude Code and Codex CLI, besides Bunny, in 0.1.14.</b> The owner: "lets remove cline and other for now, just focus on codex and claude." Cline and Aider are left out (Security ruled Cline unsafe in any mode). <b>Codex runs in full mode</b> (the owner approved it). <b>Restricted mode stays in 0.1.14 as the fallback</b> for Claude Code and Codex: when Bunny's check does not run, the chat stops and offers it (section 5).</p>
+</section>
 </main>
 
 <script>
@@ -249,7 +275,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
   // o: t, name, ver, st (html), note, mode (null = no control), btn, mn (bool), prog
   function vn(o){return (o.ver&&!/not installed|built in/.test(o.ver)?o.ver+' · ':'')+(o.note||'');}
   function er(o,v){
-    return '<div class="er"><span class="ti">'+o.t+'</span><div class="nm"><div class="l1"><b>'+o.name+'</b>'+(o.st?' '+o.st:'')+'</div>'+(o.prog!=null?'<span class="bar"><i style="width:'+o.prog+'%"></i></span><div class="l2">'+vn(o)+'</div>':'<div class="l2'+(o.wrap?' w':'')+'" title="'+vn(o).replace(/"/g,'')+'">'+vn(o)+'</div>')+'</div><div class="act2"><div class="cc">'+(o.mode?ctl(v,o.mode,o.t):'')+'</div><div class="bt">'+(o.btn||'')+'</div></div><span class="mn'+(o.mn?'':' none')+'">···</span></div>';
+    return '<div class="er'+(o.ctlh!=null?' bn':'')+'"><span class="ti">'+o.t+'</span><div class="nm"><div class="l1"><b>'+o.name+'</b>'+(o.st?' '+o.st:'')+'</div>'+(o.prog!=null?'<span class="bar"><i style="width:'+o.prog+'%"></i></span><div class="l2">'+vn(o)+'</div>':'<div class="l2'+(o.wrap?' w':'')+'" title="'+vn(o).replace(/"/g,'')+'">'+vn(o)+'</div>')+'</div><div class="act2"><div class="cc">'+(o.ctlh!=null?o.ctlh:(o.mode?ctl(v,o.mode,o.t):''))+'</div><div class="bt">'+(o.btn||'')+'</div></div><span class="mn'+(o.mn?'':' none')+'">···</span></div>';
   }
   var CCN='Anthropic does not support Claude Code with other models; it may stop working after an update.';
   var MAIN=[
@@ -257,9 +283,14 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
    {t:'CC',name:'Claude Code',ver:'v2.1.311',note:'Signed in · Anthropic',mode:'account',btn:btn('<span class="lg">Update to v2.1.327 (tested)</span><span class="sh">Update</span>','pri'),mn:true},
    {t:'CX',name:'Codex CLI',ver:'v0.170.0',note:'Full mode · Local',mode:'local',btn:'',mn:true}
   ];
+  var BUNNY_ON=true;
+  function swt(on,dis){return '<span class="onoff'+(on?' on':'')+(dis?' dis':'')+'" role="switch" aria-checked="'+on+'" aria-label="Use Bunny\'s engine"'+(dis?' aria-disabled="true"':'')+'><i></i></span>';}
+  function bunny(on,none){return {t:'B',name:'Use Bunny\'s engine',ver:'',note:none?'On · install an engine below to be able to turn this off':(on?'Default · Bunny\'s rules and your permission settings apply to every chat':'Off · chats run on the enabled engines and follow their own rules'),ctlh:swt(on,none),btn:'',mn:false};}
+  var BWARN='<div style="padding:0 12px 10px"><div class="callout wr"><b>Bunny\'s rules do not apply to chats now.</b> Chats run on the enabled engines (Claude Code, Codex CLI) and follow each engine\'s own rules, not Bunny\'s permission rules or the check Bunny makes before every step. Turn it back on to return to Bunny\'s rules. <span class="mute">Wording: Security\'s, to come.</span></div></div>';
+  function blist(on,none,rest){return '<div class="grp">'+er(bunny(on,none),'seg')+(on?'':BWARN)+rest.map(function(r){return er(r,variant);}).join('')+'</div>';}
   function list(rows,v){return '<div class="grp">'+rows.map(function(r){return er(r,v);}).join('')+'</div>';}
   function paint(){
-    document.getElementById('v3main').innerHTML='<h4>Engines</h4>'+list(MAIN,variant);
+    var REST=MAIN.slice(1);document.getElementById('v3main').innerHTML='<h4>Engines</h4>'+blist(BUNNY_ON,false,REST);
     
     
     document.getElementById('alt-b').innerHTML=list(MAIN.slice(1,3),'seg');
@@ -278,7 +309,8 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     ];
     document.getElementById('states').innerHTML=S.map(function(s){return '<div class="c">'+s[0]+'</div><div class="grp">'+er(s[1],variant)+'</div>';}).join('');
     document.getElementById('p-set').innerHTML='<h4>Engines</h4><div class="d">Only Bunny\'s window can change these.</div><div class="grp">'+MAIN.map(function(r){var q=Object.assign({},r,{btn:'',mn:false});if(q.mode==='account'){q.note='Account · every action checked first';}return er(q,variant);}).join('')+'</div>';
-    document.getElementById('pr-ph').innerHTML='<h4>Engines</h4>'+list(MAIN,variant);
+    document.getElementById('pr-ph').innerHTML='<h4>Engines</h4>'+blist(BUNNY_ON,false,REST);
+    document.getElementById('bn-on').innerHTML=blist(true,false,[]);document.getElementById('bn-off').innerHTML=blist(false,false,[]);document.getElementById('bn-none').innerHTML='<div class="grp">'+er(bunny(true,true),'seg')+'</div>';document.getElementById('bn-ph').innerHTML=blist(false,false,[]);
     document.getElementById('t-ph').innerHTML='<h4>Engines</h4>'+todayMock();
     fitStat();
   }
@@ -286,7 +318,9 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     function blk(t,n,badge,sub,ctlh,chiprow,btns){return '<div style="padding:10px 12px;border-top:1px solid var(--line);display:grid;gap:6px"><div style="display:flex;gap:8px;align-items:center"><span class="ti" style="width:32px;height:32px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 12px monospace">'+t+'</span><div><b>'+n+'</b> '+badge+'<div class="l2" style="white-space:normal">'+sub+'</div></div></div>'+(ctlh?'<div>'+ctlh+'</div>':'')+(chiprow?'<div style="display:flex;gap:6px;align-items:center">'+chiprow+'</div>':'')+'<div class="acts">'+btns+'</div></div>';}
     return '<div class="grp">'+blk('B','Bunny',chip('Default','ac'),'Bunny\'s own engine. Always there.','','','')+blk('CC','Claude Code',chip('Update ready','ac'),'Installed v2.1.311 · Signed in · Anthropic account',ctl('tg','account'),chip('Signed in','ok')+' <span class="mute">Anthropic account</span>',btn('Sign out')+btn('Update to v2.1.327 (tested)','pri')+btn('Remove'))+blk('CX','Codex CLI',chip('Restricted providers','wr'),'Installed v0.170.0 · Running locally',ctl('tg','local'),'',btn('Check for update')+btn('Remove'))+'</div>';
   }
+  ['v3main','pr-ph'].forEach(function(id){document.getElementById(id).addEventListener('click',function(e){if(e.target.closest('.onoff')){BUNNY_ON=!BUNNY_ON;paint();}});});
   function fitStat(){
+    if(!document.getElementById('stat'))return;
     var v3=document.getElementById('v3main');var img=document.getElementById('v2l');
     var d=document.documentElement,dark=d.getAttribute('data-theme')?d.getAttribute('data-theme')==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
     var im=dark?document.getElementById('v2d'):img;var h2=im.getBoundingClientRect().height,h3=v3.getBoundingClientRect().height;
