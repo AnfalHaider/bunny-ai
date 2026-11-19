@@ -21,14 +21,14 @@ test('START-WAIT: RS-5 still holds: the tray text is synced when the resume ends
   assert.match(fn, /bunnyApp\.resumeRemote\(\)/);
   assert.match(fn, /if \(result\.resumed\) new Notification/); // "open" is said only after it is open
   assert.match(fn, /syncTrayTooltip\(\);\s*$/); // the tray follows when it ends
-  assert.match(main, /const syncTrayTooltip = .*bunnyApp\?\.remote\?\.enabled \? 'Bunny AI: Open to other devices' : 'Bunny AI'/); // the text follows the real state
+  assert.match(main, /const syncTrayTooltip = .*trayTooltip\(bunnyApp\?\.remote\?\.enabled, trayEvent\)/); // the text follows the real state (words in electron/tray-words.js: 'Bunny AI: Open to other devices' when open, 'Bunny AI' when not)
   assert.match(main, /setInterval\(syncTrayTooltip, 5000\)/);
 });
 
 test('START-WAIT: the page asks for the banner every second for its first 15 s, then every 10 s, so it shows as soon as access is really open', async () => {
   const chat = await readFile(new URL('../src/ui/chat.js', import.meta.url), 'utf8');
   const watch = chat.slice(chat.indexOf('function watchRemote()'));
-  assert.match(watch, /const early = setInterval\(tick, 1000\);\s*setTimeout\(\(\) => clearInterval\(early\), 15000\);\s*setInterval\(tick, 10000\);/);
+  assert.match(watch, /setTimeout\(loop, looks <= 15 \? 1000 : 10000\)/); // one second for the first 15 looks, then every 10 s
   assert.match(watch, /getJSON\('\/api\/remote'\)/, 'what it shows is what the server says is open, never a guess');
 });
 
