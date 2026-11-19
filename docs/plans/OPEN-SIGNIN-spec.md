@@ -1,6 +1,15 @@
-# OPEN-SIGNIN: signing in from outside the home network (v0.1.14, HIGH)
+# OPEN-SIGNIN: signing in from outside the home network (v0.1.14, HIGH), revision 2
 
-Tech Lead, 2026-11-19.
+Tech Lead, 2026-11-19. Revision 2 replaces 48b67ba.
+
+**What revision 2 changes:** two owner decisions, and Security's rewrite of OS-5, OS-7 and OS-8 (64374ea):
+1. **Internet devices are used as normal.** The owner's words, relayed by the Chief of Staff (a HIGH go; recorded on the Chief's main, quoted from 64374ea): "Internet devices should be allowed to use the application as normal, since every user will be signing into their own systems only, also there should be no time out, if security needs it then add options in settings to allow full use and no expiry, if enabled once it should remain enabled, this is supposed to be a refined version of claude's RC." So three window-only options are saved, and stay on once turned on (§8.1):
+   - **Keep devices signed in** (OS-5): no expiry, and sessions survive a restart, with only hashes saved;
+   - **Everything stays on** (OS-7): Everything is allowed for internet devices, from the window, with the internet sentence, and has no idle drop;
+   - **Stay open to the internet after a restart** (OS-8): the route reopens at start, only after the start-up checks.
+2. **No banner on top anywhere, only the devices chip** (relayed by the Chief of Staff). Wherever OS-8 or BN-3 says "the banner", this spec means **the chip and the tray**. Security is ruling on the chip's behaviour, and §7 follows that ruling when it lands.
+
+What did not change: OS-1, OS-2, OS-3, OS-4, OS-5's cookie flags, OS-6, OS-9 and OS-10. **None of the new options can switch any of those off**, and **no device can change any of the options**.
 
 ## Inputs
 
@@ -9,15 +18,16 @@ Tech Lead, 2026-11-19.
 - "yes tailsacle, also add other options the user may select one form settings";
 - and the record that OPEN-SIGNIN is built to Security's safe defaults.
 
-**The safe defaults:**
-- **internet devices stay at Chats** (OS-7);
-- **the internet route is off at every start** (OS-8).
+**The defaults** (before the person turns an option on):
+- internet devices start at **Chats**;
+- sessions expire (30 minutes idle, 12 hours at most);
+- the route is **off** after a restart.
 
-Changing either needs the owner's own go.
+The owner's decision 1 (above) allows each to be changed by its own option in Bunny's window. Once turned on, an option stays on until the owner turns it off.
 
 **Research and requirements:**
 - Researcher's details: 043f56f, `docs/research/2026-11-19-open-signin-details.md`.
-- Security's OS-1 to OS-10: b6f9a11, `docs/security/2026-11-19-open-signin-requirements.md`. **These are binding.**
+- Security's OS-1 to OS-10: b6f9a11, with OS-5, OS-7 and OS-8 rewritten at 64374ea, in `docs/security/2026-11-19-open-signin-requirements.md`. **These are binding.**
 - BN-1 to BN-5, which the chip builds on: `docs/security/2026-11-19-banner-notice-requirements.md`.
 
 Every LAN rule stays: S-1, RA-1, R1–R9, DEVICE-FULL, REMOTE-STAY and WEBAPP-SIGNIN. Where a LAN rule and an OS rule differ, the stricter one wins on the internet route.
@@ -39,7 +49,7 @@ Code references are to 07d6d2f.
 
 | Route | What it needs | Bunny does |
 |---|---|---|
-| **Off** (always the state at start) | Nothing | Nothing listens for the internet. |
+| **Off** (the state at start, unless "Stay open to the internet after a restart" is on and its checks pass, §4.5) | Nothing | Nothing listens for the internet. |
 | **Tailscale Funnel** (the recommendation) | Tailscale installed and signed in on this PC (free Personal plan), with HTTPS and Funnel allowed for the tailnet | Runs `tailscale funnel` as its own child process, aimed at a loopback-only listener, and shows the public address. |
 | **Your own HTTPS address** | A public name with a trusted certificate, and a proxy or tunnel on this PC that forwards to `127.0.0.1:<port>`. Caddy, a Cloudflare named tunnel and similar all fit here. | Opens the same loopback-only listener on a port the person points the proxy at, and pins the name they typed. |
 
@@ -47,9 +57,14 @@ Researcher found no other route that is free, needs no account and no domain, an
 
 **What stays the same on every route:**
 - the passcode;
-- devices at **Chats**;
+- devices start at **Chats**, and only the window can raise one to Everything (§6);
 - the Activity record;
 - a warning chip that cannot be dismissed (§7).
+
+**Three options sit under the route choice** (all window-only, saved, on until turned off):
+- Keep devices signed in;
+- Everything stays on;
+- Stay open to the internet after a restart.
 
 ---
 
@@ -78,8 +93,11 @@ createRemoteAccess({
   via: 'lan' | 'internet',
   cookieName,                 // 'bunny_remote' (lan, today) | '__Host-bunny_remote' (internet)
   secureCookie,               // false (lan, plain HTTP) | true (internet)
-  idleMs, maxAgeMs,           // lan: SESSION_IDLE_MS / EVERYTHING_IDLE_MS, no max age; internet: 30 min idle, 12 h max (OS-5)
-  levels,                     // lan: ['chats', 'everything'] | internet: ['chats'] (OS-7)
+  limits: () => ({ idleMs, maxAgeMs, everythingIdleMs }),  // read on every check, from the options (§6):
+                              //   lan: SESSION_IDLE_MS, no max age, EVERYTHING_IDLE_MS (unless "Everything stays on": none)
+                              //   internet, Keep devices signed in OFF: 30 min idle, 12 h max; ON: none (OS-5)
+  persist,                    // null | { file }: "Keep devices signed in" (§6.2); only SHA-256 hashes of secrets are written
+  levels,                     // ['chats', 'everything'] for both listeners (OS-7 revised)
   globalLimit,                // null (lan) | { fails: 10, perMs: 10 min, waitMaxMs: 1 h, shutoff: { fails: 100, perMs: 24 h } } (OS-3)
   scrypt,                     // the shared scrypt gate (§5.3)
   file, logFile, onEnd, onShutoff, now,
@@ -109,7 +127,7 @@ Everything after the pin checks is unchanged:
 - `isDeviceRefused` (CLI-ENGINES CE-6, SEARCH-PC §5);
 - the Chats allow-list.
 
-The internet listener **never enters the Everything branch**: `session.level` is always `'chats'` there (§6).
+The internet listener enters the Everything branch only for a device **the window** raised to Everything (§6). The device-refused set still applies there: `isRemoteAdminPath`, `isDeviceRefused`, and the three new options.
 
 ---
 
@@ -191,12 +209,12 @@ When the person chooses Funnel and `CertDomains` is empty, a dialog comes **befo
    - the "Available on the internet:" line confirms it is up.
    - The public URL is taken from `status --json` (`Self.DNSName`), never from prose output.
    - **[R-2: test 2: what the foreground form prints, whether it blocks on first-time consent with no console, and its exit codes.]**
-4. Pin the host. Write `remote-internet.json` = `{ via: 'funnel', port: netPort, https: 443, name }`. That records the leftovers check below, **not** an on-state: nothing in it is read back as "on".
+4. Pin the host. Write `remote-internet.json` = `{ via: 'funnel' | 'https', port: netPort, https: 443, name, on: true }`. It records the leftovers check below. **`on` is read back at start only when "Stay open to the internet after a restart" is on**, and only through §4.5's checks.
 5. Activity gets "Internet route on", with the public name.
 
 **If the child process ends by itself:**
 - `netServer` closes at once;
-- the chip and banner say "Tailscale Funnel stopped";
+- the chip and the tray say "Tailscale Funnel stopped";
 - Activity records it.
 - Bunny does **not** restart it by itself.
 
@@ -210,8 +228,8 @@ When the person chooses Funnel and `CertDomains` is empty, a dialog comes **befo
 
 **At every start**, before anything else in OPEN-SIGNIN:
 1. If `remote-internet.json` names a port, run `tailscale funnel status --json`.
-2. Run the targeted `off` for any Funnel whose target is `127.0.0.1:<that port>`. That covers a crash or a forced kill that left one behind.
-3. The route itself is **never** turned on at start (OS-8).
+2. Run the targeted `off` for any Funnel whose target is a port that **isn't this start's internet listener** (OS-8 revised, check 4). That covers a crash or a forced kill that left one behind. A Funnel pointing anywhere else, not at a Bunny port, is left alone.
+3. Then the route is reopened **only** through §4.5, and only when the option is on. Otherwise it stays off.
 
 **Only if R-2 shows the foreground form cannot work** does Bunny use `--bg`. Then the quit and start cleanup above become required, not belt-and-braces, and Security reviews the change again.
 
@@ -220,6 +238,31 @@ When the person chooses Funnel and `CertDomains` is empty, a dialog comes **befo
 - **On:** open `netServer` on `internetPort`, and pin the saved name. Settings shows "Point your proxy at `http://127.0.0.1:<internetPort>` and keep the Host header." No child process is run.
 - **Checking it works:** a **Check** button asks the person to open `https://<name>/` from their phone. Bunny shows "Seen a request through <name>" in Activity when the first correctly pinned request arrives. Bunny does not fetch its own public address, because no outbound request is needed.
 - **Off and quit:** close `netServer`.
+
+
+### 4.5 Reopening after a restart (OS-8 revised)
+
+The option is **Stay open to the internet after a restart**: window-only, saved, and on once the owner turns it on.
+
+When the option is on and `remote-internet.json` says `on: true`, Bunny reopens at start **only if every check passes**. Otherwise it stays closed, and the Settings row says which check failed, in one sentence:
+
+| # | Check | The sentence when it fails |
+|---|---|---|
+| 1 | The saved passcode record exists, with OS-4's cost (N=65536) | "Not reopened: the passcode was not found. Turn it on again." |
+| 2 | OS-3's shut-off has not fired since it was turned on. The shut-off is saved as `shutoffAt` in `remote-internet.json` and cleared only by the window's On | "Not reopened: Bunny closed it after too many wrong passcodes. Turn it on again here." |
+| 3 | **Funnel:** `tailscale status --json` shows `BackendState` running; `Self.DNSName`, with the trailing dot removed, **equals the saved pinned name**; the Funnel capability is present. Tailscale is started by absolute path with `safeEnv` | "Not reopened: Tailscale is not running" / "this PC's Tailscale name changed" / "Funnel is not allowed for this PC" |
+| 4 | **Funnel:** leftovers are turned off first (§4.3 start, step 2). Only then does Bunny start **its own Funnel as a child process**. A `--bg` Funnel is never left behind on purpose | |
+| 5 | **Own HTTPS:** the saved host name passes OS-6's hostname check. The listener reopens on loopback. Bunny can't check the owner's proxy, so the row says "Open through your own address" | "Not reopened: the saved address is not a valid name." |
+
+**Every reopen is visible:**
+- the chip reads `Open to the internet · <address>`, in the warning colour and impossible to dismiss (§7);
+- the tray tooltip says so;
+- the start notification names the address;
+- Activity records `reopened-at-start`, with the time and the pinned name.
+
+**Quitting Bunny** ends its child Funnel. Saved sessions survive only if "Keep devices signed in" is on (§6.2).
+
+This is not REMOTE-STAY's resume. It is a separate check list, in `resumeInternet()` next to `resumeRemote()`. It runs alongside the window's start (START-WAIT), never before it.
 
 ---
 
@@ -242,7 +285,8 @@ When the person chooses Funnel and `CertDomains` is empty, a dialog comes **befo
   - The window shows "Sign-ins from the internet are paused for N min", with a **Reset** button (window-only, device-refused: `POST /api/remote/internet/reset-wait`).
 - **The per-visitor limit.** RA-1's per-visitor reserve-before-scrypt still applies to each visitor, but only when §3 trusts an address. Otherwise all visitors share one key, "unknown", and the global limit is what holds.
 - **The shut-off.** 100 wrong passcodes in 24 hours turns the internet route **off by itself**. That runs §4.3's Off, and `onShutoff` shows a window notice: "Bunny closed the internet route after 100 wrong passcodes today."
-  - Only the window turns it back on.
+  - Only the window turns it back on. `shutoffAt` is saved, so "Stay open after a restart" does **not** reopen it (§4.5, check 2).
+  - It also **ends every internet session**, and deletes the saved hashes (§6.2).
   - Activity records it.
 
 ### 5.3 One scrypt gate
@@ -255,34 +299,83 @@ A try is reserved **before** taking a gate slot (RA-1 order), and released in `f
 
 ---
 
-## 6. Devices from the internet stay at Chats (OS-7)
+## 6. Devices from the internet: levels and sessions (OS-5 and OS-7, revised)
 
-- **The level stays Chats.** `setLevel(id, 'everything')` returns null for a `via: 'internet'` session. `PATCH /api/remote/devices/<id>/level` then answers 403 with "A device signed in from the internet stays at Chats."
-- **No Everything to offer.** The first sign-in dialog (`chooseLevel`) and Settings → Change show **no Everything option** for an internet device, only a line: "Devices from outside your home network can only use Chats."
-- **Chats rules hold unchanged:** every Chats-level block, `REMOTE_TOOLS_DENIED`, SEARCH-PC's denial (SP-5) and engines (CE-6).
-- **Expiry:** an internet session ends after **30 minutes idle or 12 hours** from sign-in, whichever comes first (OS-5). `sessionFor` checks `now - signedInAt > maxAgeMs` as well as idle time.
+### 6.1 Levels: Everything from the window, never from a device
 
-## 7. The chip, the banner, the tray (OS-9, BN-2)
+- **Every internet device starts at Chats**, the default. The first sign-in dialog asks about it, as DEVICE-FULL does.
+- **Only Bunny's window can raise it to Everything**, per device, through the existing window-only route `PATCH /api/remote/devices/<id>/level`. A level change from any device is refused, Everything included (`isRemoteAdminPath`).
+- **The dialog for an internet device** (`chooseLevel`, and Settings → Change) shows R-DF1's warning **plus** this sentence, exactly:
+
+  > This device signed in over the internet. Anyone who has your passcode, anywhere, could sign in the same way. Give Everything only to a device you own.
+
+  The red R-DF1 box in Settings stays while any device has Everything.
+- **At Everything**, an internet device is treated as the window, as DEVICE-FULL does. That excludes `/api/remote*` and everything in `isDeviceRefused`: engines, SEARCH-PC's settings and Open, the three options here, and the internet routes.
+- **The "Everything stays on" option** (window-only, saved):
+  - **Off:** an Everything device drops back to Chats after 30 minutes idle (`EVERYTHING_IDLE_MS`, R-DF1).
+  - **On:** Everything has no idle limit. With "Keep devices signed in", it also survives a restart (§6.2).
+  - **Scope, a question for Security:** 64374ea puts the option under OS-7, the internet section. This spec applies it to Everything devices on **both** listeners, because one switch named "Everything stays on" that covered only some devices would mislead. It needs Security's yes before the build. If Security says no, it is `internetEverythingStaysOn`, and the row says "for devices signed in over the internet".
+- **Activity** records each grant, and each drop to Chats (by a person, idle, sign-out), with `via`.
+
+### 6.2 Sessions: "Keep devices signed in"
+
+**The cookie is unchanged:** `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/` on the internet listener, plus the CSRF header.
+
+**The option** (window-only, saved):
+- **Off**, the default: an internet session ends after **30 minutes idle or 12 hours** from sign-in, whichever comes first. `sessionFor` checks `now - signedInAt > maxAgeMs` as well as idle time.
+- **On:**
+  - no idle limit and no maximum;
+  - the cookie gets `Max-Age=34560000` (400 days, the most browsers keep);
+  - **sessions survive a restart.** `remote-sessions-internet.json` in the data folder holds, per session, `{ sha256(secret), csrf, deviceId, label, level, signedInAt, lastSeen }`. **The secret itself is never written.**
+    - On a request, Bunny hashes the cookie with SHA-256 and looks the hash up.
+    - The lookup compares with `timingSafeEqual`, over hashes of equal length.
+    - The file is written atomically (a temp file, then a rename), and is readable only by the data folder's owner, as `remote-access.json` is.
+- **Turning it on** shows one sentence: "Devices stay signed in until you sign them out here, change the passcode or turn this off."
+
+**Even with the option on, a session ends at once, and its saved hash is deleted, when:**
+- the window signs that device out, or uses **Sign out all devices**;
+- the passcode changes;
+- the option is turned **off**, which ends every session older than 12 hours;
+- the internet route is turned **off** by the person;
+- OS-3's shut-off fires.
+
+**Quitting Bunny does not end saved sessions.** That is the point of the option. They are valid again when the route reopens (§4.5).
+
+**The home network:** LAN sessions keep REMOTE-STAY's rule, that every device signs in again after a restart. There is a **separate** option, "Keep home-network devices signed in" (`keepSignedInLan`), recommended off. It uses the same hashed file mechanism (`remote-sessions-lan.json`) and the LAN's own idle limits.
+
+**The device list** in Settings shows each device with its `via` (Home network / Internet), its level, first seen and last seen.
+
+**Chats rules hold unchanged** for Chats devices: every Chats-level block, `REMOTE_TOOLS_DENIED`, SEARCH-PC's denial (SP-5) and engines (CE-6).
+
+## 7. The chip and the tray, with no banner (OS-9, BN-2; owner's decision 2)
+
+**The owner's decision 2 applies everywhere:** no banner across the top, in Bunny's window or on a device page, **only the devices chip**. Wherever OS-8, OS-9 or BN-3 says "the banner", read **the chip and the tray**. Security is ruling on the chip's exact behaviour, and this section follows that ruling when it lands.
 
 **While the internet route is on:**
-- **The chip.** BN-2's chip in the window's top bar reads **`Open to the internet · <address>`**, in the **warning colour with words**.
+- **The chip** reads **`Open to the internet · <address>`**, in the **warning colour, with words**. It sits in the window's top bar, `role="status"`.
   - It **cannot be dismissed** and never hides by itself.
-  - It takes priority over "Open to devices · N". If a LAN device has Everything at the same time, the chip says both, for example "Open to the internet · Kitchen laptop has Everything". Design draws the exact form.
-- **The banner** about the internet route never hides by itself. **A new internet sign-in always brings it back** (BN-3).
+  - It takes priority over "Open to devices · N".
+  - When a device also has Everything, the chip says both, for example "Open to the internet · Sam's phone has Everything". Design draws the exact form.
+  - A click opens Settings → Use Bunny in a browser.
+- **A new internet sign-in, a grant of Everything, and a reopen at start** each make the chip draw attention (Design: a pulse, with reduced motion respected), and send a system notification naming the device and "internet". The banner's job (BN-3) moves to these two.
 - **The tray tooltip** reads "Bunny AI: Open to the internet".
-- **A device page** reached over the internet shows its level line (Chats) as today. It may be dismissed (BN-1).
+- **A device page** shows no top line. If Security's chip ruling gives a device page a chip, it is BN-2's `Everything` chip in the page header, at Everything.
 
-A dismissal is never stored (BN-4).
+Nothing about the chip's state is stored (BN-4).
 
 ## 8. Settings and routes
 
 ### 8.1 The settings
 
-All of these are window-only (`WINDOW_ONLY_SETTING_KEYS`) **and** in `isDeviceRefused`, since an Everything device on the LAN counts as the window.
+All of these are window-only (`WINDOW_ONLY_SETTING_KEYS`) **and** in `isDeviceRefused`, since an Everything device counts as the window. That now includes **internet** devices at Everything. **No device can change any of them**, at any level (64374ea, "what these options can't switch off").
 
 | Key | Values | Note |
 |---|---|---|
-| `internetRoute` | `'funnel'` \| `'https'` | Which route **On** uses. The on-state is never saved (OS-8). |
+| `internetRoute` | `'funnel'` \| `'https'` | Which route **On** uses. The on-state is saved in `remote-internet.json`, and read back only with `internetStayOpen` (§4.5) |
+| `internetStayOpen` | `true` / `false` (default `false`) | **Stay open to the internet after a restart** (OS-8 revised) |
+| `keepSignedIn` | `true` / `false` (default `false`) | **Keep devices signed in**, for internet devices (OS-5 revised) |
+| `keepSignedInLan` | `true` / `false` (default `false`, recommended off) | The same for home-network devices (§6.2) |
+| `everythingStaysOn` | `true` / `false` (default `false`) | **Everything stays on** (OS-7 revised). Its scope is Security's call (§6.1) |
 | `internetHttpsHost` | hostname, plus an optional port | §3 checks |
 | `internetClientIpHeader` | `''` or one header name (letters, digits, `-`, at most 40) | Not `X-Forwarded-For` |
 | `internetPort` | 1024–65535 | Chosen once at random. It can be changed, but never to the window's port or the LAN port |
@@ -308,6 +401,10 @@ These go into the same window-only record as the device action log, with `via: '
 | `wait-start` / `wait-end` | the minutes |
 | `shutoff` | |
 | `route-on` / `route-off` | the route, the public name, and why it went off (person, quit, Funnel stopped, shut-off) |
+| `reopened-at-start` / `not-reopened` | the time and the pinned name, or the check that failed (§4.5) |
+| `level` | `from` and `to`, and why (window grant, window change, idle drop, sign-out), with `via` |
+| `option` | which of the four options changed, and to what |
+| `signout` | the device, and why (window, all devices, passcode change, option off, route off, shut-off) |
 | `name-warning` | the name confirmed (§4.2) |
 | `proxy-seen` | own-HTTPS only, the first request |
 
@@ -331,8 +428,9 @@ Then this spec is revised: R-1, R-2, the `X-Forwarded-For` decision, and SSE.
 2. `deviceRoute(access, pin)`, with the internet header rules (§2.3, §3).
 3. `netServer`, the own-HTTPS route, and the settings and routes (§4.4, §8).
 4. `funnel.js` with the fake runner, then the Funnel route and the start-time cleanup (§4).
-5. The window: Settings block, the name warning, the chip, the banner, the tray (§4.2, §7). Built from Design's drawing.
-6. Activity entries, then help text and pictures (O7; PICTURE-CHECK once it lands).
+5. The three options (§6, §8.1), the hashed session file (§6.2), the internet Everything dialog (§6.1), and `resumeInternet()` with its checks (§4.5).
+6. The window: Settings block, the name warning, the chip and the tray, with no banner (§4.2, §7). Built from Design's drawing.
+7. Activity entries, then help text and pictures (O7; PICTURE-CHECK once it lands).
 
 **Tests** (fake Tailscale runner; real HTTP to `127.0.0.1`; invented profile; no network, so TEST-DNS's preload is in force):
 
@@ -343,11 +441,13 @@ Then this spec is revised: R-1, R-2, the `X-Forwarded-For` decision, and SSE.
 | `test/open-signin-pin.test.js` | Host must equal the pin, and so must `X-Forwarded-Host`. Origin must be `https://<pin>`. Sec-Fetch-Site is checked. **A direct `127.0.0.1` request with Host `127.0.0.1:<port>`, and a DNS-rebinding Host, are refused.** Invalid own-HTTPS names (wildcard, IP, localhost, scheme) are refused when saved (OS-6). |
 | `test/open-signin-limits.test.js` | 60 parallel wrong passcodes give at most the allowed 401s, then waits (RA-1 on the internet listener). 10 wrong in 10 minutes pause every new internet sign-in, the wait doubles up to 1 hour, signed-in sessions keep working, **and the LAN listener still signs in**. Reset works from the window only. 100 in 24 hours shut the route off and record it. At most 2 internet scrypts run at once, and a 3rd gets 429 (OS-3). |
 | `test/open-signin-passcode.test.js` | Turning on is refused with a passcode under 16. An old N=16384 record is rehashed to N=65536 after one confirmation, and `verifyPasscode` uses the record's own cost. **The scrypt call passes `maxmem`**, so a sign-in at N=65536 does not throw (OS-4). |
-| `test/open-signin-cookie.test.js` | The internet listener sets `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/`, with no Domain. The LAN listener keeps today's cookie and flags, with no `Secure`. The internet session ends after 30 minutes idle and after 12 hours even with activity (OS-5). |
-| `test/open-signin-level.test.js` | `PATCH .../level` to `everything` for an internet device gives 403, and the device stays at Chats. `GET /api/remote` shows `via`. An internet device is refused SEARCH-PC's tools and every `REMOTE_TOOLS_DENIED` tool (OS-7). |
-| `test/funnel.test.js` | The fake runner checks: the absolute path and fixed arguments, and **never `--bg`, `reset`, `login` or `up`**. Each `status --json` state maps to its screen. Off is the targeted `--https=443 off`. **At start, a leftover Funnel pointing at the recorded port is turned off, and one pointing elsewhere is left alone.** The route is never on at start. The child ending closes the listener (OS-8). |
+| `test/open-signin-cookie.test.js` | The internet listener sets `__Host-bunny_remote; Secure; HttpOnly; SameSite=Strict; Path=/`, with no Domain. The LAN listener keeps today's cookie and flags, with no `Secure`. **With "Keep devices signed in" off**, the internet session ends after 30 minutes idle and after 12 hours even with activity (OS-5). |
+| `test/open-signin-keep.test.js` | **With "Keep devices signed in" on:** the cookie has `Max-Age=34560000`, and there is no idle or maximum end. **A restart keeps the session.** The saved file holds **no secret**: it is searched for the raw cookie value, which must not appear, only its SHA-256. The lookup uses `timingSafeEqual`. Each of these ends the session and deletes its hash: sign out, sign out all, a passcode change, the option off (only sessions older than 12 h), the route off, and the shut-off. LAN sessions still sign in again after a restart unless `keepSignedInLan` is on (64374ea, the test list). |
+| `test/open-signin-level.test.js` | **The window** raises an internet device to Everything, and the dialog includes the internet sentence, word for word. **A level change from any device** (Chats or Everything, LAN or internet) is refused. An internet device at Everything is refused `/api/remote*`, `/api/engines*`, SEARCH-PC's settings and Open, and the four options. "Everything stays on" off: the device drops to Chats after 30 minutes idle. On: no drop. Each grant and drop is in Activity with `via`. At Chats, an internet device is refused SEARCH-PC's tools and every `REMOTE_TOOLS_DENIED` tool (OS-7 revised). |
+| `test/open-signin-reopen.test.js` | With "Stay open" on, a restart reopens only when every §4.5 check passes. **Each failed check keeps the route closed, with its sentence:** no passcode record, an earlier shut-off, Tailscale stopped, a renamed DNS name, Funnel not allowed, an invalid own-HTTPS name. A leftover Funnel on another Bunny port is turned off, and a non-Bunny one is left alone. A good start reopens, the chip shows, and `reopened-at-start` is written. With the option off, nothing reopens (OS-8 revised). |
+| `test/funnel.test.js` | The fake runner checks: the absolute path and fixed arguments, and **never `--bg`, `reset`, `login` or `up`**. Each `status --json` state maps to its screen. Off is the targeted `--https=443 off`. **At start, a leftover Funnel pointing at the recorded port is turned off, and one pointing elsewhere is left alone.** The route reopens at start only through §4.5. The child ending closes the listener (OS-8). |
 | `test/open-signin-activity.test.js` | Every OS-10 entry is written, with `via: 'internet'`. **No entry holds an address**, even with `trustForwardedFor` on. The name-warning confirmation is recorded (OS-10). |
-| e2e `open-signin.spec.js` | Settings: the route choice, the Tailscale states (fake), the name-warning dialog before HTTPS, the own-HTTPS fields and hints. The chip reads "Open to the internet · <address>" in the warning colour and has no dismiss. The banner comes back on a new internet sign-in. Both themes, at phone and desktop widths (O3, O8). |
+| e2e `open-signin.spec.js` | Settings: the route choice, the Tailscale states (fake), the name-warning dialog before HTTPS, the own-HTTPS fields and hints. The chip reads "Open to the internet · <address>" in the warning colour and has no dismiss. **There is no banner anywhere.** A new internet sign-in pulses the chip and sends a notification. The three options, and the internet-device Everything dialog with its sentence. Both themes, at phone and desktop widths (O3, O8). |
 
 **Security signs on:**
 - Researcher's tests 1–5;
@@ -370,4 +470,8 @@ Then this spec is revised: R-1, R-2, the `X-Forwarded-For` decision, and SSE.
 | R-4 | Whether SSE chat streaming works through Funnel | Test 4. If not, the route is not shipped, because chat would not stream |
 | R-5 | Reboot behaviour with and without `--bg` | Test 5 |
 
-**Owner questions:** none new. The safe defaults (Chats only; off at start) are already the owner's recorded choice for building. Raising either needs its own go, asked separately.
+**Owner questions:** none. Decisions 1 and 2 are recorded.
+
+**Security questions:**
+1. The scope of "Everything stays on": both listeners, as this spec recommends, or internet devices only (§6.1)?
+2. The chip's behaviour under decision 2, which Security is already ruling on (§7).
