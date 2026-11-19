@@ -33,6 +33,26 @@ async function begin(page, request, entry) {
   await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'chat'); localStorage.setItem('bunny.modelAuto', '1'); localStorage.setItem('bunny.rail', '1'); } catch { /* storage blocked */ } });
 }
 
+/**
+ * Wait for the real condition before a picture is taken: a font starts loading only when text that uses it is laid out, so `document.fonts.ready` alone can answer before the scene's own text (code in
+ * the code font, a late chat) has asked for its font. Force a layout, then wait until no font face is still loading and the layout stopped moving (two frames with the same size) and the working line is not between two words; loop until all of that holds.
+ */
+async function settle(page) {
+  await page.evaluate(async () => {
+    const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    for (let round = 0; round < 20; round += 1) {
+      void document.body.offsetHeight; // a layout pass: it is what starts the font loads for text that was just added
+      await document.fonts.ready;
+      await frames();
+      const h = document.documentElement.scrollHeight;
+      await frames();
+      const swapping = Boolean(document.querySelector('.bunny-word.is-swapping')); // the working line's word is mid-change for 180 ms each time it changes
+      if (!swapping && h === document.documentElement.scrollHeight && ![...document.fonts].some((f) => f.status === 'loading')) return;
+    }
+    throw new Error('the page never settled: a font is still loading or the layout keeps moving');
+  });
+}
+
 for (const [name, entry] of entries) {
   test.describe(name, () => {
     test.use({ viewport: { width: entry.viewport[0], height: entry.viewport[1] }, colorScheme: entry.theme, deviceScaleFactor: 1 });
@@ -49,7 +69,7 @@ for (const [name, entry] of entries) {
         open: async (url) => { await page.goto(url); await page.evaluate(() => document.fonts?.ready); },
       };
       try { await scene(page, api, entry);
-      await page.evaluate(() => document.fonts?.ready);
+      await settle(page);
       const cap = entry.capture ?? 'viewport';
       const target = cap === 'viewport' || cap.clip ? page : page.locator(cap.locator).first();
       const options = { maxDiffPixelRatio: entry.tolerance ?? 0.0001, threshold: 0.2, animations: 'disabled', caret: 'hide', scale: 'css', ...(cap.clip ? { clip: { x: cap.clip[0], y: cap.clip[1], width: cap.clip[2], height: cap.clip[3] } } : {}) };
