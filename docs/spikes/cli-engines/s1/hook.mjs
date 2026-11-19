@@ -12,6 +12,12 @@ process.stdin.on('end', async () => {
   try { ev = JSON.parse(raw); } catch { /* keep going */ }
   log({ event: ev.hook_event_name, tool: ev.tool_name, input: ev.tool_input, agent: ev.agent_id ?? null, cwd: ev.cwd });
   if (mode === 'deny' && (process.env.HOOK_ALLOW || '').split(',').includes(ev.tool_name)) { process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'allowed so the next tool can be reached' } })); process.exit(0); }
+  if (mode === 'wait') { // a card that waits (HOOK_WAIT_MS), then Bunny's answer (HOOK_ANSWER = allow | deny); a real bridge would answer deny itself at its own limit
+    await new Promise((r) => setTimeout(r, Number(process.env.HOOK_WAIT_MS || 0)));
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: process.env.HOOK_ANSWER || 'deny', permissionDecisionReason: `answered after ${process.env.HOOK_WAIT_MS} ms` } }));
+    log({ answered: process.env.HOOK_ANSWER, after_ms: Number(process.env.HOOK_WAIT_MS || 0) });
+    process.exit(0);
+  }
   if (mode === 'allow') { process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'control run' } })); process.exit(0); }
   if (mode === 'crash') throw new Error('forced crash');
   if (mode === 'exit1') process.exit(1);

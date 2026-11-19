@@ -25,6 +25,9 @@ const TOOLS = (p) => ({
   EditMe: { name: 'Edit', input: { file_path: join(p.proj, 'edit-me.txt'), old_string: 'before', new_string: 'after' } },
   Bash: { name: 'Bash', input: { command: `echo BASH-MARKER > "${fwd(join(p.proj, 'bash-ran.txt'))}"`, description: 'spike' } },
   PowerShell: { name: 'PowerShell', input: { command: `Set-Content -LiteralPath '${join(p.proj, 'ps-ran.txt')}' -Value PS-MARKER`, description: 'spike' } },
+  WriteOut: { name: 'Write', input: { file_path: join(p.outside, 'planted.txt'), content: 'PLANTED-MARKER' } },
+  EditOut: { name: 'Edit', input: { file_path: p.canary, old_string: 'CANARY', new_string: 'CHANGED' } },
+  BashSleep: { name: 'Bash', input: { command: 'sleep 4', description: 'spike' } },
   Glob: { name: 'Glob', input: { pattern: '**/*.txt', path: p.proj } },
   Grep: { name: 'Grep', input: { pattern: 'SECRET-S1', path: p.proj, output_mode: 'content' } },
   WebFetch: { name: 'WebFetch', input: { url: `http://127.0.0.1:${p.port}/fetched`, prompt: 'summarise' } },
@@ -48,6 +51,20 @@ const SCENARIOS = {
   'r-restricted-hook-deny': { calls: ['Read', 'ReadCanary'], hook: 'deny', sources: 'bunny', extraArgs: ['--restricted'], note: 'restricted plus the hook: the hook still fires and denies' },
   'r-restricted-canary-allow': { calls: ['ReadCanary'], hook: 'allow', sources: 'bunny', extraArgs: ['--restricted'] },
   'r-restricted-killed': { calls: ['Bash', 'PowerShell', 'Mcp', 'Task', 'ReadCanary', 'Read', 'Write', 'WebFetch', 'Glob', 'Grep'], hook: 'killed', sources: 'bunny', extraArgs: ['--restricted', '--permission-prompts', 'none'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } },
+  't-default-tools': { calls: ['Read'], hook: 'allow', sources: 'bunny', extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } },
+  't-restricted-tools': { calls: ['Read'], hook: 'allow', sources: 'bunny', extraArgs: ['--restricted'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } },
+  't-restricted-noprompts-tools': { calls: ['Read'], hook: 'allow', sources: 'bunny', extraArgs: ['--restricted', '--permission-prompts', 'none'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } },
+  't-restricted-killed-alone': { calls: ['ReadCanary', 'WriteOut', 'EditOut', 'Mcp', 'Task', 'Bash'], hook: 'killed', sources: 'bunny', extraArgs: ['--restricted'], note: 'restricted alone, hook killed, no --permission-prompts' },
+  't-restricted-live-deny-all': { calls: ['Read', 'Write', 'Bash', 'PowerShell', 'Glob', 'Grep', 'WebFetch', 'Mcp', 'Task', 'Read'], hook: 'deny', sources: 'bunny', extraArgs: ['--restricted'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' }, note: 'the a-all-tools-deny calls with --restricted and a live deny hook' },
+  't-restricted-denyrule-killed': { calls: ['Read', 'Glob', 'Grep'], hook: 'killed', sources: 'bunny', extraArgs: ['--restricted'], deny: ['Read(./secret.txt)', 'Read(./protected/**)'], note: 'does the permissions.deny of Bunny load under --restricted? hook killed so only the rule can stop the read' },
+  't-restricted-procs': { calls: ['BashSleep', 'PowerShell', 'Bash'], hook: 'allow', sources: 'bunny', extraArgs: ['--restricted'], extraEnv: { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' }, procs: true },
+  't-default-procs-control': { calls: ['BashSleep'], hook: 'allow', sources: 'bunny', procs: true, note: 'control: the sampler must see the shell that runs sleep when a command tool exists' },
+  'ce19-ask-hook-allow': { calls: ['Read'], hook: 'allow', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], ask: ['Read(./secret.txt)'], note: 'CE-1.9: secret.txt is covered by permissions.ask; the hook is alive and says allow' },
+  'ce19-ask-hook-killed': { calls: ['Read'], hook: 'killed', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], ask: ['Read(./secret.txt)'], note: 'CE-1.9: same ask rule, the hook is dead' },
+  'ce19-ask-hook-deny-control': { calls: ['Read'], hook: 'deny', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], ask: ['Read(./secret.txt)'] },
+  'ce19-uncovered-hook-allow': { calls: ['Read'], hook: 'allow', sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], ask: ['Read(./protected/**)'], note: 'control: a read the ask rule does not cover, hook allow' },
+  'ce111-answered-after-2min-allow': { calls: ['Read'], hook: 'wait', wait: 120000, answer: 'allow', timeout: 300, killMs: 330000, sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], note: 'CE-1.11: hook timeout 300 s, the card is answered allow at 120 s' },
+  'ce111-unanswered-denied-by-bunny': { calls: ['Read'], hook: 'wait', wait: 150000, answer: 'deny', timeout: 300, killMs: 330000, sources: 'bunny', permMode: 'default', extraArgs: ['--permission-prompts', 'none'], note: 'CE-1.11: hook timeout 300 s, nobody answers; Bunny answers deny itself at its own 150 s limit' },
   'a-control-allow': { calls: ['Read', 'Write', 'Bash', 'Mcp'], hook: 'allow', sources: 'bunny' },
   'b-default-sources': { calls: ['Read'], hook: 'deny', sources: 'default', noBunnyHook: true },
   'b-bunny-sources-only': { calls: ['Read'], hook: 'deny', sources: 'bunny' },
@@ -85,7 +102,7 @@ async function run(name) {
   let hookCommand = `"${fwd(NODE)}" "${fwd(join(here, 'hook.mjs'))}"`;
   if (sc.hookCmd === 'missing-runtime') hookCommand = `"${fwd(join(dir, 'no-such-node.exe'))}" "${fwd(join(here, 'hook.mjs'))}"`;
   if (sc.hook === 'killed') hookCommand = `"${fwd(NODE)}" -e "process.kill(process.pid,'SIGKILL')"`;
-  const bunny = { ...(sc.deny ? { permissions: { deny: sc.deny } } : {}), hooks: { PreToolUse: sc.noBunnyHook ? [] : [{ matcher: '*', hooks: [{ type: 'command', command: hookCommand, ...(sc.timeout ? { timeout: sc.timeout } : {}) }] }] } };
+  const bunny = { ...(sc.deny || sc.ask ? { permissions: { ...(sc.deny ? { deny: sc.deny } : {}), ...(sc.ask ? { ask: sc.ask } : {}) } } : {}), hooks: { PreToolUse: sc.noBunnyHook ? [] : [{ matcher: '*', hooks: [{ type: 'command', command: hookCommand, ...(sc.timeout ? { timeout: sc.timeout } : {}) }] }] } };
   writeFileSync(join(dir, 'bunny-settings.json'), JSON.stringify(bunny, null, 2));
   writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { spike: { command: NODE, args: [join(here, 'mcp-stub.mjs')], env: { MCP_RAN: log.mcp } } } }));
   const tools = TOOLS(p);
@@ -100,19 +117,22 @@ async function run(name) {
     USERPROFILE: p.home, HOME: p.home, APPDATA: join(p.home, 'AppData/Roaming'), LOCALAPPDATA: join(p.home, 'AppData/Local'),
     CLAUDE_CONFIG_DIR: p.iso, ANTHROPIC_BASE_URL: `http://127.0.0.1:${p.port}`, ANTHROPIC_API_KEY: 'sk-ant-fake-spike',
     DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_TELEMETRY: '1', DISABLE_ERROR_REPORTING: '1',
-    HOOK_LOG: log.hook, HOOK_MODE: sc.hook, HOOK_ALLOW: sc.allow ?? '', ...(sc.proxy ? { HTTP_PROXY: sc.proxyUrl, HTTPS_PROXY: sc.proxyUrl, NO_PROXY: '127.0.0.1' } : {}), ...(sc.extraEnv ?? {}), BRIDGE_PORT: String(await freePort()),
+    HOOK_LOG: log.hook, HOOK_MODE: sc.hook, HOOK_ALLOW: sc.allow ?? '', HOOK_WAIT_MS: String(sc.wait ?? 0), HOOK_ANSWER: sc.answer ?? '', ...(sc.proxy ? { HTTP_PROXY: sc.proxyUrl, HTTPS_PROXY: sc.proxyUrl, NO_PROXY: '127.0.0.1' } : {}), ...(sc.extraEnv ?? {}), BRIDGE_PORT: String(await freePort()),
   };
   mkdirSync(env.TEMP, { recursive: true });
-  const args = ['-p', 'Spike: do the scripted tool calls.', '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--model', 'claude-sonnet-4-5', '--mcp-config', join(dir, 'mcp.json'), '--strict-mcp-config', '--settings', join(dir, 'bunny-settings.json'), '--permission-mode', sc.hook === 'allow' ? 'acceptEdits' : 'default'];
+  const args = ['-p', 'Spike: do the scripted tool calls.', '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--model', 'claude-sonnet-4-5', '--mcp-config', join(dir, 'mcp.json'), '--strict-mcp-config', '--settings', join(dir, 'bunny-settings.json'), '--permission-mode', sc.permMode ?? (sc.hook === 'allow' ? 'acceptEdits' : 'default')];
   if (sc.extraArgs) args.push(...sc.extraArgs);
   if (sc.sources === 'bunny') args.push('--setting-sources', 'user'); // only the isolated CLAUDE_CONFIG_DIR (empty); the project and the person's own home are not read
   const started = Date.now();
+  let procOut; 
   const child = spawn(CC, args, { cwd: p.proj, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = ''; let stderr = '';
+  let sampler; if (sc.procs) { procOut = join(dir, 'child-processes.txt'); sampler = spawn(join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-File', join(here, 'sample-procs.ps1'), '-RootPid', String(child.pid), '-Out', procOut, '-Seconds', '8'], { windowsHide: true, stdio: 'ignore' }); }
   child.stdout.on('data', (c) => { stdout += c; }); child.stderr.on('data', (c) => { stderr += c; });
-  const killer = setTimeout(() => { appendFileSync(join(dir, 'TIMEOUT'), 'killed after 90 s\n'); spawn(process.env.SystemRoot + '\\System32\\taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }); }, 90000);
+  const killer = setTimeout(() => { appendFileSync(join(dir, 'TIMEOUT'), 'killed after 90 s\n'); spawn(process.env.SystemRoot + '\\System32\\taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }); }, sc.killMs ?? 90000);
   const code = await new Promise((r) => child.on('close', r));
   clearTimeout(killer);
+  if (sampler) await new Promise((r) => sampler.on('close', r));
   await new Promise((r) => setTimeout(r, 300));
   stub.kill(); proxyServer?.close();
   writeFileSync(join(dir, 'engine-stdout.jsonl'), stdout);
@@ -141,6 +161,7 @@ async function run(name) {
   const results = [...stubText.matchAll(/\\"type\\":\\"tool_result\\"[^]*?\\"content\\":(\\"[^]*?\\"|\[[^]*?\])[,}]/g)].map((m) => m[1].slice(0, 140));
   lines.push(`tool_result texts the model got: ${JSON.stringify(results)}`);
   if (sc.proxy) lines.push(`connections that went to the proxy instead of the stand-in (${proxySeen.length}): ${JSON.stringify(proxySeen)}`);
+  if (sc.procs) lines.push(`distinct descendant processes of claude.exe seen every 200 ms during the run: ${JSON.stringify(read(procOut).split(String.fromCharCode(10)).map((x) => x.trim()).filter(Boolean))}`);
   const summary = lines.join('\n');
   writeFileSync(join(dir, 'SUMMARY.txt'), summary + '\n');
   console.log(summary + '\n');
