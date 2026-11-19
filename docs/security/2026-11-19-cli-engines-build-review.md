@@ -113,3 +113,26 @@ Probe (`docs/security/engines-probe/codex-declined-ran.mjs` on 02fae7a):
 - **Tests:** the `engine-*` files pass **125 of 125** on an extract of e78209b.
 
 Verdict: PASS at e78209b for the engine build so far. **Still to come:** ENGINE-RULES with EN-5 (its option key inside `deviceRefusal`), and Aider when it's built (`~/.aider*` in the key folders).
+
+## Re-review at 6c3ed0d (7028f7b LOWs, fe90806 account sign-in, 6c3ed0d Messages translator): PASS (supersedes e78209b)
+
+- **fe90806, Claude Code account sign-in and sign-out (CE-3, spec §7.1).**
+  - **Sign-in** spawns the pinned `claude.exe` by absolute path with the fixed arguments `auth login`. It runs in a visible, detached window, with `minimalEnv()` plus only the account folder's variables (`CLAUDE_CONFIG_DIR`, HOME, USERPROFILE, APPDATA, LOCALAPPDATA under `<data>\engines\claude-code\account\home`).
+  - **State** comes from `auth status --json`. Bunny keeps only the boolean `loggedIn`: the output is read into memory, at most 4,000 characters, and thrown away. Nothing is stored or logged, and no credential file is opened.
+  - **Sign-out** runs the vendor's `auth logout`, then deletes the account folder. It refuses while a run is going.
+  - **The account folder** sits under the data folder, so the floor (`protect: [dataDir]` and the `//c/` and `C:/` deny forms) keeps every engine tool out of it. Account runs use it as `CLAUDE_CONFIG_DIR`.
+  - The routes `/api/engines/<id>/signin` and `/signout` are window-only and refused to every device (`deviceRefusal`). Both actions go in the record. A signed-out account chat stops with guidance.
+- **6c3ed0d, the Messages translator for local mode.**
+  - `/v1/messages` and `/v1/messages/count_tokens` join the endpoint's path list, behind the same Host, Origin, Sec-Fetch and token checks (CE-4).
+  - The tool list in each Messages request is checked against Claude Code's expected set; anything extra is refused.
+  - Errors go through `safeMessage`, and the upstream is `budgeted()`, so EN-6 holds in local mode too.
+  - `count_tokens` is an estimate that reaches no provider.
+- **7028f7b:**
+  - pins can carry `entrySha256`, so the program itself is hash-checked at install;
+  - `checkPins` checks that licences are listed in About;
+  - Remove and Roll back use Bunny's own confirm card;
+  - a device page shows "Only Bunny's window can change engines.";
+  - the rest is UI and CSS.
+- **Tests:** the `engine-*` files pass **134 of 134** on an extract of 6c3ed0d. 7028f7b and e78209b are both ancestors.
+
+Verdict: PASS at 6c3ed0d. Still to come: ENGINE-RULES with EN-5.

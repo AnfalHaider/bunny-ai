@@ -1,9 +1,9 @@
 ---
 piece: cli-engines
 role: security
-sha: e78209b
+sha: 6c3ed0d
 verdict: PASS
 date: 2026-11-19
 ---
 
-EN-6 token budget at the endpoint with the limit card (no answer = stop), EN-7 device engine tools logged by name, EN-2 trusted entry reset after the run; chip fixed after the first message, device refused; 125/125 tests; ENGINE-RULES and EN-5 still to come
+fe90806 account sign-in: vendor login/logout by absolute path, account folder only, boolean state, window-only; 6c3ed0d Messages translator behind the CE-4 checks with tool-list check and budget; 7028f7b entrySha256; 134/134 tests
