@@ -50,3 +50,16 @@ The first one, run as written, deletes `build/what` and then files named `the`, 
 ## Verdict
 
 FAIL at d0a4c16, for BB-1. BB-2 and BB-3 should be fixed in the same change. The rest passes. A re-review needs the probe showing code unchanged and the tests for it.
+
+## Re-review at 9bf9fcc: PASS (supersedes the FAIL at d0a4c16)
+
+- **BB-1 fixed.**
+  - `KEEP` now starts with fenced blocks (```` ``` ```` and `~~~`) and inline code spans, so nothing inside code is rewritten.
+  - `$ARGUMENTS` and `${CLAUDE_PLUGIN_ROOT}` are no longer replaced in place. Two fixed notes in Bunny's code go in front, only when the token appears.
+  - My probe on 9bf9fcc: the fenced `rm -rf build/$ARGUMENTS`, the inline `node ${CLAUDE_PLUGIN_ROOT}/…` and `Claude.run()` all come back unchanged, with the note in front where it applies.
+- **BB-2 fixed.** NUL characters are dropped before the placeholders. The probe gives `… and 0 and 9. Bunny rocks.`, with nothing restored from a forged placeholder.
+- **BB-3 fixed.** `domain.tld/path` forms are kept, for a fixed list of top-level domains. `github.com/acme/Claude/tree/main` is unchanged.
+- **BB-4 (LOW, not blocking): an unclosed fence.** A fence that never closes isn't recognised, so its contents are treated as prose. The probe's new case turns `cp skill.md ~/.claude/skills/` into `cp skill.md Bunny's Customize (Settings)`. Run as written, that's a shell syntax error (an unbalanced quote), so it fails rather than doing something else. Still, I asked for an unclosed fence to run to the end of the text. Fix it in a later build: `/```[\s\S]*?(?:```|$)/` and the same for `~~~`.
+- **Tests:** `brand-bunny` and `plugins` pass 11 of 11 on an extract with an invented profile.
+
+Verdict: PASS at 9bf9fcc, with BB-4 for a later build.
