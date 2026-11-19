@@ -100,7 +100,7 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
 <div class="top">
   <div>
     <h1>Bunny engines</h1>
-    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p><p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p><p style="margin-top:8px"><span class="pill p-med">Updated 2026-11-19</span> <b>Only Claude Code and Codex CLI, besides Bunny, in 0.1.14.</b> The owner: "lets remove cline and other for now, just focus on codex and claude." Cline and Aider are left out (Security ruled Cline unsafe in any mode). <b>Codex runs in full mode</b> (the owner approved it). Nothing runs restricted in 0.1.14; the restricted screens are kept in section 5 only for a later engine.</p>
+    <p class="mute">v0.1.14 drawing, version 3: the same screens, denser. One compact row per engine. Invented data only. Nothing here is built.</p><p style="margin-top:8px"><span class="pill p-low">Approved</span> The owner approved this page on 2026-11-18, typed in the Chief of Staff's chat: "Approve, with the two-option switch (recommended)". <b>The control is the two-option Local | Account control (B). The labelled toggle (A) is not built.</b></p><p style="margin-top:8px"><span class="pill p-med">Updated 2026-11-19</span> <b>Only Claude Code and Codex CLI, besides Bunny, in 0.1.14.</b> The owner: "lets remove cline and other for now, just focus on codex and claude." Cline and Aider are left out (Security ruled Cline unsafe in any mode). <b>Codex runs in full mode</b> (the owner approved it). <b>Restricted mode stays in 0.1.14 as the fallback</b> for Claude Code and Codex: when Bunny's check does not run, the chat stops and offers it (section 5).</p>
   </div>
   <div class="tops"><button class="t" id="theme" type="button">Show the other theme</button></div>
 </div>
@@ -122,8 +122,8 @@ kbd,code{font-family:var(--mono);font-size:12.5px;background:var(--soft);border:
   <div class="rec"><span class="n">3</span><div><b><span class="pill p-hi">high</span>Download on click, size first, checked before use</b><span class="m">About 380 MB for Claude Code and 390 MB for Codex CLI. Checksum and, for Claude Code, Anthropic's signature. Claude Code from Anthropic's official installer, unmodified.</span></div></div>
   <div class="rec"><span class="n">4</span><div><b><span class="pill p-hi">high</span>One Local | Account control on each installed engine's row</b><span class="m">Account opens the vendor's own sign-in in a visible window; Bunny never sees or stores the token. Back to Local keeps you signed in until Sign out. Defaults: Claude Code Account; Codex Local. The control is the two-option Local | Account control (approved by the owner).</span></div></div>
   <div class="rec"><span class="n">5</span><div><b><span class="pill p-hi">high</span>The catch is in the row's dim line, not a block</b><span class="m">Claude Code on Local: "Anthropic does not support Claude Code with other models; it may stop working after an update." Codex on Local: OpenAI or OpenRouter only (Responses API). Same text, one line.</span></div></div>
-  <div class="rec"><span class="n">6</span><div><b><span class="pill p-hi">high</span>"Restricted" is a chip on the row</b><span class="m">Not used in 0.1.14: Codex runs in full mode (the owner approved it) and Claude Code is checked before every action. The chip exists for a later engine. Hover or tap the chip for what it means; the legend and the review at the end of a run are shown once in section 5.</span></div></div>
-  <div class="rec"><span class="n">7</span><div><b><span class="pill p-med">medium</span>Per chat: a one-line Engine menu and a short chip</b><span class="m">Code chats with a folder pick the engine before the first message; it is fixed after. The chip reads "Claude Code · Account". Section 6.</span></div></div>
+  <div class="rec"><span class="n">6</span><div><b><span class="pill p-hi">high</span>"Restricted" is a chip on the row</b><span class="m">Codex runs in full mode (the owner approved it); restricted is the fallback when Bunny's check does not run for Claude Code or Codex. A restricted run shows an amber dot on the chip. Hover or tap the chip for what it means; the legend and the review at the end of a run are shown once in section 5.</span></div></div>
+  <div class="rec"><span class="n">7</span><div><b><span class="pill p-med">medium</span>Per chat: a one-line Engine menu and a short chip</b><span class="m">Code chats with a folder pick the engine before the first message; it is fixed after. The chip reads "Claude Code · Account", with an amber dot while a run is restricted. Section 6.</span></div></div>
   <div class="rec"><span class="n">8</span><div><b><span class="pill p-hi">high</span>The engine's steps and prompts look like Bunny's</b><span class="m">Same step lines, Changes pane and permission prompt, a small engine tag; Bunny's rules decide first; if Bunny cannot check an action the run stops and says so. Section 7.</span></div></div>
   <div class="rec"><span class="n">9</span><div><b><span class="pill p-hi">high</span>Updates are Bunny's tested versions, with a way back</b><span class="m">An engine never updates itself. Update downloads and checks the new version, keeps the old one, offers Roll back in the ⋯ menu. A failed check leaves the old version in use. Section 3.</span></div></div>
 </section>
@@ -156,18 +156,27 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
   <div class="tbl"><table>
     <thead><tr><th>Engine</th><th>Default</th><th>Other choice</th><th>Is every action checked first?</th><th>If its test fails</th></tr></thead>
     <tbody>
-      <tr><td><b>Claude Code</b></td><td>Account</td><td>Local (with the Anthropic note)</td><td>Yes: a hook runs before every tool call and asks Bunny</td><td>Restricted (staged copy)</td></tr>
-      <tr><td><b>Codex CLI</b></td><td>Local</td><td>Account (its own login, to confirm)</td><td>Yes, through its approval requests</td><td>Runs in full mode (approved by the owner)</td></tr>
+      <tr><td><b>Claude Code</b></td><td>Account</td><td>Local (with the Anthropic note)</td><td>Yes: a hook runs before every tool call and asks Bunny</td><td>The run stops; the chat offers restricted mode (staged copy)</td></tr>
+      <tr><td><b>Codex CLI</b></td><td>Local</td><td>Account (its own login, to confirm)</td><td>Yes, through its approval requests</td><td>Runs in full mode (approved by the owner); if its check does not run, the same stop and restricted offer</td></tr>
     </tbody>
   </table></div>
-  <p class="mute">Rule kept: an engine is offered only if its check passes; "restricted" is the owner-approved fallback, not a weaker version of the rule. In 0.1.14 only Claude Code and Codex CLI are offered; Cline and Aider are left out.</p>
+  <p class="mute">Rule kept: an engine is offered only if its check passes; "restricted" is the owner-approved fallback, not a weaker version of the rule. In 0.1.14 only Claude Code and Codex CLI are offered; Cline and Aider are left out. The Stopped card and the path to restricted mode are in section 5.</p>
 </section>
 
 <section class="card">
-  <h2>5. Restricted, said once (held back: no engine in 0.1.14 runs restricted)</h2>
+  <h2>5. Fallback when a check fails</h2>
+  <p class="mute">Bunny checks every action before an engine runs it. If that check does not run (the watchdog sees no answer), the run stops, nothing is executed, and the chat offers restricted mode. It is the same for Claude Code and Codex CLI. Four steps:</p>
+  <div class="twocol">
+    <div><div class="lab"><b>1 · The run stops</b></div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="chipe">Claude Code · Account</span></div><div class="step"><b>Edited</b> <code>footer.html</code> <span class="eng">Claude Code</span></div><div class="callout bad" style="margin-top:8px"><b>Stopped: Bunny's check did not run.</b> Claude Code tried to run a step, but the check Bunny makes before every step did not answer. Nothing was run and nothing was changed after the last step above.<div class="acts" style="margin-top:6px"><span class="btn2 pri">Try in restricted mode</span><span class="btn2">Try again</span><span class="btn2">Dismiss</span></div></div></div></div>
+    <div><div class="lab"><b>2 · Asked before anything starts</b></div><div class="app"><div class="dlg"><b>Try this in restricted mode?</b><span class="d">Claude Code works in a copy of your folder, saves every edit as a commit you can undo, and cannot run shell commands. Nothing reaches your folder until you have looked at what changed. It could still read a file outside the copy if the model names its path; Bunny blocks the known routes.</span><div class="acts" style="justify-content:flex-end"><span class="btn2">Cancel</span><span class="btn2 pri">Try in restricted mode</span></div></div></div></div>
+  </div>
+  <div class="twocol">
+    <div><div class="lab"><b>3 · Working in a copy</b></div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="chipe">Claude Code · Account <i></i></span></div><div class="d" style="margin:6px 0">Restricted · working in a copy of your folder. Hover the chip for what that means.</div><div class="step"><b>Edited</b> <code>footer.html</code> <span class="eng">Claude Code · restricted</span></div><div class="step"><b>Edited</b> <code>header.html</code> <span class="eng">Claude Code · restricted</span></div></div></div>
+    <div><div class="lab"><b>4 · Your review at the end</b></div><div class="app"><div class="perm"><h5>Claude Code changed 2 files in a copy of your folder</h5><div class="diff"><div>footer.html</div><div class="a">+ Added the privacy link.</div><div class="r">- Old footer link removed.</div><div>header.html</div><div class="a">+ Fixed the menu link.</div></div><div class="acts"><span class="btn2 pri">Keep the changes</span><span class="btn2">Show all</span><span class="btn2">Discard</span></div></div></div></div>
+  </div>
   <div class="twocol">
     <div><div class="lab">What the chip's tooltip says</div><div class="app"><div class="callout wr"><b>Restricted.</b> Bunny cannot ask before every step the way it does with its own engine, so this engine works in a copy of your folder, saves every edit as a commit you can undo, cannot run shell commands, and Bunny shows what changed before anything reaches your folder. It could still read a file outside the copy if the model names its path; Bunny blocks the known routes and tests this first.</div></div></div>
-    <div><div class="lab">When a restricted run ends</div><div class="app"><div class="perm"><h5>The engine changed 2 files in a copy of your folder</h5><div class="diff"><div>notes/summary.md</div><div class="a">+ Added a short summary of the meeting.</div><div class="r">- Old draft line removed.</div><div>todo.txt</div><div class="a">+ Call the accountant.</div></div><div class="acts"><span class="btn2 pri">Keep the changes</span><span class="btn2">Show all</span><span class="btn2">Discard</span></div></div></div></div>
+    <div><div class="lab">On a phone</div><div class="phone"><div class="app"><div class="hdr"><span><b>Fix the footer links</b></span><span class="chipe">Claude Code <i></i></span></div><div class="callout bad" style="margin-top:8px"><b>Stopped: Bunny's check did not run.</b> Nothing was run.<div class="acts" style="margin-top:6px"><span class="btn2 pri">Try in restricted mode</span><span class="btn2">Dismiss</span></div></div></div></div></div>
   </div>
 </section>
 
@@ -179,7 +188,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
   </div>
   <div class="twocol">
     <div><div class="lab">Chip, version 2</div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="chipe">Claude Code · account</span></div><div class="d">This chat runs on Claude Code. To use another engine, start a new chat.</div><div class="acts"><span class="btn2">New chat with Bunny</span><span class="btn2">New chat…</span></div></div></div>
-    <div><div class="lab">Chip, version 3: one header line, the rest on hover</div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="acts"><span class="chipe">Claude Code · Account</span></span></div><div class="d">Hover the chip: "This chat runs on Claude Code (Account). To use another engine, start a new chat."</div></div></div>
+    <div><div class="lab">Chip, version 3: one header line, the rest on hover</div><div class="app"><div class="hdr"><span><b>Fix the footer links</b> · my-site</span><span class="acts"><span class="chipe">Claude Code · Account</span><span class="chipe">Claude Code · Account <i></i></span></span></div><div class="d">Hover the chip: "This chat runs on Claude Code (Account). To use another engine, start a new chat." The amber dot (second chip) means this run is restricted.</div></div></div>
   </div>
 </section>
 
@@ -215,7 +224,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     </tbody>
   </table></div>
   <ul style="margin:6px 0 0;padding-left:20px;display:grid;gap:4px">
-    <li><b>Left out of 0.1.14 by the owner's word:</b> Cline and Aider. Codex runs in full mode.</li>
+    <li><b>Left out of 0.1.14 by the owner's word:</b> Cline and Aider. Codex runs in full mode. Restricted mode stays as the fallback (section 5).</li>
     <li><b>Codex "Account":</b> drawn as its own login; confirm it exists before building.</li>
     <li><b>The go</b> to build, after Security's requirements.</li>
   </ul>
@@ -252,6 +261,7 @@ Waiting for you to finish in the browser…</div></div><div class="d">A visible 
     var S=[
      ['Not installed',{t:'CC',name:'Claude Code',ver:'not installed',st:chip('Account by default','ac'),note:'Installed from Anthropic\'s official installer, unmodified. Needs your Anthropic account.',mode:null,btn:btn('Download · 380 MB','pri')}],
      ['Installing',{t:'CX',name:'Codex CLI',ver:'v0.170.0',st:chip('Installing','ac'),note:'112 of 390 MB · 29%',prog:29,mode:null,btn:btn('Cancel')}],
+     ['Last run stopped',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Stopped','wr'),note:'Bunny\'s check did not run, so the last run was stopped. The chat offers Try in restricted mode.',mode:'account',mn:true}],
      ['Installed',{t:'CX',name:'Codex CLI',ver:'v0.170.0',st:chip('Ready','ok'),note:'Local · tested with Bunny',mode:'local',mn:true}],
      ['Update ready',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Update ready','ac'),note:'v2.1.327 is tested with Bunny; newer versions wait until tested.',mode:'account',btn:btn('Update to v2.1.327','pri'),mn:true}],
      ['Updating',{t:'CC',name:'Claude Code',ver:'v2.1.311',st:chip('Updating','ac'),note:'61% · still on v2.1.311 until the new one is checked',prog:61,mode:'account',btn:btn('Cancel')}],
