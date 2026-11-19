@@ -24,3 +24,12 @@ test('checkPins names what is wrong: http, an off-list host, a missing hash, no 
   assert.match(checkPins({ e: { ...base, schema: 'x.json' } }, { schemaExists: () => false })[0], /missing/);
   assert.deepEqual(checkPins({}), ['no engines are pinned']);
 });
+
+test('checkPins: the licence must be listed in About, an npm integrity must be sha512-base64, an entrySha256 must be a sha256', () => {
+  const base = { version: '1.2.3', entry: 'x.exe', signature: 'S', licence: 'L', licenceName: 'Apache-2.0', hosts: ['a.test'], files: [{ url: 'https://a.test/f', sha256: 'a'.repeat(64), kind: 'zip' }] };
+  assert.deepEqual(checkPins({ e: base }, { aboutText: 'Codex is Apache-2.0.' }), []);
+  assert.match(checkPins({ e: base }, { aboutText: 'nothing here' })[0], /not listed in Settings/);
+  assert.match(checkPins({ e: { ...base, licenceName: undefined } }, { aboutText: 'x' })[0], /not listed/);
+  assert.match(checkPins({ e: { ...base, files: [{ ...base.files[0], integrity: 'sha512-short' }] } })[0], /integrity/);
+  assert.match(checkPins({ e: { ...base, entrySha256: 'nope' } })[0], /entrySha256/);
+});

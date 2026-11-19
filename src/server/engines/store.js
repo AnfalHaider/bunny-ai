@@ -199,6 +199,7 @@ export function createEngineStore({ dataDir, pins, fetchImpl = globalThis.fetch,
       try { printed = await versionOf(exe); } catch (err) { throw err instanceof EngineStoreError ? err : new EngineStoreError('The engine did not start to print its version: it was not installed.', 'engine.version'); }
       if (!String(printed).includes(pin.version)) throw new EngineStoreError(`The engine says it is ${String(printed).slice(0, 40)}, not ${pin.version}: it was not installed.`, 'engine.version');
       const sha256 = await sha256File(exe);
+      if (pin.entrySha256 && sha256 !== String(pin.entrySha256).toLowerCase()) throw new EngineStoreError('The engine program does not match its pinned fingerprint: it was not installed.', 'engine.hash');
       // switch: the new folder first, then the pointer (an atomic write), then the old ones are tidied
       const before = await readJson(join(dirOf(id), 'current.json'), null);
       const target = join(dirOf(id), pin.version);

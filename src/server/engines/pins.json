@@ -5,6 +5,7 @@
       "version": "2.1.311",
       "channel": "stable",
       "label": "Claude Code",
+      "licenceName": "Anthropic Commercial Terms",
       "licence": "Anthropic Commercial Terms (all rights reserved): the official package, unmodified, downloaded on the person's click",
       "entry": "claude.exe",
       "signature": "Anthropic, PBC",
@@ -24,6 +25,7 @@
     "codex": {
       "version": "0.170.0",
       "label": "Codex CLI",
+      "licenceName": "Apache-2.0",
       "licence": "Apache-2.0",
       "entry": "codex-x86_64-pc-windows-msvc.exe",
       "signature": "OpenAI OpCo, LLC",

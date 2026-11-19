@@ -132,6 +132,15 @@ test('download refuses and cleans up: a hash mismatch, a path escape, a redirect
   }
 });
 
+test('a pinned entrySha256 that does not match the installed program refuses the install', async () => {
+  const dataDir = await tmp();
+  const { archive, url, pins } = setup();
+  pins.eng.entrySha256 = 'b'.repeat(64);
+  const store = createEngineStore({ dataDir, pins, fetchImpl: fakeRegistry({ [url]: archive }), ...deps() });
+  await assert.rejects(() => store.download('eng'), /does not match its pinned fingerprint/);
+  assert.equal((await store.locate('eng')).ok, false);
+});
+
 test('an update keeps the previous version (and removes older ones); rollback goes back; locate notices a program changed on disk and says it can roll back', async () => {
   const dataDir = await tmp();
   const v1 = setup('1.2.3', 'ONE'); const v2 = setup('1.3.0', 'TWO'); const v3 = setup('1.4.0', 'THREE');

@@ -1,6 +1,7 @@
 // Settings → Engines (CLI-ENGINES, the owner's approved drawing): one compact row per engine: tile, name and one dim line, the Local | Account switch, the one main button, and a ⋯ menu.
 // Everything here goes through the engines routes; only Bunny's window can change anything (the server refuses every device).
 import { getJSON, sendJSON, esc } from './api.js';
+import { isDevicePage } from './browser-mode.js';
 
 const mount = document.getElementById('engines-list');
 const chooser = document.getElementById('engine-default');
@@ -11,14 +12,15 @@ let state = null; let timer = null; let openMenu = null;
 const mb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`);
 const TILES = { 'claude-code': 'CC', codex: 'CX' };
 const SIZE_HINT = { 'claude-code': '380 MB', codex: '390 MB' };
+const deviceView = isDevicePage(); // another device never changes engines: the server refuses it, and the page does not offer the buttons
 
 function dim(e) {
   if (e.error) return e.error;
   if (e.downloading) { const p = e.progress; return p?.total ? `Downloading ${mb(p.bytes)} of ${mb(p.total)}…` : 'Downloading…'; }
-  if (!e.downloaded) return `Not installed · about ${SIZE_HINT[e.id]} · checked before it is used`;
-  const mode = e.auth === 'account' ? 'Account' : 'Local';
-  const notes = [`v${e.version}`, e.updateAvailable ? `v${e.available} is ready (tested)` : null, mode];
-  return notes.filter(Boolean).join(' · ');
+  if (!e.downloaded) return `Not installed · ${SIZE_HINT[e.id]}`;
+  // the version and the sign-in only: the mode is the switch beside it
+  const sign = e.auth === 'account' && typeof e.signedIn === 'boolean' ? (e.signedIn ? 'Signed in' : 'Not signed in') : null;
+  return [`v${e.version}`, e.updateAvailable ? `v${e.available} is ready (tested)` : null, sign].filter(Boolean).join(' · ');
 }
 
 function authSwitch(e) {
@@ -49,6 +51,7 @@ function menu(e) {
 }
 
 function row(e) {
+  if (deviceView) return `<div class="er" data-id="${e.id}"><span class="ti">${TILES[e.id]}</span><div class="nm"><div class="l1"><b>${esc(e.label)}</b></div><div class="l2">${esc(dim(e))}</div></div></div>`;
   return `<div class="er" data-id="${e.id}"><span class="ti">${TILES[e.id]}</span><div class="nm"><div class="l1"><b>${esc(e.label)}</b></div><div class="l2" title="${esc(dim(e))}">${esc(dim(e))}</div></div>`
     + `<div class="act2"><div class="cc">${e.downloaded ? authSwitch(e) : ''}</div><div class="bt">${mainButton(e)}</div></div>${menu(e)}</div>`;
 }
@@ -56,6 +59,8 @@ function row(e) {
 function render() {
   if (!state || !mount) return;
   const bunny = '<div class="er"><span class="ti">B</span><div class="nm"><div class="l1"><b>Bunny</b></div><div class="l2">Built in · Default · always there</div></div><div class="act2"><div class="cc"></div><div class="bt"></div></div><span class="mn none"></span></div>';
+  const ws = document.getElementById('engines-window-only'); if (ws) ws.hidden = !deviceView;
+  if (deviceView) { const d = document.getElementById('engine-default'); if (d) d.closest('.group').hidden = true; }
   mount.innerHTML = bunny + state.engines.map(row).join('');
   if (chooser) {
     const keep = chooser.value;
@@ -75,37 +80,68 @@ async function load() {
   try { state = await getJSON('/api/engines'); render(); loadRecord(); } catch (err) { if (mount) mount.textContent = `Engines could not be loaded: ${err.message}`; }
 }
 
+const NAMES = { 'claude-code': 'Claude Code', codex: 'Codex CLI' };
+function said(r) {
+  const n = NAMES[r.engine] ?? r.engine;
+  if (r.action === 'download') return `${n} downloaded${r.to ? ` v${r.to}` : ''}`;
+  if (r.action === 'update') return `${n} updated${r.from ? ` from v${r.from}` : ''}${r.to ? ` to v${r.to}` : ''}`;
+  if (r.action === 'rollback') return `${n} rolled back${r.to ? ` to v${r.to}` : ''}`;
+  if (r.action === 'remove') return `${n} removed`;
+  return `${n}: ${r.action}`;
+}
 async function loadRecord() {
   if (!recordEl) return;
   try {
     const { record } = await getJSON('/api/engines/record');
-    recordEl.innerHTML = record.slice(0, 8).map((r) => `<div class="rec-row"><span>${esc(new Date(r.at).toLocaleString())}</span><b>${esc(r.engine)}</b><span>${esc(r.action)}${r.to ? ` → v${esc(r.to)}` : ''}</span><code>${esc(r.sha12 ?? '')}</code></div>`).join('') || '<div class="d">Nothing yet.</div>';
+    recordEl.innerHTML = record.slice(0, 8).map((r) => `<div class="rec-row"><span class="when">${esc(new Date(r.at).toLocaleString())}</span><b>${esc(said(r))}</b>${r.sha12 ? `<code>${esc(r.sha12)}</code>` : ''}</div>`).join('') || '<div class="d">Nothing yet.</div>';
   } catch { recordEl.textContent = ''; }
 }
+
+/** Bunny's own question card (never the browser's confirm or alert). Resolves true on the action button. */
+function ask({ title, body, action, danger = false, single = false }) {
+  return new Promise((resolve) => {
+    const mk = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; };
+    const cancel = mk('button', 'btn btn-ghost', 'Cancel'); cancel.type = 'button';
+    const ok = mk('button', `btn ${danger ? 'btn-danger' : 'btn-primary'}`, action); ok.type = 'button';
+    const head = mk('div', 'modal-head'); head.append(mk('h3', 'modal-title', title));
+    const bodyEl = mk('div', 'modal-body', body);
+    const foot = mk('div', 'modal-foot actions'); foot.append(mk('span', 'spacer'));
+    if (!single) foot.append(cancel);
+    foot.append(ok);
+    const card = mk('div', 'palette modal engine-confirm'); card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', title); card.append(head, bodyEl, foot);
+    const backdrop = mk('div', 'palette-backdrop modal-backdrop'); backdrop.append(card);
+    const done = (v) => { backdrop.remove(); resolve(v); };
+    cancel.addEventListener('click', () => done(false)); ok.addEventListener('click', () => done(true));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(false); });
+    backdrop.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(false); });
+    document.body.append(backdrop); ok.focus();
+  });
+}
+const tell = (message) => ask({ title: 'Engines', body: message, action: 'OK', single: true });
 
 async function act(id, what) {
   try {
     if (what === 'download' || what === 'update') await sendJSON(`/api/engines/${id}/download`, 'POST', {});
     else if (what === 'cancel') await sendJSON(`/api/engines/${id}/cancel`, 'POST', {});
-    else if (what === 'rollback') { if (!confirm('Go back to the earlier version? New chats use it.')) return; await sendJSON(`/api/engines/${id}/rollback`, 'POST', {}); }
-    else if (what === 'remove') { if (!confirm('Remove this engine and everything it saved? You can download it again.')) return; await sendJSON(`/api/engines/${id}`, 'DELETE', {}); }
-  } catch (err) { alert(err.message); }
+    else if (what === 'rollback') { if (!(await ask({ title: 'Roll back?', body: 'Go back to the earlier version? New chats use it.', action: 'Roll back' }))) return; await sendJSON(`/api/engines/${id}/rollback`, 'POST', {}); }
+    else if (what === 'remove') { if (!(await ask({ title: 'Remove this engine?', body: 'Remove this engine and everything it saved? You can download it again.', action: 'Remove', danger: true }))) return; await sendJSON(`/api/engines/${id}`, 'DELETE', {}); }
+  } catch (err) { tell(err.message); }
   await load();
 }
 
 mount?.addEventListener('click', async (ev) => {
   const t = ev.target.closest('button');
-  if (!t) return;
+  if (!t || deviceView) return;
   const id = t.closest('.er')?.dataset.id;
   if (t.dataset.act === 'menu') { const m = t.parentElement.querySelector('.menu2'); const was = !m.hidden; if (openMenu) openMenu.hidden = true; m.hidden = was; openMenu = was ? null : m; return; }
   if (openMenu) { openMenu.hidden = true; openMenu = null; }
   if (t.dataset.act && id) { await act(id, t.dataset.act); return; }
   if (t.dataset.auth && id && !t.disabled) {
-    try { await sendJSON('/api/settings', 'PUT', { engines: { [id]: { auth: t.dataset.auth } } }); } catch (err) { alert(err.message); }
+    try { await sendJSON('/api/settings', 'PUT', { engines: { [id]: { auth: t.dataset.auth } } }); } catch (err) { tell(err.message); }
     await load();
   }
 });
 document.addEventListener('click', (ev) => { if (openMenu && !ev.target.closest('.mnw')) { openMenu.hidden = true; openMenu = null; } });
-chooser?.addEventListener('change', async () => { try { await sendJSON('/api/settings', 'PUT', { engine: chooser.value }); } catch (err) { alert(err.message); } await load(); });
+chooser?.addEventListener('change', async () => { try { await sendJSON('/api/settings', 'PUT', { engine: chooser.value }); } catch (err) { tell(err.message); } await load(); });
 
 load();

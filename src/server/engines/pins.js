@@ -7,7 +7,7 @@ export function loadPins(file = fileURLToPath(new URL('./pins.json', import.meta
 }
 
 /** Problems with a pins object (empty list = fine): used by the gate step and the tests. */
-export function checkPins(pins, { schemaExists = () => true } = {}) {
+export function checkPins(pins, { schemaExists = () => true, aboutText = null } = {}) {
   const problems = [];
   if (!pins || typeof pins !== 'object' || !Object.keys(pins).length) return ['no engines are pinned'];
   for (const [id, p] of Object.entries(pins)) {
@@ -27,6 +27,8 @@ export function checkPins(pins, { schemaExists = () => true } = {}) {
     }
     if (p.schema && !schemaExists(p.schema)) say(`schema file ${p.schema} is missing`);
     if (!p.licence) say('no licence text named');
+    if (aboutText !== null && (!p.licenceName || !String(aboutText).includes(p.licenceName))) say(`its licence (${p.licenceName ?? 'unnamed'}) is not listed in Settings → About`);
+    if (p.entrySha256 !== undefined && !/^[a-f0-9]{64}$/.test(String(p.entrySha256))) say('entrySha256 is not a sha256');
   }
   return problems;
 }

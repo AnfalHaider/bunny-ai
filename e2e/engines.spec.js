@@ -18,7 +18,9 @@ test('Engines lists Bunny, Claude Code and Codex CLI and nothing else; each engi
   await expect(rows.nth(0)).toContainText('Bunny'); await expect(rows.nth(1)).toContainText('Claude Code'); await expect(rows.nth(2)).toContainText('Codex CLI');
   await expect(page.locator('#engines-section')).not.toContainText(/Cline|Aider/);
   await expect(rows.nth(1).locator('.l2')).toContainText('Not installed');
-  for (const i of [0, 1, 2]) expect((await rows.nth(i).boundingBox()).height).toBeLessThan(70);
+  for (const i of [0, 1, 2]) expect((await rows.nth(i).boundingBox()).height).toBeLessThanOrEqual(56);
+  await expect(rows.nth(1).locator('.l2')).toHaveText('Not installed · 380 MB');
+  await expect(page.locator('#engines-section')).not.toContainText('Bunny judges every step');
 });
 
 test('download Claude Code: progress, then the Local | Account switch with Account recommended; Local shows the Anthropic note; Codex Account is greyed with its note', async ({ page }) => {
@@ -46,16 +48,18 @@ test('download Claude Code: progress, then the Local | Account switch with Accou
   await page.reload();
   await expect(page.locator('#engine-default')).toHaveValue('claude-code');
   // what was done is listed, newest first
-  await expect(page.locator('#engines-record')).toContainText('download');
+  await expect(page.locator('#engines-record')).toContainText('Claude Code downloaded v1.0.0');
+  await expect(row.locator('.l2')).not.toContainText('Account');
 });
 
 test('remove returns the row to Download; Cancel stops a download', async ({ page }) => {
-  page.on('dialog', (d) => d.accept());
+  page.on('dialog', () => { throw new Error('the browser confirm/alert is not used'); });
   await page.goto(PAGE);
   await page.locator('#engines-list .er[data-id="codex"] [data-act="download"]').click();
   await expect(page.locator('#engines-list .er[data-id="codex"] .seg')).toBeVisible({ timeout: 15_000 });
   await page.locator('#engines-list .er[data-id="codex"] [data-act="menu"]').click();
   await page.locator('#engines-list .er[data-id="codex"] [data-act="remove"]').click();
+  await page.locator('.engine-confirm').getByRole('button', { name: 'Remove' }).click();
   await expect(page.locator('#engines-list .er[data-id="codex"] [data-act="download"]')).toBeVisible();
   await page.locator('#engines-list .er[data-id="claude-code"] [data-act="download"]').click();
   const cancel = page.locator('#engines-list .er[data-id="claude-code"] [data-act="cancel"]');
@@ -68,6 +72,9 @@ for (const [scheme, width] of [['light', 1000], ['dark', 1000], ['light', 390], 
     await page.setViewportSize({ width, height: 900 });
     await page.goto(PAGE);
     await expect(page.locator('#engines-list .er')).toHaveCount(3);
+    const first = page.locator('#engines-list .er').nth(1);
+    expect((await first.boundingBox()).height).toBeLessThanOrEqual(width < 620 ? 92 : 56);
+    expect(await first.locator('.l2').evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(over).toBeLessThanOrEqual(1);
   });

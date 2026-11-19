@@ -1249,3 +1249,52 @@ body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 @font-face { font-family: "Bunny JetBrains Mono"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/jetbrains-mono-400-700.woff2") format("woff2"); }
 @font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-400.woff2") format("woff2"); }
 @font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/ibm-plex-mono-600.woff2") format("woff2"); }
+
+/* CLI-ENGINES: the engine chip and its one-line menu */
+#engine-chip.restricted .engine-text::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: #a5600b; vertical-align: middle; }
+#engine-chip[aria-disabled="true"] { cursor: default; }
+#engine-menu { min-width: 220px; padding: 5px; }
+#engine-menu button { display: flex; justify-content: space-between; gap: 18px; width: 100%; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font: inherit; cursor: pointer; text-align: left; color: inherit; }
+#engine-menu button:hover, #engine-menu button.on { background: var(--soft, #f3f1ec); }
+#engine-menu small { color: var(--muted, #62656c); }
+
+/* CLI-ENGINES: Settings -> Engines (the owner's approved drawing v12): one compact row per engine */
+#engines-section .er { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto 28px; gap: 10px; align-items: center; padding: 7px 12px; min-height: 53px; box-sizing: border-box; border-top: 1px solid var(--line); }
+#engines-section .er:first-child { border-top: 0; }
+#engines-section .ti { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-soft, #eceafb); color: var(--accent, #5b4bd5); display: grid; place-items: center; font: 700 12px ui-monospace, Consolas, monospace; }
+#engines-section .l1 b { font-weight: 600; line-height: 1.25; }
+#engines-section .l2 { font-size: 12px; line-height: 1.3; color: var(--muted, #62656c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#engines-section .act2 { display: contents; }
+#engines-section .cc, #engines-section .bt { min-width: 0; }
+#engines-section .bt { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+#engines-section .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; font-size: 13px; }
+#engines-section .seg button { border: 0; background: transparent; padding: 2px 13px; line-height: 1.4; color: var(--muted, #62656c); cursor: pointer; font: inherit; }
+#engines-section .seg button.on { background: var(--text, #1c1d20); color: var(--bg, #fff); font-weight: 700; }
+#engines-section .seg button:disabled { opacity: .5; cursor: not-allowed; }
+#engines-section .rc { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #1f7a4a; margin-left: 5px; vertical-align: middle; }
+#engines-section .btn2 { border: 1px solid var(--line); border-radius: 9px; padding: 3px 11px; line-height: 1.4; font: inherit; font-size: 13px; background: transparent; color: var(--text, #1c1d20); cursor: pointer; white-space: nowrap; }
+#engines-section .btn2.pri { background: var(--text, #1c1d20); color: var(--bg, #fff); border-color: var(--text, #1c1d20); }
+#engines-section .bar { display: block; height: 5px; width: 90px; border-radius: 99px; background: var(--line); overflow: hidden; }
+#engines-section .bar i { display: block; height: 100%; background: var(--accent, #5b4bd5); }
+#engines-section .mnw { position: relative; }
+#engines-section .mn { width: 28px; height: 28px; border: 0; background: transparent; cursor: pointer; color: var(--muted, #62656c); font-weight: 700; letter-spacing: 1px; }
+#engines-section .mn.none { visibility: hidden; }
+#engines-section .menu2 { position: absolute; right: 0; top: 30px; z-index: 5; min-width: 210px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel, #fff); padding: 5px; box-shadow: 0 10px 28px rgba(20, 22, 40, .2); }
+#engines-section .menu2 button { display: flex; justify-content: space-between; gap: 18px; width: 100%; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font: inherit; color: var(--text, #1c1d20); cursor: pointer; text-align: left; }
+#engines-section .menu2 button:hover { background: var(--soft, #f3f1ec); }
+#engines-section .menu2 button[data-act="remove"] { color: #a3243b; }
+:root[data-theme="dark"] #engines-section .menu2 button[data-act="remove"] { color: var(--bad); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #engines-section .menu2 button[data-act="remove"] { color: var(--bad); } }
+#engines-section .menu2 small { color: var(--muted, #62656c); }
+#engines-section .rec-row { display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: baseline; font-size: 12.5px; padding: 3px 0; }
+#engines-section .rec-row .when { color: var(--muted, #62656c); }
+#engines-section .rec-row code { white-space: nowrap; font-size: 11.5px; }
+#engines-section .window-only { margin: 10px 12px; }
+.engine-confirm .modal-body { line-height: 1.45; }
+@media (max-width: 620px) {
+  #engines-section .er { grid-template-columns: 32px minmax(0, 1fr) 28px; row-gap: 4px; padding: 6px 12px; }
+  #engines-section .nm { grid-column: 2; }
+  #engines-section .mnw, #engines-section .mn.none { grid-column: 3; grid-row: 1; }
+  #engines-section .act2 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; grid-column: 1 / 4; grid-row: 2; }
+  #engines-section .bt { margin-left: auto; }
+}
