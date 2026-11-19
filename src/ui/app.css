@@ -2181,9 +2181,11 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 
 /* v0.1.11: the "Open to other devices" line is part of the page's layout, not a layer over a window-high app: the app takes the height that is left,
    so the row under the composer and the sidebar's profile row are never pushed off the bottom (the owner's report) */
-body:has(> #remote-bar) { display: flex; flex-direction: column; }
-body:has(> #remote-bar) > #remote-bar { flex: none; }
-body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
+/* v0.1.14 (the owner's phone report: the composer row and Send cut at the bottom): the same holds for EVERY line put across the top of the page. A device's page has one too since v0.1.13
+   (#device-level-line, "Chats access" / "Everything access"): left out of this rule it pushed the window-high app 30px past the bottom of the phone. */
+body:has(> #remote-bar), body:has(> #device-level-line) { display: flex; flex-direction: column; }
+body:has(> #remote-bar) > #remote-bar, body:has(> #device-level-line) > #device-level-line { flex: none; }
+body:has(> #remote-bar) > .app, body:has(> #device-level-line) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 
 
 /* Bundled fonts (v0.1.13). SIL OFL 1.1, unmodified Latin woff2, see src/ui/fonts/manifest.json. Named "Bunny ..." so the default font stack is not changed by them. */
