@@ -266,7 +266,7 @@ test('the google 404-on-models quirk does not wave a bad key through', async (t)
   t.after(() => new Promise((r) => stub.server.close(r)));
 
   const { base } = await startApp(t, { fake: false, probe: null });
-  const { status, body } = await post(base, '/api/providers/google/connect', { apiKey: 'AIzaSyDUMMYKEY000000000000000000000' });
+  const { status, body } = await post(base, '/api/providers/google/connect', { apiKey: 'AIzaSyDUMMYKEY000000000000000000000', baseUrl: stub.url }); // the stub above, not the real Google (TEST-DNS: a unit test never leaves this computer)
   assert.equal(status, 400);
   assert.equal(body.code, 'probe.unauthorized');
   // And nothing was saved: the provider stays disconnected.
