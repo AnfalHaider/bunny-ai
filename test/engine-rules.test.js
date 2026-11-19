@@ -245,3 +245,47 @@ test('ER-1: a device at Chats or Everything is refused every change of useBunnyE
   void base;
   for (const body of [{ useBunnyEngine: false }, { engines: { 'claude-code': { rules: { allow: ['Bash'] } } } }]) assert.match(deviceRefusal('PUT', '/api/settings', body), /Only Bunny's window can change engines\./);
 });
+
+// ---------------------------------------------------------------- "Allow for this chat" (Codex only, ENGINE-RULES only, only from the person's own click)
+
+import { createCodexDriver } from '../src/server/engines/codex.js';
+
+test('Allow for this chat: Codex gets acceptForSession only when the person clicked it; a plain Allow is accept; Claude Code\'s cards never offer it; Bunny never picks it', async () => {
+  const sent = [];
+  const mk = (verdict) => createCodexDriver({ send: (m) => sent.push(m), judgeCommand: async () => verdict, judgeChanges: async () => verdict });
+  for (const [verdict, want] of [[{ allow: true }, 'accept'], [{ allow: true, forSession: true }, 'acceptForSession'], [{ allow: false }, 'decline'], [{ allow: false, forSession: true }, 'decline'], [{ allow: true, forSession: 'yes' }, 'accept']]) {
+    sent.length = 0;
+    await mk(verdict).feed(JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'item/commandExecution/requestApproval', params: { itemId: 'i1', command: 'dir' } }));
+    assert.equal(sent.at(-1).result.decision, want, JSON.stringify(verdict));
+  }
+  // the bridge: the card for Codex offers it; the answer 'session' becomes forSession; Claude Code's relay offers nothing and a stray 'session' there is just yes
+  const offered = [];
+  const answers = { next: 'session' };
+  const bridge = createBridge({ mode: 'auto', rules: [], root: await mkdtemp(join(tmpdir(), 'bunny-sess-')), protect: [], keyFolders: [], ask: async (_s, _d, opts) => { offered.push(Boolean(opts?.forSession)); return answers.next; } });
+  const c = await bridge.codexCommandRelay({ command: 'dir' });
+  assert.deepEqual([c.allow, c.forSession], [true, true]);
+  answers.next = true; assert.equal((await bridge.codexCommandRelay({ command: 'dir' })).forSession, undefined);
+  answers.next = false; assert.equal((await bridge.codexCommandRelay({ command: 'dir' })).allow, false);
+  answers.next = 'session'; const k = await bridge.claudeAsk({ tool: 'Bash', input: { command: 'ls' } });
+  assert.equal(k.forSession, undefined, 'Claude Code never gets a session allow');
+  assert.deepEqual(offered, [true, true, true, false], 'only Codex\'s cards ask for the third answer');
+});
+
+test('Allow for this chat, through the app: the card carries forSession only for Codex with Bunny\'s engine off; the answer is honoured only when the card offered it', async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-sess-app-'));
+  const { base } = await appOff(t, { steps: [{ command: 'dir', marker: join(folder, 'ran.txt') }, { say: 'done' }] });
+  await downloadedEngine(base, 'codex');
+  await put(base, '/api/settings', { engine: 'codex', useBunnyEngine: false });
+  const made = (await post(base, '/api/sessions', { title: 'codex asks', workMode: 'code', folder })).body;
+  const res = await fetch(`${base}/api/sessions/${made.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'go', providerId: 'openai', model: 'test-model-1', workMode: 'code' }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let text = '';
+  let card = null;
+  while (!card) { const { value, done } = await reader.read(); if (done) break; text += dec.decode(value); const m = /event: permission\ndata: (.+)\n/.exec(text); if (m) card = JSON.parse(m[1]); }
+  assert.equal(card.forSession, true, 'Codex\'s card offers Allow for this chat');
+  const ans = await post(base, `/api/sessions/${made.id}/permission/${card.id}`, { allowed: true, forSession: true });
+  assert.equal(ans.status, 200);
+  for (;;) { const { value, done } = await reader.read(); if (done) break; text += dec.decode(value); }
+  assert.match(text, /event: done/);
+  const saved = (await json(base, `/api/sessions/${made.id}`)).body;
+  assert.ok(saved.messages.some((m) => /asked/.test(m.tool ?? '') && /allowed it for this chat/i.test(m.result ?? '')), 'the answer is a step in the chat');
+});

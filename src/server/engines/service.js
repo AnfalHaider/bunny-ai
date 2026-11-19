@@ -295,10 +295,12 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
       mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(settings.permissionRules, root)), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
-      ask: async (summary, detail) => {
-        const ok = await turn.askPermission(`${label} asks: ${summary}`, detail);
-        if (ownRules) await turn.logStep({ role: 'assistant', kind: 'tool_call', tool: `${label} asked: ${summary}`, status: ok ? 'allowed' : 'denied', content: '', result: ok ? 'You allowed it.' : 'You did not allow it.' }).catch(() => {});
-        return ok;
+      ask: async (summary, detail, opts = {}) => {
+        // "Allow for this chat" is offered on Codex's cards only, and only with Bunny's engine off
+        const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true ? { forSession: true } : {});
+        const ok = answer === true || answer === 'session';
+        if (ownRules) await turn.logStep({ role: 'assistant', kind: 'tool_call', tool: `${label} asked: ${summary}`, status: ok ? 'allowed' : 'denied', content: '', result: answer === 'session' ? 'You allowed it for this chat.' : ok ? 'You allowed it.' : 'You did not allow it.' }).catch(() => {});
+        return ownRules && id === 'codex' && answer === 'session' ? 'session' : ok;
       },
     };
     const bridge = createBridge(ctx);

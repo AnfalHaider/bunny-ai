@@ -2437,16 +2437,17 @@ function showLivePermission(bodyEl, info) {
   card.append(element('h4', { textContent: `Allow: ${info.title}?` }));
   if (info.detail) card.append(element('pre', { className: 'code' }, element('code', { textContent: info.detail })));
   const actions = element('div', { className: 'permission-actions' });
-  const answer = async (allowed) => {
-    actions.replaceChildren(element('span', { className: 'hint', textContent: allowed ? 'Allowed' : 'Denied' }));
+  const answer = async (allowed, forSession = false) => {
+    actions.replaceChildren(element('span', { className: 'hint', textContent: allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
     try {
-      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', { allowed });
+      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', forSession ? { allowed, forSession: true } : { allowed });
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
     }
   };
   actions.append(
     button('Allow', { className: 'primary', onclick: () => answer(true) }),
+    ...(info.forSession ? [button('Allow for this chat', { className: 'ghost', onclick: () => answer(true, true) })] : []),
     button('Deny', { className: 'ghost', onclick: () => answer(false) }),
   );
   card.append(actions);

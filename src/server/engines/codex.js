@@ -2,7 +2,7 @@
  * CLI-ENGINES §3.2: the Codex adapter (pin 0.170.0), full mode with CE-1.12 to CE-1.17. All of it is what spike S2 showed:
  *
  *   CE-1.12  approval_policy is ALWAYS "untrusted" (never on-request, never, granular: with the sandbox on those ask for nothing), no capabilities.experimentalApi, and Bunny answers accept or
- *            decline (cancel on Stop), NEVER acceptForSession. item/permissions/requestApproval, applyPatchApproval and execCommandApproval are always declined.
+ *            decline (cancel on Stop), NEVER acceptForSession on its own: only the person's own click on "Allow for this chat" (Bunny's engine off, ENGINE-RULES) sends it. item/permissions/requestApproval, applyPatchApproval and execCommandApproval are always declined.
  *   CE-1.13  item/commandExecution/requestApproval is judged as run_command on its text; item/fileChange/requestApproval is judged per path (the paths come from the item/started that came first).
  *   CE-1.14  features.view_image=false (it reads outside the folder with no ask, even under untrusted) and apps, plugins, remote_plugin, plugin_sharing, tool_suggest, computer_use, image_generation,
  *            goals, hooks off; web_search="disabled" (without these Codex reached github.com and chatgpt.com).
@@ -142,13 +142,13 @@ export function createCodexDriver({ send, judgeCommand, judgeChanges, schema, qu
       const verdict = await judgeCommand(params ?? {});
       if (verdict.allow) accepted.add(params?.itemId); else declined.add(params?.itemId);
       queue.push({ type: 'approval', requestId: String(params?.itemId ?? id), name: 'run_command' });
-      reply(id, { decision: verdict.allow ? 'accept' : 'decline' });
+      reply(id, { decision: verdict.allow ? (verdict.forSession === true ? 'acceptForSession' : 'accept') : 'decline' }); // acceptForSession only when the person clicked "Allow for this chat" (ENGINE-RULES); the bridge never sets it otherwise
     } else if (method === 'item/fileChange/requestApproval') {
       const item = items.get(params?.itemId);
       const verdict = item?.changes ? await judgeChanges(item.changes) : { allow: false, reason: 'The file change could not be read.' };
       if (verdict.allow) accepted.add(params?.itemId); else declined.add(params?.itemId);
       queue.push({ type: 'approval', requestId: String(params?.itemId ?? id), name: 'edit_file' });
-      reply(id, { decision: verdict.allow ? 'accept' : 'decline' });
+      reply(id, { decision: verdict.allow ? (verdict.forSession === true ? 'acceptForSession' : 'accept') : 'decline' });
     } else if (method === 'applyPatchApproval' || method === 'execCommandApproval') {
       reply(id, { decision: 'denied' });
     } else if (method === 'mcpServer/elicitation/request') {

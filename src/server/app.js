@@ -1477,7 +1477,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
       if (!pending || pending.sessionId !== permissionMatch[1]) {
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
-      pending.resolve((await readBody(req)).allowed === true);
+      const answer = await readBody(req);
+      pending.resolve(answer.allowed === true && answer.forSession === true && pending.forSession ? 'session' : answer.allowed === true);
       return sendJson(res, 200, { ok: true });
     }
 
@@ -2359,15 +2360,16 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
         return { stop: () => clearTimeout(timer) };
       };
       // Ask the person, and wait for the answer (or for them to leave).
-      const askPermission = (summary, detail) => new Promise((resolveAnswer) => {
+      // `opts.forSession` offers a third answer, "Allow for this chat" (Codex's acceptForSession, only with Bunny's engine off): the answer is the text 'session', and only when this card offered it
+      const askPermission = (summary, detail, opts = {}) => new Promise((resolveAnswer) => {
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
         if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
         const timer = waitNudges({ kind: 'permission', title: summary });
-        pendingPermissions.set(pid, { sessionId: id, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
-        send('permission', { id: pid, title: summary, detail: cardText(detail) });
+        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}) });
       });
 
       // Ask the window to do a browser action, and wait for what happened.

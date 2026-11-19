@@ -129,6 +129,10 @@ export function createBridge(ctx) {
   async function asked(summary, detail) {
     try { return (await ctx.ask(summary, detail)) === true; } catch { return false; }
   }
+  /** A card that may also be answered "Allow for this chat" (Codex only): { ok, session }. Only the person's own click gives session. */
+  async function askedSession(summary, detail) {
+    try { const a = await ctx.ask(summary, detail, { forSession: true }); return { ok: a === true || a === 'session', session: a === 'session' }; } catch { return { ok: false, session: false }; }
+  }
 
   /** Judge one mapped call. Returns { allow, reason, name, risk, summary, asked }. Never throws. */
   async function judge(call) {
@@ -220,11 +224,12 @@ export function createBridge(ctx) {
   }
 
   /** A question the engine itself asked (its own ask rule or its mode): the floor first, then the person's card. No answer is a deny. */
-  async function relay(call) {
+  async function relay(call, { offerSession = false } = {}) {
     const f = await floor(call);
     const summary = summaryOf(call);
     if (f.deny) return { allow: false, reason: f.deny, name: call.name ?? 'unknown', risk: RISK[call.name] ?? 'run', summary };
     const detail = `${call.command ?? call.path ?? call.engineTool ?? ''}${f.flag ? `\n\n${f.flag}` : ''}`.trim();
+    if (offerSession) { const a = await askedSession(summary, detail); return a.ok ? { allow: true, ...(a.session ? { forSession: true } : {}), reason: 'Allowed by the person.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true }; }
     const ok = await asked(summary, detail);
     return ok ? { allow: true, reason: 'Allowed by the person.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name: call.name, risk: RISK[call.name] ?? 'run', summary, asked: true };
   }
@@ -238,15 +243,16 @@ export function createBridge(ctx) {
     /** The same request with Bunny's engine off: the floor only (no opinion on the rest). */
     async claudeFloor({ tool, input }) { return floorOnly(mapClaudeCall(tool, input)); },
     /** ENGINE-RULES, Codex: every command is the person's to decide on a card; a command that names a floor path is flagged on the card, never decided by Bunny. */
-    async codexCommandRelay(params) { return relay(mapCodexCommand(params)); },
+    async codexCommandRelay(params) { return relay(mapCodexCommand(params), { offerSession: true }); },
     /** ENGINE-RULES, Codex: a patch to a floor path is declined at once; any other goes to a card (one question for the whole change). */
     async codexChangesRelay(changes) {
       const calls = mapCodexChanges(changes);
       for (const c of calls) { const f = await floor(c); if (f.deny) return { allow: false, reason: f.deny, name: c.name ?? 'unknown', risk: 'edit', summary: summaryOf(c) }; }
       const first = calls[0];
       const list = calls.map((c) => c.path).filter(Boolean).slice(0, 8).join('\n');
-      const ok = await asked(calls.length === 1 ? summaryOf(first) : `Change ${calls.length} files`, list);
-      return ok ? { allow: true, reason: 'Allowed by the person.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true } : { allow: false, reason: 'The person did not allow this.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true };
+      const a = await askedSession(calls.length === 1 ? summaryOf(first) : `Change ${calls.length} files`, list);
+      const ok = a.ok;
+      return ok ? { allow: true, ...(a.session ? { forSession: true } : {}), reason: 'Allowed by the person.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true } : { allow: false, reason: 'The person did not allow this.', name: first.name, risk: 'edit', summary: summaryOf(first), asked: true };
     },
     /** The engine's own question (its prompt tool): the floor, then a card. */
     async claudeAsk({ tool, input }) { return relay(mapClaudeCall(tool, input)); },
