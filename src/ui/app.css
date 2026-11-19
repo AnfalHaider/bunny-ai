@@ -1464,30 +1464,69 @@ html.embedded .cz-bar { margin-top: 0; }
 .cz-add-wrap { position: relative; }
 .cz-add-menu { right: 0; left: auto; min-width: 280px; }
 .cz-form { margin-bottom: var(--sp-6); }
-.cz-table { border-top: 1px solid var(--line); }
-.cz-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) 112px 176px 260px; align-items: center; gap: var(--sp-6); /* fixed columns, so the header words sit over their columns */
-  padding: var(--sp-5) var(--sp-4); border-bottom: 1px solid var(--line); font-size: var(--fs-base);
+/* TIGHT-ROWS (v0.1.14, Design's drawing 5e0f5a4): one row of about 52 px per item: [box] [logo] name over a one-line dim description, [action] [switch] [...]. The same on Customize and Automation. */
+.cz-table, .tr-list, .group:has(.tr-row) { container-type: inline-size; }
+.tr-row {
+  display: grid; grid-template-columns: 15px 30px minmax(0, 1fr) auto; gap: var(--sp-5); align-items: center;
+  padding: var(--sp-4) var(--sp-5); min-height: 52px; border-bottom: 1px solid var(--line); font-size: var(--fs-base); position: relative;
 }
-.cz-head { padding-top: var(--sp-4); padding-bottom: var(--sp-4); font-size: var(--fs-md); color: var(--text-dim); font-weight: var(--fw-medium); }
-.cz-name { display: flex; align-items: center; gap: var(--sp-6); min-width: 0; }
-.cz-logo {
-  width: 30px; height: 30px; flex: none; border-radius: var(--r-md); display: grid; place-items: center;
-  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm);
-  font-size: var(--fs-md); font-weight: var(--fw-semibold); color: var(--accent);
+.tr-row:last-child { border-bottom: 0; }
+.tr-row.tr-nobox { grid-template-columns: 30px minmax(0, 1fr) auto; } /* a list with nothing to select (Automation) */
+.tr-row.is-picked { background: var(--hover); }
+.tr-cb-space { width: 15px; height: 15px; }
+.tr-tile {
+  width: 30px; height: 30px; border-radius: var(--r-md); display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); font-weight: var(--fw-semibold); font-size: var(--fs-md);
 }
-.cz-text { display: flex; flex-direction: column; min-width: 0; }
-.cz-text b { font-weight: var(--fw-medium); }
-.cz-text small { font-size: var(--fs-md); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cz-type { display: flex; align-items: center; gap: var(--sp-4); color: var(--text-dim); }
-.cz-status { display: flex; flex-direction: column; gap: 1px; min-width: 0; color: var(--text-dim); font-size: var(--fs-md); }
-.cz-status-word { font-weight: var(--fw-medium); }
-.cz-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); min-width: 0; max-width: 100%; }
-.cz-scope-label { color: var(--text-dim); overflow-wrap: anywhere; }
-.cz-text .cz-scope-label { white-space: normal; overflow: visible; text-overflow: clip; } /* a long folder name wraps: the whole name stays readable */
-.cz-extra { display: flex; flex-direction: column; align-items: flex-start; }
-.cz-status-detail { color: var(--text-dim); font-weight: 400; font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.cz-actions { display: flex; align-items: center; gap: var(--sp-3); justify-content: flex-end; }
+.tr-name { min-width: 0; }
+.tr-l1 { display: flex; gap: var(--sp-3); align-items: center; line-height: 1.3; min-width: 0; }
+.tr-l1 b { font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tr-l2 { font-size: var(--fs-md); color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
+.tr-chip { font-size: 11px; border: 1px solid var(--line); border-radius: 99px; padding: 0 7px; color: var(--text-dim); white-space: nowrap; flex: none; }
+.tr-chip.is-warn { color: var(--warn-text); border-color: var(--warn); background: var(--warn-soft); }
+.tr-chip.is-bad { color: var(--bad); border-color: var(--bad); }
+.tr-chip.is-ok { color: var(--ok-text); border-color: var(--ok); }
+.tr-right { display: flex; gap: var(--sp-4); align-items: center; justify-content: flex-end; }
+.tr-switch { width: 38px; height: 22px; }
+.tr-switch::after { top: 3px; left: 3px; width: 16px; height: 16px; }
+.tr-switch[aria-checked="true"]::after { left: 19px; }
+.tr-primary {
+  font: inherit; font-size: var(--fs-md); font-weight: var(--fw-semibold); border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft);
+  border-radius: var(--r-md); padding: 2px 10px; cursor: pointer; white-space: nowrap;
+}
+/* Automation keeps its checkbox switch (the same element, so it still answers a click and a keyboard): drawn as the same switch, without the on/off word */
+.tr-right .switch { display: inline-flex; align-items: center; margin: 0; }
+.tr-right .switch > span { display: none; }
+.tr-right .switch input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none; width: 38px; height: 22px; border-radius: 99px; background: var(--line-strong); position: relative; cursor: pointer; margin: 0; flex: none; transition: background var(--t-fast);
+}
+.tr-right .switch input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left var(--t-fast) var(--ease); }
+.tr-right .switch input[type="checkbox"]:checked { background: var(--accent); }
+.tr-right .switch input[type="checkbox"]:checked::after { left: 19px; }
+.tr-right .switch input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tr-more { position: relative; display: inline-flex; }
+.tr-mn { width: 28px; height: 28px; border-radius: var(--r-md); display: grid; place-items: center; color: var(--text-dim); font-weight: 700; letter-spacing: 1px; border: 0; background: none; cursor: pointer; font: inherit; }
+.tr-mn:hover, .tr-mn[aria-expanded="true"] { background: var(--hover); }
+.tr-mn:focus-visible, .tr-primary:focus-visible, .tr-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tr-menu {
+  position: absolute; z-index: 20; right: 0; top: 100%; margin-top: 4px; width: 240px; max-width: calc(100vw - 24px);
+  background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); padding: 4px; display: grid; font-size: var(--fs-base);
+}
+.tr-menu button { display: flex; justify-content: space-between; gap: var(--sp-4); align-items: center; text-align: left; padding: 5px 10px; border-radius: var(--r-sm); background: none; border: 0; font: inherit; color: inherit; cursor: pointer; }
+.tr-menu button:hover, .tr-menu button:focus-visible { background: var(--hover); outline: none; }
+.tr-menu button[disabled] { color: var(--text-faint); cursor: default; }
+.tr-menu button.is-danger { color: var(--bad); }
+.tr-menu small { color: var(--text-dim); }
+.tr-menu hr { border: 0; border-top: 1px solid var(--line); margin: 3px 0; width: 100%; }
+.tr-section { padding: var(--sp-3) var(--sp-5); font-size: var(--fs-md); font-weight: var(--fw-semibold); color: var(--text); border-bottom: 1px solid var(--line); }
+/* a narrow list (a phone, the Settings pane): the logo and the name get the room, the visible action moves into the menu (it is always the menu's first item), the switch stays on the row */
+@container (max-width: 420px) {
+  .tr-row { grid-template-columns: 15px 28px minmax(0, 1fr) auto; gap: var(--sp-4); padding: var(--sp-4) var(--sp-4); }
+  .tr-row.tr-nobox { grid-template-columns: 28px minmax(0, 1fr) auto; }
+  .tr-tile { width: 28px; height: 28px; }
+  .tr-primary { display: none; }
+}
+.cz-head { display: flex; align-items: center; gap: var(--sp-5); padding: var(--sp-3) var(--sp-5); font-size: var(--fs-md); color: var(--text-dim); border-bottom: 1px solid var(--line); }
 .cz-note { margin-top: var(--sp-6); }
 .cz-status.is-warn .cz-status-word { color: var(--warn-text); }
 .cz-status.text-ok .cz-status-word { color: var(--ok-text); }
@@ -1495,18 +1534,6 @@ html.embedded .cz-bar { margin-top: 0; }
 main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px of a settings page */
 .cz-signin-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-md); color: var(--text-dim); }
 .cz-signin-note .input { flex: 1 1 200px; min-width: 0; }
-/* Narrow (the Settings pane is about 800 px wide) and phone: each item is a card, with its status under the name (the Type column is not drawn) */
-@media (max-width: 900px) {
-  .cz-table { border-top: 0; }
-  .cz-head { grid-template-columns: minmax(0, 1fr); border-bottom: 0; }
-  .cz-head > :not(.cz-name) { display: none; }
-  #cz-list { display: flex; flex-direction: column; gap: var(--sp-4); }
-  .cz-row[role="row"]:not(.cz-head) { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
-  .cz-row .cz-type { display: none; }
-  .cz-row .cz-status { overflow-wrap: anywhere; }
-  .cz-actions { justify-content: flex-start; flex-wrap: wrap; }
-}
-
 /* Chat | Code switch sits in the sidebar header, right of the logo */
 .brand .mode-switch { margin-left: auto; }
 .brand .mode-switch button { height: 24px; padding: 0 var(--sp-5); font-size: var(--fs-xs); font-weight: var(--fw-medium); }

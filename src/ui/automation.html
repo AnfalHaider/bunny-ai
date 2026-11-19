@@ -111,7 +111,8 @@
 <script type="module">
   import { getJSON, sendJSON, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
-  import { connectorStatus, renderStatus, createSignInFlows } from './connectorStatus.js';
+  import { connectorStatus, createSignInFlows } from './connectorStatus.js';
+  import { tightRow } from './tight-rows.js';
   import { applyLanguage } from './i18n.js';
   getJSON('/api/settings').then((s) => { applyAppearance(s); applyLanguage(s.language ?? 'en'); }).catch(() => {});
   applyEmbed();
@@ -119,23 +120,9 @@
   const $ = (id) => document.getElementById(id);
   const flows = createSignInFlows({ getJSON, sendJSON, onChange: () => renderMcp(), onSignedIn: () => renderMcp() });
 
-  function row(name, detail, isOn, onToggle, onDelete, toggleLabel = 'On') {
-    const line = document.createElement('div');
-    line.className = 'kv';
-
-    const left = document.createElement('span');
-    left.className = 'k';
-    left.textContent = name;
-    if (detail) {
-      const small = document.createElement('div');
-      small.className = 'desc';
-      small.textContent = detail;
-      left.append(small);
-    }
-
-    const right = document.createElement('span');
-    right.className = 'v';
-
+  // TIGHT-ROWS (Design's drawing 5e0f5a4): one tight row per item (tight-rows.js): logo, name over one dim line, the switch at the right, and everything else (Check tools, Sign out, Delete)
+  // in the "..." menu. A chip shows only when something needs the person.
+  function row(name, detail, isOn, onToggle, onDelete, toggleLabel = 'On', { chips = [], dim = null, extra = null, primary = null, items = [] } = {}) {
     const toggle = document.createElement('label');
     toggle.className = 'switch';
     const box = document.createElement('input');
@@ -146,16 +133,7 @@
     const state = document.createElement('span');
     state.textContent = isOn ? 'on' : 'off';
     toggle.append(box, state);
-
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = 'Delete';
-    remove.className = 'ghost small danger';
-    remove.addEventListener('click', onDelete);
-
-    right.append(toggle, remove);
-    line.append(left, right);
-    return line;
+    return tightRow(document, { name, chips, dim: dim ?? detail ?? '', extra, primary, toggleNode: toggle, boxSpace: false, items: [...items, items.length ? '-' : null, { label: 'Delete', danger: true, run: onDelete }].filter((i) => i !== null) });
   }
 
   async function showError(err) {
@@ -262,46 +240,42 @@
       host.append(empty);
       return;
     }
-    // W3-6b: the status words and the sign-in are the same as on Customize (connectorStatus.js)
+    // W3-6b: the status words and the sign-in are the same as on Customize (connectorStatus.js); here a chip shows only when something needs the person
     for (const server of rows) {
       const local = server.type === 'local';
       const where = local ? `Local: ${[server.command, ...(server.args ?? [])].join(' ')}` : server.url;
-      const line = row(server.name, where, server.enabled, async (on) => {
+      const st = local ? { word: server.status === 'connected' ? `✓ ${server.tools?.length ?? 0} tools` : server.status === 'error' ? 'Error' : 'Not checked', detail: server.status === 'error' ? server.lastError ?? '' : '', tone: server.status === 'error' ? 'bad' : server.status === 'connected' ? 'ok' : '', wait: false, canSignIn: false, signInLabel: 'Sign in' }
+        : connectorStatus(server, flows.get(server.id));
+      const needs = st.tone === 'warn' || st.tone === 'bad' || st.wait;
+      const signedIn = server.oauth?.signedIn === true;
+      const primary = st.wait ? { label: 'Cancel', run: () => { flows.clear(server.id); renderMcp(); } } : st.canSignIn ? { label: st.signInLabel, run: () => flows.start(server) } : null;
+      const dim = [where, needs ? st.detail : signedIn ? `Signed in as ${server.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : ''].filter(Boolean).join(' · ');
+      host.append(row(server.name, where, server.enabled, async (on) => {
         await sendJSON(`/api/mcp/${server.id}`, 'PATCH', { enabled: on });
         await renderMcp();
       }, async () => {
         await sendJSON(`/api/mcp/${server.id}`, 'DELETE');
         await renderMcp();
-      }, 'On');
-
-      const st = local ? { word: server.status === 'connected' ? `✓ ${server.tools?.length ?? 0} tools` : server.status === 'error' ? 'Error' : 'Not checked', detail: server.status === 'error' ? server.lastError ?? '' : '', tone: server.status === 'connected' ? 'ok' : server.status === 'error' ? 'bad' : '', canSignIn: false }
-        : connectorStatus(server, flows.get(server.id));
-      line.querySelector('.k').append(renderStatus(st, document));
-      const box = local ? null : flows.clientIdBox(server);
-      if (box) line.querySelector('.k').append(box);
-
-      const addButton = (text, onclick) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = text;
-        b.className = 'ghost small';
-        b.addEventListener('click', onclick);
-        line.querySelector('.v').insertBefore(b, line.querySelector('.v').lastElementChild);
-      };
-      if (st.wait) addButton('Cancel', () => { flows.clear(server.id); renderMcp(); });
-      if (st.canSignIn) addButton(st.signInLabel, () => flows.start(server));
-      if (server.oauth?.signedIn) addButton('Sign out', async () => { $('automation-error').textContent = ''; await flows.signOut(server); await renderMcp(); });
-      addButton('Check tools', async () => {
-        try {
-          const res = await fetch(`/api/mcp/${server.id}/tools`);
-          const body = await res.json();
-          flows.clear(server.id);
-          if (!res.ok && !['mcp.needsSignIn', 'mcp.keyRefused'].includes(body.code)) throw new Error(body.message ?? 'The server did not answer');
-          $('automation-error').textContent = '';
-          await renderMcp();
-        } catch (err) { showError(err); }
-      });
-      host.append(line);
+      }, 'On', {
+        chips: needs ? [{ text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' }] : [],
+        dim,
+        extra: local ? null : flows.clientIdBox(server),
+        primary,
+        items: [
+          primary ? { label: primary.label, run: primary.run } : null,
+          { label: 'Check tools', run: async () => {
+            try {
+              const res = await fetch(`/api/mcp/${server.id}/tools`);
+              const body = await res.json();
+              flows.clear(server.id);
+              if (!res.ok && !['mcp.needsSignIn', 'mcp.keyRefused'].includes(body.code)) throw new Error(body.message ?? 'The server did not answer');
+              $('automation-error').textContent = '';
+              await renderMcp();
+            } catch (err) { showError(err); }
+          } },
+          signedIn ? { label: 'Sign out', run: async () => { $('automation-error').textContent = ''; await flows.signOut(server); await renderMcp(); } } : null,
+        ].filter(Boolean),
+      }));
     }
   }
 
