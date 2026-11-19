@@ -86,7 +86,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, isRemoteAdminPath, DEVICE_ACCESS_MESSAGE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -3569,7 +3569,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
   /** The sign-in page and its script: the ONLY files a device that has not signed in may get. */
   const SIGNIN_FILES = new Map([['/', 'signin.html'], ['/src/ui/signin.html', 'signin.html'], ['/src/ui/signin.js', 'signin.js']]);
 
-  async function remoteRoute(req, res) {
+  /**
+   * OPEN-SIGNIN 2.3: ONE route function for both listeners. `access` is the device-access instance (its own sessions, cookie and limits); `pin.check(req)` judges the request's Host,
+   * Origin and who is asking: the home network pins "<LAN address>:<port>" over HTTP, the internet pins the public name over HTTPS (internetPin.js). Everything after the pin is the same.
+   */
+  const deviceRoute = (access, pin) => async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     let path;
     try { path = decodeURIComponent(url.pathname); } catch { return sendJson(res, 400, { code: 'request.invalid', message: NOT_BUNNY_REMOTE }); }
@@ -3577,24 +3581,21 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     const headers = req.headers ?? {};
     const security = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
     const refuse = (status, code, message, extra = {}) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...security, ...extra }); res.end(JSON.stringify({ code, message })); };
-    // 1. Host: exactly the local-network address and port. Nothing wider (not localhost, not another address, not a name).
-    const host = typeof headers.host === 'string' ? headers.host.trim().toLowerCase() : '';
-    if (!remote.enabled || !host || host !== remote.host) return refuse(403, 'request.badHost', NOT_BUNNY_REMOTE);
-    // 2. Origin (when sent) exactly this origin, and fetch metadata only from this site or a typed address.
-    if (headers.origin !== undefined && headers.origin !== 'http://' + host) return refuse(403, 'request.badOrigin', NOT_BUNNY_REMOTE);
-    const site = headers['sec-fetch-site'];
-    if (site !== undefined && !['same-origin', 'none'].includes(site)) return refuse(403, 'request.badOrigin', NOT_BUNNY_REMOTE);
-    const ip = String(req.socket?.remoteAddress ?? 'unknown');
-    const secret = readCookie(headers.cookie, REMOTE_COOKIE);
-    const session = remote.sessionFor(headers.cookie);
+    // 1 and 2. The pin: Host exactly the pinned address (nothing wider), Origin (when sent) exactly this origin, and fetch metadata only from this site or a typed address.
+    if (!access.enabled) return refuse(403, 'request.badHost', NOT_BUNNY_REMOTE);
+    const pinned = pin.check(req);
+    if (!pinned.ok) return refuse(403, pinned.code, pinned.message ?? NOT_BUNNY_REMOTE);
+    const ip = pinned.ip;
+    const secret = readCookie(headers.cookie, access.cookieName);
+    const session = access.sessionFor(headers.cookie);
 
     // 3. Not signed in: the sign-in page, its script, and the sign-in itself. Nothing else; no token, no API.
     if (!session) {
       if (method === 'POST' && path === '/api/remote/signin') {
         const body = await readBody(req, 4096).catch(() => ({}));
-        const result = await remote.signIn(ip, body?.passcode, String(headers['user-agent'] ?? ''));
+        const result = await access.signIn(ip, body?.passcode, String(headers['user-agent'] ?? ''));
         if (!result.ok) return refuse(result.status, result.status === 429 ? 'remote.wait' : 'remote.passcode', result.message, result.waitSeconds ? { 'retry-after': String(result.waitSeconds) } : {});
-        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': remote.cookieFor(result.secret) });
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': access.cookieFor(result.secret) });
         return res.end(JSON.stringify({ ok: true }));
       }
       if ((method === 'GET' || method === 'HEAD') && SIGNIN_FILES.has(path)) {
@@ -3617,14 +3618,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     const writes = !['GET', 'HEAD'].includes(method);
     if (writes && !(typeof headers['x-bunny-csrf'] === 'string' && headers['x-bunny-csrf'] === session.csrf)) return refuse(403, 'request.csrf', NOT_BUNNY_REMOTE);
     if (method === 'POST' && path === '/api/remote/signout') {
-      remote.signOutSecret(secret);
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': remote.clearCookie() });
+      access.signOutSecret(secret);
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...security, 'set-cookie': access.clearCookie() });
       return res.end(JSON.stringify({ ok: true }));
     }
     if (method === 'GET' && path === '/api/remote/me') return sendJson(res, 200, { device: session.label, csrf: session.csrf, level: session.level });
     // 5. What a device may do is a short allow-list; a window-only route is never one of them.
     // DEVICE-FULL: a device the person gave 'everything' may do all the window can, except /api/remote* (the person's own switches for device access)
-    const logWindowOnly = () => { if (writes && (isWindowOnlyRoute(method, path) || (method === 'PUT' && path === '/api/settings'))) remote.logAction(session, { kind: 'route', method, path }); }; // R-DF2: route and method, never the body
+    const logWindowOnly = () => { if (writes && (isWindowOnlyRoute(method, path) || (method === 'PUT' && path === '/api/settings'))) access.logAction(session, { kind: 'route', method, path }); }; // R-DF2: route and method, never the body
     if (session.level === 'everything') {
       if (isRemoteAdminPath(path)) return refuse(403, 'request.windowOnly', DEVICE_ACCESS_MESSAGE);
       logWindowOnly();
@@ -3635,7 +3636,18 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
     logWindowOnly(); // the few window-only routes a Chats device may use (its own chat's cards and mode)
     req.bunnyRemote = session;
     return route(req, res);
-  }
+  };
+  /** The home network's pin (today's rules): Host exactly "<LAN address>:<port>", Origin exactly that over HTTP, every forwarded header ignored; the visitor is the TCP peer. */
+  const lanPin = { check: (req) => {
+    const headers = req.headers ?? {};
+    const host = typeof headers.host === 'string' ? headers.host.trim().toLowerCase() : '';
+    if (!host || host !== remote.host) return { ok: false, code: 'request.badHost', message: null };
+    if (headers.origin !== undefined && headers.origin !== 'http://' + host) return { ok: false, code: 'request.badOrigin', message: null };
+    const site = headers['sec-fetch-site'];
+    if (site !== undefined && !['same-origin', 'none'].includes(site)) return { ok: false, code: 'request.badOrigin', message: null };
+    return { ok: true, ip: String(req.socket?.remoteAddress ?? 'unknown'), host, origin: 'http://' + host };
+  } };
+  const remoteRoute = deviceRoute(remote, lanPin);
 
   server.on('close', () => { clearInterval(remoteSweep); stopRemote().catch(() => {}); });
 
