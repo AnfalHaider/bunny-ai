@@ -32,6 +32,8 @@ test('the command palette opens with Ctrl+K and runs a command', async ({ page }
 
 test('the command palette finds a chat by name', async ({ page }) => {
   await connectAndChat(page, 'a chat about penguins');
+  // the palette searches the chats the page has loaded: wait until the sidebar lists this one (on a busy PC the list can arrive after the reply, and the palette does not redraw when it does)
+  await expect(page.locator('#sessions')).toContainText('penguins');
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('penguins');
   await expect(page.locator('#palette-list .palette-item')).toHaveCount(1);
