@@ -24,6 +24,36 @@
 
 ---
 
+> **Draft: not for release.** This is the v0.1.14 section, written from the builder branches before the combined build is on main. Placeholders mark what is still being built.
+
+## What's new in v0.1.14
+
+### Your devices, at a glance
+A chip in the top bar shows the devices signed in to Bunny. Tap it for a panel: each device with its level and when it was last seen, its **Activity**, **Turn off**, and **Settings**. A setting change by a device at Everything offers that device's Activity. There is no banner across the top any more, on the PC, a phone or a browser page.
+
+### Phones fit now
+On a phone the chat top bar becomes a menu, the title, the devices chip and a more button, with a bottom sheet for the rest. Settings is a list that opens each section. The chat box is no longer cut off at the bottom of the screen.
+
+### Tighter rows
+Connectors, skills, plugins and the other lists on Customize and Automation take one row per item: the name with one dim line, and its switch on the same line at the right. Other actions sit in a "..." menu. A chip appears only when something needs you, such as **Needs sign-in**.
+
+### Search this PC from Quick ask
+The Quick ask bar can search the files on your PC through the Windows Search index: names, folders, dates and snippets, and only what Windows has indexed. Turn it on in **Settings → Capabilities**, then choose what happens after a search. **Read the files, then answer** is the default: Bunny opens up to three of the best matches, reads one or two, and answers from them, with links to the files. The other choice shows what was found. Under each answer, **Sources** chips and [1] and [2] marks show which files it used.
+
+### Web answers in Quick ask
+When a question needs the internet, Quick ask searches the web and reads pages, and cites its sources, instead of asking you to open the full app. In the bar, Bunny can only search and read the web; it cannot change files or run anything.
+
+### Everything says Bunny
+Plugins, skills and downloads from other apps are shown in Bunny's words. A skill's `SKILL.md` is the skill file, a `CLAUDE.md` is Bunny's instructions, and the model is told these are Bunny's skills. Plugins made in another app's layout install and work in Bunny. Hooks and scripts made for other apps are listed, and say plainly that they do not run in Bunny yet.
+
+### Engines
+*Placeholder: this section comes when CLI-ENGINES lands (Claude Code and Codex CLI, each with Account or Local).*
+
+### Sign in from outside your home network
+*Placeholder: this section comes when OPEN-SIGNIN lands.*
+
+---
+
 ## Why me, obviously
 
 Most AI apps lock you into one company's models and one company's cloud. Hmph. Not on my watch.
@@ -71,7 +101,7 @@ How long I wait before trying another model is yours to set: **Settings → Mode
 ### You can watch me think. On one tidy line.
 While I work, one little line at the bottom of my reply shows me hopping along ("Snuggling the code… thinking · 12s"). Open it and read my thoughts as they happen. Go on, I don't mind. When I move on, it settles into a quiet "Thought for 12s" you can open later. And if a model is being slow, I'll tell you exactly who's keeping us waiting. Hmph.
 
-<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Whisker-wiggling… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
+<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Binkying… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
 
 ### I build apps you can use straight away
 Ask for a to-do app, a game or a landing page and I build it as an **artifact**: a live page that opens right beside our chat, in its own sandbox. You get a short summary, not a wall of code. Then I open it in my browser and click around to make sure it actually works, because I have standards. Every change is kept as a new version.
@@ -151,7 +181,7 @@ You decide what I may do. I'll grumble, but I'll obey.
 
 <p align="center">
   <img src="docs/images/permission-rules.png" alt="Settings, Code: permission rules with Deny, Ask and Allow lists" width="440" />
-  <img src="docs/images/blocked-asked.png" alt="A step Blocked by a rule in amber, then a card Asked because of your rule git push" width="440" />
+  <img src="docs/images/blocked-asked.png" alt="A step denied by a rule, tagged in amber, then a card Asked because of your rule git push" width="440" />
 </p>
 
 This is how I decide, every single time I'm about to edit, read or run something:
