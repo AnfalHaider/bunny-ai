@@ -11,16 +11,42 @@ import { readGithubPlugin, searchPlugins } from '../src/server/pluginImport.js';
 // BRAND-BUNNY (v0.1.14; the owner: "...they are all supposed to be bunny and function for bunny properly"). A skill, command or plugin written for another app is imported as it is
 // and said in Bunny's words when it is read: the assistant is Bunny, the instructions file is Bunny's instructions, the places it names are Customize in Settings.
 
-test('bunnyText: the assistant is Bunny; CLAUDE.md, SKILL.md, the other app\'s folders and variables are said in Bunny\'s words', () => {
-  const said = bunnyText('You are Claude, running in Claude Code. Claude should keep notes in CLAUDE.md. Save this skill as SKILL.md under ~/.claude/skills/tidy or .claude/commands/tidy.md. Run ${CLAUDE_PLUGIN_ROOT}/scripts/go.sh with $ARGUMENTS.');
-  assert.doesNotMatch(said, /claude|SKILL\.md|ARGUMENTS/i, said);
+test('bunnyText: in prose the assistant is Bunny; CLAUDE.md, SKILL.md and the other app\'s folders are said in Bunny\'s words', () => {
+  const said = bunnyText('You are Claude, running in Claude Code. Claude should keep notes in CLAUDE.md. Save this skill as SKILL.md under ~/.claude/skills/tidy or .claude/commands/tidy.md.');
+  assert.doesNotMatch(said, /claude|SKILL\.md/i, said);
   assert.match(said, /You are Bunny, running in Bunny\./);
   assert.match(said, /Bunny should keep notes in Bunny's instructions\./);
   assert.match(said, /Bunny's Customize \(Settings\)/);
-  assert.match(said, /what the person typed after the command/);
-  assert.match(said, /the plugin's own files \(not available in Bunny\)/);
   assert.equal(bunnyText('Nothing to change here.'), 'Nothing to change here.');
   assert.equal(bunnyText(null), '');
+});
+
+test('BB-1: code is never rewritten (fenced blocks and inline code keep their commands and names); $ARGUMENTS and ${CLAUDE_PLUGIN_ROOT} stay where they stand and one fixed note explains them', () => {
+  const fenced = '```sh\nrm -rf build/$ARGUMENTS\n```';
+  const inline = 'Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/fix.js` first.';
+  const sample = '```js\nconst Claude = require("x"); Claude.run();\n```';
+  const out = (t) => bunnyText(t).split('\n\n').slice(1).join('\n\n') || bunnyText(t); // what follows the note, if there is one
+  assert.ok(bunnyText(fenced).endsWith(fenced), bunnyText(fenced));
+  assert.match(bunnyText(fenced), /^In this skill \$ARGUMENTS stands for what the person typed after the command\./);
+  assert.doesNotMatch(bunnyText(fenced).split('\n\n').slice(1).join(''), /what the person typed/);
+  assert.ok(bunnyText(inline).endsWith(inline), bunnyText(inline));
+  assert.match(bunnyText(inline), /^In this skill \$\{CLAUDE_PLUGIN_ROOT\} is the plugin's own folder, which Bunny does not provide\./);
+  assert.equal(bunnyText(sample), sample); // Claude.run() stays Claude.run()
+  assert.equal(out('Nothing here.'), 'Nothing here.');
+  // prose around code is still said in Bunny's words, the code inside it is not
+  assert.equal(bunnyText('Claude, run `Claude.run()` now.'), 'Bunny, run `Claude.run()` now.');
+  // both tokens: both notes, in a fixed order
+  assert.match(bunnyText('Use $ARGUMENTS with ${CLAUDE_PLUGIN_ROOT}/x'), /^In this skill \$ARGUMENTS stands for[^\n]*In this skill \$\{CLAUDE_PLUGIN_ROOT\} is the plugin's own folder[^\n]*\n\nUse \$ARGUMENTS with \$\{CLAUDE_PLUGIN_ROOT\}\/x$/);
+});
+
+test('BB-2: a NUL character in a skill is dropped, so it can never pass for one of the rewrite\'s own placeholders', () => {
+  const said = bunnyText('Visit https://example.com/a and \u00000\u0000 and \u00009\u0000. Claude rocks.');
+  assert.equal(said, 'Visit https://example.com/a and 0 and 9. Bunny rocks.');
+  assert.ok(!said.includes('\u0000'));
+});
+
+test('BB-3: an address with no scheme is kept like one with a scheme', () => {
+  for (const text of ['See github.com/acme/Claude/tree/main for it.', 'Raw: raw.githubusercontent.com/acme/Claude/main/SKILL.md', 'Docs at docs.claude.com/en/x']) assert.equal(bunnyText(text), text);
 });
 
 test('bunnyText never touches a model id, a model\'s own name, a web address or a domain', () => {
@@ -89,7 +115,7 @@ test('a plugin written for another app is installed on an invented profile and u
   assert.match(read, /Bunny should keep the desk clear\./);
   assert.ok(read.includes('https://github.com/someone/claude-skills'), 'a web address is left as it is');
   const command = await tools.run('read_skill', { name: 'tidy-desk:sweep' }, {});
-  assert.match(command, /Sweep the desk for: what the person typed after the command/);
+  assert.match(command, /^In this skill \$ARGUMENTS stands for what the person typed after the command\.\n\n[\s\S]*Sweep the desk for: \$ARGUMENTS/); // not replaced where it stands: a note says what it means
   const brief = await tools.run('read_skill', { name: 'agent:tidy-desk:helper' }, {});
   assert.match(brief, /You are a Bunny agent that helps with the desk\./);
   const rules = await tools.run('read_skill', { name: 'tidy-desk:instructions' }, {});
