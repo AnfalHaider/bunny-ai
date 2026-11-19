@@ -16,29 +16,31 @@
     return res;
   };
 
-  // DEVICE-FULL (Design's drawing): a thin line across the top says which level the person at the PC gave this device, always. The server is asked (never the page),
-  // and the page starts over when the level changes, so what it locks is always what the server will refuse.
+  // BANNER-NOTICE (the owner: "No banner on top is required", everywhere; Security's BN-9): a device's page shows NO notice. At Everything a small red "Everything" chip stays in the page's header
+  // (a phone gets passed around: whoever holds it can always see it has full control) and cannot be dismissed. At Chats nothing is shown. The server is asked about the level (never the page),
+  // and the page starts over when it changes.
   if (window.top !== window) return; // pages inside the Settings window (an iframe) do not repeat it
-  const GLYPH = {
-    lock: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
-    warn: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2zM12 10v5M12 18v.1"/></svg>',
-  };
   let shown = null;
-  let bar = null;
-  const paint = (level) => {
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'device-level-line';
-      bar.setAttribute('role', 'status');
-      document.body.prepend(bar);
-    }
-    const all = level === 'everything';
-    bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:5px 12px;font-size:12px;border-bottom:1px solid var(--line,#e6e2da);' + (all ? 'background:var(--bad-soft,rgba(207,63,85,.10));color:var(--bad,#cf3f55)' : 'background:var(--accent-soft,rgba(106,79,216,.08));color:var(--accent,#6a4fd8)');
-    bar.dataset.level = level;
-    bar.innerHTML = (all ? GLYPH.warn : GLYPH.lock) + '<span><b style="font-weight:600"></b></span>';
-    const b = bar.querySelector('b');
-    b.textContent = all ? 'Everything access' : 'Chats access';
-    b.parentElement.append(all ? " · ends after 30 min idle" : ' · the PC can give this device more');
+  const BAD = 'var(--bad,#cf3f55)';
+  const chipCss = `display:inline-flex;gap:6px;align-items:center;flex:none;border:1px solid ${BAD};border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;color:${BAD};background:var(--bad-soft,rgba(207,63,85,.10))`;
+  const dot = () => { const d = document.createElement('span'); d.style.cssText = `width:7px;height:7px;border-radius:50%;background:${BAD};flex:none`; return d; };
+  const paintChip = (level) => {
+    let chip = document.getElementById('device-chip');
+    if (level !== 'everything') { chip?.remove(); return; }
+    if (chip) return;
+    chip = document.createElement('button');
+    chip.id = 'device-chip';
+    chip.type = 'button';
+    chip.setAttribute('role', 'status');
+    chip.dataset.level = 'everything';
+    chip.title = 'Everything access: press for details';
+    chip.setAttribute('aria-label', 'Everything access. Press for details.');
+    chip.style.cssText = chipCss;
+    const label = document.createElement('span'); label.textContent = 'Everything';
+    chip.append(dot(), label);
+        const toolbar = document.querySelector('.topbar .toolbar');
+    if (toolbar) toolbar.parentElement.insertBefore(chip, toolbar);
+    else { chip.style.cssText += ';position:fixed;z-index:2147480000;right:10px;top:calc(env(safe-area-inset-top,0px) + 8px)'; document.body.append(chip); }
   };
   const check = async () => {
     try {
@@ -47,8 +49,8 @@
       const level = (await res.json())?.level === 'everything' ? 'everything' : 'chats';
       if (shown !== null && level !== shown) { location.reload(); return; }
       shown = level;
-      paint(level);
-    } catch { /* offline for a moment: the line stays as it was */ }
+      paintChip(level);
+    } catch { /* offline for a moment: what is shown stays as it was */ }
   };
   const start = () => { check(); setInterval(check, 10000); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();

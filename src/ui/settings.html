@@ -323,6 +323,52 @@
       </div>
     </div>
 
+    <h2>Search this PC <span class="tag">Local only</span></h2>
+    <div class="group" id="pc-search-group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Search this PC</div>
+          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. Off until you turn it on.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" id="pc-on" aria-label="Search this PC" /><span id="pc-on-state">off</span></label></div>
+      </div>
+      <div class="row" id="pc-after-row">
+        <div class="meta-col">
+          <div class="name">After a search</div>
+          <div class="desc" id="pc-after-desc">Read the files, then answer: Bunny opens the best matches (up to 3 files: one or two are read to 20,000 characters each, three to about 14,600 each, because they share one reply), answers from them and names the files it used. Show what was found: a list, and Bunny reads a file only when you press Ask about this file.</div>
+        </div>
+        <div class="right"><select id="pc-after" aria-label="After a search"><option value="read">Read the files, then answer</option><option value="show">Show what was found</option></select></div>
+      </div>
+      <div class="row" id="pc-bar-row">
+        <div class="meta-col">
+          <div class="name">Quick ask searches by itself</div>
+          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
+      </div>
+      <div class="row" id="pc-excl-row">
+        <div class="meta-col">
+          <div class="name"><button type="button" class="linklike" id="pc-excl-open" aria-expanded="false">Excluded folders (<span id="pc-excl-count">0</span>)</button></div>
+          <div class="desc">Bunny always skips its own data, AppData (browser profiles and password managers), key folders such as .ssh, Windows and Program Files, the recycle bin and other people's folders. You add your own here. A folder is skipped even when a link points into it.</div>
+          <div id="pc-excl-panel" hidden>
+            <div class="desc"><b>Always skipped</b> (you cannot change these):</div>
+            <ul id="pc-fixed" class="licence-list"></ul>
+            <div class="desc"><b>Your own folders</b></div>
+            <ul id="pc-mine" class="licence-list"></ul>
+            <div class="pc-add"><input type="text" id="pc-add-path" placeholder="C:\Users\you\Documents\private" aria-label="Folder to exclude" /> <button type="button" class="ghost small" id="pc-add-pick" hidden>Choose…</button> <button type="button" class="primary small" id="pc-add-go">Add folder</button></div>
+            <div class="desc" id="pc-excl-msg" role="status"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row" id="pc-act-row">
+        <div class="meta-col">
+          <div class="name"><button type="button" class="linklike" id="pc-act-open" aria-expanded="false">Activity</button></div>
+          <div class="desc">What Bunny looked at: each search and each file it read, by name. Never what the files said.</div>
+          <div id="pc-act-panel" hidden><ul id="pc-act" class="licence-list"></ul></div>
+        </div>
+      </div>
+    </div>
+
     <h2 data-i18n="settings.toolsTitle">Tools the AI builds</h2>
     <div class="group">
       <div class="row">
@@ -585,7 +631,7 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Quick ask</div>
-          <div class="desc">Press <span id="quick-keys">Ctrl+Alt+Space</span> anywhere to ask Bunny in a small bar. It answers right there, as plain text: it never uses tools or asks for permissions in the bar. Press Open in Bunny to carry the chat over to the main window; the chat is kept in your list, tagged Quick ask. Needs Bunny to keep running in the tray.</div>
+          <div class="desc">Press <span id="quick-keys">Ctrl+Alt+Space</span> anywhere to ask Bunny in a small bar. It answers right there, as plain text. It uses no tools except reading the web (a search and reading a page) and, when Search this PC is on, a read-only search of this computer's files; it never asks for permissions in the bar. Press Open in Bunny to carry the chat over to the main window; the chat is kept in your list, tagged Quick ask. Needs Bunny to keep running in the tray.</div>
           <div class="desc" id="quick-note" role="status" style="color:var(--warn,#b45309)" hidden></div>
         </div>
         <div class="right">
@@ -1070,6 +1116,119 @@
     if (!tools.length) {
       host.append(Object.assign(document.createElement('div'), { className: 'row desc', textContent: 'No tools built yet.' }));
     }
+  }
+
+  // ---- SEARCH-PC: Search this PC (off until turned on, with a one-time dialog), what happens after a search, the bar, the excluded folders and the record of what was looked at ----
+  async function bindPcSearch(settings) {
+    const on = $('pc-on'), after = $('pc-after'), barAuto = $('pc-bar-auto');
+    if (!on) return;
+    const paint = (s) => {
+      on.checked = s.pcSearchEnabled === true;
+      $('pc-on-state').textContent = on.checked ? 'on' : 'off';
+      after.value = s.pcSearchAfter === 'show' ? 'show' : 'read';
+      barAuto.checked = s.pcSearchBarAuto !== false;
+      $('pc-bar-state').textContent = barAuto.checked ? 'on' : 'off';
+      for (const id of ['pc-after-row', 'pc-bar-row']) $(id).classList.toggle('is-off', !on.checked);
+      after.disabled = !on.checked; barAuto.disabled = !on.checked;
+      $('pc-excl-count').textContent = String((s.pcSearchExcluded ?? []).length);
+      mine(s.pcSearchExcluded ?? []);
+    };
+    const mine = (list) => {
+      const ul = $('pc-mine');
+      ul.replaceChildren(...(list.length ? list.map((path) => {
+        const li = document.createElement('li');
+        li.append(document.createTextNode(path + ' '));
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost small'; b.textContent = 'Remove'; b.setAttribute('aria-label', 'Remove ' + path);
+        b.addEventListener('click', async () => { paint(await save({ pcSearchExcluded: list.filter((p) => p !== path) })); });
+        li.append(b);
+        return li;
+      }) : [Object.assign(document.createElement('li'), { textContent: 'None yet.' })]));
+    };
+    paint(settings);
+    // the one-time dialog: what is read, and which model gets file text
+    const who = () => new Promise((resolve) => {
+      const done = (v) => { window.removeEventListener('message', hear); clearTimeout(timer); resolve(v); };
+      const hear = (e) => { if (e.origin === location.origin && e.data?.type === 'bunny:model-info') done(e.data); };
+      const timer = setTimeout(() => done(null), 600);
+      window.addEventListener('message', hear);
+      window.parent?.postMessage?.({ type: 'bunny:ask-model' }, location.origin);
+    });
+    const confirmOn = async () => {
+      const info = await who();
+      const model = info?.model ? (info.provider ? info.model + ' on ' + info.provider : info.model) : 'the model of the chat you are in';
+      const after2 = after.value === 'show'
+        ? 'After a search Bunny shows a list. A file is read only when you press Ask about this file; then its text goes to ' + model + '.'
+        : 'After a search Bunny reads the best matches (up to 3 files, about 20,000 characters each) and sends their text to ' + model + ' to answer. This is the model that will get file text; unless it is a local model, that text leaves this computer.';
+      return new Promise((resolve) => {
+        const dlg = document.createElement('dialog');
+        dlg.className = 'pc-dialog';
+        dlg.setAttribute('aria-labelledby', 'pc-dlg-title');
+        const h = document.createElement('h3'); h.id = 'pc-dlg-title'; h.textContent = 'Turn on Search this PC?';
+        const p1 = document.createElement('p'); p1.textContent = 'Bunny will find files on this computer using the Windows Search index. It only reads: it never changes, moves or deletes anything. Folders under Excluded folders, and keys, passwords and other people\u2019s folders, are never read.';
+        const p2 = document.createElement('p'); p2.textContent = after2;
+        const row = document.createElement('div'); row.className = 'actions';
+        const no = document.createElement('button'); no.type = 'button'; no.className = 'ghost'; no.textContent = 'Cancel';
+        const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'primary'; yes.textContent = 'Turn on';
+        row.append(no, yes);
+        dlg.append(h, p1, p2, row);
+        document.body.append(dlg);
+        const end = (v) => { dlg.close(); dlg.remove(); resolve(v); };
+        no.addEventListener('click', () => end(false));
+        yes.addEventListener('click', () => end(true));
+        dlg.addEventListener('cancel', () => end(false));
+        dlg.showModal();
+        no.focus();
+      });
+    };
+    on.addEventListener('change', async () => {
+      if (on.checked && !(await confirmOn())) { on.checked = false; return; }
+      try { paint(await save(on.checked ? { pcSearchEnabled: true, pcSearchAfter: after.value } : { pcSearchEnabled: false })); } catch { on.checked = !on.checked; }
+      window.parent?.postMessage?.({ type: 'bunny:settings' }, location.origin);
+    });
+    after.addEventListener('change', async () => { paint(await save({ pcSearchAfter: after.value })); });
+    barAuto.addEventListener('change', async () => { paint(await save({ pcSearchBarAuto: barAuto.checked })); });
+    // excluded folders: the fixed list (read-only), then the person's own
+    let fixedShown = false;
+    $('pc-excl-open').addEventListener('click', async () => {
+      const panel = $('pc-excl-panel');
+      panel.hidden = !panel.hidden;
+      $('pc-excl-open').setAttribute('aria-expanded', String(!panel.hidden));
+      if (panel.hidden || fixedShown) return;
+      fixedShown = true;
+      try {
+        const fixed = await getJSON('/api/pcsearch/fixed');
+        $('pc-fixed').replaceChildren(...[...fixed.folders, ...fixed.files.map((f) => f + ' (files)'), ...fixed.places].map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+      } catch { $('pc-fixed').textContent = 'The list could not be loaded.'; }
+    });
+    const desk = desktopBridge();
+    if (desk?.pickFolder) { $('pc-add-pick').hidden = false; $('pc-add-pick').addEventListener('click', async () => { const r = await desk.pickFolder(); const p = r?.folder ?? r?.path ?? (typeof r === 'string' ? r : ''); if (p) $('pc-add-path').value = p; }); }
+    $('pc-add-go').addEventListener('click', async () => {
+      const path = $('pc-add-path').value.trim();
+      const msg = $('pc-excl-msg');
+      msg.textContent = '';
+      if (!path) return;
+      try {
+        const current = (await getJSON('/api/settings')).pcSearchExcluded ?? [];
+        paint(await save({ pcSearchExcluded: [...current, path] }));
+        $('pc-add-path').value = '';
+      } catch (e) { msg.textContent = e.message ?? 'That folder could not be added.'; }
+    });
+    // the record of what was looked at
+    $('pc-act-open').addEventListener('click', async () => {
+      const panel = $('pc-act-panel');
+      panel.hidden = !panel.hidden;
+      $('pc-act-open').setAttribute('aria-expanded', String(!panel.hidden));
+      if (panel.hidden) return;
+      try {
+        const entries = (await getJSON('/api/pcsearch/activity')).entries ?? [];
+        const line = (e) => {
+          const when = new Date(e.at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+          if (e.kind === 'read') return when + ' · ' + e.who + ' · Read ' + e.files.length + ' file' + (e.files.length === 1 ? '' : 's') + ': ' + e.files.map((f) => f.name + ' (' + f.folder + ')').join(', ');
+          return when + ' · ' + e.who + ' · Searched this PC' + (e.label ? ' for “' + e.label + '”' : '') + ' · ' + e.results + ' result' + (e.results === 1 ? '' : 's');
+        };
+        $('pc-act').replaceChildren(...(entries.length ? entries.slice(0, 100).map((e) => Object.assign(document.createElement('li'), { textContent: line(e) })) : [Object.assign(document.createElement('li'), { textContent: 'Nothing yet.' })]));
+      } catch { $('pc-act').textContent = 'The record could not be loaded.'; }
+    });
   }
 
   // ---- capabilities: each switch is one settings key, on unless set to false ----
@@ -1628,6 +1787,7 @@
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);
+    bindPcSearch(settings).catch(() => {});
     bindWait(settings);
     renderCustomTools();
     bindSignInApps(settings);

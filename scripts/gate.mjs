@@ -9,6 +9,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditStep, exceptionsSource } from './audit-exceptions.mjs';
+import { failureDetail } from './gate-report.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quick = process.argv.includes('--quick');
@@ -27,6 +28,11 @@ function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures 
   results.push({ name, pass, secs: Math.round((Date.now() - t0) / 1000) });
   console.log(`\n== ${pass ? 'PASS' : 'FAIL'}  ${name}  (${Math.round((Date.now() - t0) / 1000)}s)`);
   console.log(shown.map((l) => `   ${l}`).join('\n'));
+  // GATE-WHY: every failed step says how it ended (exit status, signal, spawn error such as ENOBUFS, and any HUNG:/EXIT: lines).
+  if (!pass) {
+    console.log('   -- why it failed --');
+    console.log(failureDetail(r, out).map((l) => `   ${l}`).join('\n'));
+  }
   // GATE-NAMES: a failed test run names what failed (the last few lines hid it three times): every failing-test line, each failure's assertion line, and the totals.
   if (failures && !pass) {
     const marks = out.filter((l) => /^\s*(✖|not ok)\b|^ℹ (tests|suites|pass|fail|cancelled|skipped|todo)\b|AssertionError|\bError \[ERR_|^\s*(TypeError|ReferenceError|RangeError|Error):/.test(l));
@@ -84,6 +90,8 @@ step('conflict markers', 'git', ['grep', '-nE', '^(<<<<<<<|>>>>>>>)( |$)', '--',
 // S-1: the request guard has one off switch, for tests. It must never be set in code that ships.
 step('request guard stays on', 'git', ['grep', '-nE', 'localGuard\\s*:\\s*false', '--', 'src', 'electron', 'scripts', 'e2e'], { ok: (r) => r.status === 1, tail: 4 });
 step('engine pins', process.execPath, ['scripts/engine-pins.mjs'], { tail: 6 });
+step('help pictures listed', process.execPath, ['scripts/pictures-check.mjs'], { tail: 12 }); // O7: every help picture is listed once, shown, and described the same way (no browser; also in --quick)
+step('css matches its build', process.execPath, ['scripts/build-css.mjs', '--check'], { tail: 6 }); // CSS-CHECK: src/ui/app.css is generated; a hand edit would be lost at the next build (no browser; also in --quick)
 step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
 if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });

@@ -39,7 +39,7 @@ export const GREETINGS = {
 };
 
 export const TAGLINES = [
-  'Pick a model, then tell me what you need.',
+  'Tell me what you need.',
   'Ask anything: code, plans, ideas, carrots.',
   'Type below. I\'ll do the hopping.',
 ];

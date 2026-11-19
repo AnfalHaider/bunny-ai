@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app, opened it beside the chat and tested it" width="900" />
+  <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app and opened it beside the chat" width="900" />
 </p>
 
 ---
@@ -64,14 +64,14 @@ flowchart LR
     M2 --> R["One quiet line tells you<br/>who answered and why"]
 ```
 
-How long I wait before trying another model is yours to set: **Settings → Capabilities → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
+How long I wait before trying another model is yours to set: **Settings → Models → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or a number of your own from 10 to 600; 30 is the default). Reasoning, image and video models get twice that, up to 600 seconds, and so does a reply that goes quiet part-way.
 
 <p align="center"><img src="docs/images/settings-wait.png" alt="Settings: Try another model when yours is busy, with Wait for a first reply under it" width="820" /></p>
 
 ### You can watch me think. On one tidy line.
 While I work, one little line at the bottom of my reply shows me hopping along ("Snuggling the code… thinking · 12s"). Open it and read my thoughts as they happen. Go on, I don't mind. When I move on, it settles into a quiet "Thought for 12s" you can open later. And if a model is being slow, I'll tell you exactly who's keeping us waiting. Hmph.
 
-<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Whisker-wiggling… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
+<p align="center"><img src="docs/images/working-line.png" alt="The working line: the hopping bunny, &quot;Binkying… thinking · 1s&quot;, opened to show the thinking" width="900" /></p>
 
 ### I build apps you can use straight away
 Ask for a to-do app, a game or a landing page and I build it as an **artifact**: a live page that opens right beside our chat, in its own sandbox. You get a short summary, not a wall of code. Then I open it in my browser and click around to make sure it actually works, because I have standards. Every change is kept as a new version.
@@ -108,7 +108,7 @@ Sign me in with the GitHub CLI you already use, or a token, and I'll search repo
 ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Alibaba Qwen, Groq, Together, Mistral, xAI, Fireworks, Cerebras, OpenAI, Anthropic, Google, OpenRouter, Nvidia, Vercel, GitHub Copilot, OpenCode and Ollama on your own machine, each with a **Get a key** link. Any other OpenAI-compatible server is one form away. When you first connect a provider, I tell you if my "free models only" filter is hiding some of its models, and show you all of them with one click.
 
 <p align="center">
-  <img src="docs/images/providers.png" alt="ModelScope, SiliconFlow, Gitee AI and more, each with a Connect button" width="440" />
+  <img src="docs/images/providers.png" alt="Popular providers such as Nvidia and OpenCode Console, each with a Connect or Sign in button" width="440" />
   <img src="docs/images/custom-provider.png" alt="The form to add a custom OpenAI-compatible provider" width="440" />
 </p>
 
@@ -128,6 +128,11 @@ Link your GitHub or Google account if you want. There's still no cloud account: 
 - **Projects, branches, search, incognito chats, voice input, read-aloud, import and export.**
 - **Connectors (MCP), skills and plugins** for even more of me, including local connectors that run as a program on your PC (you confirm the exact command).
 - **Gmail, Calendar and Drive** when you allow them at Google sign-in: I search and read mail, write drafts (sending always asks), see and add events, and read Docs and Sheets.
+- **Your phone or another computer:** with **Allow other devices to open Bunny** on, a device you sign in can reach me on your network. You give each signed-in device a level, set only from my window: **Chats** (the default) or **Everything**, which lets it use every tool and setting, as if it were my window. A device at Everything is signed out after 30 minutes idle (Chats: 2 hours), and **Activity** lists what each device did (tool names and setting changes, never the details) for the last 500 entries or 30 days. The setting stays on after a restart, and on a different network, such as a café's Wi-Fi, I don't open myself again on my own.
+- **Quick ask:** a light floating bar for a quick question, with the answer opening below it. Esc does one thing at a time (closes a menu, then stops the answer, then closes the bar), **Ctrl+Enter** opens the chat in Bunny, and with no model connected it offers **Open Bunny settings**.
+- **13 fonts and instant themes:** Inter, Source Sans 3, IBM Plex Sans, Atkinson Hyperlegible, Lexend, Nunito, Quicksand, Lora, Literata, Source Serif 4, Noto Serif, JetBrains Mono and IBM Plex Mono are built in, so they look the same on every PC. Changing the theme applies at once everywhere, with no flash. Their licences are under **Settings → About**.
+- **Chats open without a reload:** opening another chat, even in another project, doesn't reload me. Back and Forward work, and Ctrl-click opens a chat in a new window.
+- **Settings stay put:** what you change is kept after a restart, and each Settings tab shows only its own settings. A few settings moved to where they belong: **Try another model when yours is busy** and **Wait for a first reply** to **Models**, **Keep going on long jobs** and **Longest long job** to **Code**, and **Default transcript view** and **Label chats by status** to **Appearance**.
 
 ---
 
@@ -146,7 +151,7 @@ You decide what I may do. I'll grumble, but I'll obey.
 
 <p align="center">
   <img src="docs/images/permission-rules.png" alt="Settings, Code: permission rules with Deny, Ask and Allow lists" width="440" />
-  <img src="docs/images/blocked-asked.png" alt="A step Blocked by a rule in amber, then a card Asked because of your rule git push" width="440" />
+  <img src="docs/images/blocked-asked.png" alt="A step denied by a rule, tagged in amber, then a card Asked because of your rule git push" width="440" />
 </p>
 
 This is how I decide, every single time I'm about to edit, read or run something:
@@ -224,6 +229,6 @@ About 1,440 unit tests (1,244 run in parallel, plus 198 guard and kit tests) and
 - Keys and sign-in tokens are encrypted with Windows' own protection and never shown again in full.
 - What I send out: your requests to the model provider you chose; the pages you or I open; the search words I send to DuckDuckGo when I run a web search; the mail, calendar and Drive requests I make when you allow Google (see above); GitHub or Google when you sign in; a check for updates on GitHub Releases; and, when the network seems down, a tiny "am I online?" check to Google, Cloudflare or Apple connectivity addresses (no data, cookies or identifiers).
 - A phone or other computer signed in over your home network talks to me on that network only. Its chats go to the model provider you chose, the same as chats in my window.
-- Pages I build run in a sandbox and can't reach the app, and only my own windows can talk to my local server.
+- Pages I build run in a sandbox and can't reach the app. Only my own windows talk to my local server, unless you allow other devices (see above).
 
 <p align="center"><sub>Made with love for people who want a capable AI on their own terms. Now go connect a model. I'm waiting. 🐰</sub></p>

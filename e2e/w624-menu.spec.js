@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test';
 // W6-24 (QA's findings c and d): the ⋯ menu of the browser panel closes with Esc and stays inside the window at narrow widths.
 async function openMenu(page) {
   await page.goto('/');
-  await page.locator('.toolbar [data-view="browser"]').click();
+  if (await page.locator('.toolbar [data-view="browser"]').isVisible()) await page.locator('.toolbar [data-view="browser"]').click();
+  else { await page.locator('#more-button').click(); await page.locator('#more-menu').getByRole('menuitem', { name: 'Browser' }).click(); } // under 900 px it is in the menu (phone layout v3)
   await expect(page.locator('#pane-browser')).toBeVisible();
   await page.locator('#browser-more').click();
   await expect(page.locator('#browser-menu')).toBeVisible();

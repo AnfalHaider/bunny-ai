@@ -221,6 +221,7 @@ export const REMOTE_TOOLS_DENIED = Object.freeze([
   'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill',
   'schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat',
   'call_connector_tool', 'list_connector_tools',
+  'search_pc', 'read_pc_file', // SEARCH-PC SP-5: a Chats device never searches this PC; an Everything device may, as the window can
 ]);
 const allowedTools = new Set(REMOTE_TOOLS_ALLOWED);
 export const remoteToolBlocked = (name) => !allowedTools.has(String(name ?? ''));
@@ -294,7 +295,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   }
   let record = null;       // the scrypt record of the saved passcode
   let loaded = false;
-  let on = false;          // never read back from a file: OFF after every restart
+  let on = false;          // whether access is open right now: it starts OFF, and is turned on again at start only by resumeRemote() (REMOTE-STAY), which saves nothing but the flag, the address and the network's name; sessions are never saved
   let host = '';           // exactly "<lan address>:<port>" while on
   let address = null;
   const ended = (deviceIds) => { try { onEnd(deviceIds); } catch { /* the sessions are gone either way */ } }; // R6: lets the app put a device's Auto chats back to Ask

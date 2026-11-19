@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   quit: () => ipcRenderer.invoke('app:quit'),
   // BROWSER: open Bunny in the person's own browser (main opens its own address; nothing is taken from the page)
   openInBrowser: () => ipcRenderer.invoke('app:open-browser'),
+  // BANNER-NOTICE: the chip's newest event, for the tray tooltip (fixed fields: a kind and a device name; main makes the words)
+  setRemoteEvent: (event) => ipcRenderer.invoke('remote:tray-event', event && typeof event === 'object' ? { kind: event.kind, label: event.label } : null),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   // Security-relevant writes (permission rules and mode) are made by the main process, not by the page.
   secureWrite: (method, path, body) => ipcRenderer.invoke('secure:write', method, path, body),
@@ -23,6 +25,12 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
   browserView: {
     send: (msg) => ipcRenderer.invoke('browser:view', msg),
     onEvent: (fn) => { const h = (_e, event) => fn(event); ipcRenderer.on('browser:view-event', h); return () => ipcRenderer.removeListener('browser:view-event', h); },
+  },
+  // SEARCH-PC: Open, Show in folder and Copy path for a search result, by its ref (the main process looks the path up and judges it)
+  pcSearch: {
+    open: (ref) => ipcRenderer.invoke('pcsearch:open', ref),
+    show: (ref) => ipcRenderer.invoke('pcsearch:show', ref),
+    copy: (ref) => ipcRenderer.invoke('pcsearch:copy', ref),
   },
   // THEME-APPLY: the page tells the shell the theme it applied (light, dark or system): window colours, title bar and browser pane follow at once.
   setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),

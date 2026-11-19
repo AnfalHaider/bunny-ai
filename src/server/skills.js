@@ -12,6 +12,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { cleanFolders, inScope } from './scope.js';
+import { SKILL_NAMING_NOTE, bunnyText } from './bunnyText.js';
 
 // Long skills (imported plugins with reference files) are kept whole and loaded on demand.
 const MAX_LENGTH = 120_000;
@@ -100,17 +101,18 @@ export function createSkillStore({ file }) {
     const rows = (await list({ enabledOnly: true })).filter((s) => inScope(s.folders, folder));
     if (!rows.length) return null;
     // Many skills: a compact index only, so every message stays small.
+    // BRAND-BUNNY: a skill written for another app is said in Bunny's words when it is handed over (the stored text stays as it was imported)
     if (rows.length > 12) {
       return [
-        `Skills that are switched on (${rows.length}). When one fits the task, call read_skill with its name first, then follow it:`,
-        ...rows.map((s) => `- ${s.name}: ${String(s.description || '')}`),
+        `Skills that are switched on (${rows.length}). ${SKILL_NAMING_NOTE} When one fits the task, call read_skill with its name first, then follow it:`,
+        ...rows.map((s) => `- ${s.name}: ${bunnyText(String(s.description || ''))}`),
       ].join('\n');
     }
     return [
-      'Skills that are switched on:',
+      `Skills that are switched on. ${SKILL_NAMING_NOTE}`,
       ...rows.map((s) => (s.instructions.length <= INLINE_LIMIT
-        ? `## ${s.name}\n${s.instructions}`
-        : `## ${s.name}\n${s.description || '(no summary)'}\n(Long skill: call read_skill with name "${s.name}" to load its full instructions when the task needs it.)`)),
+        ? `## ${s.name}\n${bunnyText(s.instructions)}`
+        : `## ${s.name}\n${bunnyText(s.description || '(no summary)')}\n(Long skill: call read_skill with name "${s.name}" to load its full instructions when the task needs it.)`)),
     ].join('\n');
   }
 

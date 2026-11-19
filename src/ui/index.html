@@ -3,7 +3,7 @@
 <head>
 <script src="./theme-boot.js"></script>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
 <title>Bunny AI</title>
 <link rel="stylesheet" href="./app.css" />
 <link rel="icon" href="./icon.svg" type="image/svg+xml" />
@@ -172,7 +172,7 @@
         <div class="empty-state empty" id="empty">
           <h1 class="greeting" id="greeting"></h1>
           <h2 class="empty-title" data-i18n="chat.startTitle">Start a conversation</h2>
-          <p class="empty-sub" id="empty-text" data-i18n="chat.startText">Pick a model, then type below.</p>
+          <p class="empty-sub" id="empty-text" data-i18n="chat.startText">Type below to start.</p>
         </div>
         <div class="thread-inner" id="messages"></div>
       </div>
@@ -428,9 +428,11 @@
 <!-- Settings window: section navigation on the left, the section on the right
      (an embedded settings-style page, so its own save logic runs unchanged). -->
 <div class="modal-backdrop settings-backdrop" id="settings-backdrop" hidden>
-  <div class="settings-window" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="settings-window" id="settings-window" data-page="list" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="settings-head">
+      <button class="settings-back" id="settings-back" type="button" aria-label="Back to Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Settings</button>
       <h2 id="settings-title">Settings</h2>
+      <span class="settings-section-name" id="settings-section-name"></span>
       <button class="icon-btn" id="settings-close" aria-label="Close settings">✕</button>
     </div>
     <nav class="settings-nav" aria-label="Settings sections">

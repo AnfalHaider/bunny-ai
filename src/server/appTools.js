@@ -4,6 +4,7 @@
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
 import { parseGithubUrl, readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
+import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
 import { inScope } from './scope.js';
 
@@ -23,9 +24,9 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { query: { type: 'string' } }, ['query']),
     fn('read_url', 'Read a web page as text. A github.com/owner/repo link reads its README.',
       { url: { type: 'string' } }, ['url']),
-    fn('search_plugins', 'Find agent plugins and skills on GitHub, and connectors (MCP servers) in the official MCP registry.',
+    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: on GitHub, and in the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
-    fn('read_skill', 'Load the instructions of a switched-on skill by name. A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
+    fn('read_skill', 'Load the instructions of a switched-on skill by name (Bunny\'s own skills, whichever app they were first written for). A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
     fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI switched OFF; the person is shown what was added and decides whether to switch them on.',
       { url: { type: 'string' } }, ['url']),
@@ -67,7 +68,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
   });
   if (!res.ok) throw new Error(`The search answered ${res.status}`);
   const html = await res.text();
-  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim(); // one line each: a title or snippet written by a page can never start a line of its own
   const out = [];
   const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
   for (let m = re.exec(html); m && out.length < 8; m = re.exec(html)) {
@@ -75,6 +76,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
     const real = /[?&]uddg=([^&]+)/.exec(link);
     if (real) link = decodeURIComponent(real[1]);
     if (link.startsWith('//')) link = `https:${link}`;
+    if (/[\s\u0000-\u001f\u007f]/.test(link)) continue; // a link with a line break or a space in it is not a link Bunny lists
     out.push(`- ${strip(m[2])}\n  ${link}\n  ${strip(m[3] ?? '').slice(0, 220)}`);
   }
   return out.length ? out.join('\n') : 'No results.';
@@ -162,8 +164,8 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     }
   }
   const describePlugin = (plugin) => [
-    `Plugin ${plugin.name}${plugin.description ? `: ${plugin.description}` : ''}`,
-    ...(plugin.skills ?? []).map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${s.description || '(no description)'}`),
+    `Plugin ${plugin.name}${plugin.description ? `: ${bunnyText(plugin.description)}` : ''}`,
+    ...(plugin.skills ?? []).map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${bunnyText(s.description) || '(no description)'}`),
     ...(plugin.connectors ?? []).map((c) => `Connector ${c.name}: ${c.url}`),
     ...(plugin.skipped?.length ? [`Not imported: ${plugin.skipped.join('; ')}`] : []),
     'It is added switched OFF. You decide afterwards whether to switch it on.',
@@ -292,7 +294,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
       // W6-16: nor one limited to other folders than this chat's (a chat with no folder gets only the skills for everywhere)
       if (!skill || skill.enabled === false || getSettings().skillsEnabled === false || !inScope(skill.folders, ctx?.folder ?? null)) throw new Error(`There is no skill called ${name}`);
-      const text = String(skill.instructions ?? '');
+      const text = bunnyText(String(skill.instructions ?? '')); // BRAND-BUNNY: said in Bunny's words; the stored text is untouched
       const SIZE = 8000;
       if (text.length <= SIZE) return text;
       const total = Math.ceil(text.length / SIZE);

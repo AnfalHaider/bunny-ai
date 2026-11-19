@@ -11,11 +11,14 @@ import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { controlFrame } from './browserAgent.js';
 import { createBrowserViews, senderAllowed } from './browserViews.js';
+import { fromOwnFrame } from './own-ipc.js';
 import { createUpdater } from './updater.js';
 import { clearOldWorkersOnce } from './clear-old-workers.js';
 import { createQuickAsk } from './quick-ask.js';
 import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-ask-logic.js';
+import { cleanTrayEvent, trayTooltip } from './tray-words.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
+import { createPcOpen } from './pc-open.js';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -69,7 +72,7 @@ let bunnyApp = null;
 let addressNote = '';
 
 async function startServer() {
-  const bunny = await createApp({ dataDir, folderPickerOnly: true });
+  const bunny = await createApp({ dataDir, electronData: app.getPath('userData'), folderPickerOnly: true });
   bunnyApp = bunny;
   // BROWSER: a free port, or the same one as last time when "Keep the same address after restart" is on (with a plain note when it is taken). Always 127.0.0.1.
   const listening = await listenWithFallback(bunny.server, '127.0.0.1', wantedPort(prefs));
@@ -161,7 +164,8 @@ function showWindow() {
 }
 
 // REMOTE-STAY (RS-5): the tray says so while Bunny is open to other devices, even when it started hidden (tray or start at login).
-const syncTrayTooltip = () => { try { tray?.setToolTip(bunnyApp?.remote?.enabled ? 'Bunny AI: Open to other devices' : 'Bunny AI'); } catch { /* the tray is going away */ } };
+let trayEvent = null; // the newest thing the window's chip is saying (fixed fields, see tray-words.js); the window sets and clears it
+const syncTrayTooltip = () => { try { tray?.setToolTip(trayTooltip(bunnyApp?.remote?.enabled, trayEvent)); } catch { /* the tray is going away */ } };
 async function resumeOpenToDevices() {
   try {
     const result = await bunnyApp.resumeRemote(); // only on the network it was turned on with (RS-4); every device signs in again
@@ -199,9 +203,26 @@ ipcMain.handle('theme:set', (event, theme) => {
   if (prefs.theme !== theme) savePrefs({ theme });
   return { ok: true, dark: nativeTheme.shouldUseDarkColors };
 });
+// SEARCH-PC SP-4: Open, Show in folder and Copy path for a result, from Bunny's window and the Quick ask bar only; each names a result by ref and the server judges the path again
+const pcOpen = createPcOpen({
+  shell, clipboard,
+  resolve: async (ref) => (await bunnyApp.adminFetch('/api/pcsearch/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref }) })).json(),
+  allowedSender: (event) => isOwn(event.senderFrame?.url ?? '') || Boolean(quickAsk?.fromBar?.(event)),
+});
+ipcMain.handle('pcsearch:open', (event, ref) => pcOpen.open(event, ref));
+ipcMain.handle('pcsearch:show', (event, ref) => pcOpen.show(event, ref));
+ipcMain.handle('pcsearch:copy', (event, ref) => pcOpen.copy(event, ref));
+ipcMain.handle('remote:tray-event', (event, raw) => { // window-only, fixed fields only
+  if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false };
+  trayEvent = cleanTrayEvent(raw);
+  syncTrayTooltip();
+  return { ok: true };
+});
 ipcMain.handle('app:open-browser', (event) => (isOwn(event.senderFrame?.url ?? '') ? { ok: openInBrowser() } : { ok: false }));
 ipcMain.handle('prefs:get', () => ({ ...prefs, address: browserAddress(origin), addressNote }));
-ipcMain.handle('prefs:set', (_event, patch) => {
+ipcMain.handle('prefs:set', (event, patch) => {
+  // PREFS-OWN: only Bunny's own page may change the desktop preferences (as theme:set and app:open-browser already require): a page the window happens to show (a site in the panel, a pop-up) cannot
+  if (!fromOwnFrame(event, isOwn)) return { ok: false, error: 'Not allowed' };
   const clean = {};
   if (typeof patch?.launchAtLogin === 'boolean') clean.launchAtLogin = patch.launchAtLogin;
   if (typeof patch?.closeToTray === 'boolean') clean.closeToTray = patch.closeToTray;
@@ -339,7 +360,6 @@ app.whenReady().then(async () => {
     return;
   }
   createTray();
-  await resumeOpenToDevices(); // before the window loads, so its first look already shows the banner (RS-5)
   setInterval(syncTrayTooltip, 5000).unref();
   quickAsk = createQuickAsk({
     BrowserWindow, globalShortcut, screen, desktopCapturer, ipcMain, dialog, onSubmit: startQuickChat,
@@ -347,10 +367,13 @@ app.whenReady().then(async () => {
     adminFetch: (path, init) => bunnyApp.adminFetch(path, init),
     getSettings: () => bunnyApp?.getSettings() ?? {},
     onOpenChat: (sessionId) => startQuickChat({ openChat: sessionId }),
-    onOpenSettings: () => startQuickChat({ openSettings: true }),
+    onOpenSettings: (section) => startQuickChat({ openSettings: true, ...(section === 'capabilities' ? { section } : {}) }),
     onAnswerFinished: (sessionId) => startQuickChat({ openChat: sessionId, refresh: true, quiet: true }),
   });
   createWindow();
+  // START-WAIT: the first window does not wait for the network lookup (it can take 5 s). Resuming runs alongside; RS-5 still holds because the banner and the tray text follow what
+  // is actually open (the page asks the server, the tray tooltip is synced when the resume ends and every 5 s), so neither says "open" before it is, and both say it as soon as it is.
+  void resumeOpenToDevices();
   applyQuickAsk();
   // Only the installed app updates itself (or a test pointing at its own feed).
   if (app.isPackaged || process.env.BUNNY_UPDATE_FEED) {

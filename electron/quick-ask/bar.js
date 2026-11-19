@@ -104,8 +104,15 @@ function refresh() {
 function renderChip() {
   const host = $('chips');
   host.replaceChildren();
-  host.hidden = !shot;
+  host.hidden = !shot && !forcePc;
   refreshButtons();
+  if (forcePc) {
+    const c = document.createElement('span'); c.className = 'chip'; c.id = 'pc-chip';
+    const l = document.createElement('span'); l.textContent = 'Search this PC';
+    const x = document.createElement('button'); x.type = 'button'; x.setAttribute('aria-label', 'Do not search this PC'); x.textContent = '×';
+    x.addEventListener('click', () => { forcePc = false; renderChip(); message(''); text.focus(NOSCROLL); });
+    c.append(l, x); host.append(c);
+  }
   if (!shot) return;
   const chip = document.createElement('span');
   chip.className = 'chip';
@@ -124,6 +131,131 @@ function renderChip() {
   if (img.src) chip.append(img);
   chip.append(label, x);
   host.append(chip);
+}
+
+// ---- SEARCH-PC: the + menu's Search this PC, and the list of what was found (built with textContent only; the buttons name a result by its ref) ----
+let forcePc = false;
+let pcRows = [];
+let pcChosen = 0;
+const pcRowsEl = () => [...$('pc-list').querySelectorAll('.pcr')];
+function pcChoose(i) {
+  const rows = pcRowsEl();
+  if (!rows.length) return;
+  pcChosen = (i + rows.length) % rows.length;
+  rows.forEach((r, k) => r.classList.toggle('chosen', k === pcChosen));
+  rows[pcChosen].scrollIntoView({ block: 'nearest' });
+}
+function pcMarked(parent, textValue, words) {
+  const source = String(textValue ?? '');
+  const lower = source.toLowerCase();
+  const spans = [];
+  for (const w of words) for (let at = lower.indexOf(w); at !== -1 && w; at = lower.indexOf(w, at + w.length)) spans.push([at, at + w.length]);
+  spans.sort((a, b) => a[0] - b[0]);
+  let pos = 0;
+  for (const [from, to] of spans) {
+    if (from < pos) continue;
+    if (from > pos) parent.append(document.createTextNode(source.slice(pos, from)));
+    const m = document.createElement('mark'); m.textContent = source.slice(from, to); parent.append(m);
+    pos = to;
+  }
+  if (pos < source.length) parent.append(document.createTextNode(source.slice(pos)));
+}
+function pcShowResults(event) {
+  const list = $('pc-list');
+  pcRows = Array.isArray(event.rows) ? event.rows : [];
+  list.replaceChildren();
+  const words = [...new Set((/“([^”]*)”/.exec(String(event.title ?? ''))?.[1] ?? '').toLowerCase().split(/\s+/).filter((w) => w.length > 1))];
+  const head = document.createElement('div'); head.className = 'pcs'; head.textContent = String(event.title ?? 'Searched this PC'); list.append(head);
+  pcRows.slice(0, 8).forEach((r) => {
+    const row = document.createElement('div'); row.className = 'pcr'; row.dataset.ref = r.ref;
+    const n = document.createElement('div'); n.className = 'n'; n.textContent = r.name;
+    const f = document.createElement('div'); f.className = 'f'; f.textContent = r.folder;
+    row.append(n, f);
+    if (r.snippet) { const sn = document.createElement('div'); sn.className = 'sn'; pcMarked(sn, r.snippet, words); row.append(sn); }
+    const acts = document.createElement('div'); acts.className = 'pa';
+    const add = (label, run) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', () => { run(); }); acts.append(b); };
+    add(r.openable ? 'Open' : 'Show in folder', () => (r.openable ? window.quickAsk.pcOpen(r.ref) : window.quickAsk.pcShow(r.ref)).then((x) => { if (x && x.ok === false) message(x.message || 'That did not work.'); }).catch(() => message('That did not work.')));
+    add('Ask about this file', () => pcAsk(r));
+    add('Copy path', () => window.quickAsk.pcCopy(r.ref).catch(() => message('That did not work.')));
+    row.append(acts);
+    list.append(row);
+  });
+  if (pcRows.length > 8) { const more = document.createElement('div'); more.className = 'pcs'; more.textContent = (pcRows.length - 8) + ' more: ask Bunny to narrow it (for example "only the PDFs", "from last year").'; list.append(more); }
+  list.hidden = false;
+  pcChoose(0);
+  scheduleFit();
+}
+// the drawn states: searching, results (with the line that says where it looked), reading, nothing found, not available, a file that could not be read
+function pcLine(text, className = 'pcs') { const d = document.createElement('div'); d.className = className; d.textContent = text; return d; }
+function pcBusy(headline, sub) {
+  const b = $('busy');
+  if (!b) return;
+  b.replaceChildren();
+  const spin = document.createElement('span'); spin.className = 'spin';
+  b.append(spin, document.createTextNode(headline));
+  if (sub) b.append(pcLine(sub));
+  scheduleFit();
+}
+const foldersText = (n) => n + ' folder' + (n === 1 ? '' : 's') + ' excluded';
+function pcState(e) {
+  const list = $('pc-list');
+  if (e.state === 'searching') { pcBusy('Searching this PC…', 'Windows Search · ' + foldersText(e.excluded)); return; }
+  if (e.state === 'reading') { pcBusy('Reading ' + e.files.length + ' file' + (e.files.length === 1 ? '' : 's') + ': ' + e.files.join(', '), 'The text of these files is sent to the model.'); return; }
+  if (e.state === 'results') {
+    $('busy')?.remove();
+    pcShowResults(e);
+    list.append(pcLine(Math.min(8, e.rows.length) + ' of ' + e.total + ' result' + (e.total === 1 ? '' : 's') + ' · Windows Search · ' + foldersText(e.excluded)));
+    list.append(pcLine('Narrow it down, or ask about a file?'));
+    scheduleFit();
+    return;
+  }
+  if (e.state === 'read') { list.hidden = false; list.append(pcLine('Read ' + e.sources.length + ' file' + (e.sources.length === 1 ? '' : 's') + ' · ' + e.sources.map((s) => s.name + ' (' + s.part + ')').join(', '))); scheduleFit(); return; }
+  if (e.state === 'unreadable') {
+    list.hidden = false;
+    const box = document.createElement('div'); box.className = 'pcr';
+    const n = document.createElement('div'); n.className = 'n'; n.textContent = 'Could not read “' + e.name + '”: ' + (e.why || 'it could not be read') + '.';
+    box.append(n, pcLine('Only the file name and folder were used'), pcLine('Open it yourself, or ask for another file. Other reasons a file is skipped: over 8 MB, in an excluded folder, locked by another program.'));
+    list.append(box);
+    scheduleFit();
+    return;
+  }
+  // nothing came back
+  ended(); showCopy(false); $('ans').replaceChildren(); $('follow').disabled = false; $('follow').placeholder = 'Type to search again';
+  const settingsAct = ['Excluded folders', () => openInBunny('search-settings'), 'plain'];
+  if (e.state === 'none') card('warn', 'Nothing found', 'Windows has nothing indexed that matches. ' + foldersText(e.excluded).replace(' excluded', ' are excluded') + ', and files Windows has not indexed are not searched. Try another word, or check the excluded folders.', [settingsAct]);
+  else if (e.state === 'timeout') card('warn', 'Windows Search did not answer in time', 'Nothing was changed. Try again in a moment.', [again, openBunny]);
+  else card('bad', 'Windows Search is not available', 'The Windows Search service is off or still building its index. Bunny does not search the disk itself. Start the service in Windows, then ask again.', [again, openBunny]);
+}
+function pcSourcesLine(sources) {
+  if (!Array.isArray(sources) || !sources.length) return;
+  const list = $('pc-list');
+  list.hidden = false;
+  const row = document.createElement('div'); row.className = 'pcs src';
+  const label = document.createElement('span'); label.textContent = 'Sources '; row.append(label);
+  for (const s of sources) {
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'pcchip';
+    const n = document.createElement('b'); n.textContent = String(s.n);
+    chip.append(n, document.createTextNode(' ' + s.name + ' · ' + s.part));
+    chip.title = s.folder;
+    chip.addEventListener('click', () => (s.openable ? window.quickAsk.pcOpen(s.ref) : window.quickAsk.pcShow(s.ref)).then((x) => { if (x && x.ok === false) message(x.message || 'That did not work.'); }).catch(() => message('That did not work.')));
+    row.append(chip);
+  }
+  list.append(row);
+  scheduleFit();
+}
+// Search this PC is off: a question about a file is answered here with the way to turn it on (nothing was searched, nothing was sent)
+const FILE_QUESTION = /\b(find|search|look for|locate|where is|where's|where are)\b[\s\S]{0,60}\b(file|files|document|documents|folder|pdf|spreadsheet|on my (pc|computer)|on this (pc|computer))\b/i;
+let pcAvailable = false;
+
+function pcAsk(r) { if (!answering) ask('Read “' + r.name + '” (ref ' + r.ref + ') and tell me what it says.', []); }
+function pcKey(e) {
+  if (!pcRowsEl().length || answering) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pcChoose(pcChosen + (e.key === 'ArrowDown' ? 1 : -1)); return true; }
+  const r = pcRows[pcChosen];
+  if (!r) return false;
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); pcAsk(r); return true; }
+  if (e.key === 'Enter' && !e.shiftKey && !$('follow').value.trim()) { e.preventDefault(); (r.openable ? window.quickAsk.pcOpen(r.ref) : window.quickAsk.pcShow(r.ref)).catch(() => {}); return true; }
+  return false;
 }
 
 function closeMenu() {
@@ -154,6 +286,8 @@ $('shot-item').addEventListener('click', async () => {
   }
   text.focus(NOSCROLL);
 });
+
+$('pc-item').addEventListener('click', () => { closeMenu(); forcePc = true; renderChip(); message('Enter searches. Searches files Windows has indexed.', 'busy'); text.focus(NOSCROLL); });
 
 $('file-item').addEventListener('click', async () => {
   closeMenu();
@@ -267,6 +401,7 @@ function enterPanel(q) {
   $('panel').hidden = false;
   $('panel-wrap').classList.add('on');
   $('ans').replaceChildren();
+  $('pc-list').replaceChildren(); $('pc-list').hidden = true; pcRows = [];
   $('latest').hidden = true;
   $('card').hidden = true; $('card').replaceChildren();
   cardKind = '';
@@ -317,10 +452,12 @@ function ended() { answering = false; chatReady = true; $('busy')?.remove(); set
 function onAnswer(event) {
   if (!event || typeof event !== 'object') return;
   if (event.type === 'start') return;
+  if (event.type === 'pc') { pcState(event); return; }
   if (event.type === 'delta' && typeof event.text === 'string') { $('busy')?.remove(); answerText += event.text; showAnswer(true); return; }
   if (event.type === 'done' || event.type === 'stopped') {
     ended(); showAnswer(false); showCopy(true);
-    if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = `Answered by ${event.model} · text only`; $('meta').hidden = false; }
+    pcSourcesLine(event.sources);
+    if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = (Array.isArray(event.sources) && event.sources.length) ? `Answered by ${event.model} · files read on this PC, sent to the model` : `Answered by ${event.model} · text only`; $('meta').hidden = false; }
     $('follow').disabled = false; $('follow').focus(NOSCROLL); scheduleFit();
     return;
   }
@@ -345,12 +482,15 @@ window.quickAsk.onAnswer(onAnswer);
 async function ask(q, attachments, retry = false) {
   // the earlier turn stays, folded, when a follow-up is asked (not when the same question is asked again)
   if (asked && !retry && (answerText || question)) { turns.push({ q: question, a: answerText }); renderEarlier(); }
+  if (!pcAvailable && !retry && FILE_QUESTION.test(q)) { question = q; answerText = ''; enterPanel(q); ended(); $('busy')?.remove(); showCopy(false); card('warn', 'Search this PC is off', 'Turn it on in Settings › Capabilities to let Bunny look for files on this computer. Nothing was searched.', [['Open Bunny settings', () => openInBunny('search-settings'), 'plain']]); return; }
   question = q;
   answerText = '';
   answering = true;
   enterPanel(q);
   try {
-    const result = await window.quickAsk.ask(q, attachments);
+    const mode = forcePc ? 'search-pc' : undefined;
+    forcePc = false;
+    const result = await window.quickAsk.ask(q, attachments, mode);
     if (!(result && result.ok)) { ended(); card('bad', 'Bunny could not answer', (result && result.message) || 'Bunny could not start the answer.', [again, openBunny]); }
   } catch {
     ended(); card('bad', 'Bunny could not answer', 'Bunny could not start the answer.', [again, openBunny]);
@@ -374,6 +514,7 @@ async function send() {
 }
 
 $('follow').addEventListener('keydown', (e) => {
+  if (pcKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.isComposing) {
     e.preventDefault();
     const q = $('follow').value.trim();
@@ -402,6 +543,7 @@ document.addEventListener('click', (e) => { if (e.target.closest?.('a')) e.preve
 
 // Ctrl+Enter opens the chat in Bunny, once there is one (an answer or an error)
 document.addEventListener('keydown', (e) => {
+  if (pcRowsEl().length && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) return; // with a list shown, Ctrl+Enter asks about the chosen file
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && chatReady) { e.preventDefault(); openInBunny(); }
 });
 
@@ -454,6 +596,8 @@ function applyLook(look) {
     root.style.setProperty('--font', FONT_STACKS[key]);
   }
   const model = look && typeof look.model === 'string' ? look.model.trim().slice(0, 60) : '';
+  pcAvailable = Boolean(look && look.pcSearch === true);
+  $('pc-item').hidden = !pcAvailable;
   modelLine = model ? `Answers with ${model} · text only` : '';
   refreshButtons();
 }

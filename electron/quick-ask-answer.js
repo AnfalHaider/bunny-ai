@@ -1,5 +1,5 @@
 // QA-ANSWERS: the Quick ask bar answers in place. This is the main-process side: it asks Bunny's own server for a TEXT-ONLY answer and hands plain events to the bar.
-// Safety (Security, HIGH): no tool is ever offered (the request says textOnly, and the server then offers none); nothing in here can ask a permission; the bar only ever
+// Safety (Security, HIGH): the only tools offered are web_search and read_url, which only read the web (the request says textOnly, and the server then offers just those two and refuses any other); nothing in here can ask a permission; the bar only ever
 // receives plain data (text, the model's name, a kind of failure), never anything it could run; and a reply that asks for a tool becomes a card that sends the person to Bunny's window.
 
 export const NEEDS_WINDOW_MARKER = '[[NEEDS_BUNNY_WINDOW]]';
@@ -40,11 +40,26 @@ export function classifyFailure({ status = 0, code = '', reason = '', message = 
  * @param {(event: object) => void} o.emit  plain data to the bar
  * @param {(sessionId: string) => void} [o.onFinishedDetached]  an answer that finished after the person pressed Open in Bunny
  */
-export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {} }) {
+export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}, getSettings = () => ({}) }) {
   let sessionId = null;
   let controller = null;
   let detached = false;
   const out = (event) => { if (!detached) emit(event); };
+  // SEARCH-PC: what the bar is told about a search, as plain data (never a path, never file text)
+  const num = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : 0);
+  const txt = (v, n) => String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, n);
+  const sourcesOf = (list) => (Array.isArray(list) ? list : []).slice(0, 3).map((x) => ({ n: num(x?.n), name: txt(x?.name, 260), folder: txt(x?.folder, 400), part: txt(x?.part, 120), ref: txt(x?.ref, 80), openable: x?.openable === true }));
+  const pcEvent = (d) => {
+    const state = ['searching', 'results', 'none', 'unavailable', 'timeout', 'reading', 'unreadable', 'read'].includes(d.pcState) ? d.pcState : null;
+    if (!state) return null;
+    const base = { type: 'pc', state, excluded: num(d.pcExcluded) };
+    if (state === 'results') return { ...base, title: txt(d.tool, 200), total: num(d.pcTotal), rows: (Array.isArray(d.pcResults) ? d.pcResults : []).slice(0, 50).map((r) => ({ ref: txt(r.ref, 80), name: txt(r.name, 260), folder: txt(r.folder, 400), modified: txt(r.modified, 40), snippet: txt(r.snippet, 220), openable: r.openable === true })) };
+    if (state === 'reading') return { ...base, files: (Array.isArray(d.files) ? d.files : []).slice(0, 3).map((f) => txt(f, 260)) };
+    if (state === 'unreadable') return { ...base, name: txt(d.name, 260), why: txt(d.why, 200) };
+    if (state === 'read') return { ...base, sources: sourcesOf(d.pcSources) };
+    return base;
+  };
+  const pcFlag = (pc) => { const s = getSettings() ?? {}; if (s.pcSearchEnabled !== true) return {}; return pc ? { pcSearch: 'force' } : (s.pcSearchBarAuto === false ? {} : { pcSearch: true }); };
 
   async function ensureSession(title) {
     if (sessionId) return sessionId;
@@ -56,7 +71,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
   }
 
   /** Ask (or follow up). Resolves when the answer has ended, one way or another. Never throws: every failure is an event. */
-  async function ask({ text, files = [] }) {
+  async function ask({ text, files = [], pc = false }) {
     if (controller) return { ok: false, message: 'Bunny is still answering.' };
     controller = new AbortController();
     const signal = controller.signal;
@@ -67,13 +82,15 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
     let needsText = '';
     let model = null;
     let finished = false;
+    let doneSources = null;
     try {
       const id = await ensureSession(text);
       out({ type: 'start', sessionId: id });
       const res = await adminFetch(`/api/sessions/${id}/messages`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, signal,
         // text only: the server offers the model no tools; a screenshot or file goes as an ordinary attachment
-        body: JSON.stringify({ content: text, workMode: 'chat', textOnly: true, attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) }),
+        // SEARCH-PC: with the switch on, the bar may search this PC by itself (unless turned off in Settings) or when the person chose it in the + menu; the server honours it for this process only
+        body: JSON.stringify({ content: text, workMode: 'chat', textOnly: true, ...pcFlag(pc), attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -99,7 +116,8 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
         buffer = parsed.rest;
         for (const ev of parsed.events) {
           if (ev.name === 'delta' && typeof ev.data?.text === 'string') push(ev.data.text);
-          else if (ev.name === 'done') { model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; }
+          else if (ev.name === 'tool' && typeof ev.data?.pcState === 'string') { const p = pcEvent(ev.data); if (p) out(p); }
+          else if (ev.name === 'done') { doneSources = ev.data?.pcSources; model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; }
           else if (ev.name === 'error') {
             out({ type: 'error', kind: classifyFailure({ code: ev.data?.code, reason: ev.data?.reason, message: ev.data?.message }), message: String(ev.data?.message ?? 'Bunny could not answer.').slice(0, 400) });
             return { ok: true };
@@ -113,7 +131,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
       }
       if (!shown && !needs && held) { shown = true; out({ type: 'delta', text: held }); held = ''; }
       if (needs) out({ type: 'needs-window', text: needsText.replace(/^\s+/, '').slice(0, 600) });
-      else out({ type: 'done', model, finished });
+      else out({ type: 'done', model, finished, sources: sourcesOf(doneSources) });
       return { ok: true };
     } catch (err) {
       if (signal.aborted) { out({ type: 'stopped' }); return { ok: true }; }

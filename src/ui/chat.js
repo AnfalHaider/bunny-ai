@@ -18,6 +18,7 @@ import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
 import { pickGreeting } from './greetings.js';
+import { pcResultsView, wordsOfStep, markSourceNumbers, sourcesRow } from './pc-results.js';
 import { applyLanguage, t as tr } from './i18n.js';
 import { chartSpec, renderChart } from './chart.js';
 import { resolveArtifact, htmlDocument, printDocument, PRINT_SANDBOX } from './artifact-content.js';
@@ -26,8 +27,12 @@ import { initPaneLayout } from './pane-layout.js';
 import { initWorkPanes } from './work-panes.js';
 import { reachable } from './browser-pane.js';
 import { isDevicePage } from './browser-mode.js';
-import { chooseLevel, isSettingChange, paintStatus, settingNotice } from './device-access.js';
+import { chooseLevel, everythingDevices, isSettingChange } from './device-access.js';
+import { newEvents, paintChip, shownEvents } from './remote-notice.js';
+import { closePanel, openPanel } from './remote-panel.js';
 import { showUpdateBar, watchInstall, watchUpdates } from './install-app.js';
+import { fitViewport } from './viewport-fit.js';
+import { bindPhoneBar } from './phone-bar.js';
 import { JOBS, detectJob, rankModels, jobAvailability, modelAbilities, whyPicked, noEyesWarning, preferLastAnswered } from './model-abilities.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1464,6 +1469,7 @@ function renderMessage(m, { skipThinking = false } = {}) {
       res.textContent = `→ ${stepResultText(m).slice(0, resultLimit())}`;
       tc.append(res);
     }
+    if (m.pcResults?.length) tc.append(pcResultsView(document, m.pcResults, { terms: wordsOfStep(m.tool), bridge: window.bunnyDesktop ?? null, onAsk: askAboutPcFile, say: (text) => flashStatus(text) }));
     if (failedStep) {
       // The exact command and the error, in one click.
       const copy = button('Copy', { className: 'ghost small tool-call-copy' });
@@ -1550,9 +1556,11 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
   }
   if (m.role === 'assistant' && m.thinking && !skipThinking) wrap.append(thinkingBlock(m.thinking, { ms: m.thinkingMs }));
   const body = element('div', { className: 'body' });
-  if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true }));
+  if (m.role === 'assistant') body.append(renderMarkdown(m.content, { foldCode: true, noAutoLoad: m.noAutoLoad === true }));
   else body.textContent = m.content;
+  if (m.role === 'assistant' && m.pcSources?.length) markSourceNumbers(body, m.pcSources.length); // [1], [2] marks for the files the answer used
   wrap.append(body);
+  if (m.role === 'assistant' && m.pcSources?.length) wrap.append(sourcesRow(document, m.pcSources, { bridge: window.bunnyDesktop ?? null, say: (text) => flashStatus(text) }));
 
   if (m.kind === 'summary' || m.kind === 'partial') {
     const meta = element('div', { className: 'meta' },
@@ -1926,7 +1934,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     requestAnimationFrame(() => {
       paintQueued = false;
       const opened = new Set([...bodyEl.querySelectorAll('pre.is-foldable')].map((pre, i) => (pre.classList.contains('is-folded') ? -1 : i)));
-      bodyEl.replaceChildren(renderMarkdown(stripToolMarkup(segment), { foldCode: true }));
+      bodyEl.replaceChildren(renderMarkdown(stripToolMarkup(segment), { foldCode: true, noAutoLoad: Boolean(state.noAutoLoad) }));
       bodyEl.classList.add('is-streaming');
       [...bodyEl.querySelectorAll('pre.is-foldable')].forEach((pre, i) => {
         if (opened.has(i)) setFolded(pre, false);
@@ -1966,6 +1974,7 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
     onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
+      if (info.pcTainted) state.noAutoLoad = true; // file text from this PC is in this reply: the answer loads nothing by itself
       settleThinking();
       flushNote();
       showLiveTool(bodyEl, info);
@@ -2061,6 +2070,7 @@ function showLiveTool(bodyEl, info) {
     if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }
     res.textContent = `→ ${String(info.result).slice(0, resultLimit())}`;
   }
+  if (info.pcResults?.length && !line.querySelector('.pc-results')) line.querySelector('.tool-call')?.append(pcResultsView(document, info.pcResults, { terms: wordsOfStep(info.tool), bridge: window.bunnyDesktop ?? null, onAsk: askAboutPcFile, say: (text) => flashStatus(text) }));
   if ((info.attachments ?? []).length && !line.querySelector('.attachments')) line.append(renderAttachments(info.attachments));
   if (info.linked && !line.querySelector('.linked-card')) {
     line.append(linkedChatCard(info.linked));
@@ -2670,7 +2680,6 @@ function startNewChat({ incognito = false } = {}) {
 /** A message from the quick-ask bar: a NEW chat in Chat mode with no folder, the text and the optional screenshot sent as the first message. */
 // BROWSER step 2: while Bunny is open to other devices, a line across the top of the window says so, with the off switch.
 function watchRemote() {
-  let bar = null;
   // DEVICE-FULL: a device that has just signed in is asked about, one at a time, over whatever the window is showing. It works as Chats meanwhile; Not now asks again only after a restart.
   const dismissed = new Set();
   let asking = false;
@@ -2685,7 +2694,7 @@ function watchRemote() {
       else show(await sendJSON(`/api/remote/devices/${device.id}/level`, 'PATCH', { level: choice }));
     } catch { dismissed.add(device.id); /* the device signed out meanwhile, or the write failed: Settings still has the choice */ } finally { asking = false; }
   };
-  // DEVICE-FULL: when a device with Everything changes a setting, a notice says so (from the same window-only log Activity reads: names only). Entries older than the first look are not announced.
+  // DEVICE-FULL: when a device with Everything changes a setting, the chip says so (from the same window-only log Activity reads: names only). Entries older than the first look are not announced.
   let seenAt = null;
   const announceChanges = async (s) => {
     // always while access is on: a device may change a setting and be signed out (or time out) before the next look, and that must still be announced
@@ -2695,40 +2704,64 @@ function watchRemote() {
       const fresh = entries.filter((e) => isSettingChange(e) && !first && e.at > seenAt);
       if (entries.length) seenAt = entries[0].at > (seenAt ?? '') ? entries[0].at : seenAt;
       else if (seenAt === null) seenAt = '';
-      const latest = fresh[0];
-      if (latest) settingNotice(document, { label: latest.label ?? 'A device', level: latest.level, at: latest.at, onActivity: () => openSettings('desktop', { activity: latest.device }) });
+      for (const e of fresh.slice().reverse()) events.push({ kind: 'setting', device: e.device, label: e.label ?? 'A device' }); // oldest first; the chip says the newest (BN-8)
+      if (fresh.length && last) paint();
     } catch { /* not now */ }
   };
+  // BANNER-NOTICE (the owner: "No banner on top is required"): no notification anywhere. The chip in the top bar says the state and, until it is clicked, the newest thing that happened. What waits is
+  // a variable of this page and nothing else (BN-4): no setting, localStorage, cookie, file or route, so a reload shows the state words again and no device can hide anything.
+  let last = null;      // the last status seen
+  const events = [];    // new sign-ins, Everything raises and setting changes that wait for a click
+  let shutoffAck = false; // the internet shut-off was clicked on this page (a variable of the page: a reload shows it again until Settings clears it)
+  const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  let traySig = '';
+  const paint = () => {
+    const list = shownEvents(last, events, shutoffAck);
+    paintChip(document, last, chipOpts(list));
+    // the tray tooltip says what the chip says (fixed fields; the shell makes the words)
+    const top = list[list.length - 1];
+    const sig = top ? `${top.kind}|${top.label ?? ''}` : '';
+    if (sig !== traySig) { traySig = sig; window.bunnyDesktop?.setRemoteEvent?.(top ? { kind: top.kind, label: top.label } : null)?.catch?.(() => {}); }
+  };
+  const chipOpts = (list = events) => ({
+    events: list, reducedMotion: reduced(),
+    onClick: () => {
+      if (closePanel(document)) return; // a second tap closes it
+      const ev = list[list.length - 1] ?? null;
+      events.length = 0;
+      if (ev?.kind === 'shutoff') shutoffAck = true;
+      paint();
+      // the tap panel (Design's drawing): the devices, their levels and last seen, Activity, Turn off and Settings; a setting change offers that device's Activity
+      openPanel(document, last, {
+        event: ev,
+        onActivity: (id) => openSettings('desktop', id ? { activity: id } : {}),
+        onSettings: () => openSettings('desktop'),
+        onTurnOff: async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } },
+      });
+    },
+  });
   const show = (s) => {
-    if (!s?.enabled) { bar?.remove(); bar = null; document.getElementById('device-notice')?.remove(); seenAt = null; return; }
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'remote-bar';
-      bar.setAttribute('role', 'status');
-      bar.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:center;padding:6px 12px;background:var(--warn-soft,rgba(192,122,18,.12));color:var(--warn,#c07a12);border-bottom:1px solid var(--warn,#c07a12);font-size:13px;font-weight:600';
-      document.body.prepend(bar);
-    }
-    bar.replaceChildren();
-    const text = document.createElement('span');
-    paintStatus(document, text, s); // names the devices that have Everything, in bold
-    const off = document.createElement('button');
-    off.type = 'button';
-    off.textContent = 'Turn off';
-    off.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:8px;padding:1px 10px;cursor:pointer';
-    off.addEventListener('click', async () => { try { show(await sendJSON('/api/remote', 'PUT', { enabled: false })); } catch { /* it stays as it was */ } });
-    bar.append(text, off);
+    if (!s?.enabled) { events.length = 0; seenAt = null; last = s ?? null; paint(); return; }
+    for (const e of newEvents(last, s)) events.push(e);
+    last = s;
+    paint();
     askAboutDevices(s);
     announceChanges(s);
   };
-  const tick = async () => { try { show(await getJSON('/api/remote')); } catch { /* not now */ } };
-  tick();
-  setInterval(tick, 10000);
+  document.addEventListener('click', (e) => { if (e.target.isConnected && !e.target.closest('#remote-panel, #remote-chip')) closePanel(document); }); // (a chip tap redraws the chip: its old child is gone by now, and is not "elsewhere")
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && closePanel(document)) { e.stopPropagation(); document.getElementById('remote-chip')?.focus(); } }, true);
+  let refused = 0; // a device's page is refused /api/remote: after three refusals in a row outside Bunny's window it stops asking
+  const tick = async () => { try { show(await getJSON('/api/remote')); refused = 0; } catch { refused += 1; } };
+  // START-WAIT: once a second for the first 15 seconds (so the chip is there from the first moment), then every 10 seconds
+  let looks = 0;
+  const loop = () => { looks += 1; tick().finally(() => { if (!window.bunnyDesktop && refused >= 3) return; setTimeout(loop, looks <= 15 ? 1000 : 10000); }); };
+  loop();
 }
 
 async function runQuickAsk() {
   const request = await window.bunnyDesktop.quickAsk.take();
   // QUICK-UI 10: the bar had no model to answer with: its button opens Bunny on the Providers page
-  if (request && request.openSettings === true) { openSettings('providers'); return; }
+  if (request && request.openSettings === true) { openSettings(request.section === 'capabilities' ? 'capabilities' : 'providers'); return; }
   // QA-ANSWERS: Open in Bunny carries a chat that began in the bar over to this window (and a later refresh when its answer finished).
   if (request && typeof request.openChat === 'string' && /^[a-f0-9-]{36}$/.test(request.openChat)) {
     if (request.refresh) { if (state.sessionId === request.openChat && !state.streaming) await openSession(request.openChat); await loadSessions(); return; }
@@ -2857,6 +2890,14 @@ window.addEventListener('online', async () => {
   if (online) resumeQueued();
 });
 
+/** Ask about this file, on a search result: a message that names it by its ref (the model reads it with read_pc_file). */
+function askAboutPcFile(row) {
+  const input = $('input');
+  if (!input) return;
+  input.value = `Read “${row.name}” (ref ${row.ref}) and tell me what it says.`;
+  send();
+}
+
 async function send() {
   const input = $('input');
   const text = input.value.trim();
@@ -2875,6 +2916,7 @@ async function send() {
   if (!state.selected && !(state.modelAuto && state.autoPick)) { $('error').textContent = 'Choose a model first.'; return; }
 
   input.value = '';
+  state.noAutoLoad = false;
   state.lastSent = text;
   if ($('prompt-suggestions')) $('prompt-suggestions').hidden = true;
   const files = state.pendingFiles;
@@ -3629,7 +3671,7 @@ const MODE_LABELS = { auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan:
 
 const WORK_MODES = ['chat', 'code'];
 const MODE_HINTS = {
-  chat: { placeholder: 'Send a message…', empty: 'Pick a model, then type below.' },
+  chat: { placeholder: 'Send a message…', empty: 'Type below to start.' }, // a model is always in effect (Auto or the one chosen), so the empty chat does not ask for one
   code: { placeholder: 'Ask about or change the code in your folder…', empty: 'Choose a folder below, then ask Bunny to read, change or run things in it.' },
 };
 
@@ -3985,6 +4027,13 @@ function applyProfile(settings) {
 window.addEventListener('message', async (e) => {
   if (e.origin !== location.origin) return;
   if (e.data?.type === 'bunny:open-section' && typeof e.data.section === 'string') { showSettingsSection(e.data.section); return; }
+  // SEARCH-PC: Settings asks which model is in use, to name it in the one-time dialog (the model that will get file text)
+  if (e.data?.type === 'bunny:ask-model') {
+    const pick = state.selected ?? (state.modelAuto ? state.autoPick : null);
+    const row = pick ? state.models?.find((x) => x.id === (pick.model ?? pick.id) && (!pick.providerId || x.providerId === pick.providerId)) : null;
+    try { e.source?.postMessage({ type: 'bunny:model-info', model: row?.displayName ?? pick?.model ?? pick?.id ?? null, provider: row?.providerName ?? pick?.providerName ?? null }, location.origin); } catch { /* the frame is gone */ }
+    return;
+  }
   if (!['bunny:profile', 'bunny:appearance', 'bunny:settings'].includes(e.data?.type)) return;
   // THEME-APPLY: Settings says what it just chose; it is applied before anything is read back, so the page behind never lags the window in front.
   if (e.data.type === 'bunny:appearance' && e.data.patch && typeof e.data.patch === 'object') applyAppearanceNow({ ...state.settings, ...e.data.patch });
@@ -4023,13 +4072,23 @@ document.addEventListener('visibilitychange', followAppearance);
 // Sections that live on their own page rather than inside settings.html.
 const SETTINGS_PAGES = { providers: './providers.html', automation: './automation.html', customize: './customize.html' };
 
+// PHONE-LAYOUT: under 640 px Settings is a list page of the sections and a tap opens one full screen (CSS shows one or the other by data-page)
+const settingsNarrow = () => window.matchMedia?.('(max-width: 639px)').matches ?? false;
+function setSettingsPage(page, name = '') {
+  const win = $('settings-window');
+  if (win) win.dataset.page = page;
+  const label = $('settings-section-name');
+  if (label) label.textContent = name;
+}
+
 function openSettings(section = 'profile', extra = {}) {
   closeAccountMenu();
   const backdrop = $('settings-backdrop');
   if (!backdrop) return;
   backdrop.hidden = false;
   showSettingsSection(section, extra);
-  $('settings-search')?.focus();
+  if (extra.list && settingsNarrow()) setSettingsPage('list');
+  if (!extra.list || !settingsNarrow()) $('settings-search')?.focus(); // on a phone the list page is shown first for the gear: no keyboard
 }
 
 function showSettingsSection(section, extra = {}) {
@@ -4037,6 +4096,7 @@ function showSettingsSection(section, extra = {}) {
   const base = SETTINGS_PAGES[section] ?? './settings.html';
   const query = (SETTINGS_PAGES[section] ? '?embed=1' : `?embed=1&section=${encodeURIComponent(section)}`) + (typeof extra.activity === 'string' && /^[a-f0-9]{16}$/.test(extra.activity) ? `&activity=${extra.activity}` : '');
   if (frame) frame.src = base + query;
+  setSettingsPage('section', document.querySelector(`#settings-nav-list [data-section="${section}"]`)?.textContent?.trim() ?? '');
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     const on = b.dataset.section === section;
     b.classList.toggle('is-active', on);
@@ -4078,6 +4138,7 @@ function bindSettingsWindow() {
   const backdrop = $('settings-backdrop');
   if (!backdrop) return;
   $('settings-close')?.addEventListener('click', closeSettings);
+  $('settings-back')?.addEventListener('click', () => { setSettingsPage('list'); $('settings-nav-list')?.querySelector('.is-active')?.scrollIntoView?.({ block: 'nearest' }); });
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSettings(); });
   document.querySelectorAll('#settings-nav-list [data-section]').forEach((b) => {
     b.addEventListener('click', () => showSettingsSection(b.dataset.section));
@@ -4107,7 +4168,8 @@ function bindSettingsWindow() {
     else if (href.includes('settings.html')) showSettingsSection('profile');
   });
   document.querySelectorAll('[data-settings]').forEach((b) => {
-    b.addEventListener('click', (e) => { e.stopPropagation(); openSettings(b.dataset.settings); });
+    // the gear and the account menu's own Settings row open the list page on a phone; Usage, Language and the like go straight to their section
+    b.addEventListener('click', (e) => { e.stopPropagation(); openSettings(b.dataset.settings, { list: b.id === 'settings-open' || (b.dataset.settings === 'profile' && Boolean(b.closest('#account-menu'))) }); });
   });
 }
 
@@ -4571,7 +4633,7 @@ async function boot() {
       const connected = state.providers.some((p) => p.status === 'connected');
       if (connected && hiddenModelCount()) {
         const n = hiddenModelCount();
-        if ($('greeting')) $('greeting').hidden = true; // the hidden-models note replaces the "Pick a model…" greeting
+        if ($('greeting')) $('greeting').hidden = true; // the hidden-models note replaces the "Type below to start." line
         const show = element('button', { type: 'button', className: 'primary empty-cta', textContent: 'Show all models' });
         show.addEventListener('click', () => { showAllModels().catch((err) => { $('error').textContent = err.message; }); });
         empty.replaceChildren(element('span', { className: 'empty-note', textContent: `${n} ${n === 1 ? 'model is' : 'models are'} hidden by your "Show models" setting.` }), show);
@@ -4598,12 +4660,14 @@ async function boot() {
   input.focus();
 
   // W4-8 quick ask: the bar over any app asks this window to start a new chat with its message.
-  if (window.bunnyDesktop) watchRemote();
+  watchRemote(); // the window, and Bunny in a browser on this PC; a device's page is refused /api/remote and shows nothing here (its own chip is in remote.js)
   if (window.bunnyDesktop?.quickAsk) {
     window.bunnyDesktop.quickAsk.onNewChat(() => { runQuickAsk().catch((err) => { $('error').textContent = err.message; }); });
     runQuickAsk().catch((err) => { $('error').textContent = err.message; });
   }
 
+  bindPhoneBar(document);
+  fitViewport(window); // a browser without dvh units: the app takes the visible height (v0.1.14)
   // The app can be installed as a desktop app, and opened in its own window.
   // Installing Bunny as a web app (a browser tab on this computer): a service worker at the root scope, only where the browser allows one (a secure context: 127.0.0.1 and
   // localhost; a device on the network over plain http gets none) and never inside Bunny's own window. It keeps static files only; see src/ui/bunny-sw.js.
