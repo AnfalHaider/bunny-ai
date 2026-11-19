@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "engines": {
+    "claude-code": {
+      "version": "2.1.311",
+      "channel": "stable",
+      "label": "Claude Code",
+      "licence": "Anthropic Commercial Terms (all rights reserved): the official package, unmodified, downloaded on the person's click",
+      "entry": "claude.exe",
+      "signature": "Anthropic, PBC",
+      "hosts": ["registry.npmjs.org"],
+      "files": [
+        {
+          "name": "claude-code-win32-x64-2.1.311.tgz",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-win32-x64/-/claude-code-win32-x64-2.1.311.tgz",
+          "sha256": "32a333769981c72843b990f944cdcac53595ec5a98ca73ff75f0f5c417c79ee6",
+          "integrity": "sha512-fKXnBqsAPxVeIc20kCdzI4GznhuCJxumy1ZbwkyIfgZRsZXKHzMaayrJ/Ro2O+Dfb/s9rG/gAqGkqJCsA3FgJg==",
+          "size": 136547707,
+          "kind": "tgz",
+          "strip": "package"
+        }
+      ]
+    },
+    "codex": {
+      "version": "0.170.0",
+      "label": "Codex CLI",
+      "licence": "Apache-2.0",
+      "entry": "codex-x86_64-pc-windows-msvc.exe",
+      "signature": "OpenAI OpCo, LLC",
+      "model": "gpt-5.5",
+      "schema": "schemas/codex-app-server-0.170.0.json",
+      "hosts": ["github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"],
+      "files": [
+        {
+          "name": "codex-x86_64-pc-windows-msvc.exe.zip",
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.170.0/codex-x86_64-pc-windows-msvc.exe.zip",
+          "sha256": "b1634415b6ecb87fea80691580dfe49f83fd46f0ad93f128ba029604d7faa158",
+          "size": 214674329,
+          "kind": "zip"
+        }
+      ]
+    }
+  }
+}
