@@ -15,6 +15,7 @@ Risk: **HIGH**: a new execution engine, a permission bridge, third-party code do
 5. Asked how to offer engines that can't check with Bunny first: "restricted mode".
 6. "yes run the real test, codex approved, leave cline out of 0.1.14" (ca501c9): R23 is accepted for Codex, and Cline is out.
 7. **"lets remove cline and other for now, just focus on codex and claude."** (2026-11-19, relayed by the Chief of Staff.) This is the scope of v0.1.14.
+8. "also i am thinking we have this option in settings in engines, where we disable bunny engine if done we follow the enabled engines rules, bunny stays on by default." (2026-11-19, relayed by the Chief of Staff.) This is ENGINE-RULES (§3.7).
 
 **What follows:**
 - **Two engines:** Claude Code and Codex CLI, in full mode. Restricted mode stays as each engine's fallback (§0.2).
@@ -386,12 +387,110 @@ Every request must pass all of these, or it gets a 403 with no detail:
 1. `remoteAccess.js` gains `isDeviceRefused(method, path, body)`. It is true for:
    - `isRemoteAdminPath(path)`;
    - `^/api/engines(/|$)`;
-   - `PUT /api/settings` with `engine` or `engines` in its body;
+   - `PUT /api/settings` with `engine`, `engines` or `useBunnyEngine` in its body (ER-1, §3.7);
    - `POST /api/sessions`, or `PATCH /api/sessions/<id>` and the session-setting route, with `engine` in its body.
 2. It is checked in three places: in `remoteRoute`'s Everything branch, in `route()`'s belt for `req.bunnyDevice`, and in `windowOnly()`'s `req.bunnyDevice` branch, on the decoded path.
 3. The refusal message is: "Only Bunny's window can change engines."
 
-Also: `engine` and `engines` join `WINDOW_ONLY_SETTING_KEYS`, `session.engine` joins `WINDOW_ONLY_SESSION_SETTINGS`, and `/api/engines*` joins `WINDOW_ONLY_ROUTES`.
+Also: `engine`, `engines` and `useBunnyEngine` join `WINDOW_ONLY_SETTING_KEYS`, `session.engine` joins `WINDOW_ONLY_SESSION_SETTINGS`, and `/api/engines*` joins `WINDOW_ONLY_ROUTES`.
+
+### 3.7 ENGINE-RULES: when Bunny's engine is switched off (Security ER-1 to ER-7, ce64aca)
+
+**The owner** (relayed by the Chief of Staff; a HIGH go): "also i am thinking we have this option in settings in engines, where we disable bunny engine if done we follow the enabled engines rules, bunny stays on by default."
+
+While the option is on (the default), nothing in §3.1 to §3.6 changes. This section is what changes when the owner turns it off.
+
+#### 3.7.1 The option (ER-1)
+
+- **The setting:** "Use Bunny's engine", in Settings → Engines. The key is `useBunnyEngine`, **`true` by default**, and it persists.
+- **Who can change it:**
+  - window-only, **and** in `isDeviceRefused` (§3.5), so every device is refused, Everything included;
+  - each change goes in Activity, with the time and "from Bunny's window";
+  - the warning (§3.7.6) is shown when it's turned off.
+- **Per chat:** `session.engine.rules = 'bunny' | 'engine'` is fixed when the chat's first message is sent. A change applies to new chats.
+- **What it covers:** only an engine **in full mode**. An engine that fell back to restricted mode keeps the staged copy and Bunny's diff review (§3.3), because it has no rules of its own to follow there.
+- **When it can't be turned off:** while no engine is both enabled and downloaded. Chats need an engine to run on.
+- **The switch is per engine where a spike requires it:** if the Claude Code prompt-tool spike (§3.7.4) fails, Claude Code stays on Bunny's rules even with the option off, and its row in Settings says why.
+
+#### 3.7.2 The engine's own rules are set in Bunny (ER-2)
+
+- **Claude Code:** Settings → Engines → Claude Code → Rules edits `engines['claude-code'].rules = { allow: [], ask: [], deny: [] }`, in Claude Code's own pattern syntax (`Bash(npm test:*)`, `Read(./docs/**)`, `Edit(//abs/path)`).
+  - Each pattern is checked when it's saved: Claude Code's syntax, at most 200 characters, at most 200 rules. A rule that is nothing but a bare tool name in `allow`, such as `Bash`, is allowed, because it's the person's choice; it's shown in the warning colour.
+  - The rules are written into the run's `--settings` in the isolated home, at every run.
+- **Codex:** the approval choice is **fixed at `untrusted`** (ER-5), so there's nothing to edit beyond the per-card answers (§3.7.3).
+  - Codex's own exec-policy rules aren't offered in v0.1.14. Builder C's S2 note says prefix rules don't apply to its `powershell.exe -Command` wrapper on Windows, so a rule the person wrote would look like it works while it doesn't.
+  - The Rules page for Codex says so in one line.
+- **Never loaded:** a repository's `.claude` or `.codex` configs, or the person's own `~/.claude` or `~/.codex`. `--setting-sources user` (CE-1.8), the untrusted project entry (CE-1.15) and CE-3.3 stay.
+- **Never offered, as a choice or a default:** `bypassPermissions`, `--dangerously-skip-permissions`, `acceptEdits` for every tool, Codex `never`, `on-request` or `granular`, or any auto-approve mode.
+
+#### 3.7.3 The engine's questions become Bunny cards (ER-4)
+
+- **Every question** shows as a Bunny card in the chat, or on the device for a device chat (`askPermission`):
+  - an engine `ask` rule (Claude Code);
+  - every command and patch under `untrusted` (Codex).
+- **The card names the engine** and shows its own words, the tool, and the command or path. For example: **"Claude Code asks: run `npm test`?"**
+- **The answers:**
+  - **Allow once** or **Deny**.
+  - **Allow for this chat** only where the engine supports it (Codex `acceptForSession`), and only from the person's own click. Bunny never picks it.
+  - Nothing is remembered beyond the chat.
+- **Unanswered means deny:** no answer by the end of the reply, or past Bunny's 150 s limit (CE-1.11), is a deny. Bunny never answers yes by itself.
+
+#### 3.7.4 Claude Code's questions: `--permission-prompt-tool`, after a spike
+
+With the option off, Claude Code's engine `ask` has to reach the person, so `--permission-prompts none`, which turns an ask into a deny, is replaced by **`--permission-prompt-tool mcp__bunny__approve`**.
+- That is an MCP tool on a Bunny-served, per-run MCP server: loopback, the run's token, and the §2.2 checks. Its handler is the bridge.
+- `--strict-mcp-config` is given that server only.
+
+**The spike line Builder C adds to S1**, and it must pass before this ships for Claude Code:
+1. A question reaches the bridge, and **waits** for a card answered at 120 s; Allow runs the tool, and Deny stops it.
+2. **Fail closed:** an unreachable, crashed, killed or timed-out prompt tool means **deny**, and the tool doesn't run. Test each of these, as S1 (c) did for the hook.
+3. **The model can't call the prompt tool itself.** Does `mcp__bunny__approve` appear in `system/init`'s tool list? If it does:
+   - it is added to `--disallowedTools`, if that still lets it serve as the prompt tool;
+   - otherwise its handler refuses any call that isn't a permission request (shape check). The spike shows which works.
+4. With Bunny's floor rules in `permissions.deny`, a deny still wins over an engine `allow` and over the prompt tool's Allow.
+
+**If the line fails,** Claude Code stays on Bunny's rules, whatever the option says (§3.7.1), and Settings says why.
+
+#### 3.7.5 The floor, and what happens to each layer (ER-3, ER-5)
+
+**The floor holds whatever the option says.** `bridge.js` gains a `floorOnly` decision, used when `session.engine.rules === 'engine'`:
+
+- **Always denied:**
+  - Bunny's data folder (with the DPAPI key store);
+  - every engine home, in both modes, account credentials included;
+  - the person's real `~/.claude`, `~/.codex`, `~/.cline` and `~/.aider*`;
+  - the key folders (CE-1.6);
+  - `%APPDATA%` and `%LOCALAPPDATA%`;
+  - **and Bunny's own deny rules.**
+
+  A deny never gets weaker. Bunny's `allow` and `ask` rules aren't used.
+- **Unchanged:** devices (§3.5), the endpoint (§2, CE-4), downloads and pins (§4), the process (§1.3, CE-8), and the tools that stay off. Claude Code's web, MCP and subagent switches, and Codex's CE-1.14 features, aren't rules. They stay off.
+- **Activity:** the option's changes; device engine tools by name; each relayed question and its answer, as a step in the chat.
+
+**Claude Code's layers with the option off:**
+
+| Layer | With the option off |
+|---|---|
+| CE-1.7 hook | **Kept, as the floor only.** `floorOnly` denies the floor, and the hook still catches its own failures as deny. Anything else gets **no decision** (exit 0 with no `permissionDecision`), so the engine's rules apply |
+| CE-1.8 engine permissions | **Kept, and now the main wall:** `--setting-sources user`, no bypass modes, and the engine's `ask` going to `--permission-prompt-tool` (§3.7.4), not `--permission-prompts none`. The owner's `allow` rules from §3.7.2 now apply |
+| CE-1.9 Bunny's rules copied | **Changed:** only the floor goes into `permissions.deny`, plus the owner's own `ask`, `allow` and `deny` from §3.7.2. Bunny's ask and allow aren't copied |
+| CE-1.10 watchdog | **Kept:** every `tool_use` must have passed the hook (the floor) before its result, or the run stops |
+| CE-1.11 timeouts | **Kept**, for the relayed card |
+| `--disallowedTools`, the tool-list check, no MCP but Bunny's | **Kept.** The tool-list check adds `mcp__bunny__approve` only if the spike shows it must stay listed |
+
+**Codex's layers with the option off:**
+
+| Layer | With the option off |
+|---|---|
+| CE-1.12 `untrusted` | **Kept as `untrusted`**, the only policy that asks before commands inside the sandbox. `acceptForSession` only from the person's click (§3.7.3) |
+| CE-1.13 Bunny judges | **Changed:** the person decides each command and patch on the card. Bunny still **auto-declines a patch** to a floor path or a Bunny-deny path, and **flags in red** a command whose text names a floor path ("This command names Bunny's data folder"). Bunny can't see what a command reads, so the flag is a warning, not a wall |
+| CE-1.14 to CE-1.17 | **Kept** |
+
+#### 3.7.6 The warning (ER-6)
+
+It is shown when the option is turned off, and kept on the Engines page while it's off, word for word with the engine's name:
+
+> **Bunny's engine is off.** Chats run on <engine> and follow <engine>'s rules, which you set here. Bunny no longer checks each step against your Bunny rules: <engine> asks you itself, and Bunny shows its questions. Bunny still blocks its own data, its keys, the engines' sign-ins and your deny rules. A command you allow can read any file on this PC that you can.
 
 ### 3.6 Security's requirements, at a glance
 
@@ -407,6 +506,7 @@ They are binding. The full text is `docs/security/2026-11-18-cli-engines-require
 | CE-6 (devices) | §3.5 |
 | CE-7 (the record) | §4.4, §3.5 |
 | CE-8 (starting the process) | §1.3 |
+| ER-1 to ER-7 (ENGINE-RULES, ce64aca) | §3.7, §5.2 (`engine-rules.test.js`), §6.1, §6.2 step 9 |
 | CE-9 (what Security signs each engine on: the spike evidence, CE-1's failure set showing deny, the canary unread or the owner's answer, the fake-home test, the CE-6 test at Everything, and the store tests) | §5, §6 |
 
 ---
@@ -500,6 +600,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 | `test/engine-staging.test.js` | **CE-2:** the copy leaves out the listed paths, and skips links. Always-discarded paths are named. "Runs code later" files ask in Auto too. Renames, type changes and deletes are judged. Only allowed changes are applied, through the write path and checkpoints. Plan mode keeps nothing. The copy is removed afterwards. |
 | `test/engine-store.test.js` | **CE-5:** a hash or integrity mismatch, a wrong signer, an archive path-escape, an over-2 GB archive, a redirect off the host list, or a wrong `--version` is refused, and staging is removed. npm runs with `--ignore-scripts`. `current.json` is written atomically. Rollback works. An update waits during a run. Remove deletes everything. The engine record is written. A fake registry is used, with no network. |
 | `test/engine-device.test.js` | **CE-6, over real HTTP at Everything:** a device is refused `/api/engines*`, the `engine` and `engines` settings, and `session.engine` on create and on change. A Chats device's Code-mode chat runs on Bunny's engine. An Everything device's engine tools are logged by name only. |
+| `test/engine-rules.test.js` | **ER-1 to ER-7, with the option off:**<br>- `useBunnyEngine` is refused to a device at Chats and at Everything, persists across a restart, and every change is in Activity;<br>- it can't be turned off with no engine downloaded;<br>- a chat keeps the rules it started with;<br>- a repository with a hostile `.claude/settings.json` or `.codex/config.toml` changes nothing;<br>- no bypass, `acceptEdits`, `never`, `on-request` or `granular` can be saved.<br>**Claude Code:**<br>- the spawn has `--permission-prompt-tool mcp__bunny__approve` instead of `--permission-prompts none`;<br>- the generated `--settings` holds the floor plus the owner's rules, and not Bunny's ask or allow;<br>- an engine `ask` reaches a card naming Claude Code; Deny stops the tool; no answer means deny;<br>- a read of the data folder or a Bunny-deny path is refused, even with an allow-all owner rule;<br>- with the hook disabled, the watchdog stops the run.<br>**Codex:**<br>- every command reaches a card;<br>- a patch to the data folder is auto-declined;<br>- a command naming the data folder is flagged red on its card;<br>- `acceptForSession` is sent only after an "Allow for this chat" click.<br>**With the option on:** every existing engine test passes unchanged. |
 | `test/engine-env.test.js` | **CE-3 and CE-8:** the environment is `safeEnv` plus the named variables only. There's no credential variable in local mode, and no endpoint token in account mode. A fake `USERPROFILE` with hostile `.claude` and `.codex` configs is not loaded. The home is rewritten at each start. An incognito chat's folder is removed. The prompt and the token never appear in the arguments. A tree kill leaves no process behind. |
 
 ### 5.3 End-to-end (Playwright, invented profile, fake engine)
@@ -536,6 +637,7 @@ The gate runs no real CLI, uses no network and needs no account. TEST-DNS's no-n
 | S2, Codex 0.170.0 (401bd92, and the addendum 2675249) | **Done.** Full mode with CE-1.12 to CE-1.17 (§3.2). The CE-1.15 line is **settled** (Security 53cceb0): with an explicit `untrusted` entry, a project `.codex/rules` isn't read, and every command still asks. Nothing owed. |
 | S3, Cline (767c4ea) | Done, and failed: §11. |
 | S4, Aider | Not run. Aider is later (§11). |
+| **S1 line for ENGINE-RULES** (Builder C) | **Owed:** `--permission-prompt-tool` fails closed, as set out in §3.7.4. It must show: the question waits for a card; unreachable, crashed, killed and timed-out all mean deny; whether the prompt tool is visible to the model, and how it's kept from being called; and that a floor deny still wins. **If it fails,** Claude Code stays on Bunny's rules with the option off. |
 
 The canary rule stays for every future pin: the canary's unique string is searched for in every request the endpoint receives, and in the engine's output (`engine-smoke`).
 
@@ -549,6 +651,15 @@ The canary rule stays for every future pin: the canary's unique string is search
 6. `store.js`, `pins.json` and the `/api/engines` routes, plus the sign-in and sign-out flows (§7.1) and the CE-6 `isDeviceRefused` changes.
 7. **The Settings → Engines screens**, from Design's drawing (v7: two engines, with the fallback flow): the auth-mode choice, the restricted line, the sign-in states, download, update, rollback and Remove, the record, and the local-mode note.
 8. The "engine pins" gate step, `engine-smoke.mjs`, help text and pictures.
+9. **ENGINE-RULES (§3.7)**, after the S1 prompt-tool line:
+   - `useBunnyEngine` and its device refusal;
+   - the per-engine Rules page;
+   - `floorOnly` in the bridge;
+   - the relayed cards, the Codex red flag and auto-decline;
+   - the warning;
+   - `engine-rules.test.js`.
+
+   Claude Code joins only if the spike line passes; Codex doesn't depend on it.
 
 ---
 
