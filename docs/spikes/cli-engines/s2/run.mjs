@@ -48,7 +48,24 @@ const SCENARIOS = {
   'h-off-on-request-reads-writes': { calls: ['viewCanary', 'viewPng', 'patchOutside'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"', 'features.shell_tool=false', 'features.unified_exec=false', 'features.apps=false', 'features.plugins=false', 'features.computer_use=false', 'features.image_generation=false', 'web_search="disabled"'], note: 'commands off, no ask configured: view_image of the canary, a patch that ADDS a file outside the folder, a patch that UPDATES the canary' },
   'h-off-untrusted-decline-reads-writes': { calls: ['viewCanary', 'viewPng', 'patchOutside'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"', 'features.shell_tool=false', 'features.unified_exec=false', 'features.apps=false', 'features.plugins=false', 'features.computer_use=false', 'features.image_generation=false', 'web_search="disabled"'] },
   'i-all-off-view-image': { calls: ['viewPng', 'patchOutside', 'patch'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"', 'features.shell_tool=false', 'features.unified_exec=false', 'features.apps=false', 'features.plugins=false', 'features.computer_use=false', 'features.image_generation=false', 'features.view_image=false', 'features.goals=false', 'features.hooks=false', 'web_search="disabled"'], note: 'R23: view_image also off: is the outside read path closed? what tools are left?' },
-  'j-trusted-project-rules': { calls: ['inSandboxEcho', 'patch', 'readSecret'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trustedProject: true, note: 'CE-3.3: the isolated home already marks the project trusted (as a first run leaves it) and the project holds an allow rule and an allow-all config: do they load?' },
+  'j-control-home-forbidden': { calls: ['inSandboxEcho', 'readSecret'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], homeRules: 'forbidden' },
+  'j-control-home-allow-onrequest': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], homeRules: 'allow' },
+  'k-nosandbox-onrequest-baseline': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', note: 'no sandbox configured, so on-request asks for everything unless a rule allows' },
+  'k-nosandbox-onrequest-home-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', homeRules: 'allow', note: 'no sandbox configured, so on-request asks for everything unless a rule allows' },
+  'k-nosandbox-onrequest-trusted-project-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', trust: 'trusted', rules: 'allow', note: 'no sandbox configured, so on-request asks for everything unless a rule allows' },
+  'k-nosandbox-onrequest-untrusted-project-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', trust: 'untrusted', rules: 'allow', note: 'no sandbox configured, so on-request asks for everything unless a rule allows' },
+  'm-broken-home-control': { calls: ['inSandboxEcho'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', brokenRules: 'home', note: 'is the rule file read? a file with a syntax error is reported only if it is read' },
+  'm-broken-project-trusted': { calls: ['inSandboxEcho'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', trust: 'trusted', brokenRules: 'project', note: 'is the rule file read? a file with a syntax error is reported only if it is read' },
+  'm-broken-project-untrusted': { calls: ['inSandboxEcho'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', trust: 'untrusted', brokenRules: 'project', note: 'is the rule file read? a file with a syntax error is reported only if it is read' },
+  'm-broken-project-no-config': { calls: ['inSandboxEcho'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', brokenRules: 'project', note: 'is the rule file read? a file with a syntax error is reported only if it is read' },
+  'j-untrusted-trusted-forbidden': { calls: ['inSandboxEcho', 'readSecret'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'trusted', rules: 'forbidden' },
+  'j-untrusted-trusted-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'trusted', rules: 'allow' },
+  'j-untrusted-untrusted-forbidden': { calls: ['inSandboxEcho', 'readSecret'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'untrusted', rules: 'forbidden' },
+  'j-untrusted-untrusted-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'untrusted', rules: 'allow' },
+  'j-on-request-trusted-forbidden': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'trusted', rules: 'forbidden' },
+  'j-on-request-trusted-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'trusted', rules: 'allow' },
+  'j-on-request-untrusted-forbidden': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'untrusted', rules: 'forbidden' },
+  'j-on-request-untrusted-allow': { calls: ['inSandboxEcho', 'readSecret'], policy: 'on-request', sandbox: 'workspace-write', decide: 'decline', cfg: ['windows.sandbox="unelevated"'], trust: 'untrusted', rules: 'allow' },
   'k-network-proxy': { calls: ['listDir'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'accept', cfg: ['windows.sandbox="unelevated"'], proxy: true, note: 'any outbound attempt that honours the proxy variables is logged; only the stand-in should be contacted' },
   'k-network-proxy-features-off': { calls: ['listDir'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'accept', cfg: ['windows.sandbox="unelevated"', 'features.apps=false', 'features.plugins=false', 'features.remote_plugin=false', 'features.plugin_sharing=false', 'features.tool_suggest=false', 'features.computer_use=false', 'features.image_generation=false', 'web_search="disabled"'], proxy: true },
   'k-network-proxy-more-off': { calls: ['listDir'], policy: 'untrusted', sandbox: 'workspace-write', decide: 'accept', cfg: ['windows.sandbox="unelevated"', 'features.apps=false', 'features.plugins=false', 'features.remote_plugin=false', 'features.plugin_sharing=false', 'features.tool_suggest=false', 'features.computer_use=false', 'features.image_generation=false', 'features.memories=false', 'features.goals=false', 'features.hooks=false', 'features.recommended_plugins=false', 'web_search="disabled"', 'chatgpt_base_url="http://127.0.0.1:9"'], proxy: true },
@@ -71,11 +88,24 @@ async function run(name) {
   writeFileSync(join(p.proj, '.codex', 'config.toml'), 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n');
   writeFileSync(join(p.home, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['*'] } }));
   writeFileSync(join(p.home, '.cline', 'settings.json'), JSON.stringify({ autoApprove: true }));
-  if (sc.trustedProject) { // what a first run leaves behind in the isolated home: the project is marked trusted
-    writeFileSync(join(p.iso, 'config.toml'), `[projects.'${p.proj.toLowerCase()}']${String.fromCharCode(10)}trust_level = "trusted"${String.fromCharCode(10)}`);
+  if (sc.trust) { // what the isolated home says about this project before the run: 'trusted' (a first run leaves that) or 'untrusted' (Bunny rewrites config.toml like this before each run)
+    const NL = String.fromCharCode(10);
+    writeFileSync(join(p.iso, 'config.toml'), `[projects.'${p.proj.toLowerCase()}']${NL}trust_level = "${sc.trust}"${NL}`);
+  }
+  if (sc.brokenRules) { // a rule file that cannot be parsed: if Codex reads it, it says so; if it does not read it, it says nothing
+    const NL = String.fromCharCode(10);
+    const dirs = sc.brokenRules === 'home' ? [join(p.iso, 'rules')] : [join(p.proj, '.codex', 'rules')];
+    for (const d of dirs) { mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'default.rules'), 'prefix_rule(pattern=[BROKEN-MARKER-xyz' + NL); }
+  }
+  if (sc.homeRules) { // control: the same rule file in the rules folder of the isolated Codex home, where Codex reads rules
+    mkdirSync(join(p.iso, 'rules'), { recursive: true });
+    const B = String.fromCharCode(92); const pw = ['C:', 'Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'].join(B + B);
+    writeFileSync(join(p.iso, 'rules', 'default.rules'), `prefix_rule(pattern=["${pw}"], decision="${sc.homeRules}")` + String.fromCharCode(10));
+  }
+  if (sc.rules) {
     mkdirSync(join(p.proj, '.codex', 'rules'), { recursive: true });
-    { const B = String.fromCharCode(92); const pw = ['C:', 'Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'].join(B + B); writeFileSync(join(p.proj, '.codex', 'rules', 'default.rules'), `prefix_rule(pattern=["${pw}"], decision="allow")` + String.fromCharCode(10)); }
-    writeFileSync(join(p.proj, '.codex', 'config.toml'), 'approval_policy = "never"' + String.fromCharCode(10) + 'sandbox_mode = "danger-full-access"' + String.fromCharCode(10));
+    const B = String.fromCharCode(92); const pw = ['C:', 'Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'].join(B + B);
+    writeFileSync(join(p.proj, '.codex', 'rules', 'default.rules'), `prefix_rule(pattern=["${pw}"], decision="${sc.rules}")` + String.fromCharCode(10));
   }
   const tools = TOOLS(p);
   tools.viewCanary.arguments.path = p.canary;
@@ -144,6 +174,8 @@ async function run(name) {
   if (reqs[0]) { try { const b = JSON.parse(reqs[0].body); lines.push(`tools offered to the model: ${JSON.stringify((b.tools ?? []).map((t) => (t.name ?? '?') + ':' + t.type))}`); } catch { /* not json */ } }
   lines.push(`files Codex left in its isolated CODEX_HOME (${homeFiles.length}): ${JSON.stringify(homeFiles.slice(0, 25))}`);
   if (sc.proxy) lines.push(`connections that went to the proxy instead of the stand-in (${proxySeen.length}): ${JSON.stringify(proxySeen)}`);
+  lines.push(`Codex stderr mentions the broken rule file (BROKEN-MARKER, rules, parse or starlark): ${/BROKEN-MARKER|default\.rules|starlark|execpolicy|exec policy/i.test(stderr) ? JSON.stringify(stderr.replace(/\[[0-9;]*m/g, '').split(String.fromCharCode(10)).filter((l) => /BROKEN-MARKER|default\.rules|starlark|execpolicy|exec policy|rules/i.test(l)).slice(0, 3)).slice(0, 500) : 'no'}`);
+  lines.push(`config.toml in the isolated home after the run: ${JSON.stringify(read2(join(p.iso, 'config.toml')).trim())}`);
   lines.push(`hosts contacted at the stand-in: ${[...new Set(stubText.split('\n').filter(Boolean).map((l) => JSON.parse(l).host))].join(', ')}`);
   const out = lines.join('\n'); writeFileSync(join(dir, 'SUMMARY.txt'), out + '\n'); console.log(out + '\n');
 }
