@@ -291,24 +291,28 @@ test('Security 714a0a8: git\'s default fetch refspec is fine; a glob that can wr
   for (const c of ['git fetch origin +refs/heads/*:refs/heads/*', 'git fetch origin "refs/heads/*:refs/tags/*"', 'git fetch origin x:refs/tags/v1', 'git fetch origin main:main', 'git fetch origin +main:heads/main', 'git fetch origin refs/heads/*:refs/remotes/origin/../../heads/*']) blocked(t, c);
 });
 
-test('QA: a command over 64 KB, or with over 2,000 parts, is refused before anything is parsed, in well under a second; everyday commands still pass', (t) => {
+test('QA: a command over 64 KB, or with over 2,000 parts, is refused before anything is parsed, without hanging (well inside the deadline of the guard); everyday commands still pass', (t) => {
   const root = makeRepo(t, 'builder');
   const reason = /too long or has too many parts.*64 KB.*2000 commands.*Write tool/;
   const timed = (command, role) => { const t0 = Date.now(); const v = guard.decide({ tool: 'Bash', command, cwd: role ? makeRepo(t, role) : root }); return { v, ms: Date.now() - t0 }; };
+  // "No hang" is not a wall-clock budget on a busy PC: the refusal reason (with "64 KB", which the 6 s deadline's message lacks) proves the pre-parse path answered.
+  // The time limit is only a backstop: under the guard's 6 s deadline and the host's 10 s hook cut, and far from the 23-31 s the full parse took. Before the size check, the guard spawns git to place the repository, which takes about 1 s on a loaded PC.
+  const NO_HANG_MS = 5000;
   // QA's shape: 21,000 "git status;" and a push to main (about 250 KB)
   const shape = timed(`${'git status; '.repeat(21_000)}git push origin main`);
   assert.equal(shape.v.allow, false);
   assert.match(shape.v.reason, reason);
-  assert.ok(shape.ms < 1000, `answered in ${shape.ms} ms`);
+  assert.ok(shape.ms < NO_HANG_MS, `answered in ${shape.ms} ms`);
   // few bytes, many commands
   const many = timed(`${'a;'.repeat(2500)}git push origin main`);
   assert.equal(many.v.allow, false);
   assert.match(many.v.reason, reason);
-  assert.ok(many.ms < 1000, `answered in ${many.ms} ms`);
+  assert.ok(many.ms < NO_HANG_MS, `answered in ${many.ms} ms`);
   // over the size limit
   const big = timed(`echo ${'x'.repeat(70 * 1024)}`);
   assert.equal(big.v.allow, false);
-  assert.ok(big.ms < 1000);
+  assert.match(big.v.reason, reason);
+  assert.ok(big.ms < NO_HANG_MS, `answered in ${big.ms} ms`);
   assert.equal(timed(`git push origin main ${'x '.repeat(500_000)}`).v.allow, false);
   // everyday: a 12 KB sign-off note, and 1,500 commands, are still read
   const note = guard.decide({ tool: 'Bash', command: `node .bootstrap/bin/bootstrap.mjs signoff s-1 --verdict PASS --sha abc1234 --note "${'checked src/app.js:1 and the gate output. '.repeat(280)}"`, cwd: makeRepo(t, 'qa') });
