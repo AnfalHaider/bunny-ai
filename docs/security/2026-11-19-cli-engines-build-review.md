@@ -93,3 +93,23 @@ Probe (`docs/security/engines-probe/codex-declined-ran.mjs` on 02fae7a):
 ## Verdict
 
 **FAIL at 37746e5, for EN-6 and EN-7**, both in the integration. EN-1 and EN-3 are fixed, and the engine core passes.
+
+## Re-review at e78209b (41e3335 EN-2, bfc6c23 the engine chip, e78209b EN-6 and EN-7): PASS for the engine core and integration so far (supersedes the FAIL at 37746e5)
+
+- **EN-6 fixed (CE-4.5).**
+  - `budgeted()` wraps the endpoint's upstream for the run. Before each upstream call it checks the tokens used against `replyCaps.tokens`. At the budget it asks through `onLimit`, which uses the existing question card. No answer or "Stop here" stops the run, and nothing more is forwarded. "Keep going" raises the budget by one step.
+  - Test: `engine-app` "EN-6 (CE-4.5)…".
+  - **Limits, accepted:** the check is per upstream call, so one long stream can pass the budget by its own size, as with Bunny's own engine. Account mode isn't counted, because the vendor bills those runs (§7.1).
+- **EN-7 fixed (CE-6.2, CE-7.2, R-DF2).** `logTool` is set only for `req.bunnyDevice`, and every `tool-start` logs `<engine>:<mapped name>`, by name only. Test: `engine-device` at Everything over HTTP.
+- **EN-2 fixed (CE-1.15).** After a run, `ensureUntrusted` rewrites the config if any `trust_level = "trusted"` appears, and the reply says so. There's a test with a fake Codex that marks the project trusted.
+- **Also:**
+  - `writeReal` refuses a path outside the workspace root;
+  - `checkPins` checks the npm integrity format (`sha512-<base64>`);
+  - the watchdog note says a new chat starts in full mode.
+- **The engine chip (bfc6c23):**
+  - The engine can be chosen before the first message. After it, a PATCH `engine` gets 409.
+  - A device's PATCH `engine` is still refused by `deviceRefusedBody`, at every level.
+  - `session.engine = {id:'bunny'}` is accepted as an explicit choice of Bunny's engine. The chip is built from the window-only `/api/engines` list.
+- **Tests:** the `engine-*` files pass **125 of 125** on an extract of e78209b.
+
+Verdict: PASS at e78209b for the engine build so far. **Still to come:** ENGINE-RULES with EN-5 (its option key inside `deviceRefusal`), and Aider when it's built (`~/.aider*` in the key folders).
