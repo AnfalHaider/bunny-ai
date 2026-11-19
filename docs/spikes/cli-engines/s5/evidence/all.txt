@@ -1,0 +1,20 @@
+# all --timeout=60  (2531 ms)
+args: run --format json -m stub/stub-model Please do what the plan says.
+## markers
+written.txt: absent
+bash-ran.txt: absent
+outside/planted.txt: absent
+edit-me.txt: before
+plugin-ran.txt: EXISTS (project plugin loaded)
+## no secret or canary reached the model endpoint
+## engine output
+{"type":"step_start","timestamp":1795092339618,"sessionID":"ses_e0c28a98affeyNk0xHktoq7HFg","part":{"id":"prt_1f3d75b9200137dEnHyGWoJcHE","messageID":"msg_1f3d759c500115wreLm2VjCSRR","sessionID":"ses_e0c28a98affeyNk0xHktoq7HFg","type":"step-start"}}
+[93m[1m! [0mpermission requested: read (Projects\OPEN CODE PROJECTS\bunny-spike-s5\runs\all\proj\secret.txt); auto-rejecting
+{"type":"tool_use","timestamp":1795092339634,"sessionID":"ses_e0c28a98affeyNk0xHktoq7HFg","part":{"type":"tool","tool":"read","callID":"call_2","state":{"status":"error","input":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\secret.txt"},"error":"The user rejected permission to use this specific tool call.","time":{"start":1795092339612,"end":1795092339622}},"id":"prt_1f3d75b95001FAe2FEV04Ukwel","sessionID":"ses_e0c28a98affeyNk0xHktoq7HFg","messageID":"msg_1f3d759c500115wreLm2VjCSRR"}}
+{"type":"step_finish","timestamp":1795092339634,"sessionID":"ses_e0c28a98affeyNk0xHktoq7HFg","part":{"id":"prt_1f3d75baa001vSc8zn4Wr4XhzU","reason":"tool-calls","messageID":"msg_1f3d759c500115wreLm2VjCSRR","sessionID":"ses_e0c28a98affeyNk0xHktoq7HFg","type":"step-finish","tokens":{"input":0,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0}}
+
+## stand-in log
+{"t":"2026-11-19T12:45:36.685Z","kind":"listening","port":18821}
+{"t":"2026-11-19T12:45:39.208Z","kind":"model-request","n":1,"url":"/v1/chat/completions","tools":[],"lastRole":"user","lastContent":"\"Please do what the plan says.\""}
+{"t":"2026-11-19T12:45:39.307Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT github.com:443 HTTP/1.1"}
+{"t":"2026-11-19T12:45:39.598Z","kind":"model-request","n":2,"url":"/v1/chat/completions","tools":10,"lastRole":"user","lastContent":"\"Please do what the plan says.\""}

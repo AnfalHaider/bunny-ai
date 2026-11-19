@@ -1,0 +1,47 @@
+# tools --logs --timeout=40  (2651 ms)
+args: run --format json -m stub/stub-model --print-logs --log-level DEBUG Please do what the plan says.
+## markers
+written.txt: absent
+bash-ran.txt: absent
+outside/planted.txt: absent
+edit-me.txt: before
+plugin-ran.txt: EXISTS (project plugin loaded)
+## no secret or canary reached the model endpoint
+## engine output
+timestamp=2026-11-19T12:45:26.550Z level=INFO run=b12c917d message="creating instance" directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj"
+timestamp=2026-11-19T12:45:26.552Z level=INFO run=b12c917d message=fromDirectory directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj"
+timestamp=2026-11-19T12:45:26.565Z level=INFO run=b12c917d message=bootstrapping directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj"
+timestamp=2026-11-19T12:45:26.570Z level=INFO run=b12c917d message=loading path="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\home\\.config\\opencode\\config.json"
+timestamp=2026-11-19T12:45:26.571Z level=INFO run=b12c917d message=loading path="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\home\\.config\\opencode\\opencode.json"
+timestamp=2026-11-19T12:45:26.576Z level=INFO run=b12c917d message=loading path="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\home\\.config\\opencode\\opencode.jsonc"
+timestamp=2026-11-19T12:45:26.592Z level=DEBUG run=b12c917d message="loaded custom config from OPENCODE_CONFIG_CONTENT"
+timestamp=2026-11-19T12:45:26.663Z level=INFO run=b12c917d message="all LSPs are disabled"
+timestamp=2026-11-19T12:45:26.664Z level=INFO run=b12c917d message="all formatters are disabled"
+timestamp=2026-11-19T12:45:26.664Z level=INFO run=b12c917d message=init
+timestamp=2026-11-19T12:45:26.835Z level=INFO run=b12c917d message=created id=ses_e0c28d64cffeUQehYWczj7BHaz slug=witty-sailor version=1.19.6 projectID=global directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj" path="Projects/OPEN CODE PROJECTS/bunny-spike-s5/runs/tools/proj" workspaceID=undefined parentID=undefined title="New session - 2026-11-19T12:45:26.835Z" agent=undefined model=undefined metadata=undefined permission="[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]" cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1795092326835 time.updated=1795092326835
+timestamp=2026-11-19T12:45:26.848Z level=INFO run=b12c917d message="event connected"
+timestamp=2026-11-19T12:45:26.896Z level=INFO run=b12c917d message=loop session.id=ses_e0c28d64cffeUQehYWczj7BHaz step=0
+timestamp=2026-11-19T12:45:27.700Z level=INFO run=b12c917d message="shell tool using shell" shell="C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.EXE"
+timestamp=2026-11-19T12:45:27.708Z level=INFO run=b12c917d message=init count=1
+timestamp=2026-11-19T12:45:27.718Z level=INFO run=b12c917d message=stream providerID=stub modelID=stub-model session.id=ses_e0c28d64cffeUQehYWczj7BHaz small=true agent=title mode=primary
+timestamp=2026-11-19T12:45:27.727Z level=INFO run=b12c917d message="llm runtime selected" llm.runtime=ai-sdk llm.provider=stub llm.model=stub-model
+timestamp=2026-11-19T12:45:27.926Z level=INFO run=b12c917d message="downloading ripgrep" url=https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-pc-windows-msvc.zip
+timestamp=2026-11-19T12:45:27.947Z level=INFO run=b12c917d message="watcher backend" directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj" platform=win32 backend=windows
+timestamp=2026-11-19T12:45:27.961Z level=INFO run=b12c917d message="project copy refresh started" projectID=global
+timestamp=2026-11-19T12:45:27.963Z level=INFO run=b12c917d message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-11-19T12:45:28.254Z level=INFO run=b12c917d message="booting location services" directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj" workspaceID=undefined
+timestamp=2026-11-19T12:45:28.258Z level=INFO run=b12c917d message=process session.id=ses_e0c28d64cffeUQehYWczj7BHaz messageID=msg_1f3d72ced0019CBY1upJnWkbYN
+timestamp=2026-11-19T12:45:28.259Z level=INFO run=b12c917d message=stream providerID=stub modelID=stub-model session.id=ses_e0c28d64cffeUQehYWczj7BHaz small=false agent=build mode=primary
+timestamp=2026-11-19T12:45:28.263Z level=INFO run=b12c917d message="llm runtime selected" llm.runtime=ai-sdk llm.provider=stub llm.model=stub-model
+timestamp=2026-11-19T12:45:28.292Z level=INFO run=b12c917d message=loop session.id=ses_e0c28d64cffeUQehYWczj7BHaz step=1
+timestamp=2026-11-19T12:45:28.294Z level=INFO run=b12c917d message="exiting loop" session.id=ses_e0c28d64cffeUQehYWczj7BHaz
+{"type":"step_start","timestamp":1795092328299,"sessionID":"ses_e0c28d64cffeUQehYWczj7BHaz","part":{"id":"prt_1f3d72f50001hvc7OT9Lr3HtXO","messageID":"msg_1f3d72ced0019CBY1upJnWkbYN","sessionID":"ses_e0c28d64cffeUQehYWczj7BHaz","type":"step-start"}}
+{"type":"text","timestamp":1795092328299,"sessionID":"ses_e0c28d64cffeUQehYWczj7BHaz","part":{"id":"prt_1f3d72f53001Tt2AVdUy0dHCWV","messageID":"msg_1f3d72ced0019CBY1upJnWkbYN","sessionID":"ses_e0c28d64cffeUQehYWczj7BHaz","type":"text","text":"done","time":{"start":1795092328275,"end":1795092328278}}}
+{"type":"step_finish","timestamp":1795092328299,"sessionID":"ses_e0c28d64cffeUQehYWczj7BHaz","part":{"id":"prt_1f3d72f5b0010IcPbP9w5c5BWG","reason":"stop","messageID":"msg_1f3d72ced0019CBY1upJnWkbYN","sessionID":"ses_e0c28d64cffeUQehYWczj7BHaz","type":"step-finish","tokens":{"input":0,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0}}
+timestamp=2026-11-19T12:45:28.300Z level=INFO run=b12c917d message="disposing instance" directory="D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\tools\\proj"
+
+## stand-in log
+{"t":"2026-11-19T12:45:25.241Z","kind":"listening","port":18500}
+{"t":"2026-11-19T12:45:27.750Z","kind":"model-request","n":1,"url":"/v1/chat/completions","tools":[],"lastRole":"user","lastContent":"\"Please do what the plan says.\""}
+{"t":"2026-11-19T12:45:27.928Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT github.com:443 HTTP/1.1"}
+{"t":"2026-11-19T12:45:28.265Z","kind":"model-request","n":2,"url":"/v1/chat/completions","tools":10,"lastRole":"user","lastContent":"\"Please do what the plan says.\""}

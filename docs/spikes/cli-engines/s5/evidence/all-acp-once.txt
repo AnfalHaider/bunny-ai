@@ -1,0 +1,134 @@
+# all --acp=once --timeout=70  (70323 ms)
+args: acp --cwd <SPIKE>\runs\all\proj
+## markers
+written.txt: EXISTS
+bash-ran.txt: EXISTS
+outside/planted.txt: absent
+edit-me.txt: after
+plugin-ran.txt: EXISTS (project plugin loaded)
+## LEAK SECRET-S5-4e1b9a reached the model endpoint
+## tools the engine asked the host about (ACP)
+[
+ {
+  "id": "call_2",
+  "tool": "read",
+  "kind": "read",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ },
+ {
+  "id": "call_3",
+  "tool": "D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\written.txt",
+  "kind": "edit",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ },
+ {
+  "id": "call_4",
+  "tool": "D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt",
+  "kind": "edit",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ },
+ {
+  "id": "call_5",
+  "tool": "echo BASH-MARKER > \"<SPIKE>/runs/all/proj/bash-ran.txt\"",
+  "kind": "execute",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ },
+ {
+  "id": "call_6",
+  "tool": "http://127.0.0.1:18675/fetched",
+  "kind": "fetch",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ },
+ {
+  "id": "call_7",
+  "tool": "task",
+  "kind": "think",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ }
+]
+## every tool call the engine started (id:title:kind)
+call_2:read:read  call_3:write:edit  call_4:edit:edit  call_5:bash:execute  call_6:webfetch:fetch  call_7:task:think
+## ACP messages
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}
+<- {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true,"mcpCapabilities":{"http":true,"sse":true},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"fork":{},"list":{},"resume":{}}},"authMethods":[{"description":"Run `opencode auth login` in the terminal","name":"Login with opencode","id":"opencode-login"}],"agentInf
+(initialize answered: {"protocolVersion":1,"agentCapabilities":{"loadSession":true,"mcpCapabilities":{"http":true,"sse":true},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"fork":{},"list":{},"resume":{}}},"authMethods":[{"description":"Run `opencode auth login` in the termi)
+-> {"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj","mcpServers":[]}}
+<- {"jsonrpc":"2.0","id":2,"result":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","configOptions":[{"id":"model","name":"Model","category":"model","type":"select","currentValue":"stub/stub-model","options":[{"value":"opencode/beam-free","name":"OpenCode/Beam Free"},{"value":"opencode/big-pickle","name":"OpenCode/Big Pickle"},{"value":"opencode/deepseek-v4.1-flash-free","name":"OpenCode/DeepSeek V4.1 
+-> {"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","prompt":[{"type":"text","text":"Please do what the plan says."}]}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"available_commands_update","availableCommands":[{"name":"customize-opencode","description":"Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when cr
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call","toolCallId":"call_2","title":"read","kind":"read","status":"pending","locations":[],"rawInput":{}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_2","status":"in_progress","kind":"read","title":"read","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\secret.txt"}],"rawInput":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\
+<- {"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","toolCall":{"toolCallId":"call_2","title":"read","kind":"read","status":"pending","locations":[],"rawInput":{}},"options":[{"optionId":"once","kind":"allow_once","name":"Allow once"},{"optionId":"always","kind":"allow_always","name":"Always allow"},{"optionId":"reject","kind":"rejec
+-> {"jsonrpc":"2.0","id":0,"result":{"outcome":{"outcome":"selected","optionId":"once"}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_2","status":"completed","title":"Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\secret.txt","content":[{"type":"content","content":{"type":"text","text":"SECRET-S5-4e1b9a"}}],"rawOutput":{"output":"<path>D:\\Projects\\OPEN
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call","toolCallId":"call_3","title":"write","kind":"edit","status":"pending","locations":[],"rawInput":{}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_3","status":"in_progress","kind":"edit","title":"write","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\written.txt"}],"rawInput":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs
+<- {"jsonrpc":"2.0","id":1,"method":"session/request_permission","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","toolCall":{"toolCallId":"call_3","title":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\written.txt","kind":"edit","status":"pending","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\written.txt"}],"rawInput":{"filepath":
+-> {"jsonrpc":"2.0","id":1,"result":{"outcome":{"outcome":"selected","optionId":"once"}}}
+<- {"jsonrpc":"2.0","id":2,"method":"fs/write_text_file","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\written.txt","content":"WRITTEN-MARKER"}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_3","status":"completed","title":"Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\written.txt","content":[{"type":"content","content":{"type":"text","text":"Wrote file successfully."}}],"rawOutput":{"output":"Wrote file succ
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call","toolCallId":"call_4","title":"edit","kind":"edit","status":"pending","locations":[],"rawInput":{}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_4","status":"in_progress","kind":"edit","title":"edit","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt"}],"rawInput":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\
+<- {"jsonrpc":"2.0","id":3,"method":"session/request_permission","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","toolCall":{"toolCallId":"call_4","title":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt","kind":"edit","status":"pending","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt"}],"rawInput":{"filepath":
+-> {"jsonrpc":"2.0","id":3,"result":{"outcome":{"outcome":"selected","optionId":"once"}}}
+<- {"jsonrpc":"2.0","id":4,"method":"fs/write_text_file","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt","content":"after"}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_4","status":"in_progress","kind":"edit","title":"edit","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt"}],"rawInput":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_4","status":"completed","title":"Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\edit-me.txt","content":[{"type":"content","content":{"type":"text","text":"Edit applied successfully."}},{"type":"diff","path":"D:\\Projects\\
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call","toolCallId":"call_5","title":"bash","kind":"execute","status":"pending","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj"}],"rawInput":{"cwd":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj"}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_5","status":"in_progress","kind":"execute","title":"echo BASH-MARKER > \"<SPIKE>/runs/all/proj/bash-ran.txt\"","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj"}
+<- {"jsonrpc":"2.0","id":5,"method":"session/request_permission","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","toolCall":{"toolCallId":"call_5","title":"echo BASH-MARKER > \"<SPIKE>/runs/all/proj/bash-ran.txt\"","kind":"execute","status":"pending","locations":[],"rawInput":{"command":"echo BASH-MARKER > \"<SPIKE>/ru
+-> {"jsonrpc":"2.0","id":5,"result":{"outcome":{"outcome":"selected","optionId":"once"}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_5","status":"in_progress","kind":"execute","title":"echo BASH-MARKER > \"<SPIKE>/runs/all/proj/bash-ran.txt\"","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj"}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_5","status":"completed","title":"echo BASH-MARKER > \"<SPIKE>/runs/all/proj/bash-ran.txt\"","content":[{"type":"content","content":{"type":"text","text":"(no output)"}}],"rawOutput":{"output":"(no out
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call","toolCallId":"call_6","title":"webfetch","kind":"fetch","status":"pending","locations":[],"rawInput":{}}}}
+<- {"jsonrpc":"2.0","id":6,"method":"session/request_permission","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","toolCall":{"toolCallId":"call_6","title":"http://127.0.0.1:18675/fetched","kind":"fetch","status":"pending","locations":[],"rawInput":{"url":"http://127.0.0.1:18675/fetched","format":"text"}},"options":[{"optionId":"once","kind":"allow_once","name":"Allow once"},{"optionId":"always
+-> {"jsonrpc":"2.0","id":6,"result":{"outcome":{"outcome":"selected","optionId":"once"}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_6","status":"in_progress","kind":"fetch","title":"webfetch","locations":[],"rawInput":{"url":"http://127.0.0.1:18675/fetched","format":"text"}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_6","status":"completed","title":"http://127.0.0.1:18675/fetched (text/plain)","content":[{"type":"content","content":{"type":"text","text":"FETCHED-PAGE"}}],"rawOutput":{"output":"FETCHED-PAGE","metadata":{"truncated":false}}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call","toolCallId":"call_7","title":"task","kind":"think","status":"pending","locations":[],"rawInput":{}}}}
+<- {"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","toolCall":{"toolCallId":"call_7","title":"task","kind":"think","status":"pending","locations":[],"rawInput":{"description":"spike","subagent_type":"general"}},"options":[{"optionId":"once","kind":"allow_once","name":"Allow once"},{"optionId":"always","kind":"allow_always","name":"A
+-> {"jsonrpc":"2.0","id":7,"result":{"outcome":{"outcome":"selected","optionId":"once"}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_7","status":"in_progress","kind":"think","title":"task","locations":[],"rawInput":{"description":"spike","prompt":"read secret.txt","subagent_type":"general"}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c26c575ffexrPPMjEZEPTMwt","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_7","status":"in_progress","kind":"think","title":"spike","locations":[],"rawInput":{"description":"spike","prompt":"read secret.txt","subagent_type":"general"}}}}
+## engine output
+
+[killed after 70s]
+## stand-in log
+{"t":"2026-11-19T12:47:39.788Z","kind":"listening","port":18675}
+{"t":"2026-11-19T12:47:42.232Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT registry.npmjs.org:443 HTTP/1.1"}
+{"t":"2026-11-19T12:47:42.320Z","kind":"model-request","n":1,"url":"/v1/chat/completions","tools":[],"lastRole":"user","lastContent":"Please do what the plan says."}
+{"t":"2026-11-19T12:47:42.352Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT github.com:443 HTTP/1.1"}
+{"t":"2026-11-19T12:47:42.559Z","kind":"model-request","n":2,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"user","lastContent":"Please do what the plan says."}
+{"t":"2026-11-19T12:47:42.722Z","kind":"model-request","n":3,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"tool","lastContent":"<path>D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\all\\proj\\secret.txt</path>\n<type>file</type>\n<content>\n1: SECRET-S5-4e1b9a\n\n(End of file - total 1 lines)\n</content>"}
+{"t":"2026-11-19T12:47:42.755Z","kind":"model-request","n":4,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"tool","lastContent":"Wrote file successfully."}
+{"t":"2026-11-19T12:47:42.785Z","kind":"model-request","n":5,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"tool","lastContent":"Edit applied successfully."}
+{"t":"2026-11-19T12:47:43.298Z","kind":"model-request","n":6,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"tool","lastContent":"(no output)"}
+{"t":"2026-11-19T12:47:43.308Z","kind":"other-request","url":"/fetched"}
+{"t":"2026-11-19T12:47:43.325Z","kind":"model-request","n":7,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"tool","lastContent":"FETCHED-PAGE"}
+{"t":"2026-11-19T12:47:43.367Z","kind":"model-request","n":8,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","todowrite","webfetch","write"],"lastRole":"user","lastContent":"read secret.txt"}
+{"t":"2026-11-19T12:47:52.239Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT registry.npmjs.org:443 HTTP/1.1"}
+{"t":"2026-11-19T12:48:42.407Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT registry.npmjs.org:443 HTTP/1.1"}

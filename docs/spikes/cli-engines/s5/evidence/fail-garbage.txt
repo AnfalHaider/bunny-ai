@@ -1,0 +1,52 @@
+# write+bash+readCanary --acp=garbage --timeout=20  (2283 ms)
+args: acp --cwd <SPIKE>\runs\write+bash+readCanary\proj
+## markers
+written.txt: absent
+bash-ran.txt: absent
+outside/planted.txt: absent
+edit-me.txt: before
+plugin-ran.txt: EXISTS (project plugin loaded)
+## no secret or canary reached the model endpoint
+## tools the engine asked the host about (ACP)
+[
+ {
+  "id": "call_2",
+  "tool": "D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\write+bash+readCanary\\proj\\written.txt",
+  "kind": "edit",
+  "options": [
+   "allow_once:once",
+   "allow_always:always",
+   "reject_once:reject"
+  ]
+ }
+]
+## every tool call the engine started (id:title:kind)
+call_2:write:edit
+## ACP messages
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}
+<- {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true,"mcpCapabilities":{"http":true,"sse":true},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"fork":{},"list":{},"resume":{}}},"authMethods":[{"description":"Run `opencode auth login` in the terminal","name":"Login with opencode","id":"opencode-login"}],"agentInf
+(initialize answered: {"protocolVersion":1,"agentCapabilities":{"loadSession":true,"mcpCapabilities":{"http":true,"sse":true},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"fork":{},"list":{},"resume":{}}},"authMethods":[{"description":"Run `opencode auth login` in the termi)
+-> {"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\write+bash+readCanary\\proj","mcpServers":[]}}
+<- {"jsonrpc":"2.0","id":2,"result":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","configOptions":[{"id":"model","name":"Model","category":"model","type":"select","currentValue":"stub/stub-model","options":[{"value":"opencode/beam-free","name":"OpenCode/Beam Free"},{"value":"opencode/big-pickle","name":"OpenCode/Big Pickle"},{"value":"opencode/deepseek-v4.1-flash-free","name":"OpenCode/DeepSeek V4.1 
+-> {"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","prompt":[{"type":"text","text":"Please do what the plan says."}]}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","update":{"sessionUpdate":"available_commands_update","availableCommands":[{"name":"customize-opencode","description":"Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when cr
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","update":{"sessionUpdate":"tool_call","toolCallId":"call_2","title":"write","kind":"edit","status":"pending","locations":[],"rawInput":{}}}}
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_2","status":"in_progress","kind":"edit","title":"write","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\write+bash+readCanary\\proj\\written.txt"}],"rawInput":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bu
+<- {"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","toolCall":{"toolCallId":"call_2","title":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\write+bash+readCanary\\proj\\written.txt","kind":"edit","status":"pending","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\write+bash+readCanary\\proj\\wr
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_2","status":"failed","kind":"edit","title":"write","locations":[{"path":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-spike-s5\\runs\\write+bash+readCanary\\proj\\written.txt"}],"rawInput":{"filePath":"D:\\Projects\\OPEN CODE PROJECTS\\bunny-s
+<- {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_e0c24f7ddffe9IZlIU1gh2WEpF","update":{"sessionUpdate":"usage_update","used":0,"size":100000,"cost":{"amount":0,"currency":"USD"}}}}
+<- {"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn","usage":{"inputTokens":0,"outputTokens":0,"totalTokens":0},"_meta":{}}}
+(prompt finished: {"stopReason":"end_turn","usage":{"inputTokens":0,"outputTokens":0,"totalTokens":0},"_meta":{}})
+## engine output
+Failed to parse JSON message: this is not json 2 | // @bun
+3 | `);r=_e.pop()||"";for(let Ye of _e){let y=Ye.trim();if(y)try{let C=JSON.parse(y);l.enqueue(C)}catch(C){console.error("Failed to parse JSON message:",y,C)}}}let j=r.trim();if(j)try{let w=JSON.parse(j);l.enqueue(w)}catch(w){console.error("Failed to parse JSON message:",j,w)}}catch(j){l.error(j);return}finally{g.releaseLock()}l.close()}}),p=new WritableStream({async write(l){let r=JSON.stringify(l)+`
+                                                                                 ^
+SyntaxError: JSON Parse error: Unexpected identifier "this"
+      at start (B:/~BUN/root/chunk-kdsk707z.js:3:78)
+
+
+## stand-in log
+{"t":"2026-11-19T12:49:38.125Z","kind":"listening","port":18738}
+{"t":"2026-11-19T12:49:40.472Z","kind":"model-request","n":1,"url":"/v1/chat/completions","tools":[],"lastRole":"user","lastContent":"Please do what the plan says."}
+{"t":"2026-11-19T12:49:40.508Z","kind":"PROXY-CONNECT-ATTEMPT","first":"CONNECT github.com:443 HTTP/1.1"}
+{"t":"2026-11-19T12:49:40.699Z","kind":"model-request","n":2,"url":"/v1/chat/completions","tools":["bash","edit","glob","grep","read","skill","task","todowrite","webfetch","write"],"lastRole":"user","lastContent":"Please do what the plan says."}
