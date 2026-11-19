@@ -165,3 +165,23 @@ On an extract of 8bcf527 with the gate's `test/support/no-network.mjs` preload, 
 ## Verdict
 
 **FAIL at 8bcf527, for EN-8** (key the seed per project). EN-9 must be answered by a spike, or the "Allow for this chat" button hidden, before it ships. The merge passes.
+
+## Re-review at d603917 (c923b65 EN-8, d603917 EN-9): PASS (supersedes the FAIL at 8bcf527)
+
+- **EN-8 fixed.**
+  - `seedDirOf(dataDir, root)` is `engines\codex\sandbox-seed\<sha256 of the real, lower-cased project root>`, and the seed is kept and copied per project.
+  - Tests show two projects get different seeds, the same project gets the same one, and project B never gets A's. So it's one capability SID per project, never across projects.
+- **EN-9 answered by a spike on the real Codex 0.170.0** (`docs/spikes/cli-engines/s2/S2-account-and-smoke.md`, "EN-9", which I read). `acceptForSession` covers **only the exact command text** for the rest of the thread. These are all asked again:
+  - other arguments;
+  - another program;
+  - a command naming the data folder;
+  - **every** `apply_patch`, including a floor path given absolute or as `../`.
+- **The build matches that scope:**
+  - the driver records the exact text granted, and the watchdog counts only an item with exactly that text as covered (anything else unasked still trips);
+  - `acceptForSession` is sent only for a command approval, never a patch;
+  - a floor-flagged command card, or any patch card, doesn't offer the button;
+  - the button shows only where the pin says so (`pins.json` `codex.sessionAllow: true` for 0.170.0), so a new pin must rerun the spike.
+- **The stated limit is accepted:** a granted command that reads a floor path through a script, without naming it, can repeat that read without asking. That's the same as a one-off Allow: Bunny can't see what a command reads. The ER-6 warning already says so.
+- **Tests:** the `engine-*` files pass **149 of 149** at d603917 on an extract, with the no-network preload.
+
+Verdict: PASS at d603917.
