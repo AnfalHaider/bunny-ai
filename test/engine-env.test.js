@@ -41,13 +41,13 @@ test('Claude Code: every home variable points into the isolated folder; no paren
   await withParentSecrets(async () => {
     for (const auth of ['account', 'local']) {
       const w = await world(); const dump = join(w.base, `env-${auth}.json`);
-      const r = await startClaude({ cwd: w.root, prompt: 'x', home: w.home, exe: 'x', auth, endpoint: auth === 'local' ? { base: 'http://127.0.0.1:1/v1', token: 'e'.repeat(64) } : null, judge: allow, launcher: [process.execPath, FAKE, 'claude-code'], extraEnv: { BUNNY_FAKE_SCRIPT: JSON.stringify({ dumpEnv: dump, steps: [] }) } });
+      const r = await startClaude({ cwd: w.root, prompt: 'x', home: w.home, exe: 'x', auth, upstream: auth === 'local' ? async function* () { /* the stand-in never asks */ } : null, judge: allow, launcher: [process.execPath, FAKE, 'claude-code'], extraEnv: { BUNNY_FAKE_SCRIPT: JSON.stringify({ dumpEnv: dump, steps: [] }) } });
       await drain(r);
       const { env, argv } = JSON.parse(await readFile(dump, 'utf8'));
       assert.equal(JSON.stringify(env).includes('parent'), false, `${auth}: nothing of the parent's secrets`);
       for (const k of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'CLAUDE_CONFIG_DIR']) assert.ok(String(env[k]).startsWith(w.home), `${auth}: ${k} is inside the isolated home (${env[k]})`);
       assert.equal(argv.join(' ').includes(env.BUNNY_BRIDGE_TOKEN), false, 'the token is not on the command line');
-      if (auth === 'local') { assert.equal(env.ANTHROPIC_API_KEY, 'e'.repeat(64)); assert.equal('CLAUDE_CODE_OAUTH_TOKEN' in env, false); assert.equal(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:1'); }
+      if (auth === 'local') { assert.match(env.ANTHROPIC_API_KEY, /^[a-f0-9]{64}$/); assert.equal('CLAUDE_CODE_OAUTH_TOKEN' in env, false); assert.match(env.ANTHROPIC_BASE_URL, /^http:\/\/127\.0\.0\.1:\d+$/); }
       else for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN']) assert.equal(k in env, false, `account mode has no ${k}`);
     }
   });

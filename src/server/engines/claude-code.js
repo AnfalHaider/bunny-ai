@@ -215,6 +215,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createBridgeServer } from './bridge-server.js';
 import { hookIntact, writeHook } from './hook-script.js';
 import { killTree, spawnEngine } from './process.js';
+import { createEndpoint } from './endpoint.js';
 import { createBridge } from './bridge.js';
 
 /**
@@ -224,17 +225,23 @@ import { createBridge } from './bridge.js';
  * through node). The prompt goes to stdin as one stream-json user message and never on the command line (CE-8). On stop, on a watchdog trip, on an error, and at the end the whole process tree is killed
  * and the bridge listener is closed: no engine process outlives its run.
  */
-export async function startClaude({ cwd, prompt, home, exe, runtimePath = process.execPath, auth = 'account', endpoint = null, mode = 'full', planMode = false, resumeId = null, deny = [], judge, onDecision = null, signal = null, usePowerShell = false, model = null, launcher = null, silenceMs = 0, extraEnv = {}, configDir = null }) {
+export async function startClaude({ cwd, prompt, home, exe, runtimePath = process.execPath, auth = 'account', upstream = null, onEndpointUsage = null, endpointOptions = {}, mode = 'full', planMode = false, resumeId = null, deny = [], judge, onDecision = null, signal = null, usePowerShell = false, model = null, launcher = null, silenceMs = 0, extraEnv = {}, configDir = null }) {
   const queue = createEventQueue();
   const bridgeServer = createBridgeServer({ judge, onDecision });
   const { port } = await bridgeServer.start();
-  let run = null; let stopped = false;
-  const finish = async () => { await bridgeServer.close().catch(() => {}); };
+  let run = null; let stopped = false; let endpoint = null; let started = null;
+  const finish = async () => { await bridgeServer.close().catch(() => {}); await endpoint?.close().catch(() => {}); };
   try {
+    if (auth === 'local') {
+      if (!upstream) throw new Error('Local mode needs a model to talk to.');
+      const allowed = new Set(planExpected(mode, usePowerShell));
+      endpoint = createEndpoint({ upstream, label: model ?? 'bunny', onUsage: onEndpointUsage, onToolList: (names) => { const extra = names.filter((n) => !allowed.has(n)); return extra.length ? `Claude Code offered a tool Bunny does not allow: ${extra.slice(0, 3).join(', ')}.` : true; }, ...endpointOptions });
+      started = await endpoint.start();
+    }
     await mkdir(configDir ?? join(home, 'config'), { recursive: true });
     const hook = await writeHook(join(home, 'hook'));
     if (!(await hookIntact(hook.path))) throw new Error('The check script could not be written.');
-    const plan = buildRun({ exe, home, hookPath: hook.path, runtimePath, bridge: { port, token: bridgeServer.token }, endpoint, auth, mode, planMode, resumeId, deny, model, usePowerShell, configDir });
+    const plan = buildRun({ exe, home, hookPath: hook.path, runtimePath, bridge: { port, token: bridgeServer.token }, endpoint: started ? { base: started.base, token: started.token } : null, auth, mode, planMode, resumeId, deny, model, usePowerShell, configDir });
     await writeFile(plan.settingsPath, JSON.stringify(plan.settings, null, 1), { mode: 0o600 });
     const file = launcher ? launcher[0] : plan.file;
     const args = launcher ? [...launcher.slice(1), plan.file, ...plan.args] : plan.args;

@@ -206,7 +206,7 @@ test('after the run, the listener is closed: no request is answered', async () =
 test('only the listed paths are answered (404 after authentication); GET /v1/models gives one entry, the chat\'s model label', async () => {
   const { ep } = await started();
   try {
-    for (const [method, path] of [['GET', '/'], ['POST', '/v1/embeddings'], ['GET', '/v1/responses'], ['POST', '/v1/models'], ['DELETE', '/v1/chat/completions'], ['GET', '/api/settings'], ['POST', '/v1/messages']]) assert.equal((await call(ep, { method, path, body: method === 'POST' ? {} : null })).status, 404, `${method} ${path}`);
+    for (const [method, path] of [['GET', '/'], ['POST', '/v1/embeddings'], ['GET', '/v1/responses'], ['POST', '/v1/models'], ['DELETE', '/v1/chat/completions'], ['GET', '/api/settings'], ['GET', '/v1/messages'], ['POST', '/v1/messages/other']]) assert.equal((await call(ep, { method, path, body: method === 'POST' ? {} : null })).status, 404, `${method} ${path}`);
     const models = (await call(ep, { method: 'GET', path: '/v1/models' })).json();
     assert.deepEqual(models.data.map((m) => m.id), ['Auto']);
   } finally { await ep.close(); }

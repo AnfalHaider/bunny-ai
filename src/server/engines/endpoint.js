@@ -8,6 +8,7 @@
  * secret-looking error text ever reaches the CLI.
  *
  *   POST /v1/responses          Codex: translated to Chat Completions and back (translate/responses.js)
+ *   POST /v1/messages           Claude Code: translated to Chat Completions and back (translate/messages.js); /v1/messages/count_tokens is a rough count
  *   POST /v1/chat/completions   Aider: passed on
  *   GET  /v1/models             one entry: the chat's model label
  *
@@ -17,6 +18,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { looksSecret } from '../secretLike.js';
 import { ResponsesRequestError, createResponsesStream, offeredToolNames, responsesToChat, sseLine } from './translate/responses.js';
+import { MessagesRequestError, createMessagesStream, estimateInputTokens, messagesFromChat, messagesToChat, offeredToolNames as messageToolNames, sseLine as messagesSse } from './translate/messages.js';
 
 export const MAX_REQUEST_BYTES = 48 * 1024 * 1024;
 export const MAX_CONCURRENT = 4;
@@ -122,6 +124,41 @@ export function createEndpoint({ upstream, label = 'bunny', onToolList = null, o
     return undefined;
   }
 
+  async function handleMessages(res, request, signal) {
+    let converted;
+    try { converted = messagesToChat(request); } catch (err) {
+      if (err instanceof MessagesRequestError) return json(res, err.status, { type: 'error', error: { type: 'invalid_request_error', message: err.message } });
+      throw err;
+    }
+    if (onToolList) {
+      const verdict = onToolList(messageToolNames(request));
+      if (verdict && verdict !== true) return json(res, 400, { type: 'error', error: { type: 'invalid_request_error', message: typeof verdict === 'string' ? verdict : 'The engine offered a tool Bunny does not allow.' } });
+    }
+    const inputGuess = estimateInputTokens(request);
+    if (request.stream !== true) {
+      try {
+        const chat = await chatFromChunks(upstream({ chat: converted.chat, signal }));
+        onUsage?.({ input: chat.usage.prompt_tokens ?? 0, output: chat.usage.completion_tokens ?? 0 });
+        return json(res, 200, messagesFromChat(chat, { model: label }));
+      } catch (err) { return json(res, 502, { type: 'error', error: { type: 'api_error', message: safeMessage(err) } }); }
+    }
+    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'text/event-stream; charset=utf-8', connection: 'keep-alive' });
+    const conv = createMessagesStream({ model: label, inputTokens: inputGuess });
+    let failure = null;
+    try {
+      for await (const chunk of upstream({ chat: converted.chat, signal })) {
+        if (signal.aborted) break;
+        for (const ev of conv.push(chunk)) res.write(messagesSse(ev));
+      }
+    } catch (err) { failure = safeMessage(err); }
+    if (!signal.aborted) {
+      for (const ev of conv.finish({ error: failure })) res.write(messagesSse(ev));
+      onUsage?.(conv.usage);
+    }
+    res.end();
+    return undefined;
+  }
+
   async function handleChat(res, request, signal) {
     if (!request || typeof request !== 'object' || !Array.isArray(request.messages)) return json(res, 400, { error: { type: 'invalid_request_error', message: 'The request has no messages.' } });
     const chat = { ...request, stream: true };
@@ -156,7 +193,7 @@ export function createEndpoint({ upstream, label = 'bunny', onToolList = null, o
     if (!tokenOk(req)) return refuse(res);
     const path = url.pathname;
     const method = req.method ?? 'GET';
-    const known = (method === 'POST' && ['/v1/responses', '/v1/chat/completions'].includes(path)) || (method === 'GET' && path === '/v1/models');
+    const known = (method === 'POST' && ['/v1/responses', '/v1/messages', '/v1/messages/count_tokens', '/v1/chat/completions'].includes(path)) || (method === 'GET' && path === '/v1/models');
     if (!known) { res.writeHead(404, { ...SECURITY_HEADERS, 'content-type': 'application/json' }); res.end('{}'); return undefined; }
     if (active >= maxConcurrent) return refuse(res, 429);
     active += 1; stats.requests += 1;
@@ -168,6 +205,8 @@ export function createEndpoint({ upstream, label = 'bunny', onToolList = null, o
       let body;
       try { body = JSON.parse(await readBody(req)); } catch (err) { return json(res, err.status === 413 ? 413 : 400, { error: { type: 'invalid_request_error', message: err.status === 413 ? 'The request is too big.' : 'The request is not JSON.' } }); }
       if (path === '/v1/responses') return await handleResponses(res, body, control.signal);
+      if (path === '/v1/messages/count_tokens') return json(res, 200, { input_tokens: estimateInputTokens(body) });
+      if (path === '/v1/messages') return await handleMessages(res, body, control.signal);
       return await handleChat(res, body, control.signal);
     } catch (err) {
       if (!res.headersSent) json(res, 500, { error: { type: 'server_error', message: safeMessage(err) } }); else res.end();

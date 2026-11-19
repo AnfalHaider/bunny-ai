@@ -297,7 +297,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
       const deny = denyRules({ rules: rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
       if (id === 'claude-code') {
         run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null,
-          endpoint: null, ...(auth === 'local' ? { endpoint: await localEndpoint(turn) } : {}) });
+          upstream: auth === 'local' ? budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn) : null, onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       } else {
         const sch = await schema();
         run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
@@ -341,7 +341,6 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
   }
 
   const pinVersion = (id) => pins[id]?.version ?? null;
-  async function localEndpoint(turn) { void turn; throw new Error('Claude Code in local mode needs the Messages translator, which is not available yet.'); }
 
   const busy = (id) => running.has(id);
   return { store, pins, status, startDownload, signIn, signOut, refreshAuth, runTurn, busy, progress, ids: ENGINE_IDS, fake: fakeMode, randomId: randomUUID };
