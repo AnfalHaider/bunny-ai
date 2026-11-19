@@ -2202,3 +2202,11 @@ body:has(> #remote-bar) > .app { flex: 1 1 0; min-height: 0; height: auto; }
 @font-face { font-family: "Bunny JetBrains Mono"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("fonts/jetbrains-mono-400-700.woff2") format("woff2"); }
 @font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-400.woff2") format("woff2"); }
 @font-face { font-family: "Bunny IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/ibm-plex-mono-600.woff2") format("woff2"); }
+
+/* CLI-ENGINES: the engine chip and its one-line menu */
+#engine-chip.restricted .engine-text::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: #a5600b; vertical-align: middle; }
+#engine-chip[aria-disabled="true"] { cursor: default; }
+#engine-menu { min-width: 220px; padding: 5px; }
+#engine-menu button { display: flex; justify-content: space-between; gap: 18px; width: 100%; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font: inherit; cursor: pointer; text-align: left; color: inherit; }
+#engine-menu button:hover, #engine-menu button.on { background: var(--soft, #f3f1ec); }
+#engine-menu small { color: var(--muted, #62656c); }

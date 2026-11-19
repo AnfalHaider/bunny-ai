@@ -122,3 +122,16 @@ test('an engine that is not downloaded says so plainly and offers Bunny\'s engin
   assert.equal(saved.engine, undefined, 'no engine for a Chat-mode chat');
   void folder;
 });
+
+test('the chat\'s engine can be chosen before its first message (PATCH) and is then fixed: a change on a chat that has messages is refused; Bunny can be chosen explicitly', async (t) => {
+  const { base } = await appWithEngines(t);
+  await downloaded(base, 'codex');
+  const { body: session } = await post(base, '/api/sessions', { title: 'Pick', workMode: 'code' });
+  const patch = (body) => json(base, `/api/sessions/${session.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await patch({ engine: { id: 'codex', auth: 'local' } })).body.engine.id, 'codex');
+  assert.equal((await patch({ engine: { id: 'bunny' } })).body.engine.id, 'bunny', 'an explicit Bunny choice');
+  assert.equal((await patch({ engine: { id: 'claude-code', auth: 'account' } })).body.engine.id, 'claude-code');
+  await chatOn(base, session.id, 'hello', { workMode: 'chat' }); // gives the chat a message
+  const refused = await patch({ engine: { id: 'codex', auth: 'local' } });
+  assert.equal(refused.status, 409); assert.match(refused.body.message, /start a new chat/);
+});

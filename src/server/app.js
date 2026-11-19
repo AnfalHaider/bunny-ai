@@ -1717,7 +1717,8 @@ export async function createApp({ toolInstaller: toolInstallerOverride = null, w
     if (sessionMatch && method === 'PATCH') {
       try {
         const rawPatch = await readBody(req);
-        if (deviceRefusedBody(req, res, method, path, rawPatch)) return; // CE-6: a device never moves a chat to another engine
+        if (deviceRefusedBody(req, res, method, path, rawPatch)) return;
+        if (rawPatch?.engine !== undefined) { const current = await sessions.get(sessionMatch[1]); if (current?.messages?.length && current.engine) return sendJson(res, 409, { code: 'engine.fixed', message: 'This chat already runs on an engine. To use another, start a new chat.' }); } // CE-6: a device never moves a chat to another engine
         const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
@@ -3192,7 +3193,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       {
         const cfg = engineSettings(settings);
         const wanted = session.engine?.id ?? (cfg.engine !== 'bunny' && cfg.engines[cfg.engine].enabled ? cfg.engine : null);
-        if (wanted && workMode === 'code' && workspace && !req.bunnyRemote && !scheduledTask) {
+        if (wanted && wanted !== 'bunny' && workMode === 'code' && workspace && !req.bunnyRemote && !scheduledTask) {
           if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth } });
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({

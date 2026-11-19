@@ -6,6 +6,7 @@
  * Server state is fetched, never guessed; the DOM is rebuilt from `state`.
  */
 
+import { loadEngines, paintEngineChip } from './engine-chip.js';
 import {
   getJSON, sendJSON, streamMessage, streamComplete, applyTheme, applyAppearance,
   computerScreenshot, computerClick, computerType, computerKey, computerWait, computerReset,
@@ -271,6 +272,7 @@ function renderComposerHeader() {
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
   if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
+  paintEngineChip({ chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
   if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
@@ -2577,7 +2579,7 @@ async function openChatInPlace(id, { push = true } = {}) {
   if (typed.trim()) (state.drafts ??= new Map()).set(leaving ?? 'new', typed);
   $('input').value = '';
   $('error').textContent = '';
-  state.pendingFolder = null; state.pendingMode = null; state.pendingEffort = null; // what was being set up for an unsent new chat does not follow
+  state.pendingFolder = null; state.pendingMode = null; state.pendingEffort = null; state.pendingEngine = null; // what was being set up for an unsent new chat does not follow
   if (state.pendingFiles?.length) { state.pendingFiles = []; renderPendingFiles(); }
   if (push && id !== leaving) history.pushState(null, '', `./index.html?s=${id}`);
   try {
@@ -2934,8 +2936,10 @@ async function send() {
     if (permission) await sessionSetting(session.id, 'permissionMode', permission);
     const effort = $('effort-level')?.value;
     if (effort) await sessionSetting(session.id, 'effort', effort);
+    if (state.pendingEngine) { try { await sendJSON(`/api/sessions/${session.id}`, 'PATCH', { engine: state.pendingEngine }); } catch { /* the chat then uses the default engine */ } }
     state.pendingMode = null;
     state.pendingEffort = null;
+    state.pendingEngine = null;
   }
 
   state.messages.push({ id: `pending-u-${Date.now()}`, role: 'user', content: text, local: true, attachments: files });
@@ -3986,6 +3990,7 @@ window.addEventListener('message', async (e) => {
   try {
     const settings = await getJSON('/api/settings');
     state.settings = settings;
+    loadEngines().then(() => renderComposerHeader()).catch(() => {}); // the engine chip lists what is downloaded
     applyProfile(settings);
     applyAppearanceNow(settings);
     renderSidebar(); // "Label chats by status" is read when the list is drawn
@@ -4053,6 +4058,7 @@ async function closeSettings() {
   try {
     const settings = await getJSON('/api/settings');
     state.settings = settings;
+    loadEngines().then(() => renderComposerHeader()).catch(() => {}); // the engine chip lists what is downloaded
     applyProfile(settings);
     applyCapabilities(settings);
     applyAppearanceNow(settings);
@@ -4531,6 +4537,7 @@ async function boot() {
     state.providers = await getJSON('/api/providers');
     const settings = await getJSON('/api/settings');
     state.settings = settings;
+    loadEngines().then(() => renderComposerHeader()).catch(() => {}); // the engine chip lists what is downloaded
     setZoom(Number(settings.uiZoom) || 1, { save: false }); // the zoom you left it at
     state.models = visibleModels(await getJSON('/api/models'));
     loadArtifacts().catch(() => {});
