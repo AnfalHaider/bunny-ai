@@ -92,3 +92,14 @@ test('files in folders Bunny never searches are not in the results, though the i
   const names = events.find((e) => e.event === 'tool' && e.data.pcResults)?.data.pcResults.map((r) => r.name);
   assert.deepEqual(names, ['budget.txt'], 'only the ordinary document');
 });
+
+test('SP-8: in a normal chat the text read is kept for the model (8,000 characters at most, only after the secret check); the saved list holds names, folders and dates, no snippet', async (t) => {
+  const w = await pcWorld(t, { files: { 'Documents/long notes.txt': `start ${'plain words '.repeat(3000)}` }, settings: { pcSearchEnabled: true, pcSearchAfter: 'read' }, calls: [['search_pc', { terms: ['long'] }]] });
+  const { id } = await w.say('read my long notes');
+  const session = await (await fetch(`${w.base}/api/sessions/${id}`)).json();
+  const kept = session.messages.filter((m) => m.modelResult);
+  assert.equal(kept.length, 1);
+  assert.ok(kept[0].modelResult.includes(MARKER_START) && kept[0].modelResult.length <= 8000);
+  const listed = session.messages.find((m) => m.pcResults);
+  assert.deepEqual(Object.keys(listed.pcResults[0]).sort(), ['folder', 'modified', 'name', 'openable', 'ref']);
+});
