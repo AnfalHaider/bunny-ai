@@ -2234,7 +2234,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (chatPc || barPc) history.unshift({ role: 'system', content: PC_SYSTEM_TEXT });
       const toolDefinitions = [
         ...appToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'build']),
-        ...(chatPc ? pcToolDefinitions() : []),
+        ...(chatPc || barPc ? pcToolDefinitions() : []), // (the bar is offered only quickTools; this list is what may run)
         ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),

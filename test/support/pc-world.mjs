@@ -27,6 +27,14 @@ export async function pcWorld(t, { files = {}, settings = { pcSearchEnabled: tru
   const env = { APPDATA: dirs.roaming, LOCALAPPDATA: dirs.local, ProgramData: join(T, 'ProgramData'), windir: join(T, 'Windows'), ProgramFiles: join(T, 'Program Files'), 'ProgramFiles(x86)': join(T, 'Program Files (x86)'), SystemDrive: parse(T).root.replace(/[\\/]+$/, '').toUpperCase() };
   const pcOptions = { run: fakeRunner(rows, { seen: indexSeen }), home, env, driveType: async () => 'local' };
 
+  // a unit test never leaves this computer, with or without the TEST-DNS preload: anything but loopback fails here (the app's tools copy fetch when the app starts)
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const host = new URL(String(input?.url ?? input)).hostname;
+    if (!/^(127.0.0.1|localhost|[::1])$/.test(host)) throw new Error(`a unit test must not reach the network: ${host}`);
+    return realFetch(input, init);
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
   const requests = [];
   const upstream = createServer((req, res) => {
     let raw = '';
