@@ -32,3 +32,32 @@ Exact `--help` text: `evidence/restricted-help.txt`. Runs: `evidence/r-restricte
 - **Canary under `--restricted`.** With the hook allowing everything, a Read of `canary.txt` outside the folder did not return its content (`r-restricted-canary-allow`; the string never reached the endpoint or stdout): file tools are confined to the working folders by the engine itself. With the hook killed and `--permission-prompts none`, the canary also stayed unread (`r-restricted-killed`), while a read of `secret.txt` inside the folder ran, as before.
 - **Does a command still run when the model asks?** No: with the hook allowing everything, scripted Bash and PowerShell calls ran nothing (`bash-ran.txt`, `ps-ran.txt` absent; the model got "disabled for this session"). Checked at the stand-in's request log, not the process list: the commands write a marker file and none appeared; no child shell process was observed because no command tool exists to start one.
 - **Note:** under `--restricted` with a hook that allows, Write (acceptEdits) did write a file inside the folder, and the MCP tool ran: `--restricted` is not a no-writes mode; Bunny's hook (or its staged copy) still has to be the judge for writes.
+
+## Addendum 2: Tech Lead's five `--restricted` checks, and Security's CE-1.9 and CE-1.11 lines
+Run on the same pin, stand-ins and invented profile. Each file in `evidence/` is the command and the result.
+
+**1. Help text.** `evidence/restricted-help.txt` (the `--restricted` entry) and `evidence/permission-prompts-help.txt` (`--permission-prompts <target>`: "host" or "none"; "none" denies anything that would prompt automatically and the permission mode still decides the rest).
+
+**2. System/init tools lists** (`system/init` event of stream-json; `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` set in all three):
+- default (`t-default-tools`): Task, **Bash, PowerShell, Monitor, WebFetch, WebSearch**, Edit, Write, Read, Glob, Grep, NotebookEdit, ListAgents, SendMessage, Skill, Cron*, worktree tools, Task* tools, ToolSearch, Workflow, ReportFindings, ScheduleWakeup, and the MCP tool.
+- `--restricted` (`t-restricted-tools`) and `--restricted --permission-prompts none` (`t-restricted-noprompts-tools`): identical lists. **Removed: Bash, PowerShell, Monitor, WebFetch** (and Workflow). **Kept: WebSearch, Agent (listed as `Task`), ListAgents, SendMessage, Skill, the Cron/worktree/Task tools, the MCP tool** from `--mcp-config` (pass none to have none), Write, Edit, Read, Glob, Grep, NotebookEdit.
+
+**3. `--restricted` alone, hook killed, no `--permission-prompts`** (`t-restricted-killed-alone`; calls Read of `canary.txt` by absolute path, Write outside the folder, Edit outside, MCP, Agent, Bash):
+- Read of the canary: not returned (the tool result carried no canary text; the string never reached the endpoint): the "confines file tools to the working folders" claim held.
+- Write outside the folder: refused (`outside\planted.txt` was never created; `outside\` held only the canary).
+- Edit outside: refused by the engine's own "file has not been read yet" check, so nothing changed.
+- MCP: not run ("requested permissions … you haven't granted it yet"). Bash: "No such tool".
+- **Agent: launched** ("Async agent launched successfully"); `--restricted` does not stop the subagent tool.
+
+**4. `--restricted` with Bunny's `--settings` and a live deny hook** (`t-restricted-live-deny-all`: the a-all-tools-deny calls): the hook **still loads and fires** (7 calls seen: Read, Write, Glob, Grep, MCP, Agent, Read) and every one was denied by it; nothing ran. So `--restricted` does **not** drop `--settings` hooks; the help text says the same ("managed settings and `--settings` still apply"). Bunny's `permissions.deny` also still loads under it: `t-restricted-denyrule-killed` (hook killed, deny rules for `secret.txt` and `protected/**` in Bunny's `--settings`): the read was refused "denied by your permission settings" and `secret.txt` never reached the endpoint. Both routes combine with `--setting-sources user` and `CLAUDE_CONFIG_DIR`; the project's and the fake home's hostile configs fired 0 times.
+
+**5. Commands under `--restricted`.** `t-restricted-procs`: the model asked for `Bash`, PowerShell and `Bash` with the hook allowing everything; `evidence/t-restricted-procs.children.txt` is the list of distinct descendants of `claude.exe` sampled every 200 ms for 8 s: **only `conhost.exe`** (no `bash.exe`, `powershell.exe` or `cmd.exe`), the marker files were not created, and the model was told "No such tool available: Bash. Bash is disabled for this session, in subagents as well as here." The control `t-default-procs-control` (default mode, the same sleep command) shows `bash.exe`, `conhost.exe` and `node.exe` in the same sampler, so the sampler can see a command's process.
+
+**CE-1.9 (ask rules).** Secret in `permissions.ask: ["Read(./secret.txt)"]`, `--permission-prompts none`, default permission mode:
+- hook alive and saying **allow** (`ce19-ask-hook-allow`): the read was **refused** ("requires approval, and this session has no approval surface"): **the first condition does not hold**: a hook `allow` does not pass an ask-covered read when nobody can answer the prompt.
+- hook killed (`ce19-ask-hook-killed`): refused too (secret not read). Control: a read the ask rule does not cover, hook allow (`ce19-uncovered-hook-allow`) ran; a hook deny on the covered path (`ce19-ask-hook-deny-control`) denied.
+- Per Security's own fallback, ask-covered read paths therefore go into `permissions.deny` (never allowed for Claude Code), or the adapter must answer through `--permission-prompt-tool` instead of `--permission-prompts none` (not tested here).
+
+**CE-1.11 (long hook timeout).** Hook `timeout` set to 300 s in Bunny's `--settings`:
+- the hook holds the call for 120 s then answers allow (`ce111-answered-after-2min-allow`, 121.7 s): the tool **ran** (secret read): the engine waited the whole 2 minutes.
+- the hook holds the call and, with nobody answering, Bunny's own limit (150 s) makes it print deny (`ce111-unanswered-denied-by-bunny`, 151.6 s): the tool **did not run**. The 300 s engine timeout was not reached; earlier, a 3 s timeout failed open (`c-timeout`).
