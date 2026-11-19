@@ -1,6 +1,6 @@
 # OPEN-SIGNIN: signing in from outside the home network (v0.1.14, HIGH), revision 3
 
-Tech Lead, 2026-11-19. Revision 3 replaces bacd595 (revision 2) and 48b67ba (revision 1).
+Tech Lead, 2026-11-19. Revision 3 replaces bacd595 (revision 2) and 48b67ba (revision 1). **Addition after 2fecff1:** Security's BN-7 addition makes the flood shut-off a chip event that stays visible with no access open (§7.2).
 
 **What revision 3 changes:** Security answered both of revision 2's questions.
 - **705e7cf (the LAN addendum):** "Keep devices signed in" and "Everything stays on" cover **home-network devices too**, since the owner said "there should be no time out". So one `keepSignedIn` covers both listeners, and `keepSignedInLan` is gone (§6.2, §8.1).
@@ -384,7 +384,8 @@ The chip appears on every Bunny page on the PC, in its top bar, while device acc
 - a device signs in, on either listener. This is compared **by device id, not by count**, so a sign-out and a sign-in between two looks still counts (BN-L1);
 - a device is raised to Everything;
 - the internet route reopens at start (§4.5);
-- a device changes a setting. The window reads this from the window-only log, as d46888a and f7caeb4 do today.
+- a device changes a setting. The window reads this from the window-only log, as d46888a and f7caeb4 do today;
+- **OS-3's flood shut-off fires** (Security's BN-7 addition, relayed by the Chief of Staff). The chip reads `Closed to the internet: too many wrong passcodes` in the warning colour, stays until clicked, and the click opens Activity. **The route is already closed by then, so this one event keeps the chip visible even when no device access is open, until it's clicked.** It is the only event that does. The Settings row keeps saying why the route closed, and that only Bunny's window can reopen it (OS-3, §5.2). Because the shut-off is saved (`shutoffAt`, §4.5), a reload or a restart shows the event again, until the window reopens the route or the chip is clicked. Clicking acknowledges the event; it doesn't reopen anything.
 
 **What the chip does with an event:**
 - It **switches to the event's words**: `New: Pixel 8 signed in (internet)`, `Pixel 8 has Everything`, `Reopened to the internet`, or `Pixel 8 changed a setting` (in the warning colour).
@@ -501,6 +502,7 @@ The home-network warning sentence shows while the option is on. |
 - after a reload, shows the state words;
 - catches the swap case (a sign-out and a sign-in between two looks) as an event;
 - for a raise to Everything, shows the warning colour with the device's name;
+- **for the flood shut-off,** shows "Closed to the internet: too many wrong passcodes" in the warning colour **with no access open**, stays through a reload until clicked, opens Activity when clicked, and leaves the route closed. The Settings row says why, and that only the window can reopen it;
 - for a setting changed from a device, shows the event, and the click opens Activity. Two changes show a badge of 2;
 - with reduced motion, shows no pulse, and `aria-live` still announces once.
 
