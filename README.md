@@ -25,7 +25,7 @@
   <img src="docs/images/artifact.png" alt="Bunny made a carrot-themed to-do app and opened it beside the chat" width="900" />
 </p>
 
-> **A note on what's shipped.** Everything here is in the current release (v0.1.14) unless it carries the label **🆕 v0.1.15 (not released yet)**. Those labelled parts are being built right now. Each sits between V0115 markers, so it can be cut whole if it slips.
+> **A note on what's shipped.** Everything here is in the v0.1.14 build unless it carries the label **🆕 v0.1.15 (not released yet)**. Those labelled parts are being built right now. Each sits between V0115 markers, so it can be cut whole if it slips.
 
 ---
 
@@ -61,13 +61,12 @@ I'm not tied to one company. Pick any model (I know 23 providers, plus anything 
 | You're tired of… | So I… |
 |---|---|
 | One AI company's models and one company's cloud | Work with 23 providers and any OpenAI-compatible server, and keep your chats and keys on your PC |
-| AIs that explain how to do it instead of doing it | Make the app, edit the code, run the tests, browse the page and click around to check |
+| AIs that explain how to do it instead of doing it | Make the app, edit the code, run the tests, browse the page |
 | Typing "continue" every few minutes | Keep going on long jobs, show "Still working · step 140", and ask only when I truly need you |
-| A model that stalls halfway | Hand the whole task, and everything I've read, to the next model without losing a step |
+| A model that stalls halfway | Move the job to the next model |
 | Not knowing what the AI is allowed to do | Follow a permission mode and your Deny / Ask / Allow rules, and say which rule stopped a step |
 | Changes you didn't want | Put every file a reply changed back with one **Undo** button |
 | A wall of code in the middle of a chat | Fold long code, with **Show all**, **Copy** and **Save as artifact** |
-| Settings that don't stay | Keep what you change after a restart, each tab showing only its own settings |
 | Wanting a quick answer without opening the full app | Pop up **Quick ask**, a light floating bar, with sources under each answer |
 
 ---
@@ -78,7 +77,7 @@ These are things you can type today. What I do is described from how I really be
 
 ### 1. "Build me a to-do app with a carrot theme"
 **You say:** *Make a to-do app with a carrot theme. Let me tick things off and save them.*
-**I do:** Build it as an **artifact**, a live page that opens beside our chat in its own sandbox. I give you a short summary, not a wall of code, then open it in my browser and click around to check it works. Every change you ask for becomes a new version.
+**I do:** Build it as an **artifact**, a live page that opens beside our chat in its own sandbox. I give you a short summary, not a wall of code. Every change you ask for becomes a new version.
 **You see:** the app next to the chat, plus a version list.
 
 ### 2. "Fix the failing tests in this project"
@@ -90,7 +89,7 @@ These are things you can type today. What I do is described from how I really be
 
 ### 3. "Do this big job while I make tea"
 **You say:** *Refactor the pricing code to use cents, update the tests and tell me what you changed.*
-**I do:** Work through it without nagging you to type "continue". I keep a task list, show "Still working · step 140" so you know I'm not napping, and if one model fails I pass the job to the next one, with everything I've read. I check with you before one job uses more than 5 million tokens, and if I catch myself going round in circles, I stop and ask.
+**I do:** Work through it without nagging you to type "continue". I keep a task list, show "Still working · step 140" so you know I'm not napping, and if one model fails I move the job to the next one. I check with you before one job uses more than 5 million tokens, and if I catch myself going round in circles, I stop and ask.
 **You see:** one tidy working line you can open to read my thoughts, and a summary of what I did and what's left.
 
 <p align="center"><img src="docs/images/keep-going.png" alt="A long job: task list ticking, a failed test fixed, &quot;Still working · step 13&quot; in the top bar" width="900" /></p>
@@ -102,12 +101,12 @@ These are things you can type today. What I do is described from how I really be
 
 ### 5. "Look into this and give me sources"
 **You say:** *Compare the three most-used open-source note apps and tell me where each one is weak. Cite your sources.*
-**I do:** Search the web (the search words go to DuckDuckGo), open and read pages in my browser panel, and show you what I read.
-**You see:** an answer with the pages I used, and the browser panel open beside the chat if you want to watch.
+**I do:** Search the web (the search words go to DuckDuckGo) and read pages, and cite what I used.
+**You see:** an answer with the pages I used.
 
 ### 6. "Find my tax return" (from the Quick ask bar)
 **You say (in the floating bar):** *Find the file called tax return from last year.*
-**I do:** With **Search this PC** switched on (it's off until you turn it on in **Settings → Capabilities**), I search the files Windows has indexed: names, folders, dates and snippets. By default I open up to three of the best matches, read one or two, and answer from them with links. Folders such as Windows, Program Files, AppData and the ones that hold keys are always left out, and you can add your own exclusions.
+**I do:** With **Search this PC** switched on (it's off until you turn it on in **Settings → Capabilities**), I search the files Windows has indexed: names, folders, dates and snippets. By default I open up to three of the best matches, read up to three of them, and answer from them with links. Folders such as Windows, Program Files, AppData and the ones that hold keys are always left out, and you can add your own exclusions.
 **You see:** the answer, **Sources** chips under it and [1], [2] marks showing which files I used.
 
 <!-- V0115:begin quick-ask-note -->
@@ -160,7 +159,7 @@ These are things you can type today. What I do is described from how I really be
 ## Everything I do
 
 ### I keep going until the job is done
-I keep a task list and tell you "Still working · step 140". If a model gives up, another takes the whole task over without losing a thing I've read: how long I wait first is yours to set under **Settings → Models → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or your own number from 10 to 600; 30 is the default; reasoning, image and video models get twice that, up to 600). I stop when it's finished, when you press **Stop**, or when I truly need you, and then I ask with a card.
+I keep a task list and tell you "Still working · step 140". If a model gives up, another takes the task over: how long I wait first is yours to set under **Settings → Models → Wait for a first reply** (15, 30, 60, 90 or 120 seconds, or your own number from 10 to 600; 30 is the default; reasoning, image and video models get twice that, up to 600). I stop when it's finished, when you press **Stop**, or when I truly need you, and then I ask with a card.
 
 ```mermaid
 flowchart LR
@@ -177,7 +176,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    M1["Model A is working"] -->|"error, limit or no answer in time<br/>(30s unless you change it in Settings)"| H["I hand over the task list<br/>and everything I have read"]
+    M1["Model A is working"] -->|"error, limit or no answer in time<br/>(30s unless you change it in Settings)"| H["I hand over the task list"]
     H --> M2["Model B carries on<br/>from the same step"]
     M2 --> R["One quiet line tells you<br/>who answered and why"]
 ```
@@ -297,7 +296,7 @@ flowchart TD
 
 ## Coming in v0.1.15
 
-> **🆕 v0.1.15 (not released yet).** Nothing in this section is in the current release. Each item is a block that can be cut if it doesn't make it.
+> **🆕 v0.1.15 (not released yet).** Nothing in this section is in v0.1.14. Each item is a block that can be cut if it doesn't make it.
 
 <!-- V0115:begin office-files -->
 - **Office files.** Ask me for a Word, Excel or PowerPoint file and I make it.
