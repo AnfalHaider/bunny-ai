@@ -180,7 +180,7 @@ export async function searchPlugins(query, { fetchImpl = globalThis.fetch, githu
   const lines = curatedLines(searchCurated(q));
   const githubUrl = `https://api.github.com/search/repositories?q=${encodeURIComponent(`${q} skill OR plugin OR mcp`)}&sort=stars&per_page=8`;
   const token = typeof githubToken === 'string' && githubToken.trim() ? githubToken.trim() : null;
-  const askGithub = (withToken) => fetchImpl(githubUrl, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai', ...(withToken && new URL(githubUrl).hostname === 'api.github.com' ? { authorization: `Bearer ${withToken}` } : {}) } });
+  const askGithub = (withToken) => fetchImpl(githubUrl, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai', ...(withToken && new URL(githubUrl).hostname === 'api.github.com' ? { authorization: `Bearer ${withToken}` } : {}) }, ...(withToken ? { redirect: 'error' } : {}) }); // F4-1: the request that carries the token never follows a redirect (it could lead to another host)
   try {
     let res = await askGithub(token);
     let note = '';
@@ -189,7 +189,7 @@ export async function searchPlugins(query, { fetchImpl = globalThis.fetch, githu
     lines.push(`GitHub repositories with skills, plugins or connectors for Bunny${note} (install with install_plugin and the url; a repository's name may mention another app, its skills still work in Bunny):`);
     for (const r of data.items ?? []) lines.push(`- ${r.full_name} (★${r.stargazers_count}) https://github.com/${r.full_name} — ${bunnyText(String(r.description ?? '')).slice(0, 140)}`);
     if (!(data.items ?? []).length) lines.push(data.message && /rate limit/i.test(String(data.message)) ? '- GitHub is limiting searches for now: sign in to GitHub in Settings to search more, or try again later' : '- none found');
-  } catch (err) { lines.push(`GitHub search failed: ${String(err.message).replace(token ?? '\u0000', '***')}`); }
+  } catch (err) { lines.push(`GitHub search failed: ${String(err.message).replaceAll(token ?? '\u0000', '***')}`); }
   try {
     const res = await fetchImpl(`https://registry.modelcontextprotocol.io/v0/servers?search=${encodeURIComponent(q)}&limit=8`); // no token here: the registry is a different host
     const data = await res.json();

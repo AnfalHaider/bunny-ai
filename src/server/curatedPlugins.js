@@ -38,6 +38,6 @@ export function searchCurated(query, { list = CURATED, limit = 4 } = {}) {
 export function curatedLines(matches) {
   if (!matches.length) return [];
   const how = { 'sign-in': "the person signs in on the vendor's own page", key: 'the person pastes a key', none: 'no sign-in needed' };
-  return ["Known connectors for common jobs, checked by Bunny's team (add with add_connector and the url; it is added switched OFF and the person is asked):",
+  return ["Known connectors for common jobs (add with add_connector and the url; it is added switched OFF and the person is asked):",
     ...matches.map((e) => `- ${e.name}: ${e.url} (${how[e.needs] ?? how.none}) — ${e.why}`), ''];
 }

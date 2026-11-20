@@ -9,7 +9,7 @@ const SECRET = 'ghp_INVENTED_TEST_TOKEN_0123456789abcdef';
 function recorder({ githubStatus = 200, registry = { servers: [] } } = {}) {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
-    calls.push({ url: String(url), headers: { ...(init.headers ?? {}) } });
+    calls.push({ url: String(url), headers: { ...(init.headers ?? {}) }, redirect: init.redirect });
     if (String(url).startsWith('https://api.github.com/')) {
       const withToken = Boolean(init.headers?.authorization);
       const status = withToken ? githubStatus : 200;
@@ -33,6 +33,13 @@ test('the curated list is pinned and safe: remote https addresses at the vendor\
   assert.doesNotMatch(JSON.stringify(CURATED), /claude/i, 'Bunny\'s own words');
 });
 
+test('F4-3: every curated entry is https on that vendors own domain', () => {
+  const own = { notion: 'notion.com', linear: 'linear.app', sentry: 'sentry.dev', atlassian: 'atlassian.com', stripe: 'stripe.com', context7: 'context7.com', deepwiki: 'deepwiki.com', huggingface: 'huggingface.co', 'microsoft-learn': 'learn.microsoft.com' };
+  assert.deepEqual(CURATED.map((e) => e.id).sort(), Object.keys(own).sort(), 'every entry has a named vendor domain');
+  for (const e of CURATED) { const u = new URL(e.url); assert.equal(u.protocol, 'https:', e.id); assert.ok(u.hostname === own[e.id] || u.hostname.endsWith(`.${own[e.id]}`), `${e.id}: ${u.hostname} is not on ${own[e.id]}`); }
+  assert.doesNotMatch(curatedLines(CURATED.slice(0, 1)).join(String.fromCharCode(10)), /checked by/i, 'no claim of a check until the URLs are verified');
+});
+
 test('search_plugins shows the curated matches FIRST, then GitHub, then the registry; a query with no curated match goes straight on', async () => {
   const { fetchImpl } = recorder();
   const out = await searchPlugins('notion pages', { fetchImpl });
@@ -51,7 +58,7 @@ test('the person\'s GitHub sign-in is sent ONLY to api.github.com, only in the s
   const { calls, fetchImpl } = recorder({ registry: { servers: [{ server: { name: 'io.example/thing', description: 'x', remotes: [{ url: 'https://mcp.example.test/mcp' }] } }] } });
   const out = await searchPlugins('thing', { fetchImpl, githubToken: SECRET });
   const gh = calls.filter((c) => new URL(c.url).hostname === 'api.github.com'); const other = calls.filter((c) => new URL(c.url).hostname !== 'api.github.com');
-  assert.equal(gh.length, 1); assert.equal(gh[0].headers.authorization, `Bearer ${SECRET}`);
+  assert.equal(gh.length, 1); assert.equal(gh[0].headers.authorization, `Bearer ${SECRET}`); assert.equal(gh[0].redirect, 'error', 'F4-1: the request that carries the token never follows a redirect');
   assert.ok(other.length >= 1 && other.every((c) => !JSON.stringify(c).includes(SECRET)), 'no other host sees it');
   assert.ok(!out.includes(SECRET)); assert.match(out, /someone\/notes-tool/);
   // without a sign-in: the same search, no header
@@ -70,6 +77,9 @@ test('if GitHub refuses the sign-in the search runs again without it and says so
     assert.equal(gh.length, 2); assert.ok(gh[0].headers.authorization); assert.equal(gh[1].headers.authorization, undefined, 'the retry carries no token');
     assert.match(out, /GitHub sign-in was not accepted for this search/); assert.match(out, /someone\/notes-tool/);
     const boom = async (url) => { if (String(url).startsWith('https://api.github.com/')) throw new Error(`network down while sending ${SECRET}`); return { status: 200, ok: true, json: async () => ({ servers: [] }) }; };
+    const twice = async (url) => { if (String(url).startsWith('https://api.github.com/')) throw new Error(`sent ${SECRET} and again ${SECRET} to the wrong place`); return { status: 200, ok: true, json: async () => ({ servers: [] }) }; };
+    const failed2 = await searchPlugins('thing', { fetchImpl: twice, githubToken: SECRET });
+    assert.ok(!failed2.includes(SECRET) && (failed2.match(/\*\*\*/g) ?? []).length === 2, 'F4-2: every occurrence is blanked');
     const failed = await searchPlugins('thing', { fetchImpl: boom, githubToken: SECRET });
     assert.match(failed, /GitHub search failed/); assert.ok(!failed.includes(SECRET), 'the token is blanked out of an error');
   } finally { Object.assign(console, keep); }
