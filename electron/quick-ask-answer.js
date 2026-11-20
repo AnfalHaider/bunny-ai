@@ -27,6 +27,15 @@ export function parseSse(buffer) {
   return { events, rest };
 }
 
+// QUICK-ASK (v0.1.14.1): when does Bunny look the web up itself? A quick answer that ends without any look-up, for a question the web can answer, gets one web_search run by Bunny and is asked again with the results.
+// "The web can answer it" is: the person asked to search the internet, or the model asked for Bunny's window for something that is not a local action. A local action is never searched for.
+const ASKED_TO_SEARCH = /\b(search|google|look\s?up|browse|check|find\s?out)\b[\s\S]{0,40}\b(the\s+)?(internet|web|net|online)\b|\b(on|from)\s+the\s+(internet|web)\b|\bonline\b[\s\S]{0,20}\b(search|look)/i;
+const LOCAL_ACTION = /\b(files?|folders?|documents?|pdfs?|spreadsheets?|my (pc|computer|laptop|desktop|screen)|this (pc|computer)|on (my|this) (pc|computer)|run|execute|install|uninstall|delete|remove|rename|move|copy|open (the|my|a)|screenshot|screen|terminal|command|script|commit|git|clipboard)\b/i;
+export const webCanAnswer = (text) => !LOCAL_ACTION.test(String(text ?? ''));
+export const askedToSearch = (text) => ASKED_TO_SEARCH.test(String(text ?? ''));
+/** The words to search for: the question without the "search the internet" asking. */
+export const searchQueryOf = (text) => String(text ?? '').replace(/\b(please|pls)\b/gi, ' ').replace(/[,.]?\s*\b(search|google|look\s?up|browse|check)\s+(for\s+it\s+)?(on\s+)?(the\s+)?(internet|web|net|online)\b[.!?]*/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+
 /** What kind of failure is this, for the card: the network is down, no model is set up, or something else (with its own plain reason). */
 export function classifyFailure({ status = 0, code = '', reason = '', message = '' } = {}) {
   if (reason === 'unreachable' || code === 'network.offline' || code === 'chat.unreachable' || /fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT|network/i.test(String(message)) && !status) return 'offline';
@@ -83,14 +92,17 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
     let model = null;
     let finished = false;
     let doneSources = null;
+    let lookups = 0;
     try {
       const id = await ensureSession(text);
       out({ type: 'start', sessionId: id });
+      for (let round = 0; round < 2; round += 1) {
+      held = ''; shown = false; needs = false; needsText = ''; finished = false; doneSources = null; lookups = 0;
       const res = await adminFetch(`/api/sessions/${id}/messages`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, signal,
         // text only: the server offers the model no tools; a screenshot or file goes as an ordinary attachment
         // SEARCH-PC: with the switch on, the bar may search this PC by itself (unless turned off in Settings) or when the person chose it in the + menu; the server honours it for this process only
-        body: JSON.stringify({ content: text, workMode: 'chat', textOnly: true, ...pcFlag(pc), attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) }),
+        body: JSON.stringify({ content: text, workMode: 'chat', textOnly: true, ...(round === 1 ? { lookupFirst: true, lookupQuery: searchQueryOf(text) || text } : {}), ...pcFlag(pc), attachments: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -117,7 +129,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
         for (const ev of parsed.events) {
           if (ev.name === 'delta' && typeof ev.data?.text === 'string') push(ev.data.text);
           else if (ev.name === 'tool' && typeof ev.data?.pcState === 'string') { const p = pcEvent(ev.data); if (p) out(p); }
-          else if (ev.name === 'done') { doneSources = ev.data?.pcSources; model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; }
+          else if (ev.name === 'done') { doneSources = ev.data?.pcSources; model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; lookups = num(ev.data?.lookups); }
           else if (ev.name === 'error') {
             out({ type: 'error', kind: classifyFailure({ code: ev.data?.code, reason: ev.data?.reason, message: ev.data?.message }), message: String(ev.data?.message ?? 'Bunny could not answer.').slice(0, 400) });
             return { ok: true };
@@ -129,9 +141,16 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
           }
         }
       }
+      // one retry, only when no look-up was made: the person asked to search the internet and the model answered without one, or it asked for Bunny's window for something the web can answer
+      const retryable = round === 0 && webCanAnswer(text) && (needs || (finished && lookups === 0 && askedToSearch(text)));
+      if (retryable) { out({ type: 'restart' }); continue; }
       if (!shown && !needs && held) { shown = true; out({ type: 'delta', text: held }); held = ''; }
-      if (needs) out({ type: 'needs-window', text: needsText.replace(/^\s+/, '').slice(0, 600) });
-      else out({ type: 'done', model, finished, sources: sourcesOf(doneSources) });
+      // the window card is for a real local action only: a web question that still ended in the marker is shown as the model's own words
+      if (needs && webCanAnswer(text)) { out({ type: 'delta', text: needsText.replace(/^\s+/, '').slice(0, 600) || 'I could not answer that from the web.' }); out({ type: 'done', model, finished: true, lookups, sources: [] }); }
+      else if (needs) out({ type: 'needs-window', text: needsText.replace(/^\s+/, '').slice(0, 600) });
+      else out({ type: 'done', model, finished, lookups, sources: sourcesOf(doneSources) });
+      return { ok: true };
+      }
       return { ok: true };
     } catch (err) {
       if (signal.aborted) { out({ type: 'stopped' }); return { ok: true }; }
