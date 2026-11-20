@@ -1,0 +1,230 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny project instructions</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Project instruction files, shown on the Working folder card</h1>
+   <p class="dim">v0.1.15 · FOLDER-RULES · Code chats · invented profile only (folder of "Sam")</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>A Code chat looks in its folder for <b>AGENTS.md</b>, <b>CLAUDE.md</b> and <b>.cursor/rules</b> and gives what it finds to the model as the project's instructions. The person sees it: the <b>Working folder</b> card lists the files in use, has <b>one switch per chat</b>, and a <b>View what was read</b> link that shows the exact text the model was given.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li><b>Trust first (Security FR-2):</b> the first time a folder (by its real path) has instruction files, Bunny asks <b>Follow them / Not now</b> in a card in the chat, with the text readable. Nothing is followed before the person says yes. Section 1a.</li>
+   <li>Once followed, it is on for new chats in that folder; the switch is per chat, so one chat can ignore the files and another use them.</li>
+   <li>Nothing is hidden: the list is the truth, and View shows the same text the model gets.</li>
+   <li>The files are the project's words. They sit under the person's rules and permissions and cannot change them (wording below; Security to confirm).</li>
+   <li>No banner and no notice. The only other sign is the existing folder chip's tooltip ("Working folder: … · 3 instruction files").</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · The Working folder card, today beside proposed</h2>
+  <div class="cols">
+   <div class="cell"><h3>Today (drawn from the build)</h3>
+    <div class="dlg"><div class="dh"><b>Working folder</b></div>
+     <div class="db"><div class="path">C:\Users\Sam\Projects\carrot-shop</div>
+      <div class="line"><span><b>Give this chat its own copy of the project</b></span><button class="sw" role="switch" aria-checked="false" aria-label="own copy"></button></div>
+      <p class="sub">Bunny makes a separate working copy on a new branch, so two chats can edit this project at once without clashing. Files git does not track, such as node_modules, are not copied.</p></div>
+     <div class="df"><button class="btn">Change folder</button><button class="btn">Close</button></div></div>
+    <p class="cap">Nothing here says the model was given any instruction files, so a person cannot tell.</p></div>
+   <div class="cell"><h3>Proposed · desktop</h3>
+    <div class="dlg"><div class="dh"><b>Working folder</b></div>
+     <div class="db"><div class="path">C:\Users\Sam\Projects\carrot-shop</div>
+      <div class="line"><span><b>Give this chat its own copy of the project</b></span><button class="sw" role="switch" aria-checked="false" aria-label="own copy"></button></div>
+      <p class="sub">Bunny makes a separate working copy on a new branch, so two chats can edit this project at once without clashing. Files git does not track, such as node_modules, are not copied.</p>
+      <div class="blk" id="blk1">
+       <div class="hd"><span><b>Project instructions</b> <span class="sub">· 3 files</span></span><button class="sw" role="switch" aria-checked="true" aria-label="Use project instructions in this chat" id="sw1"></button></div>
+       <div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><span class="chp ok">in use</span><button class="lnk">View</button></div>
+       <div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><span class="chp ok">in use</span><button class="lnk">View</button></div>
+       <div class="f"><span class="n">.cursor/rules/<small>2 files · tests.mdc, style.mdc</small></span><span class="chp ok">in use</span><button class="lnk">View</button></div>
+       <div class="note">Read when this chat started, from this folder. Instructions from the project, under your rules. <button class="lnk">View what was read</button> · <button class="lnk">Read again</button></div>
+      </div></div>
+     <div class="df"><button class="btn">Change folder</button><button class="btn p">Close</button></div></div>
+    <p class="cap">The switch belongs to <b>this chat</b> only; it is written in the label ("in this chat") for a screen reader.</p></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Proposed · phone (360 px)</h3>
+    <div class="dlg ph"><div class="dh"><b>Working folder</b></div>
+     <div class="db"><div class="path">C:\Users\Sam\Projects\carrot-shop</div>
+      <div class="line"><span><b>Give this chat its own copy of the project</b></span><button class="sw" role="switch" aria-checked="false" aria-label="own copy"></button></div>
+      <div class="blk">
+       <div class="hd"><span><b>Project instructions</b> <span class="sub">· 3 files</span></span><button class="sw" role="switch" aria-checked="true" aria-label="Use project instructions in this chat"></button></div>
+       <div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><button class="lnk">View</button></div>
+       <div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><button class="lnk">View</button></div>
+       <div class="f"><span class="n">.cursor/rules/<small>2 files</small></span><button class="lnk">View</button></div>
+       <div class="note"><button class="lnk">View what was read</button> · <button class="lnk">Read again</button></div>
+      </div></div>
+     <div class="df"><button class="btn">Change folder</button><button class="btn p">Close</button></div></div>
+    <p class="cap">On a phone the "in use" chips drop; the switch and the file names stay. The card is the same one the desktop uses.</p></div>
+   <div class="cell"><h3>Proposed · View what was read</h3>
+    <div class="dlg"><div class="dh"><b>What this chat was given</b><div class="sub">Exactly this text, in this order. It cannot be edited here; change the file in the folder, then Read again.</div></div>
+     <div class="db"><div class="seg" id="vseg"><button type="button" aria-pressed="true" data-f="0">AGENTS.md</button><button type="button" aria-pressed="false" data-f="1">CLAUDE.md</button><button type="button" aria-pressed="false" data-f="2">.cursor/rules</button></div>
+      <div class="view" id="vtext"></div></div>
+     <div class="df"><button class="btn p">Close</button></div></div></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>1a · The first time: asking before following (FR-2)</h2>
+  <p>Why: in Auto mode, instructions from a cloned repository could steer commands with no card. So nothing in these files is followed until the person says so, once per folder.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li><b>Where:</b> a card in the chat, in the thread above the composer, the first time a Code chat starts in a folder that has instruction files and no answer is stored for it. It is the same kind of card Bunny already uses to ask for something (like switching to Code mode); one card, no banner.</li>
+   <li><b>What it knows:</b> the folder's <b>real path</b> (links resolved). The answer is kept for that folder, across chats.</li>
+   <li><b>Follow them:</b> the files are used from the next reply, in this chat and in new chats in the folder. The Working folder card then shows them "in use".</li>
+   <li><b>Not now:</b> nothing is followed. The card closes and does not come back in this chat. A new chat in the same folder asks again. Nothing is stored as a "never".</li>
+   <li><b>Change it later:</b> on the Working folder card (below): "Follow them…" when not followed; the switch turns them off for this chat; "Ask me again for this folder" forgets the stored answer.</li>
+  </ul>
+  <div class="cols">
+   <div class="cell"><h3>The card in the chat · desktop</h3>
+    <div class="tc"><div class="who">Bunny</div>
+     <b>This folder has instruction files</b>
+     <p>The project in <span class="path">C:\Users\Sam\Projects\carrot-shop</span> has instruction files. If I follow them, they steer what I do here, including commands I run in Auto mode.</p>
+     <div class="blk"><div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><button class="lnk">Read</button></div><div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><button class="lnk">Read</button></div><div class="f"><span class="n">.cursor/rules/<small>2 files</small></span><button class="lnk">Read</button></div></div>
+     <p class="sub">Read them first. Follow them only if you trust whoever wrote them, for example if you cloned this project from someone else. They stay under your rules.</p>
+     <div class="bar"><button class="btn p">Follow them</button><button class="btn">Not now</button></div></div>
+    <p class="cap">Read opens the same viewer as View what was read, before anything is followed.</p></div>
+   <div class="cell"><h3>The card in the chat · phone</h3>
+    <div class="tc ph2"><div class="who">Bunny</div>
+     <b>This folder has instruction files</b>
+     <p>If I follow the files in <span class="path">carrot-shop</span>, they steer what I do here, including commands I run in Auto mode.</p>
+     <div class="blk"><div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><button class="lnk">Read</button></div><div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><button class="lnk">Read</button></div><div class="f"><span class="n">.cursor/rules/<small>2 files</small></span><button class="lnk">Read</button></div></div>
+     <p class="sub">Read them first. Follow only if you trust whoever wrote them.</p>
+     <div class="bar"><button class="btn p">Follow them</button><button class="btn">Not now</button></div></div></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>After "Not now" · the Working folder card</h3>
+    <div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span><button class="sw" role="switch" aria-checked="false" aria-label="Use project instructions in this chat"></button></div>
+     <div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><span class="chp">not followed</span><button class="lnk">View</button></div>
+     <div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><span class="chp">not followed</span><button class="lnk">View</button></div>
+     <div class="note">Not followed yet. <button class="lnk">Follow them…</button> asks you to confirm.</div></div>
+    <p class="cap">Turning the switch on (or "Follow them…") opens the same question as the card, so trust is never given by a stray click.</p></div>
+   <div class="cell"><h3>After "Follow them" · the Working folder card</h3>
+    <div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span><button class="sw" role="switch" aria-checked="true" aria-label="Use project instructions in this chat"></button></div>
+     <div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><span class="chp ok">in use</span><button class="lnk">View</button></div>
+     <div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><span class="chp ok">in use</span><button class="lnk">View</button></div>
+     <div class="note">You chose to follow these for this folder. <button class="lnk">View what was read</button> · <button class="lnk">Ask me again for this folder</button></div></div></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · States</h2>
+  <p class="dim">Pick one to see the block as it would show.</p>
+  <div class="seg" id="sseg"></div>
+  <div class="cols"><div class="cell"><div class="dlg"><div class="db"><div id="stage"></div></div></div><p class="cap" id="scap"></p></div></div>
+ </section>
+
+ <section>
+  <h2>3 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Trust card title</td><td>This folder has instruction files</td></tr>
+   <tr><td>Trust card body</td><td>The project in &lt;folder&gt; has instruction files. If I follow them, they steer what I do here, including commands I run in Auto mode.</td></tr>
+   <tr><td>Trust card hint</td><td>Read them first. Follow them only if you trust whoever wrote them, for example if you cloned this project from someone else. They stay under your rules.</td></tr>
+   <tr><td>Trust card buttons</td><td>Follow them · Not now · (each file) Read</td></tr>
+   <tr><td>Not followed chip / line</td><td>not followed · Not followed yet. Follow them… asks you to confirm.</td></tr>
+   <tr><td>Followed line</td><td>You chose to follow these for this folder. View what was read · Ask me again for this folder</td></tr>
+   <tr><td>Block title</td><td>Project instructions</td></tr>
+   <tr><td>Switch label (screen reader)</td><td>Use project instructions in this chat</td></tr>
+   <tr><td>Foot line</td><td>Read when this chat started, from this folder. Instructions from the project, under your rules.</td></tr>
+   <tr><td>None found</td><td>No instruction files here. Bunny looks for AGENTS.md, CLAUDE.md and .cursor/rules in this folder.</td></tr>
+   <tr><td>Switch off</td><td>Not used in this chat. The files stay where they are.</td></tr>
+   <tr><td>A file too long</td><td>Only the first 32 KB of a file is used. (chip: "first 32 KB")</td></tr>
+   <tr><td>Files together too long</td><td>Together the files pass 64 KB, so only the first 64 KB is used, in the order shown. The files after that are not used. (chip: "not used")</td></tr>
+   <tr><td>Engine chat (Claude Code or Codex)</td><td>This chat runs on Claude Code, which reads CLAUDE.md from the folder itself. Bunny does not add it again.</td></tr>
+   <tr><td>View heading</td><td>What this chat was given</td></tr>
+   <tr><td>Changed on disk</td><td>chip "changed since it was read" and the link Read again; never read silently mid-chat.</td></tr>
+  </table></div>
+  <div class="q"><b>For Security and Tech Lead to confirm before build:</b> (a) the files are plain text given as labelled project data, never able to widen permissions, switch off a rule or ask for a tool; (b) the limits, 32 KB per file and 64 KB in all (Tech Lead's spec ff6665ad, reviewed by Security) and the <code>.cursor/rules</code> file types read (<code>.mdc</code>, <code>.md</code>); (c) whether Bunny's own engine and the engine chats really differ as drawn in the "Engine chat" state; (d) files outside the project folder are never read (no parent-folder search); (e) FR-2: the stored answer is keyed by real path; <b>does the card ask again when a file is added or changed after "Follow them"?</b> (drawn: no; the "changed since it was read" chip and Read again cover it; a new or changed file after trust is a risk Security may want asked again); (f) a chat's own project copy (a different folder) uses the original project's stored answer (drawn: yes); (g) the card must not appear for engine chats that read the files themselves.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ document.querySelectorAll('.sw').forEach(function(b){b.addEventListener('click',function(){if(b.disabled)return;b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true')})});
+ var V=[
+  '<i># AGENTS.md (1.2 KB)</i>\n# carrot-shop\nUse npm run test before saying a change is done.\nThe shop is plain HTML and one small script; no framework.\nKeep prices in cents.',
+  '<i># CLAUDE.md (3.4 KB)</i>\n## Style\nTwo spaces. Single quotes. Use semicolons.\n## Folders\nsrc/ is the page; test/ holds the checks; never touch dist/.',
+  '<i># .cursor/rules/tests.mdc</i>\nEvery new function gets a test in test/.\n\n<i># .cursor/rules/style.mdc</i>\nName things for what they are, not how they work.'];
+ var vt=document.getElementById('vtext');vt.innerHTML=V[0];
+ document.querySelectorAll('#vseg button').forEach(function(b){b.addEventListener('click',function(){document.querySelectorAll('#vseg button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});vt.innerHTML=V[+b.dataset.f]})});
+ function sw(on,dis){return '<button class="sw" role="switch" aria-checked="'+on+'" aria-label="Use project instructions in this chat"'+(dis?' disabled':'')+'></button>'}
+ function f(n,s,chip,cls){return '<div class="f"><span class="n">'+n+'<small>'+s+'</small></span>'+(chip?'<span class="chp '+(cls||'')+'">'+chip+'</span>':'')+'<button class="lnk">View</button></div>'}
+ var S={
+  'Asking (first time)':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span>'+sw(false,true)+'</div>'+f('AGENTS.md','1.2 KB','waiting for you','w')+f('CLAUDE.md','3.4 KB','waiting for you','w')+'<div class="note">I asked in the chat whether to follow these. Nothing is used until you say yes.</div></div>',c:'While the card in the chat is open, the switch is disabled and says why.'},
+  'Found (default)':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span>'+sw(true)+'</div>'+f('AGENTS.md','1.2 KB','in use','ok')+f('CLAUDE.md','3.4 KB','in use','ok')+'<div class="note">Read when this chat started, from this folder. Instructions from the project, under your rules. <button class="lnk">View what was read</button></div></div>',c:'Shown once the person has chosen Follow them for this folder; new chats in the folder start like this.'},
+  'None found':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b></span>'+sw(false,true)+'</div><div class="note" style="border-top:0">No instruction files here. Bunny looks for AGENTS.md, CLAUDE.md and .cursor/rules in this folder.</div></div>',c:'The switch is greyed out: there is nothing to turn on.'},
+  'Switch off':{h:'<div class="blk off"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span>'+sw(false)+'</div>'+f('AGENTS.md','1.2 KB','not used','')+f('CLAUDE.md','3.4 KB','not used','')+'<div class="note">Not used in this chat. The files stay where they are.</div></div>',c:'Applies from the next reply. Nothing already said is taken back.'},
+  'Large file':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span>'+sw(true)+'</div>'+f('AGENTS.md','1.2 KB','in use','ok')+f('CLAUDE.md','61 KB','first 32 KB','w')+'<div class="note">Only the first 32 KB of a file is used. <button class="lnk">View what was read</button></div></div>',c:'The warning chip is the only mark; the card still works.'},
+  'Over 64 KB in all':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 3 files</span></span>'+sw(true)+'</div>'+f('AGENTS.md','30 KB','in use','ok')+f('CLAUDE.md','32 KB','in use','ok')+f('.cursor/rules/','2 files, 20 KB','not used','w')+'<div class="note">Together the files pass 64 KB, so only the first 64 KB is used, in the order shown. The files after that are not used. <button class="lnk">View what was read</button></div></div>',c:'The order is AGENTS.md, CLAUDE.md, then .cursor/rules; the warning chip marks what was left out.'},
+  'Changed on disk':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span>'+sw(true)+'</div>'+f('AGENTS.md','1.4 KB','changed since read','w')+f('CLAUDE.md','3.4 KB','in use','ok')+'<div class="note"><button class="lnk">Read again</button> · Files are read when the chat starts, not while it runs.</div></div>',c:'Read again re-reads all files for the next reply. No automatic re-read mid-chat.'},
+  'Engine chat':{h:'<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span>'+sw(false,true)+'</div>'+f('AGENTS.md','1.2 KB','Claude Code reads it','')+f('CLAUDE.md','3.4 KB','Claude Code reads it','')+'<div class="note">This chat runs on Claude Code, which reads CLAUDE.md from the folder itself. Bunny does not add it again.</div></div>',c:'Shown so the person is not misled; the switch is disabled because the engine owns this.'}};
+ var seg=document.getElementById('sseg'),stage=document.getElementById('stage'),cap=document.getElementById('scap');
+ Object.keys(S).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});paint(k)});seg.appendChild(b)});
+ function paint(k){stage.innerHTML=S[k].h;cap.textContent=S[k].c;stage.querySelectorAll('.sw').forEach(function(b){b.addEventListener('click',function(){if(!b.disabled)b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true')})})}
+ paint('Found (default)');
+})();
+</script>

@@ -1,0 +1,200 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny rewind</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.ub{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--dim);padding:6px 0}
+.msg{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 12px;display:grid;gap:6px}
+.msg .who{font-size:12px;color:var(--dim)}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp:last-child{border-bottom:0}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.db,.dh,.df{min-width:0}
+.res{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.res .hd{padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.res .hd b{font-weight:600}
+.fr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:5px 12px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:center}
+.fr:last-child{border-bottom:0}.fr .n{font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fr .o{color:var(--dim);font-size:12px;white-space:nowrap}.fr .o.rm{color:var(--bad)}.fr .o.sk{color:var(--warn)}
+.conf{border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow);padding:14px 16px;display:grid;gap:8px;max-width:520px}
+.conf b.t{font-size:16px}
+.sheet{width:100%;max-width:360px;margin:0}
+.btn.d{background:var(--bad);border-color:var(--bad);color:var(--panel);font-weight:600}
+@container (max-width:420px){.cp{grid-template-columns:18px minmax(0,1fr)}.cp .chp{display:none}}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Rewind: go back further than one reply</h1>
+   <p class="dim">v0.1.15 · REWIND · Code chats · invented profile only (a chat of "Sam")</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>Every reply that changed files already leaves a checkpoint. Today the person can undo <b>one reply at a time</b>, from the bar under that reply. Proposed: a <b>Rewind</b> list of every checkpoint in the chat. Pick a step, see exactly what it restores, confirm in words, and the project goes back to how it was just before that reply.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li>Two ways in: <b>Go back further…</b> next to the existing Undo button, and <b>Rewind</b> at the top of the Changes pane.</li>
+   <li>One row per reply that changed files, newest first. Replies that changed nothing are not listed.</li>
+   <li>The chat messages are never rewound; only the files.</li>
+   <li>Before it acts, Bunny makes a checkpoint of how things are now, so a rewind can itself be undone (Tech Lead to confirm).</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · Today beside proposed (desktop)</h2>
+  <div class="cols">
+   <div class="cell"><h3>Today (drawn from the build)</h3>
+    <div class="msg"><div class="who">Bunny · reply 7</div><div>I added a "Sold out" label to the carrot cake card and a test for it.</div>
+     <div class="ub"><span>Files changed: 3</span><button class="btn">Undo file changes</button></div></div>
+    <p class="cap">One bar under each reply. To go back past reply 5 the person must undo 7, then 6, then 5, in order, each with its own confirm. Undoing out of order replaces later edits.</p></div>
+   <div class="cell"><h3>Proposed</h3>
+    <div class="msg"><div class="who">Bunny · reply 7</div><div>I added a "Sold out" label to the carrot cake card and a test for it.</div>
+     <div class="ub"><span>Files changed: 3</span><button class="btn">Undo file changes</button><button class="lnk" id="open1">Go back further…</button></div></div>
+    <p class="cap">The existing button is unchanged; one quiet link is added next to it.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · The Rewind panel</h2>
+  <p class="dim">Click a row. The lower block always says what going back to that step does, before anything happens.</p>
+  <div class="cols">
+   <div class="cell"><h3>Desktop · dialog</h3>
+    <div class="dlg" style="max-width:560px"><div class="dh"><b>Rewind</b><div class="sub">Go back to how the project was before a reply. Chat messages stay as they are.</div></div>
+     <div class="db"><div class="list" id="list" role="radiogroup" aria-label="Checkpoints"></div>
+      <div class="res" id="res"></div></div>
+     <div class="df"><button class="btn">Close</button><button class="btn p" id="go">Go back to before reply 5…</button></div></div></div>
+   <div class="cell"><h3>Phone · bottom sheet (360 px)</h3>
+    <div class="dlg ph sheet" id="phone"><div class="dh"><b>Rewind</b><div class="sub">Go back to before a reply. Chat messages stay.</div></div>
+     <div class="db"><div class="list" id="list2" role="radiogroup" aria-label="Checkpoints" style="max-height:210px"></div>
+      <div class="res" id="res2"></div></div>
+     <div class="df"><button class="btn">Close</button><button class="btn p" id="go2">Go back…</button></div></div></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>3 · The confirm, in words</h2>
+  <p class="dim">An in-page card, like the other confirms (no browser pop-up).</p>
+  <div class="cols">
+   <div class="cell"><div class="conf"><b class="t" id="ct">Go back to before reply 5?</b>
+     <p id="cb1"></p>
+     <p class="sub">Edits you made yourself to these files since then are replaced too. Changes made by commands the replies ran are not undone. The chat stays as it is.</p>
+     <p class="sub">Bunny keeps a checkpoint of how things are now first, so you can undo this.</p>
+     <div class="bar" style="justify-content:flex-end"><button class="btn">Cancel</button><button class="btn d">Go back</button></div></div>
+    <p class="cap">The button says what it does ("Go back"), not "OK". After it: the status line says what was done, for example "Put back 1 file, removed 4." and the rows from reply 5 on show <i>undone</i>.</p></div>
+   <div class="cell"><h3>Other states</h3>
+    <div class="seg" id="sseg"></div>
+    <div class="list" id="stage" style="padding:0"></div><p class="cap" id="scap"></p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>4 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Link under a reply</td><td>Go back further…</td></tr>
+   <tr><td>Changes pane button</td><td>Rewind</td></tr>
+   <tr><td>Panel title / line</td><td>Rewind · Go back to how the project was before a reply. Chat messages stay as they are.</td></tr>
+   <tr><td>Row</td><td>Reply 5 · 10:42 — first line of what the person asked — "3 files"</td></tr>
+   <tr><td>Result block</td><td>Goes back to before reply 5. Replies 5 to 7 are rewound together.</td></tr>
+   <tr><td>File outcomes</td><td>put back as it was · removed (a reply made it) · kept (too large to copy)</td></tr>
+   <tr><td>Empty</td><td>No reply has changed files yet. Nothing to go back to.</td></tr>
+   <tr><td>Reply still running</td><td>Wait for the reply to finish, or press Stop first.</td></tr>
+   <tr><td>Done</td><td>Put back 1 file, removed 4.</td></tr>
+  </table></div>
+  <div class="q"><b>For Tech Lead to confirm before build:</b> (a) rewinding applies the checkpoints newest to oldest so each file ends as it was before the chosen reply (the earliest captured copy wins); (b) the "checkpoint of now" taken first, so a rewind can be undone; (c) files over 5 MB are noted, not copied, and show as "kept"; (d) only write_file and edit_file are tracked, as today, so command changes are never undone.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ var CP=[
+  {n:7,t:'10:42',a:'Add a "Sold out" label to the carrot cake card',f:[['src/cards.js','put back as it was',''],['src/style.css','put back as it was',''],['test/cards.test.js','removed (reply 7 made it)','rm']]},
+  {n:6,t:'10:35',a:'Prices in cents, not dollars',f:[['src/cards.js','put back as it was',''],['src/prices.js','put back as it was','']]},
+  {n:5,t:'10:21',a:'Start the shop page with three carrot cakes',f:[['index.html','removed (reply 5 made it)','rm'],['src/cards.js','removed (reply 5 made it)','rm'],['src/style.css','removed (reply 5 made it)','rm'],['assets/hero.png','kept (too large to copy)','sk']]},
+  {n:4,t:'10:12',a:'Rename the folder labels',f:[['README.md','put back as it was','']],undone:1},
+  {n:3,t:'10:03',a:'Write a short README',f:[['README.md','removed (reply 3 made it)','rm']]}];
+ var sel=5;
+ function files(c){var out=[];CP.filter(function(x){return x.n>=c&&!x.undone}).reverse().forEach(function(x){x.f.forEach(function(y){if(!out.some(function(o){return o[0]===y[0]}))out.push(y)})});return out}
+ function paint(listId,resId,goId){
+  var L=document.getElementById(listId);L.innerHTML='';
+  CP.forEach(function(c){var d=document.createElement('div');d.className='cp'+(c.undone?' gone':'');d.setAttribute('role','radio');d.tabIndex=0;d.setAttribute('aria-checked',c.n===sel?'true':'false');
+   d.innerHTML='<span class="rd"></span><span class="t"><b>Reply '+c.n+' · '+c.t+(c.undone?' · undone':'')+'</b><span>'+c.a+'</span></span><span class="chp">'+c.f.length+' file'+(c.f.length>1?'s':'')+'</span>';
+   d.addEventListener('click',function(){sel=c.n;paint('list','res','go');paint('list2','res2','go2');confirmText()});L.appendChild(d)});
+  var fs=files(sel);var last=CP[0].n;
+  document.getElementById(resId).innerHTML='<div class="hd"><b>Goes back to before reply '+sel+'.</b> '+(sel===last?'Only reply '+last+' is rewound.':'Replies '+sel+' to '+last+' are rewound together.')+'</div>'+fs.map(function(f){return '<div class="fr"><span class="n">'+f[0]+'</span><span class="o '+f[2]+'">'+f[1]+'</span></div>'}).join('');
+  var g=document.getElementById(goId);g.textContent=goId==='go'?'Go back to before reply '+sel+'…':'Go back…';
+ }
+ function confirmText(){var fs=files(sel);var rm=fs.filter(function(f){return f[2]==='rm'}).length;var put=fs.filter(function(f){return f[2]===''}).length;
+  document.getElementById('ct').textContent='Go back to before reply '+sel+'?';
+  document.getElementById('cb1').textContent='Bunny puts back '+put+' file'+(put===1?'':'s')+' as they were before reply '+sel+(rm?' and removes '+rm+' file'+(rm===1?'':'s')+' that '+(sel===CP[0].n?'it':'replies '+sel+' to '+CP[0].n)+' created':'')+'. That undoes the file changes of '+(sel===CP[0].n?'reply '+sel:'replies '+sel+' to '+CP[0].n)+'.'}
+ paint('list','res','go');paint('list2','res2','go2');confirmText();
+ var ST={'Empty':['<div class="note" style="padding:14px 16px;border:0">No reply has changed files yet. Nothing to go back to.</div>','Shown instead of the list; the Go back button is disabled.'],
+  'Reply running':['<div class="note" style="padding:14px 16px;border:0">Wait for the reply to finish, or press Stop first.</div>','The list stays visible above this line; the Go back button is disabled while a reply runs.'],
+  'After rewind':['<div class="cp gone"><span class="rd"></span><span class="t"><b>Reply 7 · 10:42 · undone</b><span>Add a "Sold out" label to the carrot cake card</span></span><span class="chp">3 files</span></div><div class="cp gone"><span class="rd"></span><span class="t"><b>Reply 6 · 10:35 · undone</b><span>Prices in cents, not dollars</span></span><span class="chp">2 files</span></div><div class="cp gone"><span class="rd"></span><span class="t"><b>Reply 5 · 10:21 · undone</b><span>Start the shop page with three carrot cakes</span></span><span class="chp">4 files</span></div><div class="cp"><span class="rd"></span><span class="t"><b>Before the rewind · 10:50</b><span>Bunny kept this, so the rewind can be undone</span></span><span class="chp">9 files</span></div>','The rewound rows are dim and say undone. The "Before the rewind" row is the safety checkpoint; picking it puts things back as they were just before the rewind.']};
+ var seg=document.getElementById('sseg');Object.keys(ST).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});show(k)});seg.appendChild(b)});
+ function show(k){document.getElementById('stage').innerHTML=ST[k][0];document.getElementById('scap').textContent=ST[k][1]}show('Empty');
+ document.getElementById('open1').addEventListener('click',function(){document.getElementById('list').scrollIntoView({behavior:'smooth',block:'center'})});
+})();
+</script>
