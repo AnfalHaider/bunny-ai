@@ -184,3 +184,15 @@ test('F5: a plugin whose description is too long to show gets a step with Open i
   assert.equal(skills.length, 30);
   assert.ok(skills.every((x) => x.enabled === false), 'nothing was switched on');
 });
+
+test('connector_sign_in: with Connectors turned off globally there is no card and nothing is contacted; a local connector has no sign-in (Security review)', async (t) => {
+  const w = await world(t, { capability: 'connector_sign_in', connector: 'Notion', reason: 'x' });
+  const { body: added } = await post(w.base, '/api/mcp', { name: 'Notion', url: 'http://127.0.0.1:9/mcp' });
+  void added;
+  await fetch(`${w.base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ connectorsEnabled: false }) });
+  const r = await w.say();
+  assert.equal(r.card, null);
+  assert.match(lastTool(w.seen[1]), /^Connectors are turned off in Settings › Capabilities, so none can be signed in to\./);
+  const src = readFileSync(new URL('../src/server/app.js', import.meta.url), 'utf8');
+  assert.match(src, /is a connector that runs on this computer and has no sign-in/);
+});

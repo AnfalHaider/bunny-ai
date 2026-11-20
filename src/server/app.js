@@ -2640,11 +2640,13 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         }
         if (capability === 'connector_sign_in') {
           if (req.bunnyRemote || req.bunnyDevice) return "Signing in to a connector is only in Bunny's window on the PC.";
+          if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so none can be signed in to.'; // the master switch holds before any card or connection
           // F5-2: an exact installed connector, by id or name, in scope; the sign-in goes to its own configured address only; the model never gives an address
           const wanted = String(args_.connector ?? '').trim();
           const server = wanted ? (await mcp.list()).find((c) => (c.id === wanted || c.name === wanted) && inScope(c.folders, scopeFolder)) : null;
           if (!server) return 'No installed connector has that exact name in this chat. Look at the Connectors line for the names.';
           if (!server.enabled) return `${server.name} is switched off. The person switches it on in Settings › Customize first.`;
+          if (server.type === 'local') return `${server.name} is a connector that runs on this computer and has no sign-in.`; // polling a local connector would start its program again and again
           const answer = await askCapability('connector_sign_in', reason, `Sign in to ${server.name}`);
           if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
           send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id }); // the same Sign in button as a connector found at the start of a reply
