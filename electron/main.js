@@ -257,7 +257,7 @@ function applyQuickAsk(patch = {}) {
   if (!quickAsk) return {};
   if (!prefs.quickAskEnabled) { quickAsk.disable(); return {}; }
   const checked = validateAccelerator(prefs.quickAskShortcut);
-  const result = quickAsk.enable(checked.ok ? checked.accelerator : '');
+  const result = checked.ok ? quickAsk.enable(checked.accelerator) : { ok: false, message: checked.message }; // (a shortcut that is refused says why: "That shortcut is Copy, Paste, Cut...", not only "Choose a shortcut.")
   if (result.ok) {
     if (prefs.quickAskShortcut !== result.accelerator) savePrefs({ quickAskShortcut: result.accelerator });
     return {};

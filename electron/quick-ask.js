@@ -223,13 +223,15 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
   ipcMain.handle('quickask:escHandled', (event) => { if (fromBar(event)) clearTimeout(escTimer); return { ok: true }; });
   ipcMain.handle('quickask:close', (event) => { if (!fromBar(event)) return { ok: false }; destroyBar(); return { ok: true }; });
   // Open in Bunny: the chat (and an answer still coming) is carried over to the main window; the bar closes.
-  ipcMain.handle('quickask:open', (event, target) => {
+  ipcMain.handle('quickask:open', async (event, target) => {
     if (!fromBar(event) || !answerer) return { ok: false, message: 'Not allowed' };
     // QUICK-UI 10: "No model connected" leads with Open Bunny settings: the window comes forward on its Providers page; the bar closes (nothing is carried over: there is no chat worth keeping)
     if (target === 'settings') { onOpenSettings(); destroyBar(); return { ok: true }; }
     if (target === 'search-settings') { onOpenSettings('capabilities'); destroyBar(); return { ok: true }; } // SEARCH-PC: the Search this PC rows
     const id = answerer.sessionId;
     if (!id) return { ok: false, message: 'There is no chat to open yet.' };
+    await answerer.whenStored(); // QA: what the bar showed in place of a refusal is stored first (a moment at most)
+    if (!alive() || !answerer) return { ok: false, message: 'The bar closed.' };
     answerer.detach();
     onOpenChat(id);
     destroyBar({ keepAnswer: true });

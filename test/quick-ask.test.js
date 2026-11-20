@@ -204,3 +204,9 @@ test('QA (0.1.15): the keys every app uses for Copy, Paste, Cut, Select all, Und
   }
   for (const good of ['Ctrl+Space', 'Ctrl+Shift+K', 'Alt+Space', 'Ctrl+Alt+C', 'Win+Q']) assert.equal(validateAccelerator(good).ok, true, good);
 });
+
+test('QA follow-up: a refused shortcut says why (the main process passes the reason on, not only "Choose a shortcut.")', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const main = await readFile(new URL('../electron/main.js', import.meta.url), 'utf8');
+  assert.match(main, /checked\.ok \? quickAsk\.enable\(checked\.accelerator\) : \{ ok: false, message: checked\.message \}/);
+});
