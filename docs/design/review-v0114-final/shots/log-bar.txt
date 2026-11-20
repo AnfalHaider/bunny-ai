@@ -1,0 +1,44 @@
+light empty pill: 624x54 radius 20px bg rgba(255, 255, 255, 0.92)
+light placeholder: What are we burrowing into?
+light visible buttons when empty: none
+light keys line when typing: Enter to send · Shift+Enter new line · Esc to close Answers with Auto · text only
+light resize heights asked: 70,70,98,98,98,193
+light Esc with menu open: menu hidden=true calls=escHandled
+light Stop icon: {"ns":"http://www.w3.org/2000/svg","w":14,"h":14,"btn":34}
+light keys while thinking: Esc stops the answer · it stays in the chat Answers with Auto · text only
+light Esc while answering: stop,escHandled
+light visible buttons after answer: copy:Copy the answer:32px svg 16 | open:null:186px svg 0
+light text after Copy: no confirmation element
+light keys after answer: Enter sends a follow-up · Ctrl+Enter opens it in Bunny · Esc closes Answers with Auto · text only
+light Ctrl+Enter: open:
+light long answer: scrollTop 199 of 529; latest pill true
+light code block Copy button: true
+light earlier turns: Earlier row present
+light no-model focus: Open Bunny settings
+light no-model buttons: Open Bunny settings
+light offline focus: Try again
+light offline buttons: Try again | Open in Bunny
+light needs-window focus: Open in Bunny
+light needs-window buttons: Open in Bunny
+dark empty pill: 624x54 radius 20px bg rgba(38, 39, 44, 0.92)
+dark placeholder: What are we burrowing into?
+dark visible buttons when empty: none
+dark keys line when typing: Enter to send · Shift+Enter new line · Esc to close Answers with Auto · text only
+dark resize heights asked: 70,70,98,98,98,98,193
+dark Esc with menu open: menu hidden=true calls=escHandled
+dark Stop icon: {"ns":"http://www.w3.org/2000/svg","w":14,"h":14,"btn":34}
+dark keys while thinking: Esc stops the answer · it stays in the chat Answers with Auto · text only
+dark Esc while answering: stop,escHandled
+dark visible buttons after answer: copy:Copy the answer:32px svg 16 | open:null:186px svg 0
+dark text after Copy: no confirmation element
+dark keys after answer: Enter sends a follow-up · Ctrl+Enter opens it in Bunny · Esc closes Answers with Auto · text only
+dark Ctrl+Enter: open:
+dark long answer: scrollTop 199 of 529; latest pill true
+dark code block Copy button: true
+dark earlier turns: Earlier row present
+dark no-model focus: Open Bunny settings
+dark no-model buttons: Open Bunny settings
+dark offline focus: Try again
+dark offline buttons: Try again | Open in Bunny
+dark needs-window focus: Open in Bunny
+dark needs-window buttons: Open in Bunny

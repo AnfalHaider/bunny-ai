@@ -1,0 +1,24 @@
+d light rows (nothing installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":53,"dim":"Not installed · 380 MB","switchInline":null,"chips":"","btn":"Download (380 MB)"},{"name":"Codex CLI","h":53,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+d light rows (Claude Code installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":53,"dim":"v1.0.0","switchInline":true,"chips":"","btn":""},{"name":"Codex CLI","h":53,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+d light switch sides (* = recommended dot): Bunny:  Claude Code:Local|Account*  Codex CLI:
+d light menu: Remove / frees 1 MB
+d light overflow: 0
+d light other rows: Engine for new chats | Use Bunny's engine // note hidden=true
+d dark rows (nothing installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":53,"dim":"Not installed · 380 MB","switchInline":null,"chips":"","btn":"Download (380 MB)"},{"name":"Codex CLI","h":53,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+d dark rows (Claude Code installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":53,"dim":"v1.0.0 · Not signed in","switchInline":true,"chips":"","btn":"Sign in"},{"name":"Codex CLI","h":53,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+d dark switch sides (* = recommended dot): Bunny:  Claude Code:Local|Account*  Codex CLI:
+d dark menu: Remove / frees 1 MB
+d dark overflow: 0
+d dark other rows: Engine for new chats | Use Bunny's engine // note hidden=true
+m light rows (nothing installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":82,"dim":"Not installed · 380 MB","switchInline":null,"chips":"","btn":"Download (380 MB)"},{"name":"Codex CLI","h":82,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+m light rows (Claude Code installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":82,"dim":"v1.0.0 · Not signed in","switchInline":true,"chips":"","btn":"Sign in"},{"name":"Codex CLI","h":82,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+m light switch sides (* = recommended dot): Bunny:  Claude Code:Local|Account*  Codex CLI:
+m light menu: Remove / frees 1 MB
+m light overflow: 0
+m light other rows: Engine for new chats | Use Bunny's engine // note hidden=true
+m dark rows (nothing installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":82,"dim":"Not installed · 380 MB","switchInline":null,"chips":"","btn":"Download (380 MB)"},{"name":"Codex CLI","h":82,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+m dark rows (Claude Code installed): [{"name":"Bunny","h":53,"dim":"Built in · Default · always there","switchInline":null,"chips":"","btn":""},{"name":"Claude Code","h":82,"dim":"v1.0.0 · Not signed in","switchInline":true,"chips":"","btn":"Sign in"},{"name":"Codex CLI","h":82,"dim":"Not installed · 390 MB","switchInline":null,"chips":"","btn":"Download (390 MB)"}]
+m dark switch sides (* = recommended dot): Bunny:  Claude Code:Local|Account*  Codex CLI:
+m dark menu: Remove / frees 1 MB
+m dark overflow: 0
+m dark other rows: Engine for new chats | Use Bunny's engine // note hidden=true

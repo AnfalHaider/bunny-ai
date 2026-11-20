@@ -1,0 +1,10 @@
+1100 light top bar: {"n":10,"labels":"Hide sidebar,Open to devices. Press for details.,export,Session overview,Terminal,Changes,Browser,Files,Tasks and plan,Open this chat in its own window","cut":[],"titleW":55,"chip":"Open to devices","notes":[]}
+1100 light sheet: no ⋯ button found
+1100 dark top bar: {"n":10,"labels":"Hide sidebar,Open to devices. Press for details.,export,Session overview,Terminal,Changes,Browser,Files,Tasks and plan,Open this chat in its own window","cut":[],"titleW":55,"chip":"Open to devices","notes":[]}
+1100 dark sheet: no ⋯ button found
+chip state words: Open to devices
+after a sign-in: {"n":10,"labels":"Hide sidebar,New: Android · Chrome signed in. Press for details.,export,Session overview,Terminal,Changes,Browser,Files,Tasks and plan,Open this chat in its own window","cut":[],"titleW":55,"chip":"New: Android · Chrome signed in","notes":[]}
+after Everything: {"n":10,"labels":"Hide sidebar,Android · Chrome has Everything, 2 new. Press for details.,export,Session overview,Terminal,Changes,Browser,Files,Tasks and plan,Open this chat in its own window","cut":[],"titleW":55,"chip":"Android · Chrome has Everything\n2","notes":[]}
+after a click: {"n":10,"labels":"Hide sidebar,Android · Chrome has Everything. Press for details.,export,Session overview,Terminal,Changes,Browser,Files,Tasks and plan,Open this chat in its own window","cut":[],"titleW":55,"chip":"Android · Chrome has Everything","notes":[]}
+device page everything: {"chip":"Everything","notes":[]}
+device page chats: {"chip":null,"notes":[]}
