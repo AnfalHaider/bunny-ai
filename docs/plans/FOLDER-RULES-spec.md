@@ -66,7 +66,7 @@ The person's own every-chat instructions already cover the last one, in Settings
   - NUL and every other C0 control character are removed, except tab and newline. (A file holding a NUL is still skipped, as §2 says.)
   - The file name is used exactly as on disk, with control characters removed and cut to 100 characters. That same cleaned name goes in the fence, the system line, the cards and the view.
 - **Helpers** (`run_subagent`) don't get the folder note in v1. Their system text is built separately (`app.js` ~2578). This is a follow-up.
-- **Engine chats.** Bunny adds nothing to an engine's prompt. An engine reads its own files in the folder (Codex reads `AGENTS.md`; Claude Code reads `CLAUDE.md`).
+- **Engine chats: superseded by `ONE-INSTRUCTIONS-spec.md`** (2026-11-20), which gives the same set to every engine. The lines below are kept for the record.
   - **UNKNOWN:** whether Claude Code still reads a project `CLAUDE.md` with `--setting-sources user` (`engines/claude-code.js:105`).
   - Builder checks this with the stand-in engine's arguments, and with the real CLI only if a copy is already on disk from the allowed download.
   - Until it is checked, the view for an engine chat says only "The engine reads its own instructions files."
@@ -104,7 +104,7 @@ The person's own every-chat instructions already cover the last one, in Settings
   - **A new file name** that wasn't there at Follow (a `CLAUDE.md` added later, say) asks again before it's followed, with the same card naming only the new file.
     - Meanwhile the files already followed keep being followed, and the new one is left out of the note.
     - Follow them adds its name to `files`. A followed file that is later removed is no longer sent after the next Read again or the next chat.
-  - **Engine chats get no card:** Bunny adds nothing to an engine's prompt (§3), so there is nothing to trust.
+  - **Engine chats get no card:** superseded by ONE-INSTRUCTIONS §3. Engine chats now get the same card, because Bunny gives them the set. Security re-confirms.
 - **The Working folder card** (drawing v2 §1) shows the "Project instructions" block:
   - each file's name, size and state: in use, not followed, waiting for you, changed since it was read, cut, or not used;
   - **View what was read**, the exact text sent, read-only;
