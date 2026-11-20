@@ -76,7 +76,7 @@ const FLOOR_LIST = `<div class="floor" id="engine-floor"><div class="floor-h">Al
   + `<li>Every engine's own folder, where its sign-in is kept.</li>`
   + '<li>Your private folders (keys, sign-ins, app data) when they lie outside the project.</li>'
   + `<li>Bunny's own tools: the model may not use them.</li>`
-  + '</ul><div class="d">Commands are not blocked: Bunny cannot see what a command reads. When a command that names one of these folders comes to you on a card, the card says so.</div></div>';
+  + '</ul><div class="d">Commands are not blocked: Bunny cannot see what a command reads. When a command that names one of these folders comes to you on a card, the card says so; a command your Allow rules let through runs without a card.</div></div>';
 
 const rulesLines = (list) => (Array.isArray(list) ? list : []).join('\n');
 function paintRules() {
