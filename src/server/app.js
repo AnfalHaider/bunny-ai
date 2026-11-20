@@ -15,6 +15,8 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { capabilityMap } from './capabilityMap.js';
+import { splitDeferred, namesLine, findTools, clean as cleanOutside } from './deferTools.js';
+import { BRAVE_SECRET } from './webSearch.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -42,7 +44,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, META_TOOLS, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -388,7 +390,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     try { return redactDeep(await httpCallTool(sent, { ...call, auth: secret ? undefined : connectorSignIn.authFor(server) }), secret); } catch (err) { throw redactError(err, secret); }
   };
   const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
-  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
+  const appTools = createAppTools({ toolInstaller, getSearchKey: () => secrets.get(BRAVE_SECRET), skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -866,6 +868,22 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const body = await readBody(req);
         return sendJson(res, 200, await pc.resolveRef(body.ref));
       }
+    }
+
+    // ---- F6: the Brave Search key (Settings, Capabilities). The window's alone: it is stored in the secrets store, never in settings, and is never handed back, only whether one is set. ----
+    if (path === '/api/web-search' && method === 'GET') {
+      if (req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+      return sendJson(res, 200, { braveKey: settings.braveKeySet === true });
+    }
+    if (path === '/api/web-search/key' && (method === 'PUT' || method === 'DELETE')) {
+      if (windowOnly(req, res)) return;
+      if (req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); // an Everything device counts as the window for the rest, never for this
+      if (method === 'DELETE') { await secrets.delete(BRAVE_SECRET); await saveSettings({ braveKeySet: false }); return sendJson(res, 200, { braveKey: false }); }
+      const key = String((await readBody(req))?.key ?? '').trim();
+      if (!/^[\x21-\x7e]{10,200}$/.test(key)) return sendJson(res, 400, { code: 'websearch.badKey', message: 'That does not look like a Brave Search key. Copy it again from the Brave Search API page.' });
+      await secrets.set(BRAVE_SECRET, key);
+      await saveSettings({ braveKeySet: true });
+      return sendJson(res, 200, { braveKey: true });
     }
 
     // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
@@ -2438,6 +2456,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           .map((c) => ({ name: c.name, state: !c.enabled ? 'off' : c.status === 'needsSignIn' ? 'needsSignIn' : 'failed' }));
         // after the app's own main system text (which stays first), not in front of it
         const mainAt = history.findIndex((m) => m.role === 'system' && String(m.content).includes('You are Bunny AI'));
+        if (req.bunnyRemote) history.splice(mainAt + 1, 0, { role: 'system', content: "On this device you can't use: the browser panel, desktop control, installing plugins or tools, building tools and scheduling. Say so plainly if the task needs one, or tell the person to continue in Bunny's window." });
         history.splice(mainAt + 1, 0, { role: 'system', content: capabilityMap({
           code: Boolean(workspace), computer: aiComputerOn, build: buildOn, browser: browserControl, pc: chatPc, google: googleOn, github: Boolean(githubToken),
           device: Boolean(req.bunnyRemote ?? req.bunnyDevice), plan: permissionMode === 'plan', connectors: asleep,
@@ -2462,12 +2481,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
        * the way request_capability adds its tools. No permission changes: the person's yes was already given on the card, and each tool still asks as any connector tool does.
        * Returns one plain line for the model (the tool names, or why there are none), or ''.
        */
-      const loadSwitchedOn = async (added) => {
+      const loadSwitchedOn = async (added, { force = false } = {}) => {
         if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so its tools are not loaded'; // the master switch holds here too (Security F1-1)
         const lines = [];
         for (const sid of added?.connectorIds ?? []) {
           const server = await mcp.get(sid);
-          if (!server || !server.enabled || !inScope(server.folders, scopeFolder) || servers.some((x) => x.id === server.id)) continue;
+          if (!server || !server.enabled || !inScope(server.folders, scopeFolder) || (!force && servers.some((x) => x.id === server.id))) continue;
           const label = String(server.name ?? 'the connector').replace(/[^\w .,:'-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'the connector';
           try {
             const startStep = `Start ${server.name}`;
@@ -2482,7 +2501,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
             } else lines.push(`${label} is on but did not start (${String(err.message).replace(/[^\w .,:'-]/g, ' ').slice(0, 100)}).`);
             continue;
           }
-          servers.push(server);
+          if (!servers.some((x) => x.id === server.id)) servers.push(server);
           const offered = connectorTools([server], { planMode: permissionMode === 'plan' });
           const names = [];
           for (const def of offered.definitions.slice(0, 60)) {
@@ -2499,10 +2518,27 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         }
         return lines.join('\n');
       };
-      // PV-2: too many tools for a provider: the connector tools are reached through two small tools instead
-      const capped = capTools(toolDefinitions, toolIndex);
-      const deferredTools = capped.deferred;
-      if (deferredTools.size) toolDefinitions.splice(0, toolDefinitions.length, ...capped.definitions);
+      // AGENT-FLOW F7 (it replaces PV-2's two meta-tools): over 40 tools or 30,000 characters, the connector, Google, GitHub, chat-search and built tools are named in one line and their
+      // definitions are sent only after find_tools loads them. The quick bar is never deferred. What can be found is exactly what would have been sent: these are the definitions that
+      // already passed the mode, scope and capability filters above, and the device filter (remoteToolBlocked) keeps a blocked tool out of the names.
+      let deferredTools = new Map();
+      if (!textOnly) {
+        const sourceOf = (name) => {
+          if (req.bunnyRemote && remoteToolBlocked(name)) return null;
+          if (toolIndex.has(name)) return `${cleanOutside(toolIndex.get(name).server.name, 40) || 'a connector'} (connector)`;
+          if (/^(gmail_|calendar_|drive_)/.test(name)) return 'Google';
+          if (/^github_/.test(name)) return 'GitHub';
+          if (name === 'search_chats') return 'Chats';
+          if (name.startsWith(CUSTOM_PREFIX)) return 'Built tools';
+          return null;
+        };
+        const split = splitDeferred(toolDefinitions, sourceOf);
+        if (split) {
+          deferredTools = split.deferred;
+          toolDefinitions.splice(0, toolDefinitions.length, ...split.core);
+          history.unshift({ role: 'system', content: namesLine(deferredTools) });
+        }
+      }
 
       // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,
       // never cut: the part the person cannot see could be the part that matters.
@@ -2582,12 +2618,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       let buildEnabled = buildOn;
       const vision = body.vision !== false;
       const origin = `http://${req.headers.host ?? '127.0.0.1'}`;
-      const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
+      const askCapability = (capability, reason, title = CAPABILITIES[capability]) => new Promise((resolveAnswer) => {
         const cid = randomUUID();
         const timer = waitNudges({ kind: 'capability', title: CAPABILITIES[capability] }); // W6-25: waits, then nudges
         pendingCapabilities.set(cid, { sessionId: id, capability, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
-        send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
+        send('capability', { id: cid, capability, title, reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
       });
       // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
       const askQuestion = (q) => new Promise((resolveAnswer) => {
@@ -2600,7 +2636,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         send('question', { id: qid, ...q });
       });
       let runAskRefusals = 0;
-      const grantCapability = async (capability, reason) => {
+      const grantCapability = async (capability, reason, args_ = {}) => {
         if (!CAPABILITIES[capability]) return `There is no such capability. Choose one of: ${Object.keys(CAPABILITIES).join(', ')}.`;
         if (capability === 'code_mode' && workspace) return `Code mode is already on in ${workspace.root}.`;
         if (capability === 'leave_plan_mode' && permissionMode !== 'plan') return 'This chat is not in Plan mode.';
@@ -2608,6 +2644,54 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (capability === 'computer_use' && computerOn) return 'You can already control this computer.';
         if (capability === 'custom_tools' && buildEnabled) return 'You can already build tools with create_tool.';
         if ((capability === 'computer_use' || capability === 'custom_tools') && process.platform !== 'win32') return 'That needs Bunny AI on Windows.';
+        // AGENT-FLOW F5 (Security F5-1..F5-4)
+        if (capability === 'browser_panel') {
+          // the desktop window already offers the browser tools when it can drive the panel; anywhere else there is no card, only the fixed answer
+          return browserControl && !req.bunnyRemote && !req.bunnyDevice && !textOnly && !scheduledTask
+            ? 'The browser panel is already available in this reply: use browser_open, browser_read, browser_click and browser_type.'
+            : "The browser panel is only in Bunny's window on the PC. Use web_search and read_url here, or tell the person to continue in Bunny's window.";
+        }
+        if (capability === 'sign_in') {
+          const service = String(args_.service ?? '');
+          if (!['google', 'github'].includes(service)) return 'Give service: google or github.';
+          if (req.bunnyRemote || req.bunnyDevice) return "Signing in is only in Bunny's window on the PC.";
+          const signedIn = async () => (service === 'github' ? Boolean(await accounts.githubToken().catch(() => null)) : Boolean((await accounts.status().catch(() => ({}))).google?.workspace));
+          if (await signedIn()) return `You are already signed in to ${service === 'github' ? 'GitHub' : 'Google'}.`;
+          if (service === 'google' && !String(settings.googleClientId ?? '').trim()) return "Google isn't set up in Bunny yet. The person adds the Google client in Settings › Profile first.";
+          const label = service === 'github' ? 'GitHub' : 'Google';
+          const answer = await askCapability('sign_in', `${reason ? `${reason} ` : ''}Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.`, `Sign in to ${label}`);
+          if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+          // the person signs in on the card's Settings page; Bunny only watches for the result. The model is told signed in or not, never a code, address, token or name (F5-1).
+          const until = Date.now() + 120_000;
+          while (Date.now() < until && !controller?.signal?.aborted && !(await signedIn())) await new Promise((r) => setTimeout(r, 2000));
+          if (!(await signedIn())) return `Not signed in to ${label} yet. Carry on without it, or ask the person to tell you when they have signed in.`;
+          if (service === 'github') {
+            const token = await accounts.githubToken().catch(() => null);
+            if (token) toolDefinitions.push(...githubToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'], { canClone: Boolean(workspace) }));
+            return 'Signed in to GitHub. You now have the github_ tools, use them for GitHub itself (repositories, issues, pull requests online), never for a local folder.';
+          }
+          toolDefinitions.push(...googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'send']));
+          return 'Signed in to Google. You now have the gmail_, calendar_ and drive_ tools. Draft emails rather than sending unless the person asks you to send.';
+        }
+        if (capability === 'connector_sign_in') {
+          if (req.bunnyRemote || req.bunnyDevice) return "Signing in to a connector is only in Bunny's window on the PC.";
+          // F5-2: an exact installed connector, by id or name, in scope; the sign-in goes to its own configured address only; the model never gives an address
+          const wanted = String(args_.connector ?? '').trim();
+          const server = wanted ? (await mcp.list()).find((c) => (c.id === wanted || c.name === wanted) && inScope(c.folders, scopeFolder)) : null;
+          if (!server) return 'No installed connector has that exact name in this chat. Look at the Connectors line for the names.';
+          if (!server.enabled) return `${server.name} is switched off. The person switches it on in Settings › Customize first.`;
+          const answer = await askCapability('connector_sign_in', reason, `Sign in to ${server.name}`);
+          if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+          send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id }); // the same Sign in button as a connector found at the start of a reply
+          const until = Date.now() + 120_000;
+          let ready = false;
+          while (Date.now() < until && !controller?.signal?.aborted && !ready) {
+            await new Promise((r) => setTimeout(r, 4000));
+            try { await mcpListTools(await mcp.get(server.id)); ready = true; } catch { /* not signed in yet */ }
+          }
+          if (!ready) return `${server.name} is not signed in yet. Carry on without it, or ask the person to tell you when they have signed in.`;
+          return (await loadSwitchedOn({ connectorIds: [server.id] }, { force: true })) || `${server.name} is signed in.`;
+        }
         const answer = await askCapability(capability, reason);
         if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
         if (capability === 'code_mode') {
@@ -2663,7 +2747,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -2710,7 +2794,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
             baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake: fake && !use.provider.custom,
             signal: background ? undefined : controller.signal,
-            tools: toolDefinitions.filter(allowed).filter((d) => !(req.bunnyRemote && remoteToolBlocked(d.function.name))), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
+            tools: [...toolDefinitions, ...[...deferredTools.values()].map((x) => x.def)].filter((d) => d.function.name !== 'find_tools').filter(allowed).filter((d) => !(req.bunnyRemote && remoteToolBlocked(d.function.name))), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds), // F7: a helper is sent every tool it may use, not this reply's deferred list
             // OpenRouter's reasoning setting belongs to this chat's provider only.
             extraBody: use.providerId === providerId ? extraBody : null, auth: use.provider.auth ?? null, parallel: (n) => n === 'run_subagent',
           })) text += delta;
@@ -3047,7 +3131,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
               break;
             }
             case 'request_capability':
-              result = await grantCapability(parsed.capability, parsed.reason);
+              result = await grantCapability(parsed.capability, parsed.reason, parsed);
               break;
             case 'start_process': {
               if (!workspace) throw new Error('Programs run in Code mode, inside the workspace folder.');
@@ -3140,7 +3224,6 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         if (req.bunnyRemote ?? req.bunnyDevice) remote.logAction(req.bunnyRemote ?? req.bunnyDevice, { kind: 'tool', tool: String(name) }); // R-DF2: the tool's name only, never its arguments
         let parsed = {};
-        const viaMeta = name === 'call_connector_tool' && deferredTools.size > 0;
         try {
           parsed = JSON.parse(args || '{}');
         } catch {
@@ -3154,14 +3237,26 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           send('tool', { tool: 'read_url', status: 'failed', result: 'A quick answer opens only addresses you typed or that its own search found.' });
           return 'read_url refused: a quick answer opens only an address exactly as the person typed it or as web_search listed it, nothing else. Use web_search, or tell the person to open this in Bunny' + String.fromCharCode(39) + 's window.';
         }
-        // PV-2: the two small tools that reach the connector tools not listed in the request
-        if (name === 'list_connector_tools' && deferredTools.size > 0) return describeDeferred(deferredTools, parsed.match);
-        if (viaMeta) {
-          const target = String(parsed.name ?? '');
-          if (!deferredTools.has(target)) return `There is no connector tool called ${target}. Call list_connector_tools to see the names.`;
-          name = target;
-          parsed = parsed.arguments && typeof parsed.arguments === 'object' ? parsed.arguments : {};
-          args = JSON.stringify(parsed);
+        // F7: find_tools loads deferred tools into THIS reply (its own loaded set: the list below is this reply's). The checks run again here: Plan mode and a device.
+        if (name === 'find_tools' && agentScope.getStore()) return 'find_tools is not for helpers: you already have every tool you may use.';
+        if (name === 'find_tools' && deferredTools.size > 0) {
+          const found = findTools(deferredTools, parsed, {
+            allowed: (n) => !(req.bunnyRemote && remoteToolBlocked(n)) && !(permissionMode === 'plan' && planRefuses(riskOf(n), n)),
+            already: (n) => toolDefinitions.some((d) => d.function?.name === n),
+          });
+          for (const def of found.defs) {
+            if (!toolDefinitions.some((d) => d.function?.name === def.function.name)) toolDefinitions.push(def);
+            if (fullTools !== toolDefinitions && !fullTools.some((d) => d.function?.name === def.function.name)) fullTools.push(def); // a device's list is its own copy
+          }
+          const label = `Look for tools: ${cleanOutside(parsed.query ?? (Array.isArray(parsed.names) ? parsed.names.join(', ') : ''), 80)}`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: label, status: 'done', content: '', result: clip(found.text, 1200) });
+          send('tool', { tool: label, status: 'done', result: clip(found.text, 1200) });
+          return found.text;
+        }
+        // a deferred tool that was not loaded in this reply is refused like any tool that was not offered, with the way to load it
+        if (deferredTools.has(name) && !toolDefinitions.some((d) => d.function?.name === name) && !agentScope.getStore()) {
+          send('tool', { tool: name, status: 'denied' });
+          return `${name} is not loaded in this reply, so it was not run. Load it first with find_tools(names: ['${name}']).`;
         }
         // The checklist changes quietly: no step line for each update.
         if (name === 'update_tasks') {
@@ -3172,7 +3267,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         }
         // One check for every path: a tool that was not offered to the model in this reply never runs, whatever
         // it is (a hallucinated call, or text in a file telling it to). Plan mode relies on this.
-        if (!toolDefinitions.some((d) => d.function?.name === name) && !(viaMeta && deferredTools.has(name))) {
+        if (!toolDefinitions.some((d) => d.function?.name === name) && !(agentScope.getStore() && deferredTools.has(name))) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not available in this reply, so it was not run.`;
         }
@@ -3309,13 +3404,16 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, browser: browserControl && !textOnly && !scheduledTask });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);
               if (!added) return said;
               const shown = `${added.title}\n${added.text}`;
-              if (shown.length > 1800) return `${said}\nIt is too long to show you whole, so it stays switched OFF; the person can read and switch it on in Settings, Customize.`;
+              if (shown.length > 1800) {
+                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.' });
+                return `${said}\nIt is installed and OFF: its description is too long to show whole. It stays off until the person switches it on in Settings › Customize.`;
+              }
               const answer = await askCapability('switch_on_added', shown);
               if (answer.granted) {
                 await appTools.switchOn(added);
@@ -3351,7 +3449,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
+        // Brave's terms: no storing of its results. The chat keeps one line (who answered and how many), not the text; the person and the model see the results during this reply only.
+        const bravePage = name === 'web_search' && wholeResult.startsWith('(via Brave)\n');
+        const keptResult = bravePage ? `web search via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results` : clip(result, 1200);
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: keptResult, fullResult: bravePage ? '' : wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
         send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}) });
         if (signIn) return `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.`;
         return connectorPictures.length ? { content: result, images: connectorPictures } : result;
@@ -3510,9 +3611,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         }
       }
       const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
-      const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
+      const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && d.function.name !== 'find_tools');
       const quickTools = [...appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)), ...(barPc ? pcToolDefinitions() : [])]; // Quick ask: look-ups only
       const refusedLevel = textOnly ? undefined : toolsRefused.get(refusalKey);
+      if (refusedLevel) history.splice(Math.max(0, history.findIndex((m) => m.role === 'system' && String(m.content).includes('You are Bunny AI')) + 1), 0, { role: 'system', content: refusedLevel === 'all' ? 'Your tools were turned off for this model, so answer without them and say what you could not do.' : "This model refused the connectors' tools, so only Bunny's own tools are on; say so if the task needs a connector." });
       const NO_TOOLS_NOTE = 'No tools are available in this reply (this model does not accept them), so you cannot search the web, read pages or use connectors, whatever was said before. If asked, say so plainly; never claim you did.';
       if (refusedLevel === 'all') history.unshift({ role: 'system', content: NO_TOOLS_NOTE });
       for (let attempt = 1; attempt <= 2; attempt += 1) {

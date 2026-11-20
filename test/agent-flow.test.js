@@ -15,8 +15,8 @@ test('F2: the map names what is on, says how to get what is off, and lists conne
   assert.match(text, /files and commands: off; call request_capability with code_mode/);
   assert.match(text, /control of this computer: off; call request_capability with computer_use/);
   assert.match(text, /searching this PC: off; tell the person to turn on Search this PC in Settings › Capabilities/);
-  assert.match(text, /Gmail, Calendar and Drive: not signed in; tell the person to sign in to Google in Settings › Profile/);
-  assert.match(text, /the browser panel: only in the desktop window/);
+  assert.match(text, /Gmail, Calendar and Drive: not signed in; call request_capability with sign_in \(service: google\)/);
+  assert.match(text, /the browser panel: only in Bunny's window on the PC/);
   assert.match(text, /Maps \(switched off\), Mail b x b  \(needs sign-in\)|Maps \(switched off\), Mail b x \/b \(needs sign-in\)|Maps \(switched off\)/);
   assert.match(text, /Broken \(did not start\)/);
   assert.match(text, /do not just say you cannot/);

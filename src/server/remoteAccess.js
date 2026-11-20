@@ -214,7 +214,7 @@ export const REMOTE_TOOLS_ALLOWED = Object.freeze([
   'create_artifact', 'update_artifact',
   'list_files', 'read_file', 'find_files', 'search_files', 'edit_file', 'multi_edit', 'write_file', 'download_file', 'make_word', 'make_excel', 'make_powerpoint',
   'run_command', 'start_process', 'read_process', 'list_processes', 'stop_process',
-  'list_models', 'list_sessions', 'read_session', 'search_chats',
+  'list_models', 'list_sessions', 'read_session', 'search_chats', 'find_tools',
   'github_api_get', 'github_clone', 'github_comment', 'github_create_issue', 'github_create_pull_request', 'github_issue', 'github_list_issues', 'github_list_pull_requests', 'github_my_repos', 'github_pull_request', 'github_read_file', 'github_repo', 'github_search', 'github_update_issue',
   'gmail_draft', 'gmail_read', 'gmail_search', 'gmail_send', 'calendar_create_event', 'calendar_events', 'drive_read', 'drive_search',
 ]);
@@ -223,7 +223,6 @@ export const REMOTE_TOOLS_DENIED = Object.freeze([
   'browser_back', 'browser_capture', 'browser_click', 'browser_compare', 'browser_inspect', 'browser_open', 'browser_read', 'browser_screenshot', 'browser_scroll', 'browser_type',
   'create_tool', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill',
   'schedule_task', 'list_scheduled_tasks', 'remember', 'start_session', 'message_session', 'move_to_new_chat',
-  'call_connector_tool', 'list_connector_tools',
   'search_pc', 'read_pc_file', // SEARCH-PC SP-5: a Chats device never searches this PC; an Everything device may, as the window can
 ]);
 const allowedTools = new Set(REMOTE_TOOLS_ALLOWED);
