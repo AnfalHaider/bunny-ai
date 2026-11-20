@@ -36,6 +36,7 @@ import { WEBAPP_PUBLIC_PATHS, isWebappPath, webappResponse } from './webapp.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
+import { redactDeep, redactError } from './redactKey.js';
 import { thinkingBody } from '../providers/thinking.js';
 import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSignIn.js';
 import { createScheduleStore } from './scheduler.js';
@@ -370,10 +371,24 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const connectorSignIn = createConnectorSignIn({ secrets, mcp, getBase: () => `http://127.0.0.1:${server.address().port}` });
   // L-4: a local connector's settings come back from the secret store only to start it
   const withEnv = async (server) => ({ ...server, env: await mcp.resolveEnv(server.id) });
-  const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }));
-  const mcpCallTool = async (server, call) => (server.type === 'local' ? localMcp.callTool(await withEnv(server), call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
+  // K-3 / K-5: a remote connector's KEY is fetched for one request only, goes only as its own header to the origin it was saved for, with no redirect and never to OAuth; every form of it is blanked
+  // from what the connector answers and from any error before the model or the window sees it.
+  const keyed = async (server) => {
+    const k = server.type === 'local' ? null : await mcp.resolveKey(server.id);
+    return k ? { server: { ...server, headers: { ...(server.headers ?? {}), [k.header]: k.value }, keyed: true }, secret: k.value } : { server, secret: null };
+  };
+  const mcpListTools = async (server, extra = {}) => {
+    if (server.type === 'local') return localMcp.listTools(await withEnv(server), extra);
+    const { server: sent, secret } = await keyed(server);
+    try { return redactDeep(await httpListTools(sent, { auth: secret ? undefined : connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }), secret); } catch (err) { throw redactError(err, secret); }
+  };
+  const mcpCallTool = async (server, call) => {
+    if (server.type === 'local') return localMcp.callTool(await withEnv(server), call);
+    const { server: sent, secret } = await keyed(server);
+    try { return redactDeep(await httpCallTool(sent, { ...call, auth: secret ? undefined : connectorSignIn.authFor(server) }), secret); } catch (err) { throw redactError(err, secret); }
+  };
   const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
-  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
+  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -1167,6 +1182,19 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 200, await mcp.add(plain));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });
+      }
+    }
+    // K-2: a remote connector's key. Window only (the route table), a password field in the screen, and the answer is only the connector as the list shows it: the header name and whether a key is set.
+    const mcpKeyMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/key$/);
+    if (mcpKeyMatch && (method === 'PUT' || method === 'DELETE')) {
+      if (windowOnly(req, res)) return;
+      try {
+        if (method === 'DELETE') return sendJson(res, 200, await mcp.clearKey(mcpKeyMatch[1]));
+        const body = await readBody(req);
+        const saved = await mcp.setKey(mcpKeyMatch[1], { header: body.header, value: body.value });
+        return sendJson(res, 200, saved);
+      } catch (err) {
+        return sendJson(res, err.code === 'mcp.notFound' ? 404 : 400, { code: err.code ?? 'mcp.failed', message: String(err.message).slice(0, 300) });
       }
     }
     const mcpMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})$/);

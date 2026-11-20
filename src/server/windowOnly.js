@@ -23,7 +23,7 @@ const WRITES = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const UUID = '[a-f0-9-]{36}';
 /** Routes that are window-only whatever their body says: [methods, path pattern]. */
 export const WINDOW_ONLY_ROUTES = [
-  [WRITES, `^/api/mcp(/${UUID}(/call)?)?$`],                // connectors: add, enable, change, remove, call
+  [WRITES, `^/api/mcp(/${UUID}(/call|/key)?)?$`],           // connectors: add, enable, change, remove, call, key
   [WRITES, `^/api/connectors(/.*)?$`],                      // connector sign-in (W3-6)
   [WRITES, `^/api/schedules(/${UUID})?$`],                  // schedules
   [WRITES, `^/api/hooks(/${UUID})?$`],                      // hooks run commands
