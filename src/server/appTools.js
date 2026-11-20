@@ -3,6 +3,7 @@
  *   read  - web_search, read_url, search_plugins, read_skill
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
+import { searchWeb } from './webSearch.js';
 import { parseGithubUrl, readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
 import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
@@ -58,36 +59,13 @@ export function describeAppTool(name, args = {}) {
   }
 }
 
-/** DuckDuckGo's HTML endpoint: no key, plain results. */
-async function webSearch(query, fetchImpl = globalThis.fetch) {
-  const q = String(query ?? '').trim();
-  if (!q) throw new Error('web_search needs a query');
-  const res = await fetchImpl(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
-    headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) bunny-ai', accept: 'text/html' },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`The search answered ${res.status}`);
-  const html = await res.text();
-  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim(); // one line each: a title or snippet written by a page can never start a line of its own
-  const out = [];
-  const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
-  for (let m = re.exec(html); m && out.length < 8; m = re.exec(html)) {
-    let link = m[1];
-    const real = /[?&]uddg=([^&]+)/.exec(link);
-    if (real) link = decodeURIComponent(real[1]);
-    if (link.startsWith('//')) link = `https:${link}`;
-    if (/[\s\u0000-\u001f\u007f]/.test(link)) continue; // a link with a line break or a space in it is not a link Bunny lists
-    out.push(`- ${strip(m[2])}\n  ${link}\n  ${strip(m[3] ?? '').slice(0, 220)}`);
-  }
-  return out.length ? out.join('\n') : 'No results.';
-}
-
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ toolInstaller = null, getSearchKey = async () => null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
+  const startFetch = globalThis.fetch; // web_search reads globalThis.fetch at call time unless a test passed its own
   let queue = Promise.resolve();
   const serial = (job) => { const next = queue.then(job, job); queue = next.catch(() => {}); return next; };
 
@@ -286,7 +264,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   }
 
   const run = {
-    web_search: ({ query }) => webSearch(query),
+    web_search: async ({ query }, ctx) => searchWeb(query, { fetchImpl: (u, i) => (fetchImpl === startFetch ? globalThis.fetch : fetchImpl)(u, i), braveKey: await Promise.resolve().then(getSearchKey).catch(() => null), browser: ctx?.browser === true }), // F6: Brave (with the person's key), then DuckDuckGo
     read_url: ({ url }) => readUrl(url),
     search_plugins: ({ query }) => searchPlugins(query),
     read_skill: async ({ name, part }, ctx) => {

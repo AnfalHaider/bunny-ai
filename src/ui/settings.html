@@ -292,6 +292,13 @@
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" aria-label="Connectors" /><span>on</span></label></div>
       </div>
+      <div class="row" id="brave-row">
+        <div class="meta-col">
+          <div class="name">Brave Search key</div>
+          <div class="desc">Web search tries Brave first when you add a key (the Brave Search API has a free allowance), then DuckDuckGo. The key is kept encrypted on this computer, is sent only to Brave, and is never shown again. <span id="brave-state" role="status"></span></div>
+          <div class="desc"><input type="password" id="brave-key" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Paste your Brave Search key" aria-label="Brave Search key" /> <button type="button" id="brave-save" class="ghost small">Save key</button> <button type="button" id="brave-remove" class="ghost small" hidden>Remove key</button> <span class="err" id="brave-err" role="alert"></span></div>
+        </div>
+      </div>
     </div>
 
     <h2>Voice</h2>
@@ -949,6 +956,17 @@
       showPhoto(await sendJSON('/api/profile/photo', 'POST', { data }));
       window.parent?.postMessage?.({ type: 'bunny:profile' }, location.origin);
     } catch (err) { $('photo-error').textContent = err.message ?? 'That picture could not be saved.'; }
+  });
+  // F6: the Brave Search key. Only whether one is set comes back; the key itself is never shown.
+  const paintBrave = (set) => { $('brave-state').textContent = set ? 'A key is saved.' : 'No key: DuckDuckGo only.'; $('brave-remove').hidden = !set; };
+  getJSON('/api/web-search').then((r) => paintBrave(r.braveKey)).catch(() => { $('brave-row').hidden = true; });
+  $('brave-save').addEventListener('click', async () => {
+    $('brave-err').textContent = '';
+    try { const r = await sendJSON('/api/web-search/key', 'PUT', { key: $('brave-key').value.trim() }); $('brave-key').value = ''; paintBrave(r.braveKey); } catch (err) { $('brave-err').textContent = err.message ?? 'The key could not be saved.'; }
+  });
+  $('brave-remove').addEventListener('click', async () => {
+    $('brave-err').textContent = '';
+    try { paintBrave((await sendJSON('/api/web-search/key', 'DELETE')).braveKey); } catch (err) { $('brave-err').textContent = err.message ?? 'The key could not be removed.'; }
   });
   $('photo-remove').addEventListener('click', async () => {
     showPhoto(await sendJSON('/api/profile/photo', 'DELETE'));

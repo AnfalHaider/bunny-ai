@@ -15,6 +15,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { capabilityMap } from './capabilityMap.js';
+import { BRAVE_SECRET } from './webSearch.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -373,7 +374,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }));
   const mcpCallTool = async (server, call) => (server.type === 'local' ? localMcp.callTool(await withEnv(server), call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
   const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
-  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
+  const appTools = createAppTools({ toolInstaller, getSearchKey: () => secrets.get(BRAVE_SECRET), skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -851,6 +852,21 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const body = await readBody(req);
         return sendJson(res, 200, await pc.resolveRef(body.ref));
       }
+    }
+
+    // ---- F6: the Brave Search key (Settings, Capabilities). The window's alone: it is stored in the secrets store, never in settings, and is never handed back, only whether one is set. ----
+    if (path === '/api/web-search' && method === 'GET') {
+      if (req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
+      return sendJson(res, 200, { braveKey: Boolean(await secrets.get(BRAVE_SECRET)) });
+    }
+    if (path === '/api/web-search/key' && (method === 'PUT' || method === 'DELETE')) {
+      if (windowOnly(req, res)) return;
+      if (req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); // an Everything device counts as the window for the rest, never for this
+      if (method === 'DELETE') { await secrets.delete(BRAVE_SECRET); return sendJson(res, 200, { braveKey: false }); }
+      const key = String((await readBody(req))?.key ?? '').trim();
+      if (!/^[\x21-\x7e]{10,200}$/.test(key)) return sendJson(res, 400, { code: 'websearch.badKey', message: 'That does not look like a Brave Search key. Copy it again from the Brave Search API page.' });
+      await secrets.set(BRAVE_SECRET, key);
+      return sendJson(res, 200, { braveKey: true });
     }
 
     // ---- W2-7: permission rules by command and path (Settings, Code). Checked before the permission mode. ----
@@ -3272,7 +3288,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, browser: browserControl });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);

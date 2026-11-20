@@ -54,6 +54,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], '^/api/oauth/[a-z0-9-]+/(start|finish)$'],     // provider sign-in
   [['GET'], '^/api/remote/log$'],                           // DEVICE-FULL R-DF2: what devices did; read only in Bunny's window
   [WRITES, '^/api/engines(/.*)?$'],                         // CLI-ENGINES: download, update, switch, roll back, remove, sign in and out of an engine
+  [WRITES, '^/api/web-search(/.*)?$'],                      // F6: the Brave Search key is the window's alone
   [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];
 
