@@ -131,6 +131,11 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
 
 ## PG-4: protected paths for Bunny's own file tools
 
+**Status: the owner said "Not yet"** (recorded at 1e55d2c6). PG-4 is not built in v0.1.15.
+
+- **The instructions-file part** is covered another way, by Security's replacement: the folder's instructions files are **frozen by content** at Follow them, and only the person's Read again, with a diff, changes what is sent (FOLDER-RULES §2, ONE-INSTRUCTIONS §1).
+- **The rest of the list** stays here for a later question.
+
 ### Owner's question
 
 "Should Bunny always ask before its own file tools change files that make code run later or that configure your tools (`.vscode`, `.github/workflows`, git hooks, shell profiles, `package.json` scripts, `.mcp.json`), in every mode, Auto included?"

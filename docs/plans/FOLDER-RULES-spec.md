@@ -37,10 +37,20 @@ The person's own every-chat instructions already cover the last one, in Settings
   - inside the folder, and never through a link that leads out;
   - the person's read-deny rules hide a file, and then it isn't read or listed;
   - never from the data folder.
-- **Read once, when the chat starts** (or when the person first picks Follow them), and kept with the chat as `session.folderRulesRead`: `{ name, text, sha256, readAt }` for each file.
-  - Every reply sends that same text. It is **not** re-read mid-chat, so a file edited during the chat can't silently steer the model (drawing v2: "Files are read when the chat starts, not while it runs").
-  - Only **Read again** on the Working folder card reads the files afresh, for the next reply.
-  - The view shows each file's size and the time it was read.
+- **Frozen by content** (Security's replacement for PG-4's instructions-file part, after the owner's "Not yet" to PG-4, recorded at 1e55d2c6). This replaces the earlier per-chat reading.
+  - **What is kept.** At Follow them, the exact bytes the person was shown are kept in the folder's **trust record** (§5) as `frozen: [{ name, text, sha256, readAt }]`, after the caps and FR-1's cleaning.
+  - **What is sent.** Every reply, every engine prompt (ONE-INSTRUCTIONS) and every handover (ENGINE-SWITCH) sends **that frozen copy**, never the file as it is on disk now. A new chat on the folder uses the same frozen copy.
+  - **No re-reading.** Bunny never re-reads a followed file for sending, not per reply and not per chat. Only **Read again** (below) replaces the frozen copy.
+- **Changes are found by hash, whoever made them:** the person, the model (`write_file`, `edit_file`, a `run_command`), an engine, git, or another program.
+  - When the Working folder card or the trust card is shown, and at the start of each reply, Bunny hashes each followed file on disk and compares it with the frozen `sha256`.
+  - A different hash shows "changed since it was read". A missing file shows "no longer on disk".
+  - In both cases **the frozen copy is still the one sent**, until the person acts.
+- **Read again** happens only by the person's click, in Bunny's window (the trust record is window-only).
+  - It first shows a **diff** of the frozen text against the file now, per file, and a removed file as "will no longer be followed".
+  - The diff is confirmed with **Use the new text** or **Keep the old text**. Only then is the frozen copy replaced, with the new `sha256` and `readAt`.
+  - Neither a model, a device nor a command can trigger it.
+- **A new file name** that wasn't in the frozen copy asks first (§5). It is never added silently.
+- The view shows each frozen file's size, its `readAt`, and its state against the disk.
 - **Text only.** A file that isn't valid UTF-8, or that holds a NUL byte, is skipped and named in the view.
 - **Size caps:**
   - each file, at most **32 KB**. A bigger file is cut there, and the view says "cut at 32 KB";
@@ -89,24 +99,25 @@ The person's own every-chat instructions already cover the last one, in Settings
     - Its title is "This folder has instruction files". It shows the folder path, each file with its size and a **Read** link (the same viewer as View what was read), and the buttons **Follow them** and **Not now**.
     - The wording is Design's (v2 §3).
     - Until the person picks Follow them, no system line and no note are sent.
-  - **Follow them** stores the answer for the folder's realpath and reads the files (§2). They are used from the next reply, in this chat and in every new chat on that folder.
+  - **Follow them** stores the answer for the folder's realpath, with the frozen copy of exactly what the card showed (§2). It is used from the next reply, in this chat and in every new chat on that folder.
   - **Not now** follows nothing and stores nothing: never a "never". The card closes and doesn't come back in this chat; a new chat on that folder asks again.
-  - **The stored answer** lives in `settings.folderRulesTrusted`: a list of `{ folder: realpath, files: [names followed] }`, at most 200 folders.
+  - **The stored answer** lives in `settings.folderRulesTrusted`: a list of `{ folder: realpath, files: [names followed], frozen: [{ name, text, sha256, readAt }] }`, at most 200 folders. The frozen texts are capped as §2 says, so at most 64 KB per folder.
     - That key is in `WINDOW_ONLY_SETTING_KEYS`, so no device can give the answer: not a Chats device (FR-3), and not any other. Only Bunny's own window can. The card's buttons on a device say it has to be answered on the PC.
   - **Changing it later**, on the Working folder card:
     - **Follow them…** when the folder isn't followed. It opens the same question as the card, so trust is never given by a stray click; turning the chat's switch on does the same.
     - **Ask me again for this folder** when it is followed. It removes the folder's entry from `folderRulesTrusted`, and the next chat asks again.
   - **A W2-9 worktree chat** uses the answer given for its **original** folder's realpath (`session.worktree.repo`), not the worktree's own path.
-  - **A followed file is edited** (Security's answer, drawing v2): no new question, and no new text either.
-    - The chat keeps sending the text it read (§2).
-    - The Working folder card marks that file "changed since it was read" when its current hash differs from the stored `sha256`.
-    - **Read again** reads all the files for the next reply and clears the mark.
-  - **A new file name** that wasn't there at Follow (a `CLAUDE.md` added later, say) asks again before it's followed, with the same card naming only the new file.
-    - Meanwhile the files already followed keep being followed, and the new one is left out of the note.
-    - Follow them adds its name to `files`. A followed file that is later removed is no longer sent after the next Read again or the next chat.
+  - **A followed file is edited or removed,** by anyone: no new question, and no new text either.
+    - The frozen copy keeps being sent (§2).
+    - The Working folder card marks the file "changed since it was read" or "no longer on disk".
+    - **Read again** (the person's click in the window, with the diff first) is the only way to replace the frozen copy.
+  - **A new file name** that wasn't in the frozen copy (a `CLAUDE.md` added later, say) asks first, with the same card naming only the new file and showing its text.
+    - Meanwhile the frozen files keep being followed, and the new one is left out.
+    - Follow them adds its name to `files` and its text to `frozen`.
+    - A frozen file that is removed from disk is still sent from the frozen copy until Read again confirms its removal.
   - **Engine chats get no card:** superseded by ONE-INSTRUCTIONS §3. Engine chats now get the same card, because Bunny gives them the set. Security re-confirms.
 - **The Working folder card** (drawing v2 §1) shows the "Project instructions" block:
-  - each file's name, size and state: in use, not followed, waiting for you, changed since it was read, cut, or not used;
+  - each file's name, size and state: in use, not followed, waiting for you, changed since it was read, no longer on disk, cut, or not used;
   - **View what was read**, the exact text sent, read-only;
   - the "not used" list for `.mdc` rules that aren't always-on.
   - The folder chip's tooltip names the count ("· 3 instruction files").
@@ -143,7 +154,11 @@ The person's own every-chat instructions already cover the last one, in Settings
    - after Follow, the next reply has the note;
    - Not now sends none, and the next chat on that folder asks again;
    - a W2-9 worktree chat follows when its original folder is trusted;
-   - editing a followed `AGENTS.md` mid-chat asks nothing and the **old** text is still sent; the card shows "changed since it was read", and after Read again the next reply sends the new text and the mark clears;
+   - editing a followed `AGENTS.md` asks nothing, and the **frozen** text is still sent, in this chat and in a new chat; the card shows "changed since it was read";
+   - Read again shows the diff first; "Keep the old text" changes nothing; "Use the new text" replaces the frozen copy, and the next reply sends it with the mark cleared;
+   - deleting a followed file shows "no longer on disk", and the frozen copy is still sent until Read again confirms;
+   - **the model edits `AGENTS.md` through `write_file`, and in a separate test through `run_command` (`Set-Content AGENTS.md …`).** In both, the next reply's note, the next engine prompt and a handover all hold the frozen text byte for byte, and the card shows "changed since it was read";
+   - a device's or a model's attempt to trigger Read again (any route other than the window's click) changes nothing;
    - Not now stores nothing in `folderRulesTrusted`, and a new chat on that folder shows the card again;
    - "Ask me again for this folder" removes the entry, and the next chat asks again;
    - adding `CLAUDE.md` after Follow asks about it, and until the answer only `AGENTS.md` is in the note;
