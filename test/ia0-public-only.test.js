@@ -28,8 +28,9 @@ test('the store: a model-added or device-added connector must be public https; t
   await assert.rejects(store.add({ name: 'A', url: 'http://127.0.0.1:9/mcp', addedBy: 'model' }), /public https address/);
   await assert.rejects(store.add({ name: 'B', url: 'http://192.168.1.2/mcp', addedBy: 'device' }), /public https address/);
   await assert.rejects(store.add({ name: 'C', url: 'https://10.0.0.1/mcp', addedBy: 'model' }), /public https address/);
-  const own = await store.add({ name: 'Mine', url: 'http://192.168.1.2:8080/mcp' });
-  assert.equal(own.addedBy, undefined);
+  const own = await store.add({ name: 'Mine', url: 'http://192.168.1.2:8080/mcp', addedBy: 'person' });
+  assert.equal(own.addedBy, 'person');
+  await assert.rejects(store.add({ name: 'Default', url: 'http://192.168.1.3/mcp' }), /public https address/, 'with nothing said, a connector is the models own');
   const found = await store.add({ name: 'Found', url: 'https://mcp.example.com/mcp', addedBy: 'model', enabled: false });
   assert.equal(found.addedBy, 'model');
   assert.equal(guarded(found), true); assert.equal(guarded(own), false);
@@ -38,13 +39,13 @@ test('the store: a model-added or device-added connector must be public https; t
   const again = createMcpStore({ file: join(dir, 'mcp.json'), lookupImpl: pub });
   assert.equal((await again.list()).find((s) => s.name === 'Found').addedBy, 'model', 'it is remembered');
   const odd = await store.add({ name: 'Odd', url: 'https://odd.example.com/mcp', addedBy: 'anything-else' });
-  assert.equal(odd.addedBy, undefined, 'only the exact words model and device make a guarded record; the window route alone can omit them');
+  assert.equal(odd.addedBy, 'model', 'anything but the exact words person or device is the model's');
 });
 
 test('the window\'s POST makes the person\'s record; a posted addedBy is ignored; the model tool is refused at a private address', async (t) => {
   const { base } = await startApp(t, { fake: false });
   const r = await post(base, '/api/mcp', { name: 'Local', url: 'http://127.0.0.1:9/mcp', addedBy: 'model' });
-  assert.equal(r.status, 200); assert.equal(r.body.addedBy, undefined);
+  assert.equal(r.status, 200); assert.equal(r.body.addedBy, 'person');
   const { body: list } = await json(base, '/api/mcp');
   assert.equal(list.length, 1);
 });

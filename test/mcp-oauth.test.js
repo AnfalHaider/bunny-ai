@@ -118,7 +118,7 @@ test('sign-in works end to end and no file ever holds the token', async () => {
   const t = await setup({ idToken: true });
   try {
     const store = createMcpStore({ file: join(dir, 'mcp.json') });
-    const added = await store.add({ name: 'Fake', url: t.f.server.url });
+    const added = await store.add({ name: 'Fake', url: t.f.server.url, addedBy: 'person' });
     t.f.server.id = added.id;
     const done = await signIn(t);
     assert.deepEqual(done, { serverId: added.id, account: 'pat@example.test' });

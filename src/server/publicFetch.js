@@ -47,6 +47,8 @@ export async function checkPublicAddress(address, { lookupImpl = (h, o) => dnsLo
  * `allowHttp` and `allowPrivate` exist for the tests' loopback stand-ins only; nothing in the app passes them.
  */
 export function publicFetch(url, init = {}, { lookupImpl = (h, o) => dnsLookup(h, o), allowHttp = false, allowPrivate = false } = {}) {
+  // a test may stand in for the network, and only when it says so in the environment (the app never sets this); anything else always goes through the checks below
+  if (process.env.BUNNY_TEST_TRANSPORT === '1' && typeof globalThis.__bunnyTestFetch === 'function') return globalThis.__bunnyTestFetch(url, init);
   return new Promise((resolve, reject) => {
     let u;
     try { u = new URL(String(url)); } catch { reject(refused()); return; }
