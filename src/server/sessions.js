@@ -38,7 +38,7 @@ export function sinceSummary(messages = []) {
 }
 
 /** @param {string} dir */
-export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
+export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed = null, onRemoved = null } = {}) {
   const fileFor = (id) => join(dir, `${id}.json`);
 
   async function ensureDir() {
@@ -271,6 +271,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       session.title = String(message.content).trim().slice(0, 60) || 'New chat';
     }
     await save(session);
+    // REWIND: the reply that holds a checkpoint is saved, so the checkpoint can record which message it belongs to and what its files look like now
+    if (entry.checkpoint) await onCheckpointed?.(session.id, entry.checkpoint.id, entry.id);
     return session;
   }
 
@@ -297,6 +299,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...(e.restricted ? { restricted: true } : {}), ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
       else delete session.engine;
     }
+    if (patch.rewindNote !== undefined) { if (patch.rewindNote) session.rewindNote = String(patch.rewindNote).slice(0, 300); else delete session.rewindNote; } // REWIND: fixed text for the next message
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;
@@ -314,6 +317,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
 
   async function remove(id) {
     await rm(fileFor(requireId(id)), { force: true });
+    await onRemoved?.(id); // its checkpoints (copies of the person's files) go with it
   }
 
   /** Drop one message and everything after it. Used by edit-and-resend. */
@@ -481,11 +485,12 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     };
   }
 
-  /** Note that a reply's file changes were undone, so its button goes away. */
+  /** Note that a reply's file changes were undone, so its button goes away (one id, or a list for a rewind). */
   async function markCheckpointRestored(id, checkpointId) {
     const session = await get(requireId(id));
     if (!session) throw new Error('Session not found');
-    for (const m of session.messages) if (m.checkpoint?.id === checkpointId) m.checkpoint.restored = true;
+    const ids = new Set([].concat(checkpointId));
+    for (const m of session.messages) if (m.checkpoint && ids.has(m.checkpoint.id)) m.checkpoint.restored = true;
     await save(session);
     return session;
   }

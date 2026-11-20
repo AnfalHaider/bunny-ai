@@ -330,17 +330,19 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     };
     const bridge = createBridge(ctx);
     const checked = async (res, paths) => { if (res.allow && res.name !== 'run_command' && res.name !== 'read_file') for (const p of paths) await turn.beforeWrite?.(p).catch(() => {}); return res; };
+    const COMMAND_TOOLS = new Set(['Bash', 'PowerShell', 'run_command', 'shell']);
     const judgeClaude = async (req) => {
+      if (COMMAND_TOOLS.has(req.tool)) turn.onCommand?.(); // REWIND: a command step in this reply (what it changes cannot be put back)
       const p = req.input?.file_path ?? req.input?.path ?? req.input?.notebook_path;
       if (ownRules) { const r = await bridge.claudeFloor(req); if (r.abstain && p && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(req.tool)) await turn.beforeWrite?.(p).catch(() => {}); return r; } // the checkpoint is taken before a write the engine may then do
       const r = await bridge.claude(req); return checked(r, p ? [p] : []);
     };
     const decideClaude = async (req) => { const r = await bridge.claudeAsk(req); const p = req.input?.file_path ?? req.input?.path; return checked(r, p ? [p] : []); };
     const bridgeForCodex = ownRules ? {
-      codexCommand: (params) => bridge.codexCommandRelay(params),
+      codexCommand: (params) => { turn.onCommand?.(); return bridge.codexCommandRelay(params); },
       codexChanges: async (changes) => { const r = await bridge.codexChangesRelay(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     } : {
-      codexCommand: (params) => bridge.codexCommand(params),
+      codexCommand: (params) => { turn.onCommand?.(); return bridge.codexCommand(params); },
       codexChanges: async (changes) => { const r = await bridge.codexChanges(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     };
 

@@ -6,6 +6,7 @@
  * carry a bar. Undo reuses the checkpoint restore Bunny already has.
  */
 import { getJSON, sendJSON } from './api.js';
+import { confirmRewind, openRewindPanel } from './rewind.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,7 +32,7 @@ export function ago(iso, now = Date.now()) {
   return `${Math.floor(secs / 86_400)}d ago`;
 }
 
-export function initWorkPanes({ getSessionId, getPendingFolder = () => null, onChanged = () => {}, copy }) {
+export function initWorkPanes({ getSessionId, getPendingFolder = () => null, onChanged = () => {}, copy, rewindCtx = null }) {
   let changes = { checkpoints: [], totals: { files: 0, added: 0, removed: 0 }, folder: null, git: false };
   let openFilePath = null;
   const expanded = new Set(); // folders open in the tree
@@ -56,16 +57,12 @@ export function initWorkPanes({ getSessionId, getPendingFolder = () => null, onC
     return box;
   }
 
-  async function undoTo(cp, index) {
-    const restores = cp.files.filter((f) => f.status !== 'new').map((f) => f.path);
-    const removes = cp.files.filter((f) => f.status === 'new').map((f) => f.path);
-    const parts = [];
-    if (restores.length) parts.push(`restores ${restores.join(', ')}`);
-    if (removes.length) parts.push(`removes ${removes.join(', ')}`);
-    if (!window.confirm(`Undo checkpoint ${index + 1}? It ${parts.join(' and ')}. Undo ${cp.files.length} file${cp.files.length === 1 ? '' : 's'}?`)) return;
-    await sendJSON(`/api/sessions/${session()}/checkpoints/${cp.id}/restore`, 'POST');
-    await refresh();
-    onChanged();
+  /** REWIND: each checkpoint goes back to before itself (or, for the safety copy of a rewind, undoes the rewind), asked in words with the preview. */
+  function rewindFrom(cp, index) {
+    const ctx = rewindCtx?.();
+    if (!ctx) return;
+    if (cp.kind === 'rewind') confirmRewind(ctx, { cp: cp.id }, 'how things were before the rewind');
+    else confirmRewind(ctx, { before: cp.id }, `before checkpoint ${index + 1}`);
   }
 
   function paintChanges() {
@@ -78,6 +75,7 @@ export function initWorkPanes({ getSessionId, getPendingFolder = () => null, onC
       return;
     }
     host.append(el('div', { className: 'changes-head' },
+      rewindCtx ? el('button', { className: 'btn btn-ghost small', type: 'button', textContent: 'Rewind', onclick: () => openRewindPanel(rewindCtx()) }) : null,
       el('span', { className: 'badge', textContent: `${total} file${total === 1 ? '' : 's'}` }),
       el('span', { className: 'ok', textContent: `+${changes.totals.added}` }),
       el('span', { className: 'bad', textContent: `−${changes.totals.removed}` })));
@@ -89,11 +87,11 @@ export function initWorkPanes({ getSessionId, getPendingFolder = () => null, onC
       if (!cp.files.length) return;
       const card = el('div', { className: 'checkpoint-card' });
       const head = el('div', { className: 'checkpoint-head' },
-        el('span', { className: 'checkpoint-title', textContent: `Checkpoint ${index + 1}` }),
+        el('span', { className: 'checkpoint-title', textContent: cp.kind === 'rewind' ? 'Before the rewind' : `Checkpoint ${index + 1}` }),
         el('span', { className: 'checkpoint-time', textContent: ago(cp.at) }));
       head.append(cp.restored
         ? el('span', { className: 'checkpoint-done', textContent: 'Undone' })
-        : el('button', { className: 'btn btn-ghost small', type: 'button', textContent: 'Undo to here', onclick: () => undoTo(cp, index) }));
+        : el('button', { className: 'btn btn-ghost small', type: 'button', textContent: cp.kind === 'rewind' ? 'Undo the rewind' : 'Rewind to before this', onclick: () => rewindFrom(cp, index) }));
       card.append(head);
       for (const f of cp.files) {
         const row = el('div', { className: 'change-row', role: 'button', tabindex: '0', 'aria-expanded': 'false' },

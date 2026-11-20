@@ -231,7 +231,7 @@ export function gitBranch(folder) {
 }
 
 /** beforeWrite(absolutePath) runs before a file is written or edited (for undo). */
-export function createWorkspace(rootFolder, { protect = [], allow = [], envRunner = undefined, beforeWrite = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
+export function createWorkspace(rootFolder, { protect = [], allow = [], envRunner = undefined, beforeWrite = null, onCommand = null, signal = null, hidden = null, clock = Date.now, allowLoopback = process.env.BUNNY_ALLOW_LOOPBACK_DOWNLOAD === '1' } = {}) {
   const root = resolve(rootFolder);
 
   // S-3 (Security baseline 0.1.4): Bunny's own secrets (the provider keys and sign-in tokens, the account file) are never reachable by the agent's tools, whatever folder the chat works in:
@@ -628,6 +628,7 @@ export function createWorkspace(rootFolder, { protect = [], allow = [], envRunne
   }
 
   async function run_command({ command, cwd, timeout_seconds } = {}, { onProgress = null } = {}) {
+    onCommand?.(); // REWIND: this reply ran a command, so a rewind warns that what it changed is not put back
     // W6-17: the model may ask for longer than the 2 minute default, up to 10 minutes.
     const limitMs = Math.round(Math.min(MAX_COMMAND_SECONDS, Math.max(1, Number(timeout_seconds) || COMMAND_TIMEOUT_MS / 1000)) * 1000);
     // W6-8: a server or watcher (or a trailing &) would hang here until the timeout: start_process runs it in the background.
