@@ -42,6 +42,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['DELETE'], '^/api/tools/[a-z][a-z0-9_]{1,39}$'],        // custom tools
   [['POST', 'DELETE'], `^/api/sessions/${UUID}/worktree(/finish)?$`], // a chat's own copy of its project (W2-9): it makes and removes folders and branches
   [['POST'], '^/api/worktrees/remove$'],                    // removing a leftover copy (W2-9)
+  [['POST'], `^/api/sessions/${UUID}/engine$`],             // ENGINE-SWITCH: moving a chat to another engine
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
   [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)
   [['POST'], `^/api/sessions/${UUID}/question/${UUID}$`],   // answering a question card ("Keep going?")

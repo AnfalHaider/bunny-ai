@@ -7,7 +7,7 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,6 +86,7 @@ import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
 import { OFFICE_EXT, OFFICE_KIND, OFFICE_TOOLS, OfficeError, buildOffice, describeOffice, madeLine, officeToolDefinitions, outline as officeOutline, validateOffice } from './officeMake.js';
 import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
+import { buildHandover, handoverSaid } from './engines/handover.js'; // ENGINE-SWITCH
 import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
@@ -345,6 +346,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  const replyingChats = new Set(); // ENGINE-SWITCH: chats with a reply running (a switch waits for it)
   const engines = createEngineService({ dataDir }); // CLI-ENGINES: Claude Code and Codex, downloaded on the person's click (src/server/engines)
   // W2-9: a chat's own copy of its project (ADR-002)
   const worktrees = createWorktrees({ dataDir });
@@ -1774,6 +1776,42 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
+    // ENGINE-SWITCH (v0.1.15): move a chat to another engine, between replies. Only Bunny's own window may (the route is on the window-only list and refused to a device, CE-6). The engine's own session is dropped
+    // (the new engine gets a handover built from the chat, see engines/handover.js), the folder, the checkpoints and the task list stay the chat's. `PATCH engine` stays refused once the chat has messages.
+    const switchMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/engine$/);
+    if (switchMatch && method === 'POST') {
+      if (windowOnly(req, res)) return;
+      const id = switchMatch[1];
+      const body = await readBody(req);
+      const to = body?.to;
+      if (!['bunny', 'claude-code', 'codex'].includes(to)) return sendJson(res, 400, { code: 'engine.unknown', message: 'Choose Bunny, Claude Code or Codex.' });
+      const session = await sessions.get(id);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
+      if (replyingChats.has(id) || engines.busy(id)) return sendJson(res, 409, { code: 'chat.busy', message: 'A reply is still running in this chat. Switch when it has finished.' });
+      if (session.incognito) return sendJson(res, 409, { code: 'engine.incognito', message: 'An incognito chat does not use engines.' });
+      const from = session.engine?.id ?? 'bunny';
+      if (to === from) return sendJson(res, 409, { code: 'engine.same', message: 'This chat already runs on that engine.' });
+      const label = (x) => (x === 'claude-code' ? 'Claude Code' : x === 'codex' ? 'Codex' : "Bunny's engine");
+      if (to !== 'bunny') {
+        if ((session.workMode ?? 'chat') !== 'code') return sendJson(res, 409, { code: 'engine.needsCode', message: `${label(to)} works in a folder: switch this chat to Code mode first.` });
+        const folder = session.folder ? await effectiveRoot(session) : null;
+        if (!folder?.ok) return sendJson(res, 409, { code: 'engine.needsFolder', message: `${label(to)} needs a working folder: choose one for this chat first.` });
+        const row = (await engines.status(settings)).engines.find((e) => e.id === to);
+        if (!row?.downloaded) return sendJson(res, 409, { code: 'engine.notDownloaded', message: `Download ${label(to)} first (Settings, Engines).`, fix: 'download' });
+        if (row.enabled === false) return sendJson(res, 409, { code: 'engine.disabled', message: `${label(to)} is switched off in Settings, Engines.`, fix: 'enable' });
+        if (to === 'claude-code' && row.auth === 'account' && row.signedIn === false) return sendJson(res, 409, { code: 'engine.notSignedIn', message: 'Sign in to Claude Code first (Settings, Engines).', fix: 'signin' });
+      }
+      const cfg = engineSettings(settings);
+      const was = session.engine?.restrictedFor ?? (session.engine?.restricted ? [session.engine.id] : []);
+      const next = to === 'bunny'
+        ? { id: 'bunny', rules: 'bunny', handoverPending: true }
+        : { id: to, auth: cfg.engines[to].auth, rules: cfg.useBunnyEngine === false ? 'engine' : 'bunny', rulesFixed: true }; // the rules are fixed again now, from the current setting
+      const at = new Date().toISOString();
+      const updated = await sessions.update(id, { engine: { ...next, from, switchedAt: at, ...(was.length ? { restrictedFor: was } : {}) } });
+      await sessions.append(id, { role: 'assistant', kind: 'engine-switch', content: `(switched from ${label(from)} to ${label(to)})`, from, to });
+      return sendJson(res, 200, { ok: true, engine: updated.engine, restrictedAgain: to !== 'bunny' && was.includes(to) });
+    }
+
     const sessionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})$/);
     if (sessionMatch && method === 'GET') {
       const session = await sessions.get(sessionMatch[1]);
@@ -1789,6 +1827,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (deviceRefusedBody(req, res, method, path, rawPatch)) return;
         if (rawPatch?.engine !== undefined) { const current = await sessions.get(sessionMatch[1]); if (current?.messages?.length && current.engine) return sendJson(res, 409, { code: 'engine.fixed', message: 'This chat already runs on an engine. To use another, start a new chat.' }); } // CE-6: a device never moves a chat to another engine
         const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
+        // ES-2 (Security): only the server writes which engines Bunny's check failed for. A PATCH that carries `restrictedFor` or `restricted` has it ignored, and never removes what is stored.
+        if (patch.engine && typeof patch.engine === 'object') { const cur = await sessions.get(sessionMatch[1]); const { restricted: _r, restrictedFor: _rf, ...rest } = patch.engine; patch.engine = { ...rest, ...(cur?.engine?.restrictedFor ? { restrictedFor: cur.engine.restrictedFor } : cur?.engine?.restricted ? { restricted: true } : {}) }; if (cur?.engine && patch.engine.id === cur.engine.id) { for (const k of ['from', 'switchedAt', 'handoverPending']) if (cur.engine[k] !== undefined && patch.engine[k] === undefined) patch.engine[k] = cur.engine[k]; } }
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
@@ -2156,7 +2196,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       let currentTasks = [];
       let askedThisReply = false; // W6-12: an ask_user card was shown in this reply
       const beforeWrite = async (abs) => {
-        checkpoint ??= checkpoints.begin(id, workspace?.root ?? '');
+        checkpoint ??= checkpoints.begin(id, workspace?.root ?? '', session.engine?.id ?? 'bunny'); // (each checkpoint records which engine made it)
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
@@ -2285,6 +2325,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (taskNote) { // a user-role note after the app's own system text, before the conversation (the same way as a connector's own words)
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: taskNote });
+      }
+      // ENGINE-SWITCH: Bunny's engine reads the chat itself, so on its first reply after a switch it gets only the taking-over line, the files the chat changed and the open steps, as a user-role note (the same pattern)
+      if (session.engine?.id === 'bunny' && session.engine.handoverPending === true && !textOnly && !scheduledTask) {
+        try {
+          const root = workspace?.root ?? '';
+          const built = await buildHandover({ messages: session.messages.at(-1)?.role === 'user' ? session.messages.slice(0, -1) : session.messages, root, fromId: session.engine.from ?? 'bunny', checkpoints: root ? await checkpoints.list(id).catch(() => []) : [], exists: async (rel) => stat(resolve(root, rel)).then(() => true, () => false), filesOnly: true });
+          const noteAt = history.findIndex((m) => m.role !== 'system');
+          history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: built.text });
+        } catch { /* a note is a convenience: the chat's own messages are all there */ }
+        session = await sessions.update(id, { engine: { ...session.engine, handoverPending: false } }).catch(() => session);
       }
 
       // Tools from the MCP servers the person has switched on, in Chat and in Code (M-2: the person wants Bunny to use them; Plan mode hides the ones that may write).
@@ -3308,7 +3358,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // already arrived is kept, so a stopped reply is still a reply.
       const controller = new AbortController();
       let clientGone = false;
+      replyingChats.add(id);
+      res.on('finish', () => replyingChats.delete(id)); // (before the person's page has even read the end: a switch right after a reply must not meet a stale "busy")
       res.on('close', () => {
+        replyingChats.delete(id);
         if (!res.writableEnded) clientGone = true;
         controller.abort();
       });
@@ -3336,9 +3389,22 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const wantRules = cfg.useBunnyEngine === false ? 'engine' : 'bunny';
           if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth, rules: wantRules, rulesFixed: true } });
           else if (!session.engine.rulesFixed) session = await sessions.update(id, { engine: { ...session.engine, rules: wantRules, rulesFixed: true } });
+          // ENGINE-SWITCH: the handover. Claude Code gets it on the first turn after a switch (its own session was dropped, so there is no --resume); Codex gets it on EVERY turn (its threads are ephemeral, so this is also its memory)
+          let handover = null; let handoverStats = null;
+          {
+            const eng = session.engine;
+            const prior = session.messages.at(-1)?.role === 'user' ? session.messages.slice(0, -1) : session.messages;
+            const talked = prior.some((m) => m && (m.role === 'user' || m.role === 'assistant') && (!m.kind || m.kind === 'text' || m.kind === 'partial' || m.kind === 'summary'));
+            if (talked && (wanted === 'codex' || (wanted === 'claude-code' && !eng.sessionId && eng.from))) {
+              try {
+                const built = await buildHandover({ messages: prior, root: workspace.root, fromId: eng.from ?? wanted, checkpoints: await checkpoints.list(id).catch(() => []), exists: async (rel) => stat(resolve(workspace.root, rel)).then(() => true, () => false), folderBlock: '' });
+                handover = built.text; handoverStats = built.stats;
+              } catch { /* the engine still gets the person's message */ }
+            }
+          }
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
-            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            id, session, settings, content, handover, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
@@ -3353,16 +3419,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
           if (outcome.stoppedForCheck) {
-            session = await sessions.update(id, { engine: { ...session.engine, restricted: true } }).catch(() => session);
+            const failedFor = session.engine.restrictedFor ?? (session.engine.restricted ? [session.engine.id] : []); // ES-2: only this code writes the list
+            session = await sessions.update(id, { engine: { ...session.engine, restrictedFor: [...new Set([...failedFor, wanted])] } }).catch(() => session);
             const note = "Stopped: Bunny's check did not run. Your next message in this chat continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder. A new chat starts in full mode again.";
             send('delta', { text: `${outcome.text ? '\n\n' : ''}${note}` });
             outcome.text = `${outcome.text}${outcome.text ? '\n\n' : ''}${note}`;
           }
           if (clientGone) { if (outcome.text.trim()) await sessions.append(id, { role: 'assistant', content: outcome.text, kind: 'partial', ...undoInfo() }); }
           else if (outcome.text.trim()) {
-            const saved = await sessions.append(id, { role: 'assistant', content: outcome.text, ...undoInfo() });
+            const saved = await sessions.append(id, { role: 'assistant', content: outcome.text, ...undoInfo(), ...(handoverStats ? { handover: handoverStats } : {}) });
             session = await sessions.get(id);
-            send('done', { sessionId: id, model: cfg.engines[wanted] ? `${wanted}` : model, messageId: saved.messages.at(-1)?.id, context: sessions.context(session) });
+            send('done', { sessionId: id, ...(handoverStats ? { handover: handoverSaid(handoverStats) } : {}), model: cfg.engines[wanted] ? `${wanted}` : model, messageId: saved.messages.at(-1)?.id, context: sessions.context(session) });
           }
           res.end();
           return;

@@ -17,14 +17,14 @@ export function createCheckpoints({ dir }) {
   const safe = (v) => /^[a-f0-9-]{36}$/.test(String(v));
 
   /** Start a checkpoint for one reply. Nothing is written until a file is changed. */
-  function begin(sessionId, root) {
+  function begin(sessionId, root, engine = 'bunny') {
     const id = randomUUID();
     const files = new Map();
     let writing = Promise.resolve();
     const persist = () => {
       writing = writing.then(async () => {
         await mkdir(join(dir, sessionId), { recursive: true });
-        await writeFile(fileFor(sessionId, id), JSON.stringify({ id, sessionId, root, at: new Date().toISOString(), restored: false, files: [...files.values()] }));
+        await writeFile(fileFor(sessionId, id), JSON.stringify({ id, sessionId, root, engine, at: new Date().toISOString(), restored: false, files: [...files.values()] }));
       });
       return writing;
     };

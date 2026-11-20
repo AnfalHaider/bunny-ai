@@ -57,6 +57,7 @@ export function deviceRefusal(method, path, body = null) {
   if (p === '/api/sessions' && m === 'POST' && has('engine')) return ENGINE_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('engine')) return ENGINE_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}/setting/engine$`).test(p) && m === 'PATCH') return ENGINE_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}/engine$`).test(p) && m === 'POST') return ENGINE_REFUSED_MESSAGE; // ENGINE-SWITCH: a device never moves a chat to another engine (CE-6)
   return null;
 }
 export const isDeviceRefused = (method, path, body = null) => deviceRefusal(method, path, body) !== null;
