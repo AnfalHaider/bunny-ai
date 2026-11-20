@@ -857,15 +857,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     // ---- F6: the Brave Search key (Settings, Capabilities). The window's alone: it is stored in the secrets store, never in settings, and is never handed back, only whether one is set. ----
     if (path === '/api/web-search' && method === 'GET') {
       if (req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." });
-      return sendJson(res, 200, { braveKey: Boolean(await secrets.get(BRAVE_SECRET)) });
+      return sendJson(res, 200, { braveKey: settings.braveKeySet === true });
     }
     if (path === '/api/web-search/key' && (method === 'PUT' || method === 'DELETE')) {
       if (windowOnly(req, res)) return;
       if (req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: "Change this in Bunny's window." }); // an Everything device counts as the window for the rest, never for this
-      if (method === 'DELETE') { await secrets.delete(BRAVE_SECRET); return sendJson(res, 200, { braveKey: false }); }
+      if (method === 'DELETE') { await secrets.delete(BRAVE_SECRET); await saveSettings({ braveKeySet: false }); return sendJson(res, 200, { braveKey: false }); }
       const key = String((await readBody(req))?.key ?? '').trim();
       if (!/^[\x21-\x7e]{10,200}$/.test(key)) return sendJson(res, 400, { code: 'websearch.badKey', message: 'That does not look like a Brave Search key. Copy it again from the Brave Search API page.' });
       await secrets.set(BRAVE_SECRET, key);
+      await saveSettings({ braveKeySet: true });
       return sendJson(res, 200, { braveKey: true });
     }
 
@@ -3288,7 +3289,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, browser: browserControl });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, browser: browserControl && !textOnly && !scheduledTask });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               const added = appTools.takePending?.(id);
@@ -3330,7 +3331,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // A command that exits non-zero, cannot start or runs out of time is a failed step, not a "done" one (Q2-29).
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: clip(result, 1200), fullResult: wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
+        // Brave's terms: no storing of its results. The chat keeps one line (who answered and how many), not the text; the person and the model see the results during this reply only.
+        const bravePage = name === 'web_search' && wholeResult.startsWith('(via Brave)\n');
+        const keptResult = bravePage ? `web search via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results` : clip(result, 1200);
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: keptResult, fullResult: bravePage ? '' : wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
         send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}) });
         if (signIn) return `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.`;
         return connectorPictures.length ? { content: result, images: connectorPictures } : result;

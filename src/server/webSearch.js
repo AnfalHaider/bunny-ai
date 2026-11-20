@@ -22,7 +22,10 @@ export const searchProviders = [
     async run(query, { fetchImpl, key }) {
       let res;
       try {
-        res = await fetchImpl(`https://${BRAVE_HOST}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${MAX_HITS}`, { headers: { accept: 'application/json', 'x-subscription-token': key }, signal: AbortSignal.timeout(LIMIT_MS) });
+        const address = `https://${BRAVE_HOST}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${MAX_HITS}`;
+        if (new URL(address).origin !== `https://${BRAVE_HOST}`) return { reason: 'Brave could not be reached' }; // the key goes to this origin only
+        // redirect: 'error': a redirect would carry the header to another place, so it is never followed
+        res = await fetchImpl(address, { headers: { accept: 'application/json', 'x-subscription-token': key }, redirect: 'error', signal: AbortSignal.timeout(LIMIT_MS) });
       } catch (err) { return { reason: timedOut(err) ? 'Brave did not answer in 15 seconds' : 'Brave could not be reached' }; }
       if (res.status === 401 || res.status === 403 || res.status === 422) return { reason: 'Brave refused the key' };
       if (res.status === 429) return { reason: "Brave's free allowance is used up for now" };
@@ -72,16 +75,18 @@ export async function searchWeb(query, { fetchImpl = globalThis.fetch, braveKey 
   const q = String(query ?? '').trim();
   if (!q) throw new Error('web_search needs a query');
   const reasons = [];
+  const key0 = typeof braveKey === 'string' ? braveKey.trim() : '';
   let answeredEmpty = false;
   for (const p of searchProviders) {
     const key = typeof braveKey === 'string' ? braveKey.trim() : '';
     if (p.needsKey && !key) continue; // with no key Brave is never called
     const out = await p.run(q, { fetchImpl, key });
-    if (out.hits?.length) return `(via ${p.label})\n${out.hits.join('\n')}`;
+    if (out.hits?.length) return `(via ${p.label})\n${out.hits.join('\n')}`.split(key0 || '\u0000').join('[key]');
     if (out.hits) { answeredEmpty = true; reasons.push(`${p.label} found no results`); } else reasons.push(out.reason);
   }
   if (answeredEmpty && reasons.every((r) => /found no results$/.test(r))) return 'No results.';
   const hint = braveKey ? 'Try again in a minute.' : 'Try again in a minute, or add a Brave Search key in Settings, Web search.';
   const panel = browser ? ` The browser panel is another way: browser_open https://duckduckgo.com/?q=${encodeURIComponent(q)} and browser_read it.` : '';
-  throw new Error(`The web search did not work. ${reasons.map((r) => `${r}.`).join(' ')} ${hint}${panel}`);
+  const redact = (t) => (key0 ? String(t).split(key0).join('[key]') : String(t));
+  throw new Error(redact(`The web search did not work. ${reasons.map((r) => `${r}.`).join(' ')} ${hint}${panel}`));
 }

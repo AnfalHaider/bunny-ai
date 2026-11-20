@@ -140,3 +140,71 @@ test('web_search in a chat uses the saved key: the stand-in Brave answers and th
   const tmp = await mkdtemp(join(tmpdir(), 'x-'));
   void tmp;
 });
+
+// ---------- Security F6-1 to F6-4 and Brave's terms ----------
+test('F6-1: the key goes to https://api.search.brave.com only, with redirect: "error", and every copy is redacted from errors', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url: String(url), redirect: init.redirect }); throw new Error(`failed with ${KEY} inside`); };
+  const bad = await searchWeb('x', { fetchImpl: async (u, i) => (String(u).includes(BRAVE_HOST) ? fetchImpl(u, i) : html('', 202)), braveKey: KEY }).catch((e) => e.message);
+  assert.equal(seen[0].redirect, 'error');
+  assert.ok(new URL(seen[0].url).origin === `https://${BRAVE_HOST}` && !seen[0].url.includes(KEY));
+  assert.ok(!bad.includes(KEY), 'no copy of the key in the failure text');
+});
+
+test('F6-1: Settings holds only braveKeySet (a boolean); the key route and the flag are the window\'s; a device cannot set the flag', async (t) => {
+  const { base } = await startApp(t, { fake: false });
+  await put(base, '/api/web-search/key', { key: KEY });
+  const settings = await (await fetch(`${base}/api/settings`)).json();
+  assert.equal(settings.braveKeySet, true);
+  assert.ok(!JSON.stringify(settings).includes(KEY));
+  const { isWindowOnlyRoute, WINDOW_ONLY_SETTING_KEYS } = await import('../src/server/windowOnly.js');
+  assert.ok(WINDOW_ONLY_SETTING_KEYS.includes('braveKeySet'));
+  assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { braveKeySet: true }), true);
+  await put(base, '/api/web-search/key', undefined, 'DELETE');
+  assert.equal((await (await fetch(`${base}/api/settings`)).json()).braveKeySet, false);
+});
+
+test('F6-3: the browser-panel hint only comes when the panel is allowed in this reply, and never in Quick ask or a scheduled run', async () => {
+  const bad = () => world({ 'html.duckduckgo.com': html('', 202) });
+  await assert.rejects(searchWeb('x', { fetchImpl: bad().fetchImpl, browser: false }), (e) => !/browser_open/.test(e.message));
+  await assert.rejects(searchWeb('x', { fetchImpl: bad().fetchImpl, browser: true }), /browser_open/);
+});
+
+test("Brave's terms: the chat keeps one line for a Brave search, not the result text; the links the model cites are in its own answer", async (t) => {
+  const { createServer } = await import('node:http');
+  const { base } = await startApp(t, { fake: false });
+  await put(base, '/api/web-search/key', { key: KEY });
+  const sse = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`;
+  let n = 0;
+  const provider = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      n += 1;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(sse(n === 1 ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'web_search', arguments: '{"query":"carrots"}' } }] } : { content: 'done' }));
+    });
+  });
+  await new Promise((r) => provider.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
+  await fetch(`${base}/api/providers/openai/connect`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` }) });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => (String(url).includes(BRAVE_HOST) ? json(braveBody) : real(url, init));
+  t.after(() => { globalThis.fetch = real; });
+  const { id } = await (await fetch(`${base}/api/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'brave terms' }) })).json();
+  const stream = await (await fetch(`${base}/api/sessions/${id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'search carrots', providerId: 'openai', model: 'gpt-4o' }) })).text();
+  assert.match(stream, /brave\.example\/carrots/, 'the person sees the results during the reply');
+  const saved = JSON.stringify(await (await fetch(`${base}/api/sessions/${id}`)).json());
+  assert.match(saved, /web search via Brave: 1 results/);
+  assert.ok(!/Brave carrots|brave\.example|From Brave/.test(saved), 'no result text, title, link or snippet is saved with the chat');
+  const exported = await (await fetch(`${base}/api/sessions/${id}/export?format=markdown`)).text().catch(() => '');
+  assert.ok(!/brave\.example|From Brave/.test(exported), 'nor in an export');
+});
+
+test("F6-4: Brave's result links are in the Quick ask read_url allow-set like DuckDuckGo's (the link lines keep their form)", async () => {
+  const w = world({ [BRAVE_HOST]: json(braveBody) });
+  const out = await searchWeb('x', { fetchImpl: w.fetchImpl, braveKey: KEY });
+  const links = out.split('\n').map((l) => /^ {2}(https?:\/\/\S+)$/.exec(l)?.[1]).filter(Boolean);
+  assert.deepEqual(links, ['https://brave.example/carrots']);
+});
