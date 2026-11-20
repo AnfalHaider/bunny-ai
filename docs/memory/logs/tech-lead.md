@@ -2,6 +2,11 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-20 - AGENT-FLOW diagnosis (read only)
+
+**Wrote** `docs/plans/AGENT-FLOW-diagnosis.md` on `claude/tech-lead-agent-flow`, from the code at e2ec6ec6. Main causes: switched-on connectors are not loaded into the same reply; the browser panel, PC search and sign-ins are invisible when off; Chat mode is capped at 6 steps and never extended; the plugin search is anonymous and limited to remote servers; Ask is the default and allows one call per card. Fixes F1-F13 ranked; F8-F13 are HIGH.
+**Lesson:** compare every place that grants something mid-reply. request_capability pushes tools and switchOn does not, and that one difference is the dead end.
+
 ## 2026-11-17 - FINAL entry for this session (retired after v0.1.8; restarts for v0.1.9)
 
 **Reviewed and signed (sign-off files under `docs/signoffs/<piece>/tech-lead.md`, each on the branch named):** `k1-kit-0.6.0` PASS at 4a0fa01 (earlier shas 8c39d76, 714a0a8, 9538bcb, 46add98, f45f024); `k2-guard` PASS at 1d3a77c (ec605fd, bec112e before it); `kit-land` PASS at da999b0 (88bbd53, ba091a6 before it); `release-0.1.8` PASS at a6afcf5 (e028d3b before it); `release-0.1.7` PASS at 6b06ed9; the W2-7, W4-5b, W5-1, W5-7, W5-8, W6-2/3/4/18, lane-a-016 pieces earlier (FAIL then PASS where a first sha was wrong).
