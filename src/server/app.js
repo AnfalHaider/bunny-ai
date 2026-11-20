@@ -2708,7 +2708,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
             baseUrl: use.provider.baseUrl, apiKey: use.apiKey ?? undefined, model: use.model, messages: helperHistory, fake: fake && !use.provider.custom,
             signal: background ? undefined : controller.signal,
-            tools: toolDefinitions.filter(allowed).filter((d) => !(req.bunnyRemote && remoteToolBlocked(d.function.name))), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds),
+            tools: [...toolDefinitions, ...[...deferredTools.values()].map((x) => x.def)].filter((d) => d.function.name !== 'find_tools').filter(allowed).filter((d) => !(req.bunnyRemote && remoteToolBlocked(d.function.name))), runTool, maxTokens, maxToolRounds: Math.max(8, maxToolRounds), // F7: a helper is sent every tool it may use, not this reply's deferred list
             // OpenRouter's reasoning setting belongs to this chat's provider only.
             extraBody: use.providerId === providerId ? extraBody : null, auth: use.provider.auth ?? null, parallel: (n) => n === 'run_subagent',
           })) text += delta;
@@ -3152,6 +3152,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           return 'read_url refused: a quick answer opens only an address exactly as the person typed it or as web_search listed it, nothing else. Use web_search, or tell the person to open this in Bunny' + String.fromCharCode(39) + 's window.';
         }
         // F7: find_tools loads deferred tools into THIS reply (its own loaded set: the list below is this reply's). The checks run again here: Plan mode and a device.
+        if (name === 'find_tools' && agentScope.getStore()) return 'find_tools is not for helpers: you already have every tool you may use.';
         if (name === 'find_tools' && deferredTools.size > 0) {
           const found = findTools(deferredTools, parsed, {
             allowed: (n) => !(req.bunnyRemote && remoteToolBlocked(n)) && !(permissionMode === 'plan' && planRefuses(riskOf(n), n)),
@@ -3167,7 +3168,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           return found.text;
         }
         // a deferred tool that was not loaded in this reply is refused like any tool that was not offered, with the way to load it
-        if (deferredTools.has(name) && !toolDefinitions.some((d) => d.function?.name === name)) {
+        if (deferredTools.has(name) && !toolDefinitions.some((d) => d.function?.name === name) && !agentScope.getStore()) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not loaded in this reply, so it was not run. Load it first with find_tools(names: ['${name}']).`;
         }
@@ -3180,7 +3181,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         }
         // One check for every path: a tool that was not offered to the model in this reply never runs, whatever
         // it is (a hallucinated call, or text in a file telling it to). Plan mode relies on this.
-        if (!toolDefinitions.some((d) => d.function?.name === name)) {
+        if (!toolDefinitions.some((d) => d.function?.name === name) && !(agentScope.getStore() && deferredTools.has(name))) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not available in this reply, so it was not run.`;
         }
