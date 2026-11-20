@@ -197,8 +197,12 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     await store.addRecord({ engine: id, action: 'signin', from: null, to: null, sha12: '' });
     if (fakeMode && !openLoginRun) { setTimeout(() => writeFile(fakeFlag(), '1').catch(() => {}), 200); return { started: true, url: 'https://claude.ai/login?stand-in=1' }; }
     loginRuns.get(id)?.kill?.();
+    // The program opens the browser itself, and a browser it starts inherits its environment: with the isolated user and app-data folders that was a brand-new first-run Chrome profile, not the person's own browser
+    // (seen with the real program, v0.1.14.1). So the program is told its browser is a file that does nothing (the BROWSER variable it reads), and Bunny's own button opens the page address it printed in the person's normal browser.
+    const noBrowser = join(accountHome, 'no-browser.cmd');
+    await writeFile(noBrowser, '@exit /b 0\r\n').catch(() => {});
     let run;
-    try { run = (openLoginRun ?? spawnEngine)({ file: found.exe, args: AUTH_COMMANDS.login, cwd: accountHome, extraEnv: authEnv() }); }
+    try { run = (openLoginRun ?? spawnEngine)({ file: found.exe, args: AUTH_COMMANDS.login, cwd: accountHome, extraEnv: { ...authEnv(), BROWSER: noBrowser } }); }
     catch (err) { throw Object.assign(new Error(`Claude Code's sign-in could not start (${String(err?.message ?? err).slice(0, 120)}).`), { status: 502 }); }
     loginRuns.set(id, run);
     let said = '';

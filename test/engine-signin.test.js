@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createEngineService } from '../src/server/engines/service.js';
@@ -45,6 +45,10 @@ test('a sign-in that prints its page: the address is returned, the program was s
   assert.equal(stand.calls[0].extraEnv.CLAUDE_CONFIG_DIR, join(dataDir, 'engines', 'claude-code', 'account', 'home', 'config'), 'the account folder isolation is kept');
   assert.equal(stand.calls[0].extraEnv.USERPROFILE, join(dataDir, 'engines', 'claude-code', 'account', 'home'));
   assert.doesNotMatch(JSON.stringify((await svc.record?.()) ?? ''), /oauth|client_id|state=xyz/, 'the address is not written to the record');
+  // the program's own browser launch must not inherit the isolated profile folders: its browser is a file that does nothing, so the person's normal browser is opened by Bunny's button
+  const noBrowser = stand.calls[0].extraEnv.BROWSER;
+  assert.equal(noBrowser, join(dataDir, 'engines', 'claude-code', 'account', 'home', 'no-browser.cmd'));
+  assert.equal(readFileSync(noBrowser, 'utf8').trim(), '@exit /b 0');
 });
 
 test('an address on a stranger\'s site is never returned; a program that prints nothing is "started, no page seen", never "a window opened"', async (t) => {
