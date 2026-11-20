@@ -1,0 +1,245 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny folder trust</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.pc .btn.p{}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.pc .btn.p{}
+</style>
+<style>
+.qs{display:grid;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--soft)}
+.qs .qh{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.qs .qh b{font-size:13.5px}
+.two{display:inline-flex}.two button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:3px 12px;cursor:pointer;margin-left:-1px}
+.two button:first-child{border-radius:8px 0 0 8px;margin-left:0}.two button:last-child{border-radius:0 8px 8px 0}
+.two button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+.rowt{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.rowt:last-child{border-bottom:0}.rowt small{display:block;color:var(--dim);font-size:12px}
+.st{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}.st.ok{color:var(--ok);border-color:var(--ok)}
+@container (max-width:430px){.rowt{grid-template-columns:minmax(0,1fr) auto}.rowt>:nth-child(3){grid-column:1/-1}}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Trusting a folder: instructions and Auto, as two answers</h1>
+   <p class="dim">v0.1.15 · AGENT-FLOW F12 (HIGH, owner said yes to the Smart default) · Security's F12-1 to F12-4 · invented profile only</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>The Smart default starts a new Code chat in <b>Auto</b> (with Bunny's check on every risky action) in a <b>git project you have trusted</b>, and in <b>Ask</b> anywhere else. Trusting a folder to <i>follow its instruction files</i> and trusting it to <i>start in Auto</i> are <b>different trusts</b>, so one click must never grant both without saying so.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li><b>Drawn (recommended): one card, two separate answers.</b> Each question has its own Yes / Not now, and nothing is chosen until the person chooses. Alternative B below names both in one button, as Security allows.</li>
+   <li>A folder Bunny has not seen is <b>never trusted</b>: a cloned or downloaded project starts in Ask until the person's click.</li>
+   <li>"Git project" is decided by Bunny asking git itself, not by a <span class="mono">.git</span> file or folder alone.</li>
+   <li>With the Auto check off, unreachable or failed, Smart acts as <b>Ask</b>. It never acts as Auto with no check.</li>
+   <li>Existing chats keep their mode. A phone's new chat starts in Ask whatever the default. Each trust is seen and removed on the Working folder card and in Settings → Permissions.</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · The card, when a folder has both (recommended: two answers)</h2>
+  <div class="cols">
+   <div class="cell"><h3>Desktop</h3>
+    <div class="pc" id="c1"></div><p class="cap">"Continue" is disabled until both are answered; "Not now" for both is a valid answer and stores nothing.</p></div>
+   <div class="cell"><h3>Phone (360 px)</h3>
+    <div class="pc ph2" id="c2"></div></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Alternative B · one answer that names both</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Trust this folder?</b>
+     <p>The project in <span class="path">C:\Users\Sam\Projects\carrot-shop</span> is a git project with instruction files.</p>
+     <p><b>Trust this folder</b> means: follow its instruction files, <b>and</b> start new chats here in Auto with Bunny's check.</p>
+     <div class="blk"><div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><button class="lnk">Read</button></div></div>
+     <div class="btns"><button class="btn p">Trust this folder</button><button class="btn">Not now</button></div>
+     <div class="sub">Want only one? Choose Not now and use the Working folder card.</div></div>
+    <p class="cap">Faster, but a person who wants only one of the two has to go to the Working folder card. Not recommended: the two-answer card above is clearer.</p></div>
+   <div class="cell"><h3>Which cards appear, by folder</h3>
+    <div class="seg" id="seg"></div><div class="pc" id="stage"></div><p class="cap" id="scap"></p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · Where each trust is seen and removed</h2>
+  <div class="cols">
+   <div class="cell"><h3>The Working folder card</h3>
+    <div class="dlg"><div class="dh"><b>Working folder</b></div><div class="db"><div class="path">C:\Users\Sam\Projects\carrot-shop</div>
+     <div class="blk"><div class="hd"><span><b>Trust for this folder</b></span></div>
+      <div class="rowt"><span>Follow its instruction files<small>AGENTS.md, for every engine</small></span><span class="st ok">trusted</span><button class="lnk">Remove</button></div>
+      <div class="rowt"><span>Start new chats in Auto<small>With Bunny's check. A git project.</small></span><span class="st ok">trusted</span><button class="lnk">Remove</button></div>
+      <div class="note">Removing a trust means I ask again next time. Chats already open keep what they have until you change it.</div></div></div>
+     <div class="df"><button class="btn p">Close</button></div></div>
+    <p class="cap">Each row is removed on its own. Not-yet-trusted rows show "Trust…", which opens the same question as the card.</p></div>
+   <div class="cell"><h3>Settings → Permissions → Trusted folders</h3>
+    <div class="set" style="border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden"><div style="padding:12px 14px 8px;font-size:16px;font-weight:700">Trusted folders</div>
+     <div class="rowt" style="border-top:1px solid var(--line)"><span><b>carrot-shop</b><small>C:\Users\Sam\Projects\carrot-shop</small></span><span class="st ok">instructions</span><span class="st ok">Auto</span></div>
+     <div class="rowt"><span><b>garden-notes</b><small>C:\Users\Sam\Documents\garden-notes</small></span><span class="st ok">instructions</span><span class="st">not Auto</span></div>
+     <div class="rowt"><span><b>old-site</b><small>C:\Users\Sam\Projects\old-site</small></span><span class="st">not followed</span><span class="st">not Auto</span></div>
+     <div class="note" style="padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)">Click a folder to change either trust. <button class="lnk">Remove all trust</button></div></div>
+    <p class="cap">A folder Bunny has never seen is not in this list: it is untrusted by default.</p></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>On the mode chip, so the person can see why</h3>
+    <div class="step"><span class="chipb">Auto</span><span class="sub">carrot-shop is trusted for Auto, with Bunny's check.</span></div>
+    <div class="step" style="margin-top:6px"><span class="chipb">Ask</span><span class="sub">This folder is not trusted yet. <button class="lnk">Trust…</button></span></div>
+    <div class="step" style="margin-top:6px"><span class="chipb">Ask</span><span class="sub">Smart starts in Ask while Bunny's check is off or can't be reached.</span></div>
+    <p class="cap">A tooltip on the chip, not a banner. Only the person's choice or the three cases above decide it.</p></div>
+   <div class="cell"><h3>In the default-mode menu</h3>
+    <div class="menu2"><div class="opt"><span><b>Ask</b></span></div><div class="opt"><span><b>Accept edits</b></span></div><div class="opt"><span><b>Auto</b><small>Always Auto, with the check</small></span></div><div class="opt"><span><b>Plan</b></span></div><div class="opt"><span><b>Smart</b><small>Auto in a trusted git project, Ask everywhere else</small></span><span class="chp ok">default</span></div></div>
+    <p class="cap">A person who already picked a mode keeps it.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>3 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Card title</td><td>Trust this folder?</td></tr>
+   <tr><td>Question 1</td><td>Follow its instruction files? They steer what I do here, whichever engine this chat uses.</td></tr>
+   <tr><td>Question 2</td><td>Start new chats here in Auto? Auto with Bunny's check on every risky action. Only for a git project.</td></tr>
+   <tr><td>Buttons</td><td>Yes · Not now (each question) · Continue</td></tr>
+   <tr><td>Alternative B button</td><td>Trust this folder = follow its instruction files, and start new chats here in Auto with Bunny's check.</td></tr>
+   <tr><td>Not a git project</td><td>Smart starts here in Ask, because this folder is not a git project.</td></tr>
+   <tr><td>Check off or unreachable</td><td>Smart starts in Ask while Bunny's check is off or can't be reached.</td></tr>
+   <tr><td>Remove</td><td>Removing a trust means I ask again next time. Chats already open keep what they have.</td></tr>
+   <tr><td>Device</td><td>A phone's new chat starts in Ask. Trust can be given only on the PC.</td></tr>
+  </table></div>
+  <div class="q"><b>For Security (F12-1 to F12-4):</b> (a) Is the two-answers card enough for F12-1, or do you want the single named button (B)? (b) Trust is keyed by the folder's real path and recorded only from the window; (c) the git decision is Bunny's own <span class="mono">git rev-parse</span>, shown on the card as "a git project" only when that said yes; (d) the card never appears for a device and a device cannot answer it; (e) the chip tooltip's three reasons are fixed strings.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ function twoq(title,body,id){return '<div class="qs"><div class="qh"><b>'+title+'</b></div><div class="sub">'+body+'</div><div class="two" data-q="'+id+'"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="false">Not now</button></div></div>'}
+ function card(el,files,git){var h='<div class="who">Bunny</div><b>Trust this folder?</b><div class="sub"><span class="path">C:\\Users\\Sam\\Projects\\carrot-shop</span></div>';
+  if(files)h+=twoq('Follow its instruction files?','AGENTS.md (1.2 KB) <button class="lnk">Read</button>. They steer what I do here, whichever engine this chat uses.','a');
+  if(git)h+=twoq('Start new chats here in Auto?','Auto with Bunny\'s check on every risky action. This is a git project.','b');
+  h+='<div class="btns"><button class="btn p cont" disabled style="opacity:.5">Continue</button></div><div class="sub">Not now stores nothing: I ask again next time. Existing chats keep their mode.</div>';
+  el.innerHTML=h;var need=(files?1:0)+(git?1:0);var done={};
+  el.querySelectorAll('.two').forEach(function(t){t.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){t.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});done[t.dataset.q]=1;if(Object.keys(done).length>=need){var c=el.querySelector('.cont');c.disabled=false;c.style.opacity=1}})})})}
+ card(document.getElementById('c1'),true,true);card(document.getElementById('c2'),true,true);
+ var S={
+  'Files and git':['Both questions, as above.',function(el){card(el,true,true)}],
+  'Files, not git':['Only the instructions question. Smart starts here in Ask, because this folder is not a git project.',function(el){card(el,true,false)}],
+  'Git, no files':['Only the Auto question; no instruction file list.',function(el){card(el,false,true)}],
+  'Neither':['No card. A new chat starts in Ask. Nothing to trust.',function(el){el.innerHTML='<div class="sub">No instruction files, and not a git project: no card, and new chats start in Ask.</div>'}]};
+ var seg=document.getElementById('seg');Object.keys(S).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sh(k)});seg.appendChild(b)});
+ function sh(k){S[k][1](document.getElementById('stage'));document.getElementById('scap').textContent=S[k][0]}sh('Files and git');
+})();
+</script>

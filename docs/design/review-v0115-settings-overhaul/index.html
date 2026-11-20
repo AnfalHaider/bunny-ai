@@ -1,0 +1,259 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny settings overhaul</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.pc .btn.p{}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.pc .btn.p{}
+</style>
+<style>
+.sv{font-size:11.5px;color:var(--ok);white-space:nowrap}.sv::before{content:"✓ "}
+.er{font-size:12px;color:var(--bad);display:block;margin-top:3px}
+.set{container-type:inline-size;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden;min-width:0}
+.set h4{margin:0;padding:12px 14px 8px;font-size:16px}
+.grp{padding:8px 14px 2px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);border-top:1px solid var(--line);background:var(--soft)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center;padding:9px 14px;border-top:1px solid var(--line)}
+.row .lb b{font-weight:600;font-size:13.5px}.row .lb small{display:block;color:var(--dim);font-size:12px;line-height:1.35}
+.row .ct{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.row.full{grid-template-columns:minmax(0,1fr)}.row.full .ct{justify-content:flex-start}
+.row.dim .lb{opacity:.6}
+.field{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px 10px;font-size:13px;min-width:120px}
+.field.bad{border-color:var(--bad)}
+textarea.field{width:100%;min-height:60px;font:12.5px Consolas,monospace;color:var(--fg)}
+.tag{font-size:11px;border:1px solid var(--warn);color:var(--warn);background:var(--warn-soft);border-radius:99px;padding:0 7px;white-space:nowrap}
+.tag.new{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+@container (max-width:430px){.row{grid-template-columns:minmax(0,1fr)}.row .ct{justify-content:flex-start}}
+.nav{display:grid;gap:1px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);max-width:300px}
+.nav div{background:var(--panel);padding:6px 12px;font-size:13px;display:flex;justify-content:space-between;gap:8px}
+.nav div.n{background:var(--accent-soft)}.nav div small{color:var(--dim);font-size:11.5px}
+.mv{color:var(--accent)}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Settings, made clearer</h1>
+   <p class="dim">v0.1.15 · SETTINGS-OVERHAUL · from QA's audit of every control (docs/qa/settings-audit-e2ec6ec6.md, 1bd3bfe7) · invented profile only</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>QA found that <b>nothing is dead and everything sticks</b>. The problems are where things sit and how clearly they are said. Proposed: <b>14 sections become 12</b>, each with one job; Quick ask gets <b>one home</b>; every setting has a help line; everything saves as you change it with a small "Saved" mark; and wrong input gets a clear message instead of being dropped.</p>
+  <div class="q"><b>Two decisions for the Chief of Staff and the owner</b><br>
+   <b>1 · Language.</b> Only about a third of the main window's words change, and Settings and replies stay English. Choose: <b>(a)</b> keep the picker with an honest line ("Changes about a third of the main window so far; Settings and replies stay English"), or <b>(b)</b> hide it until the translation is finished. Drawn as (a).<br>
+   <b>2 · Google sign-in.</b> Today the button is greyed because a person must register their own Google app. Choose: <b>(a)</b> an honest note and a short "How to connect" steps panel (drawn), or <b>(b)</b> hide Google until Bunny can offer a one-click sign-in.</div>
+ </section>
+
+ <section>
+  <h2>1 · The sections, today beside proposed</h2>
+  <div class="cols">
+   <div class="cell"><h3>Today (14, from the audit)</h3>
+    <div class="nav"><div>Profile</div><div>Appearance</div><div>Language <small>one control</small></div><div>Notifications <small>one switch</small></div><div>Bunny</div><div>Capabilities <small>holds part of Quick ask</small></div><div>Models</div><div>Code <small>"Code" also names a group in Appearance</small></div><div>Engines</div><div>Desktop app <small>holds the rest of Quick ask</small></div><div>Privacy <small>nothing to set</small></div><div>Connection <small>nothing to set</small></div><div>Usage <small>nothing to set</small></div><div>About</div></div></div>
+   <div class="cell"><h3>Proposed (12)</h3>
+    <div class="nav"><div>Profile</div><div>Appearance <small class="mv">+ Language</small></div><div>Memory and instructions <small class="mv">was Bunny</small></div><div>Models <small class="mv">+ Connection, Default effort</small></div><div>Capabilities</div><div class="n">Quick ask <small>new: one home</small></div><div class="n">Permissions <small>new: mode, rules, Auto check, trusted folders</small></div><div>Code chats <small class="mv">the one place named Code</small></div><div>Engines</div><div>Desktop app <small class="mv">+ Notifications</small></div><div>Usage and data <small class="mv">= Usage + Privacy</small></div><div>About</div></div>
+    <p class="cap">Language, Notifications, Privacy, Connection and Usage no longer stand alone. On a phone the same list opens one section at a time, as today.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · Each section as proposed</h2>
+  <p class="dim">Pick a section. Desktop on the left, phone (360 px) on the right. Rows tagged <span class="tag">moved</span> came from another section; <span class="tag new">new</span> are v0.1.15 rows.</p>
+  <div class="seg" id="seg"></div>
+  <div class="cols"><div class="cell"><div class="set" id="d"></div><p class="cap" id="cap"></p></div><div class="cell"><div class="set" id="m" style="max-width:360px"></div></div></div>
+ </section>
+
+ <section>
+  <h2>3 · One way of saving, and clear errors</h2>
+  <p>Every setting saves as you change it, switches and menus at once, text boxes when you leave them or press Enter. Next to the control a small <span class="sv">Saved</span> appears. There is no Save button anywhere (the Models section's "Save models" goes). When the input is wrong, nothing is saved and the line says why, in red, right under it.</p>
+  <div class="cols">
+   <div class="cell"><h3>Aliases, a line without " = "</h3>
+    <div class="set"><div class="row full"><div class="lb"><b>Aliases</b><small>One per line: a short name, then " = ", then the model. Example: fast = gpt-4o-mini</small></div><div class="ct" style="display:block;width:100%"><textarea class="field bad" aria-label="Aliases">fast = gpt-4o-mini
+qa-aliases</textarea><span class="er">Not saved: line 2 has no " = ". Write it as name = model.</span></div></div></div></div>
+   <div class="cell"><h3>Allowed models, a typo</h3>
+    <div class="set"><div class="row full"><div class="lb"><b>Allowed models</b><small>One model per line. Leave empty to allow all. Only these models are offered.</small></div><div class="ct" style="display:block;width:100%"><textarea class="field bad" aria-label="Allowed models">gpt-4o-minni</textarea><span class="er">Not saved: "gpt-4o-minni" is not a model I know. Nothing would be left to choose from. Did you mean gpt-4o-mini?</span></div></div></div></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Saved mark</h3>
+    <div class="set"><div class="row"><div class="lb"><b>Branch prefix</b><small>New branches and project copies start with this.</small></div><div class="ct"><span class="field">claude/</span><span class="sv">Saved</span></div></div></div></div>
+   <div class="cell"><h3>A shortcut that is a bad idea</h3>
+    <div class="set"><div class="row"><div class="lb"><b>Shortcut</b><small>Press the keys you want.</small></div><div class="ct"><span class="field bad">Ctrl+C</span></div><div class="lb" style="grid-column:1/-1"><span class="er">Not saved: Ctrl+C copies in every app. Choose a shortcut that uses Ctrl+Alt or Win.</span></div></div></div></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>4 · The help lines that are missing, in words</h2>
+  <div class="tbl"><table>
+   <tr><th>Setting</th><th>Help line</th></tr>
+   <tr><td>Transcript text size</td><td>How big the text in chats is.</td></tr>
+   <tr><td>Transcript width</td><td>How wide the chat column is on a large screen.</td></tr>
+   <tr><td>Code colours (light, dark)</td><td>The colours used in code blocks in each theme.</td></tr>
+   <tr><td>Code font size</td><td>The size of text inside code blocks.</td></tr>
+   <tr><td>Instructions for every chat</td><td>Sent to the model at the start of every chat. Keep it short.</td></tr>
+   <tr><td>Rule form: Folder</td><td>Where the rule applies: every folder, or just one.</td></tr>
+   <tr><td>Rule form: What it matches</td><td>A command, a file path or a tool.</td></tr>
+   <tr><td>Rule form: Pattern</td><td>Use * as a wildcard, for example npm test*.</td></tr>
+   <tr><td>Rule form: What happens</td><td>Allow runs with no question. Ask shows a card. Deny always stops it.</td></tr>
+   <tr><td>Speech voice</td><td>The Windows voice used when I read a reply aloud.</td></tr>
+   <tr><td>Wait for a first reply</td><td>Seconds to wait before trying another model (10 to 600). Off while "Try another model" is off.</td></tr>
+   <tr><td>When you ask for an unrelated task</td><td>Ask shows a choice. Start a new chat picks that choice for you. Do it here never offers it.</td></tr>
+   <tr><td>After a search</td><td>Read the files, then answer, or just show what was found.</td></tr>
+   <tr><td>Language</td><td>(a) Changes about a third of the main window so far. Settings and replies stay in English.</td></tr>
+  </table></div>
+ </section>
+
+ <section>
+  <h2>5 · Room for the new v0.1.15 rows</h2>
+  <div class="tbl"><table>
+   <tr><th>New row</th><th>Where</th></tr>
+   <tr><td>Brave Search key (optional)</td><td>Capabilities → Web search</td></tr>
+   <tr><td>Check Auto actions, and its model</td><td>Permissions (F11)</td></tr>
+   <tr><td>Smart default, trusted folders</td><td>Permissions: default mode and Trusted folders (F12)</td></tr>
+   <tr><td>Confine commands</td><td>Permissions (F13, later)</td></tr>
+   <tr><td>Search this PC defaults</td><td>Capabilities → Search this PC; the "by itself" switch lives in Quick ask</td></tr>
+   <tr><td>Engine rules (Deny, Ask, Allow)</td><td>Engines, under each engine</td></tr>
+   <tr><td>Connector keys</td><td>Capabilities → Connectors → Keys</td></tr>
+   <tr><td>Project instructions switch</td><td>Code chats → Instructions (global switch for FOLDER-RULES)</td></tr>
+  </table></div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ function sw(on,dis){return '<button class="sw" role="switch" aria-checked="'+on+'"'+(dis?' disabled':'')+'></button>'}
+ function R(l,h,c,o){o=o||{};return '<div class="row'+(o.full?' full':'')+(o.dim?' dim':'')+'"><div class="lb"><b>'+l+'</b>'+(o.tag?' <span class="tag'+(o.tag==='new'?' new':'')+'">'+(o.tag==='new'?'new':'moved')+'</span>':'')+(h?'<small>'+h+'</small>':'')+'</div><div class="ct">'+c+'</div></div>'}
+ function G(t){return '<div class="grp">'+t+'</div>'}
+ function F(t){return '<span class="field">'+t+'</span>'}
+ var S={
+ 'Profile':['Profile',[R('Profile photo','Shown in the sidebar.','<button class="btn s2">Choose…</button>'),R('Full name','','<span class="field">Sam Rivera</span><span class="sv">Saved</span>'),R('What should Bunny call you?','Used in the model\'s instructions.','<span class="field">Sam</span>'),R('GitHub','Lets me read and open pull requests.','<button class="btn s2">Sign in</button>'),G('Google'),R('Google','Not available until you connect your own Google app. This is how, in 5 steps.','<button class="btn s2">How to connect</button>'),R('Sign-in apps','For the Google steps above. Advanced.','<button class="btn s2">Open</button>')],'Google gets a plain path (a short steps panel) or an honest note, instead of a greyed button.'],
+ 'Appearance':['Appearance and language',[R('Theme','','<span class="field">System ▾</span>'),R('Interface font','','<span class="field">Inter ▾</span>'),R('Response font','','<span class="field">Source Serif 4 ▾</span>'),R('Language','Changes about a third of the main window so far. Settings and replies stay in English.','<span class="field">English ▾</span>',{tag:'moved'}),G('Chat'),R('Transcript text size','How big the text in chats is.','<span class="field">Medium ▾</span>'),R('Transcript width','How wide the chat column is on a large screen.','<span class="field">Standard ▾</span>'),R('Label chats by status','','sw1'),R('Default transcript view','','<span class="field">Normal ▾</span>'),R('Motion','','<span class="field">On ▾</span>'),G('Code blocks'),R('Code colours','The colours used in code blocks in each theme.','<span class="field">Light: Paper ▾</span><span class="field">Dark: Night ▾</span>'),R('Code font','','<span class="field">JetBrains Mono ▾</span>'),R('Code font size','The size of text inside code blocks.','<span class="field">13 ▾</span>')],'"Code" is no longer a group name in Appearance: the group is "Code blocks". Language moves in here, with an honest help line (decision 1).'],
+ 'Memory':['Memory and instructions',[R('Instructions for every chat','Sent to the model at the start of every chat. Keep it short.','<textarea class="field" aria-label="Instructions">Be brief. Use metric units.</textarea><span class="sv">Saved</span>',{full:1}),G('Memory'),R('Use memory','','sw1'),R('Search and reference chats','','sw1'),R('Generate memory from chats','','sw1'),R('Include sensitive topics in memory','','sw0'),R('Your memory','','<button class="btn s2">Open</button><button class="btn s2">Import</button>')],'Was "Bunny". The instructions box finally has its help line.'],
+ 'Models':['Models',[R('Right now','Provider and model in use.','<span class="chp ok">Nvidia · gpt-oss-120b</span>',{tag:'moved'}),R('Show models','','<span class="field">Free only ▾</span>'),R('Default effort','How hard the model thinks, in every chat.','<span class="field">Medium ▾</span>',{tag:'moved'}),R('Longest reply','The most tokens a single reply may use.','<span class="field">4,000</span>'),R('Token budget for one reply','I ask before a reply goes past this.','<span class="field">5,000,000</span>'),G('When a model is busy'),R('Try another model when yours is busy','','sw1'),R('Wait for a first reply','Seconds before trying another model (10 to 600).','<span class="field">30</span><span class="sv">Saved</span>'),G('Names and limits'),R('Aliases','One per line: a short name, " = ", then the model.','<textarea class="field" aria-label="Aliases">fast = gpt-4o-mini</textarea>',{full:1}),R('Allowed models','One per line. Empty allows all. Only these are offered.','<textarea class="field" aria-label="Allowed">&nbsp;</textarea>',{full:1})],'Connection (display only, duplicated the picker) is folded into "Right now". Default effort moves here: it applies in Chat too. "Save models" is gone: everything saves as you change it.'],
+ 'Capabilities':['Capabilities',[R('Artifacts','','sw1'),R('Draw charts in artifacts','','sw1'),R('Use skills','','sw1'),R('Use connectors','','sw1'),R('Connector keys','The keys your connectors use. Values are never shown again.','<button class="btn s2">Manage</button>',{tag:'new'}),R('Computer use','','sw0'),R('Let the AI build its own tools','You read and approve each tool before it is saved.','sw0'),G('Web search'),R('Brave Search key (optional)','Used instead of DuckDuckGo when set.','<span class="field">Paste a key</span>',{tag:'new'}),G('Search this PC'),R('Search this PC','Finds files and the text inside documents, through Windows Search.','sw1'),R('Excluded folders','Always left out: Windows, Program Files, AppData and key folders.','<button class="btn s2">Add folder</button>'),R('Defaults','Whether a chat may turn it on from a card.','<span class="field">Ask me ▾</span>',{tag:'new'}),G('Voice'),R('Speech voice','The Windows voice used when I read a reply aloud.','<span class="field">Zira ▾</span>')],'Quick ask no longer lives here: "Quick ask searches by itself" moved to Quick ask.'],
+ 'Quick ask':['Quick ask',[R('Quick ask','A light floating bar for a quick question.','sw1'),R('Shortcut','Press the keys you want.','<span class="field">Ctrl+Alt+Space</span><button class="btn s2">Change</button>'),R('Keep running in the tray','Quick ask needs this on.','sw1',{tag:'moved'}),G('Searching'),R('Search this PC by itself','Quick ask can find files without being asked each time.','sw1',{tag:'moved'}),R('After a search','Read the files, then answer, or just show what was found.','<span class="field">Read, then answer ▾</span>',{tag:'moved'}),R('Search this PC is on','Change it in Capabilities.','<button class="btn s2">Open Capabilities</button>'),G('When Search this PC is off'),R('Search this PC by itself','Search this PC is off, so this does nothing yet.','sw0'+'|dis',{dim:1})],'One home for Quick ask: on/off, shortcut, tray, searching and what happens after. The dimmed row now says why it is dimmed.'],
+ 'Permissions':['Permissions',[R('Default permission mode','What a new Code chat starts in.','<span class="field">Smart ▾</span>',{tag:'new'}),R('','Smart: Auto in a trusted git folder, Ask otherwise.','',{}),R('Check Auto actions','A second model checks each risky action in Auto.','sw1',{tag:'new'}),R('Model that checks','Cheapest of this chat\'s provider.','<span class="field">Automatic ▾</span>',{tag:'new'}),G('Rules'),R('Rules','Allow, Ask or Deny, for every folder or just one.','<button class="btn s2">Add a rule</button>',{}),R('Folder','Where the rule applies: every folder, or just one.','<span class="field">Every folder ▾</span>'),R('What it matches','A command, a file path or a tool.','<span class="field">Command ▾</span>'),R('Pattern','Use * as a wildcard, for example npm test*.','<span class="field">npm test*</span>'),R('What happens','Allow runs with no question. Ask shows a card. Deny always stops it.','<span class="field">Allow ▾</span>'),R('Try a command','Shows what I would do without running anything.','<button class="btn s2">Try</button>'),G('Trusted folders'),R('carrot-shop','Instructions: followed · Auto: trusted','<button class="lnk">Remove</button>',{tag:'new'}),R('old-site','Instructions: not followed · Auto: not trusted','<button class="lnk">Remove</button>',{tag:'new'})],'Today the permission rules sit in "Code" with seven unrelated settings after them. Mode, rules, the Auto check and trusted folders now share one section.'],
+ 'Code chats':['Code chats',[G('Long jobs'),R('Keep going on long jobs','','sw1'),R('Longest long job','','<span class="field">2 hours ▾</span>'),G('Helpers'),R('Helpers','Let me bring helper agents for big jobs.','sw1'),G('After a reply'),R('Summary and next steps','Finish a job with a short report.','sw1'),R('Prompt suggestions','Offer what to ask next.','sw1'),G('New tasks'),R('When you ask for an unrelated task','Ask shows a choice. Start a new chat picks that choice for you. Do it here never offers it.','<span class="field">Ask ▾</span>'),G('Branches'),R('Branch prefix','New branches and project copies start with this.','<span class="field">claude/</span><span class="sv">Saved</span>'),G('Instructions'),R('Use project instructions','AGENTS.md or CLAUDE.md in the folder, for every engine. Each folder still asks once.','sw1',{tag:'new'})],'The seven settings that followed the rules block now have headings of their own. "Code chats" is the only place "Code" names a section.'],
+ 'Engines':['Engines',[R('Bunny','Built in','<span class="chp ok">default</span>'),R('Claude Code','v2.1.311 · Signed in','<span class="field">Account</span>'),R('Rules for Claude Code','Deny, Ask and Allow lists for this engine.','<button class="btn s2">Edit</button>',{tag:'new'}),R('Codex CLI','v0.170.0 · Local','<span class="field">Local</span>'),G('Defaults'),R('Engine for new chats','','<span class="field">Bunny ▾</span>'),R('Use Bunny\'s engine','On: your Bunny rules decide each step.','sw1')],'Unchanged apart from the engine rule lists (built as drawn) and a link from each engine.'],
+ 'Desktop':['Desktop app',[R('Start when I sign in','','sw1'),R('Keep running in the tray','','sw1'),R('Keep the same address after restart','','sw1'),R('Reply ready','A notification when a reply finishes while Bunny is in the background.','sw1',{tag:'moved'}),G('Other devices'),R('Allow other devices to open Bunny','A phone or another computer on your network. You choose each device\'s level.','sw0'),R('Open in your browser','','<button class="btn s2">Open</button>'),R('Install as an app','','<button class="btn s2">Install</button>')],'Notifications joins here. The hidden, disabled second copy of "Allow other devices" is removed: one switch, in one place.'],
+ 'Usage':['Usage and data',[G('Usage'),R('This month','Tokens used by chats on this PC.','<span class="field">412,300</span>'),G('Where your data is'),R('Chats and settings','Stored in your user folder on this PC.','<button class="btn s2">Show folder</button>'),R('Keys and sign-ins','Locked with Windows\' own protection. Never shown again in full.',''),R('What leaves this PC','Your requests go to the provider you chose. Nothing else without your say-so.','<button class="btn s2">Read how</button>')],'Privacy, Usage and the plain facts about storage are one section, in plain words instead of "DPAPI" and "JSON per chat".'],
+ 'About':['About',[R('Update automatically','','sw1'),R('Check for updates','Bunny 0.1.15','<button class="btn s2">Check</button>'),R('Licences','','<button class="btn s2">Open</button>')],'Unchanged.']};
+ var seg=document.getElementById('seg');
+ function paint(k){var v=S[k];['d','m'].forEach(function(id){var h='<h4>'+v[0]+'</h4>'+v[1].map(function(x){return x.replace(/>sw(0|1)(\|dis)?</g,'>').replace(/^sw(0|1)(\|dis)?$/,'')}).join('');var e=document.getElementById(id);e.innerHTML='<h4>'+v[0]+'</h4>'+v[1].join('').replace(/<div class="ct">sw(0|1)(\|dis)?<\/div>/g,function(m,a,b){return '<div class="ct">'+sw(a==='1',!!b)+'</div>'}).replace(/<div class="ct">sw1<\/div>/g,'<div class="ct">'+sw(true)+'</div>');e.querySelectorAll('.sw:not([disabled])').forEach(function(b){b.addEventListener('click',function(){b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true');var c=b.parentNode;if(!c.querySelector('.sv')){var s=document.createElement('span');s.className='sv';s.textContent='Saved';c.appendChild(s)}})})});document.getElementById('cap').textContent=v[2]}
+ Object.keys(S).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=S[k][0];b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});paint(k)});seg.appendChild(b)});
+ paint('Profile');
+})();
+</script>
