@@ -2,6 +2,12 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-20 - v0.1.15 specs: OFFICE-MAKE, REWIND, FOLDER-RULES
+
+**Wrote** `docs/plans/OFFICE-MAKE-spec.md`, `docs/plans/REWIND-spec.md` and `docs/plans/FOLDER-RULES-spec.md` on `claude/tech-lead-v0115-specs`. OFFICE-MAKE picks docx@9.15.3, write-excel-file@4.1.1 and pptxgenjs@4.0.1 (MIT, no install scripts, 34.5 MB unpacked or 7.9 MB gz; audit 2 HIGH in image-size, which pptxgenjs never loads, cleared to 0 by overriding image-size to 2.0.3). The smoke run made all three files and Bunny's readDocument read them back. REWIND adds an after-hash per file, a preview, changed-outside detection, re-checking the path on restore, an undoable rewind, and caps of 100 per chat and 1 GB; it also closes G1-G3 in today's Undo. FOLDER-RULES puts the file text in a user-role note after every system message (the W6-12 pattern); it is never parsed as a setting.
+**Before this:** release-0.1.14 PASS at a579d7e9 (00970bbd, claude/tech-lead-signoff-0114-final2).
+**Lesson:** measure a library's audit and its real requires before choosing it. pptxgenjs's HIGH advisory sits in a dependency it never loads, so an override fixes it without an owner exception.
+
 ## 2026-11-17 - FINAL entry for this session (retired after v0.1.8; restarts for v0.1.9)
 
 **Reviewed and signed (sign-off files under `docs/signoffs/<piece>/tech-lead.md`, each on the branch named):** `k1-kit-0.6.0` PASS at 4a0fa01 (earlier shas 8c39d76, 714a0a8, 9538bcb, 46add98, f45f024); `k2-guard` PASS at 1d3a77c (ec605fd, bec112e before it); `kit-land` PASS at da999b0 (88bbd53, ba091a6 before it); `release-0.1.8` PASS at a6afcf5 (e028d3b before it); `release-0.1.7` PASS at 6b06ed9; the W2-7, W4-5b, W5-1, W5-7, W5-8, W6-2/3/4/18, lane-a-016 pieces earlier (FAIL then PASS where a first sha was wrong).
