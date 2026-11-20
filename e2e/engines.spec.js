@@ -199,6 +199,15 @@ for (const [scheme, width] of [['light', 1000], ['dark', 1000], ['light', 390], 
     await expect(list('allow').locator('.rr code')).toHaveText(['Read(./docs/**)', 'Bash(npm test:*)']);
     await expect(list('allow').locator('.rr .k')).toHaveText(['Path', 'Command']);
     await expect(page.locator('#engine-rules-said')).toContainText('Not saved yet');
+    // Design: the group header and the kind chip are readable on the theme's own surface (not a fixed light fill)
+    await expect(list('allow').locator('.rr .k').first()).toBeVisible();
+    const contrast = await page.evaluate(() => {
+      const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const ratio = (el) => { const cs = getComputedStyle(el); const a = lum(rgb(cs.color)) + 0.05, b = lum(rgb(cs.backgroundColor)) + 0.05; return Math.max(a, b) / Math.min(a, b); };
+      return [...document.querySelectorAll('#engine-rules .gh2')].map(ratio);
+    });
+    for (const r of contrast) expect(r, 'Deny / Ask / Allow header text on its bar').toBeGreaterThanOrEqual(4.5);
     // a bad rule, a duplicate, and Bunny's own tool are refused beside the line, nothing is added
     for (const [bad, said] of [['not a rule!', "not in Claude Code's rule form"], ['Bash(npm test:*)', 'already in this list'], ['mcp__bunny__approve', "Bunny's own"], ['', 'Type a rule first']]) {
       await list('allow').locator('[data-add-input="allow"]').fill(bad);
