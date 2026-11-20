@@ -125,7 +125,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       try {
         for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: !off })).id);
         for (const c of plugin.connectors ?? []) {
-          try { record.connectors.push((await mcp.add({ ...c, enabled: off ? false : c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ if (err.existing) record.uses.push(err.existing); /* G11: but this plugin counts on it */ }
+          try { record.connectors.push((await mcp.add({ ...c, addedBy: 'model', enabled: off ? false : c.enabled !== false })).id); } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector: it is used as it is, and not owned by this plugin */ if (err.existing) record.uses.push(err.existing); /* G11: but this plugin counts on it */ }
         }
       } catch (err) { // half an install is undone, so nothing is left behind
         await removeParts(record);
@@ -270,7 +270,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
         const same = ownedConnectors.find((o) => norm(o.url).replace(/\/+$/, '') === norm(c.url).replace(/\/+$/, ''));
         if (same) { keepConnector.add(same.id); next.connectors.push(same.id); done.connectorsKept += 1; if ((record.folders ?? []).length || (same.folders ?? []).length) await mcp.update(same.id, { folders: record.folders ?? [] }); continue; }
         try {
-          const added = await mcp.add({ ...c, enabled: false, folders: record.folders ?? [] }); // W616-1
+          const added = await mcp.add({ ...c, addedBy: 'model', enabled: false, folders: record.folders ?? [] }); // W616-1
           next.connectors.push(added.id); done.connectorsAdded += 1;
         } catch (err) { if (err.code !== 'mcp.duplicate') throw err; /* already a connector of the person's own: left as it is */ }
       }
@@ -381,7 +381,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
       const remote = !String(args.command ?? '').trim();
       if (remote && String(args.url ?? '').trim() && (await mcp.list()).some((x) => x.url && normUrl(x.url) === normUrl(args.url))) return 'A connector at that address is already installed, so nothing was added (F10-5). Changing it is done by the person in Settings, Customize.';
-      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: remote ? false : ctx?.switchOn !== 'off', ...(remote && args.key_headers ? { keyHeaders: args.key_headers } : {}) });
+      const added = await mcp.add({ addedBy: 'model', name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: remote ? false : ctx?.switchOn !== 'off', ...(remote && args.key_headers ? { keyHeaders: args.key_headers } : {}) });
       if (remote) {
         keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
         return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).${added.keyHeaders?.length ? ` It needs a key (${added.keyHeaders.join(', ')}): tell the person to open Settings, Customize, this connector, Add key, and paste it there. Never ask for the key in the chat.` : ''}`;

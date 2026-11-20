@@ -55,6 +55,7 @@ import { createToolInstaller } from './toolInstall.js';
 import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
 import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited } from './download.js';
+import { checkPublicAddress } from './publicFetch.js';
 import { createPcService } from './pcService.js';
 import { FIXED_EXCLUSIONS } from './pcExclusions.js';
 import { PC_TOOLS, pcToolDefinitions, PC_SYSTEM_TEXT, createPcTurn, holdsPcFileText } from './pcTools.js';
@@ -1178,8 +1179,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (String(body.command ?? '').trim() && body.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'A local connector runs a program on this computer. Confirm the command to add it.' });
         }
-        const { source: _dropped, trustedKeyHeaders: _trusted, ...plain } = body; // W6-6: only the tool installer may say where a connector came from; only Bunny's own code names the trusted key headers
-        return sendJson(res, 200, await mcp.add(plain));
+        const { source: _dropped, trustedKeyHeaders: _trusted, addedBy: _by, ...plain } = body; // W6-6: only the tool installer may say where a connector came from; only Bunny's own code names the trusted key headers
+        return sendJson(res, 200, await mcp.add({ ...plain, addedBy: req.bunnyRemote || req.bunnyDevice ? 'device' : 'person' })); // IA-0: only the window's own add is the person's
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });
       }
@@ -3298,6 +3299,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
             body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null;
           } else if (remoteAdd) {
+            try { await checkPublicAddress(parsed.url); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; } // IA-0: refused before any card, with the one sentence
             body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
             listed = { skills: [], connectors: [String(parsed.url)] };
           } else if (localConnector) {

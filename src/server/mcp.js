@@ -9,8 +9,10 @@
  * with a name, so a configuration cannot become arbitrary code execution.
  */
 
+import { guarded, publicFetch } from './publicFetch.js';
 import { appVersion } from './updates.js'; // the app's own version, read from package.json (it used to be typed here and went stale)
 
+const REAL_FETCH = globalThis.fetch; // the platform's own fetch, taken once: a test that swaps the global in is then not forced through the public-address guard
 const PROTOCOL_VERSION = '2025-06-18';
 
 export class McpError extends Error {
@@ -38,7 +40,8 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
   const session = sessions.get(sessionKey(server, url));
   for (let attempt = 0; ; attempt++) {
     const extra = auth ? ((await auth({ refresh: attempt > 0 })) ?? {}) : {};
-    const res = await fetchImpl(url, {
+    const doFetch = guarded(server) && fetchImpl === REAL_FETCH ? publicFetch : fetchImpl; // IA-0: a connector the model (or a device) added is reached only at a public https address, checked at every call, with no redirect
+    const res = await doFetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -50,7 +53,7 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
       },
       body: JSON.stringify(body),
       signal,
-      ...(server.keyed ? { redirect: 'error' } : {}), // K-3: a request that carries a key never follows a redirect
+      ...(server.keyed || guarded(server) ? { redirect: 'error' } : {}), // K-3: a request that carries a key never follows a redirect
     });
     if (res.status === 401 && (auth || server.keyed)) {
       if (attempt === 0 && Object.keys(extra).length > 0) continue;
