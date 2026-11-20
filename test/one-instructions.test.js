@@ -30,7 +30,7 @@ async function world(t, files = { 'AGENTS.md': RULE }) {
   const prompts = async () => (await readFile(log, 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => { const p = JSON.parse(l); return { ...p, input: told(p) }; });
   const { body: s } = await post(started.base, '/api/sessions', { title: 'oi', workMode: 'code', folder });
   const say = async (content) => (await (await fetch(`${started.base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'test-model-1', workMode: 'code' }) })).text());
-  const act = (what) => post(started.base, `/api/sessions/${s.id}/folder-rules/${what}`, {});
+  const act = (what, body = {}) => post(started.base, `/api/sessions/${s.id}/folder-rules/${what}`, body);
   const download = async (id) => { assert.equal((await post(started.base, `/api/engines/${id}/download`, {})).status, 202); for (let i = 0; i < 100; i += 1) { if ((await json(started.base, '/api/engines')).body.engines.find((e) => e.id === id).downloaded) return; await new Promise((r) => setTimeout(r, 50)); } throw new Error('no download'); };
   return { ...started, folder, id: s.id, say, act, prompts, download };
 }
@@ -71,7 +71,7 @@ test('3 and 5: Claude Code: nothing before Follow them; then the block once; non
   assert.doesNotMatch(owed[0].input, /CLAUDE\.md/);
   // after Read again: one more turn, with "replaces"
   await writeFile(join(w.folder, 'AGENTS.md'), 'Use British spelling.');
-  assert.equal((await w.act('read-again')).status, 200);
+  assert.equal((await w.act('read-again', { use: 'new' })).status, 200);
   await w.say('fourth message');
   const after = (await w.prompts()).at(-1);
   assert.ok(after.input.startsWith(ENGINE_LEAD_IN_REPLACES), 'the engine is told this replaces the earlier set');

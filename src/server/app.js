@@ -11,7 +11,7 @@ import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from '
 import { userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
@@ -363,8 +363,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     }
     return session?.folder ? checkFolder(session.folder) : null;
   };
-  // FOLDER-RULES + ONE-INSTRUCTIONS (v0.1.15): the folder's instructions files, ONE set for every engine (see folderRules.js). Read once (when the chat first needs them after the person said Follow them, or at Read again),
-  // kept with the chat as session.folderRulesRead, and sent from that copy every reply: a file edited mid-chat cannot silently steer the model. Nothing is read or sent before the folder is trusted (FR-2).
+  // FOLDER-RULES + ONE-INSTRUCTIONS (v0.1.15): the folder's instructions files, ONE set for every engine (see folderRules.js). FROZEN BY CONTENT (Security's replacement for PG-4's instructions part): at Follow them the exact
+  // text the person was shown is kept in the folder's trust record (settings.folderRulesTrusted[].frozen, per folder, not per chat) with its sha256. Every reply of Bunny's engine, every engine prompt and every handover
+  // sends THAT copy, never the file as it is on disk now; a new chat on the folder sends it too. Bunny never re-reads a followed file for sending. A change on disk (by the person, the model, an engine, git, anything) is
+  // found by hash and only shown ("changed since it was read", "no longer on disk"); only the person's Read again in the window, after the diff, replaces the copy. Nothing is sent before the folder is trusted (FR-2).
   const frDeps = (workspace, rules) => ({
     resolve: async (rel) => { if (readDenied(rules(), rel)) return null; try { return await workspace.folder(rel); } catch { return null; } }, // inside the folder, not through a link out, not the data folder, not hidden by a read-deny rule
     dir: async (rel) => { try { return await listDir(await workspace.folder(rel)); } catch { return []; } },
@@ -373,39 +375,37 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const frKey = async (session, folderInfo) => { const raw = session?.worktree?.repo ?? folderInfo?.folder ?? session?.folder ?? ''; try { return await realpath(raw); } catch { return String(raw); } };
   const frTrusted = (key) => (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).find((e) => e?.folder === key) ?? null;
   const frOn = (session) => settings.folderRulesEnabled !== false && session?.folderRules !== false;
-  const frStore = (rows, now) => rows.map((f) => ({ name: f.name, kind: f.kind, size: f.size, sha256: f.sha256, text: f.text, cut: f.cut, readAt: now }));
-  /**
-   * The set this reply follows, or null. Returns { files, replaces, session }: `files` are the followed files as kept with the chat; `replaces` says the engines are owed it again after Read again.
-   * It reads the folder only when nothing was kept yet for a trusted folder (the first reply after Follow them, or a new chat on that folder).
-   */
-  const followedFolderRules = async (session, workspace, folderInfo, rules) => {
-    if (!workspace || !frOn(session)) return null;
-    const trust = frTrusted(await frKey(session, folderInfo));
-    if (!trust || !Array.isArray(trust.files) || !trust.files.length) return null;
-    let current = session;
-    if (!Array.isArray(current.folderRulesRead)) {
-      const found = await collectFolderRules(frDeps(workspace, rules));
-      const mine = found.files.filter((f) => trust.files.includes(f.name));
-      current = await sessions.update(session.id, { folderRulesRead: frStore(mine, new Date().toISOString()), folderRulesNext: true }).catch(() => session);
-    }
-    const files = (current.folderRulesRead ?? []).filter((f) => trust.files.includes(f.name));
-    return files.length ? { files, replaces: current.folderRulesNext === true && Boolean(current.engine?.sessionId), session: current } : null;
+  const frFrozen = (entry) => (Array.isArray(entry?.frozen) ? entry.frozen : []).filter((f) => Array.isArray(entry?.files) && entry.files.includes(f.name));
+  /** One hash for a whole set (names and file hashes in order): what an engine session was last told. */
+  const frSetSha = (files) => createHash('sha256').update(JSON.stringify(files.map((f) => [f.name, f.sha256]))).digest('hex');
+  const frKeep = (f, at) => ({ name: f.name, kind: f.kind, size: f.size, sha256: f.sha256, text: f.text, cut: f.cut, readAt: at });
+  /** Write one folder's record (the followed names and their frozen copy), at most 200 folders. */
+  const frWrite = async (key, files, frozen) => {
+    const rest = (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key);
+    rest.push({ folder: key, files: files.slice(0, 100), frozen: frozen.slice(0, 100) });
+    await saveSettings({ folderRulesTrusted: rest.slice(-200) });
   };
-  /** What the Working folder card shows: each candidate file and where it stands, never any file text (View what was read asks for that). */
+  /**
+   * The set this reply follows, or null: the folder's FROZEN copy (no disk read). Returns { files, sha }.
+   */
+  const followedFolderRules = async (session, workspace, folderInfo) => {
+    if (!workspace || !frOn(session)) return null;
+    const files = frFrozen(frTrusted(await frKey(session, folderInfo)));
+    return files.length ? { files, sha: frSetSha(files) } : null;
+  };
+  /** What the Working folder card shows: every file, frozen or only on disk, and where it stands against the disk, found by hash; never any file text (View what was read asks for that). */
   const folderRulesView = async (session, folderInfo, workspace, rules) => {
     const found = await collectFolderRules(frDeps(workspace, rules));
     const key = await frKey(session, folderInfo);
     const trust = frTrusted(key);
-    const kept = new Map((session.folderRulesRead ?? []).map((f) => [f.name, f]));
+    const frozen = new Map(frFrozen(trust).map((f) => [f.name, f]));
+    const onDisk = new Map(found.files.map((f) => [f.name, f]));
     const on = frOn(session);
-    const files = found.files.map((f) => {
-      const followed = Boolean(trust?.files?.includes(f.name));
-      const was = kept.get(f.name);
-      const state = !on ? 'off' : !followed ? 'waiting' : was && was.sha256 !== f.sha256 ? 'changed' : 'in-use';
-      return { name: f.name, kind: f.kind, size: f.size, state, cut: f.cut, readAt: was?.readAt ?? null };
-    });
+    const files = [];
+    for (const [name, f] of frozen) { const now = onDisk.get(name); files.push({ name, kind: f.kind, size: f.size, cut: f.cut, readAt: f.readAt, state: !on ? 'off' : !now ? 'gone' : now.sha256 !== f.sha256 ? 'changed' : 'in-use' }); }
+    for (const [name, f] of onDisk) if (!frozen.has(name)) files.push({ name, kind: f.kind, size: f.size, cut: f.cut, readAt: null, state: !on ? 'off' : 'waiting' });
     return { enabled: settings.folderRulesEnabled !== false, chatSwitch: session.folderRules !== false, folder: key, trusted: Boolean(trust), files, notUsed: found.notUsed, skipped: found.skipped, leftOut: found.leftOut,
-      count: files.length, readAt: (session.folderRulesRead ?? [])[0]?.readAt ?? null };
+      count: files.length, readAt: [...frozen.values()][0]?.readAt ?? null };
   };
   /** The processes a chat started stop before its copy is touched (Windows will not remove a folder something runs in). */
   const stopChatProcesses = async (sessionId) => { for (const p of processes.list(sessionId)) await processes.stop(p.id, p.owner).catch(() => {}); };
@@ -834,7 +834,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     }
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
-    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
+    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, folderRulesTrusted: (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).map((e) => ({ folder: e.folder, files: e.files, frozen: (e.frozen ?? []).map(({ name, size, sha256, readAt }) => ({ name, size, sha256, readAt })) })), systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
     // ---- CLI-ENGINES: what is downloaded, and the window's buttons (device access is refused for all of these: remoteRoute, route's belt and windowOnly) ----
     if (path === '/api/engines' && method === 'GET') return sendJson(res, 200, await engines.status(settings));
     if (path === '/api/engines/record' && method === 'GET') return sendJson(res, 200, { record: await engines.store.record() });
@@ -868,7 +868,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (Object.hasOwn(patch, 'folderRulesTrusted')) { // FR-2: a list of { folder, files }, at most 200 folders; only Bunny's window writes it (window-only key, and refused to every device)
         const list = Array.isArray(patch.folderRulesTrusted) ? patch.folderRulesTrusted : null;
         if (!list || list.length > 200 || list.some((e) => !e || typeof e.folder !== 'string' || !e.folder || e.folder.length > 500 || !Array.isArray(e.files) || e.files.length > 100 || e.files.some((f) => typeof f !== 'string'))) return sendJson(res, 400, { code: 'folderRules.bad', message: 'The followed folders are a list of folders with the file names followed in each.' });
-        patch.folderRulesTrusted = list.map((e) => ({ folder: e.folder, files: [...new Set(e.files.map(cleanName).filter(Boolean))] }));
+        // the frozen copy is the server's: this write can remove a folder or a file name, never add or change frozen text
+        const prior = Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : [];
+        patch.folderRulesTrusted = list.map((e) => { const was = prior.find((p) => p.folder === e.folder); const names = [...new Set(e.files.map(cleanName).filter(Boolean))]; const frozen = (was?.frozen ?? []).filter((f) => names.includes(f.name)); return { folder: e.folder, files: frozen.map((f) => f.name), frozen }; }).filter((e) => e.files.length);
       }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       const rulesWas = engineSettings(settings).useBunnyEngine;
@@ -1827,13 +1829,14 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
-    // FOLDER-RULES (FR-2): the Working folder card's view, and the three answers that only Bunny's window may give. A Chats device sees nothing of the files.
-    const frMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/folder-rules(?:\/(follow|read-again|ask-again))?$/);
+    // FOLDER-RULES (FR-2): the Working folder card's view, the diff for Read again, and the answers that only Bunny's window may give. A Chats device sees nothing of the files.
+    const frMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/folder-rules(?:\/(diff|follow|read-again|ask-again))?$/);
     if (frMatch) {
       const action = frMatch[2];
-      if (!action && method !== 'GET') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use GET.' });
-      if (action && method !== 'POST') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use POST.' });
-      if (action && windowOnly(req, res)) return;
+      const readOnly = !action || action === 'diff';
+      if (readOnly && method !== 'GET') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use GET.' });
+      if (!readOnly && method !== 'POST') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use POST.' });
+      if (!readOnly && windowOnly(req, res)) return;
       if (req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "Answer this in Bunny's window on the PC." });
       const id = frMatch[1];
       const session = await sessions.get(id);
@@ -1842,31 +1845,48 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (!folderInfo?.ok) return sendJson(res, 409, { code: 'folderRules.noFolder', message: 'This chat has no working folder.' });
       const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir], allow: folderInfo.copy ? [folderInfo.folder] : [] });
       const rules = () => rulesFor(settings.permissionRules, workspace.root);
+      const key = await frKey(session, folderInfo);
+      const trust = frTrusted(key);
       if (!action) {
         const view = await folderRulesView(session, folderInfo, workspace, rules);
         const wantText = new URL(req.url, 'http://localhost').searchParams.get('text') === '1';
-        return sendJson(res, 200, wantText ? { ...view, read: (session.folderRulesRead ?? []).map((f) => ({ name: f.name, text: f.text, cut: f.cut, readAt: f.readAt })) } : view);
+        return sendJson(res, 200, wantText ? { ...view, read: frFrozen(trust).map((f) => ({ name: f.name, text: f.text, sha256: f.sha256, cut: f.cut, readAt: f.readAt })) } : view);
       }
-      const key = await frKey(session, folderInfo);
-      if (action === 'ask-again') { // "Ask me again for this folder": the entry goes, and what this chat kept goes with it
+      if (action === 'ask-again') { // "Ask me again for this folder": the entry goes, with its frozen copy
         await saveSettings({ folderRulesTrusted: (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key) });
-        await sessions.update(id, { folderRulesRead: null, folderRulesNext: false });
         return sendJson(res, 200, { ok: true });
       }
       const found = await collectFolderRules(frDeps(workspace, rules));
-      if (action === 'follow') { // Follow them: the answer is stored for the folder (never a "never": Not now stores nothing) and the files are read for the next reply
-        const asked = await readBody(req).catch(() => ({}));
-        const wanted = Array.isArray(asked?.names) ? asked.names.map(cleanName) : null; // the card can name some files; no names means every file listed
-        const names = found.files.map((f) => f.name).filter((n) => !wanted || wanted.includes(n));
-        if (!names.length) return sendJson(res, 409, { code: 'folderRules.none', message: 'This folder has no instructions files to follow.' });
-        const list = (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key);
-        const had = frTrusted(key)?.files ?? [];
-        list.push({ folder: key, files: [...new Set([...had, ...names])].map(cleanName).slice(0, 100) });
-        await saveSettings({ folderRulesTrusted: list.slice(-200) });
-      } else if (!frTrusted(key)) return sendJson(res, 409, { code: 'folderRules.notFollowed', message: 'Follow the folder first.' });
-      const followed = frTrusted(key).files;
-      const updated = await sessions.update(id, { folderRulesRead: frStore(found.files.filter((f) => followed.includes(f.name)), new Date().toISOString()), folderRulesNext: true });
-      return sendJson(res, 200, { ok: true, view: await folderRulesView(updated, folderInfo, workspace, rules) });
+      const onDisk = new Map(found.files.map((f) => [f.name, f]));
+      if (action === 'diff') { // Read again shows this first: per followed file the frozen text against the file now; a removed file is "will no longer be followed"; a file not followed yet is listed as new
+        const frozen = frFrozen(trust);
+        return sendJson(res, 200, {
+          files: frozen.map((f) => { const now = onDisk.get(f.name); return { name: f.name, status: !now ? 'removed' : now.sha256 === f.sha256 ? 'same' : 'changed', frozen: f.text, now: now ? now.text : null, frozenSha256: f.sha256, nowSha256: now?.sha256 ?? null }; }),
+          added: found.files.filter((f) => !frozen.some((z) => z.name === f.name)).map((f) => ({ name: f.name, text: f.text, sha256: f.sha256 })),
+        });
+      }
+      const asked = await readBody(req).catch(() => ({}));
+      const at = new Date().toISOString();
+      const shown = asked && typeof asked.shas === 'object' && asked.shas ? asked.shas : null; // what the card showed: a file that changed since is refused, so the frozen bytes are exactly what the person saw
+      if (action === 'follow') { // Follow them: the answer is stored for the folder (never a "never": Not now stores nothing) with the exact text shown, frozen
+        const wanted = Array.isArray(asked?.names) ? asked.names.map(cleanName) : null;
+        const chosen = found.files.filter((f) => !wanted || wanted.includes(f.name));
+        if (!chosen.length) return sendJson(res, 409, { code: 'folderRules.none', message: 'This folder has no instructions files to follow.' });
+        if (shown && chosen.some((f) => shown[f.name] !== undefined && shown[f.name] !== f.sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed since the card was shown. Look again.' });
+        const had = frFrozen(trust);
+        const frozen = [...had.filter((f) => !chosen.some((c) => c.name === f.name)), ...chosen.map((f) => frKeep(f, at))];
+        await frWrite(key, frozen.map((f) => f.name), frozen);
+      } else { // read-again: the person's click in the window, after the diff: "Use the new text" or "Keep the old text"
+        if (!trust) return sendJson(res, 409, { code: 'folderRules.notFollowed', message: 'Follow the folder first.' });
+        if (asked?.use === 'old') return sendJson(res, 200, { ok: true, changed: false, view: await folderRulesView(session, folderInfo, workspace, rules) });
+        if (asked?.use !== 'new') return sendJson(res, 400, { code: 'folderRules.choose', message: 'Choose Use the new text or Keep the old text.' });
+        const old = frFrozen(trust);
+        if (shown && old.some((f) => onDisk.has(f.name) && shown[f.name] !== undefined && shown[f.name] !== onDisk.get(f.name).sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed again since the diff was shown. Look again.' });
+        const next = old.filter((f) => onDisk.has(f.name)).map((f) => (onDisk.get(f.name).sha256 === f.sha256 ? f : frKeep(onDisk.get(f.name), at))); // a removed file is no longer followed; a new name is never added here
+        await frWrite(key, next.map((f) => f.name), next);
+      }
+      const after = await sessions.get(id);
+      return sendJson(res, 200, { ok: true, changed: true, view: await folderRulesView(after, folderInfo, workspace, rules) });
     }
 
     // ENGINE-SWITCH (v0.1.15): move a chat to another engine, between replies. Only Bunny's own window may (the route is on the window-only list and refused to a device, CE-6). The engine's own session is dropped
@@ -1920,7 +1940,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (deviceRefusedBody(req, res, method, path, rawPatch)) return;
         if (rawPatch?.engine !== undefined) { const current = await sessions.get(sessionMatch[1]); if (current?.messages?.length && current.engine) return sendJson(res, 409, { code: 'engine.fixed', message: 'This chat already runs on an engine. To use another, start a new chat.' }); } // CE-6: a device never moves a chat to another engine
         const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
-        delete patch.folderRulesRead; delete patch.folderRulesNext; // FOLDER-RULES: the text read and the "tell the engines again" flag are written only by the server
+        delete patch.folderRulesRead; delete patch.folderRulesNext; delete patch.folderRulesSent; // FOLDER-RULES: what an engine was last told is written only by the server
         // ES-2 (Security): only the server writes which engines Bunny's check failed for. A PATCH that carries `restrictedFor` or `restricted` has it ignored, and never removes what is stored.
         if (patch.engine && typeof patch.engine === 'object') { const cur = await sessions.get(sessionMatch[1]); const { restricted: _r, restrictedFor: _rf, ...rest } = patch.engine; patch.engine = { ...rest, ...(cur?.engine?.restrictedFor ? { restrictedFor: cur.engine.restrictedFor } : cur?.engine?.restricted ? { restricted: true } : {}) }; if (cur?.engine && patch.engine.id === cur.engine.id) { for (const k of ['from', 'switchedAt', 'handoverPending']) if (cur.engine[k] !== undefined && patch.engine[k] === undefined) patch.engine[k] = cur.engine[k]; } }
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
@@ -2336,7 +2356,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       // FOLDER-RULES / ONE-INSTRUCTIONS: the folder's instructions files this reply follows (null: none, not trusted yet, or switched off). Only the text reaches a model; nothing here decides a permission.
       let folderRulesSet = null;
-      if (workspace && body.textOnly !== true && !req.bunnyRemote) { try { folderRulesSet = await followedFolderRules(session, workspace, folder, activeRules); if (folderRulesSet) session = folderRulesSet.session; } catch { folderRulesSet = null; } }
+      if (workspace && body.textOnly !== true && !req.bunnyRemote) { try { folderRulesSet = await followedFolderRules(session, workspace, folder); } catch { folderRulesSet = null; } }
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
       const needsOk = (risk, name, args) => risk === 'send'
         || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
@@ -2426,7 +2446,6 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (folderRulesSet && !(session.engine && session.engine.id !== 'bunny')) { // Bunny's engine: the files as quoted data in a user-role note, below Bunny's rules and the person's words
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: bunnyNote(folderRulesSet.files) });
-        if (session.folderRulesNext) session = await sessions.update(id, { folderRulesNext: false }).catch(() => session);
       }
       // ENGINE-SWITCH: Bunny's engine reads the chat itself, so on its first reply after a switch it gets only the taking-over line, the files the chat changed and the open steps, as a user-role note (the same pattern)
       if (session.engine?.id === 'bunny' && session.engine.handoverPending === true && !textOnly && !scheduledTask) {
@@ -3501,8 +3520,9 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             // (project_doc_max_bytes = 0), so it always gets the block. Claude Code gets it on its first turn (no --resume), after a switch, and once after Read again; Codex on every turn.
             const pinReads = engines.pins?.[wanted]?.readsProjectDoc === true && wanted === 'claude-code';
             const folderFiles = !pinReads && folderRulesSet ? folderRulesSet.files : [];
-            const owed = wanted === 'codex' || (wanted === 'claude-code' && (!eng.sessionId || session.folderRulesNext === true));
-            const folderBlock = folderFiles.length && owed ? engineBlock(folderFiles, { replaces: Boolean(eng.sessionId) && session.folderRulesNext === true }) : '';
+            const setSha = folderRulesSet?.sha ?? null;
+            const owed = wanted === 'codex' || (wanted === 'claude-code' && (!eng.sessionId || session.folderRulesSent !== setSha)); // Claude Code resumes its own session: it is told again only when the frozen set is not the one it was last told
+            const folderBlock = folderFiles.length && owed ? engineBlock(folderFiles, { replaces: Boolean(eng.sessionId) && Boolean(session.folderRulesSent) && session.folderRulesSent !== setSha }) : '';
             if (talked && (wanted === 'codex' || (wanted === 'claude-code' && !eng.sessionId && eng.from))) {
               try {
                 const built = await buildHandover({ messages: prior, root: workspace.root, fromId: eng.from ?? wanted, checkpoints: await checkpoints.list(id).catch(() => []), exists: async (rel) => stat(resolve(workspace.root, rel)).then(() => true, () => false), folderBlock });
@@ -3527,7 +3547,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             },
             logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
-          if (session.folderRulesNext) session = await sessions.update(id, { folderRulesNext: false }).catch(() => session); // the engines have been told (again) what the folder's files say
+          if (folderRulesSet && session.folderRulesSent !== folderRulesSet.sha) session = await sessions.update(id, { folderRulesSent: folderRulesSet.sha }).catch(() => session); // what the engines were last told
           if (outcome.stoppedForCheck) {
             const failedFor = session.engine.restrictedFor ?? (session.engine.restricted ? [session.engine.id] : []); // ES-2: only this code writes the list
             session = await sessions.update(id, { engine: { ...session.engine, restrictedFor: [...new Set([...failedFor, wanted])] } }).catch(() => session);

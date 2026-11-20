@@ -302,13 +302,10 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...carried, ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
       else delete session.engine;
     }
-    // FOLDER-RULES: the chat's own switch (window-only), the files as read when the chat started or at Read again (server-written), and whether the engines are owed the set again
+    // FOLDER-RULES: the chat's own switch (window-only), and the hash of the frozen set the chat's engine session was last told (server-written). The text itself lives in the folder's trust record, not here.
     if (patch.folderRules !== undefined) { if (typeof patch.folderRules === 'boolean') session.folderRules = patch.folderRules; else delete session.folderRules; }
-    if (patch.folderRulesRead !== undefined) {
-      if (Array.isArray(patch.folderRulesRead)) session.folderRulesRead = patch.folderRulesRead.slice(0, 60).map((f) => ({ name: String(f.name ?? '').slice(0, 100), kind: f.kind === 'cursor' ? 'cursor' : 'main', size: Number(f.size) || 0, sha256: String(f.sha256 ?? '').slice(0, 64), text: String(f.text ?? '').slice(0, 33_000), cut: Boolean(f.cut), readAt: String(f.readAt ?? '').slice(0, 40) }));
-      else delete session.folderRulesRead;
-    }
-    if (patch.folderRulesNext !== undefined) { if (patch.folderRulesNext) session.folderRulesNext = true; else delete session.folderRulesNext; }
+    if (patch.folderRulesSent !== undefined) { if (typeof patch.folderRulesSent === 'string' && /^[a-f0-9]{64}$/.test(patch.folderRulesSent)) session.folderRulesSent = patch.folderRulesSent; else delete session.folderRulesSent; }
+    delete session.folderRulesRead; delete session.folderRulesNext; // (the earlier per-chat copy, if an old chat has one)
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;

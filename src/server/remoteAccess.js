@@ -62,7 +62,7 @@ export function deviceRefusal(method, path, body = null) {
   // FOLDER-RULES (FR-2, FR-3): whether a folder's instructions files are followed, and the two switches, are answered in Bunny's window only, never by a device at any level
   if (new RegExp(`^/api/sessions/${UUID_}/folder-rules/`).test(p) && m !== 'GET') return FOLDER_RULES_REFUSED_MESSAGE;
   if (p === '/api/settings' && m === 'PUT' && has('folderRulesEnabled', 'folderRulesTrusted')) return FOLDER_RULES_REFUSED_MESSAGE;
-  if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('folderRules', 'folderRulesRead', 'folderRulesNext')) return FOLDER_RULES_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('folderRules', 'folderRulesRead', 'folderRulesNext', 'folderRulesSent')) return FOLDER_RULES_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}/setting/folderRules$`).test(p) && m === 'PATCH') return FOLDER_RULES_REFUSED_MESSAGE;
   return null;
 }
