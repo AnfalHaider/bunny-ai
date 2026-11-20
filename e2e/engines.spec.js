@@ -94,8 +94,15 @@ test('Claude Code in Account mode: Sign in appears when signed out, opens the ve
   await expect(row.locator('.seg')).toBeVisible({ timeout: 15_000 });
   await expect(row.locator('[data-act="signin"]')).toBeVisible({ timeout: 10_000 });
   await expect(row.locator('.l2')).toContainText('Not signed in');
+  // v0.1.14.1: the dialog says only what happened: with the page address the program printed, one button opens it (here the browser is a stand-in that answers for claude.ai); nothing says "a window opened"
+  await page.context().route('https://claude.ai/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>stand-in sign-in</title>' }));
   await row.locator('[data-act="signin"]').click();
-  await page.locator('.engine-confirm').getByRole('button', { name: 'OK' }).click();
+  const dialog = page.locator('.engine-confirm');
+  await expect(dialog).toContainText('Open the sign-in page in your browser');
+  await expect(dialog).not.toContainText('A window opened');
+  const popup = page.waitForEvent('popup');
+  await dialog.getByRole('button', { name: 'Open the sign-in page' }).click();
+  expect(new URL((await popup).url()).hostname).toBe('claude.ai');
   await expect(row.locator('.l2')).toContainText('Signed in', { timeout: 15_000 });
   await row.locator('[data-act="menu"]').click();
   await row.locator('[data-act="signout"]').click();
