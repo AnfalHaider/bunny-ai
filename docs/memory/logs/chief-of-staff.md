@@ -2,6 +2,18 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-20 - v0.1.14 published
+
+**Owner's words (typed in this chat):** "Ship 0.1.14 as soon as it can be without the internet sign-in." (2026-11-19) and "check all sessions, and continue, then release and publish 0.1.14 manage everything yourself. i am going to sleep. give me a report of gaps and features vs claude app and cursor vs Bunny AI when done." (2026-11-20). Record: docs/releases/2026-11-20-v0-1-14.md.
+
+**Published:** v0.1.14, tag f20f1640 (code a579d7e9), 2026-11-20T07:07:37Z. Bunny-AI-Setup-0.1.14.exe is 123,051,037 bytes; latest.yml says 0.1.14 with the same size. Gate 12/12 at a579d7e9 (unit 198/198 plus the parallel group, e2e 603 passed). Security, Tech Lead, Librarian, QA, Design and Chief of Staff signed at a579d7e9. Owner's phone pinged; the gaps report (docs/plans/2026-11-20-gaps-vs-claude-cursor.md) sent.
+
+**Late fixes after the first 12/12 at 5fbb7975:** Design failed the Engines screen with Bunny's engine off (dark warning unreadable, narrow rule boxes) -> d3e89565; QA F3 composer row cut on phones -> 5695d62e; Security RL-1 and Tech Lead found the new Always protected list overclaimed for commands -> reworded (c457a8cd, d7022bfe) and the notes corrected; search-pc phone spec hidden step under load -> 0270440b; GATE-MARKS merged so the gate names a failing unit test (a579d7e9).
+
+**Open for v0.1.15:** OPEN-SIGNIN (owner's Tailscale test), full v12 rule list editor, floor flag on the Allow path (HIGH), 'Bunny's own tools' under the file-tools heading, About licence link at ~720 px, the unnamed intermittent unit failure (now named by the gate when it recurs), pin the reporter in gate-marks.test.js, PIC-OFFSET, PERM-REFINE, HOOK-MAP, Codex Account, engine spikes, palette redraw.
+
+**Lesson:** an in-app security statement is a claim like any other: Security and Tech Lead checked each line against the code and both found the same overclaim. Have them read new user-facing safety text before the gate, not after.
+
 ## 2026-11-19 - v0.1.13 published
 
 **Owner's words (typed in this chat):** "Yes, release when ready"; "push and release when ready"; "just run the test for cut part, then release and push, no need for all the tests and sign offs again"; "ok, ping my phone when it's live". The full words for every row are in docs/plans/2026-11-18-v0.1.13-plan.md.
