@@ -119,8 +119,11 @@ for (const [label, size] of [['desktop', { width: 1280, height: 800 }], ['phone'
     const step = page.locator('.tool-call-header', { hasText: 'Searched this PC for “tax” · 3 results' });
     await expect(step).toBeAttached({ timeout: 20_000 });
     await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
-    for (const line of await page.locator('.tool-group-line').all()) { if ((await line.getAttribute('aria-expanded')) !== 'true') await line.click(); } // the steps are folded into a group: open it
-    await expect(step).toBeVisible();
+    // the steps are folded into a group: open it. The page can fold the group again just after the reply ends (it did on a busy PC), so open it again until the step shows
+    await expect(async () => {
+      for (const line of await page.locator('.tool-group-line').all()) { if ((await line.getAttribute('aria-expanded')) !== 'true') await line.click(); }
+      await expect(step).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
     await expect(page.locator('.tool-call-header', { hasText: /^Read \d+ files?: / }).first()).toBeVisible();
     await step.click();
     const rows = page.locator('.pc-results .pc-row');
