@@ -38,7 +38,8 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
         command: { type: 'string', description: 'For a local connector: the program to run' },
         args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
-        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' } }, ['name']),
+        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' },
+        key_headers: { type: 'array', items: { type: 'string' }, description: 'For a remote connector that needs a key: the header NAMES its listing asks for (never a value). The person pastes the key themselves, in Settings, Customize, on that connector: never ask for it in the chat.' } }, ['name']),
     fn('install_from_github', 'Install a tool from a PUBLIC GitHub repository: an MCP server written in Node.js. The person sees a card first with the repository, the exact commit, the install command and "This runs code from the internet on this computer", and must say yes. It is installed into Bunny AI\'s own tools folder at that commit, npm install scripts are NOT run, and it is added as a connector. Use add_connector instead for a server that npx can run, and install_plugin for skills.',
       { repo: { type: 'string', description: 'owner/name or a github.com link' } }, ['repo']),
   ].filter((d) => risks.includes(APP_TOOL_RISK[d.function.name]));
@@ -337,10 +338,10 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       }
       // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
       const remote = !String(args.command ?? '').trim();
-      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote });
+      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote, ...(remote && args.key_headers ? { keyHeaders: args.key_headers } : {}) });
       if (remote) {
         keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
-        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).`;
+        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).${added.keyHeaders?.length ? ` It needs a key (${added.keyHeaders.join(', ')}): tell the person to open Settings, Customize, this connector, Add key, and paste it there. Never ask for the key in the chat.` : ''}`;
       }
       return `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
     },

@@ -50,8 +50,9 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
       },
       body: JSON.stringify(body),
       signal,
+      ...(server.keyed ? { redirect: 'error' } : {}), // K-3: a request that carries a key never follows a redirect
     });
-    if (res.status === 401 && auth) {
+    if (res.status === 401 && (auth || server.keyed)) {
       if (attempt === 0 && Object.keys(extra).length > 0) continue;
       throw new McpError('This connector needs you to sign in.', 'mcp.needsSignIn', { signInUrl: resourceMetadataFrom(res) });
     }

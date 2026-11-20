@@ -210,7 +210,7 @@ export async function searchPlugins(query, { fetchImpl = globalThis.fetch, githu
 }
 
 /** What to tell the person about a connector that needs a key (a header value): where it comes from and where it goes. Keys are never taken through the chat. */
-export const KEY_CARD = "Do not ask for the key in chat and do not drop it. Tell the person plainly: it needs a key made in their account on the vendor's own site (name the page if you know it), Bunny never takes a key through chat, and today a remote connector has no field in Bunny to paste one into. Offer a connector that signs in on the vendor's page, or a plugin from GitHub, for the same job"
+export const KEY_CARD = "Do not ask for the key in chat. Tell the person: the key is made in their account on the vendor's own site (name the page if you know it). Add the connector with add_connector and pass the header name as key_headers (it arrives switched OFF), then say that the key goes in Settings, Customize, on that connector, under Add key: Bunny keeps it on this computer and sends it only to that connector"
 
 /** Read a web page as text (README-friendly), for the model to check before installing. */
 export async function readUrl(url, { fetchImpl = null } = {}) {

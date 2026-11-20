@@ -91,9 +91,9 @@ test('a connector that needs a key is no dead end: the line names the header and
   const { fetchImpl } = recorder({ registry });
   const out = await searchPlugins('keyed', { fetchImpl });
   assert.doesNotMatch(out, /cannot connect it yet/i);
-  assert.match(out, /io\.example\/keyed: https:\/\/mcp\.keyed\.test\/mcp \(needs a key: X-Api-Key\. Do not ask for the key in chat and do not drop it\./);
+  assert.match(out, /io\.example\/keyed: https:\/\/mcp\.keyed\.test\/mcp \(needs a key: X-Api-Key\. Do not ask for the key in chat\./);
   assert.doesNotMatch(out, /X-Optional/);
-  assert.match(out, /never takes a key through chat/); assert.match(out, /Offer a connector that signs in on the vendor's page/);
+  assert.match(out, /Do not ask for the key in chat/); assert.match(out, /key_headers/); assert.match(out, /Settings, Customize, on that connector, under Add key/);
   const limited = async (url) => (String(url).startsWith('https://api.github.com/') ? { status: 403, ok: false, json: async () => ({ message: 'API rate limit exceeded for 1.2.3.4' }) } : { status: 200, ok: true, json: async () => ({ servers: [] }) });
   assert.match(await searchPlugins('x', { fetchImpl: limited }), /GitHub is limiting searches for now: sign in to GitHub in Settings/);
 });

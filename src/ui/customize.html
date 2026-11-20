@@ -99,6 +99,7 @@
   import { applyEmbed } from './embed.js';
   import { connectorStatus, createSignInFlows } from './connectorStatus.js';
   import { tightRow } from './tight-rows.js';
+  import { keyBox } from './connector-key.js';
   applyEmbed();
 
   const $ = (id) => document.getElementById(id);
@@ -192,6 +193,7 @@
   // "Everywhere" is the default and says nothing; "Only in: <folder>" is part of the dim line; changing it is in the menu.
   const folderName = (f) => String(f).split(/[\\/]/).filter(Boolean).pop() ?? String(f);
   const scopeDim = (item) => ((item.folders ?? []).length ? `Only in: ${item.folders.map(folderName).join(', ')}` : '');
+  const keyOpen = new Set(); // connectors whose key box is open (the key itself is never kept here)
   const dimLine = (...parts) => parts.filter(Boolean).join(' · ');
   function scopeItems(path, item) {
     const folders = item.folders ?? [];
@@ -224,14 +226,16 @@
           id: s.id,
           name: s.name,
           chips: [plugin ? { text: 'Plugin' } : null, needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
-          dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : hostOrUrl(s.url), needs ? st.detail : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : '', plugin ? '' : scopeDim(s)),
-          extra: flows.clientIdBox(s),
+          dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : hostOrUrl(s.url), needs ? st.detail : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : '', s.hasKey ? `Key saved (${s.keyHeader})` : '', plugin ? '' : scopeDim(s)),
+          extra: flows.clientIdBox(s) ?? (keyOpen.has(s.id) ? keyBox({ server: s, save: (header, value) => sendJSON(`/api/mcp/${s.id}/key`, 'PUT', { header, value }), done: async () => { keyOpen.delete(s.id); await load(); }, cancel: () => { keyOpen.delete(s.id); paint(); } }) : null),
           primary,
           toggle: { on: s.enabled, label: `Use ${s.name}`, change: async (on) => { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on }); await load(); } },
           items: [
             primary ? { label: primary.label, run: primary.run } : null,
             { label: 'Test', run: async () => { notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); } },
             signedIn ? { label: 'Sign out', run: () => signOut(s) } : null,
+            s.type !== 'local' ? { label: s.hasKey ? 'Change key…' : 'Add key…', run: () => { keyOpen.add(s.id); paint(); } } : null,
+            s.hasKey ? { label: 'Remove key', run: async () => { await sendJSON(`/api/mcp/${s.id}/key`, 'DELETE'); await load(); } } : null,
             { label: s.trustReadOnly ? 'Read-only labels trusted' : 'Trust read-only labels', checked: Boolean(s.trustReadOnly), run: async () => { try { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { trustReadOnly: !s.trustReadOnly }); notice = !s.trustReadOnly ? `${s.name}: tools that call themselves read-only now run without asking.` : ''; } catch (err) { notice = err.message; } await load(); } },
             '-',
             ...(plugin ? [] : scopeItems(`/api/mcp/${s.id}`, s)),
