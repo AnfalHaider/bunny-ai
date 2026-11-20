@@ -97,6 +97,7 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
    <li>Some cards never offer it (sending, building tools, protected paths, compound commands, your own Ask rules, a chat holding PC file text, a device). They show only Allow once and Don't allow, and say why in one line.</li>
    <li>What is allowed is listed on the <b>Working folder</b> card, with <b>Forget</b>. A folder change, an engine switch or Plan mode also clears it.</li>
    <li>A deny rule always wins, and an allowed kind never gets past the always-protected list.</li>
+   <li><b>Kinds are narrow (Security F9-1 to F9-3):</b> a wide command kind exists only for a fixed list of program and sub-command pairs ("npm test commands", "git commit commands"). Interpreters, shells, downloaders, deletions and <span class="mono">git push</span> get only <b>this exact command</b>. An edit kind is one folder and below, never the whole project. Controlling the PC lasts <b>for this task</b> (this reply). Browser kinds are by site, and purchases, downloads and form submits are once only.</li>
   </ul>
  </section>
 
@@ -112,8 +113,8 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
     <div class="pc"><div class="who">Bunny</div><b>Run this command?</b>
      <div class="code">npm run test</div><div class="sub">In C:\Users\Sam\Projects\carrot-shop</div>
      <div class="btns"><button class="btn p">Allow once</button><button class="btn" id="fc">Allow <span class="mono">npm run</span> commands in this chat</button><button class="btn">Don't allow</button></div>
-     <label class="tick" id="tk"><i></i><span>Also save as a rule for this folder <span class="sub">(an Allow rule, for C:\Users\Sam\Projects\carrot-shop)</span></span></label></div>
-    <p class="cap">Click the tick to see it on. It is shown with the middle button and applies only if that button is pressed.</p></div>
+     <label class="tick" id="tk"><i></i><span>Also save as a rule for this folder <span class="sub">Saves exactly: Allow <span class="mono">npm run *</span> in C:\Users\Sam\Projects\carrot-shop</span></span></label></div>
+    <p class="cap">Click the tick to see it on. It shows the exact rule text before anything is saved, applies only if the middle button is pressed, and writes an Allow rule only.</p></div>
   </div>
   <div class="cols">
    <div class="cell"><h3>Proposed · phone (360 px)</h3>
@@ -152,8 +153,9 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
      <div class="db"><div class="path">C:\Users\Sam\Projects\carrot-shop</div>
       <div class="blk"><div class="hd"><span><b>Allowed in this chat</b> <span class="sub">· 3 kinds</span></span><button class="lnk">Forget allowed actions</button></div>
        <div class="f"><span class="n">npm run commands</span><button class="lnk">Forget</button></div>
-       <div class="f"><span class="n">Edits in src/</span><button class="lnk">Forget</button></div>
+       <div class="f" title="C:\Users\Sam\Projects\carrot-shop\src\components"><span class="n">Edits in src/components/</span><button class="lnk">Forget</button></div>
        <div class="f"><span class="n">Actions on example.com</span><button class="lnk">Forget</button></div>
+       <div class="f"><span class="n">Controlling this PC <small>(this task only)</small></span><span class="chp">ends with this reply</span></div>
        <div class="note">Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode. Rules saved for this folder are in Settings → Code.</div></div></div>
      <div class="df"><button class="btn p">Close</button></div></div>
     <p class="cap">Empty state: "Nothing is allowed for this chat." The block is hidden on a device.</p></div>
@@ -175,9 +177,14 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
    <tr><td>Not offered (one line)</td><td>Asked every time: &lt;reason&gt; (reasons below)</td></tr>
    <tr><td>List heading</td><td>Allowed in this chat · Forget · Forget allowed actions</td></tr>
    <tr><td>List foot</td><td>Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode.</td></tr>
+   <tr><td>Exact-command button</td><td>Allow <span class="mono">&lt;the whole command&gt;</span> (this exact command) in this chat</td></tr>
+   <tr><td>Computer button</td><td>Allow controlling this PC for this task (no tick)</td></tr>
+   <tr><td>List, computer row</td><td>Controlling this PC (this task only); removed when the reply ends</td></tr>
+   <tr><td>Tick, exact rule</td><td>Saves exactly: Allow &lt;rule&gt; in &lt;folder&gt;</td></tr>
+   <tr><td>Reasons (Asked every time: …)</td><td>this command is named by a path or has options Bunny can't check · this sends or buys something · a helper is asking</td></tr>
    <tr><td>Device line</td><td>"For this chat" can be given only on the PC.</td></tr>
   </table></div>
-  <div class="q"><b>For Security and Tech Lead:</b> (a) the one-line reasons are fixed strings, never model text; (b) the kind comes only from the call's own arguments at the moment of the card, so a hostile file cannot widen it; (c) the tick writes an Allow rule only, never removes a Deny or Ask; (d) the step mark must not be mistaken for a banner: it is a small chip on the step, nothing across the screen; (e) long paths: the folder kind shows the folder name only ("src/"), with the full path in a tooltip.</div>
+  <div class="q"><b>For Security and Tech Lead:</b> (a) the one-line reasons are fixed strings, never model text; (b) the kind comes only from the call's own arguments at the moment of the card, so a hostile file cannot widen it; (c) the tick writes an Allow rule only, never removes a Deny or Ask; (d) the step mark must not be mistaken for a banner: it is a small chip on the step, nothing across the screen; (e) long paths: the folder kind shows the folder relative to the project ("src/components/"), cut in the middle if long, with the full path in the tooltip (Security answered a to e: yes). Security's F9-1 to F9-3 and the seven changes are applied (a06e28ad, 7105eed1).</div>
  </section>
 </div>
 <script>
@@ -185,21 +192,25 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
  var r=document.documentElement;
  document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
  var tk=document.getElementById('tk');tk.addEventListener('click',function(){var i=tk.querySelector('i');i.classList.toggle('on')});
- function card(id,q,code,sub,mid,why){var h='<div class="who">Bunny</div><b>'+q+'</b><div class="code">'+code+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'<div class="btns"><button class="btn p">Allow once</button>'+(mid?'<button class="btn">'+mid+'</button>':'')+'<button class="btn">Don\'t allow</button></div>'+(mid?'<label class="tick"><i></i><span>Also save as a rule for this folder</span></label>':'')+(why?'<div class="sub">Asked every time: '+why+'</div>':'');document.getElementById(id).innerHTML=h}
+ function card(id,q,code,sub,mid,why,notick){var h='<div class="who">Bunny</div><b>'+q+'</b><div class="code">'+code+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'<div class="btns"><button class="btn p">Allow once</button>'+(mid?'<button class="btn">'+mid+'</button>':'')+'<button class="btn">Don\'t allow</button></div>'+(mid&&!notick?'<label class="tick"><i></i><span>Also save as a rule for this folder</span></label>':'')+(why?'<div class="sub">Asked every time: '+why+'</div>':'');document.getElementById(id).innerHTML=h}
  var K={
-  'Command':['Run this command?','npm run test','Allow <span class="mono">npm run</span> commands in this chat','The first word, plus the first sub-command for known tools (npm run, git commit, node).'],
-  'Edit':['Edit this file?','src/cards.js','Allow edits in <span class="mono">src/</span> in this chat','The folder of the path, inside the workspace only.'],
-  'Connector':['Use this connector tool?','Notion: create page','Allow Notion: create page in this chat','The exact tool name.'],
-  'Computer':['Click on this PC?','Click at (412, 233)','Allow controlling this PC in this chat','All four computer actions together: click, type, key, scroll.'],
-  'Browser':['Do this on a page?','Click "Buy" on example.com','Allow actions on example.com in this chat','The page\'s site (host), for actions that change things.']};
+  'Command (known pair)':['Run this command?','npm test','Allow <span class="mono">npm test</span> commands in this chat','Only a fixed list of program and sub-command pairs: npm, pnpm and yarn run or test; git status, diff, log, show, add, commit; dotnet, cargo and go build or test; pytest, tsc, eslint, prettier --check.',0],
+  'Command (exact)':['Run this command?','node scripts/check.js','Allow <span class="mono">node scripts/check.js</span> (this exact command) in this chat','Interpreters and shells, anything that downloads code, deletions, git push and git -c get only the whole command text, compared exactly, never as a prefix. The tick saves an exact rule.',0],
+  'Edit':['Edit this file?','src/components/Card.js','Allow edits in <span class="mono">src/components/</span> in this chat','One folder and below, never the whole project, shown relative to the project and cut in the middle if long; the full path is in the tooltip. Protected files stay outside it.',0],
+  'Connector':['Use this connector tool?','Notion: create page','Allow Notion: create page in this chat','The connector plus the tool\'s own name, never a tool that sends.',0],
+  'Computer':['Click on this PC?','Click at (412, 233)','Allow controlling this PC for this task','This reply only: it ends when the reply ends and is never kept for the chat. All four computer actions together; there is no tick.',1],
+  'Browser':['Do this on a page?','Click "Next" on example.com','Allow actions on example.com in this chat','The page\'s site, exact host with no subdomains, taken from the page the panel is on at that moment. There is no tick; it is never saved as a rule.',1]};
  var ks=document.getElementById('kseg');Object.keys(K).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){ks.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sk(k)});ks.appendChild(b)});
- function sk(k){var v=K[k];card('kcard',v[0],v[1],'',v[2]);document.getElementById('kcap').textContent='Kind: '+v[3]}sk('Command');
+ function sk(k){var v=K[k];card('kcard',v[0],v[1],'',v[2],'',v[4]);document.getElementById('kcap').textContent='Kind: '+v[3]}sk('Command (known pair)');
  var N={
   'Compound command':['Run this command?','npm run build && node deploy.js','it has more than one part, so Bunny cannot tell what exactly will run','Compound commands, redirects, substitutions, variables and pipes to a shell.'],
   'Sending':['Send this email?','To: alex@example.com · "Invoice"','sending always asks','Sending (gmail_send, message_session).'],
   'Building':['Add this local connector?','node mcp-server.js','adding tools and connectors always asks','create_tool, install_from_github, local connectors, schedules that may change things.'],
   'Your own rule':['Run this command?','git push origin main','your own Ask rule for git push* asks every time','A card shown because of the person\'s own Ask rule.'],
   'Protected path':['Edit this file?','.github/workflows/ci.yml','this file can run code later, so it asks every time','.git, .vscode tasks, .github/workflows, .husky, package.json scripts and the like.'],
+  'Named by a path or options':['Run this command?','.\\npm run build','this command is named by a path or has options Bunny can\'t check','A first word with a path or drive letter, or an option before the sub-command (git -c, npm --prefix). No kind at all, not even the exact one.'],
+  'Buys or sends (browser)':['Do this on a page?','Click "Buy now" on shop.example.com','this sends or buys something','Purchases, downloads and form submits with typed text are once only.'],
+  'A helper is asking':['Run this command?','npm test','a helper is asking','Helpers may use the chat\'s kinds but cannot create one: their card offers Allow once only.'],
   'PC file text in chat':['Run this command?','node convert.js','this chat has read text from your PC files, so commands ask every time','While the chat holds PC file text (the Search this PC rule).']};
  var ns=document.getElementById('nseg');Object.keys(N).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){ns.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sn(k)});ns.appendChild(b)});
  function sn(k){var v=N[k];card('ncard',v[0],v[1],'',null,v[2]);document.getElementById('ncap').textContent='Why: '+v[3]}sn('Compound command');
