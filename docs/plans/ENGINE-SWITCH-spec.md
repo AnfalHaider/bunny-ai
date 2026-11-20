@@ -88,6 +88,7 @@ BUNNY HANDOVER>>>
   - No contents: the new engine reads the files itself, which is the owner's "read the same files".
   - A path that no longer exists is marked `(deleted)`.
 - **The task list.** The open steps of the newest saved list, quoted as in W6-12.
+- **ES-1 (Security): PC file text never goes in the handover.** Any message with `pcSources`, or marked tainted (`noAutoLoad`), is replaced in the handover by the single line "(an answer that used files from this PC, left out)". So is any tool step of `search_pc` or `read_pc_file`. The summary message is used only when it was written before the chat first held PC file text; otherwise it is left out with the same line.
 - **Cleaning.** Every piece is fenced and cleaned as FR-1 does:
   - the fence words `<<<BUNNY HANDOVER` and `BUNNY HANDOVER>>>` are removed from the inner text;
   - C0 control characters are removed (tab and newline kept).
@@ -127,6 +128,7 @@ BUNNY HANDOVER>>>
 ## 5. Restricted mode
 
 - **The flag moves into a list.** `session.engine.restricted` becomes `session.engine.restrictedFor: [engine ids]`. The old `restricted: true` is read as `[that chat's engine]`.
+- **ES-2 (Security): only the server sets `restrictedFor`.** It is written only by the engine-turn code when Bunny's check didn't run. Any `PATCH` of the session that carries `restrictedFor`, or `restricted`, has that field ignored. It is never removed from a chat.
 - **Switching to a different engine** starts that engine in **full** mode. The failed check was the old engine's (its hook or watchdog), not the folder's.
 - **Switching back** to an engine in `restrictedFor` runs it restricted again, and the confirm card says so ("Claude Code runs restricted in this chat: Bunny's check failed for it earlier").
 - **Bunny's engine** has no restricted mode, so the list doesn't apply to it.
@@ -162,11 +164,16 @@ BUNNY HANDOVER>>>
    - the file list is the union of the checkpoints' paths and the tool-step paths, de-duplicated, 200 at most, with deleted files marked;
    - the open task steps are quoted.
 4. **Cleaning:** a message containing `BUNNY HANDOVER>>>` arrives with the fence words removed, inside one fence. Control characters are removed.
+4a. **ES-1:**
+    - a reply with `pcSources`, a tainted message and a `read_pc_file` step each appear only as "(an answer that used files from this PC, left out)";
+    - a summary written after PC text entered the chat is left out;
+    - a searched-for word from the PC file text appears nowhere in the handover.
 5. **Resume:**
    - Claude Code after a switch has no `--resume`; the next turn has `--resume <new id>`;
    - Codex gets the handover on every turn;
    - Bunny's engine gets the note on its first reply after a switch only.
 6. **Restricted:**
+   - ES-2: a `PATCH` with `engine.restrictedFor: []` or `restricted: false`, from the window or a device, leaves the stored list unchanged;
    - `restricted: true` is read as `restrictedFor: [id]`;
    - switching to the other engine runs full;
    - switching back runs restricted, and the card says so.

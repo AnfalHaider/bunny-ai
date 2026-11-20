@@ -22,7 +22,7 @@ Bunny builds **one** text per folder. All three engines get exactly that text, s
 
 - **Reading.** Files are read through the workspace read path, once when the chat starts or at Follow them, and again only on Read again. This is FOLDER-RULES §2 as aligned to drawing v2.
 - **The caps.**
-  - The spec says 32 KB per file and 64 KB in all; drawing v2 says 20 KB. **Design and the Chief of Staff pick one before build.** This spec takes whatever they pick, and the same cap applies to all three engines.
+  - **Settled: 32 KB per file and 64 KB in all** (Chief of Staff, 2026-11-20; Design's drawing v3 says the same). The same cap applies to all three engines.
 - **The text is kept with the chat** (`session.folderRulesRead`), so every engine in this chat gets the same bytes, including after an ENGINE-SWITCH.
 
 ## 2. How each engine gets it
@@ -114,6 +114,11 @@ These run with the pinned CLIs, in an invented profile, offline.
 - **E2, Codex:**
   - Setup: the same with `AGENTS.md`, and with and without `project_doc_max_bytes = 0`.
   - Expected: without the key the canary shows (Codex's own reading), and with it the canary doesn't. With the block it shows again.
+- **OI-1 (Security, on 9979b4d9): canaries beyond the root file.** The same canary is planted in each of these, one at a time:
+  - **Claude Code under `--setting-sources user`:** a `CLAUDE.md` in a subfolder that it reads a file from, during the run; and `.claude/CLAUDE.md` at the root.
+  - **Codex with `project_doc_max_bytes = 0`:** an `AGENTS.md` in a subfolder (the nested project doc), with the run's `cwd` at the root, and again with `cwd` in the subfolder.
+- **If any canary shows,** the build either turns that reading off (a flag or a config key, proven by the same canary), or the folder view says plainly that "<engine> also reads <file> by itself". Bunny never claims "the same text for all three" for a case the canaries didn't prove.
+- **Security withdraws its answer (3):** the trust card covers engine chats (§3).
 - **Recording.** The result goes in `pins.json` and the PR, with the command and its output (O1).
 
 ### End-to-end
