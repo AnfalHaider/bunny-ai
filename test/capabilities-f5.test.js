@@ -129,3 +129,57 @@ test('F5-3 and F5 words: pushed browser tools follow the taint rule, devices and
   assert.match(src, /is installed and off/);
   assert.match(src, /Its description is too long to show here\. Open Settings › Customize to read it and switch it on\./);
 });
+
+// ---- the over-long plugin: the step carries openInCustomize, nothing is switched on ----
+const LONG_REPO = { 'plugin.json': JSON.stringify({ name: 'carrot-helper', description: 'Carrot know-how' }) };
+for (let n = 0; n < 30; n += 1) LONG_REPO[`skills/grow${n}/SKILL.md`] = `---
+name: grow${n}
+description: How to grow carrots in a very particular way number ${n}, with care
+---
+Water them every morning.`;
+test('F5: a plugin whose description is too long to show gets a step with Open in Customize (openInCustomize), and nothing is switched on', async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes('api.github.com') && u.includes('/git/trees/')) return new Response(JSON.stringify({ tree: Object.keys(LONG_REPO).map((path) => ({ path, type: 'blob' })) }), { status: 200 });
+    const m = /raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/(.*)$/.exec(u);
+    if (m) return LONG_REPO[m[1]] !== undefined ? new Response(LONG_REPO[m[1]], { status: 200 }) : new Response('not found', { status: 404 });
+    return real(url, init);
+  };
+  t.after(() => { globalThis.fetch = real; });
+  const w = await world(t, { capability: 'new_tool', reason: 'x' });
+  // a model that installs the plugin instead: replace the stand-in's first answer by driving the tool route through a second world
+  const seen = [];
+  const provider = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, jsonH); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      const b = JSON.parse(raw);
+      seen.push(b);
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(sse(b.messages.some((m) => m.role === 'tool') ? { content: 'done' } : call('install_plugin', { url: 'https://github.com/bunny/carrot-helper' })));
+    });
+  });
+  await new Promise((r) => provider.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
+  await post(w.base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
+  const { body: session } = await post(w.base, '/api/sessions', { title: 'long plugin' });
+  await fetch(`${w.base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: 'auto' }) });
+  const res = await fetch(`${w.base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: jsonH, body: JSON.stringify({ content: 'add the carrot plugin', providerId: 'openai', model: 'gpt-4o' }) });
+  const reader = res.body.getReader();
+  let text = '';
+  const stop = setTimeout(() => reader.cancel().catch(() => {}), 20_000);
+  for (;;) {
+    const { done, value } = await reader.read().catch(() => ({ done: true }));
+    if (done) break;
+    text += new TextDecoder().decode(value);
+    const card = /event: (permission|capability)\ndata: (.*)\n/.exec(text);
+    if (card && !text.includes('answered')) { text += 'answered'; await post(w.base, `/api/sessions/${session.id}/${card[1]}/${JSON.parse(card[2]).id}`, card[1] === 'permission' ? { allowed: true } : { granted: true }); }
+  }
+  clearTimeout(stop);
+  assert.match(text, /"result":"Its description is too long to show here\. Open Settings › Customize to read it and switch it on\.","openInCustomize":true/);
+  const skills = await (await fetch(`${w.base}/api/skills`)).json();
+  assert.equal(skills.length, 30);
+  assert.ok(skills.every((x) => x.enabled === false), 'nothing was switched on');
+});

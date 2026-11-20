@@ -2067,6 +2067,10 @@ function showLiveTool(bodyEl, info) {
     line.querySelector('.tag')?.classList.add('is-blocked');
     line.append(signInStep(info));
   }
+  if (info.openInCustomize && !line.querySelector('.open-customize')) { // F5: an installed plugin that is off, too long to show: the button goes to Customize (nothing is switched on from here)
+    const open = button('Open in Customize', { className: 'ghost small open-customize', onclick: () => openSettings('customize') });
+    line.append(open);
+  }
   if (info.result) {
     let res = line.querySelector('.tool-call-result');
     if (!res) { res = element('div', { className: 'tool-call-result' }); line.querySelector('.tool-call')?.append(res); }

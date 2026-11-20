@@ -3376,7 +3376,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               if (!added) return said;
               const shown = `${added.title}\n${added.text}`;
               if (shown.length > 1800) {
-                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.' });
+                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.', openInCustomize: true });
                 return `${said}\nIt is installed and OFF: its description is too long to show whole. It stays off until the person switches it on in Settings › Customize.`;
               }
               const answer = await askCapability('switch_on_added', shown);
