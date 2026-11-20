@@ -78,7 +78,36 @@ const FLOOR_LIST = `<div class="floor" id="engine-floor"><div class="floor-h">Al
   + `<li>Bunny's own tools: the model may not use them.</li>`
   + '</ul><div class="d">Commands are not blocked: Bunny cannot see what a command reads. When a command that names one of these folders comes to you on a card, the card says so; a command your Allow rules let through runs without a card.</div></div>';
 
-const rulesLines = (list) => (Array.isArray(list) ? list : []).join('\n');
+// The engine's own rules as lists (Deny, Ask, Allow), one row per rule with Remove and an add line per list. The same data shape as before ({ allow, ask, deny } of strings)
+// and the same checks on the server; the add line only repeats them so a mistake is said at once, next to the line.
+const RULE_KINDS = ['deny', 'ask', 'allow'];
+const RULE_HEAD = { deny: ['Deny', 'the engine is told no'], ask: ['Ask', 'the engine asks you, in the chat'], allow: ['Allow', 'the engine goes ahead'] };
+const RULE_SHAPE = /^[A-Za-z_][A-Za-z0-9_]*(\([^\r\n]*\))?$/;
+let draft = { deny: [], ask: [], allow: [] }; let dirty = false; const typed = { deny: '', ask: '', allow: '' }; const lineError = { deny: '', ask: '', allow: '' };
+const copyRules = (r) => ({ deny: [...(r?.deny ?? [])], ask: [...(r?.ask ?? [])], allow: [...(r?.allow ?? [])] });
+function syncDraft(saved) { if (!dirty) draft = copyRules(saved); }
+/** What the person sees in front of a rule: Command, Path (files) or Tool, from the rule's own tool name. */
+const ruleKind = (rule) => { const t = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(rule)?.[1] ?? ''; return ['Bash', 'PowerShell'].includes(t) ? 'Command' : ['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep'].includes(t) ? 'Path' : 'Tool'; };
+/** The reason a typed rule is refused, or '' (the server checks the same again on Save). */
+function ruleProblem(text, kind) {
+  const t = text.trim();
+  if (!t) return 'Type a rule first.';
+  if (t.length > 200) return 'A rule is at most 200 characters.';
+  if (!RULE_SHAPE.test(t)) return "That is not in Claude Code's rule form, for example Bash(npm test:*) or Read(./docs/**).";
+  if (t.startsWith('mcp__bunny__')) return "That tool is Bunny's own and cannot be given a rule.";
+  if (draft[kind].includes(t)) return 'That rule is already in this list.';
+  if (draft[kind].length >= 200) return 'A list holds at most 200 rules.';
+  return '';
+}
+function rulesGroup(kind) {
+  const [name, sub] = RULE_HEAD[kind];
+  const rows = draft[kind].map((r, i) => `<div class="rr"><span class="k">${ruleKind(r)}</span><code>${esc(r)}</code><button type="button" class="rm" data-rm="${kind}" data-i="${i}" aria-label="Remove ${esc(r)}">Remove</button></div>`).join('')
+    || `<div class="rr none">No ${name.toLowerCase()} rules.</div>`;
+  return `<div class="rg" data-kind="${kind}"><div class="gh2">${name} <span>${sub}</span></div>${rows}`
+    + `<div class="ra"><input type="text" data-add-input="${kind}" maxlength="200" spellcheck="false" autocomplete="off" placeholder="${kind === 'allow' ? 'Bash(npm test:*)' : kind === 'ask' ? 'Bash(git push:*)' : 'Read(./secrets/**)'}" aria-label="New ${name.toLowerCase()} rule" value="${esc(typed[kind])}" />`
+    + `<button type="button" class="btn2" data-add="${kind}">Add ${name.toLowerCase()} rule</button></div><div class="err" data-line-error="${kind}" role="alert"${lineError[kind] ? '' : ' hidden'}>${esc(lineError[kind])}</div></div>`;
+}
+
 function paintRules() {
   const off = state.useBunnyEngine === false;
   if (bunnyRules) { bunnyRules.checked = !off; const st = document.getElementById('engine-bunny-rules-state'); if (st) st.textContent = off ? 'off' : 'on'; bunnyRules.disabled = deviceView; }
@@ -90,18 +119,18 @@ function paintRules() {
   if (rulesBox.hidden) return;
   const cc = state.engines.find((e) => e.id === 'claude-code');
   const cx = state.engines.find((e) => e.id === 'codex');
-  const keepOpen = rulesBox.querySelector('details')?.open;
   let html = '';
   if (cc?.downloaded && cc.ownRules) {
-    html += `<div class="row stack"><div class="meta-col"><div class="name">Claude Code's rules</div><div class="desc">In Claude Code's own form, one per line, for example <code>Bash(npm test:*)</code> or <code>Read(./docs/**)</code>. Allow runs with no question, Ask shows a card, Deny always stops. Bunny never loads rules from a folder or from your own Claude Code.</div></div>`
-      + ['deny', 'ask', 'allow'].map((k) => `<label class="rl">${k[0].toUpperCase()}${k.slice(1)}<textarea data-kind="${k}" rows="3" maxlength="40000" spellcheck="false" aria-label="${k} rules">${esc(rulesLines(cc.rules?.[k]))}</textarea></label>`).join('')
+    syncDraft(cc.rules);
+    html += `<div class="row stack"><div class="meta-col"><div class="name">Claude Code's rules</div><div class="desc">The engine's own rules, in Claude Code's own form, for example <code>Bash(npm test:*)</code> or <code>Read(./docs/**)</code>. Deny always stops. Ask shows a card. Allow runs with no question. Bunny never loads rules from a folder or from your own Claude Code.</div></div>`
+      + RULE_KINDS.map(rulesGroup).join('')
       + FLOOR_LIST
+      + `<div class="d" id="engine-rules-never">Not offered, as a choice or a default: bypass permissions, "accept everything", auto-approve.</div>`
       + `<div><button type="button" class="btn2 pri" id="engine-rules-save">Save rules</button> <span class="d" id="engine-rules-said" role="status"></span></div></div>`;
   } else if (cc?.downloaded) html += `<div class="row"><div class="desc">Claude Code stays on Bunny's rules: its permission question has not been checked for this version.</div></div>`;
   if (cx?.downloaded) html += `<div class="row"><div class="desc">Codex asks you about every command and file change, and you answer on a card. Its own rules are not offered yet.</div></div>`;
   if (!html) html = `<div class="row"><div class="desc">Download an engine to set its rules.</div></div>`;
   rulesBox.innerHTML = html;
-  void keepOpen;
 }
 
 function render() {
@@ -130,8 +159,6 @@ function render() {
 let watching = 0;
 /** After a sign-in starts: look again every 3 s for two minutes (the page also refreshes by itself). */
 function watchSignIn() { const run = (watching += 1); let n = 0; const tick = async () => { if (run !== watching || n >= 40) return; n += 1; await load(); if (state?.engines.find((e) => e.id === 'claude-code')?.signedIn === true) return; setTimeout(tick, 3000); }; setTimeout(tick, 3000); }
-
-const parseLines = (box) => box.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
 async function load() {
   try { state = await getJSON('/api/engines'); render(); loadRecord(); } catch (err) { if (mount) mount.textContent = `Engines could not be loaded: ${err.message}`; }
@@ -215,13 +242,27 @@ bunnyRules?.addEventListener('change', async () => {
   try { await sendJSON('/api/settings', 'PUT', { useBunnyEngine: !wantOff }); } catch (err) { bunnyRules.checked = wantOff; await tell(err.message); }
   await load();
 });
+const repaintRules = () => { if (state) paintRules(); };
+function addRule(kind) {
+  const input = rulesBox.querySelector(`[data-add-input="${kind}"]`);
+  const text = (input?.value ?? '').trim();
+  const bad = ruleProblem(text, kind);
+  if (bad) { lineError[kind] = bad; typed[kind] = input?.value ?? ''; repaintRules(); rulesBox.querySelector(`[data-add-input="${kind}"]`)?.focus(); return; }
+  draft[kind].push(text); typed[kind] = ''; lineError[kind] = ''; dirty = true; repaintRules();
+  rulesBox.querySelector(`[data-add-input="${kind}"]`)?.focus();
+  const said = document.getElementById('engine-rules-said'); if (said) said.textContent = 'Not saved yet.';
+}
+rulesBox?.addEventListener('input', (ev) => { const k = ev.target?.dataset?.addInput; if (k) { typed[k] = ev.target.value; if (lineError[k]) { lineError[k] = ''; const e = rulesBox.querySelector(`[data-line-error="${k}"]`); if (e) e.hidden = true; } } });
+rulesBox?.addEventListener('keydown', (ev) => { const k = ev.target?.dataset?.addInput; if (k && ev.key === 'Enter') { ev.preventDefault(); addRule(k); } });
 rulesBox?.addEventListener('click', async (ev) => {
+  if (deviceView) return;
+  const add = ev.target.closest('[data-add]'); if (add) { addRule(add.dataset.add); return; }
+  const rm = ev.target.closest('[data-rm]');
+  if (rm) { draft[rm.dataset.rm].splice(Number(rm.dataset.i), 1); dirty = true; repaintRules(); const said = document.getElementById('engine-rules-said'); if (said) said.textContent = 'Not saved yet.'; return; }
   const b = ev.target.closest('#engine-rules-save');
-  if (!b || deviceView) return;
-  const rules = {};
-  for (const ta of rulesBox.querySelectorAll('textarea[data-kind]')) rules[ta.dataset.kind] = parseLines(ta);
+  if (!b) return;
   const said = document.getElementById('engine-rules-said');
-  try { await sendJSON('/api/settings', 'PUT', { engines: { 'claude-code': { rules } } }); await load(); const again = document.getElementById('engine-rules-said'); if (again) again.textContent = 'Saved. New runs use these rules.'; } catch (err) { if (said) said.textContent = err.message; }
+  try { await sendJSON('/api/settings', 'PUT', { engines: { 'claude-code': { rules: { deny: draft.deny, ask: draft.ask, allow: draft.allow } } } }); dirty = false; await load(); const again = document.getElementById('engine-rules-said'); if (again) again.textContent = 'Saved. New runs use these rules.'; } catch (err) { if (said) said.textContent = err.message; }
 });
 chooser?.addEventListener('change', async () => { try { await sendJSON('/api/settings', 'PUT', { engine: chooser.value }); } catch (err) { tell(err.message); } await load(); });
 
