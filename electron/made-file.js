@@ -1,5 +1,22 @@
 // OFFICE-MAKE: Open, Save as… and Show in folder for a Word, Excel or PowerPoint file Bunny made in a chat with no folder. IPC only, from Bunny's own window: a page sends two ids (the chat and the
 // file), never a path. The server looks the ids up under that chat's own made-files folder (window-only route), and the person chooses where Save as… puts the copy: the model never writes outside Bunny's data folder.
+import { readdir, readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
+
+const OFFICE_EXTS = new Set(['.docx', '.xlsx', '.pptx']); // never a macro format (.docm, .xlsm, .pptm)
+/** OM-5: the main process finds the file itself, under <data>/made/<chat>/, from the two ids. Only the three Office extensions; the name shown is the saved safe name. */
+export async function findMadeFile(dataDir, chat, file) {
+  const UUID = /^[a-f0-9-]{36}$/;
+  if (!UUID.test(String(chat)) || !UUID.test(String(file))) return { ok: false, reason: 'That file is not valid.' };
+  const dir = join(dataDir, 'made', chat);
+  const names = await readdir(dir).catch(() => []);
+  const hit = names.find((n) => n.startsWith(`${file}.`) && OFFICE_EXTS.has(extname(n).toLowerCase()));
+  if (!hit) return { ok: false, reason: 'That file is no longer here.' };
+  let name = hit;
+  try { const meta = JSON.parse(await readFile(join(dir, `${file}.json`), 'utf8')); if (typeof meta?.name === 'string') name = meta.name.slice(0, 120); } catch { /* the stored name is gone: the file's own name */ }
+  return { ok: true, real: join(dir, hit), name };
+}
+
 /**
  * @param {{ shell: { openPath: Function, showItemInFolder: Function }, dialog: { showSaveDialog: Function }, copyFile: Function,
  *           resolve: (chat: string, file: string) => Promise<{ ok: boolean, real?: string, name?: string, reason?: string }>,

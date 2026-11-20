@@ -19,7 +19,7 @@ import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-as
 import { cleanTrayEvent, trayTooltip } from './tray-words.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
 import { createPcOpen } from './pc-open.js';
-import { createMadeFile } from './made-file.js';
+import { createMadeFile, findMadeFile } from './made-file.js';
 import { copyFile } from 'node:fs/promises';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
@@ -217,7 +217,7 @@ ipcMain.handle('pcsearch:copy', (event, ref) => pcOpen.copy(event, ref));
 // OFFICE-MAKE: Open, Save as… and Show in folder for a file made in a chat with no folder: Bunny's window only, two ids, the server finds the file under that chat's own folder
 const madeFile = createMadeFile({
   shell, dialog, copyFile, windowOf,
-  resolve: async (chat, file) => (await bunnyApp.adminFetch('/api/made/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat, file }) })).json(),
+  resolve: (chat, file) => findMadeFile(dataDir, chat, file), // the main process resolves the ids itself, under <data>/made/<chat>/
   allowedSender: (event) => isOwn(event.senderFrame?.url ?? ''),
 });
 ipcMain.handle('made:open', (event, chat, file) => madeFile.open(event, chat, file));

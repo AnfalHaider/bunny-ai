@@ -1655,15 +1655,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (madeMatch && method === 'GET') {
       const found = await findMade(madeMatch[1], madeMatch[2]);
       if (!found) return sendJson(res, 404, { code: 'made.notFound', message: 'That file is no longer here.' });
+      const device = req.bunnyRemote ?? req.bunnyDevice;
+      if (device) remote.logAction(device, { kind: 'tool', tool: 'download made file' }); // R-DF2: a device's fetch is in the access log, by name only (it can read this chat, so it may fetch its files)
       const bytes = await readFile(found.file);
-      res.writeHead(200, { 'content-type': found.mime, 'content-length': bytes.length, 'content-disposition': `attachment; filename="${found.name.replace(/[^A-Za-z0-9._ -]/g, '_')}"`, 'cache-control': 'private, no-store', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
+      const ascii = found.name.replace(/[^A-Za-z0-9._ -]/g, '_');
+      res.writeHead(200, { 'content-type': found.mime, 'content-length': bytes.length, 'content-disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(found.name)}`, 'cache-control': 'private, no-store', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
       return res.end(bytes);
-    }
-    if (path === '/api/made/resolve' && method === 'POST') { // the desktop window's Open, Save as and Show in folder: window only, ids only, never a path from a page
-      if (!adminOk(req)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Only Bunny's window can open a file." });
-      const body = await readBody(req);
-      const found = /^[a-f0-9-]{36}$/.test(String(body.chat)) && /^[a-f0-9-]{36}$/.test(String(body.file)) ? await findMade(body.chat, body.file) : null;
-      return sendJson(res, 200, found ? { ok: true, real: found.file, name: found.name } : { ok: false, reason: 'That file is no longer here.' });
     }
 
     // ---- is this a folder a chat can work in? (and which git branch is it on) ----

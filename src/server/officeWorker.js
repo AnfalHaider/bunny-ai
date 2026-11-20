@@ -34,12 +34,15 @@ async function word(spec, images) {
     } else if (b.type === 'page_break') children.push(new Paragraph({ children: [new PageBreak()] }));
   }
   const doc = new Document({
-    creator: 'Bunny AI', title: spec.title || undefined,
+    creator: 'Bunny AI', lastModifiedBy: 'Bunny AI', title: spec.title || undefined, // OM-6: never the Windows user name, the profile name or a folder
     numbering: { config: [{ reference: 'bunny-numbers', levels: [{ level: 0, format: LevelFormat.DECIMAL, text: '%1.', alignment: AlignmentType.START }] }] },
     sections: [{ children }],
   });
   return Packer.toBuffer(doc);
 }
+
+/** IFS, XLOOKUP and CONCAT are stored as _xlfn.NAME in the file (outside string literals), or Excel shows #NAME?. */
+const withFuture = (f) => f.split(/("(?:[^"]|"")*")/).map((part, i) => (i % 2 ? part : part.replace(/\b(IFS|XLOOKUP|CONCAT)\s*\(/gi, (m, n) => `_xlfn.${n.toUpperCase()}(`))).join('');
 
 async function excel(spec) {
   const { default: writeExcelFile } = await import('write-excel-file/node');
@@ -51,7 +54,7 @@ async function excel(spec) {
     if (c.kind === 'boolean') return { value: c.value, type: Boolean };
     if (c.kind === 'date') return { value: new Date(c.value), type: Date, format: c.format, ...(fontWeight ? { fontWeight } : {}) };
     // no leading "=": the writer puts the text verbatim into <f>, and OOXML has no "=" there
-    return { value: c.value, type: 'Formula', ...(c.format ? { format: c.format } : {}), ...(fontWeight ? { fontWeight } : {}) };
+    return { value: withFuture(c.value), type: 'Formula', ...(c.format ? { format: c.format } : {}), ...(fontWeight ? { fontWeight } : {}) };
   };
   const sheets = spec.sheets.map((s) => ({
     sheet: s.name,
@@ -66,7 +69,7 @@ async function powerpoint(spec, images) {
   const { default: PptxGenJS } = await import('pptxgenjs');
   const pres = new PptxGenJS();
   pres.layout = 'LAYOUT_16x9'; // 10 x 5.625 in
-  pres.author = 'Bunny AI'; if (spec.title) pres.title = spec.title;
+  pres.author = 'Bunny AI'; pres.company = 'Bunny AI'; pres.revision = '1'; if (spec.title) pres.title = spec.title; // OM-6
   const runs = (str, base = {}) => parseInline(str).map((r) => ({ text: r.text, options: { ...base, bold: r.bold || base.bold, italic: r.italic, ...(r.link ? { hyperlink: { url: r.link }, color: ACCENT, underline: { style: 'sng' } } : {}) } }));
   for (const s of spec.slides) {
     const slide = pres.addSlide();
@@ -90,7 +93,7 @@ async function powerpoint(spec, images) {
       let w = box.w; let h = w / ratio; if (h > box.h) { h = box.h; w = h * ratio; }
       slide.addImage({ data: `image/${info.type === 'jpg' ? 'jpeg' : 'png'};base64,${Buffer.from(bytes).toString('base64')}`, x: box.x, y: box.y, w, h });
     }
-    if (s.notes) slide.addNotes(s.notes);
+    if (s.notes) slide.addNotes(parseInline(s.notes).map((r) => (r.link ? `${r.text} (${r.link})` : r.text)).join('')); // notes are plain text: a link is written out as its address only when it is https: or mailto:, anything else is its label
   }
   const out = await pres.write({ outputType: 'nodebuffer' });
   return Buffer.from(out);

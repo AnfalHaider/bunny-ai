@@ -89,20 +89,44 @@ export function describeOffice(name, args = {}) {
 
 // ---------------------------------------------------------------- validation
 
-const FORMULA_REFUSED = /\b(WEBSERVICE|FILTERXML|HYPERLINK|CALL|REGISTER|RTD|IMPORTDATA|IMPORTXML|IMPORTHTML|IMPORTRANGE|IMPORTFEED|EXEC|SHELL|DDE|DDEAUTO|MSEXCEL|CMD|POWERSHELL)\b/i;
-/** Why a formula is refused, or ''. A formula that names a function that fetches, calls a program or reaches another workbook is never written. */
+/** OM-2: the only functions a made sheet may call. Anything else followed by "(" is refused: a denylist missed IMAGE(), which fetches an address when the sheet opens in Excel 365. */
+export const FORMULA_FUNCTIONS = Object.freeze(new Set([
+  'SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'COUNTIF', 'COUNTIFS', 'SUMIF', 'SUMIFS', 'AVERAGEIF', 'AVERAGEIFS', 'ROUND', 'ROUNDUP', 'ROUNDDOWN', 'ABS', 'INT', 'MOD', 'POWER', 'SQRT', 'PRODUCT', 'MEDIAN',
+  'IF', 'IFS', 'IFERROR', 'AND', 'OR', 'NOT',
+  'VLOOKUP', 'HLOOKUP', 'XLOOKUP', 'INDEX', 'MATCH',
+  'CONCAT', 'CONCATENATE', 'TEXT', 'LEFT', 'RIGHT', 'MID', 'LEN', 'UPPER', 'LOWER', 'TRIM',
+  'TODAY', 'NOW', 'DATE', 'YEAR', 'MONTH', 'DAY',
+]));
+/** Functions newer than Excel 2007 are stored with this prefix in the file; without it Excel shows #NAME?. */
+export const FUTURE_FUNCTIONS = Object.freeze(new Set(['IFS', 'XLOOKUP', 'CONCAT']));
+const ADDRESS_LIKE = /(https?:|ftp:|file:|ldap:|\\\\|\/\/|www\.|[a-z]:[\\/])/i;
+/** Why a formula is refused, or ''. Allowlist of function names; no external workbook ("["), no program call ("|"), no quoted path, no string that looks like an address. */
 export function formulaProblem(formula) {
   const f = String(formula ?? '').trim().replace(/^=/, '');
   if (!f) return 'A formula is empty.';
   if (f.length > LIMITS.formulaChars) return `A formula is longer than ${LIMITS.formulaChars} characters.`;
-  const named = FORMULA_REFUSED.exec(f);
-  if (named) return `The formula names ${named[1].toUpperCase()}, which could fetch an address or run a program.`;
   if (/[|]/.test(f)) return 'The formula has a "|", the form a program call (DDE) takes.';
   if (/\[/.test(f)) return 'The formula reaches into another workbook ("[").';
-  if (/(^|[^A-Za-z0-9_.])[A-Za-z]:[\\/]|\\\\/.test(f) || /https?:\/\//i.test(f)) return 'The formula names a file or an address.';
+  // the string literals ("...") are text: judged for an address, then taken out so a name inside one is not mistaken for a function
+  const literals = f.match(/"(?:[^"]|"")*"/g) ?? [];
+  for (const lit of literals) if (ADDRESS_LIKE.test(lit)) return 'The formula holds text that looks like an address or a file, which a sheet may not fetch.';
+  const bare = f.replace(/"(?:[^"]|"")*"/g, '""');
+  if (/'[^']*'!/.test(bare) && /'[^']*(?:[\\/]|[a-z]:)[^']*'!/i.test(bare)) return 'The formula names a file path.';
+  if (/(^|[^A-Za-z0-9_.])[A-Za-z]:[\\/]|\\\\|https?:\/\//i.test(bare)) return 'The formula names a file or an address.';
+  for (const m of bare.matchAll(/([A-Za-z_][A-Za-z0-9_.]*)\s*\(/g)) {
+    const name = m[1].toUpperCase();
+    if (!FORMULA_FUNCTIONS.has(name)) return `The formula uses ${m[1]}, which is not one of the functions a made sheet may use (${[...FORMULA_FUNCTIONS].slice(0, 8).join(', ')} and others of the plain maths, logic, look-up, text and date kind).`;
+  }
   return '';
 }
 
+/** OM-3: a picture is a path inside the workspace folder, never an address, a network path, a drive or "..": Bunny reads it itself and gives the library only bytes. */
+export function pictureProblem(p) {
+  const t = String(p ?? '').trim();
+  if (!t) return 'A picture needs a path.';
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(t) || t.startsWith('\\\\') || t.startsWith('//') || t.startsWith('/') || t.startsWith('\\') || t.includes('\0') || t.split(/[\\/]/).some((x) => x === '..')) return `The picture "${t.slice(0, 60)}" must be a path inside the workspace folder (not an address, a network path, a drive path or one with ..).`;
+  return '';
+}
 const text = (v) => (typeof v === 'string' ? v : v == null ? '' : String(v));
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const count = { chars: 0 };
@@ -137,7 +161,7 @@ export function validateOffice(name, args, { code = false } = {}) {
         case 'image': {
           if (!code) refuse('Pictures can be added only in a chat that has a folder.');
           images += 1; if (images > LIMITS.images) refuse(`A file holds at most ${LIMITS.images} pictures.`);
-          const ip = text(b.path).trim(); if (!ip) refuse(`Block ${i + 1} (image) needs a path.`);
+          const ip = text(b.path).trim(); { const why = pictureProblem(ip); if (why) refuse(why); }
           const w = Number(b.width_cm); return { type: 'image', path: ip, width_cm: Number.isFinite(w) ? Math.min(17, Math.max(1, w)) : 12 };
         }
         case 'page_break': return { type: 'page_break' };
@@ -188,7 +212,7 @@ export function validateOffice(name, args, { code = false } = {}) {
     if (isObj(s.image)) {
       if (!code) refuse('Pictures can be added only in a chat that has a folder.');
       images += 1; if (images > LIMITS.images) refuse(`A file holds at most ${LIMITS.images} pictures.`);
-      const ip = text(s.image.path).trim(); if (!ip) refuse(`Slide ${i + 1}'s picture needs a path.`);
+      const ip = text(s.image.path).trim(); { const why = pictureProblem(ip); if (why) refuse(why); }
       o.image = { path: ip };
     }
     if (s.notes !== undefined) { addChars(s.notes); o.notes = text(s.notes); }

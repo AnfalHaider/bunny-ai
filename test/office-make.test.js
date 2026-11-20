@@ -49,10 +49,12 @@ test('3. Excel cells: a string starting with = + - @ is TEXT; { formula } is kep
   const shared = (await entry(x, 'xl/sharedStrings.xml')) ?? sheet;
   for (const t of ['=1+1', '+2', '-3', '@x']) assert.ok((shared + sheet).includes(t), `${t} is written as text`);
   assert.match((await readDocument(x, { name: 'a.xlsx' })).text, /=1\+1\t\+2\t-3\t@x/);
-  for (const f of ['WEBSERVICE("http://x.test")', 'FILTERXML(A1,"//a")', 'HYPERLINK("http://x.test")', 'CALL("a","b")', 'REGISTER("a")', 'RTD("a","b","c")', 'IMPORTDATA("u")', 'IMPORTXML("u","//a")', '[book.xlsx]Sheet1!A1', "cmd|'/c calc'!A1", "'C:\\x.xlsx'!A1", 'A1+B1)&webservice(']) {
+  for (const f of ['IMAGE("https://x.test/a.png")', 'WEBSERVICE("http://x.test")', 'FILTERXML(A1,"//a")', 'HYPERLINK("http://x.test")', 'CALL("a","b")', 'RTD("a","b","c")', 'IMPORTXML("u","//a")', 'FOOBAR(1)', '_xlfn.WEBSERVICE("x")', 'SUM(1)+IMAGE(A1)',
+    "[book.xlsx]Sheet1!A1", "cmd|' /c calc'!A0", "'C:\\a\\[b.xlsx]S'!A1", "'C:\\x.xlsx'!A1", 'IF(A1,"https://x.test","b")', 'IF(A1,"\\\\server\\share","b")', 'TEXT(A1,"www.x.test")']) {
     assert.notEqual(formulaProblem(f), '', f);
     assert.throws(() => validateOffice('make_excel', { path: 'a.xlsx', sheets: [{ name: 'S', rows: [[{ formula: f }]] }] }), (e) => e instanceof OfficeError && /Nothing was written/.test(e.message), f);
   }
+  for (const ok of ['SUM(A1:A2)', 'IFS(A1>1,"a",TRUE,"b")', 'XLOOKUP(A1,B:B,C:C)', 'CONCAT("a",A1)', 'TEXT(TODAY(),"yyyy-mm-dd")', 'IFERROR(VLOOKUP(A1,B1:C9,2,FALSE),"none")', 'SUM(A1:A2)*(1+B1)', '"WEBSERVICE(""x"")"']) assert.equal(formulaProblem(ok), '', ok);
   assert.equal(formulaProblem('SUM(A1:A2)'), ''); assert.equal(formulaProblem("'Sheet 2'!A1*2"), ''); assert.equal(formulaProblem('IF(A1>1,"a","b")'), '');
   for (const bad of [{ name: '' }, { name: 'a/b' }, { name: 'x'.repeat(32) }, { name: '[x]' }]) assert.throws(() => validateOffice('make_excel', { path: 'a.xlsx', sheets: [{ ...bad, rows: [] }] }), OfficeError);
   assert.throws(() => validateOffice('make_excel', { path: 'a.xlsx', sheets: [{ name: 'A', rows: [] }, { name: 'a', rows: [] }] }), /Two sheets/);
@@ -231,7 +233,7 @@ test('8. Plan mode refuses all three tools; Chat mode writes only under <data>/m
   const m = cardsKept[0].madeFile;
   const res = await fetch(`${chat.base}/api/sessions/${chat.session.id}/made/${m.id}`);
   assert.equal(res.status, 200);
-  assert.match(res.headers.get('content-disposition'), /^attachment; filename="x\.docx"$/); assert.equal(res.headers.get('x-content-type-options'), 'nosniff'); assert.equal(res.headers.get('cross-origin-resource-policy'), 'same-origin');
+  assert.match(res.headers.get('content-disposition'), /^attachment; filename="x\.docx"; filename\*=UTF-8''x\.docx$/); assert.equal(res.headers.get('x-content-type-options'), 'nosniff'); assert.equal(res.headers.get('cross-origin-resource-policy'), 'same-origin');
   assert.match((await readDocument(Buffer.from(await res.arrayBuffer()), { name: 'x.docx' })).text, /# Hello/);
   assert.equal((await fetch(`${chat.base}/api/sessions/${plan.session.id}/made/${m.id}`)).status, 404, 'another chat cannot reach it');
   assert.equal((await fetch(`${chat.base}/api/sessions/${chat.session.id}/made/not-an-id`)).status, 404);
