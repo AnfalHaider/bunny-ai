@@ -130,10 +130,10 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
     <div class="pc"><div class="who">Bunny</div><b>Switch this chat to Codex CLI?</b>
      <div class="sub">It carries on in <span class="mono">C:\Users\Sam\Projects\carrot-shop</span>.</div>
      <p>Codex follows <b>Bunny's rules</b>. <span class="sub">(When Bunny's engine is off it would follow its own rules, which you set in Settings → Engines; the card says which.)</span></p>
-     <p>It gets this chat's folder, its instruction files, a summary of the conversation and the list of files this chat changed.</p>
+     <p>It gets this chat's folder, its instruction files, a summary of the conversation <span class="sub">(answers that used files from this PC are left out)</span> and the list of files this chat changed.</p>
      <div class="sub">Actions you allowed for this chat are cleared. Your files and Undo stay as they are.</div>
      <div class="btns"><button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button></div></div>
-    <p class="cap">The button names what it does.</p></div>
+    <p class="cap">The button names what it does. The bracket about files from this PC shows only when this chat has such answers.</p></div>
    <div class="cell"><h3>Phone (360 px)</h3>
     <div class="pc ph2"><div class="who">Bunny</div><b>Switch this chat to Codex CLI?</b>
      <p>It gets this chat's folder, its instruction files, a summary of the conversation and the files this chat changed. It follows Bunny's rules.</p>
@@ -144,10 +144,13 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
    <div class="cell"><h3>Variant: it runs restricted</h3>
     <div class="pc"><div class="who">Bunny</div><b>Switch this chat to Claude Code?</b>
      <p>Claude Code runs <b>restricted</b> in this chat: Bunny's check failed for it earlier. It works in a copy of your folder, and you review the changes before they reach it.</p>
+     <div class="sub">If you switch away later, the other engine runs in full mode, and Claude Code stays restricted if you come back.</div>
      <div class="btns"><button class="btn p">Switch to Claude Code</button><button class="btn">Cancel</button></div></div></div>
-   <div class="cell"><h3>Variant: engine's own rules</h3>
+   <div class="cell"><h3>Variant: the engine's own rules (Bunny's engine is off)</h3>
     <div class="pc"><div class="who">Bunny</div><b>Switch this chat to Codex CLI?</b>
      <p>Bunny's engine is off, so Codex follows <b>its own rules</b>: it asks you about every command and file change.</p>
+     <div class="btns"><button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button></div></div><div class="pc" style="margin-top:8px"><div class="who">Bunny</div><b>Switch this chat to Claude Code?</b>
+     <p>Bunny's engine is off, so Claude Code follows <b>the rules you set for it</b> in Settings → Engines: Allow runs with no question, Ask shows a card, Deny stops it.</p>
      <div class="btns"><button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button></div></div></div>
   </div>
  </section>
@@ -183,6 +186,9 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
    <tr><td>Card body</td><td>It gets this chat's folder, its instruction files, a summary of the conversation and the list of files this chat changed.</td></tr>
    <tr><td>Card foot</td><td>Actions you allowed for this chat are cleared. Your files and Undo stay as they are.</td></tr>
    <tr><td>Divider</td><td>Now on &lt;engine&gt;</td></tr>
+   <tr><td>Files from this PC</td><td>(answers that used files from this PC are left out), only when it applies</td></tr>
+   <tr><td>Own rules: Claude Code</td><td>Claude Code follows the rules you set for it in Settings → Engines: Allow runs with no question, Ask shows a card, Deny stops it.</td></tr>
+   <tr><td>Restricted, switching away</td><td>If you switch away later, the other engine runs in full mode, and Claude Code stays restricted if you come back.</td></tr>
    <tr><td>Details line</td><td>Handover: 12 messages, 31 files, 9 KB</td></tr>
    <tr><td>Busy</td><td>Wait for the reply to finish, or press Stop first.</td></tr>
    <tr><td>No folder / Chat mode</td><td>An engine needs a folder. Choose a folder first, or switch to Bunny.</td></tr>
@@ -198,10 +204,10 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
  function o(n,s,right,dis){return '<div class="opt'+(dis?' dis':'')+'"><span><b>'+n+'</b><small>'+s+'</small></span><span>'+right+'</span></div>'}
  var M={
   'All ready':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Built in','')+o('Claude Code','Signed in','<span class="chp ok">now</span>')+o('Codex CLI','v1.0.0 · Local','<button class="btn s2">Switch</button>'),
-  'One needs fixing':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Built in','<button class="btn s2">Switch</button>')+o('Claude Code','Signed in','<span class="chp ok">now</span>')+o('Codex CLI','Not downloaded','<button class="btn s2">Download</button>',1)+o('Claude Code (other)','Not signed in','<button class="btn s2">Sign in</button>',1),
+  'One needs fixing':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Built in','<button class="btn s2">Switch</button>')+o('Claude Code · Local','Runs on Bunny’s endpoint and your models. Not supported by Anthropic.','<span class="chp ok">now</span>')+o('Codex CLI','Not downloaded','<button class="btn s2">Download</button>',1)+o('Claude Code · Account','Your own Anthropic account. Not signed in.','<button class="btn s2">Sign in</button>',1),
   'While a reply runs':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Wait for the reply to finish, or press Stop first.','',1)+o('Codex CLI','Wait for the reply to finish, or press Stop first.','',1)};
  var mseg=document.getElementById('mseg'),menu=document.getElementById('menu');Object.keys(M).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){mseg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});menu.innerHTML=M[k]});mseg.appendChild(b)});menu.innerHTML=M['All ready'];
- document.getElementById('mcap').textContent='Engines that are not ready are greyed, with the reason and the button that fixes it.';
+ document.getElementById('mcap').textContent='Engines that are not ready are greyed, with the reason and the button that fixes it. Claude Code appears once per mode (Local, Account): switching between them goes through the same card and the same handover.';
  function card(t,b,btns){return '<div class="who">Bunny</div><b>'+t+'</b><div class="sub">'+b+'</div>'+(btns?'<div class="btns">'+btns+'</div>':'')}
  var S={
   'Chat mode / no folder':[card('No folder to carry over','An engine needs a folder. Choose a folder first, or switch to Bunny.','<button class="btn p">Choose a folder</button><button class="btn">Switch to Bunny</button>'),'Switching to Bunny is always allowed; an engine needs a folder.'],
