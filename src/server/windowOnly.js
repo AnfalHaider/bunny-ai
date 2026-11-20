@@ -14,10 +14,10 @@
  */
 
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'folderRulesEnabled', 'folderRulesTrusted'];
 
 /** A session setting that decides the same. */
-export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine'];
+export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine', 'folderRules'];
 
 const WRITES = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const UUID = '[a-f0-9-]{36}';
@@ -36,6 +36,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST', 'DELETE'], `^/api/sessions/${UUID}/worktree(/finish)?$`], // a chat's own copy of its project (W2-9): it makes and removes folders and branches
   [['POST'], '^/api/worktrees/remove$'],                    // removing a leftover copy (W2-9)
   [['POST'], `^/api/sessions/${UUID}/engine$`],             // ENGINE-SWITCH: moving a chat to another engine
+  [['POST'], `^/api/sessions/${UUID}/folder-rules/(follow|read-again|ask-again)$`], // FOLDER-RULES (FR-2): the trust answer and its changes are the window's
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
   [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)
   [['POST'], `^/api/sessions/${UUID}/question/${UUID}$`],   // answering a question card ("Keep going?")
@@ -59,7 +60,7 @@ export function isWindowOnlyRoute(method, path, body = null) {
   if (path === '/api/permission-rules' && m === 'PUT') return true;
   if (path === '/api/settings' && m === 'PUT') return has(...WINDOW_ONLY_SETTING_KEYS);
   if (path === '/api/sessions' && m === 'POST') return has('permissionMode', 'engine');
-  if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode', 'engine');
+  if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode', 'engine', 'folderRules');
   // a project's instructions steer the model in every chat that uses it
   if (path === '/api/projects' && m === 'POST') return has('instructions');
   if (new RegExp(`^/api/projects/${UUID}$`).test(path) && m === 'PATCH') return has('instructions');

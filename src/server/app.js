@@ -87,6 +87,7 @@ import { createCheckpoints } from './checkpoints.js';
 import { OFFICE_EXT, OFFICE_KIND, OFFICE_TOOLS, OfficeError, buildOffice, describeOffice, madeLine, officeToolDefinitions, outline as officeOutline, validateOffice } from './officeMake.js';
 import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
 import { buildHandover, handoverSaid } from './engines/handover.js'; // ENGINE-SWITCH
+import { bunnyNote, cleanName, collectFolderRules, engineBlock, listDir, systemLine as folderSystemLine } from './folderRules.js'; // FOLDER-RULES, ONE-INSTRUCTIONS
 import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
@@ -361,6 +362,50 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       return real ? { ok: true, folder: real, copy: true } : { ok: false, copy: true, gone: true, reason: `This chat's copy is gone; the branch ${session.worktree.branch} still has the work.` };
     }
     return session?.folder ? checkFolder(session.folder) : null;
+  };
+  // FOLDER-RULES + ONE-INSTRUCTIONS (v0.1.15): the folder's instructions files, ONE set for every engine (see folderRules.js). Read once (when the chat first needs them after the person said Follow them, or at Read again),
+  // kept with the chat as session.folderRulesRead, and sent from that copy every reply: a file edited mid-chat cannot silently steer the model. Nothing is read or sent before the folder is trusted (FR-2).
+  const frDeps = (workspace, rules) => ({
+    resolve: async (rel) => { if (readDenied(rules(), rel)) return null; try { return await workspace.folder(rel); } catch { return null; } }, // inside the folder, not through a link out, not the data folder, not hidden by a read-deny rule
+    dir: async (rel) => { try { return await listDir(await workspace.folder(rel)); } catch { return []; } },
+  });
+  /** The folder the answer is keyed by: the project's own folder (the original of a W2-9 copy), by real path. */
+  const frKey = async (session, folderInfo) => { const raw = session?.worktree?.repo ?? folderInfo?.folder ?? session?.folder ?? ''; try { return await realpath(raw); } catch { return String(raw); } };
+  const frTrusted = (key) => (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).find((e) => e?.folder === key) ?? null;
+  const frOn = (session) => settings.folderRulesEnabled !== false && session?.folderRules !== false;
+  const frStore = (rows, now) => rows.map((f) => ({ name: f.name, kind: f.kind, size: f.size, sha256: f.sha256, text: f.text, cut: f.cut, readAt: now }));
+  /**
+   * The set this reply follows, or null. Returns { files, replaces, session }: `files` are the followed files as kept with the chat; `replaces` says the engines are owed it again after Read again.
+   * It reads the folder only when nothing was kept yet for a trusted folder (the first reply after Follow them, or a new chat on that folder).
+   */
+  const followedFolderRules = async (session, workspace, folderInfo, rules) => {
+    if (!workspace || !frOn(session)) return null;
+    const trust = frTrusted(await frKey(session, folderInfo));
+    if (!trust || !Array.isArray(trust.files) || !trust.files.length) return null;
+    let current = session;
+    if (!Array.isArray(current.folderRulesRead)) {
+      const found = await collectFolderRules(frDeps(workspace, rules));
+      const mine = found.files.filter((f) => trust.files.includes(f.name));
+      current = await sessions.update(session.id, { folderRulesRead: frStore(mine, new Date().toISOString()), folderRulesNext: true }).catch(() => session);
+    }
+    const files = (current.folderRulesRead ?? []).filter((f) => trust.files.includes(f.name));
+    return files.length ? { files, replaces: current.folderRulesNext === true && Boolean(current.engine?.sessionId), session: current } : null;
+  };
+  /** What the Working folder card shows: each candidate file and where it stands, never any file text (View what was read asks for that). */
+  const folderRulesView = async (session, folderInfo, workspace, rules) => {
+    const found = await collectFolderRules(frDeps(workspace, rules));
+    const key = await frKey(session, folderInfo);
+    const trust = frTrusted(key);
+    const kept = new Map((session.folderRulesRead ?? []).map((f) => [f.name, f]));
+    const on = frOn(session);
+    const files = found.files.map((f) => {
+      const followed = Boolean(trust?.files?.includes(f.name));
+      const was = kept.get(f.name);
+      const state = !on ? 'off' : !followed ? 'waiting' : was && was.sha256 !== f.sha256 ? 'changed' : 'in-use';
+      return { name: f.name, kind: f.kind, size: f.size, state, cut: f.cut, readAt: was?.readAt ?? null };
+    });
+    return { enabled: settings.folderRulesEnabled !== false, chatSwitch: session.folderRules !== false, folder: key, trusted: Boolean(trust), files, notUsed: found.notUsed, skipped: found.skipped, leftOut: found.leftOut,
+      count: files.length, readAt: (session.folderRulesRead ?? [])[0]?.readAt ?? null };
   };
   /** The processes a chat started stop before its copy is touched (Windows will not remove a folder something runs in). */
   const stopChatProcesses = async (sessionId) => { for (const p of processes.list(sessionId)) await processes.stop(p.id, p.owner).catch(() => {}); };
@@ -819,6 +864,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (deviceRefusedBody(req, res, method, path, patch)) return;
       { const bad = validateEngineSettings(patch); if (bad) return sendJson(res, 400, { code: 'settings.badEngine', message: bad }); }
       if (patch.useBunnyEngine === false && !(await engines.status(settings)).engines.some((e) => e.enabled && e.downloaded && e.ownRules)) return sendJson(res, 409, { code: 'settings.noEngine', message: 'Download an engine first: chats need one to run on while Bunny\'s engine is off.' });
+      if (Object.hasOwn(patch, 'folderRulesEnabled') && typeof patch.folderRulesEnabled !== 'boolean') return sendJson(res, 400, { code: 'folderRules.bad', message: "Following the folder's instructions files is on or off." });
+      if (Object.hasOwn(patch, 'folderRulesTrusted')) { // FR-2: a list of { folder, files }, at most 200 folders; only Bunny's window writes it (window-only key, and refused to every device)
+        const list = Array.isArray(patch.folderRulesTrusted) ? patch.folderRulesTrusted : null;
+        if (!list || list.length > 200 || list.some((e) => !e || typeof e.folder !== 'string' || !e.folder || e.folder.length > 500 || !Array.isArray(e.files) || e.files.length > 100 || e.files.some((f) => typeof f !== 'string'))) return sendJson(res, 400, { code: 'folderRules.bad', message: 'The followed folders are a list of folders with the file names followed in each.' });
+        patch.folderRulesTrusted = list.map((e) => ({ folder: e.folder, files: [...new Set(e.files.map(cleanName).filter(Boolean))] }));
+      }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       const rulesWas = engineSettings(settings).useBunnyEngine;
       // SEARCH-PC SP-1: no device, at any level, turns Search this PC on or changes what it may look at
@@ -1776,6 +1827,48 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
+    // FOLDER-RULES (FR-2): the Working folder card's view, and the three answers that only Bunny's window may give. A Chats device sees nothing of the files.
+    const frMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/folder-rules(?:\/(follow|read-again|ask-again))?$/);
+    if (frMatch) {
+      const action = frMatch[2];
+      if (!action && method !== 'GET') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use GET.' });
+      if (action && method !== 'POST') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use POST.' });
+      if (action && windowOnly(req, res)) return;
+      if (req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "Answer this in Bunny's window on the PC." });
+      const id = frMatch[1];
+      const session = await sessions.get(id);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
+      const folderInfo = await effectiveRoot(session);
+      if (!folderInfo?.ok) return sendJson(res, 409, { code: 'folderRules.noFolder', message: 'This chat has no working folder.' });
+      const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir], allow: folderInfo.copy ? [folderInfo.folder] : [] });
+      const rules = () => rulesFor(settings.permissionRules, workspace.root);
+      if (!action) {
+        const view = await folderRulesView(session, folderInfo, workspace, rules);
+        const wantText = new URL(req.url, 'http://localhost').searchParams.get('text') === '1';
+        return sendJson(res, 200, wantText ? { ...view, read: (session.folderRulesRead ?? []).map((f) => ({ name: f.name, text: f.text, cut: f.cut, readAt: f.readAt })) } : view);
+      }
+      const key = await frKey(session, folderInfo);
+      if (action === 'ask-again') { // "Ask me again for this folder": the entry goes, and what this chat kept goes with it
+        await saveSettings({ folderRulesTrusted: (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key) });
+        await sessions.update(id, { folderRulesRead: null, folderRulesNext: false });
+        return sendJson(res, 200, { ok: true });
+      }
+      const found = await collectFolderRules(frDeps(workspace, rules));
+      if (action === 'follow') { // Follow them: the answer is stored for the folder (never a "never": Not now stores nothing) and the files are read for the next reply
+        const asked = await readBody(req).catch(() => ({}));
+        const wanted = Array.isArray(asked?.names) ? asked.names.map(cleanName) : null; // the card can name some files; no names means every file listed
+        const names = found.files.map((f) => f.name).filter((n) => !wanted || wanted.includes(n));
+        if (!names.length) return sendJson(res, 409, { code: 'folderRules.none', message: 'This folder has no instructions files to follow.' });
+        const list = (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key);
+        const had = frTrusted(key)?.files ?? [];
+        list.push({ folder: key, files: [...new Set([...had, ...names])].map(cleanName).slice(0, 100) });
+        await saveSettings({ folderRulesTrusted: list.slice(-200) });
+      } else if (!frTrusted(key)) return sendJson(res, 409, { code: 'folderRules.notFollowed', message: 'Follow the folder first.' });
+      const followed = frTrusted(key).files;
+      const updated = await sessions.update(id, { folderRulesRead: frStore(found.files.filter((f) => followed.includes(f.name)), new Date().toISOString()), folderRulesNext: true });
+      return sendJson(res, 200, { ok: true, view: await folderRulesView(updated, folderInfo, workspace, rules) });
+    }
+
     // ENGINE-SWITCH (v0.1.15): move a chat to another engine, between replies. Only Bunny's own window may (the route is on the window-only list and refused to a device, CE-6). The engine's own session is dropped
     // (the new engine gets a handover built from the chat, see engines/handover.js), the folder, the checkpoints and the task list stay the chat's. `PATCH engine` stays refused once the chat has messages.
     const switchMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/engine$/);
@@ -1827,6 +1920,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (deviceRefusedBody(req, res, method, path, rawPatch)) return;
         if (rawPatch?.engine !== undefined) { const current = await sessions.get(sessionMatch[1]); if (current?.messages?.length && current.engine) return sendJson(res, 409, { code: 'engine.fixed', message: 'This chat already runs on an engine. To use another, start a new chat.' }); } // CE-6: a device never moves a chat to another engine
         const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
+        delete patch.folderRulesRead; delete patch.folderRulesNext; // FOLDER-RULES: the text read and the "tell the engines again" flag are written only by the server
         // ES-2 (Security): only the server writes which engines Bunny's check failed for. A PATCH that carries `restrictedFor` or `restricted` has it ignored, and never removes what is stored.
         if (patch.engine && typeof patch.engine === 'object') { const cur = await sessions.get(sessionMatch[1]); const { restricted: _r, restrictedFor: _rf, ...rest } = patch.engine; patch.engine = { ...rest, ...(cur?.engine?.restrictedFor ? { restrictedFor: cur.engine.restrictedFor } : cur?.engine?.restricted ? { restricted: true } : {}) }; if (cur?.engine && patch.engine.id === cur.engine.id) { for (const k of ['from', 'switchedAt', 'handoverPending']) if (cur.engine[k] !== undefined && patch.engine[k] === undefined) patch.engine[k] = cur.engine[k]; } }
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
@@ -2240,6 +2334,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
       // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
       const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
+      // FOLDER-RULES / ONE-INSTRUCTIONS: the folder's instructions files this reply follows (null: none, not trusted yet, or switched off). Only the text reaches a model; nothing here decides a permission.
+      let folderRulesSet = null;
+      if (workspace && body.textOnly !== true && !req.bunnyRemote) { try { folderRulesSet = await followedFolderRules(session, workspace, folder, activeRules); if (folderRulesSet) session = folderRulesSet.session; } catch { folderRulesSet = null; } }
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
       const needsOk = (risk, name, args) => risk === 'send'
         || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
@@ -2321,10 +2418,15 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
       const textOnlyBase = today + (callName ? `The person you are talking to likes to be called ${callName}. ` : '') + 'You are Bunny AI. Never claim you did something you did not do.';
-      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '']).filter(Boolean).join('\n') });
+      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '', folderRulesSet ? folderSystemLine(folderRulesSet.files.map((f) => f.name)) : '']).filter(Boolean).join('\n') });
       if (taskNote) { // a user-role note after the app's own system text, before the conversation (the same way as a connector's own words)
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: taskNote });
+      }
+      if (folderRulesSet && !(session.engine && session.engine.id !== 'bunny')) { // Bunny's engine: the files as quoted data in a user-role note, below Bunny's rules and the person's words
+        const noteAt = history.findIndex((m) => m.role !== 'system');
+        history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: bunnyNote(folderRulesSet.files) });
+        if (session.folderRulesNext) session = await sessions.update(id, { folderRulesNext: false }).catch(() => session);
       }
       // ENGINE-SWITCH: Bunny's engine reads the chat itself, so on its first reply after a switch it gets only the taking-over line, the files the chat changed and the open steps, as a user-role note (the same pattern)
       if (session.engine?.id === 'bunny' && session.engine.handoverPending === true && !textOnly && !scheduledTask) {
@@ -3395,12 +3497,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             const eng = session.engine;
             const prior = session.messages.at(-1)?.role === 'user' ? session.messages.slice(0, -1) : session.messages;
             const talked = prior.some((m) => m && (m.role === 'user' || m.role === 'assistant') && (!m.kind || m.kind === 'text' || m.kind === 'partial' || m.kind === 'summary'));
+            // ONE-INSTRUCTIONS: the folder's one set. Claude Code reads CLAUDE.md under --setting-sources user only if the pin says it does (pins.json readsProjectDoc: then Bunny sends nothing to it); Codex's own reading is off
+            // (project_doc_max_bytes = 0), so it always gets the block. Claude Code gets it on its first turn (no --resume), after a switch, and once after Read again; Codex on every turn.
+            const pinReads = engines.pins?.[wanted]?.readsProjectDoc === true && wanted === 'claude-code';
+            const folderFiles = !pinReads && folderRulesSet ? folderRulesSet.files : [];
+            const owed = wanted === 'codex' || (wanted === 'claude-code' && (!eng.sessionId || session.folderRulesNext === true));
+            const folderBlock = folderFiles.length && owed ? engineBlock(folderFiles, { replaces: Boolean(eng.sessionId) && session.folderRulesNext === true }) : '';
             if (talked && (wanted === 'codex' || (wanted === 'claude-code' && !eng.sessionId && eng.from))) {
               try {
-                const built = await buildHandover({ messages: prior, root: workspace.root, fromId: eng.from ?? wanted, checkpoints: await checkpoints.list(id).catch(() => []), exists: async (rel) => stat(resolve(workspace.root, rel)).then(() => true, () => false), folderBlock: '' });
+                const built = await buildHandover({ messages: prior, root: workspace.root, fromId: eng.from ?? wanted, checkpoints: await checkpoints.list(id).catch(() => []), exists: async (rel) => stat(resolve(workspace.root, rel)).then(() => true, () => false), folderBlock });
                 handover = built.text; handoverStats = built.stats;
               } catch { /* the engine still gets the person's message */ }
             }
+            if (!handover && folderBlock) handover = folderBlock; // no handover this turn: the folder's set goes alone in front of the person's message
           }
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
@@ -3418,6 +3527,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             },
             logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
+          if (session.folderRulesNext) session = await sessions.update(id, { folderRulesNext: false }).catch(() => session); // the engines have been told (again) what the folder's files say
           if (outcome.stoppedForCheck) {
             const failedFor = session.engine.restrictedFor ?? (session.engine.restricted ? [session.engine.id] : []); // ES-2: only this code writes the list
             session = await sessions.update(id, { engine: { ...session.engine, restrictedFor: [...new Set([...failedFor, wanted])] } }).catch(() => session);
