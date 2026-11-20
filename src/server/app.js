@@ -2419,7 +2419,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (!textOnly && !scheduledTask) {
         const asleep = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((c) => inScope(c.folders, scopeFolder) && (!c.enabled || c.status === 'error' || c.status === 'needsSignIn'))
           .map((c) => ({ name: c.name, state: !c.enabled ? 'off' : c.status === 'needsSignIn' ? 'needsSignIn' : 'failed' }));
-        history.unshift({ role: 'system', content: capabilityMap({
+        // after the app's own main system text (which stays first), not in front of it
+        const mainAt = history.findIndex((m) => m.role === 'system' && String(m.content).includes('You are Bunny AI'));
+        history.splice(mainAt + 1, 0, { role: 'system', content: capabilityMap({
           code: Boolean(workspace), computer: aiComputerOn, build: buildOn, browser: browserControl, pc: chatPc, google: googleOn, github: Boolean(githubToken),
           device: Boolean(req.bunnyRemote ?? req.bunnyDevice), plan: permissionMode === 'plan', connectors: asleep,
         }) });
