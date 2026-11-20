@@ -218,8 +218,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     if (url && exitCode === undefined) await new Promise((r) => setTimeout(r, 300)); // a program that prints an address and stops at once with an error did not sign anyone in
     if (url && (exitCode === undefined || exitCode === 0)) return { started: true, url }; // a program that already stopped with an error is a failure, whatever address its message holds
     if (exitCode !== undefined && exitCode !== 0) {
-      const why = String(run.stderr?.() ?? said).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).at(-1) ?? '';
-      throw Object.assign(new Error(`Claude Code's sign-in stopped before it showed a page (exit code ${exitCode}).${why ? ` It said: ${why.replace(/https?:\/\/\S+/g, '[address]').slice(0, 160)}` : ''}`), { status: 502 });
+      throw Object.assign(new Error(`Claude Code's sign-in stopped before it showed a page (exit code ${exitCode}). Press Sign in to try again; if it stops again, Claude Code may need an update (Engines > Claude Code).`), { status: 502 });
     }
     if (exitCode === 0) { await refreshAuth(id).catch(() => {}); return { started: true, url: null, finished: true }; }
     return { started: true, url: null };

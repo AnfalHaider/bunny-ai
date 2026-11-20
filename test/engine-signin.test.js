@@ -58,12 +58,12 @@ test('an address on a stranger\'s site is never returned; a program that prints 
   assert.deepEqual(await b.svc.signIn('claude-code'), { started: true, url: null });
 });
 
-test('a program that stops without a page says why: its exit code and its last line, with any address hidden', async (t) => {
+test('a program that stops without a page says so with its exit code and a plain reason, and nothing it printed reaches the person (SI-1)', async (t) => {
   const { svc } = service(t, login({ code: 1, stderr: 'Error: login failed, see https://claude.ai/help?trace=abc\nnot a terminal', after: 20 }));
   await assert.rejects(svc.signIn('claude-code'), (err) => {
     assert.match(err.message, /stopped before it showed a page \(exit code 1\)/);
-    assert.match(err.message, /not a terminal/);
-    assert.doesNotMatch(err.message, /trace=abc/);
+    assert.doesNotMatch(err.message, /not a terminal|login failed|trace=abc|It said/, 'no quote of the program\'s output');
+    assert.match(err.message, /Press Sign in to try again/);
     assert.equal(err.status, 502);
     return true;
   });
