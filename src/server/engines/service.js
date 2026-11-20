@@ -10,12 +10,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
-import { spawnEngine, minimalEnv } from './process.js';
+import { spawnEngine } from './process.js';
 import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
 import { createBridge, keyFolders } from './bridge.js';
-import { AUTH_COMMANDS, denyRules, startClaude } from './claude-code.js';
+import { AUTH_COMMANDS, denyRules, signInUrlFrom, startClaude } from './claude-code.js';
 import { loadSchema, startCodex } from './codex.js';
 import { loadPins } from './pins.js';
 import { createEngineStore } from './store.js';
@@ -142,7 +141,7 @@ export function budgeted(upstream, turn) {
 
 // ---------------------------------------------------------------- the service
 
-export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false } = {}) {
+export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false, openLoginRun = null, loginWaitMs = 12_000 } = {}) {
   const fakeMode = Boolean(fake);
   const fp = fakeMode ? fakePins() : null;
   const pins = pinsOverride ?? (fakeMode ? fp.pins : loadPins());
@@ -184,20 +183,45 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     return hit?.signedIn ?? null;
   }
 
-  /** Start the vendor's own sign-in in a visible window, with only the account folder set. The person finishes it in the vendor's browser page. */
+  /** Start the vendor's own sign-in, with only the account folder set, and say what really happened: { started: true, url } when the program printed its sign-in page (the person opens it with one click),
+   * { started: true, url: null } when it is running but showed no page address (nobody can tell whether a browser page opened), or an error that says why it could not start or stopped.
+   * v0.1.14.1: the program has no console window (a detached one with its output thrown away never opened a page on some PCs), so what it prints is read here: only the page address, and nothing is kept. */
+  const loginRuns = new Map(); // id -> the running sign-in, so a second click replaces it and the end of the session stops it
+  const LOGIN_LIFETIME_MS = 10 * 60_000;
   async function signIn(id) {
     if (id !== 'claude-code') throw Object.assign(new Error('Only Claude Code signs in with an account for now.'), { status: 400 });
     const found = fakeMode ? { ok: true } : await store.locate(id);
     if (!found.ok) throw Object.assign(new Error('Download Claude Code first.'), { status: 409 });
     await mkdir(accountConfig, { recursive: true });
-    if (fakeMode) { setTimeout(() => writeFile(fakeFlag(), '1').catch(() => {}), 200); }
-    else {
-      const child = spawn(found.exe, AUTH_COMMANDS.login, { cwd: accountHome, env: { ...minimalEnv(), ...authEnv() }, detached: true, stdio: 'ignore', windowsHide: false, shell: false });
-      child.on('error', () => {}); child.unref();
-    }
     authCache.delete(id);
     await store.addRecord({ engine: id, action: 'signin', from: null, to: null, sha12: '' });
-    return { started: true };
+    if (fakeMode && !openLoginRun) { setTimeout(() => writeFile(fakeFlag(), '1').catch(() => {}), 200); return { started: true, url: 'https://claude.ai/login?stand-in=1' }; }
+    loginRuns.get(id)?.kill?.();
+    // The program opens the browser itself, and a browser it starts inherits its environment: with the isolated user and app-data folders that was a brand-new first-run Chrome profile, not the person's own browser
+    // (seen with the real program, v0.1.14.1). So the program is told its browser is a file that does nothing (the BROWSER variable it reads), and Bunny's own button opens the page address it printed in the person's normal browser.
+    const noBrowser = join(accountHome, 'no-browser.cmd');
+    await writeFile(noBrowser, '@exit /b 0\r\n').catch(() => {});
+    let run;
+    try { run = (openLoginRun ?? spawnEngine)({ file: found.exe, args: AUTH_COMMANDS.login, cwd: accountHome, extraEnv: { ...authEnv(), BROWSER: noBrowser } }); }
+    catch (err) { throw Object.assign(new Error(`Claude Code's sign-in could not start (${String(err?.message ?? err).slice(0, 120)}).`), { status: 502 }); }
+    loginRuns.set(id, run);
+    let said = '';
+    let exitCode;
+    let url = null;
+    run.exited.then((code) => { exitCode = code; if (loginRuns.get(id) === run) loginRuns.delete(id); authCache.delete(id); }).catch(() => {});
+    (async () => { try { for await (const line of run.lines) { said = (said + line + '\n').slice(-8000); url ??= signInUrlFrom(said); } } catch { /* unreadable: no address */ } })();
+    const stop = setTimeout(() => { try { run.kill?.(); } catch { /* gone */ } }, LOGIN_LIFETIME_MS); stop.unref?.();
+    run.exited.finally(() => clearTimeout(stop)).catch(() => {});
+    const t0 = Date.now();
+    while (url === null && exitCode === undefined && Date.now() - t0 < loginWaitMs) { url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`); if (url) break; await new Promise((r) => setTimeout(r, 100)); }
+    url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`);
+    if (url && exitCode === undefined) await new Promise((r) => setTimeout(r, 300)); // a program that prints an address and stops at once with an error did not sign anyone in
+    if (url && (exitCode === undefined || exitCode === 0)) return { started: true, url }; // a program that already stopped with an error is a failure, whatever address its message holds
+    if (exitCode !== undefined && exitCode !== 0) {
+      throw Object.assign(new Error(`Claude Code's sign-in stopped before it showed a page (exit code ${exitCode}). Press Sign in to try again; if it stops again, Claude Code may need an update (Engines > Claude Code).`), { status: 502 });
+    }
+    if (exitCode === 0) { await refreshAuth(id).catch(() => {}); return { started: true, url: null, finished: true }; }
+    return { started: true, url: null };
   }
 
   /** Sign out: the vendor's own logout in the account folder, then the folder is deleted. */

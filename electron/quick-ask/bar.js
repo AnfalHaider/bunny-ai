@@ -63,7 +63,7 @@ let question = '';
 let answering = false;
 let asked = false; // the first question has been sent: the bar is now an answer panel
 let chatReady = false; // there is a chat to open in Bunny (an answer, or an error, has come)
-let modelLine = ''; // "Answers with Auto · text only", when the app told us
+let modelLine = ''; // "Answers with Auto · web search", when the app told us
 const turns = []; // earlier questions and answers of this chat, folded above the current one
 
 // What the card on screen allows: '' (an answer, a follow-up is possible), 'settings' (no model: the card's only action is Open Bunny settings), 'chat' (a card that can open the chat in Bunny)
@@ -244,6 +244,8 @@ function pcSourcesLine(sources) {
   scheduleFit();
 }
 // Search this PC is off: a question about a file is answered here with the way to turn it on (nothing was searched, nothing was sent)
+// a question that mentions files on this computer (no verb needed): when the model asked for Bunny's window for it while Search this PC is off, the card says that switch is off
+const FILES_WORDS = /\b(files?|folders?|documents?|pdfs?|spreadsheets?|my (pc|computer|laptop)|this (pc|computer)|on (my|this) (pc|computer))\b/i;
 const FILE_QUESTION = /\b(find|search|look for|locate|where is|where's|where are)\b[\s\S]{0,60}\b(file|files|document|documents|folder|pdf|spreadsheet|on my (pc|computer)|on this (pc|computer))\b/i;
 let pcAvailable = false;
 
@@ -453,11 +455,17 @@ function onAnswer(event) {
   if (!event || typeof event !== 'object') return;
   if (event.type === 'start') return;
   if (event.type === 'pc') { pcState(event); return; }
+  if (event.type === 'restart') { // Bunny looks the web up itself and asks again: what the first reply said is dropped
+    answerText = ''; $('ans').replaceChildren();
+    const thinking = document.createElement('div'); thinking.className = 'think'; thinking.id = 'busy';
+    const spin = document.createElement('span'); spin.className = 'spin'; thinking.append(spin, document.createTextNode('Looking it up on the web…'));
+    $('ans').append(thinking); scheduleFit(); return;
+  }
   if (event.type === 'delta' && typeof event.text === 'string') { $('busy')?.remove(); answerText += event.text; showAnswer(true); return; }
   if (event.type === 'done' || event.type === 'stopped') {
     ended(); showAnswer(false); showCopy(true);
     pcSourcesLine(event.sources);
-    if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = (Array.isArray(event.sources) && event.sources.length) ? `Answered by ${event.model} · files read on this PC, sent to the model` : `Answered by ${event.model} · text only`; $('meta').hidden = false; }
+    if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = (Array.isArray(event.sources) && event.sources.length) ? `Answered by ${event.model} · files read on this PC, sent to the model` : `Answered by ${event.model}${event.lookups > 0 ? ' · web search' : ''}`; $('meta').hidden = false; }
     $('follow').disabled = false; $('follow').focus(NOSCROLL); scheduleFit();
     return;
   }
@@ -465,6 +473,7 @@ function onAnswer(event) {
     ended(); showCopy(true);
     answerText = typeof event.text === 'string' ? event.text : '';
     if (answerText) showAnswer(false); else $('ans').replaceChildren();
+    if (!pcAvailable && FILES_WORDS.test(question)) { card('warn', 'Search this PC is off', 'Turn it on in Settings › Capabilities to let Bunny look for files on this computer. Nothing was searched.', [['Open Bunny settings', () => openInBunny('search-settings'), 'fill']]); return; }
     card('warn', "This needs Bunny's window", "This needs a tool, and Bunny asks your permission for tools in its own window, never here. Nothing has been touched.", [['Open in Bunny', () => openInBunny(), 'fill']]);
     return;
   }
@@ -598,7 +607,7 @@ function applyLook(look) {
   const model = look && typeof look.model === 'string' ? look.model.trim().slice(0, 60) : '';
   pcAvailable = Boolean(look && look.pcSearch === true);
   $('pc-item').hidden = !pcAvailable;
-  modelLine = model ? `Answers with ${model} · text only` : '';
+  modelLine = model ? `Answers with ${model} · web search${pcAvailable ? ' and files on this PC' : ''}` : '';
   refreshButtons();
 }
 

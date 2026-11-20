@@ -180,10 +180,22 @@ function ask({ title, body, action, danger = false, single = false }) {
 }
 const tell = (message) => ask({ title: 'Engines', body: message, action: 'OK', single: true });
 
+/** The sign-in page address the server returned, only if it is an https address on the vendor's own sites (the server checks too); anything else is not opened. */
+const signInPage = (u) => { try { const x = new URL(String(u ?? '')); return x.protocol === 'https:' && !x.username && !x.password && /(^|\.)(claude\.ai|claude\.com|anthropic\.com)$/i.test(x.hostname) ? x.href : null; } catch { return null; } };
+
 async function act(id, what) {
   try {
     if (what === 'download' || what === 'update') await sendJSON(`/api/engines/${id}/download`, 'POST', {});
-    else if (what === 'signin') { await sendJSON(`/api/engines/${id}/signin`, 'POST', {}); await tell('A window opened with Claude Code\'s own sign-in. Finish it there and in your browser. Bunny never sees your sign-in. This page updates by itself.'); watchSignIn(); }
+    else if (what === 'signin') {
+      // v0.1.14.1: say only what happened. With a page address from the program, one button opens it in the browser; without one, Bunny says it cannot tell whether a page opened. A failed start shows the reason.
+      const r = await sendJSON(`/api/engines/${id}/signin`, 'POST', {});
+      const page = signInPage(r?.url);
+      if (page) {
+        watchSignIn();
+        if (await ask({ title: 'Sign in to Claude Code', body: 'Claude Code started its own sign-in. Open the sign-in page in your browser and finish there. Bunny never sees your sign-in. This page updates by itself when you are signed in.', action: 'Open the sign-in page' })) window.open(page, '_blank', 'noopener,noreferrer');
+      } else if (r?.finished) await tell('Claude Code finished its sign-in without needing a page. This page updates by itself.');
+      else { await tell('Claude Code started its sign-in, but Bunny could not see a page address, so it cannot tell whether a page opened in your browser. If none did, press Sign in again. This page updates by itself when you are signed in.'); watchSignIn(); }
+    }
     else if (what === 'signout') { if (!(await ask({ title: 'Sign out of Claude Code?', body: 'Claude Code signs out of this account. Chats on it will ask you to sign in again.', action: 'Sign out', danger: true }))) return; await sendJSON(`/api/engines/${id}/signout`, 'POST', {}); }
     else if (what === 'cancel') await sendJSON(`/api/engines/${id}/cancel`, 'POST', {});
     else if (what === 'rollback') { if (!(await ask({ title: 'Roll back?', body: 'Go back to the earlier version? New chats use it.', action: 'Roll back' }))) return; await sendJSON(`/api/engines/${id}/rollback`, 'POST', {}); }

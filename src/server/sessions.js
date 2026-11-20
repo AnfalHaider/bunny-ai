@@ -336,6 +336,18 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     return dropped;
   }
 
+  /** v0.1.14.1 (Quick ask retry): cut everything after the last user message (the first reply, which is being replaced). The question itself stays, once. Returns how many were cut. */
+  async function dropAfterLastUser(id) {
+    const session = await get(requireId(id));
+    if (!session) throw new Error('Session not found');
+    let keep = session.messages.length;
+    while (keep > 0 && session.messages[keep - 1].role !== 'user') keep -= 1;
+    if (keep === 0) return 0;
+    const dropped = session.messages.length - keep;
+    if (dropped) { session.messages = session.messages.slice(0, keep); await save(session); }
+    return dropped;
+  }
+
   /** Replace a message's text and cut everything after it. */
   async function editMessage(id, messageId, content) {
     const session = await get(requireId(id));
@@ -487,7 +499,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
 
   return {
     list, get, create, remove, fork, children, exportSession, context, summary,
-    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors),
+    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
     markCheckpointRestored: locked(markCheckpointRestored), setWorktree: locked(setWorktree),
   };
