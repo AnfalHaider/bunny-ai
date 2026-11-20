@@ -212,7 +212,7 @@ export const REMOTE_CAPABILITIES = ['code_mode', 'leave_plan_mode'];
 export const REMOTE_TOOLS_ALLOWED = Object.freeze([
   'web_search', 'read_url', 'search_plugins', 'read_skill', 'ask_user', 'request_capability', 'update_tasks', 'check_environment', 'run_subagent',
   'create_artifact', 'update_artifact',
-  'list_files', 'read_file', 'find_files', 'search_files', 'edit_file', 'multi_edit', 'write_file', 'download_file',
+  'list_files', 'read_file', 'find_files', 'search_files', 'edit_file', 'multi_edit', 'write_file', 'download_file', 'make_word', 'make_excel', 'make_powerpoint',
   'run_command', 'start_process', 'read_process', 'list_processes', 'stop_process',
   'list_models', 'list_sessions', 'read_session', 'search_chats',
   'github_api_get', 'github_clone', 'github_comment', 'github_create_issue', 'github_create_pull_request', 'github_issue', 'github_list_issues', 'github_list_pull_requests', 'github_my_repos', 'github_pull_request', 'github_read_file', 'github_repo', 'github_search', 'github_update_issue',

@@ -2468,3 +2468,13 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .rp-actions { display: flex; gap: 8px; margin-top: 2px; }
 .rp-btn { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--bg-sidebar); color: var(--text); border-radius: 99px; padding: 3px 14px; min-height: 32px; cursor: pointer; }
 .rp-btn.rp-quiet { background: none; border-color: transparent; color: var(--text-dim); }
+
+/* OFFICE-MAKE: the card for a Word, Excel or PowerPoint file made in a chat with no folder: name, kind and size, then Open, Save as… and Show in folder */
+.made-card { flex-wrap: wrap; max-width: 520px; }
+.made-card .thumb-made { display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.made-card .thumb-excel { background: var(--ok-soft); color: var(--ok); }
+.made-card .thumb-powerpoint { background: var(--warn-soft); color: var(--warn); }
+.made-card .made-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-left: auto; }
+.made-card .made-said { flex-basis: 100%; font-size: var(--fs-sm); color: var(--text-dim); }
+.made-card .made-said:empty { display: none; }
+@media (max-width: 520px) { .made-card .made-actions { margin-left: 0; flex-basis: 100%; } }

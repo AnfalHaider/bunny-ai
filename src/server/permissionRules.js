@@ -151,7 +151,7 @@ export function readDenied(rules, rel) {
   return checkPath(rules, rel, 'reads')?.effect === 'deny';
 }
 
-const EDIT_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'download_file']); // W613-1: a download writes a file, so the person's edit rules judge it too
+const EDIT_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'download_file', 'make_word', 'make_excel', 'make_powerpoint']); // W613-1: a download writes a file, so the person's edit rules judge it too
 const READ_TOOLS = new Set(['read_file', 'list_files', 'search_files', 'find_files']);
 
 /** The verdict for one workspace tool call, or null when no rule speaks. */

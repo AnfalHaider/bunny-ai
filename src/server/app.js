@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
 import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
@@ -26,7 +26,7 @@ import { offlineProbe, offlineDiscover } from '../providers/offline.js';
 import { createSessionStore } from './sessions.js';
 import { createProjectStore } from './projects.js';
 import { createArtifactStore } from './artifacts.js';
-import { normaliseAttachments, prepareAttachments, toModelMessage } from './attachments.js';
+import { normaliseAttachments, prepareAttachments, safeName, toModelMessage } from './attachments.js';
 import { parseImport } from './import.js';
 import { createUsageStore } from './usage.js';
 import { createUnavailableStore, modelSpecificFailure, affordableTokens, notProvisioned, failureKind, cooldownFor } from './unavailable.js';
@@ -84,6 +84,7 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { OFFICE_EXT, OFFICE_KIND, OFFICE_TOOLS, OfficeError, buildOffice, describeOffice, madeLine, officeToolDefinitions, outline as officeOutline, validateOffice } from './officeMake.js';
 import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
 import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
@@ -310,6 +311,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const sessions = createSessionStore({ dir: join(dataDir, 'sessions') });
   const projects = createProjectStore({ file: join(dataDir, 'projects.json') });
   const artifacts = createArtifactStore({ dir: join(dataDir, 'artifacts') });
+  const MADE_MIME = { '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+  /** A made file: both ids are uuids (checked by the caller), and it is looked for only under that chat's own folder. */
+  async function findMade(chatId, fileId) {
+    const dir = join(dataDir, 'made', chatId);
+    const names = await readdir(dir).catch(() => []);
+    const hit = names.find((n) => n.startsWith(`${fileId}.`) && MADE_MIME[extname(n).toLowerCase()]);
+    if (!hit) return null;
+    const meta = await readJson(join(dir, `${fileId}.json`), null).catch(() => null);
+    return { file: join(dir, hit), mime: MADE_MIME[extname(hit).toLowerCase()], name: String(meta?.name ?? hit).slice(0, 120) };
+  }
   const usage = createUsageStore({ file: join(dataDir, 'usage.json') });
   const unavailable = createUnavailableStore({ file: join(dataDir, 'unavailable.json') });
   // Sign-in flows waiting for a person to finish. In memory only: a device
@@ -1639,6 +1650,22 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
+    // ---- OFFICE-MAKE: a file the model made in a chat with no folder; the person saves it from the card. Only this chat's own folder is looked in; it is always a download, never shown in the page. ----
+    const madeMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/made\/([a-f0-9-]{36})$/);
+    if (madeMatch && method === 'GET') {
+      const found = await findMade(madeMatch[1], madeMatch[2]);
+      if (!found) return sendJson(res, 404, { code: 'made.notFound', message: 'That file is no longer here.' });
+      const bytes = await readFile(found.file);
+      res.writeHead(200, { 'content-type': found.mime, 'content-length': bytes.length, 'content-disposition': `attachment; filename="${found.name.replace(/[^A-Za-z0-9._ -]/g, '_')}"`, 'cache-control': 'private, no-store', 'cross-origin-resource-policy': 'same-origin', 'x-content-type-options': 'nosniff' });
+      return res.end(bytes);
+    }
+    if (path === '/api/made/resolve' && method === 'POST') { // the desktop window's Open, Save as and Show in folder: window only, ids only, never a path from a page
+      if (!adminOk(req)) return sendJson(res, 403, { code: 'request.windowOnly', message: "Only Bunny's window can open a file." });
+      const body = await readBody(req);
+      const found = /^[a-f0-9-]{36}$/.test(String(body.chat)) && /^[a-f0-9-]{36}$/.test(String(body.file)) ? await findMade(body.chat, body.file) : null;
+      return sendJson(res, 200, found ? { ok: true, real: found.file, name: found.name } : { ok: false, reason: 'That file is no longer here.' });
+    }
+
     // ---- is this a folder a chat can work in? (and which git branch is it on) ----
     if (path === '/api/folder/check' && method === 'POST') {
       const result = await checkFolder((await readBody(req)).folder);
@@ -1778,6 +1805,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
     if (sessionMatch && method === 'DELETE') {
+      await rm(join(dataDir, 'made', sessionMatch[1]), { recursive: true, force: true }).catch(() => {}); // OFFICE-MAKE: the files made in this chat go with it
       // W2-9: a chat with its own copy never loses work silently. Default: what is uncommitted becomes one commit, the copy goes, the branch stays.
       // ?worktree=discard (asked twice by the screen) removes the copy and the branch too. A clean copy with nothing of its own goes with its branch.
       const doomed = await sessions.get(sessionMatch[1]);
@@ -2281,6 +2309,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ...(scheduledTask ? [] : [capabilityToolDefinition(), askToolDefinition()]),
         ...(artifactsOn ? artifactToolDefinitions() : []),
         ...(workspace ? workspaceToolDefinitions(risks) : []),
+        ...(!workspace && !textOnly && !session.incognito ? officeToolDefinitions({ code: false }) : []), // OFFICE-MAKE: Chat mode, files for the person to save
         ...(workspace ? processToolDefinitions(risks) : []),
         ...(aiComputerOn ? computerToolDefinitions(permissionMode === 'plan' ? risks : [...risks, 'build']) : []),
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
@@ -3096,6 +3125,30 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           send('tool', { tool: summary, status, result: clip(result, 600), attachments });
           return seenImages?.length ? { content: result, images: seenImages } : result;
         }
+        if (OFFICE_TOOLS.includes(name) && !workspace) { // OFFICE-MAKE, Chat mode: the file goes only into Bunny's own data folder, and the person saves it from the card
+          const summary = describeOffice(name, parsed);
+          send('tool', { tool: summary, status: 'running' });
+          try {
+            const spec = validateOffice(name, parsed, { code: false });
+            const buf = await buildOffice(spec);
+            const fileId = randomUUID();
+            const dir = join(dataDir, 'made', id);
+            await mkdir(dir, { recursive: true });
+            const shown = `${safeName(basename(spec.path.replace(/\\/g, '/'))).slice(0, 100)}`;
+            await writeFile(join(dir, `${fileId}${OFFICE_EXT[name]}`), buf);
+            await writeFile(join(dir, `${fileId}.json`), JSON.stringify({ name: shown }));
+            const madeFile = { id: fileId, name: shown, kind: OFFICE_KIND[name], size: buf.length };
+            const line = madeLine({ ...spec, path: shown }, buf.length);
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'done', content: '', result: line, madeFile });
+            send('tool', { tool: summary, status: 'done', result: line, madeFile });
+            return `${line}. The person sees a file card with Open and Save as. Do not say where it is stored.`;
+          } catch (err) {
+            if (!(err instanceof OfficeError)) throw err;
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'failed', content: '', result: err.message });
+            send('tool', { tool: summary, status: 'failed', result: err.message });
+            return err.message;
+          }
+        }
         const isApp = appTools.has(name);
         const isWorkspace = !isApp && workspace?.has(name);
         const entry = isApp || isWorkspace ? null : toolIndex.get(name);
@@ -3126,7 +3179,20 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           send('tool', { tool: summary, status: 'denied', result: why });
           return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
         }
-        const detail = name === 'install_plugin' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
+        let officeSpec = null; // OFFICE-MAKE (Code mode): the checked call, its outline for the card, and the person's READ rules on every picture it names
+        if (isWorkspace && OFFICE_TOOLS.includes(name)) {
+          try { officeSpec = validateOffice(name, parsed, { code: true }); } catch (err) { if (!(err instanceof OfficeError)) throw err; await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: err.message }); send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; }
+          for (const ip of [...(officeSpec.blocks ?? []).map((b) => b.path), ...(officeSpec.slides ?? []).map((sl) => sl.image?.path)].filter(Boolean)) {
+            const readRule = checkToolCall(activeRules(), 'read_file', { path: ip }, await workspace.canon(ip).catch(() => false));
+            if (readRule?.effect === 'deny') {
+              const why = `Blocked by your permission rule ${describeRule(readRule)} (the picture ${ip}). Nothing was written.`;
+              await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: why });
+              send('tool', { tool: summary, status: 'denied', result: why });
+              return `${why} Do not try this again or look for a way around the rule; carry on without it, or tell the person what you needed.`;
+            }
+          }
+        }
+        const detail = officeSpec ? officeOutline(officeSpec) : name === 'install_plugin' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
 Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : toolPlan ? toolPlan.cardText
           : localConnector ? `This runs on your computer:
@@ -3135,7 +3201,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
         if (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
-          const tooLong = (localConnector || toolPlan || name === 'run_command') ? cardTooLong(detail) : null;
+          const tooLong = (localConnector || toolPlan || name === 'run_command' || officeSpec) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
           if (!allowed) {

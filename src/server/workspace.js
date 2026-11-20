@@ -22,6 +22,7 @@ import { checkEnvironment } from './environment.js';
 import { createContext, Script } from 'node:vm';
 import { fetchLimited } from './download.js';
 import { shellHint, looksLikeServer } from './shellFit.js';
+import { LIMITS as OFFICE_LIMITS, OFFICE_TOOLS, OfficeError, buildOffice, describeOffice, imageInfo, madeLine, officeToolDefinitions, validateOffice } from './officeMake.js';
 
 const MAX_READ = 200_000;          // characters returned from one read
 const MAX_LIST = 400;              // entries in one listing
@@ -128,6 +129,7 @@ export function endsInBackground(command) {
 export const TOOL_RISK = {
   list_files: 'read', read_file: 'read', search_files: 'read', find_files: 'read', check_environment: 'read',
   write_file: 'edit', edit_file: 'edit', multi_edit: 'edit', download_file: 'edit',
+  make_word: 'edit', make_excel: 'edit', make_powerpoint: 'edit', // OFFICE-MAKE: they write one file, so they are edit tools like write_file
   run_command: 'run',
 };
 
@@ -178,6 +180,7 @@ export function workspaceToolDefinitions(risks = ['read', 'edit', 'run']) {
       + 'Each call starts fresh in the workspace folder: cd does not carry over, so pass cwd to run somewhere else.',
       { command: { type: 'string' }, cwd: { type: 'string', description: 'Folder inside the workspace to run in, e.g. "rea". Default: the workspace folder' }, timeout_seconds: { type: 'integer', description: 'How long it may run before it is stopped: 1 to 600 seconds. Default 120.' } }, ['command']),
   ];
+  all.push(...officeToolDefinitions({ code: true }));
   return all.filter((d) => risks.includes(TOOL_RISK[d.function.name]));
 }
 
@@ -193,6 +196,7 @@ export function describeToolCall(name, args = {}) {
     case 'find_files': return `Find ${String(args.pattern ?? '').slice(0, 60)}${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'check_environment': return `Check environment${args.path && args.path !== '.' ? ` in ${args.path}` : ''}`;
     case 'write_file': return `Write ${args.path}`;
+    case 'make_word': case 'make_excel': case 'make_powerpoint': return describeOffice(name, args);
     case 'download_file': return `Download ${String(args.url ?? '').slice(0, 100)} to ${args.path}`;
     case 'edit_file': return `Edit ${args.path}${args.replace_all ? ' (all occurrences)' : ''}`;
     case 'multi_edit': return `Edit ${args.path} (${Array.isArray(args.edits) ? args.edits.length : 0} changes)`;
@@ -531,6 +535,35 @@ export function createWorkspace(rootFolder, { protect = [], allow = [], envRunne
     return `Wrote ${show(abs)} (${String(content).split('\n').length} lines)`;
   }
 
+  /** OFFICE-MAKE: one new Word, Excel or PowerPoint file. Same write path as write_file: the path is inside the folder (never .git, no .., no absolute path), the checkpoint is taken before the write, one writeFile. */
+  async function makeOffice(name, args = {}) {
+    let spec;
+    try { spec = validateOffice(name, args, { code: true }); } catch (err) { if (err instanceof OfficeError) throw new Error(err.message); throw err; }
+    if (isAbsolute(spec.path) || /^[a-zA-Z]:/.test(spec.path) || spec.path.split(/[\\/]/).some((p) => p === '..')) throw new Error(`${spec.path} must be a path inside the workspace folder. Nothing was written.`);
+    const abs = await insideEdit(spec.path, { mustExist: false });
+    const there = await lstat(abs).then(() => true, () => false);
+    if (there && !spec.overwrite) throw new Error(`${show(abs)} already exists. Pass overwrite: true to replace it, or choose another name. Nothing was written.`);
+    const images = new Map();
+    for (const ip of new Set([...spec.blocks ?? [], ...spec.slides ?? []].map((x) => x.path ?? x.image?.path).filter((p) => typeof p === 'string' && p && p !== spec.path))) {
+      if (isAbsolute(ip)) throw new Error(`The picture ${ip} must be a path inside the workspace folder. Nothing was written.`);
+      const src = await inside(ip);
+      const info = await stat(src);
+      if (!info.isFile() || info.size > OFFICE_LIMITS.imageBytes) throw new Error(`The picture ${ip} is not a file of at most ${OFFICE_LIMITS.imageBytes / 1024 / 1024} MB. Nothing was written.`);
+      const bytes = await readFile(src);
+      if (!imageInfo(bytes)) throw new Error(`The picture ${ip} is not a PNG or JPEG (judged by its first bytes). Nothing was written.`);
+      images.set(ip, bytes);
+    }
+    let buf;
+    try { buf = await buildOffice(spec, { images }); } catch (err) { throw new Error(err.message); }
+    await beforeWrite?.(abs);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, buf);
+    return madeLine({ ...spec, path: show(abs) }, buf.length);
+  }
+  const make_word = (a) => makeOffice('make_word', a);
+  const make_excel = (a) => makeOffice('make_excel', a);
+  const make_powerpoint = (a) => makeOffice('make_powerpoint', a);
+
   async function download_file({ url, path } = {}) {
     if (!String(path ?? '').trim()) throw new Error('download_file needs a path to save to');
     const abs = await insideEdit(path, { mustExist: false });
@@ -694,7 +727,7 @@ export function createWorkspace(rootFolder, { protect = [], allow = [], envRunne
     return read_file({ path: abs });
   }
 
-  const tools = { list_files, read_file, search_files, find_files, check_environment, write_file, download_file, edit_file, multi_edit, run_command };
+  const tools = { list_files, read_file, search_files, find_files, check_environment, write_file, make_word, make_excel, make_powerpoint, download_file, edit_file, multi_edit, run_command };
   return {
     root,
     has: (name) => Object.hasOwn(tools, name),

@@ -260,6 +260,11 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       const { id: artifactId, title, kind } = message.artifact;
       entry.artifact = { id: artifactId, title: String(title ?? 'Artifact').slice(0, 120), kind: ['html', 'code', 'markdown'].includes(kind) ? kind : 'markdown' };
     }
+    // A Word, Excel or PowerPoint file made in a chat with no folder (OFFICE-MAKE): kept so the chat shows its card again later. The file itself is under <data>/made/<chat>/.
+    if (message.madeFile && typeof message.madeFile === 'object' && /^[a-f0-9-]{36}$/.test(String(message.madeFile.id))) {
+      const { id: fileId, name, kind, size } = message.madeFile;
+      entry.madeFile = { id: fileId, name: String(name ?? 'File').slice(0, 120), kind: ['Word', 'Excel', 'PowerPoint'].includes(kind) ? kind : 'Word', size: Math.max(0, Number(size) || 0) };
+    }
     session.messages.push(entry);
     // First user line becomes the title, so the sidebar is useful immediately.
     if (session.title === 'New chat' && message.role === 'user') {
