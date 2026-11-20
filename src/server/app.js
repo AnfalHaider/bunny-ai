@@ -1178,7 +1178,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (String(body.command ?? '').trim() && body.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'A local connector runs a program on this computer. Confirm the command to add it.' });
         }
-        const { source: _dropped, ...plain } = body; // W6-6: only the tool installer may say where a connector came from
+        const { source: _dropped, trustedKeyHeaders: _trusted, ...plain } = body; // W6-6: only the tool installer may say where a connector came from; only Bunny's own code names the trusted key headers
         return sendJson(res, 200, await mcp.add(plain));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });

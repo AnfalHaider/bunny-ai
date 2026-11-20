@@ -100,9 +100,13 @@ test('K-4/K-1 through the store: a refused header and an odd key are never saved
   for (const header of ['Host', 'Authorization', 'x y']) await assert.rejects(() => store.setKey(c.id, { header, value: KEY }), /header|Authorization/i, header);
   for (const value of ['', '   ', 'a\nb', 'x'.repeat(4001), 5, null]) await assert.rejects(() => store.setKey(c.id, { header: 'X-Api-Key', value }), /one line of text/, String(value).slice(0, 10));
   assert.equal(await secrets.get(`mcp-key.${c.id}`), null); assert.equal((await store.get(c.id)).hasKey, false);
-  const withAuth = await store.add({ name: 'A', url: 'https://mcp.a.test/mcp', keyHeaders: ['Authorization', 'Host', 'bad name'] });
-  assert.deepEqual(withAuth.keyHeaders, ['Authorization'], 'only plain, allowed names are kept as suggestions');
-  assert.equal((await store.setKey(withAuth.id, { header: 'Authorization', value: `Bearer ${KEY}` })).hasKey, true);
+  // LOW: Authorization is accepted only when Bunny's own code got the name from the registry or a curated entry (trustedKeyHeaders), never from the model's key_headers
+  const fromModel = await store.add({ name: 'A', url: 'https://mcp.a.test/mcp', keyHeaders: ['Authorization', 'Host', 'bad name', 'X-Api-Key'] });
+  assert.deepEqual(fromModel.keyHeaders, ['X-Api-Key'], 'the names the model passed: plain ones only, never Authorization');
+  await assert.rejects(() => store.setKey(fromModel.id, { header: 'Authorization', value: `Bearer ${KEY}` }), /Authorization/);
+  assert.equal((await store.setKey(fromModel.id, { header: 'X-Api-Key', value: KEY })).hasKey, true);
+  const trusted = await store.add({ name: 'T', url: 'https://mcp.t.test/mcp', trustedKeyHeaders: ['Authorization'] });
+  assert.equal((await store.setKey(trusted.id, { header: 'Authorization', value: `Bearer ${KEY}` })).hasKey, true, 'a name from a trusted source');
 });
 
 test('K-5: every form of the key is blanked from results, errors and nested connector answers', () => {
