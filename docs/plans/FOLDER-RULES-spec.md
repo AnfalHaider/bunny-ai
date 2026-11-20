@@ -2,7 +2,7 @@
 
 Tech Lead, 2026-11-20. Plan item D in `docs/plans/2026-11-20-v0.1.15-plan.md`.
 
-- Design draws it first (O3): the chip, the view and the switch.
+- Design draws it first (O3): the trust card, the Working folder card, the view and the switch (drawing v2).
 - Risk: MEDIUM. The text comes from files Bunny didn't write, and it reaches the model.
 - Security passed it with required changes FR-1 to FR-3 (33fac2db, `docs/security/2026-11-20-v0115-specs-review.md`). They are folded in below (§3, §5, §6, §7).
 
@@ -37,7 +37,10 @@ The person's own every-chat instructions already cover the last one, in Settings
   - inside the folder, and never through a link that leads out;
   - the person's read-deny rules hide a file, and then it isn't read or listed;
   - never from the data folder.
-- **Read again for each reply,** so an edit counts at once. The view shows each file's size and the time it was read.
+- **Read once, when the chat starts** (or when the person first picks Follow them), and kept with the chat as `session.folderRulesRead`: `{ name, text, sha256, readAt }` for each file.
+  - Every reply sends that same text. It is **not** re-read mid-chat, so a file edited during the chat can't silently steer the model (drawing v2: "Files are read when the chat starts, not while it runs").
+  - Only **Read again** on the Working folder card reads the files afresh, for the next reply.
+  - The view shows each file's size and the time it was read.
 - **Text only.** A file that isn't valid UTF-8, or that holds a NUL byte, is skipped and named in the view.
 - **Size caps:**
   - each file, at most **32 KB**. A bigger file is cut there, and the view says "cut at 32 KB";
@@ -61,7 +64,7 @@ The person's own every-chat instructions already cover the last one, in Settings
 - **FR-1: the text is fenced and cleaned** before it goes in the note.
   - The fence words `<<<FOLDER FILE` and `FOLDER FILE>>>` are removed from the file text, as QV-1 does for web results, so a file can't close its own fence.
   - NUL and every other C0 control character are removed, except tab and newline. (A file holding a NUL is still skipped, as §2 says.)
-  - The file name is used exactly as on disk, with control characters removed and cut to 100 characters. That same cleaned name goes in the fence, the system line, the chip and the view.
+  - The file name is used exactly as on disk, with control characters removed and cut to 100 characters. That same cleaned name goes in the fence, the system line, the cards and the view.
 - **Helpers** (`run_subagent`) don't get the folder note in v1. Their system text is built separately (`app.js` ~2578). This is a follow-up.
 - **Engine chats.** Bunny adds nothing to an engine's prompt. An engine reads its own files in the folder (Codex reads `AGENTS.md`; Claude Code reads `CLAUDE.md`).
   - **UNKNOWN:** whether Claude Code still reads a project `CLAUDE.md` with `--setting-sources user` (`engines/claude-code.js:105`).
@@ -79,29 +82,38 @@ The person's own every-chat instructions already cover the last one, in Settings
 
 ## 5. The person sees it, trusts it once, and has a switch
 
-- **FR-2: a folder is trusted before its files are followed.**
+- **FR-2: a folder is trusted before its files are followed.** This is drawn in Design's v2, section 1a (https://claude.ai/artifact/D8XZWqKw35pLenFz1LPtRK).
   - **Why.** The files usually come from a cloned repository, and the note reaches the model without anyone choosing to read them. In Auto mode a hostile `AGENTS.md` could steer a command that no rule asks about, such as sending `.env` somewhere with curl. §4 proves the permissions don't change; it doesn't prove the model won't be steered within them.
-  - **Before first use,** for each folder realpath, nothing is followed. The chip says "AGENTS.md found: follow it?" (or names the first file found), with **Follow** and **Not now**, and the text is visible in the view. Until the person picks Follow, no system line and no note are sent. This is the same step as Claude Code's and Cursor's folder trust.
-  - **The answer is stored per realpath** in `settings.folderRulesTrusted`: a list of `{ folder: realpath, files: [names followed], readAt: { name: sha256 } }`, at most 200 folders.
-    - That key is in `WINDOW_ONLY_SETTING_KEYS`, so no device can give the answer: not a Chats device (FR-3), and not any other. Only Bunny's own window can.
+  - **Where it asks.** A card **in the chat**, in the thread above the composer. It is the same kind of card Bunny uses to ask for something (like switching to Code mode), not a chip and not a banner.
+    - It appears the first time a Code chat starts in a folder that has instruction files and no stored answer.
+    - Its title is "This folder has instruction files". It shows the folder path, each file with its size and a **Read** link (the same viewer as View what was read), and the buttons **Follow them** and **Not now**.
+    - The wording is Design's (v2 §3).
+    - Until the person picks Follow them, no system line and no note are sent.
+  - **Follow them** stores the answer for the folder's realpath and reads the files (§2). They are used from the next reply, in this chat and in every new chat on that folder.
+  - **Not now** follows nothing and stores nothing: never a "never". The card closes and doesn't come back in this chat; a new chat on that folder asks again.
+  - **The stored answer** lives in `settings.folderRulesTrusted`: a list of `{ folder: realpath, files: [names followed] }`, at most 200 folders.
+    - That key is in `WINDOW_ONLY_SETTING_KEYS`, so no device can give the answer: not a Chats device (FR-3), and not any other. Only Bunny's own window can. The card's buttons on a device say it has to be answered on the PC.
+  - **Changing it later**, on the Working folder card:
+    - **Follow them…** when the folder isn't followed. It opens the same question as the card, so trust is never given by a stray click; turning the chat's switch on does the same.
+    - **Ask me again for this folder** when it is followed. It removes the folder's entry from `folderRulesTrusted`, and the next chat asks again.
   - **A W2-9 worktree chat** uses the answer given for its **original** folder's realpath (`session.worktree.repo`), not the worktree's own path.
-  - **A followed file is edited** (Security's answer, drawing v2): no new question.
-    - The file keeps being followed as it is now, read again each reply as §2 says.
-    - The chip shows "changed since it was read" when its hash differs from `readAt`.
-    - **Read again** opens the view on the new text and stores the new hash, which clears the mark.
-  - **A new file name** that wasn't there at Follow (a `CLAUDE.md` added later, say) asks again before it's followed: "CLAUDE.md is new here: follow it too?"
+  - **A followed file is edited** (Security's answer, drawing v2): no new question, and no new text either.
+    - The chat keeps sending the text it read (§2).
+    - The Working folder card marks that file "changed since it was read" when its current hash differs from the stored `sha256`.
+    - **Read again** reads all the files for the next reply and clears the mark.
+  - **A new file name** that wasn't there at Follow (a `CLAUDE.md` added later, say) asks again before it's followed, with the same card naming only the new file.
     - Meanwhile the files already followed keep being followed, and the new one is left out of the note.
-    - Follow adds its name to `files`. A file that was followed and is then removed simply stops being sent.
+    - Follow them adds its name to `files`. A followed file that is later removed is no longer sent after the next Read again or the next chat.
   - **Engine chats get no card:** Bunny adds nothing to an engine's prompt (§3), so there is nothing to trust.
-  - **Not now** sends nothing for this chat and asks again in the next chat on that folder.
-  - Design adds the trust state to the drawing.
-- **The chip.** A Code chat whose folder has any of these files shows "Following AGENTS.md" (or "…and 2 more"). Clicking it opens a view with:
-  - each file's name, size and "cut" state;
-  - the text, read-only;
-  - the "not used" list.
-- **The switch.** Settings → Capabilities → "Follow the folder's instructions files (AGENTS.md, CLAUDE.md, Cursor rules)" sets `settings.folderRulesEnabled`. It is **on** by default, as in Claude Code and Cursor.
-  - The view also has a switch for the current chat only, `session.folderRules: false`, for a folder you don't trust.
-- **Both switches mean the same:** off means nothing is read. The global switch turns it off for every folder, trusted or not.
+- **The Working folder card** (drawing v2 §1) shows the "Project instructions" block:
+  - each file's name, size and state: in use, not followed, waiting for you, changed since it was read, cut, or not used;
+  - **View what was read**, the exact text sent, read-only;
+  - the "not used" list for `.mdc` rules that aren't always-on.
+  - The folder chip's tooltip names the count ("· 3 instruction files").
+- **The switches.**
+  - **Global:** Settings → Capabilities → "Follow the folder's instructions files (AGENTS.md, CLAUDE.md, Cursor rules)" sets `settings.folderRulesEnabled`. It is **on** by default, as in Claude Code and Cursor.
+  - **Per chat:** the switch on the Working folder card sets `session.folderRules`.
+- **Both switches mean the same:** off means nothing is read or sent. The global switch turns it off for every folder, trusted or not.
 - **FR-3: the switches are window-only.** `folderRulesEnabled` goes in `WINDOW_ONLY_SETTING_KEYS`, and the chat's `folderRules` goes in `WINDOW_ONLY_SESSION_SETTINGS`, both ways: a device can't turn either one on or off.
 
 ## 6. Tests
@@ -131,7 +143,9 @@ The person's own every-chat instructions already cover the last one, in Settings
    - after Follow, the next reply has the note;
    - Not now sends none, and the next chat on that folder asks again;
    - a W2-9 worktree chat follows when its original folder is trusted;
-   - editing a followed `AGENTS.md` asks nothing, the new text is sent, the chip shows "changed since it was read", and Read again clears it;
+   - editing a followed `AGENTS.md` mid-chat asks nothing and the **old** text is still sent; the card shows "changed since it was read", and after Read again the next reply sends the new text and the mark clears;
+   - Not now stores nothing in `folderRulesTrusted`, and a new chat on that folder shows the card again;
+   - "Ask me again for this folder" removes the entry, and the next chat asks again;
    - adding `CLAUDE.md` after Follow asks about it, and until the answer only `AGENTS.md` is in the note;
    - an engine chat on a folder with an `AGENTS.md` shows no trust card;
    - a device's `PATCH` of `folderRulesTrusted` gets 403, from a Chats device and from an Everything device.
@@ -139,7 +153,12 @@ The person's own every-chat instructions already cover the last one, in Settings
 
 ### End-to-end (invented profile)
 
-- A Code chat on a folder with an `AGENTS.md` shows the chip. The view lists the file, and the switch removes it from the next reply (checked through the stand-in model's received messages).
+- A Code chat on a folder with an `AGENTS.md` shows the trust card above the composer.
+  - Read opens the viewer.
+  - Follow them puts the note in the next reply.
+  - The Working folder card shows the file in use.
+  - The chat's switch removes it from the next reply.
+  - All of this is checked through the stand-in model's received messages.
 - **Pictures:** desktop and phone, both themes, from Design's drawing.
 
 ## 7. Help (O7)
