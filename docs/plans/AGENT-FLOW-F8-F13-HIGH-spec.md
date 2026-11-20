@@ -381,7 +381,38 @@ F11 (Auto with a judge) ──> F12 (Auto as the default) <── F13 (confineme
 - **Failed:** `npm install` (its cache in `%LOCALAPPDATA%`).
 - **Time:** about 1.8 s per run in the prototype, with an estimate of 0.1 to 0.2 s once precompiled.
 
+### The options weighed (added 2026-11-20, after the Chief of Staff's note)
+
+The Researcher's headline: Codex asks less mainly because of its native Windows sandboxes ([R] §5). Bunny already has two pieces of that:
+
+- **Codex's own sandbox, already used by Bunny.** For Codex chats, Bunny writes `[windows] sandbox = "unelevated"` (`codex.js:70`, CE-1.16) and `sandbox: 'workspace-write'` in `thread/start` (`codex.js:104`).
+  - The first command in a fresh Codex home makes a capability SID per project: measured at 3 to 4 minutes on the owner's PC. The EN-8 seed (`engines/sandbox-seed.js`) brings that down to 2 s.
+  - The pinned app-server protocol also lists **`command/exec`** (with write, terminate and resize) and **`windowsSandbox/setupStart` / `windowsSandbox/readiness`** (`schemas/codex-app-server-0.170.0.json`). That is a way to run **one command** under Codex's sandbox policy without a model turn.
+- **The restricted-mode staged copy** (`engines/staging.js`): the engine works in a copy, and Bunny diffs it back through the write path.
+
+| Option | Writes outside the folder | Network | Reads | Needs | Cost | Fit |
+|---|---|---|---|---|---|---|
+| **A. Low-integrity helper** ([S], measured) | blocked | open | open | nothing (PowerShell P/Invoke) plus a one-time folder label | about 0.1 to 0.2 s per command (estimate) | Good. Caches outside the folder must be moved. |
+| **B. Codex's sandbox through `command/exec`** | blocked, by ACLs for the project's capability SID (unelevated) | "environment-level offline controls", weaker than elevated ([R] §5) | open in unelevated ("no denied read paths", [R] §5) | Codex downloaded (an engine), and a long-lived `codex app-server` per project | the first run per project is 3 to 4 min without the seed, 2 s with it; then per command: **UNKNOWN** (the spike measures it) | Good for commands. It is the same boundary Codex chats already run in, and Security already reviewed CE-1.15/16 and EN-8. |
+| **C. The staged copy for Bunny's Auto** | nothing reaches the folder without the diff review | open | the copy only (hidden paths left out) | nothing new | copies the whole workspace (up to 50,000 files or 2 GB, `staging.js:16-17`) per reply | **Poor for commands.** The copy has no `.git` (`staging.js` leaves it out), so `git` commands break; installs land in the copy; dev servers serve the copy. It suits a "look but don't touch" Auto on an untrusted folder, not everyday work. |
+
+**Recommendation:**
+
+1. **B where Codex is downloaded, A otherwise, and C only as an optional "work in a copy" Auto for untrusted folders.**
+   - B gives Bunny's own commands the same boundary as Codex's, which is what the owner compares against.
+   - A covers people without Codex, with no download.
+2. **Before B is built, one spike (S-F13B)** with the pinned `codex` 0.170.0 already on disk, offline, in an invented profile. It needs no sign-in and makes no model calls. It answers:
+   - (a) whether `command/exec` runs without an account;
+   - (b) its parameters (`sandboxPolicy`, `cwd`, environment) from `codex app-server generate-json-schema`;
+   - (c) the per-command time;
+   - (d) that writes outside the folder, and to `%USERPROFILE%`, are refused;
+   - (e) what network access a command gets under unelevated;
+   - (f) that `windowsSandbox/readiness` reports the seeded state.
+3. **If the spike fails any of (a) to (d),** F13 ships A only, and B is recorded with the reason.
+
 ### Behaviour
+
+The steps below describe A. B uses the same setting, the same "confined" mark and the same failure card, with the Codex app-server in place of the helper. Nothing is ever run unconfined without a card.
 
 1. **The helper.** A small helper starts `run_command` and `start_process` children with a Low integrity token: a copy of the user's token, Low (`S-1-16-4096`), started with `CreateProcessAsUser`.
    - It is PowerShell `Add-Type` P/Invoke, as `computer.js` already does, compiled once to a cached helper in Bunny's data folder. No native module, and nothing installed.
@@ -426,6 +457,10 @@ F11 (Auto with a judge) ──> F12 (Auto as the default) <── F13 (confineme
 4. A helper failure, simulated, gives the card, and nothing runs until yes.
 5. "Remove the label" leaves the folder at Medium again, checked with `icacls`.
 6. **Timing.** The median added time per command is recorded in the PR. The target is under 0.3 s.
+7. **B (after S-F13B passes)** gets the same tests 1 to 6, through a stand-in app-server in unit tests and the pinned `codex app-server` in the Windows integration run. It also checks:
+   - with Codex not downloaded, Bunny uses A and the step mark says which one ran;
+   - the app-server stops when the chat's folder changes or the app quits (no orphaned process, checked with the process list);
+   - the EN-8 seed is reused, so the second project command takes under 5 s.
 
 **End-to-end:** in Auto with "Confine" on, the stand-in model runs a command that tries to write outside the folder. The step shows it was refused by the confinement, and the reply explains.
 
@@ -442,6 +477,6 @@ F11 (Auto with a judge) ──> F12 (Auto as the default) <── F13 (confineme
 1. **F9** "Allow for this chat". Recommended: yes.
 2. **F10** One install card. Recommended: yes.
 3. **F11** Auto with a judge. Recommended: yes.
-4. **F13** Confine commands. Recommended: yes, as an option, on for Auto.
+4. **F13** Confine commands. Recommended: yes, as an option, on for Auto: Codex's own sandbox where Codex is downloaded (after spike S-F13B), the low-integrity helper otherwise.
 5. **F12** Auto as the default in trusted git folders. Recommended: yes, after F11 (and F13).
 6. **F8** A card that turns on Search this PC. Recommended: yes. Ask it together with QUICK-ASK-JUST-WORKS' default-on question.
