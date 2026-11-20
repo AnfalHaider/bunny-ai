@@ -82,9 +82,17 @@ The person's own every-chat instructions already cover the last one, in Settings
 - **FR-2: a folder is trusted before its files are followed.**
   - **Why.** The files usually come from a cloned repository, and the note reaches the model without anyone choosing to read them. In Auto mode a hostile `AGENTS.md` could steer a command that no rule asks about, such as sending `.env` somewhere with curl. §4 proves the permissions don't change; it doesn't prove the model won't be steered within them.
   - **Before first use,** for each folder realpath, nothing is followed. The chip says "AGENTS.md found: follow it?" (or names the first file found), with **Follow** and **Not now**, and the text is visible in the view. Until the person picks Follow, no system line and no note are sent. This is the same step as Claude Code's and Cursor's folder trust.
-  - **The answer is stored per realpath** in `settings.folderRulesTrusted`: a list of realpaths, at most 200. That key is in `WINDOW_ONLY_SETTING_KEYS`, so a device can never trust a folder; only Bunny's own window can.
-  - **A W2-9 worktree chat** uses the trust of its **main** folder's realpath (`session.worktree.repo`), not the worktree's own path.
-  - **Changed files.** Trust belongs to the folder, not to the file text, as in the rivals. The chip always names the files being followed, so the person can see when one appears.
+  - **The answer is stored per realpath** in `settings.folderRulesTrusted`: a list of `{ folder: realpath, files: [names followed], readAt: { name: sha256 } }`, at most 200 folders.
+    - That key is in `WINDOW_ONLY_SETTING_KEYS`, so no device can give the answer: not a Chats device (FR-3), and not any other. Only Bunny's own window can.
+  - **A W2-9 worktree chat** uses the answer given for its **original** folder's realpath (`session.worktree.repo`), not the worktree's own path.
+  - **A followed file is edited** (Security's answer, drawing v2): no new question.
+    - The file keeps being followed as it is now, read again each reply as §2 says.
+    - The chip shows "changed since it was read" when its hash differs from `readAt`.
+    - **Read again** opens the view on the new text and stores the new hash, which clears the mark.
+  - **A new file name** that wasn't there at Follow (a `CLAUDE.md` added later, say) asks again before it's followed: "CLAUDE.md is new here: follow it too?"
+    - Meanwhile the files already followed keep being followed, and the new one is left out of the note.
+    - Follow adds its name to `files`. A file that was followed and is then removed simply stops being sent.
+  - **Engine chats get no card:** Bunny adds nothing to an engine's prompt (§3), so there is nothing to trust.
   - **Not now** sends nothing for this chat and asks again in the next chat on that folder.
   - Design adds the trust state to the drawing.
 - **The chip.** A Code chat whose folder has any of these files shows "Following AGENTS.md" (or "…and 2 more"). Clicking it opens a view with:
@@ -122,8 +130,11 @@ The person's own every-chat instructions already cover the last one, in Settings
    - a new folder with an `AGENTS.md` sends no note until Follow is chosen;
    - after Follow, the next reply has the note;
    - Not now sends none, and the next chat on that folder asks again;
-   - a W2-9 worktree chat follows when its main folder is trusted;
-   - a device's `PATCH` of `folderRulesTrusted` gets 403.
+   - a W2-9 worktree chat follows when its original folder is trusted;
+   - editing a followed `AGENTS.md` asks nothing, the new text is sent, the chip shows "changed since it was read", and Read again clears it;
+   - adding `CLAUDE.md` after Follow asks about it, and until the answer only `AGENTS.md` is in the note;
+   - an engine chat on a folder with an `AGENTS.md` shows no trust card;
+   - a device's `PATCH` of `folderRulesTrusted` gets 403, from a Chats device and from an Everything device.
 10. **FR-3:** a device's `PATCH` of `folderRulesEnabled`, or of a chat's `folderRules`, gets 403 either way, as in the existing window-only tests.
 
 ### End-to-end (invented profile)
