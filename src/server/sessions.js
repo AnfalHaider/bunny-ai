@@ -255,6 +255,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (message.linked && typeof message.linked === 'object' && /^[a-f0-9-]{36}$/.test(String(message.linked.id))) {
       entry.linked = { id: message.linked.id, title: String(message.linked.title ?? 'Chat').slice(0, 120), status: String(message.linked.status ?? '').slice(0, 20), ...(message.linked.model ? { model: String(message.linked.model).slice(0, 120) } : {}) };
     }
+    // F9: a step that ran with no card because the person had allowed its kind for this chat keeps the small mark that says so (a fixed-length label made by the server)
+    if (typeof message.allowedKind === 'string' && message.allowedKind.trim()) entry.allowedKind = message.allowedKind.trim().slice(0, 120);
     // An artifact a tool step made: kept so the chat can show its card again later.
     if (message.artifact && typeof message.artifact === 'object' && /^[a-f0-9-]{36}$/.test(String(message.artifact.id))) {
       const { id: artifactId, title, kind } = message.artifact;
@@ -284,9 +286,9 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.pinned !== undefined) session.pinned = Boolean(patch.pinned);
     if (patch.archived !== undefined) session.archived = Boolean(patch.archived);
     if (patch.projectId !== undefined) session.projectId = patch.projectId ?? null;
-    if (patch.folder !== undefined) session.folder = String(patch.folder ?? '').trim() || null;
+    if (patch.folder !== undefined) { const next = String(patch.folder ?? '').trim() || null; if (next !== (session.folder ?? null)) delete session.allowKinds; session.folder = next; } // F9: a change of folder ends what was allowed for this chat
     if (patch.branch !== undefined) session.branch = String(patch.branch ?? '').trim() || null;
-    if (patch.permissionMode !== undefined) session.permissionMode = patch.permissionMode;
+    if (patch.permissionMode !== undefined) { if (patch.permissionMode === 'plan') delete session.allowKinds; session.permissionMode = patch.permissionMode; } // F9: so does Plan mode
     if (patch.effort !== undefined) session.effort = patch.effort ?? null;
     if (patch.incognito !== undefined) session.incognito = Boolean(patch.incognito);
     if (patch.remoteAuto !== undefined) { if (patch.remoteAuto) session.remoteAuto = String(patch.remoteAuto); else delete session.remoteAuto; } // R6: set to Auto by another device (its id)
@@ -502,7 +504,12 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     return run;
   };
 
+  // F9-5: the list of allowed kinds is written ONLY by these three, called by the server (a window answer to a card, or Forget from the window): update() never takes it from a patch
+  async function setAllowKinds(id, next) { const session = await get(requireId(id)); if (!session) throw new Error('Session not found'); if (next && next.length) session.allowKinds = next; else delete session.allowKinds; await save(session); return session.allowKinds ?? []; }
+  async function allowKindsOf(id) { return (await get(requireId(id)))?.allowKinds ?? []; }
+  async function forgetAllowKind(id, index) { const session = await get(requireId(id)); if (!session) throw new Error('Session not found'); const list = [...(session.allowKinds ?? [])]; if (index === 'all') list.length = 0; else if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 1); if (list.length) session.allowKinds = list; else delete session.allowKinds; await save(session); return list; }
   return {
+    allowKindsOf, setAllowKinds: locked(setAllowKinds), forgetAllowKind: locked(forgetAllowKind),
     list, get, create, remove, fork, children, exportSession, context, summary,
     append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),

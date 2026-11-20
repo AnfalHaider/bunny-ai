@@ -35,6 +35,7 @@ import { WEBAPP_PUBLIC_PATHS, isWebappPath, webappResponse } from './webapp.js';
 import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
+import { COMPUTER_TOOLS, DEVICE_LINE, addKind, browserKind, browserMatches, commandKind, commandMatches, computerKind, connectorKind, connectorMatches, editKind, editMatches, reasonLine, saveRuleFor } from './allowKinds.js';
 import { thinkingBody } from '../providers/thinking.js';
 import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSignIn.js';
 import { createScheduleStore } from './scheduler.js';
@@ -328,6 +329,21 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const oauthFlows = new Map();
   // Tool calls waiting for the person's Allow or Deny (Manual and Accept-edits modes).
   const pendingPermissions = new Map();
+  // F9: what is allowed for the REPLY running now (computer control lasts for one reply, never the chat); chat id -> true
+  const replyKinds = new Map();
+  /** F9-6: a ticked "Also save as a rule" writes ONE Allow rule for this folder, through the same checks as Settings' own list. Allow only; never removes a Deny or Ask. */
+  async function saveAllowRule(folder, rule) {
+    const stored = normaliseRules(settings.permissionRules);
+    const key = Object.keys(stored.folders).find((f) => f.toLowerCase() === String(folder).toLowerCase()) ?? folder;
+    const list = [...(stored.folders[key] ?? [])];
+    const checked = checkRule(rule);
+    if (checked.error) return false;
+    if (list.some((r) => r.kind === checked.rule.kind && r.effect === 'allow' && r.pattern === checked.rule.pattern && r.ops === checked.rule.ops)) return true;
+    if (list.length >= MAX_RULES) return false;
+    settings = { ...settings, permissionRules: { global: stored.global, folders: { ...stored.folders, [key]: [...list, checked.rule] } } };
+    await writeJson(settingsFile, settings);
+    return true;
+  }
   // Browser actions waiting for the open window to do them and answer.
   const pendingBrowser = new Map();
   const screensDir = join(dataDir, 'screens');
@@ -1520,6 +1536,18 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       return sendJson(res, 200, { terminals: terminals.list() });
     }
 
+    // ---- F9: what is allowed for this chat (the Working folder card), and Forget. Forget is window only (the route table); the list is written only by the server from a window answer to a card (F9-5).
+    const kindsMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/allow-kinds(?:\/(all|\d{1,2}))?$/);
+    if (kindsMatch && method === 'GET') {
+      const list = await sessions.allowKindsOf(kindsMatch[1]).catch(() => []);
+      return sendJson(res, 200, { kinds: list.map((k, i) => ({ i, type: k.type, label: k.label, ...(k.title ? { title: k.title } : {}) })), replyOnly: replyKinds.get(kindsMatch[1]) ? [{ type: 'computer', label: 'Controlling this PC', note: 'this task only' }] : [] });
+    }
+    if (kindsMatch && method === 'DELETE') {
+      if (windowOnly(req, res)) return;
+      const left = await sessions.forgetAllowKind(kindsMatch[1], kindsMatch[2] === 'all' || kindsMatch[2] === undefined ? 'all' : Number(kindsMatch[2])).catch(() => []);
+      return sendJson(res, 200, { kinds: left.map((k, i) => ({ i, type: k.type, label: k.label })) });
+    }
+
     // ---- a waiting tool call: the person's Allow or Deny ----
     const permissionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/permission\/([a-f0-9-]{36})$/);
     if (permissionMatch && method === 'POST') {
@@ -1528,6 +1556,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
       const answer = await readBody(req);
+      if (answer.kind === true || answer.saveRule === true) { // F9: "for this chat" is given only from Bunny's window, only on a card that offered a kind (the kind itself is the server's, made from the call)
+        if (req.bunnyRemote || req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_LINE });
+        if (!pending.kind) return sendJson(res, 400, { code: 'kind.notOffered', message: 'That card did not offer it.' });
+        pending.resolve({ allowed: true, kind: pending.kind, saveRule: answer.saveRule === true });
+        return sendJson(res, 200, { ok: true });
+      }
       pending.resolve(answer.allowed === true && answer.forSession === true && pending.forSession ? 'session' : answer.allowed === true);
       return sendJson(res, 200, { ok: true });
     }
@@ -2080,6 +2114,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // next step, so the chat reads as a running account of the work, also after a reload.
       let sinceStep = '';
       const stepsTaken = [];
+      const kindNotes = new Map(); // F9: step summary -> the small mark that says why nothing asked
       const logStep = async (entry) => {
         const scope = agentScope.getStore();
         if (!scope && entry.kind === 'tool_call') {
@@ -2088,6 +2123,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           if (note) entry = { ...entry, note: note.slice(0, 2000) };
           stepsTaken.push(`${entry.tool}${entry.status && entry.status !== 'done' ? ` (${entry.status})` : ''}`);
         }
+        if (entry.kind === 'tool_call' && kindNotes.has(entry.tool)) entry = { ...entry, allowedKind: kindNotes.get(entry.tool) }; // F9: the small mark that says why nothing asked
         if (entry.kind === 'tool_call') entry = await keepForModel(entry);
         return sessions.append(scope?.logTo ?? id, entry);
       };
@@ -2445,9 +2481,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
         const timer = waitNudges({ kind: 'permission', title: summary });
-        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        pendingPermissions.set(pid, { sessionId: id, kind: opts.kind ?? null, forSession: opts.forSession === true, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
-        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}) });
+        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}), ...(opts.kind ? { kind: { button: opts.kind.button, ...(opts.kindRule ? { rule: opts.kindRule } : {}), ...(opts.kind.thisReplyOnly ? { replyOnly: true } : {}) } } : {}), ...(opts.reason ? { reason: opts.reason } : {}) });
       });
 
       // Ask the window to do a browser action, and wait for what happened.
@@ -2768,6 +2804,44 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return { target, text: reply.trim() || '(no reply)' };
       };
 
+      // ---- F9: Allow for this chat. A kind is made from the call's OWN arguments when the card is shown (never from text), covers only what Security's F9-1 to F9-3 say, and is given only from the window.
+      const kindsActive = !scheduledTask && !req.bunnyRemote && !req.bunnyDevice && !textOnly; // devices and scheduled runs neither create nor use kinds (F9-4)
+      const NEVER_KIND = { gmail_send: 'sending', message_session: 'sending', create_tool: 'building', install_from_github: 'building', install_plugin: 'building', add_connector: 'building', schedule_task: 'building', add_skill: 'building' };
+      if (kindsActive) res.once('close', () => replyKinds.delete(id));
+      const f9Judge = async ({ name, parsed, entry = null, askRule = false, host = null }) => {
+        if (!kindsActive) return { covered: null, opts: {} };
+        const root = workspace?.root ?? null;
+        let made;
+        if (name === 'run_command' || name === 'start_process') made = commandKind(parsed.command, { cwd: root });
+        else if (root && (['write_file', 'edit_file', 'multi_edit'].includes(name) || OFFICE_TOOLS.includes(name))) made = editKind(resolve(root, String(parsed.path ?? '')), root);
+        else if (COMPUTER_TOOLS.includes(name)) made = computerKind();
+        else if (name.startsWith('browser_') && ['browser_click', 'browser_type', 'browser_capture'].includes(name)) made = browserKind(host, { name, parsed });
+        else if (entry) made = connectorKind({ serverId: entry.server.id, serverName: entry.server.name, toolName: entry.tool.name });
+        else if (NEVER_KIND[name]) made = { kind: null, reason: NEVER_KIND[name] };
+        else return { covered: null, opts: {} };
+        if (askRule) return { covered: null, opts: { reason: reasonLine('askRule') } }; // the person's own Ask rule asks every time, kind or not
+        const list = await sessions.allowKindsOf(id).catch(() => []);
+        const hit = made.kind && (made.kind.type === 'computer' ? (replyKinds.get(id) === true ? { label: made.kind.label } : null)
+          : list.find((k) => (k.type === 'command' && commandMatches(k, parsed.command, { cwd: root }))
+            || (k.type === 'edit' && editMatches(k, resolve(root ?? '.', String(parsed.path ?? '')), root))
+            || (k.type === 'connector' && entry && connectorMatches(k, { serverId: entry.server.id, toolName: entry.tool.name }))
+            || (k.type === 'browser' && browserMatches(k, host))));
+        if (hit) return { covered: hit.label, opts: {} };
+        if (!made.kind) return { covered: null, opts: { reason: reasonLine(made.reason) } };
+        if (agentScope.getStore()) return { covered: null, opts: { reason: reasonLine('helper') } }; // a helper may use the chat's kinds but cannot create one
+        if (pcTurn.tainted) return { covered: null, opts: { reason: reasonLine('pcText') } };
+        const rule = root ? saveRuleFor(made.kind, session.folder ?? root) : null;
+        return { covered: null, opts: { kind: made.kind, ...(rule ? { kindRule: rule.text } : {}), _rule: rule?.rule ?? null } };
+      };
+      /** After a card answered "for this chat": remember the kind (server side), and save the rule only if the tick was on and the kind can be saved. */
+      const f9Give = async (answer, opts) => {
+        if (!answer || typeof answer !== 'object' || !answer.kind) return;
+        const kind = answer.kind;
+        if (kind.type === 'computer') { replyKinds.set(id, true); return; }
+        await sessions.setAllowKinds(id, addKind(await sessions.allowKindsOf(id), kind));
+        if (answer.saveRule && opts?._rule && workspace?.root) await saveAllowRule(session.folder ?? workspace.root, opts._rule);
+      };
+
       const runAgentTool = async (name, parsed) => {
         const custom = !isAgentTool(name);
         if (!toolDefinitions.some((d) => d.function.name === name)) throw new Error(`There is no tool called ${name}`);
@@ -2804,14 +2878,17 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         if (ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
           const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || name === 'schedule_task' || custom) ? cardTooLong(detail, name === 'schedule_task' ? parsed.prompt : detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
-          const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
+          const f9 = await f9Judge({ name, parsed, askRule: ruledProcess?.effect === 'ask' });
+          if (f9.covered) kindNotes.set(summary, f9.covered);
+          const allowed = f9.covered ? true : await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail, f9.opts);
+          if (allowed) await f9Give(allowed, f9.opts);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
         }
-        send('tool', { tool: summary, status: 'running' });
+        send('tool', { tool: summary, status: 'running', ...(kindNotes.has(summary) ? { allowedKind: kindNotes.get(summary) } : {}) });
         let status = 'done';
         let result = '';
         let attachments = [];
@@ -3103,14 +3180,19 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
             return planRefusal(name);
           }
           if (needsOk(BROWSER_TOOL_RISK[name], name, parsed)) {
-            const allowed = await askPermission(summary, '');
+            // F9-3: the host is what the panel reports for its CURRENT page now, never one from the call's arguments
+            const host = kindsActive && ['browser_click', 'browser_type'].includes(name) ? await askBrowser('read', {}).then((a) => { try { return new URL(String(a?.url ?? '')).hostname; } catch { return null; } }, () => null) : null;
+            const f9 = await f9Judge({ name, parsed, host });
+            if (f9.covered) kindNotes.set(summary, f9.covered);
+            const allowed = f9.covered ? true : await askPermission(summary, '', f9.opts);
+            if (allowed) await f9Give(allowed, f9.opts);
             if (!allowed) {
               await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
               send('tool', { tool: summary, status: 'denied' });
               return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
             }
           }
-          send('tool', { tool: summary, status: 'running' });
+          send('tool', { tool: summary, status: 'running', ...(kindNotes.has(summary) ? { allowedKind: kindNotes.get(summary) } : {}) });
           let result;
           let status = 'done';
           let attachments = [];
@@ -3204,7 +3286,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         if (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
           const tooLong = (localConnector || toolPlan || name === 'run_command' || officeSpec) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
-          const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
+          const f9 = await f9Judge({ name, parsed, entry, askRule: ruled?.effect === 'ask' });
+          if (f9.covered) kindNotes.set(summary, f9.covered);
+          const allowed = f9.covered ? true : await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail, f9.opts);
+          if (allowed) await f9Give(allowed, f9.opts);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -3212,7 +3297,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           }
         }
 
-        send('tool', { tool: summary, status: 'running' });
+        send('tool', { tool: summary, status: 'running', ...(kindNotes.has(summary) ? { allowedKind: kindNotes.get(summary) } : {}) });
         let result;
         let status = 'done';
         let signIn = null; // a connector that needs the person to sign in: { needsSignIn: true, serverId }
@@ -3338,7 +3423,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           else if (!session.engine.rulesFixed) session = await sessions.update(id, { engine: { ...session.engine, rules: wantRules, rulesFixed: true } });
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
-            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, allowKinds: () => sessions.allowKindsOf(id), signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
