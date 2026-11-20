@@ -182,7 +182,7 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
      <div class="blk"><div class="hd"><span><b>Trust for this folder</b></span></div>
       <div class="rowt"><span>Follow its instruction files<small>AGENTS.md, for every engine</small></span><span class="st ok">trusted</span><button class="lnk">Remove</button></div>
       <div class="rowt"><span>Start new chats in Auto<small>With Bunny's check. A git project.</small></span><span class="st ok">trusted</span><button class="lnk">Remove</button></div>
-      <div class="note">Removing a trust means I ask again next time. Chats already open keep what they have until you change it.</div></div></div>
+      <div class="note">Removing a trust means I ask again next time. Removing the instruction files also deletes the saved copy of them. Chats already open keep what they have until you change it. If this folder is moved or renamed, it is untrusted again.</div></div></div>
      <div class="df"><button class="btn p">Close</button></div></div>
     <p class="cap">Each row is removed on its own. Not-yet-trusted rows show "Trust…", which opens the same question as the card.</p></div>
    <div class="cell"><h3>Settings → Permissions → Trusted folders</h3>
@@ -190,8 +190,8 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
      <div class="rowt" style="border-top:1px solid var(--line)"><span><b>carrot-shop</b><small>C:\Users\Sam\Projects\carrot-shop</small></span><span class="st ok">instructions</span><span class="st ok">Auto</span></div>
      <div class="rowt"><span><b>garden-notes</b><small>C:\Users\Sam\Documents\garden-notes</small></span><span class="st ok">instructions</span><span class="st">not Auto</span></div>
      <div class="rowt"><span><b>old-site</b><small>C:\Users\Sam\Projects\old-site</small></span><span class="st">not followed</span><span class="st">not Auto</span></div>
-     <div class="note" style="padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)">Click a folder to change either trust. <button class="lnk">Remove all trust</button></div></div>
-    <p class="cap">A folder Bunny has never seen is not in this list: it is untrusted by default.</p></div>
+     <div class="note" style="padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)">Click a folder to change either trust. If a folder is moved or renamed it is untrusted again. Removing the instructions trust also deletes the saved copy of the files. <button class="lnk">Remove all trust</button></div></div>
+    <p class="cap">A folder Bunny has never seen is not in this list: it is untrusted by default. This list, Remove and Remove all trust work only in Bunny’s own window: a phone or browser page cannot see or change them.</p></div>
   </div>
   <div class="cols">
    <div class="cell"><h3>On the mode chip, so the person can see why</h3>
@@ -211,15 +211,18 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
    <tr><th>Where</th><th>Words</th></tr>
    <tr><td>Card title</td><td>Trust this folder?</td></tr>
    <tr><td>Question 1</td><td>Follow its instruction files? They steer what I do here, whichever engine this chat uses.</td></tr>
-   <tr><td>Question 2</td><td>Start new chats here in Auto? Auto with Bunny's check on every risky action. Only for a git project.</td></tr>
+   <tr><td>Question 1 (Read)</td><td>Read shows each file's text on the card. Yes saves exactly the text shown here. If the file changes later, I keep using this saved copy until you read it again.</td></tr>
+   <tr><td>Question 2</td><td>Start new chats here in Auto? Commands and changes run without asking you, unless Bunny's check stops them or a rule asks. (Shown only while Bunny's check is on and set up.)</td></tr>
    <tr><td>Buttons</td><td>Yes · Not now (each question) · Continue</td></tr>
    <tr><td>Alternative B button</td><td>Trust this folder = follow its instruction files, and start new chats here in Auto with Bunny's check.</td></tr>
    <tr><td>Not a git project</td><td>Smart starts here in Ask, because this folder is not a git project.</td></tr>
    <tr><td>Check off or unreachable</td><td>Smart starts in Ask while Bunny's check is off or can't be reached.</td></tr>
-   <tr><td>Remove</td><td>Removing a trust means I ask again next time. Chats already open keep what they have.</td></tr>
+   <tr><td>Remove</td><td>Removing a trust means I ask again next time. Removing the instructions trust also deletes the saved copy of the files. Chats already open keep what they have.</td></tr>
+   <tr><td>Moved or renamed</td><td>A folder that is moved or renamed is untrusted again.</td></tr>
+   <tr><td>Window only</td><td>Trusted folders, Remove and Remove all trust work only in Bunny's own window.</td></tr>
    <tr><td>Device</td><td>A phone's new chat starts in Ask. Trust can be given only on the PC.</td></tr>
   </table></div>
-  <div class="q"><b>For Security (F12-1 to F12-4):</b> (a) Is the two-answers card enough for F12-1, or do you want the single named button (B)? (b) Trust is keyed by the folder's real path and recorded only from the window; (c) the git decision is Bunny's own <span class="mono">git rev-parse</span>, shown on the card as "a git project" only when that said yes; (d) the card never appears for a device and a device cannot answer it; (e) the chip tooltip's three reasons are fixed strings.</div>
+  <div class="q"><b>For Security (F12-1 to F12-4):</b> (a) Is the two-answers card enough for F12-1, or do you want the single named button (B)? (b) Trust is keyed by the folder's real path and recorded only from the window; (c) the git decision is Bunny's own <span class="mono">git rev-parse</span>, shown on the card as "a git project" only when that said yes; (d) the card never appears for a device and a device cannot answer it; (e) the chip tooltip's three reasons are fixed strings; (f) Security's five changes are applied: Read expands the text inline and Yes freezes exactly that text, the Question 2 wording, Question 2 only while the check is on and set up, window-only trust management with the saved copies deleted on removal, and moved or renamed folders untrusted again.</div>
  </section>
 </div>
 <script>
@@ -227,15 +230,17 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
  var r=document.documentElement;
  document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
  function twoq(title,body,id){return '<div class="qs"><div class="qh"><b>'+title+'</b></div><div class="sub">'+body+'</div><div class="two" data-q="'+id+'"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="false">Not now</button></div></div>'}
- function card(el,files,git){var h='<div class="who">Bunny</div><b>Trust this folder?</b><div class="sub"><span class="path">C:\\Users\\Sam\\Projects\\carrot-shop</span></div>';
-  if(files)h+=twoq('Follow its instruction files?','AGENTS.md (1.2 KB) <button class="lnk">Read</button>. They steer what I do here, whichever engine this chat uses.','a');
-  if(git)h+=twoq('Start new chats here in Auto?','Auto with Bunny\'s check on every risky action. This is a git project.','b');
+ function card(el,files,git,checkOff){var h='<div class="who">Bunny</div><b>Trust this folder?</b><div class="sub"><span class="path">C:\\Users\\Sam\\Projects\\carrot-shop</span></div>';
+  if(files)h+=twoq('Follow its instruction files?','AGENTS.md (1.2 KB) <button class="lnk rdb">Read</button>. They steer what I do here, whichever engine this chat uses.</div><div class="view rdv" hidden># AGENTS.md<br>Use npm run test before saying a change is done.<br>Keep prices in cents.</div><div class="sub"><b>Yes saves exactly the text shown here.</b> If the file changes later, I keep using this saved copy until you read it again.','a');
+  if(git&&!checkOff)h+=twoq('Start new chats here in Auto?','Commands and changes run without asking you, unless Bunny’s check stops them or a rule asks. This is a git project.','b');
+  if(git&&checkOff)h+='<div class="sub">Auto is not offered here: Smart starts in Ask while Bunny’s check is off or can’t be reached.</div>';
   h+='<div class="btns"><button class="btn p cont" disabled style="opacity:.5">Continue</button></div><div class="sub">Not now stores nothing: I ask again next time. Existing chats keep their mode.</div>';
-  el.innerHTML=h;var need=(files?1:0)+(git?1:0);var done={};
+  el.innerHTML=h;var need=(files?1:0)+(git&&!checkOff?1:0);el.querySelectorAll('.rdb').forEach(function(rb){rb.addEventListener('click',function(){var v=el.querySelector('.rdv');v.hidden=!v.hidden;rb.textContent=v.hidden?'Read':'Hide'})});var done={};
   el.querySelectorAll('.two').forEach(function(t){t.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){t.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});done[t.dataset.q]=1;if(Object.keys(done).length>=need){var c=el.querySelector('.cont');c.disabled=false;c.style.opacity=1}})})})}
  card(document.getElementById('c1'),true,true);card(document.getElementById('c2'),true,true);
  var S={
   'Files and git':['Both questions, as above.',function(el){card(el,true,true)}],
+  'Files and git, check off':['Question 2 appears only while Bunny’s check is on and set up. Otherwise only the instructions question shows, with one line saying why.',function(el){card(el,true,true,true)}],
   'Files, not git':['Only the instructions question. Smart starts here in Ask, because this folder is not a git project.',function(el){card(el,true,false)}],
   'Git, no files':['Only the Auto question; no instruction file list.',function(el){card(el,false,true)}],
   'Neither':['No card. A new chat starts in Ask. Nothing to trust.',function(el){el.innerHTML='<div class="sub">No instruction files, and not a git project: no card, and new chats start in Ask.</div>'}]};
