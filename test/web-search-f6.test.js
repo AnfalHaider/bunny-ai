@@ -172,7 +172,7 @@ test('F6-3: the browser-panel hint only comes when the panel is allowed in this 
 
 test("Brave's terms: the chat keeps one line for a Brave search, not the result text; the links the model cites are in its own answer", async (t) => {
   const { createServer } = await import('node:http');
-  const { base } = await startApp(t, { fake: false });
+  const { base, dataDir } = await startApp(t, { fake: false });
   await put(base, '/api/web-search/key', { key: KEY });
   const sse = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`;
   let n = 0;
@@ -200,6 +200,21 @@ test("Brave's terms: the chat keeps one line for a Brave search, not the result 
   assert.ok(!/Brave carrots|brave\.example|From Brave/.test(saved), 'no result text, title, link or snippet is saved with the chat');
   const exported = await (await fetch(`${base}/api/sessions/${id}/export?format=markdown`)).text().catch(() => '');
   assert.ok(!/brave\.example|From Brave/.test(exported), 'nor in an export');
+  // memory: what Bunny remembers is never fed from a search result
+  const memory = await (await fetch(`${base}/api/memory`)).text();
+  assert.ok(!/Brave carrots|brave\.example|From Brave/.test(memory), 'nor in memory');
+  // a backup is a copy of the data folder: no file in it holds the result text, title, link or snippet (the key is in DPAPI-protected secrets, never as text)
+  const { readdir: ls, readFile: rf } = await import('node:fs/promises');
+  const names = await ls(dataDir, { recursive: true, withFileTypes: true });
+  let scanned = 0;
+  for (const e of names.filter((x) => x.isFile())) {
+    const text = await rf(join(e.parentPath ?? e.path, e.name), 'utf8').catch(() => '');
+    scanned += 1;
+    assert.ok(!/Brave carrots|brave\.example\/carrots|From Brave/.test(text), `${e.name} (part of a backup) holds no Brave result text`);
+  }
+  assert.ok(scanned > 0, 'the data folder was scanned');
+  const sessionFile = names.find((x) => x.isFile() && x.name.includes(id));
+  void sessionFile;
 });
 
 test("F6-4: Brave's result links are in the Quick ask read_url allow-set like DuckDuckGo's (the link lines keep their form)", async () => {
