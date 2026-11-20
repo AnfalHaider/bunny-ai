@@ -70,6 +70,14 @@ const engineNames = () => {
 };
 const warningText = (names) => { const n = names.length ? names.join(' or ') : 'the engine'; return `Bunny's engine is off. Chats run on ${n} and follow ${n}'s rules, which you set here. Bunny no longer checks each step against your Bunny rules, including your Deny rules: ${n} asks you itself, and Bunny shows its questions. Bunny still blocks its own data, its keys and the engines' sign-ins. A command you allow can read any file on this PC that you can.`; };
 
+// The locked rows under the three boxes: what Bunny always protects while its engine is off (the floor in src/server/engines/bridge.js). Read only, not rules the person can change.
+const FLOOR_LIST = '<div class="floor" id="engine-floor"><div class="floor-h">Always protected, whatever the rules say</div><ul>'
+  + `<li>Bunny's own data folder: your chats, memory, settings and keys.</li>`
+  + `<li>Every engine's own folder, where its sign-in is kept.</li>`
+  + '<li>Your private folders (keys, sign-ins, app data) when they lie outside the project.</li>'
+  + `<li>Bunny's own tools: the model may not use them.</li>`
+  + '</ul><div class="d">A command that names one of these folders is flagged on its card.</div></div>';
+
 const rulesLines = (list) => (Array.isArray(list) ? list : []).join('\n');
 function paintRules() {
   const off = state.useBunnyEngine === false;
@@ -86,7 +94,8 @@ function paintRules() {
   let html = '';
   if (cc?.downloaded && cc.ownRules) {
     html += `<div class="row stack"><div class="meta-col"><div class="name">Claude Code's rules</div><div class="desc">In Claude Code's own form, one per line, for example <code>Bash(npm test:*)</code> or <code>Read(./docs/**)</code>. Allow runs with no question, Ask shows a card, Deny always stops. Bunny never loads rules from a folder or from your own Claude Code.</div></div>`
-      + ['allow', 'ask', 'deny'].map((k) => `<label class="rl">${k[0].toUpperCase()}${k.slice(1)}<textarea data-kind="${k}" rows="3" maxlength="40000" spellcheck="false" aria-label="${k} rules">${esc(rulesLines(cc.rules?.[k]))}</textarea></label>`).join('')
+      + ['deny', 'ask', 'allow'].map((k) => `<label class="rl">${k[0].toUpperCase()}${k.slice(1)}<textarea data-kind="${k}" rows="3" maxlength="40000" spellcheck="false" aria-label="${k} rules">${esc(rulesLines(cc.rules?.[k]))}</textarea></label>`).join('')
+      + FLOOR_LIST
       + `<div><button type="button" class="btn2 pri" id="engine-rules-save">Save rules</button> <span class="d" id="engine-rules-said" role="status"></span></div></div>`;
   } else if (cc?.downloaded) html += `<div class="row"><div class="desc">Claude Code stays on Bunny's rules: its permission question has not been checked for this version.</div></div>`;
   if (cx?.downloaded) html += `<div class="row"><div class="desc">Codex asks you about every command and file change, and you answer on a card. Its own rules are not offered yet.</div></div>`;

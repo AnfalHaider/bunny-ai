@@ -8,13 +8,13 @@ const PAGE = '/src/ui/settings.html?embed=1&section=engines';
 test.beforeEach(async ({ request }) => {
   await resetProfile(request).catch(() => {});
   for (const id of ['claude-code', 'codex']) await request.delete(`/api/engines/${id}`).catch(() => {}); // a clean slate: nothing downloaded
-  await request.put('/api/settings', { data: { engine: 'bunny', engines: { 'claude-code': { auth: 'account' } } } }).catch(() => {});
+  await request.put('/api/settings', { data: { engine: 'bunny', useBunnyEngine: true, engines: { 'claude-code': { auth: 'account' } } } }).catch(() => {});
 });
 
 // leave nothing behind: a downloaded stand-in engine would show the engine chip in every later spec's Code chats (and in the help pictures)
 test.afterEach(async ({ request }) => {
   for (const id of ['claude-code', 'codex']) await request.delete(`/api/engines/${id}`).catch(() => {});
-  await request.put('/api/settings', { data: { engine: 'bunny' } }).catch(() => {});
+  await request.put('/api/settings', { data: { engine: 'bunny', useBunnyEngine: true } }).catch(() => {}); // and Bunny's engine back on: an Off left behind changes every later Code chat
 });
 
 test('Engines lists Bunny, Claude Code and Codex CLI and nothing else; each engine is one compact row', async ({ page }) => {
@@ -130,3 +130,48 @@ test('Use Bunny\'s engine: turning it off asks first with the warning, then the 
   await expect(page.locator('#engines-warning')).toBeHidden();
   await expect(page.locator('#engines-record')).toContainText("Bunny's engine turned on");
 });
+
+// ER-6 and ENGINE-RULES (Design's final review of 0.1.14): with Bunny's engine off, the warning is readable in both themes and the rules editor is a full-width, left-aligned column
+for (const scheme of ['dark', 'light']) {
+  test(`Bunny's engine off, ${scheme} theme: the warning text has at least 4.5:1 contrast on its fill; the Deny, Ask and Allow boxes fill the card's width, left-aligned, in that order, above a read-only list of what is always protected`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1000, height: 1300 });
+    await page.goto(PAGE);
+    const row = page.locator('#engines-list .er[data-id="claude-code"]');
+    await row.locator('[data-act="download"]').click();
+    await expect(row.locator('.seg')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#engine-bunny-rules').uncheck({ force: true });
+    await page.locator('.engine-confirm').getByRole('button', { name: 'Turn it off' }).click();
+    await expect(page.locator('#engines-warning')).toBeVisible();
+    await expect(page.locator('#engine-rules textarea[data-kind="deny"]')).toBeVisible();
+    const m = await page.evaluate(() => {
+      const parse = (c) => { const n = c.match(/[\d.]+/g).map(Number); return { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 }; };
+      const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+      const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const w = document.getElementById('engines-warning');
+      // the fill, composited over every ancestor's fill down to the page
+      const chain = []; for (let e = w; e; e = e.parentElement) chain.push(e);
+      let bg = { r: 255, g: 255, b: 255, a: 1 };
+      for (const e of chain.reverse()) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a > 0) bg = over(c, bg); }
+      const texts = [w, w.querySelector('b')].map((e) => parse(getComputedStyle(e).color));
+      const ratios = texts.map((t) => { const a = lum(over(t, bg)) + 0.05, b = lum(bg) + 0.05; return Math.max(a, b) / Math.min(a, b); });
+      const rows = document.querySelector('#engine-rules .row.stack').getBoundingClientRect();
+      const tas = [...document.querySelectorAll('#engine-rules textarea')].map((t) => { const r = t.getBoundingClientRect(); return { kind: t.dataset.kind, left: r.left, width: r.width }; });
+      const labels = [...document.querySelectorAll('#engine-rules label.rl')].map((l) => l.firstChild.textContent.trim());
+      const floor = document.getElementById('engine-floor');
+      return { ratios, rowLeft: rows.left, rowWidth: rows.width, tas, labels, floorText: floor?.textContent ?? '', floorInputs: floor ? floor.querySelectorAll('textarea,input,button').length : -1, floorBelow: floor ? floor.getBoundingClientRect().top >= document.querySelector('#engine-rules textarea[data-kind="allow"]').getBoundingClientRect().bottom : false };
+    });
+    for (const r of m.ratios) expect(r, 'the warning text against its fill').toBeGreaterThanOrEqual(4.5);
+    expect(m.labels).toEqual(['Deny', 'Ask', 'Allow']);
+    for (const t of m.tas) {
+      expect(t.width, `${t.kind} box fills the card`).toBeGreaterThanOrEqual(m.rowWidth * 0.9);
+      expect(Math.abs(t.left - m.tas[0].left), `${t.kind} box starts where the others do`).toBeLessThanOrEqual(1);
+      expect(t.left - m.rowLeft, `${t.kind} box is left-aligned in the card`).toBeLessThanOrEqual(24);
+    }
+    expect(m.floorText).toContain('Always protected');
+    expect(m.floorText).toContain("Bunny's own data folder");
+    expect(m.floorText).toContain('private folders');
+    expect(m.floorInputs).toBe(0);
+    expect(m.floorBelow).toBe(true);
+  });
+}

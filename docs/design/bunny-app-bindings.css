@@ -1331,7 +1331,14 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 }
 
 /* CLI-ENGINES, ENGINE-RULES: the warning while Bunny's engine is off, and the engine's own rules editor */
-#engines-section .lead.warn { border-left: 3px solid #a5600b; padding: 8px 12px; border-radius: 8px; background: var(--soft, #f3f1ec); color: var(--text, #1c1d20); }
+#engines-section .lead.warn { border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--text); }
+#engines-section .lead.warn b { color: var(--text); }
+#engines-section #engine-rules .row.stack { align-items: stretch; text-align: left; }
+#engines-section #engine-rules .rl { width: 100%; justify-items: stretch; text-align: left; }
+#engines-section #engine-rules .floor { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; background: var(--soft, transparent); }
+#engines-section #engine-rules .floor-h { font-size: 13px; font-weight: 600; }
+#engines-section #engine-rules .floor ul { margin: 6px 0; padding-left: 18px; list-style: disc; font-size: 13px; color: var(--text-dim); }
+#engines-section #engine-rules .floor .d { font-size: 13px; color: var(--text-dim); }
 #engines-section #engine-rules .rl { display: grid; gap: 4px; font-size: 13px; font-weight: 600; margin: 8px 0; }
 #engines-section #engine-rules textarea { width: 100%; box-sizing: border-box; font: 12.5px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; background: transparent; color: var(--text, #1c1d20); resize: vertical; }
 
