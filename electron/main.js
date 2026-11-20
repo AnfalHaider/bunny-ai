@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
+import { panelAllows } from '../src/server/pgRules.js';
 import { controlFrame } from './browserAgent.js';
 import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { fromOwnFrame } from './own-ipc.js';
@@ -111,7 +112,7 @@ function contextMenu(contents) {
 // W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
 // A view may only be put in a Bunny window, by the page of that window; and never shows Bunny's own server (its port).
 const windowOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.webContents === sender ? w : null; };
-const browserViews = createBrowserViews({ WebContentsView, session, BrowserWindow, nativeImage, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
+const browserViews = createBrowserViews({ WebContentsView, session, BrowserWindow, nativeImage, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } }, siteAllows: (details) => panelAllows(bunnyApp?.siteRules?.() ?? [], details) });
 
 function guard(contents) {
   if (browserViews.ownsSession(contents.session)) return;
