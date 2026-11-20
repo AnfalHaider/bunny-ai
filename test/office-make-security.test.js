@@ -113,3 +113,13 @@ test('OM-5: the file route serves only .docx, .xlsx and .pptx (never a macro for
   assert.equal((await findMadeFile(dataDir, '../x', m.id)).ok, false);
   assert.equal((await fetch(`${base}/api/made/resolve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 404);
 });
+
+test('OM-7: formula text and a sheet name with markup characters are escaped in the XML: IF(A1="</f><x/>",1,2) and a name with \' and & cannot add an element', async () => {
+  const buf = await made('make_excel', { path: 'a.xlsx', sheets: [{ name: "It's & co", rows: [[{ formula: 'IF(A1="</f><x/>",1,2)' }, { value: '</c><x/>' }]] }] });
+  const zip = openZip(buf);
+  const sheet = zip.text('xl/worksheets/sheet1.xml'); const book = zip.text('xl/workbook.xml');
+  assert.ok(sheet.includes('&lt;/f&gt;&lt;x/&gt;'), 'the formula text is escaped');
+  for (const part of zip.names.filter((n) => /\.xml$/.test(n))) assert.doesNotMatch(zip.text(part) ?? '', /<x\/>/, `${part} has no injected element`);
+  assert.match(book, /name="It&apos;s &amp; co"/, 'the sheet name is escaped');
+  assert.doesNotMatch(book, /name="It's & co"/);
+});
