@@ -187,5 +187,6 @@ test('F1-1: with Connectors turned off globally, a yes switches nothing on in th
   await say(base, session.id, 'add a weather tool', { grant: true });
   assert.ok(!(seen[1].tools ?? []).some((d) => /forecast/.test(d.function.name)), 'no connector tool was loaded');
   const told = seen[1].messages.filter((m) => m.role === 'tool').at(-1).content;
-  assert.match(told, /Connectors are turned off in Settings › Capabilities, so its tools are not loaded/);
+  assert.match(told, /The person said yes, but Connectors are turned off in Settings › Capabilities, so its tools are not loaded\./);
+  assert.ok(!/now switched on/.test(told), 'it does not also say it is switched on');
 });

@@ -2624,7 +2624,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           if (await signedIn()) return `You are already signed in to ${service === 'github' ? 'GitHub' : 'Google'}.`;
           if (service === 'google' && !String(settings.googleClientId ?? '').trim()) return "Google isn't set up in Bunny yet. The person adds the Google client in Settings › Profile first.";
           const label = service === 'github' ? 'GitHub' : 'Google';
-          const answer = await askCapability('sign_in', `${reason ? `${reason} ` : ''}Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.`, `Sign in to ${label}`);
+          const answer = await askCapability('sign_in', `Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.${reason ? ` Why it asks: "${String(reason).replace(/[\r\n"]+/g, ' ').slice(0, 200)}"` : ''}`, `Sign in to ${label}`);
           if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
           // the person signs in on the card's Settings page; Bunny only watches for the result. The model is told signed in or not, never a code, address, token or name (F5-1).
           const until = Date.now() + 120_000;
@@ -3384,6 +3384,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                 await appTools.switchOn(added);
                 // AGENT-FLOW F1: what was just switched on is loaded into THIS reply, so the person does not have to send another message
                 const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                if (settings.connectorsEnabled === false) return `${said}\nThe person said yes, but Connectors are turned off in Settings › Capabilities, so its tools are not loaded.`;
                 return `${said}\nThe person said yes: it is now switched on.${loaded ? `\n${loaded}` : ''}`;
               }
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;

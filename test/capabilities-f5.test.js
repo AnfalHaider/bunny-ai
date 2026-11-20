@@ -79,7 +79,8 @@ test('sign_in github: the card says Sign in to GitHub; after the person signs in
   const r = await w.say({ grant: true }, async () => { await secretStore.set('account:github', 'ghp_SECRETTOKEN0123456789'); }); // the person signs in in Settings while the card is open
   assert.equal(r.card.capability, 'sign_in');
   assert.equal(r.card.title, 'Sign in to GitHub');
-  assert.match(r.card.reason, /Settings › Profile/);
+  assert.ok(r.card.reason.startsWith("Bunny opens Settings › Profile, where you sign in to GitHub yourself. Bunny waits for it."), 'the fixed sentence comes first');
+  assert.match(r.card.reason, / Why it asks: "list issues"$/, "then the model's reason, quoted");
   assert.match(lastTool(w.seen[1]), /^Signed in to GitHub\. You now have the github_ tools/);
   assert.ok(toolNames(w.seen[1]).some((n) => n.startsWith('github_')), 'the tools arrived in the same reply');
   assert.ok(!JSON.stringify(w.seen).includes('ghp_SECRETTOKEN'), 'a token is never in any request to the model (F5-1)');
