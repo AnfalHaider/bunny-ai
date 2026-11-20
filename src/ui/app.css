@@ -2287,13 +2287,10 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 #engines-section .lead.warn { border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--text); }
 #engines-section .lead.warn b { color: var(--text); }
 #engines-section #engine-rules .row.stack { align-items: stretch; text-align: left; }
-#engines-section #engine-rules .rl { width: 100%; justify-items: stretch; text-align: left; }
 #engines-section #engine-rules .floor { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; background: var(--soft, transparent); }
 #engines-section #engine-rules .floor-h { font-size: 13px; font-weight: 600; }
 #engines-section #engine-rules .floor ul { margin: 6px 0; padding-left: 18px; list-style: disc; font-size: 13px; color: var(--text-dim); }
 #engines-section #engine-rules .floor .d { font-size: 13px; color: var(--text-dim); }
-#engines-section #engine-rules .rl { display: grid; gap: 4px; font-size: 13px; font-weight: 600; margin: 8px 0; }
-#engines-section #engine-rules textarea { width: 100%; box-sizing: border-box; font: 12.5px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; background: transparent; color: var(--text, #1c1d20); resize: vertical; }
 
 /* ---------- SEARCH-PC: the result list, the Settings rows and the one-time dialog (tokens only) ---------- */
 .linklike { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
@@ -2468,3 +2465,19 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .rp-actions { display: flex; gap: 8px; margin-top: 2px; }
 .rp-btn { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--bg-sidebar); color: var(--text); border-radius: 99px; padding: 3px 14px; min-height: 32px; cursor: pointer; }
 .rp-btn.rp-quiet { background: none; border-color: transparent; color: var(--text-dim); }
+
+/* ENGINE-RULES editor as drawn (v12): Deny / Ask / Allow lists, one row per rule with Remove, an add line per list, then the locked floor */
+#engines-section #engine-rules .rg { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 8px 0; width: 100%; text-align: left; }
+#engines-section #engine-rules .gh2 { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 7px 12px; font-size: 13px; font-weight: 600; background: var(--soft, #f3f1ec); }
+#engines-section #engine-rules .gh2 span { font-weight: 400; font-size: 12px; color: var(--muted, #62656c); }
+#engines-section #engine-rules .rr { display: flex; gap: 8px; align-items: center; padding: 7px 12px; border-top: 1px solid var(--line); font-size: 13px; min-width: 0; }
+#engines-section #engine-rules .rr.none { color: var(--muted, #62656c); }
+#engines-section #engine-rules .rr .k { font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--muted, #62656c); flex: none; }
+#engines-section #engine-rules .rr code { flex: 1; min-width: 0; overflow-wrap: anywhere; font: 12.5px ui-monospace, Consolas, monospace; }
+#engines-section #engine-rules .rm { margin-left: auto; border: 0; background: transparent; color: var(--muted, #62656c); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 2px 4px; flex: none; }
+#engines-section #engine-rules .rm:hover { color: var(--text, #1c1d20); }
+#engines-section #engine-rules .ra { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 7px 12px; border-top: 1px solid var(--line); }
+#engines-section #engine-rules .ra input { flex: 1; min-width: 12ch; box-sizing: border-box; font: 12.5px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 9px; padding: 4px 8px; background: transparent; color: var(--text, #1c1d20); }
+#engines-section #engine-rules .rg > .err { padding: 0 12px 7px; font-size: 12.5px; color: #a3243b; }
+:root[data-theme="dark"] #engines-section #engine-rules .rg > .err { color: var(--bad); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #engines-section #engine-rules .rg > .err { color: var(--bad); } }
