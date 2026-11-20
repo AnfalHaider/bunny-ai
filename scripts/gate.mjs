@@ -10,6 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditStep, exceptionsSource } from './audit-exceptions.mjs';
 import { failureDetail } from './gate-report.mjs';
+import { FAIL_MARKS } from './gate-marks.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quick = process.argv.includes('--quick');
@@ -35,7 +36,7 @@ function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures 
   }
   // GATE-NAMES: a failed test run names what failed (the last few lines hid it three times): every failing-test line, each failure's assertion line, and the totals.
   if (failures && !pass) {
-    const marks = out.filter((l) => /^\s*(✖|not ok)\b|^ℹ (tests|suites|pass|fail|cancelled|skipped|todo)\b|AssertionError|\bError \[ERR_|^\s*(TypeError|ReferenceError|RangeError|Error):/.test(l));
+    const marks = out.filter((l) => FAIL_MARKS.test(l));
     console.log(`   -- what failed (${marks.length} marked lines${marks.length > 120 ? ', the first 120' : ''}) --`);
     console.log(marks.slice(0, 120).map((l) => `   ${l.slice(0, 300)}`).join('\n'));
   }
