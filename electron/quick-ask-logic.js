@@ -38,6 +38,8 @@ const NAMED_KEYS = new Map([
   ['home', 'Home'], ['end', 'End'], ['pageup', 'PageUp'], ['pagedown', 'PageDown'], ['insert', 'Insert'],
 ]);
 
+const SYSTEM_EDIT_KEYS = new Set(['Ctrl+A', 'Ctrl+C', 'Ctrl+V', 'Ctrl+X', 'Ctrl+Z', 'Ctrl+Y', 'Ctrl+Insert', 'Shift+Insert', 'Ctrl+Shift+V', 'Ctrl+Shift+Z', 'Ctrl+Shift+C']);
+
 /** Check a shortcut the person typed. Returns { ok: true, accelerator } (Electron's spelling) or { ok: false, message }. */
 export function validateAccelerator(input) {
   const raw = typeof input === 'string' ? input.trim() : '';
@@ -64,7 +66,10 @@ export function validateAccelerator(input) {
   if (!mods.some((m) => m === 'Ctrl' || m === 'Alt' || m === 'Super')) return { ok: false, message: 'Use Ctrl, Alt or Win with another key' };
   const order = ['Ctrl', 'Alt', 'Shift', 'Super'];
   mods.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-  return { ok: true, accelerator: [...mods, key].join('+') };
+  // v0.1.14.2 (QA): a registered global shortcut is taken away from every app, so the keys every app uses for Copy, Paste, Cut, Select all, Undo and Redo are refused
+  const accelerator = [...mods, key].join('+');
+  if (SYSTEM_EDIT_KEYS.has(accelerator)) return { ok: false, message: 'That shortcut is Copy, Paste, Cut, Select all, Undo or Redo in every app, and Quick ask would take it away from them. Choose another.' };
+  return { ok: true, accelerator };
 }
 
 /**

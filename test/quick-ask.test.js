@@ -82,12 +82,12 @@ test('structure: the bar preload exposes exactly these functions (submit, the sc
   const src = await readFile(new URL('../electron/quick-ask/preload.cjs', import.meta.url), 'utf8');
   const bridge = /exposeInMainWorld\('quickAsk', \{([\s\S]*?)\}\);/.exec(src)[1];
   const names = [...bridge.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
-  assert.deepEqual(names, ['submit', 'captureScreenshot', 'pickFile', 'ask', 'stop', 'openInBunny', 'resize', 'onAnswer', 'dropFile', 'pcOpen', 'pcShow', 'pcCopy', 'init', 'close', 'escHandled', 'onEscape']);
+  assert.deepEqual(names, ['submit', 'captureScreenshot', 'pickFile', 'ask', 'stop', 'openInBunny', 'resize', 'onAnswer', 'dropFile', 'pcOpen', 'pcShow', 'pcCopy', 'init', 'close', 'escHandled', 'onRefresh', 'onEscape']); // onRefresh: the bar was shown again, read Bunny's settings again (v0.1.14.2; carries no data)
   assert.equal((src.match(/exposeInMainWorld/g) ?? []).length, 1);
   assert.doesNotMatch(src, /ipcRenderer\.(send|once)\b|require\((?!'electron')/);
   // the one thing that may arrive from main is the plain answer, and nothing else is listened to
   const listened = [...src.matchAll(/ipcRenderer\.on\('([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(listened, ['quickask:answer', 'quickask:esc']);
+  assert.deepEqual(listened, ['quickask:answer', 'quickask:refresh', 'quickask:esc']);
 });
 
 test('structure: the bar window is frameless, transparent, always on top, and secure', () => {
@@ -193,4 +193,14 @@ test('desktop preferences: every one the person saves is kept and is still there
   assert.deepEqual([start().launchAtLogin, start().keepAddress], [false, true], 'turning one off leaves the others as they were');
   const quick = applyTrayRule(start(), { quickAskEnabled: true });
   assert.deepEqual([quick.prefs.launchAtLogin, quick.prefs.keepAddress, quick.prefs.closeToTray], [false, true, true], 'the tray rule changes only what it must');
+});
+
+test('QA (0.1.15): the keys every app uses for Copy, Paste, Cut, Select all, Undo and Redo cannot be the Quick ask shortcut; others still can', async () => {
+  const { validateAccelerator } = await import('../electron/quick-ask-logic.js');
+  for (const bad of ['Ctrl+C', 'ctrl+v', 'Ctrl+X', 'Ctrl+A', 'Ctrl+Z', 'Ctrl+Y', 'CommandOrControl+C', 'Ctrl+Insert', 'Shift+Insert', 'Ctrl+Shift+V', 'Ctrl+Shift+Z']) {
+    const r = validateAccelerator(bad);
+    assert.equal(r.ok, false, bad);
+    if (/^(ctrl|commandorcontrol)/i.test(bad)) assert.match(r.message, /Copy, Paste, Cut, Select all, Undo or Redo/); // (Shift+Insert is already refused for having no Ctrl, Alt or Win)
+  }
+  for (const good of ['Ctrl+Space', 'Ctrl+Shift+K', 'Alt+Space', 'Ctrl+Alt+C', 'Win+Q']) assert.equal(validateAccelerator(good).ok, true, good);
 });

@@ -76,11 +76,12 @@ export function createQuickAsk({ BrowserWindow, globalShortcut, screen, desktopC
 
   function open() {
     clearTimeout(keepTimer);
-    if (alive()) { // a second press while open just focuses
+    if (alive()) { // a second press while open just focuses; a bar that was kept (hidden) reads Bunny's settings again, so a switch turned on meanwhile shows (QA, 0.1.15)
       place();
       bar.show();
       bar.focus();
       bar.webContents.focus();
+      try { bar.webContents.send('quickask:refresh'); } catch { /* the page is going away */ }
       return;
     }
     bar = new BrowserWindow(barWindowOptions());
