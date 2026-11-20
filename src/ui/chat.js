@@ -807,6 +807,7 @@ async function loadSessions() {
   announceFinishedChats(rows);
   state.sessions = rows;
   renderSidebar();
+  refreshPalette(); // the chat list can arrive after the palette opened: its chat matches follow it
   watchWorkingChats();
 }
 
@@ -4221,6 +4222,17 @@ function openPalette() {
   $('palette-input').value = '';
   renderPalette('');
   $('palette-input').focus();
+}
+
+/** Redraw an open palette from its own query (chats are matched from the list, which may load late). Does nothing while it is closed. */
+function refreshPalette() {
+  const backdrop = $('palette-backdrop');
+  const input = $('palette-input');
+  if (!backdrop || backdrop.hidden || !input) return;
+  const active = [...$('palette-list').querySelectorAll('.palette-item')].findIndex((el) => el.classList.contains('is-active'));
+  renderPalette(input.value);
+  const items = [...$('palette-list').querySelectorAll('.palette-item')];
+  if (active > 0 && items[active]) { items[0]?.classList.remove('is-active'); items[active].classList.add('is-active'); }
 }
 
 function closePalette() {

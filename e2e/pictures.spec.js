@@ -71,6 +71,12 @@ for (const [name, entry] of entries) {
       };
       try { await scene(page, api, entry);
       await settle(page);
+      // PIC-OFFSET: a page or panel scrolled to a fraction of a pixel (a scene scrolls an element into view) draws its text on half-pixel lines, so a picture could differ from run to run by that.
+      // Every scroll position is made a whole number of pixels before the picture is taken.
+      await page.evaluate(() => {
+        window.scrollTo(Math.round(window.scrollX), Math.round(window.scrollY));
+        for (const el of document.querySelectorAll('*')) { if (el.scrollTop % 1 !== 0) el.scrollTop = Math.round(el.scrollTop); if (el.scrollLeft % 1 !== 0) el.scrollLeft = Math.round(el.scrollLeft); }
+      });
       const cap = entry.capture ?? 'viewport';
       const target = cap === 'viewport' || cap.clip ? page : page.locator(cap.locator).first();
       const options = { maxDiffPixelRatio: entry.tolerance ?? 0.0001, threshold: 0.2, animations: 'disabled', caret: 'hide', scale: 'css', ...(cap.clip ? { clip: { x: cap.clip[0], y: cap.clip[1], width: cap.clip[2], height: cap.clip[3] } } : {}) };
