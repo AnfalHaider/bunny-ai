@@ -1212,7 +1212,7 @@ function paintMessages() {
   // D-2: consecutive tool steps between two pieces of narration are ONE group line, collapsed once finished.
   let run = [];
   const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
-  const groupable = (m) => m.kind === 'tool_call' && !m.needsSignIn && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  const groupable = (m) => m.kind === 'tool_call' && !m.needsSignIn && !m.question && !m.artifact && !m.madeFile && !m.linked && !(m.attachments ?? []).length;
   // W4-5c: a reply saves ONE thinking text; when steps came before its answer, its "Thought for" row goes before the first of them
   // (thinking, then the step it led to), the same order the live line settles in.
   const thoughtAt = new Map();
@@ -1482,6 +1482,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
+    if (m.madeFile) wrap.append(madeFileCard(m.madeFile));
     if (m.linked) wrap.append(linkedChatCard(m.linked));
     if (m.question) wrap.append(answeredQuestionCard(m.question));
     return wrap;
@@ -2077,6 +2078,7 @@ function showLiveTool(bodyEl, info) {
     line.append(linkedChatCard(info.linked));
     loadSessions().catch(() => {});
   }
+  if (info.madeFile && info.status === 'done' && !line.querySelector('.made-card')) line.append(madeFileCard(info.madeFile)); // OFFICE-MAKE
   if (info.artifact && info.status === 'done') {
     line.querySelector('.artifact-card')?.remove();
     line.append(artifactCard(info.artifact));
@@ -2335,6 +2337,28 @@ function linkedChatCard(c) {
     // Leaving now would stop the reply that is still coming in.
     onclick: () => (state.streaming ? flashStatus(say('card.wait')) : goToChat(c.id)),
   }));
+  return card;
+}
+
+/** OFFICE-MAKE: a Word, Excel or PowerPoint file made in a chat with no folder: its name, kind and size, and Open, Save as… and Show in folder. In a plain browser, Open and Save as are a download. */
+function madeFileCard(f) {
+  const chat = state.sessionId;
+  const url = `/api/sessions/${chat}/made/${f.id}`;
+  const desk = window.bunnyDesktop?.made ?? null;
+  const size = f.size >= 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`;
+  const said = element('span', { className: 'hint made-said', role: 'status' });
+  const run = (job) => job().then((r) => { said.textContent = r && r.ok === false ? (r.message ?? 'That did not work.') : r?.saved ? 'Saved.' : ''; }).catch(() => { said.textContent = 'That did not work.'; });
+  const download = () => { const a = document.createElement('a'); a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove(); };
+  const card = element('div', { className: 'artifact-card made-card' },
+    element('span', { className: `artifact-thumb thumb-made thumb-${String(f.kind).toLowerCase()}`, 'aria-hidden': 'true' }, icon('artifact')),
+    element('span', { className: 'artifact-card-info' },
+      element('span', { className: 'artifact-card-title', textContent: f.name }),
+      element('span', { className: 'artifact-card-kind', textContent: `${f.kind} · ${size}` })));
+  const actions = element('span', { className: 'made-actions' });
+  actions.append(button('Open', { className: 'ghost sm', 'aria-label': `Open ${f.name}`, onclick: () => (desk ? run(() => desk.open(chat, f.id)) : download()) }));
+  actions.append(button('Save as…', { className: 'ghost sm', 'aria-label': `Save ${f.name} as`, onclick: () => (desk ? run(() => desk.save(chat, f.id)) : download()) }));
+  if (desk) actions.append(button('Show in folder', { className: 'ghost sm', 'aria-label': `Show ${f.name} in its folder`, onclick: () => run(() => desk.show(chat, f.id)) }));
+  card.append(actions, said);
   return card;
 }
 
