@@ -1,0 +1,207 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny allow for this chat</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Allow for this chat, on the permission card</h1>
+   <p class="dim">v0.1.15 · AGENT-FLOW F9 (HIGH) · Code chats · invented profile only (project of "Sam") · from Tech Lead's spec, ed2b61ae</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>Today every permission card approves <b>one call</b>, so a 10-step job can mean 10 cards. Proposed: the card also offers <b>Allow for this chat: &lt;kind&gt;</b>, a narrow kind named in words on the button, so the same kind of action stops asking until the chat ends. An optional tick saves it as a rule for the folder.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li>Three buttons: <b>Allow once</b>, <b>Allow for this chat: …</b>, <b>Don't allow</b>. The kind is always spelled out ("Allow <span class="mono">npm run</span> commands in this chat").</li>
+   <li>Some cards never offer it (sending, building tools, protected paths, compound commands, your own Ask rules, a chat holding PC file text, a device). They show only Allow once and Don't allow, and say why in one line.</li>
+   <li>What is allowed is listed on the <b>Working folder</b> card, with <b>Forget</b>. A folder change, an engine switch or Plan mode also clears it.</li>
+   <li>A deny rule always wins, and an allowed kind never gets past the always-protected list.</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · The card, today beside proposed</h2>
+  <div class="cols">
+   <div class="cell"><h3>Today (drawn from the build)</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Run this command?</b>
+     <div class="code">npm run test</div><div class="sub">In C:\Users\Sam\Projects\carrot-shop</div>
+     <div class="btns"><button class="btn p">Allow</button><button class="btn">Don't allow</button></div></div>
+    <p class="cap">Each card approves one call. The only lasting yes is a rule written by hand in Settings.</p></div>
+   <div class="cell"><h3>Proposed · desktop</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Run this command?</b>
+     <div class="code">npm run test</div><div class="sub">In C:\Users\Sam\Projects\carrot-shop</div>
+     <div class="btns"><button class="btn p">Allow once</button><button class="btn" id="fc">Allow <span class="mono">npm run</span> commands in this chat</button><button class="btn">Don't allow</button></div>
+     <label class="tick" id="tk"><i></i><span>Also save as a rule for this folder <span class="sub">(an Allow rule, for C:\Users\Sam\Projects\carrot-shop)</span></span></label></div>
+    <p class="cap">Click the tick to see it on. It is shown with the middle button and applies only if that button is pressed.</p></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Proposed · phone (360 px)</h3>
+    <div class="pc ph2"><div class="who">Bunny</div><b>Run this command?</b>
+     <div class="code">npm run test</div>
+     <div class="btns" style="display:grid"><button class="btn p">Allow once</button><button class="btn">Allow <span class="mono">npm run</span> commands in this chat</button><button class="btn">Don't allow</button></div>
+     <label class="tick"><i></i><span>Also save as a rule for this folder</span></label></div>
+    <p class="cap">On a phone the buttons stack, full width, with the kind still in words.</p></div>
+   <div class="cell"><h3>After pressing the middle button</h3>
+    <div class="step"><span>Ran <span class="mono">npm run test</span></span><span class="tg2 ok">allowed for this chat: npm run</span></div>
+    <div class="step"><span>Ran <span class="mono">npm run lint</span></span><span class="tg2 ok">allowed for this chat: npm run</span></div>
+    <div class="step warn"><span>Ask: <span class="mono">npm install</span></span><span class="tg2">still asks: a different kind</span></div>
+    <p class="cap">Later steps of the same kind run with no card and carry a small mark, so the person can see why nothing asked. The chip is the only sign; no banner.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · The kinds, each in words</h2>
+  <p class="dim">Pick a kind to see the button as it reads.</p>
+  <div class="seg" id="kseg"></div>
+  <div class="cols"><div class="cell"><div class="pc" id="kcard"></div><p class="cap" id="kcap"></p></div></div>
+ </section>
+
+ <section>
+  <h2>3 · When it is not offered</h2>
+  <p class="dim">Only Allow once and Don't allow, with one dim line saying why. (The line is a Design addition for clarity; the spec lists the cases only.)</p>
+  <div class="seg" id="nseg"></div>
+  <div class="cols"><div class="cell"><div class="pc" id="ncard"></div><p class="cap" id="ncap"></p></div></div>
+ </section>
+
+ <section>
+  <h2>4 · On the Working folder card: what is allowed in this chat</h2>
+  <div class="cols">
+   <div class="cell"><h3>Proposed</h3>
+    <div class="dlg"><div class="dh"><b>Working folder</b></div>
+     <div class="db"><div class="path">C:\Users\Sam\Projects\carrot-shop</div>
+      <div class="blk"><div class="hd"><span><b>Allowed in this chat</b> <span class="sub">· 3 kinds</span></span><button class="lnk">Forget allowed actions</button></div>
+       <div class="f"><span class="n">npm run commands</span><button class="lnk">Forget</button></div>
+       <div class="f"><span class="n">Edits in src/</span><button class="lnk">Forget</button></div>
+       <div class="f"><span class="n">Actions on example.com</span><button class="lnk">Forget</button></div>
+       <div class="note">Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode. Rules saved for this folder are in Settings → Code.</div></div></div>
+     <div class="df"><button class="btn p">Close</button></div></div>
+    <p class="cap">Empty state: "Nothing is allowed for this chat." The block is hidden on a device.</p></div>
+   <div class="cell"><h3>On a device (phone signed in over the network)</h3>
+    <div class="pc ph2"><div class="who">Bunny</div><b>Run this command?</b><div class="code">npm run test</div>
+     <div class="btns" style="display:grid"><button class="btn p">Allow once</button><button class="btn">Don't allow</button></div>
+     <div class="sub">"For this chat" can be given only on the PC.</div></div>
+    <p class="cap">A device can still answer once where it can today; the "for this chat" part is window-only.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>5 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Buttons</td><td>Allow once · Allow &lt;kind&gt; in this chat · Don't allow</td></tr>
+   <tr><td>Tick</td><td>Also save as a rule for this folder</td></tr>
+   <tr><td>Step mark</td><td>allowed for this chat: &lt;kind&gt;</td></tr>
+   <tr><td>Not offered (one line)</td><td>Asked every time: &lt;reason&gt; (reasons below)</td></tr>
+   <tr><td>List heading</td><td>Allowed in this chat · Forget · Forget allowed actions</td></tr>
+   <tr><td>List foot</td><td>Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode.</td></tr>
+   <tr><td>Device line</td><td>"For this chat" can be given only on the PC.</td></tr>
+  </table></div>
+  <div class="q"><b>For Security and Tech Lead:</b> (a) the one-line reasons are fixed strings, never model text; (b) the kind comes only from the call's own arguments at the moment of the card, so a hostile file cannot widen it; (c) the tick writes an Allow rule only, never removes a Deny or Ask; (d) the step mark must not be mistaken for a banner: it is a small chip on the step, nothing across the screen; (e) long paths: the folder kind shows the folder name only ("src/"), with the full path in a tooltip.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ var tk=document.getElementById('tk');tk.addEventListener('click',function(){var i=tk.querySelector('i');i.classList.toggle('on')});
+ function card(id,q,code,sub,mid,why){var h='<div class="who">Bunny</div><b>'+q+'</b><div class="code">'+code+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'<div class="btns"><button class="btn p">Allow once</button>'+(mid?'<button class="btn">'+mid+'</button>':'')+'<button class="btn">Don\'t allow</button></div>'+(mid?'<label class="tick"><i></i><span>Also save as a rule for this folder</span></label>':'')+(why?'<div class="sub">Asked every time: '+why+'</div>':'');document.getElementById(id).innerHTML=h}
+ var K={
+  'Command':['Run this command?','npm run test','Allow <span class="mono">npm run</span> commands in this chat','The first word, plus the first sub-command for known tools (npm run, git commit, node).'],
+  'Edit':['Edit this file?','src/cards.js','Allow edits in <span class="mono">src/</span> in this chat','The folder of the path, inside the workspace only.'],
+  'Connector':['Use this connector tool?','Notion: create page','Allow Notion: create page in this chat','The exact tool name.'],
+  'Computer':['Click on this PC?','Click at (412, 233)','Allow controlling this PC in this chat','All four computer actions together: click, type, key, scroll.'],
+  'Browser':['Do this on a page?','Click "Buy" on example.com','Allow actions on example.com in this chat','The page\'s site (host), for actions that change things.']};
+ var ks=document.getElementById('kseg');Object.keys(K).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){ks.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sk(k)});ks.appendChild(b)});
+ function sk(k){var v=K[k];card('kcard',v[0],v[1],'',v[2]);document.getElementById('kcap').textContent='Kind: '+v[3]}sk('Command');
+ var N={
+  'Compound command':['Run this command?','npm run build && node deploy.js','it has more than one part, so Bunny cannot tell what exactly will run','Compound commands, redirects, substitutions, variables and pipes to a shell.'],
+  'Sending':['Send this email?','To: alex@example.com · "Invoice"','sending always asks','Sending (gmail_send, message_session).'],
+  'Building':['Add this local connector?','node mcp-server.js','adding tools and connectors always asks','create_tool, install_from_github, local connectors, schedules that may change things.'],
+  'Your own rule':['Run this command?','git push origin main','your own Ask rule for git push* asks every time','A card shown because of the person\'s own Ask rule.'],
+  'Protected path':['Edit this file?','.github/workflows/ci.yml','this file can run code later, so it asks every time','.git, .vscode tasks, .github/workflows, .husky, package.json scripts and the like.'],
+  'PC file text in chat':['Run this command?','node convert.js','this chat has read text from your PC files, so commands ask every time','While the chat holds PC file text (the Search this PC rule).']};
+ var ns=document.getElementById('nseg');Object.keys(N).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){ns.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sn(k)});ns.appendChild(b)});
+ function sn(k){var v=N[k];card('ncard',v[0],v[1],'',null,v[2]);document.getElementById('ncap').textContent='Why: '+v[3]}sn('Compound command');
+})();
+</script>

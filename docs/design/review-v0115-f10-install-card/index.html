@@ -1,0 +1,174 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny install card</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>One card to install and switch on</h1>
+   <p class="dim">v0.1.15 · AGENT-FLOW F10 (HIGH) · plugins and connectors Bunny adds for a task · invented profile only · from Tech Lead's spec, ed2b61ae</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>Today, when Bunny adds a plugin or connector for a task, the person answers <b>two cards</b>: one to install, then "Switch on what was just added?". Proposed: <b>one card</b>, "Install and switch on &lt;name&gt;?", that shows everything both cards show now, with three buttons. The task then carries on in the same reply.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li>The buttons: <b>Install and switch on</b>, <b>Install, keep off</b>, <b>Don't install</b>.</li>
+   <li>Nothing Bunny adds is ever on without the window's yes; that yes is now given on the one card that shows it all.</li>
+   <li>The same card in every mode, Auto included. In Auto that is the same number of cards as today for a remote connector and one fewer for a local one.</li>
+   <li>Over-long descriptions: no "switch on" button; it installs off, and says so.</li>
+   <li>Plan mode refuses; a device cannot install; "install from GitHub" keeps its own card with "switch on" added.</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · Today beside proposed</h2>
+  <div class="cols">
+   <div class="cell"><h3>Today · two cards (drawn from the build)</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Add this connector?</b><div class="code">https://mcp.notion.example/mcp</div><div class="sub">Notion: read and write pages.</div>
+     <div class="btns"><button class="btn p">Allow</button><button class="btn">Don't allow</button></div></div>
+    <div class="div">answered, then a second card</div>
+    <div class="pc"><div class="who">Bunny</div><b>Switch on what was just added?</b><div class="sub">Notion · 12 tools</div>
+     <div class="btns"><button class="btn p">Switch on</button><button class="btn">Keep off</button></div></div>
+    <p class="cap">In Auto the install runs unasked and only the second card shows. A local connector gets a build card even in Auto, then the second card.</p></div>
+   <div class="cell"><h3>Proposed · one card · desktop</h3>
+    <div class="pc" id="main"></div>
+    <p class="cap" id="mcap"></p></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Proposed · phone (360 px)</h3>
+    <div class="pc ph2"><div class="who">Bunny</div><b>Install and switch on Notion?</b>
+     <div class="sub">Adds a connector at</div><div class="code">https://mcp.notion.example/mcp</div>
+     <div class="sub">Lets me read and write your Notion pages.</div>
+     <div class="btns" style="display:grid"><button class="btn p">Install and switch on</button><button class="btn">Install, keep off</button><button class="btn">Don't install</button></div></div></div>
+   <div class="cell"><h3>After "Install and switch on"</h3>
+    <div class="step"><span>Installed and switched on <b>Notion</b></span><span class="tg2 ok">12 tools ready</span></div>
+    <div class="step"><span>Notion: search pages</span><span class="tg2 ok">done</span></div>
+    <h3 style="margin-top:8px">After "Install, keep off"</h3>
+    <div class="step"><span>Installed <b>Notion</b></span><span class="tg2">off</span><span class="sub">Switch it on in Customize.</span></div>
+    <p class="cap">The task continues in the same reply either way; with "keep off" the model is told the tools are not on.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · Which card, by what is added</h2>
+  <div class="seg" id="seg"></div>
+  <div class="cols"><div class="cell"><div class="pc" id="stage"></div><p class="cap" id="scap"></p></div></div>
+ </section>
+
+ <section>
+  <h2>3 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Title</td><td>Install and switch on &lt;name&gt;?</td></tr>
+   <tr><td>Buttons</td><td>Install and switch on · Install, keep off · Don't install</td></tr>
+   <tr><td>Too long</td><td>Too long to show: it will be installed off. Switch it on in Customize.</td></tr>
+   <tr><td>After</td><td>Installed and switched on &lt;name&gt; · &lt;n&gt; tools ready / Installed &lt;name&gt; · off</td></tr>
+   <tr><td>Device</td><td>Installing can be done only on the PC.</td></tr>
+   <tr><td>Plan mode</td><td>Plan mode is on, so I only look. I can add this when you turn it off.</td></tr>
+  </table></div>
+  <div class="q"><b>For Security and Tech Lead:</b> (a) the one card shows everything both of today's cards show: what is added (plugin preview text, connector address, or the exact command, arguments and variable names), plus the full description; (b) over 1,800 characters there is no switch-on button and it installs off; (c) "Install, keep off" really leaves it off; (d) answering is window-only; (e) the model's own description is shown quoted, after a fixed first line, so it cannot dress up the card.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ function card(el,title,body,btns,note){el.innerHTML='<div class="who">Bunny</div><b>'+title+'</b>'+body+'<div class="btns">'+btns+'</div>'+(note?'<div class="sub">'+note+'</div>':'')}
+ var B3='<button class="btn p">Install and switch on</button><button class="btn">Install, keep off</button><button class="btn">Don\'t install</button>';
+ var B2='<button class="btn p">Install, keep off</button><button class="btn">Don\'t install</button>';
+ var S={
+  'Remote connector':['Install and switch on Notion?','<div class="sub">Adds a connector at</div><div class="code">https://mcp.notion.example/mcp</div><div class="sub">Lets me read and write your Notion pages.</div>',B3,'','Shows the address and the description. Same card in Ask and in Auto.'],
+  'Plugin':['Install and switch on Meeting notes?','<div class="sub">Adds a plugin that contains</div><div class="code">2 skills · 1 command · 0 hooks run</div><div class="sub">Skills: summarise-meeting, action-items. Hooks and scripts made for other apps are listed, and do not run in Bunny.</div>',B3,'','The preview lists what the plugin holds, in Bunny\'s words.'],
+  'Local connector':['Install and switch on Files helper?','<div class="sub">Adds a connector that runs as a program on this PC</div><div class="code">node C:\\Users\\Sam\\tools\\files-mcp.js --root C:\\Users\\Sam\\Documents</div><div class="sub">Variables it gets: FILES_ROOT, API_KEY (values not shown)</div>',B3,'It runs on your PC with your rights.','Always shows the exact command, arguments and variable names. In Auto this is one card instead of two.'],
+  'Too long':['Install Report builder?','<div class="sub">Adds a plugin</div><div class="code">3 skills · 4 commands</div><div class="sub">Too long to show: it will be installed off. Switch it on in Customize.</div><div class="view" style="max-height:80px">A very long description from the plugin\'s own files, cut here for the card… (first 1,800 characters)</div>',B2,'','Over 1,800 characters: no "switch on" button; the person can read it in Customize before turning it on.'],
+  'From GitHub':['Install and switch on from GitHub?','<div class="sub">This runs code from the internet.</div><div class="code">github.com/example/mcp-notes @ 4f2a9c1</div><div class="sub">The commit above is what will be installed.</div>',B3,'Only install code you trust.','Keeps its own card (the commit and the "runs code from the internet" line), with "switch on" added.'],
+  'On a device':['Installing is only on the PC','<div class="sub">Installing can be done only on the PC. I can tell you what I would add, and you can approve it in Bunny\'s window.</div>','','',"A device cannot install; no buttons, one sentence."],
+  'Plan mode':['Plan mode is on','<div class="sub">I only look in Plan mode. I can add Notion when you turn it off.</div>','','','Plan refuses, as today.']};
+ var main=document.getElementById('main');
+ var m=S['Remote connector'];card(main,m[0],m[1],m[2],m[3]);document.getElementById('mcap').textContent='One card with the address, the description and three buttons.';
+ var seg=document.getElementById('seg'),stage=document.getElementById('stage'),cap=document.getElementById('scap');
+ Object.keys(S).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sh(k)});seg.appendChild(b)});
+ function sh(k){var v=S[k];card(stage,v[0],v[1],v[2],v[3]);cap.textContent=v[4]}sh('Remote connector');
+})();
+</script>

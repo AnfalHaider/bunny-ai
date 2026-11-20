@@ -1,0 +1,213 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny engine switch</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.pc .btn.p{}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>Switch a chat's engine midway</h1>
+   <p class="dim">v0.1.15 · ENGINE-SWITCH (MEDIUM) · Code chats · invented profile only · from Tech Lead's spec, 9979b4d9</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>Today a chat's engine is fixed at its first message; the only way to use another is a new chat. Proposed: the engine chip offers <b>Switch this chat to…</b>. A confirm card says what the new engine gets: <b>this chat's folder, its instruction files, a summary of the conversation and the list of files this chat changed</b>, so it "knows what we're talking about".</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li>Only between replies, only in a Code chat with a folder (Bunny's engine is always allowed). Never from a phone or other device.</li>
+   <li>Engines that aren't ready are shown with the reason and the button that fixes it (Download, Sign in).</li>
+   <li>The transcript gets a divider ("Now on Codex"). The reply that follows shows the size of the handover.</li>
+   <li>Switching clears "Allowed for this chat" actions (F9), and checkpoints stay per chat, so Undo and Rewind still work.</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · The chip, today beside proposed</h2>
+  <div class="cols">
+   <div class="cell"><h3>Today (drawn from the build)</h3>
+    <div class="bar"><span class="chipb">Claude Code ▾</span><span class="sub">before the first message the chip lists engines; after it the engine is fixed</span></div>
+    <div class="step warn"><span>This chat already runs on an engine. To use another, start a new chat.</span></div>
+    <p class="cap">The error shown if a change is tried after the first message.</p></div>
+   <div class="cell"><h3>Proposed · the chip's menu</h3>
+    <div class="menu2" id="menu"></div>
+    <div class="seg" id="mseg" style="margin-top:8px"></div>
+    <p class="cap" id="mcap"></p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · The confirm card</h2>
+  <div class="cols">
+   <div class="cell"><h3>Desktop</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Switch this chat to Codex CLI?</b>
+     <div class="sub">It carries on in <span class="mono">C:\Users\Sam\Projects\carrot-shop</span>.</div>
+     <p>Codex follows <b>Bunny's rules</b>. <span class="sub">(When Bunny's engine is off it would follow its own rules, which you set in Settings → Engines; the card says which.)</span></p>
+     <p>It gets this chat's folder, its instruction files, a summary of the conversation and the list of files this chat changed.</p>
+     <div class="sub">Actions you allowed for this chat are cleared. Your files and Undo stay as they are.</div>
+     <div class="btns"><button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button></div></div>
+    <p class="cap">The button names what it does.</p></div>
+   <div class="cell"><h3>Phone (360 px)</h3>
+    <div class="pc ph2"><div class="who">Bunny</div><b>Switch this chat to Codex CLI?</b>
+     <p>It gets this chat's folder, its instruction files, a summary of the conversation and the files this chat changed. It follows Bunny's rules.</p>
+     <div class="btns" style="display:grid"><button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button></div></div>
+    <p class="cap">On a phone signed in as a device the chip has no switch (see 4); this is the card on the PC window narrowed.</p></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>Variant: it runs restricted</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Switch this chat to Claude Code?</b>
+     <p>Claude Code runs <b>restricted</b> in this chat: Bunny's check failed for it earlier. It works in a copy of your folder, and you review the changes before they reach it.</p>
+     <div class="btns"><button class="btn p">Switch to Claude Code</button><button class="btn">Cancel</button></div></div></div>
+   <div class="cell"><h3>Variant: engine's own rules</h3>
+    <div class="pc"><div class="who">Bunny</div><b>Switch this chat to Codex CLI?</b>
+     <p>Bunny's engine is off, so Codex follows <b>its own rules</b>: it asks you about every command and file change.</p>
+     <div class="btns"><button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button></div></div></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>3 · In the chat after the switch</h2>
+  <div class="cols">
+   <div class="cell"><div class="pc">
+     <div class="who">Claude Code · reply 6</div><div>I moved the prices to cents and updated the tests.</div>
+     <div class="div">Now on Codex CLI</div>
+     <div class="who">Sam</div><div>Now add a sold-out label to the carrot cake card.</div>
+     <div class="who">Codex CLI · reply 7</div><div>Done: the label shows when stock is 0.</div>
+     <div class="sub">Handover: 12 messages, 31 files, 9 KB</div></div>
+    <p class="cap">The divider stays in the transcript. The size line is in the reply's details, so a person can see the handover happened without the handover text being saved in the chat.</p></div>
+   <div class="cell"><h3>Rewind knows which engine</h3>
+    <div class="list"><div class="cp" style="grid-template-columns:18px minmax(0,1fr) auto"><span class="rd"></span><span class="t"><b>Reply 7 (Codex CLI) · 10:58</b><span>Add a sold-out label</span></span><span class="chp">2 files</span></div><div class="cp" style="grid-template-columns:18px minmax(0,1fr) auto"><span class="rd"></span><span class="t"><b>Reply 6 (Claude Code) · 10:42</b><span>Prices in cents</span></span><span class="chp">4 files</span></div></div>
+    <p class="cap">A rewind across a switch is allowed: the files belong to the folder, not the engine. The next engine is told about the rewind.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>4 · When it is not offered</h2>
+  <div class="seg" id="seg"></div>
+  <div class="cols"><div class="cell"><div class="pc" id="stage"></div><p class="cap" id="scap"></p></div></div>
+ </section>
+
+ <section>
+  <h2>5 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Menu heading</td><td>Switch this chat to…</td></tr>
+   <tr><td>Card title / button</td><td>Switch this chat to &lt;engine&gt;? · Switch to &lt;engine&gt;</td></tr>
+   <tr><td>Card body</td><td>It gets this chat's folder, its instruction files, a summary of the conversation and the list of files this chat changed.</td></tr>
+   <tr><td>Card foot</td><td>Actions you allowed for this chat are cleared. Your files and Undo stay as they are.</td></tr>
+   <tr><td>Divider</td><td>Now on &lt;engine&gt;</td></tr>
+   <tr><td>Details line</td><td>Handover: 12 messages, 31 files, 9 KB</td></tr>
+   <tr><td>Busy</td><td>Wait for the reply to finish, or press Stop first.</td></tr>
+   <tr><td>No folder / Chat mode</td><td>An engine needs a folder. Choose a folder first, or switch to Bunny.</td></tr>
+   <tr><td>Device</td><td>The engine can be changed only on the PC.</td></tr>
+  </table></div>
+  <div class="q"><b>For Security (spec §5 and §6) and Tech Lead:</b> (a) restricted mode follows the engine, not the chat: switching to a different engine starts it in full mode, and switching back to one that failed runs it restricted again, as the variant card says; (b) only Bunny's window can switch; (c) the "Actions you allowed… are cleared" line matches F9; (d) the handover text is fenced and cleaned and never saved in the chat; (e) the words "its instruction files" assume ONE-INSTRUCTIONS (page FOLDER-RULES v4): if the folder is not trusted yet, the card adds "Not followed yet: it will not get them" so it never promises what it won't send.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ function o(n,s,right,dis){return '<div class="opt'+(dis?' dis':'')+'"><span><b>'+n+'</b><small>'+s+'</small></span><span>'+right+'</span></div>'}
+ var M={
+  'All ready':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Built in','')+o('Claude Code','Signed in','<span class="chp ok">now</span>')+o('Codex CLI','v1.0.0 · Local','<button class="btn s2">Switch</button>'),
+  'One needs fixing':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Built in','<button class="btn s2">Switch</button>')+o('Claude Code','Signed in','<span class="chp ok">now</span>')+o('Codex CLI','Not downloaded','<button class="btn s2">Download</button>',1)+o('Claude Code (other)','Not signed in','<button class="btn s2">Sign in</button>',1),
+  'While a reply runs':'<div class="opt"><span class="sub">Switch this chat to…</span></div>'+o('Bunny','Wait for the reply to finish, or press Stop first.','',1)+o('Codex CLI','Wait for the reply to finish, or press Stop first.','',1)};
+ var mseg=document.getElementById('mseg'),menu=document.getElementById('menu');Object.keys(M).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){mseg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});menu.innerHTML=M[k]});mseg.appendChild(b)});menu.innerHTML=M['All ready'];
+ document.getElementById('mcap').textContent='Engines that are not ready are greyed, with the reason and the button that fixes it.';
+ function card(t,b,btns){return '<div class="who">Bunny</div><b>'+t+'</b><div class="sub">'+b+'</div>'+(btns?'<div class="btns">'+btns+'</div>':'')}
+ var S={
+  'Chat mode / no folder':[card('No folder to carry over','An engine needs a folder. Choose a folder first, or switch to Bunny.','<button class="btn p">Choose a folder</button><button class="btn">Switch to Bunny</button>'),'Switching to Bunny is always allowed; an engine needs a folder.'],
+  'On a device':[card('Engine','The engine can be changed only on the PC. This chat runs on Claude Code.',''),'A device sees the divider and the current engine, and nothing to change it with.'],
+  'Folder not trusted yet':[card('Switch this chat to Codex CLI?','It gets this chat\'s folder, a summary of the conversation and the list of files this chat changed. <b>Not followed yet:</b> the folder\'s instruction files will not be passed on until you choose Follow them.','<button class="btn p">Switch to Codex CLI</button><button class="btn">Cancel</button>'),'The card never promises the instruction files if they are not trusted.']};
+ var seg=document.getElementById('seg');Object.keys(S).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});sh(k)});seg.appendChild(b)});
+ function sh(k){document.getElementById('stage').innerHTML=S[k][0];document.getElementById('scap').textContent=S[k][1]}sh('Chat mode / no folder');
+})();
+</script>

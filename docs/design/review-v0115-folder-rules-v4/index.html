@@ -1,0 +1,196 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny shared instructions</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--ok:#2f8f5b;--on:#6a4fd8;--off:#cfcbc2;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--ok:#58c58a;--on:#8f7bf0;--off:#4a4b53;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+button.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+.cell{display:grid;gap:6px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--on)}.sw[aria-checked=true]::after{left:19px}
+.sw[disabled]{opacity:.45;cursor:default}
+.dlg{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
+.dlg.ph{max-width:360px}
+.dh{padding:14px 16px 4px}.dh b{font-size:16px}
+.db{padding:6px 16px 12px;display:grid;gap:10px}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.btn.p{background:var(--fg);color:var(--panel);border-color:var(--fg);font-weight:600}
+.btn.s{font-size:12px;padding:1px 9px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.path{font-size:12px;color:var(--dim);font-family:Consolas,monospace;overflow-wrap:anywhere}
+.seg{flex-wrap:wrap;max-width:100%}.seg button{margin-left:0!important;border-radius:8px!important;margin-right:4px}
+.sub{font-size:12px;color:var(--dim)}
+.line{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.line b{font-weight:600}
+.blk{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:grid}
+.blk .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.blk .hd b{font-size:13px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.f:last-child{border-bottom:0}
+.f .n{font-family:Consolas,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.f .n small{font-family:"Segoe UI",system-ui,sans-serif;color:var(--dim);font-size:11.5px;margin-left:6px}
+.chp{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim);white-space:nowrap}
+.chp.ok{color:var(--ok);border-color:var(--ok)}.chp.w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.lnk{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.off .f .n,.off .f .chp{opacity:.5}
+@container (max-width:400px){.f{grid-template-columns:minmax(0,1fr) auto}.f .chp{display:none}}
+.note{font-size:12px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line)}
+.view{border:1px solid var(--line);border-radius:10px;background:var(--soft);font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:10px 12px;white-space:pre-wrap;max-height:230px;overflow:auto}
+.view i{color:var(--dim);font-style:normal}
+.tc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.tc .who{font-size:12px;color:var(--dim)}.tc.ph2{max-width:360px}
+.tbl{overflow-x:auto}
+.q{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13px}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.pc .who{font-size:12px;color:var(--dim)}.pc>b{font-size:15px}
+.pc.ph2{max-width:360px;width:100%}
+.code{font-family:Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{text-align:left}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.tick i{width:15px;height:15px;border:1.5px solid var(--dim);border-radius:4px;flex:none;margin-top:2px;display:inline-block}
+.tick i.on{background:var(--accent);border-color:var(--accent)}
+.step{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-wrap:wrap}
+.step.bad{border-color:var(--bad)}.step.warn{border-color:var(--warn);background:var(--warn-soft)}
+.step .tg2{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:0 7px;color:var(--dim)}
+.step .tg2.ok{color:var(--ok);border-color:var(--ok)}.step .tg2.b{color:var(--bad);border-color:var(--bad)}
+.div{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}.div::before,.div::after{content:"";flex:1;border-top:1px solid var(--line)}
+.btn.s2{font-size:12px;padding:1px 9px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.opt:last-child{border-bottom:0}.opt small{display:block;color:var(--dim);font-size:11.5px}
+.opt.dis{opacity:.6}
+.menu2{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;max-width:420px}
+.chipb{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.mono{font-family:Consolas,monospace;font-size:12.5px}
+.cp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.cp[aria-checked=true]{background:var(--accent-soft)}
+.rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--dim);display:grid;place-items:center}
+.cp[aria-checked=true] .rd{border-color:var(--accent)}.cp[aria-checked=true] .rd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cp .t{min-width:0}.cp .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp .t span{font-size:12px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp.gone .t b{color:var(--dim)}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);max-height:300px;overflow-y:auto}
+.pc .btn.p{}
+</style>
+<div class="wrap">
+ <div class="top">
+  <div><h1>One set of project instructions for every engine</h1>
+   <p class="dim">v0.1.15 · FOLDER-RULES v4 (ONE-INSTRUCTIONS, MEDIUM) · replaces the "Engine chat" state of v3 · invented profile only · from Tech Lead's spec, ed2b61ae</p></div>
+  <div class="bar"><span class="pill draft">For approval</span><button class="tg" id="theme" type="button">Light / Dark</button></div>
+ </div>
+
+ <section>
+  <h2>In short</h2>
+  <p>Bunny builds <b>one</b> instruction text per folder and gives exactly that text to Bunny's engine, Claude Code and Codex CLI, so the three cannot disagree about the same project. Everything in v3 stays (the trust card, the 32 KB and 64 KB limits, the per-chat switch, View what was read); what changes is that <b>engine chats are covered too</b>.</p>
+  <ul class="dim" style="margin:0;padding-left:18px">
+   <li><b>Which file:</b> <b>AGENTS.md</b> is the project's file. <b>CLAUDE.md</b> is used only when there is no AGENTS.md. If both exist, CLAUDE.md is listed as "not used". A CLAUDE.md that only says <span class="mono">@AGENTS.md</span> is shown as "points to AGENTS.md". Cursor's always-on rules are added after the main file.</li>
+   <li><b>Trust covers engines:</b> before "Follow them", <b>no engine</b> gets the text (today Codex reads AGENTS.md unasked; this is safer).</li>
+   <li><b>Replaced state:</b> v3 showed engine chats as "Claude Code reads it" with the switch disabled. Now they show the same block, "in use", with the same switch.</li>
+   <li>The files are still only the folder's words and never change permissions, for any engine.</li>
+  </ul>
+ </section>
+
+ <section>
+  <h2>1 · The trust card, now covering every engine</h2>
+  <div class="cols">
+   <div class="cell"><h3>v3 (published before)</h3>
+    <div class="pc"><div class="who">Bunny</div><b>This folder has instruction files</b>
+     <p>The project in <span class="path">C:\Users\Sam\Projects\carrot-shop</span> has instruction files. If I follow them, they steer what I do here, including commands I run in Auto mode.</p>
+     <div class="sub">For Bunny's engine chats only; engine chats were left out.</div></div></div>
+   <div class="cell"><h3>v4 · desktop</h3>
+    <div class="pc"><div class="who">Bunny</div><b>This folder has instruction files</b>
+     <p>The project in <span class="path">C:\Users\Sam\Projects\carrot-shop</span> has instruction files. If I follow them, they steer what I do here <b>whichever engine this chat uses</b>, including commands run in Auto mode. Bunny, Claude Code and Codex CLI all get the same text.</p>
+     <div class="blk"><div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><span class="chp ok">main file</span><button class="lnk">Read</button></div><div class="f"><span class="n">CLAUDE.md<small>3.4 KB</small></span><span class="chp">not used</span><button class="lnk">Read</button></div><div class="f"><span class="n">.cursor/rules/<small>2 files</small></span><span class="chp ok">added</span><button class="lnk">Read</button></div></div>
+     <div class="sub">Read them first. Follow them only if you trust whoever wrote them, for example if you cloned this project from someone else. They stay under your rules.</div>
+     <div class="btns"><button class="btn p">Follow them</button><button class="btn">Not now</button></div></div></div>
+  </div>
+  <div class="cols">
+   <div class="cell"><h3>v4 · phone (360 px)</h3>
+    <div class="pc ph2"><div class="who">Bunny</div><b>This folder has instruction files</b>
+     <p>If I follow the files in <span class="path">carrot-shop</span>, they steer what I do here on any engine, including commands run in Auto mode. All three engines get the same text.</p>
+     <div class="blk"><div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><button class="lnk">Read</button></div><div class="f"><span class="n">CLAUDE.md<small>not used</small></span><button class="lnk">Read</button></div></div>
+     <div class="btns" style="display:grid"><button class="btn p">Follow them</button><button class="btn">Not now</button></div></div></div>
+   <div class="cell"><h3>After "Not now"</h3>
+    <div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· 2 files</span></span><button class="sw" role="switch" aria-checked="false" aria-label="Use project instructions in this chat"></button></div>
+     <div class="f"><span class="n">AGENTS.md<small>1.2 KB</small></span><span class="chp">not followed</span><button class="lnk">View</button></div>
+     <div class="note">Not followed yet, so no engine gets them. <button class="lnk">Follow them…</button></div></div>
+    <p class="cap">Codex's own reading of AGENTS.md is turned off too, so an untrusted folder's files reach no engine.</p></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>2 · The Working folder card, v4 states</h2>
+  <p class="dim">Pick one. All are shown for a chat that has been followed unless the state says otherwise.</p>
+  <div class="seg" id="seg"></div>
+  <div class="cols"><div class="cell"><div class="dlg"><div class="db"><div id="stage"></div></div></div><p class="cap" id="scap"></p></div>
+   <div class="cell"><h3>Phone</h3><div class="dlg ph"><div class="db"><div id="stage2"></div></div></div></div></div>
+ </section>
+
+ <section>
+  <h2>3 · View what was read</h2>
+  <div class="dlg"><div class="dh"><b>What this chat was given</b><div class="sub">One text, the same for Bunny, Claude Code and Codex CLI. Change the file in the folder, then Read again.</div></div>
+   <div class="db"><div class="seg" id="vseg"><button type="button" aria-pressed="true" data-f="0">AGENTS.md · main file</button><button type="button" aria-pressed="false" data-f="1">CLAUDE.md · not used</button><button type="button" aria-pressed="false" data-f="2">.cursor/rules · added</button></div>
+    <div class="view" id="vtext"></div></div>
+   <div class="df"><button class="btn p">Close</button></div></div>
+  <p class="cap">The "not used" file can still be read here, so the person can see why it was left out.</p>
+ </section>
+
+ <section>
+  <h2>4 · The words</h2>
+  <div class="tbl"><table>
+   <tr><th>Where</th><th>Words</th></tr>
+   <tr><td>Trust card, body</td><td>If I follow them, they steer what I do here whichever engine this chat uses, including commands run in Auto mode. Bunny, Claude Code and Codex CLI all get the same text.</td></tr>
+   <tr><td>File chips</td><td>main file · not used · points to AGENTS.md · added · in use · not followed · first 32 KB · changed since it was read</td></tr>
+   <tr><td>CLAUDE.md not used</td><td>Not used: AGENTS.md is this folder's instructions file.</td></tr>
+   <tr><td>CLAUDE.md only</td><td>Used because there is no AGENTS.md.</td></tr>
+   <tr><td>Pointer</td><td>Points to AGENTS.md: same set.</td></tr>
+   <tr><td>Engine line</td><td>This chat runs on Codex CLI. It gets the same text as Bunny and Claude Code.</td></tr>
+   <tr><td>Engine reads it itself (only if the proof fails)</td><td>Claude Code reads CLAUDE.md itself, so I do not add it again.</td></tr>
+   <tr><td>Not followed</td><td>Not followed yet, so no engine gets them.</td></tr>
+  </table></div>
+  <div class="q"><b>For Security and Tech Lead:</b> (a) Security re-confirms that the trust card now applies to engine chats (v3 said no card for them); (b) the "Engine reads it itself" state exists only if the engine proof (E1 or E2) shows the pinned engine reads the file by itself; otherwise it is never shown; (c) after an ENGINE-SWITCH the new engine gets the same text, so the switch card says "its instruction files" only when the folder is trusted; (d) for a folder with no instruction files, the F12 "Smart" default needs a trust too: the spec says to draw one trust for both, so I would reuse this card with the title "Trust this folder?" and no file list; confirm before I draw it; (e) limits unchanged: 32 KB a file, 64 KB in all.</div>
+ </section>
+</div>
+<script>
+(function(){
+ var r=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')});
+ document.querySelectorAll('.sw').forEach(function(b){b.addEventListener('click',function(){b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true')})});
+ var V=['<i># AGENTS.md (1.2 KB)</i>\n# carrot-shop\nUse npm run test before saying a change is done.\nKeep prices in cents.','<i># CLAUDE.md (3.4 KB) - not used: AGENTS.md is this folder\'s instructions file</i>\n## Style\nTwo spaces. Single quotes.','<i># .cursor/rules/tests.mdc (alwaysApply)</i>\nEvery new function gets a test in test/.'];
+ var vt=document.getElementById('vtext');vt.innerHTML=V[0];
+ document.querySelectorAll('#vseg button').forEach(function(b){b.addEventListener('click',function(){document.querySelectorAll('#vseg button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});vt.innerHTML=V[+b.dataset.f]})});
+ function sw(on,dis){return '<button class="sw" role="switch" aria-checked="'+on+'" aria-label="Use project instructions in this chat"'+(dis?' disabled':'')+'></button>'}
+ function f(n,s,chip,cls){return '<div class="f"><span class="n">'+n+'<small>'+s+'</small></span>'+(chip?'<span class="chp '+(cls||'')+'">'+chip+'</span>':'')+'<button class="lnk">View</button></div>'}
+ function blk(cnt,rows,note,on,dis){return '<div class="blk"><div class="hd"><span><b>Project instructions</b> <span class="sub">· '+cnt+'</span></span>'+sw(on,dis)+'</div>'+rows+'<div class="note">'+note+'</div></div>'}
+ var S={
+  'AGENTS.md only':[blk('1 file',f('AGENTS.md','1.2 KB','in use','ok'),'Followed for this folder. <button class="lnk">View what was read</button>',true),'The simple case.'],
+  'CLAUDE.md only':[blk('1 file',f('CLAUDE.md','3.4 KB','in use','ok'),'Used because there is no AGENTS.md. <button class="lnk">View what was read</button>',true),'CLAUDE.md is the fallback.'],
+  'Both files':[blk('2 files',f('AGENTS.md','1.2 KB','main file','ok')+f('CLAUDE.md','3.4 KB','not used',''),'Not used: AGENTS.md is this folder\'s instructions file. <button class="lnk">View what was read</button>',true),'AGENTS.md wins; CLAUDE.md is shown, not hidden, so nobody wonders.'],
+  'CLAUDE.md points to AGENTS.md':[blk('2 files',f('AGENTS.md','1.2 KB','main file','ok')+f('CLAUDE.md','0.1 KB','points to AGENTS.md',''),'CLAUDE.md only says @AGENTS.md, so it is the same set. <button class="lnk">View what was read</button>',true),'This repository\'s own pattern.'],
+  'With Cursor rules':[blk('3 files',f('AGENTS.md','1.2 KB','main file','ok')+f('.cursor/rules/','2 files','added','ok'),'Cursor\'s always-on rules are added after the main file. <button class="lnk">View what was read</button>',true),'Only rules marked always-on are added.'],
+  'On Codex CLI':[blk('2 files',f('AGENTS.md','1.2 KB','in use','ok')+f('CLAUDE.md','3.4 KB','not used',''),'This chat runs on Codex CLI. It gets the same text as Bunny and Claude Code. <button class="lnk">View what was read</button>',true),'Replaces v3\'s "Claude Code reads it" with a disabled switch.'],
+  'Engine reads it itself':[blk('1 file',f('CLAUDE.md','3.4 KB','read by Claude Code',''),'Claude Code reads CLAUDE.md itself, so I do not add it again.',false,true),'Only if the engine proof shows the pinned Claude Code reads the file on its own. Not expected.'],
+  'Not followed':[blk('2 files',f('AGENTS.md','1.2 KB','not followed','')+f('CLAUDE.md','3.4 KB','not followed',''),'Not followed yet, so no engine gets them. <button class="lnk">Follow them…</button>',false),'Opens the same question as the card.']};
+ var seg=document.getElementById('seg');Object.keys(S).forEach(function(k,i){var b=document.createElement('button');b.type='button';b.textContent=k;b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',function(){seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});paint(k)});seg.appendChild(b)});
+ function paint(k){['stage','stage2'].forEach(function(id){var e=document.getElementById(id);e.innerHTML=S[k][0];e.querySelectorAll('.sw').forEach(function(b){b.addEventListener('click',function(){if(!b.disabled)b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true')})})});document.getElementById('scap').textContent=S[k][1]}paint('AGENTS.md only');
+})();
+</script>
