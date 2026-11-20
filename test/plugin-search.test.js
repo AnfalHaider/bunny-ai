@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { CURATED, curatedLines, searchCurated } from '../src/server/curatedPlugins.js';
 import { searchPlugins } from '../src/server/pluginImport.js';
@@ -34,10 +35,12 @@ test('the curated list is pinned and safe: remote https addresses at the vendor\
 });
 
 test('F4-3: every curated entry is https on that vendors own domain', () => {
-  const own = { notion: 'notion.com', linear: 'linear.app', sentry: 'sentry.dev', atlassian: 'atlassian.com', stripe: 'stripe.com', context7: 'context7.com', deepwiki: 'deepwiki.com', huggingface: 'huggingface.co', 'microsoft-learn': 'learn.microsoft.com' };
+  const own = { notion: 'notion.com', linear: 'linear.app', sentry: 'sentry.dev', atlassian: 'atlassian.com', stripe: 'stripe.com', context7: 'context7.com', deepwiki: 'deepwiki.com', 'microsoft-learn': 'learn.microsoft.com' };
   assert.deepEqual(CURATED.map((e) => e.id).sort(), Object.keys(own).sort(), 'every entry has a named vendor domain');
   for (const e of CURATED) { const u = new URL(e.url); assert.equal(u.protocol, 'https:', e.id); assert.ok(u.hostname === own[e.id] || u.hostname.endsWith(`.${own[e.id]}`), `${e.id}: ${u.hostname} is not on ${own[e.id]}`); }
-  assert.doesNotMatch(curatedLines(CURATED.slice(0, 1)).join(String.fromCharCode(10)), /checked by/i, 'no claim of a check until the URLs are verified');
+  const sources = readFileSync(new URL('../docs/plans/curated-connectors-sources.md', import.meta.url), 'utf8');
+  for (const e of CURATED) assert.ok(sources.includes(e.url), `${e.id}: the sources note lists ${e.url}`); // the "checked" claim is backed by a table naming each address
+  assert.ok(!sources.includes('huggingface.co/mcp') || /dropped/i.test(sources), 'a dropped entry is said to be dropped');
 });
 
 test('search_plugins shows the curated matches FIRST, then GitHub, then the registry; a query with no curated match goes straight on', async () => {
@@ -47,6 +50,9 @@ test('search_plugins shows the curated matches FIRST, then GitHub, then the regi
   const curated = lines.findIndex((l) => /^Known connectors for common jobs/.test(l)); const github = lines.findIndex((l) => /^GitHub repositories/.test(l)); const registry = lines.findIndex((l) => /^MCP registry connectors/.test(l));
   assert.ok(curated === 0 && curated < github && github < registry, `${curated} ${github} ${registry}`);
   assert.match(out, /- Notion: https:\/\/mcp\.notion\.com\/mcp \(the person signs in on the vendor's own page\)/);
+  assert.match(await searchPlugins('library documentation', { fetchImpl }), /Context7.*\(no sign-in needed; an API key is optional, for higher limits\)/);
+  assert.match(await searchPlugins('jira', { fetchImpl }), /https:\/\/mcp\.atlassian\.com\/v2\/mcp/);
+  assert.doesNotMatch(await searchPlugins('models datasets huggingface', { fetchImpl }), /huggingface\.co\/mcp/);
   assert.match(out, /added switched OFF and the person is asked/);
   assert.deepEqual(searchCurated('zzzz nothing').map((e) => e.id), []);
   assert.doesNotMatch(await searchPlugins('zzzz nothing', { fetchImpl }), /Known connectors/);
