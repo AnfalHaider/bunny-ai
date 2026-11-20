@@ -30,6 +30,13 @@ test('F2: on a device some abilities say "only in the window", and nothing is on
   assert.ok(!/request_capability/.test(text.replace(/files and commands:[^;]*;/, '')), 'no capability card is promised for what a device cannot ask for');
 });
 
+test("F2: on a device the Google and GitHub lines end (in Bunny's window)", () => {
+  const text = capabilityMap({ device: true });
+  assert.match(text, /sign in to Google in Settings › Profile \(in Bunny's window\)/);
+  assert.match(text, /sign in to GitHub in Settings › Profile \(in Bunny's window\)/);
+  assert.ok(!/\(in Bunny's window\)/.test(capabilityMap({})), 'not on the window itself');
+});
+
 test('F2: it is short (about 150 tokens at most) when everything is off, and shorter when things are on', () => {
   const none = capabilityMap({});
   assert.ok(none.length < 900, `${none.length} characters`);
@@ -168,4 +175,17 @@ test('F1: a no on the card changes nothing: no tool arrives and the connector st
   await say(base, session.id, 'add a weather tool', { grant: false });
   assert.ok(!(seen[1].tools ?? []).some((d) => /forecast/.test(d.function.name)));
   assert.deepEqual((await json(base, '/api/mcp')).body.map((c) => [c.name, c.enabled]), [['weather', false]]);
+});
+
+test('F1-1: with Connectors turned off globally, a yes switches nothing on in this reply: no tool arrives and the model is told why in fixed words', async (t) => {
+  standIn(t);
+  const { base, seen } = await startModel(t, (body, n) => (n === 1 ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'install_plugin', arguments: JSON.stringify({ url: 'https://github.com/bunny/carrot-helper' }) } }] } : { content: 'ok' }));
+  await post(base, '/api/settings', {}).catch(() => {});
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ connectorsEnabled: false }) });
+  const { body: session } = await post(base, '/api/sessions', { title: 'F1-1' });
+  await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: 'auto' }) });
+  await say(base, session.id, 'add a weather tool', { grant: true });
+  assert.ok(!(seen[1].tools ?? []).some((d) => /forecast/.test(d.function.name)), 'no connector tool was loaded');
+  const told = seen[1].messages.filter((m) => m.role === 'tool').at(-1).content;
+  assert.match(told, /Connectors are turned off in Settings › Capabilities, so its tools are not loaded/);
 });

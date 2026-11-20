@@ -18,8 +18,9 @@ export function capabilityMap(state = {}) {
   mark(state.build, 'building tools', state.device ? 'only in the window' : 'off; call request_capability with custom_tools');
   mark(state.browser, 'the browser panel', 'only in the desktop window; not here');
   mark(state.pc, 'searching this PC', state.device ? 'only in the window' : "off; tell the person to turn on Search this PC in Settings › Capabilities");
-  mark(state.google, 'Gmail, Calendar and Drive', 'not signed in; tell the person to sign in to Google in Settings › Profile');
-  mark(state.github, 'GitHub', 'not signed in; tell the person to sign in to GitHub in Settings › Profile');
+  const win = state.device ? " (in Bunny's window)" : '';
+  mark(state.google, 'Gmail, Calendar and Drive', `not signed in; tell the person to sign in to Google in Settings › Profile${win}`);
+  mark(state.github, 'GitHub', `not signed in; tell the person to sign in to GitHub in Settings › Profile${win}`);
   const parts = [`Abilities now. On: ${on.length ? on.join(', ') : 'none beyond chatting, web search and reading pages'}.`];
   if (how.length) parts.push(`Off, and how to get each: ${how.join('; ')}.`);
   const waiting = (state.connectors ?? []).slice(0, 6);

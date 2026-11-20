@@ -2426,6 +2426,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
        * Returns one plain line for the model (the tool names, or why there are none), or ''.
        */
       const loadSwitchedOn = async (added) => {
+        if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so its tools are not loaded'; // the master switch holds here too (Security F1-1)
         const lines = [];
         for (const sid of added?.connectorIds ?? []) {
           const server = await mcp.get(sid);
