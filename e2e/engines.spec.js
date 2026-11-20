@@ -168,7 +168,8 @@ for (const scheme of ['dark', 'light']) {
       expect(Math.abs(t.left - m.tas[0].left), `${t.kind} box starts where the others do`).toBeLessThanOrEqual(1);
       expect(t.left - m.rowLeft, `${t.kind} box is left-aligned in the card`).toBeLessThanOrEqual(24);
     }
-    expect(m.floorText).toContain('Always protected');
+    expect(m.floorText).toContain("Always protected from the engine's file tools, whatever the rules say");
+    expect(m.floorText).toContain('Commands are not blocked: Bunny cannot see what a command reads.');
     expect(m.floorText).toContain("Bunny's own data folder");
     expect(m.floorText).toContain('private folders');
     expect(m.floorInputs).toBe(0);

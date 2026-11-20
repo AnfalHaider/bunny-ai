@@ -71,12 +71,12 @@ const engineNames = () => {
 const warningText = (names) => { const n = names.length ? names.join(' or ') : 'the engine'; return `Bunny's engine is off. Chats run on ${n} and follow ${n}'s rules, which you set here. Bunny no longer checks each step against your Bunny rules, including your Deny rules: ${n} asks you itself, and Bunny shows its questions. Bunny still blocks its own data, its keys and the engines' sign-ins. A command you allow can read any file on this PC that you can.`; };
 
 // The locked rows under the three boxes: what Bunny always protects while its engine is off (the floor in src/server/engines/bridge.js). Read only, not rules the person can change.
-const FLOOR_LIST = '<div class="floor" id="engine-floor"><div class="floor-h">Always protected, whatever the rules say</div><ul>'
+const FLOOR_LIST = `<div class="floor" id="engine-floor"><div class="floor-h">Always protected from the engine's file tools, whatever the rules say</div><ul>`
   + `<li>Bunny's own data folder: your chats, memory, settings and keys.</li>`
   + `<li>Every engine's own folder, where its sign-in is kept.</li>`
   + '<li>Your private folders (keys, sign-ins, app data) when they lie outside the project.</li>'
   + `<li>Bunny's own tools: the model may not use them.</li>`
-  + '</ul><div class="d">A command that names one of these folders is flagged on its card.</div></div>';
+  + '</ul><div class="d">Commands are not blocked: Bunny cannot see what a command reads. When a command that names one of these folders comes to you on a card, the card says so.</div></div>';
 
 const rulesLines = (list) => (Array.isArray(list) ? list : []).join('\n');
 function paintRules() {
