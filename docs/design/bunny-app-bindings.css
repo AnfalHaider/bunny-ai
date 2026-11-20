@@ -1383,6 +1383,12 @@ button.pc-chip:hover { background: var(--hover); }
   .composer-under .job-wrap { position: static; }
   .composer-under .menu { left: 0; right: 0; min-width: 0; width: auto; max-height: min(60vh, 420px); max-height: min(60dvh, 420px); }
 }
+/* F3 again (QA, 0.1.14 final): in Code mode the row holds the folder, the branch, the permission button, "Window only" (a browser tab), the effort and the job button, and does not fit one line
+   under about 720 px. It wraps to a second line instead of cutting the last controls off: nothing is dropped and every chip keeps its label (a chip is only shortened when it alone is wider than the row). */
+@media (max-width: 720px) {
+  .composer-under { flex-wrap: wrap; row-gap: var(--sp-2); }
+  .composer-under .picker-btn, .composer-under .ctx-chip, .composer-under #effort-level, .composer-under .job-wrap, .composer-under .window-only-note { flex: 0 0 auto; max-width: 100%; min-width: 0; }
+}
 /* F8: on a touch screen every control of the composer and the lists is at least 32 px high */
 @media (pointer: coarse) {
   .composer-under .picker-btn, .composer-under .ctx-chip, .composer-under .select { min-height: 32px; height: 32px; }
