@@ -15,6 +15,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { capabilityMap } from './capabilityMap.js';
+import { splitDeferred, namesLine, findTools, clean as cleanOutside } from './deferTools.js';
 import { BRAVE_SECRET } from './webSearch.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -42,7 +43,7 @@ import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSi
 import { createScheduleStore } from './scheduler.js';
 import { createHookStore, EVENTS as HOOK_EVENTS } from './hooks.js';
 import { createSkillStore } from './skills.js';
-import { listTools as httpListTools, callTool as httpCallTool, connectorTools, capTools, META_TOOLS, describeDeferred, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
+import { listTools as httpListTools, callTool as httpCallTool, connectorTools, mcpResultText, connectorInstructions, isReadOnlyTool, relistReason, RETRY_FAILED_MS, outsideTrust } from './mcp.js';
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
@@ -2479,10 +2480,27 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         }
         return lines.join('\n');
       };
-      // PV-2: too many tools for a provider: the connector tools are reached through two small tools instead
-      const capped = capTools(toolDefinitions, toolIndex);
-      const deferredTools = capped.deferred;
-      if (deferredTools.size) toolDefinitions.splice(0, toolDefinitions.length, ...capped.definitions);
+      // AGENT-FLOW F7 (it replaces PV-2's two meta-tools): over 40 tools or 30,000 characters, the connector, Google, GitHub, chat-search and built tools are named in one line and their
+      // definitions are sent only after find_tools loads them. The quick bar is never deferred. What can be found is exactly what would have been sent: these are the definitions that
+      // already passed the mode, scope and capability filters above, and the device filter (remoteToolBlocked) keeps a blocked tool out of the names.
+      let deferredTools = new Map();
+      if (!textOnly) {
+        const sourceOf = (name) => {
+          if (req.bunnyRemote && remoteToolBlocked(name)) return null;
+          if (toolIndex.has(name)) return `${cleanOutside(toolIndex.get(name).server.name, 40) || 'a connector'} (connector)`;
+          if (/^(gmail_|calendar_|drive_)/.test(name)) return 'Google';
+          if (/^github_/.test(name)) return 'GitHub';
+          if (name === 'search_chats') return 'Chats';
+          if (name.startsWith(CUSTOM_PREFIX)) return 'Built tools';
+          return null;
+        };
+        const split = splitDeferred(toolDefinitions, sourceOf);
+        if (split) {
+          deferredTools = split.deferred;
+          toolDefinitions.splice(0, toolDefinitions.length, ...split.core);
+          history.unshift({ role: 'system', content: namesLine(deferredTools) });
+        }
+      }
 
       // W614-1: a confirm card shows at most CARD_LIMIT characters. A program or command whose text is longer is refused,
       // never cut: the part the person cannot see could be the part that matters.
@@ -3120,7 +3138,6 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         if (req.bunnyRemote && remoteToolBlocked(name)) throw new Error(`${name} is not available in a chat from another device. Do it in Bunny's window.`);
         if (req.bunnyRemote ?? req.bunnyDevice) remote.logAction(req.bunnyRemote ?? req.bunnyDevice, { kind: 'tool', tool: String(name) }); // R-DF2: the tool's name only, never its arguments
         let parsed = {};
-        const viaMeta = name === 'call_connector_tool' && deferredTools.size > 0;
         try {
           parsed = JSON.parse(args || '{}');
         } catch {
@@ -3134,14 +3151,25 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           send('tool', { tool: 'read_url', status: 'failed', result: 'A quick answer opens only addresses you typed or that its own search found.' });
           return 'read_url refused: a quick answer opens only an address exactly as the person typed it or as web_search listed it, nothing else. Use web_search, or tell the person to open this in Bunny' + String.fromCharCode(39) + 's window.';
         }
-        // PV-2: the two small tools that reach the connector tools not listed in the request
-        if (name === 'list_connector_tools' && deferredTools.size > 0) return describeDeferred(deferredTools, parsed.match);
-        if (viaMeta) {
-          const target = String(parsed.name ?? '');
-          if (!deferredTools.has(target)) return `There is no connector tool called ${target}. Call list_connector_tools to see the names.`;
-          name = target;
-          parsed = parsed.arguments && typeof parsed.arguments === 'object' ? parsed.arguments : {};
-          args = JSON.stringify(parsed);
+        // F7: find_tools loads deferred tools into THIS reply (its own loaded set: the list below is this reply's). The checks run again here: Plan mode and a device.
+        if (name === 'find_tools' && deferredTools.size > 0) {
+          const found = findTools(deferredTools, parsed, {
+            allowed: (n) => !(req.bunnyRemote && remoteToolBlocked(n)) && !(permissionMode === 'plan' && planRefuses(riskOf(n), n)),
+            already: (n) => toolDefinitions.some((d) => d.function?.name === n),
+          });
+          for (const def of found.defs) {
+            if (!toolDefinitions.some((d) => d.function?.name === def.function.name)) toolDefinitions.push(def);
+            if (fullTools !== toolDefinitions && !fullTools.some((d) => d.function?.name === def.function.name)) fullTools.push(def); // a device's list is its own copy
+          }
+          const label = `Look for tools: ${cleanOutside(parsed.query ?? (Array.isArray(parsed.names) ? parsed.names.join(', ') : ''), 80)}`;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: label, status: 'done', content: '', result: clip(found.text, 1200) });
+          send('tool', { tool: label, status: 'done', result: clip(found.text, 1200) });
+          return found.text;
+        }
+        // a deferred tool that was not loaded in this reply is refused like any tool that was not offered, with the way to load it
+        if (deferredTools.has(name) && !toolDefinitions.some((d) => d.function?.name === name)) {
+          send('tool', { tool: name, status: 'denied' });
+          return `${name} is not loaded in this reply, so it was not run. Load it first with find_tools(names: ['${name}']).`;
         }
         // The checklist changes quietly: no step line for each update.
         if (name === 'update_tasks') {
@@ -3152,7 +3180,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         }
         // One check for every path: a tool that was not offered to the model in this reply never runs, whatever
         // it is (a hallucinated call, or text in a file telling it to). Plan mode relies on this.
-        if (!toolDefinitions.some((d) => d.function?.name === name) && !(viaMeta && deferredTools.has(name))) {
+        if (!toolDefinitions.some((d) => d.function?.name === name)) {
           send('tool', { tool: name, status: 'denied' });
           return `${name} is not available in this reply, so it was not run.`;
         }
@@ -3475,7 +3503,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         }
       }
       const fullTools = req.bunnyRemote ? toolDefinitions.filter((d) => !remoteToolBlocked(d.function.name)) : toolDefinitions; // the live list: a tool added mid-reply (Code mode granted) is offered in the next round
-      const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && !META_TOOLS.includes(d.function.name));
+      const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && d.function.name !== 'find_tools');
       const quickTools = [...appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)), ...(barPc ? pcToolDefinitions() : [])]; // Quick ask: look-ups only
       const refusedLevel = textOnly ? undefined : toolsRefused.get(refusalKey);
       const NO_TOOLS_NOTE = 'No tools are available in this reply (this model does not accept them), so you cannot search the web, read pages or use connectors, whatever was said before. If asked, say so plainly; never claim you did.';

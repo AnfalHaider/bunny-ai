@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { startApp, post } from './helpers.js';
 import { streamChat, refusesTools } from '../src/server/chat.js';
-import { capTools, describeDeferred } from '../src/server/mcp.js';
 
 // W4-11 PV-1 (a provider that refuses tools), PV-2 (too many tools) and PV-3 (the fake provider calls tools).
 const sse = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`;
@@ -33,22 +32,6 @@ test('PV-1: a 400 about something else is still an error', async () => {
   assert.equal(refusesTools({ code: 'chat.http', message: 'The provider answered 400: max_tokens is too large' }), false);
   assert.equal(refusesTools({ code: 'chat.http', message: 'The provider answered 400: Tool use is not supported' }), true);
   assert.equal(refusesTools({ code: 'chat.http', message: 'The provider answered 500: tools are down' }), false);
-});
-
-test('PV-2: over the limit only the built-in tools and two small ones are offered, and every connector tool stays reachable', () => {
-  const builtin = ['read_file', 'web_search'].map((n) => tool(n));
-  const conn = Array.from({ length: 150 }, (_, i) => tool(`big__tool_${i}`, i === 149 ? 'finds the needle' : 'ordinary'));
-  const index = new Map(conn.map((d) => [d.function.name, {}]));
-  const capped = capTools([...builtin, ...conn], index);
-  assert.ok(capped.definitions.length <= 100);
-  assert.deepEqual(capped.definitions.map((d) => d.function.name).sort(), ['call_connector_tool', 'list_connector_tools', 'read_file', 'web_search']);
-  assert.equal(capped.deferred.size, 150);
-  assert.match(describeDeferred(capped.deferred, 'needle'), /^big__tool_149: finds the needle$/);
-  assert.match(describeDeferred(capped.deferred), /more: narrow it with match/);
-  // under the limit nothing changes
-  const small = capTools([...builtin, ...conn.slice(0, 5)], new Map(conn.slice(0, 5).map((d) => [d.function.name, {}])));
-  assert.equal(small.definitions.length, 7);
-  assert.equal(small.deferred.size, 0);
 });
 
 test('PV-3: the fake provider calls the tool a [[call ...]] line names, through the real loop, and says what it got', async () => {
@@ -83,7 +66,7 @@ async function bigConnector(t) {
   return { calls, url: `http://127.0.0.1:${server.address().port}/mcp` };
 }
 
-test('PV-2 through a real reply: 150 connector tools are not all sent, and the model reaches one through call_connector_tool', async (t) => {
+test('F7 (it replaces PV-2) through a real reply: 150 connector tools are not all sent, find_tools loads one, and the model calls it', async (t) => {
   const seen = [];
   const provider = createServer((req, res) => {
     let raw = '';
@@ -92,10 +75,10 @@ test('PV-2 through a real reply: 150 connector tools are not all sent, and the m
       if (req.url.endsWith('/models')) { res.writeHead(200, json); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
       const body = JSON.parse(raw);
       seen.push(body);
-      const result = body.messages.find((m) => m.role === 'tool');
-      const delta = result
-        ? { content: `got: ${result.content}` }
-        : { tool_calls: [{ index: 0, id: 'c1', function: { name: 'call_connector_tool', arguments: JSON.stringify({ name: 'big__t149', arguments: {} }) } }] };
+      const told = body.messages.filter((m) => m.role === 'tool').length;
+      const delta = told === 0 ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'find_tools', arguments: JSON.stringify({ names: ['big__t149'] }) } }] }
+        : told === 1 ? { tool_calls: [{ index: 0, id: 'c2', function: { name: 'big__t149', arguments: '{}' } }] }
+          : { content: `got: ${body.messages.filter((m) => m.role === 'tool').at(-1).content}` };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(sse(delta));
     });
@@ -112,13 +95,14 @@ test('PV-2 through a real reply: 150 connector tools are not all sent, and the m
   const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: json, body: JSON.stringify({ content: 'use the needle tool', providerId: 'openai', model: 'gpt-4o' }) });
   const text = await res.text();
   assert.ok(seen[0].tools.length <= 100, `sent ${seen[0].tools.length} tools`);
-  assert.ok(seen[0].tools.some((d) => d.function.name === 'call_connector_tool'));
+  assert.ok(seen[0].tools.some((d) => d.function.name === 'find_tools'));
   assert.ok(!seen[0].tools.some((d) => d.function.name === 'big__t149'), 'a connector tool is not listed in the request');
+  assert.ok(seen[1].tools.some((d) => d.function.name === 'big__t149'), 'after find_tools the tool is offered in the next request of the same reply');
   assert.deepEqual(connector.calls.map((c) => c.name), ['t149'], text.slice(-300));
   assert.match(text, /got: .*ran t149/);
 });
 
-// ---- PV-2 must not become a permission bypass: a connector tool reached through call_connector_tool is held to the same rules
+// ---- F7 (replacing PV-2) must not become a permission bypass: a connector tool loaded with find_tools is held to the same rules
 /** One reply where the model calls big__t149 through call_connector_tool (or directly, when `direct`). */
 async function viaMeta(t, { mode, answer = false, count = 150, direct = false }) {
   const seen = [];
@@ -129,12 +113,11 @@ async function viaMeta(t, { mode, answer = false, count = 150, direct = false })
       if (req.url.endsWith('/models')) { res.writeHead(200, json); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
       const body = JSON.parse(raw);
       seen.push(body);
-      const told = body.messages.find((m) => m.role === 'tool');
-      const call = direct
-        ? { name: `big__t${count - 1}`, arguments: '{}' }
-        : { name: 'call_connector_tool', arguments: JSON.stringify({ name: `big__t${count - 1}`, arguments: {} }) };
+      const told = body.messages.filter((m) => m.role === 'tool');
+      const target = `big__t${count - 1}`;
+      const call = direct || told.length === 1 ? { name: target, arguments: '{}' } : { name: 'find_tools', arguments: JSON.stringify({ names: [target] }) };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(sse(told ? { content: `got: ${told.content}` } : { tool_calls: [{ index: 0, id: 'c1', function: call }] }));
+      res.end(sse(told.length >= (direct ? 1 : 2) ? { content: `got: ${told.at(-1).content}` } : { tool_calls: [{ index: 0, id: `c${told.length + 1}`, function: call }] }));
     });
   });
   await new Promise((r) => provider.listen(0, '127.0.0.1', r));
@@ -174,30 +157,30 @@ async function viaMeta(t, { mode, answer = false, count = 150, direct = false })
   return { card, calls, text, seen };
 }
 
-test('PV-2 and Ask mode: a tool reached through call_connector_tool shows the same permission card as a direct call, and "no" stops it', async (t) => {
+test('F7 and Ask mode: a tool loaded with find_tools shows the same permission card as a direct call, and "no" stops it', async (t) => {
   const meta = await viaMeta(t, { mode: 'ask', answer: false });
-  assert.ok(meta.seen[0].tools.some((d) => d.function.name === 'call_connector_tool'), 'the tool list was capped');
+  assert.ok(meta.seen[0].tools.some((d) => d.function.name === 'find_tools'), 'the tool list was deferred');
   assert.ok(meta.card, 'the permission card was shown');
   assert.deepEqual(meta.calls, [], 'a no stopped the tool');
   assert.match(meta.text, /did not allow/);
   const direct = await viaMeta(t, { mode: 'ask', answer: false, count: 5, direct: true });
-  assert.ok(!direct.seen[0].tools.some((d) => d.function.name === 'call_connector_tool'), 'a small connector is not capped');
+  assert.ok(!direct.seen[0].tools.some((d) => d.function.name === 'find_tools'), 'a small connector is not deferred');
   assert.ok(direct.card, 'the direct call asked too');
-  assert.equal(meta.card.title, 'Big: t149', 'the card names the real tool, not call_connector_tool');
+  assert.equal(meta.card.title, 'Big: t149', 'the card names the real tool');
   assert.equal(direct.card.title, 'Big: t4', 'the same kind of card for a direct call');
 });
 
-test('PV-2 and Ask mode: "yes" runs it once', async (t) => {
+test('F7 and Ask mode: "yes" runs it once', async (t) => {
   const r = await viaMeta(t, { mode: 'ask', answer: true });
   assert.ok(r.card);
   assert.deepEqual(r.calls, ['t149']);
 });
 
-test('PV-2 and Plan mode: a may-write tool (its read-only label is not trusted) is refused through call_connector_tool, with no card', async (t) => {
+test('F7 and Plan mode: a may-write tool (its read-only label is not trusted) is never found or loaded by find_tools, with no card', async (t) => {
   const r = await viaMeta(t, { mode: 'plan' });
   assert.equal(r.card, null);
   assert.deepEqual(r.calls, []);
-  assert.match(r.text, /no connector tool called|not available/);
+  assert.match(r.text, /not loaded|No tool matches|not available/);
 });
 
 test('PV-1 combined: a provider refuses tools, the retry without tools fails too, and the error is the retry\'s (so the next model is tried), with no more than two requests', async () => {
@@ -216,10 +199,9 @@ test('PV-1 combined: a provider refuses tools, the retry without tools fails too
   assert.equal(told, 1);
 });
 
-test('PV-2: the size limit counts the connectors\' tools only: big built-in tool sets (Code mode) do not hide a small connector', () => {
-  const builtin = Array.from({ length: 60 }, (_, i) => tool(`builtin_${i}`, 'd'.repeat(500)));
-  const conn = [tool('rows__dump')];
-  const capped = capTools([...builtin, ...conn], new Map([['rows__dump', {}]]));
-  assert.equal(capped.deferred.size, 0, 'the connector tool is offered directly');
-  assert.equal(capped.definitions.length, 61);
+test('F7: a deferred tool called before find_tools loaded it is refused with the way to load it, and nothing runs', async (t) => {
+  const r = await viaMeta(t, { mode: 'ask', answer: true, direct: true });
+  assert.equal(r.card, null, 'no card: it never got that far');
+  assert.deepEqual(r.calls, []);
+  assert.match(r.text, /big__t149 is not loaded in this reply, so it was not run\. Load it first with find_tools\(names: \['big__t149'\]\)/);
 });
