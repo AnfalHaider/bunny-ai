@@ -24,7 +24,7 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { query: { type: 'string' } }, ['query']),
     fn('read_url', 'Read a web page as text. A github.com/owner/repo link reads its README.',
       { url: { type: 'string' } }, ['url']),
-    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: on GitHub, and in the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
+    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: a short list of known connectors first, then GitHub, then the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
     fn('read_skill', 'Load the instructions of a switched-on skill by name (Bunny\'s own skills, whichever app they were first written for). A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
@@ -85,7 +85,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   let queue = Promise.resolve();
@@ -288,7 +288,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   const run = {
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
-    search_plugins: ({ query }) => searchPlugins(query),
+    search_plugins: async ({ query }) => searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) }),
     read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
