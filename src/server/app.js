@@ -1960,6 +1960,13 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
+    // QUICK-ASK (v0.1.14.3): the bar tells the server what it showed in place of a model's refusal, and the chat keeps that as its reply. Main process only (the admin secret), a quick-ask chat only, the last reply only.
+    const quickReplyMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/quick-reply$/);
+    if (quickReplyMatch && method === 'POST') {
+      if (!adminOk(req) || req.bunnyRemote || req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: 'Only Bunny\'s own window may do that.' });
+      const body = await readBody(req, 64 * 1024);
+      return sendJson(res, 200, { replaced: await sessions.replaceLastReply(quickReplyMatch[1], body.content).catch(() => false) });
+    }
     const messageMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/messages$/);
     if (messageMatch && method === 'POST') {
       const id = messageMatch[1];

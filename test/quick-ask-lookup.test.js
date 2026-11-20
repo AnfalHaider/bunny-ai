@@ -17,7 +17,7 @@ function server(rounds) {
     const enc = new TextEncoder();
     return new Response(new ReadableStream({ start(c) { for (const e of events) c.enqueue(enc.encode(e)); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
   };
-  return { adminFetch, messages: () => calls.filter((c) => c.path.endsWith('/messages')) };
+  return { adminFetch, messages: () => calls.filter((c) => c.path.endsWith('/messages')), replies: () => calls.filter((c) => c.path.endsWith('/quick-reply')).map((c) => c.body.content) };
 }
 const collect = () => { const got = []; return { got, emit: (e) => got.push(e) }; };
 /** What the bar shows at the end: the answer text after the last restart (a restart drops what came before it). */
@@ -187,4 +187,21 @@ test('a model that still refuses after Bunny\'s own search is not the last word:
   const c2 = collect();
   await createAnswerer({ adminFetch: f.adminFetch, emit: c2.emit, getSettings: settings() }).ask({ text: 'find my tax returns file' });
   assert.match(shownText(c2.got), /I searched this PC and found one file: tax return 2025\.txt \(Documents\)\./);
+});
+
+test('what the bar showed in place of a refusal is what the chat keeps: Bunny\'s own words, the web results and the files list are sent to be stored as the reply', async () => {
+  const off = server([ignoring]);
+  await createAnswerer({ adminFetch: off.adminFetch, emit: () => {}, getSettings: settings({ pcSearchEnabled: false }) }).ask({ text: 'find my tax returns file' });
+  assert.deepEqual(off.replies(), [PC_OFF_TEXT]);
+  const web = server([[frame('delta', { text: 'I cannot browse the internet.' }), frame('done', { model: 'm', lookups: 0 })], [frame('delta', { text: 'As an AI I cannot browse.' }), frame('done', { model: 'm', lookups: 1, lookupText: '- Islamabad weather https://weather.example.test/i: clear' })]]);
+  await createAnswerer({ adminFetch: web.adminFetch, emit: () => {}, getSettings: settings() }).ask({ text: 'weather in Islamabad today' });
+  assert.equal(web.replies().length, 1);
+  assert.match(web.replies()[0], /Here is what the web search found[\s\S]*weather\.example\.test/);
+  const fine = server([[frame('delta', { text: 'A rabbit is a small mammal.' }), frame('done', { model: 'm', lookups: 0 })]]);
+  await createAnswerer({ adminFetch: fine.adminFetch, emit: () => {}, getSettings: settings() }).ask({ text: 'what is a rabbit?' });
+  assert.deepEqual(fine.replies(), [], 'an answer that was not replaced is left as the model gave it');
+});
+
+test('the wider refusal words: "As an AI", "I\'m unable to access", "I don\'t have access to real-time", "I can\'t access the internet"', () => {
+  for (const t of ['As an AI language model, I do not know that.', 'I\'m unable to access the internet.', 'I don\'t have access to real-time information.', 'I can\'t access the internet right now.']) assert.equal(isRefusal(t), true, t);
 });

@@ -101,3 +101,23 @@ test('pcLookupFirst: with Search this PC on, Bunny runs search_pc itself and han
   await barAsk(page, 'find my tax returns file', { pcSearch: true, pcLookupFirst: true, pcTerms: ['tax'] }, { admin: false });
   assert.doesNotMatch(JSON.stringify(page.requests[0].messages), /Bunny searched this computer|tax return 2025/, 'a page without the admin secret cannot ask for it');
 });
+
+test('quick-reply: the last reply of a quick-ask chat is replaced by what the bar showed; only from the main process, only a quick-ask chat, only a reply', async (t) => {
+  const w = await pcWorld(t, { files: {}, settings: {}, calls: [] });
+  const made = await (await fetch(`${w.base}/api/sessions`, { method: 'POST', headers: json, body: JSON.stringify({ title: 'bar', origin: 'quick-ask', workMode: 'chat' }) })).json();
+  await barAsk(w, 'find my tax returns file', {}, { sessionId: made.id }); // the stand-in model answers "done"
+  const post = (id, body, admin = true) => (admin ? w.app.adminFetch : fetch.bind(globalThis))(admin ? `/api/sessions/${id}/quick-reply` : `${w.base}/api/sessions/${id}/quick-reply`, { method: 'POST', headers: json, body: JSON.stringify(body) });
+  const page = await post(made.id, { content: 'from a page' }, false);
+  assert.equal(page.status, 403, 'without the admin secret nothing is replaced');
+  assert.equal((await (await post(made.id, { content: 'Search this PC is off. Nothing was searched.' })).json()).replaced, true);
+  let chat = await (await fetch(`${w.base}/api/sessions/${made.id}`)).json();
+  assert.deepEqual(chat.messages.map((m) => [m.role, m.content]).at(-1), ['assistant', 'Search this PC is off. Nothing was searched.']);
+  assert.equal(chat.messages.filter((m) => m.role === 'user').length, 1);
+  // an empty text, or a chat that did not begin in the bar, is left alone
+  assert.equal((await (await post(made.id, { content: '   ' })).json()).replaced, false);
+  const plain = await (await fetch(`${w.base}/api/sessions`, { method: 'POST', headers: json, body: JSON.stringify({ title: 'plain', workMode: 'chat' }) })).json();
+  await barAsk(w, 'hello', {}, { sessionId: plain.id });
+  assert.equal((await (await post(plain.id, { content: 'replaced?' })).json()).replaced, false, 'only a quick-ask chat');
+  chat = await (await fetch(`${w.base}/api/sessions/${plain.id}`)).json();
+  assert.notEqual(chat.messages.at(-1).content, 'replaced?');
+});

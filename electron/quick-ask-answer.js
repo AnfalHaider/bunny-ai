@@ -31,7 +31,7 @@ export function parseSse(buffer) {
 // needs-window marker) is not shown as it is: if the question is about files on this PC, Bunny searches them itself (with Search this PC on) or says in its own words that the switch is off; any other question
 // gets one web_search run by Bunny; either way the model is asked again with the results as labelled data. A real local action (delete, run, install, the screen...) is the only thing that gets the window card.
 const ASKED_TO_SEARCH = /\b(search|google|look\s?up|browse|check|find\s?out)\b[\s\S]{0,40}\b(the\s+)?(internet|web|net|online)\b|\b(on|from)\s+the\s+(internet|web)\b|\bonline\b[\s\S]{0,20}\b(search|look)/i;
-const REFUSAL = /\b(?:I|we|this (?:model|bar)|the (?:model|bar)|quick ask)\b[^.!?\n]{0,25}\b(?:can(?:no|'|’)t|cannot|can not|am unable to|is unable to|are unable to|could not|couldn(?:'|’)t|do not have|don(?:'|’)t have|have no|only (?:support|supports|have|has|can))\b[^.!?\n]{0,70}\b(?:browse|search|see|access|look|read|files?|internet|web|tool|tools|computer|pc)\b|\bopen (?:the |bunny(?:'|’)s |bunny )?(?:full |main )?(?:bunny )?(?:app|window)\b|\bfull (?:bunny )?(?:app|window)\b/i;
+const REFUSAL = /\b(?:I|we|this (?:model|bar)|the (?:model|bar)|quick ask)\b[^.!?\n]{0,25}\b(?:can(?:no|'|’)t|cannot|can not|(?:am |is |are )?unable to|could not|couldn(?:'|’)t|do not have|don(?:'|’)t have|have no|only (?:support|supports|have|has|can))\b[^.!?\n]{0,70}\b(?:browse|search|see|access|look|read|files?|internet|web|tool|tools|computer|pc)\b|\bas an ai\b|\bopen (?:the |bunny(?:'|’)s |bunny )?(?:full |main )?(?:bunny )?(?:app|window)\b|\bfull (?:bunny )?(?:app|window)\b/i;
 // a real local action: something Bunny would have to DO on this computer, which only Bunny's window may ask permission for
 const LOCAL_ACTION = /\b(run|execute|install|uninstall|delete|remove|rename|move|copy|paste|screenshot|screen|terminal|command|script|commit|git|clipboard|click|type|keyboard)\b/i;
 // a question about files on this computer (no verb needed)
@@ -92,6 +92,9 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
     sessionId = made.id;
     return sessionId;
   }
+
+  /** What the bar showed in place of a model's refusal is what the chat keeps as the reply, so a follow-up or Open in Bunny does not carry the refusal. Never throws; a failure leaves the chat as it was. */
+  const keepAsReply = (id, content) => { adminFetch(`/api/sessions/${id}/quick-reply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content }) }).catch(() => {}); };
 
   /** Ask (or follow up). Resolves when the answer has ended, one way or another. Never throws: every failure is an event. */
   async function ask({ text, files = [], pc = false }) {
@@ -163,13 +166,13 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
       // decide from the answer: no look-up and a refusal (or the marker, or the person asked to search and nothing was searched)
       const refused = finished && lookups === 0 ? (needs || isRefusal(fullText) || askedToSearch(text)) : needs;
       const settingsNow = getSettings() ?? {};
-      const own = (kind, say) => { if (shown) out({ type: 'restart' }); out({ type: 'delta', text: say }); out({ type: 'done', model, finished: true, lookups: 0, sources: [], own: kind }); };
+      const own = (kind, say) => { if (shown) out({ type: 'restart' }); out({ type: 'delta', text: say }); out({ type: 'done', model, finished: true, lookups: 0, sources: [], own: kind }); keepAsReply(id, say); };
       // the retry's answer is still a refusal: the model did not use what Bunny found, so Bunny shows it itself, sourced, instead of "open the full app"
       if (round === 1 && finished && (needs || isRefusal(fullText))) {
         const rows = pcRows.filter((r) => r && r.name).slice(0, 8);
         const said = retryKind === 'pc' ? (rows.length ? `I searched this PC and found ${rows.length === 1 ? 'one file' : `${rows.length} files`}: ${rows.map((r) => `${r.name}${r.folder ? ` (${r.folder})` : ''}`).join('; ')}.` : '')
           : (lookupText ? `Here is what the web search found (the model did not use it):\n\n${lookupText}` : '');
-        if (said) { out({ type: 'restart' }); out({ type: 'delta', text: said }); out({ type: 'done', model, finished: true, lookups, sources: sourcesOf(doneSources) }); return { ok: true }; }
+        if (said) { out({ type: 'restart' }); out({ type: 'delta', text: said }); out({ type: 'done', model, finished: true, lookups, sources: sourcesOf(doneSources) }); keepAsReply(id, said); return { ok: true }; }
       }
       if (round === 0 && refused && !realLocalAction(text)) {
         if (isFileQuestion(text)) {
