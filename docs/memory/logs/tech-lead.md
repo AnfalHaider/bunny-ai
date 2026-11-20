@@ -2,6 +2,11 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-20 - v0.1.15 specs: ENGINE-SWITCH, ONE-INSTRUCTIONS, F5-F7, F8-F13
+
+**Wrote** on `claude/tech-lead-v0115-specs`: ENGINE-SWITCH (9979b4d9; it found that Codex chats lose their earlier turns, because every turn starts an ephemeral thread), ONE-INSTRUCTIONS (9979b4d9), AGENT-FLOW F5-F7 (1da0a118), and F8-F13 HIGH (this commit), using the Researcher's comparison (dcec6eae) and sandbox research (5c5088f0). Each spec has unit, e2e and QA checks.
+**Lesson:** read how each engine gets its earlier turns before designing a handover. One of the two had none.
+
 ## 2026-11-20 - v0.1.15 specs: OFFICE-MAKE, REWIND, FOLDER-RULES
 
 **Wrote** `docs/plans/OFFICE-MAKE-spec.md`, `docs/plans/REWIND-spec.md` and `docs/plans/FOLDER-RULES-spec.md` on `claude/tech-lead-v0115-specs`. OFFICE-MAKE picks docx@9.15.3, write-excel-file@4.1.1 and pptxgenjs@4.0.1 (MIT, no install scripts, 34.5 MB unpacked or 7.9 MB gz; audit 2 HIGH in image-size, which pptxgenjs never loads, cleared to 0 by overriding image-size to 2.0.3). The smoke run made all three files and Bunny's readDocument read them back. REWIND adds an after-hash per file, a preview, changed-outside detection, re-checking the path on restore, an undoable rewind, and caps of 100 per chat and 1 GB; it also closes G1-G3 in today's Undo. FOLDER-RULES puts the file text in a user-role note after every system message (the W6-12 pattern); it is never parsed as a setting.
