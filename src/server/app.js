@@ -2421,6 +2421,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           .map((c) => ({ name: c.name, state: !c.enabled ? 'off' : c.status === 'needsSignIn' ? 'needsSignIn' : 'failed' }));
         // after the app's own main system text (which stays first), not in front of it
         const mainAt = history.findIndex((m) => m.role === 'system' && String(m.content).includes('You are Bunny AI'));
+        if (req.bunnyRemote) history.splice(mainAt + 1, 0, { role: 'system', content: "On this device you can't use: the browser panel, desktop control, installing plugins or tools, building tools and scheduling. Say so plainly if the task needs one, or tell the person to continue in Bunny's window." });
         history.splice(mainAt + 1, 0, { role: 'system', content: capabilityMap({
           code: Boolean(workspace), computer: aiComputerOn, build: buildOn, browser: browserControl, pc: chatPc, google: googleOn, github: Boolean(githubToken),
           device: Boolean(req.bunnyRemote ?? req.bunnyDevice), plan: permissionMode === 'plan', connectors: asleep,
@@ -2445,12 +2446,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
        * the way request_capability adds its tools. No permission changes: the person's yes was already given on the card, and each tool still asks as any connector tool does.
        * Returns one plain line for the model (the tool names, or why there are none), or ''.
        */
-      const loadSwitchedOn = async (added) => {
+      const loadSwitchedOn = async (added, { force = false } = {}) => {
         if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so its tools are not loaded'; // the master switch holds here too (Security F1-1)
         const lines = [];
         for (const sid of added?.connectorIds ?? []) {
           const server = await mcp.get(sid);
-          if (!server || !server.enabled || !inScope(server.folders, scopeFolder) || servers.some((x) => x.id === server.id)) continue;
+          if (!server || !server.enabled || !inScope(server.folders, scopeFolder) || (!force && servers.some((x) => x.id === server.id))) continue;
           const label = String(server.name ?? 'the connector').replace(/[^\w .,:'-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'the connector';
           try {
             const startStep = `Start ${server.name}`;
@@ -2465,7 +2466,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
             } else lines.push(`${label} is on but did not start (${String(err.message).replace(/[^\w .,:'-]/g, ' ').slice(0, 100)}).`);
             continue;
           }
-          servers.push(server);
+          if (!servers.some((x) => x.id === server.id)) servers.push(server);
           const offered = connectorTools([server], { planMode: permissionMode === 'plan' });
           const names = [];
           for (const def of offered.definitions.slice(0, 60)) {
@@ -2582,12 +2583,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       let buildEnabled = buildOn;
       const vision = body.vision !== false;
       const origin = `http://${req.headers.host ?? '127.0.0.1'}`;
-      const askCapability = (capability, reason) => new Promise((resolveAnswer) => {
+      const askCapability = (capability, reason, title = CAPABILITIES[capability]) => new Promise((resolveAnswer) => {
         const cid = randomUUID();
         const timer = waitNudges({ kind: 'capability', title: CAPABILITIES[capability] }); // W6-25: waits, then nudges
         pendingCapabilities.set(cid, { sessionId: id, capability, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
-        send('capability', { id: cid, capability, title: CAPABILITIES[capability], reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
+        send('capability', { id: cid, capability, title, reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
       });
       // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
       const askQuestion = (q) => new Promise((resolveAnswer) => {
@@ -2600,7 +2601,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         send('question', { id: qid, ...q });
       });
       let runAskRefusals = 0;
-      const grantCapability = async (capability, reason) => {
+      const grantCapability = async (capability, reason, args_ = {}) => {
         if (!CAPABILITIES[capability]) return `There is no such capability. Choose one of: ${Object.keys(CAPABILITIES).join(', ')}.`;
         if (capability === 'code_mode' && workspace) return `Code mode is already on in ${workspace.root}.`;
         if (capability === 'leave_plan_mode' && permissionMode !== 'plan') return 'This chat is not in Plan mode.';
@@ -2608,6 +2609,54 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (capability === 'computer_use' && computerOn) return 'You can already control this computer.';
         if (capability === 'custom_tools' && buildEnabled) return 'You can already build tools with create_tool.';
         if ((capability === 'computer_use' || capability === 'custom_tools') && process.platform !== 'win32') return 'That needs Bunny AI on Windows.';
+        // AGENT-FLOW F5 (Security F5-1..F5-4)
+        if (capability === 'browser_panel') {
+          // the desktop window already offers the browser tools when it can drive the panel; anywhere else there is no card, only the fixed answer
+          return browserControl && !req.bunnyRemote && !req.bunnyDevice && !textOnly && !scheduledTask
+            ? 'The browser panel is already available in this reply: use browser_open, browser_read, browser_click and browser_type.'
+            : "The browser panel is only in Bunny's window on the PC. Use web_search and read_url here, or tell the person to continue in Bunny's window.";
+        }
+        if (capability === 'sign_in') {
+          const service = String(args_.service ?? '');
+          if (!['google', 'github'].includes(service)) return 'Give service: google or github.';
+          if (req.bunnyRemote || req.bunnyDevice) return "Signing in is only in Bunny's window on the PC.";
+          const signedIn = async () => (service === 'github' ? Boolean(await accounts.githubToken().catch(() => null)) : Boolean((await accounts.status().catch(() => ({}))).google?.workspace));
+          if (await signedIn()) return `You are already signed in to ${service === 'github' ? 'GitHub' : 'Google'}.`;
+          if (service === 'google' && !String(settings.googleClientId ?? '').trim()) return "Google isn't set up in Bunny yet. The person adds the Google client in Settings › Profile first.";
+          const label = service === 'github' ? 'GitHub' : 'Google';
+          const answer = await askCapability('sign_in', `${reason ? `${reason} ` : ''}Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.`, `Sign in to ${label}`);
+          if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+          // the person signs in on the card's Settings page; Bunny only watches for the result. The model is told signed in or not, never a code, address, token or name (F5-1).
+          const until = Date.now() + 120_000;
+          while (Date.now() < until && !controller?.signal?.aborted && !(await signedIn())) await new Promise((r) => setTimeout(r, 2000));
+          if (!(await signedIn())) return `Not signed in to ${label} yet. Carry on without it, or ask the person to tell you when they have signed in.`;
+          if (service === 'github') {
+            const token = await accounts.githubToken().catch(() => null);
+            if (token) toolDefinitions.push(...githubToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'run'], { canClone: Boolean(workspace) }));
+            return 'Signed in to GitHub. You now have the github_ tools, use them for GitHub itself (repositories, issues, pull requests online), never for a local folder.';
+          }
+          toolDefinitions.push(...googleToolDefinitions(permissionMode === 'plan' ? ['read'] : ['read', 'edit', 'send']));
+          return 'Signed in to Google. You now have the gmail_, calendar_ and drive_ tools. Draft emails rather than sending unless the person asks you to send.';
+        }
+        if (capability === 'connector_sign_in') {
+          if (req.bunnyRemote || req.bunnyDevice) return "Signing in to a connector is only in Bunny's window on the PC.";
+          // F5-2: an exact installed connector, by id or name, in scope; the sign-in goes to its own configured address only; the model never gives an address
+          const wanted = String(args_.connector ?? '').trim();
+          const server = wanted ? (await mcp.list()).find((c) => (c.id === wanted || c.name === wanted) && inScope(c.folders, scopeFolder)) : null;
+          if (!server) return 'No installed connector has that exact name in this chat. Look at the Connectors line for the names.';
+          if (!server.enabled) return `${server.name} is switched off. The person switches it on in Settings › Customize first.`;
+          const answer = await askCapability('connector_sign_in', reason, `Sign in to ${server.name}`);
+          if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+          send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id }); // the same Sign in button as a connector found at the start of a reply
+          const until = Date.now() + 120_000;
+          let ready = false;
+          while (Date.now() < until && !controller?.signal?.aborted && !ready) {
+            await new Promise((r) => setTimeout(r, 4000));
+            try { await mcpListTools(await mcp.get(server.id)); ready = true; } catch { /* not signed in yet */ }
+          }
+          if (!ready) return `${server.name} is not signed in yet. Carry on without it, or ask the person to tell you when they have signed in.`;
+          return (await loadSwitchedOn({ connectorIds: [server.id] }, { force: true })) || `${server.name} is signed in.`;
+        }
         const answer = await askCapability(capability, reason);
         if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
         if (capability === 'code_mode') {
@@ -2663,7 +2712,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -3047,7 +3096,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
               break;
             }
             case 'request_capability':
-              result = await grantCapability(parsed.capability, parsed.reason);
+              result = await grantCapability(parsed.capability, parsed.reason, parsed);
               break;
             case 'start_process': {
               if (!workspace) throw new Error('Programs run in Code mode, inside the workspace folder.');
@@ -3326,7 +3375,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               const added = appTools.takePending?.(id);
               if (!added) return said;
               const shown = `${added.title}\n${added.text}`;
-              if (shown.length > 1800) return `${said}\nIt is too long to show you whole, so it stays switched OFF; the person can read and switch it on in Settings, Customize.`;
+              if (shown.length > 1800) {
+                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.' });
+                return `${said}\nIt is installed and OFF: its description is too long to show whole. It stays off until the person switches it on in Settings › Customize.`;
+              }
               const answer = await askCapability('switch_on_added', shown);
               if (answer.granted) {
                 await appTools.switchOn(added);
@@ -3509,6 +3561,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const coreOnly = fullTools.filter((d) => !toolIndex.has(d.function.name) && d.function.name !== 'find_tools');
       const quickTools = [...appToolDefinitions(['read']).filter((d) => QUICK_ASK_TOOLS.includes(d.function.name)), ...(barPc ? pcToolDefinitions() : [])]; // Quick ask: look-ups only
       const refusedLevel = textOnly ? undefined : toolsRefused.get(refusalKey);
+      if (refusedLevel) history.splice(Math.max(0, history.findIndex((m) => m.role === 'system' && String(m.content).includes('You are Bunny AI')) + 1), 0, { role: 'system', content: refusedLevel === 'all' ? 'Your tools were turned off for this model, so answer without them and say what you could not do.' : "This model refused the connectors' tools, so only Bunny's own tools are on; say so if the task needs a connector." });
       const NO_TOOLS_NOTE = 'No tools are available in this reply (this model does not accept them), so you cannot search the web, read pages or use connectors, whatever was said before. If asked, say so plainly; never claim you did.';
       if (refusedLevel === 'all') history.unshift({ role: 'system', content: NO_TOOLS_NOTE });
       for (let attempt = 1; attempt <= 2; attempt += 1) {

@@ -28,6 +28,9 @@ export const CAPABILITIES = {
   custom_tools: 'Build new tools: write a small script that becomes a tool Bunny AI can use',
   new_tool: 'Something no current tool can do: find a plugin or connector for it, or build it',
   switch_on_added: 'Switch on what was just added? It stays off until you say yes',
+  browser_panel: 'Use the browser beside the chat (only in the desktop window on the PC)',
+  sign_in: 'Sign in to Google or GitHub (give service: google or github); the person signs in themselves in Settings, Profile',
+  connector_sign_in: 'Sign in to a connector that is installed and needs it (give connector: its exact name)',
 };
 
 const fn = (name, description, properties = {}, required = []) => ({
@@ -58,6 +61,8 @@ export function capabilityToolDefinition() {
   {
     capability: { type: 'string', enum: Object.keys(CAPABILITIES) },
     reason: { type: 'string', description: 'One sentence, for the person: what you want to do with it' },
+    service: { type: 'string', enum: ['google', 'github'], description: 'For sign_in only' },
+    connector: { type: 'string', description: 'For connector_sign_in only: the connector\'s exact name' },
   }, ['capability', 'reason']);
 }
 
