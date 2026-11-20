@@ -613,6 +613,31 @@ The steps below describe A. B uses the same setting, the same "confined" mark an
   - `whoami /groups` inside the child shows `S-1-16-4096`;
   - Remove the label deletes `.bunny/tmp`.
 
+### Security's required changes for option B (00e89f3f)
+
+Security adopted the order: B where Codex is present, otherwise A, with C as an option, after spike S-F13B.
+
+- **F13B-1: the spike comes first, and is reviewed.**
+  - Spike S-F13B writes its output to a file under `docs/research/` and sends it to Security **before B is built**.
+  - It answers (a) to (f) above, and includes the raw `generate-json-schema` excerpt for `command/exec`.
+- **F13B-2: Bunny sets every field of the call, every time.**
+  - The sandbox policy is `workspace-write`, with the writable roots exactly `[workspace realpath, <root>/.bunny/tmp]`.
+  - **Network is off by default** for a confined command, if the spike's (e) shows it can be turned off. The person can turn it on in the setting.
+  - The cwd is inside the workspace. The environment is `safeEnv` plus the cache variables.
+  - **Nothing in the call comes from the model.**
+- **F13B-3: the app-server used for commands is its own.**
+  - It has a dedicated, isolated home with **no sign-in**, never the person's Codex account home.
+  - Its `config.toml` is rewritten by `ensureUntrusted`, with the CE-1.14 features off and `project_doc_max_bytes = 0`.
+  - It talks over **stdio only**, and nothing listens on a port.
+  - Any approval or escalation request it sends gets **deny** from Bunny, never accept.
+- **F13B-4: added tests:**
+  - `command/exec` with a write outside the root fails;
+  - a request from the app-server to widen the roots, or to escalate, is denied;
+  - the app-server's home has no auth file, and no port is opened while it runs (checked with `Get-NetTCPConnection` for its process id);
+  - with network off, a confined `curl.exe https://example.com` fails;
+  - every field of each `command/exec` call equals Bunny's fixed values whatever the model asked.
+- **F13B-5: the help text says plainly** that confined commands can still **read** everything the person can, Bunny's data folder included, under both A and B. Files encrypted with this user's DPAPI key can be decrypted by any process running as the person, so confinement limits **writes**, not the reading of secrets. That sentence joins F13-4's "not covered" list.
+
 ### Tests
 
 **Unit and Windows integration** (`test/confine.test.js`, run on Windows only, invented temp folders only, never a real project and never the real profile):

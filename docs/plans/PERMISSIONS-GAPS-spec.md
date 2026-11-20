@@ -38,14 +38,30 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
 - **The order is the usual one:** deny, then ask, then allow, then the mode.
 - **Not covered, and said in Settings:** what a command does on the network. Bunny can't see inside a command. F13's option B is the only network limit for commands.
 
+### Security's required changes (00e89f3f)
+
+- **PG1-a: matching.**
+  - The host is normalised first through `new URL`: lowercase, the trailing dot removed, IDN converted to punycode, and IP literals normalised (decimal, hex and short forms).
+  - `*.x.com` matches subdomains only, and `x.com` matches exactly. The editor offers both.
+  - Ports are ignored.
+- **PG1-b: an allow never weakens a fixed protection:** `fetchLimited`'s private-address refusal (WA-1), the Quick ask `read_url` allow-set (WA-2) and the taint rule.
+- **PG1-c: the browser panel.**
+  - Deny and ask are enforced in the panel's session with `webRequest.onBeforeRequest`, for **every** request: the main frame, sub-frames, XHR and fetch, and downloads. Top-level navigation alone isn't enough.
+  - An ask on a sub-resource counts as a deny, because no card can stop a page mid-load. Settings says so.
+- **PG1-d: remote connectors.** A connector's address is judged when it is added and again whenever it changes. A deny on its host stops its calls.
+
 ### Tests
 
 - **Unit:**
   - a deny on `*.paste.io` refuses `read_url` of `https://x.paste.io/a`, and refuses a redirect to it from an allowed host at that hop;
   - an ask on `example.com` shows a card in Auto;
   - an allow skips the Ask-mode card for `download_file`;
-  - wildcards and IDN forms (`xn--`) match the same host.
-- **End-to-end:** a browser navigation to a denied host is stopped, and the step says why.
+  - PG1-a: `EXAMPLE.com.`, `xn--` forms and `http://2130706433/`-style IP forms normalise and match; `*.x.com` doesn't match `x.com`; ports are ignored;
+  - PG1-b: an allow on `127.0.0.1` or a private address still gets WA-1's refusal;
+  - PG1-d: changing a connector's address to a denied host stops its next call.
+- **End-to-end:**
+  - a browser navigation to a denied host is stopped, and the step says why;
+  - PG1-c: a page on an allowed host that loads a script, a frame and a fetch from a denied host has all three blocked, and a sub-resource on an ask host is blocked too.
 - **QA:** add a domain rule in Settings, then check that it holds for reading a page, a download and the browser.
 
 ## PG-2: rules for a tool by name
@@ -59,18 +75,26 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
 ### Behaviour
 
 - **The rule:** `kind: 'tool'`, `pattern` is a tool name with `*`.
-  - **Connector tools** are written `<connector>:<tool>`, and the person sees the connector's name. Example: `notion:*`.
+  - **Connector tools** are stored by **connector id plus the original tool name** (PG2-a), and shown as `<connector name>:<tool>`. Example: `notion:*`. Renaming a connector, or a clash rename of a tool, can't escape a rule.
   - **Bunny's own tools** are written by name: `browser_*`, `computer_*`, `github_create_*`, `gmail_send`.
 - **Judged** for every tool call, after Plan and before the mode, in the usual order.
 - **What an allow can't do:** an allow rule can't remove an ask that is fixed in every mode (sending, `create_tool`, `install_from_github`, local connectors, PG-4's protected paths). The rule screen marks those as "always asks".
-- **F9's "save as a rule"** writes these for connector tools and for computer use.
+- **F9's "save as a rule"** writes these for connector tools only. Computer and browser kinds can't be saved (F9-6).
+
+### Security's required changes (00e89f3f)
+
+- **PG2-a:** the key is the connector id plus the original tool name (above).
+- **PG2-b: an allow never switches a capability on.** An allow on `computer_*` or `browser_*` doesn't offer those tools unless the capability is on.
+- **PG2-c:** an allow never removes a fixed ask (above). The rule list marks those as "always asks".
 
 ### Tests
 
 - **Unit:**
   - `notion:*` with ask asks for every Notion tool in Auto;
   - `computer_*` with deny refuses the computer tools, and they aren't offered either;
-  - an allow on `gmail_send` still asks.
+  - an allow on `gmail_send` still asks;
+  - PG2-a: renaming the Notion connector, or a clash rename of its tool, keeps the rule in force;
+  - PG2-b: an allow on `computer_*` with computer use off offers no computer tools.
 - **End-to-end:** a connector tool under an ask rule shows "Asked because of your rule".
 - **QA:** add a tool rule, and check the rule list's "always asks" marks.
 
@@ -90,12 +114,19 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
   - `chat:message`, for `message_session`.
 - **Judged when the agent call is made.** A helper's own tool calls stay under the same rules as the chat (they already are).
 
+### Security's required changes (00e89f3f)
+
+- **PG3-a: `chat:message` is a send.** `message_session` speaks for the person, so an allow rule may **not** skip its card. Allow skips the Ask-mode card only for `helper:*` and `chat:start`.
+- **PG3-b: helpers.** A helper's own calls stay under the chat's rules, PG-1, PG-2 and PG-4 included. A helper can't start helpers or chats (`HELPER_NEVER`, unchanged).
+
 ### Tests
 
 - **Unit:**
   - `helper:*` deny refuses `run_subagent`, and the model is told;
   - `chat:message` ask asks;
-  - an allow skips the Ask-mode card.
+  - an allow skips the Ask-mode card for `helper:*` and `chat:start`;
+  - PG3-a: an allow on `chat:message` still shows the card, in every mode;
+  - PG3-b: a helper's `read_url` to a denied host and its edit of `AGENTS.md` are judged exactly as the chat's.
 - **QA:** with a deny on helpers, a big task runs without helpers and says so.
 
 ## PG-4: protected paths for Bunny's own file tools
@@ -116,17 +147,33 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
    `.git` stays **refused**, as today.
 2. **For `write_file`, `edit_file`, `multi_edit`, `download_file` and `make_*`,** a path on the list **asks in every mode, Auto included.** The card is marked "changes how code runs later".
    - An allow rule doesn't unlock it, and neither do F9's kinds or F11's judge (which may still block it).
-   - **The exception, for usability:** a `package.json` edit that changes only `dependencies` and `devDependencies` (checked by parsing the before and after JSON) asks only as an ordinary edit.
+   - **The exception, for usability (narrowed by PG4-b):** a `package.json` edit asks only as an ordinary edit **only** when, comparing the parsed JSON before and after, it changes nothing but the versions of packages already listed in `dependencies` or `devDependencies`, and no version becomes a URL, `git`, `file:`, `link:`, `github:` or tarball form. **Adding a new package name asks in Auto,** because the next install runs its scripts.
 3. **Engines.** The same list is already an Ask for restricted copy-back. In full mode the bridge applies it to engine Write and Edit too, so all three engines agree.
 4. **Plan mode** already refuses every write.
+
+### Security's required changes (00e89f3f)
+
+- **PG4-a: added to `PROTECTED_WRITES`,** matched case-insensitively at any depth on the realpath relative to the workspace:
+  - **the instructions files Bunny follows:** `AGENTS.md`, `CLAUDE.md`, `.cursorrules` and `.cursor/rules/**`. Without them, a model in a trusted folder could rewrite the instructions every later chat follows. (`.claude/` and `.cursor/` are already listed.)
+  - `.gitattributes`, whose filters and textconv run programs, and `.gitmodules`;
+  - CI configuration: `.gitlab-ci.yml`, `azure-pipelines.yml`, `.circleci/`, `Jenkinsfile`, `.buildkite/`;
+  - `lefthook.yml`, `.lefthook*`, `.envrc`, `.pnpmfile.cjs`;
+  - `*.psm1`, `*.sh`, `*.vbs`.
+- **PG4-b:** the narrower `package.json` exception (above).
+- **PG4-c: with Bunny's engine off** (ENGINE-RULES, the floor only), PG-4 joins the floor as a **flag** on the engine's card, where there is one, the same way the floor flags commands. It is not a deny, because the person chose "follow the engine".
+  - **This extends ER, so it needs the owner's word.** It is question 1b below.
 
 ### Tests
 
 - **Unit:**
   - each listed path asks in Auto, and an allow rule on `**` doesn't skip it;
-  - a dependency-only `package.json` change asks only in Ask mode, while a `scripts` change asks in Auto;
+  - PG4-a: each added name asks, including at depth (`docs/AGENTS.md`), in other case (`agents.md`) and through a junction, which is judged on the realpath;
+  - PG4-b:
+    - raising the version of an existing dependency asks only in Ask mode;
+    - adding a new package, a version set to `git+https://…`, `file:../x`, `link:`, `github:a/b` or a `.tgz` URL, and a `scripts` change all ask in Auto;
   - `.git/` is still refused;
-  - an engine Write in full mode to `.github/workflows/x.yml` asks through the bridge.
+  - an engine Write in full mode to `.github/workflows/x.yml` asks through the bridge;
+  - PG4-c (if the owner agrees): with Bunny's engine off, an engine's edit of `AGENTS.md` carries the flag on its card, and isn't denied.
 - **End-to-end:** in Auto, the stand-in model edits `.vscode/tasks.json`, and the card says "changes how code runs later".
 - **QA:** in Auto, on an invented project, run a normal coding task. Only the protected files ask, and the count is in the QA note.
 
@@ -146,12 +193,29 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
 - **The person's own rules come first:** a deny or ask rule on `git log*` still applies.
 - **SEARCH-PC taint still asks.**
 
+### Security's required changes (00e89f3f)
+
+- **PG5-a: Bunny runs the git forms with fixed options.**
+  - The form is `git -c core.fsmonitor= -c core.pager=cat -c diff.external= --no-pager <cmd>`, and `diff`, `log -p` and `show` also get `--no-ext-diff --no-textconv`.
+  - Without them, a repository's config or attributes can make `git status` or `git diff` run a program (`core.fsmonitor` runs on `git status`).
+  - These options are added by Bunny; the model's own `-c` is never accepted (F9-1).
+- **PG5-b: path arguments are judged as reads.**
+  - The path arguments of `dir`, `Get-ChildItem`, `type`, `Get-Content` and the like go through the read rules, the floor and the protected paths. A path outside the workspace gets a card.
+  - Otherwise `type C:\Users\…\.ssh\id_ed25519` would run with no card.
+- **PG5-c: only the exact listed forms, each with an allowlist of flags** (for example `git log --oneline -n <N>`).
+  - An unknown flag gets a card.
+  - `npm ls` and `node --version` take no other arguments.
+- **PG5-d:** the taint card and the person's rules still come first (above).
+
 ### Tests
 
 - **Unit:**
   - `git status` runs with no card in Ask;
   - `git status; rm -r x`, `git log > out.txt` and `Get-Content a | Set-Content b` all ask;
-  - an ask rule on `git status` asks.
+  - an ask rule on `git status` asks;
+  - PG5-a: in an invented repository with `core.fsmonitor` set to a probe script, `git status` run by Bunny doesn't start the probe, and with a `diff.external` probe `git diff` doesn't start it either;
+  - PG5-b: `type ..\outside.txt`, `Get-Content $HOME\.ssh\id_ed25519` and a read-denied path each get a card or a refusal;
+  - PG5-c: `git log --format=%H` (not on the flag list) gets a card, and `npm ls x` gets a card.
 - **QA:** a read-only look around a project in Ask mode has no cards.
 
 ## PG-6: importing another app's rules can't invert a deny
@@ -162,13 +226,22 @@ Tech Lead, 2026-11-20. v0.1.15. It feeds the PERMISSIONS-LIKE-CLAUDE workstream.
 - When the engine's own rules (ENGINE-RULES) or an imported plugin bring rules written for OpenCode, whose last match wins ([R] §2 "Who wins"), Bunny converts them to its order: deny, then ask, then allow.
 - The import screen shows any rule whose meaning changed.
 
+### Security's required changes (00e89f3f)
+
+- The import screen shows each changed rule's **new meaning before saving**, and nothing is saved until the person confirms.
+- An import that would add an allow wider than an existing deny is listed **first**.
+
 ### Tests
 
-- **Unit:** an OpenCode-style list `[allow '*', deny 'rm*']` imports as deny `rm*` plus allow `*`, and `rm -r` is denied.
+- **Unit:**
+  - an OpenCode-style list `[allow '*', deny 'rm*']` imports as deny `rm*` plus allow `*`, and `rm -r` is denied;
+  - the preview lists the changed rule with its new meaning, and nothing is saved until confirm;
+  - an import holding an allow wider than an existing deny lists it first.
 
 ## The owner's questions, in order (O12)
 
 1. **PG-4** Protected paths. Recommended: yes. It makes Auto safer, which F11 and F12 build on.
+   - **1b. PG4-c, asked with it:** "With Bunny's engine off, should the engines' cards also be marked when they change one of these files?" Recommended: yes, a mark and never a block. It extends ENGINE-RULES.
 2. **PG-5** Read-only commands. Recommended: yes.
 3. **PG-2** Tool rules. Recommended: yes. F9 saves into these.
 4. **PG-1** Domain rules. Recommended: yes.
