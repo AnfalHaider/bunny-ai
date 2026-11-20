@@ -225,7 +225,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, installSource: installSourceOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
   // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
   const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
@@ -389,7 +389,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     try { return redactDeep(await httpCallTool(sent, { ...call, auth: secret ? undefined : connectorSignIn.authFor(server) }), secret); } catch (err) { throw redactError(err, secret); }
   };
   const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
-  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
+  const appTools = createAppTools({ workDir: join(dataDir, 'installing'), ...(installSourceOverride ?? {}), toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -2658,7 +2658,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'create_tool', 'install_from_github', 'install_plugin', 'install_skill', 'add_connector', 'add_skill', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -3277,7 +3277,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
             }
           }
         }
-        const detail = officeSpec ? officeOutline(officeSpec) : name === 'install_plugin' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
+        const detail = officeSpec ? officeOutline(officeSpec) : name === 'install_plugin' || name === 'install_skill' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
 Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : toolPlan ? toolPlan.cardText
           : localConnector ? `This runs on your computer:
@@ -3289,15 +3289,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         let oneCard = null;
         let alreadyThere = false; // asking again about something that is already installed would be a card for nothing: the install itself answers
         const remoteAdd = name === 'add_connector' && !localConnector && String(parsed.url ?? '').trim();
-        if (isApp && name === 'install_plugin') alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
+        const installsSource = name === 'install_plugin' || name === 'install_skill'; // INSTALL-ANYWHERE: both take a GitHub link, an archive or a SKILL.md at a public https address
+        if (isApp && installsSource && scheduledTask) { const said = 'Installing needs you; nobody is here to ask.'; send('tool', { tool: summary, status: 'denied', result: said }); return said; } // IA-8: never unattended
+        if (isApp && installsSource) alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
         if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
-        if (alreadyThere) { const said = name === 'install_plugin' ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
-        if (isApp && !alreadyThere && (name === 'install_plugin' || remoteAdd || localConnector || toolPlan)) {
-          let title; let body; let listed = null; let tooLong = false; let commit = null; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
-          if (name === 'install_plugin') {
-            const card = await appTools.previewPluginCard(parsed.url);
+        if (alreadyThere) { const said = installsSource ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
+        if (isApp && !alreadyThere && (installsSource || remoteAdd || localConnector || toolPlan)) {
+          let title; let body; let listed = null; let tooLong = false; let commit = null; let token = null; let openWeb = false; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
+          if (installsSource) {
+            const card = await appTools.previewPluginCard(parsed.url, { chatId: id });
             if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
-            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null;
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null; token = card.token ?? null; openWeb = card.openWeb === true;
           } else if (remoteAdd) {
             try { await checkPublicAddress(parsed.url); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; } // IA-0: refused before any card, with the one sentence
             body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
@@ -3313,14 +3315,17 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           }
           if (tooLong) body = `Too long to show: it will be installed off. Switch it on in Customize.\n\n${body}`;
           title = tooLong ? `Install ${display}?` : `Install and switch on ${display}?`;
-          const choices = [...(tooLong ? [] : [{ id: 'on', label: 'Install and switch on', primary: true }]), { id: 'off', label: 'Install, keep off', ...(tooLong ? { primary: true } : {}) }, { id: 'no', label: "Don't install" }];
+          const offFirst = tooLong || openWeb; // IA-7: from the open web, "Install, keep off" is the main button
+          const onButton = tooLong ? [] : [{ id: 'on', label: 'Install and switch on', ...(offFirst ? {} : { primary: true }) }];
+          const offButton = { id: 'off', label: 'Install, keep off', ...(offFirst ? { primary: true } : {}) };
+          const choices = [...(openWeb ? [offButton, ...onButton] : [...onButton, offButton]), { id: 'no', label: "Don't install" }];
           const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices });
           if (!answer) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
-          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit };
+          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit, token };
         }
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
         if (!oneCard && !alreadyThere && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')))) {
@@ -3342,7 +3347,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off', ...(oneCard.commit ? { expectCommit: oneCard.commit } : {}) } : {}) });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off', ...(oneCard.commit ? { expectCommit: oneCard.commit } : {}), ...(oneCard.token ? { expectToken: oneCard.token } : {}) } : {}) });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               let added = appTools.takePending?.(id);

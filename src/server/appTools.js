@@ -3,6 +3,7 @@
  *   read  - web_search, read_url, search_plugins, read_skill
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
+import { describeSource, discardSource, prepareSource, stillTheSame, CHANGED } from './installSource.js';
 import { parseGithubUrl, readGithubPlugin, readUrl, resolveCommit, searchPlugins } from './pluginImport.js';
 import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
@@ -10,7 +11,7 @@ import { inScope } from './scope.js';
 
 export const APP_TOOL_RISK = {
   web_search: 'read', read_url: 'read', search_plugins: 'read', read_skill: 'read',
-  install_plugin: 'edit', add_skill: 'edit', add_connector: 'edit',
+  install_plugin: 'build', install_skill: 'build', add_skill: 'edit', add_connector: 'edit', // INSTALL-ANYWHERE: an install is a build action: a card in every mode, never skipped by a rule, a kind or a judge, refused in Plan
   install_from_github: 'build', // W6-6: runs code from the internet, so it is asked in EVERY mode (Auto too); Plan mode refuses it
 };
 
@@ -28,7 +29,9 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
     fn('read_skill', 'Load the instructions of a switched-on skill by name (Bunny\'s own skills, whichever app they were first written for). A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
-    fn('install_plugin', 'Install a plugin from a GitHub repository link: adds its skills and remote connectors to Bunny AI switched OFF; the person is shown what was added and decides whether to switch them on.',
+    fn('install_plugin', 'Install a plugin from a GitHub repository link, or from an archive (.zip, .tar.gz, .tgz) at a public https address: adds its skills and remote connectors to Bunny AI switched OFF after the person has seen one card listing every part and the fingerprint of the source. Nothing in it runs.',
+      { url: { type: 'string' } }, ['url']),
+    fn('install_skill', 'Install a skill from a SKILL.md address, or an archive or GitHub repository that holds skills, at a public https address: the person sees one card with the source, its fingerprint and the skill text before anything is added. It arrives switched OFF.',
       { url: { type: 'string' } }, ['url']),
     fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI, switched OFF: the person is shown the whole text (at most about 1,500 characters) and decides whether to switch it on.',
       { name: { type: 'string' }, description: { type: 'string' }, instructions: { type: 'string' } }, ['name', 'instructions']),
@@ -52,6 +55,7 @@ export function describeAppTool(name, args = {}) {
     case 'search_plugins': return `Search plugins for "${String(args.query ?? '').slice(0, 80)}"`;
     case 'read_skill': return `Load skill ${args.name}`;
     case 'install_plugin': return `Install plugin ${args.url}`;
+    case 'install_skill': return `Install skill ${args.url}`;
     case 'add_skill': return `Add skill ${args.name}`;
     case 'add_connector': return `Add connector ${args.name}`;
     case 'install_from_github': return `Install tool ${String(args.repo ?? '').slice(0, 100)} from GitHub`;
@@ -86,7 +90,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, now = () => new Date() }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   let queue = Promise.resolve();
@@ -118,10 +122,10 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   }
 
   /** Add the parts of a plugin and write down what was added. A plugin that is already installed is refused, never added twice. */
-  function installParts(plugin, source, { off = false } = {}) {
+  function installParts(plugin, source, { off = false, pin = null } = {}) {
     return serial(async () => {
       if (findInstalled(plugin.name, source)) throw Object.assign(new Error(`${plugin.name} is already installed. Uninstall it first to install it again.`), { code: 'plugin.installed' });
-      const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), connectors: [], uses: [], skills: [] };
+      const record = { id: crypto.randomUUID(), name: plugin.name, description: plugin.description, ...(source ? { source } : {}), ...(pin ? { pin } : {}), connectors: [], uses: [], skills: [] };
       try {
         for (const s of plugin.skills ?? []) record.skills.push((await skills.add({ ...s, enabled: !off })).id);
         for (const c of plugin.connectors ?? []) {
@@ -134,6 +138,29 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       await saveSettings({ plugins: [...(getSettings().plugins ?? []), record] });
       return record;
     });
+  }
+
+  // INSTALL-ANYWHERE: a source that is not GitHub's (an archive, a SKILL.md) is fetched, pinned, unpacked and inspected ONCE for the card; the install then uses exactly that folder.
+  const prepared = new Map(); // token -> prepared source (a temp folder under workDir)
+  const known = new Map(); // chat -> the addresses the catalogues showed it (curated, GitHub, registry): anything else is "found on the open web"
+  const sweep = async () => { for (const [t, p] of prepared) if (Date.now() - Date.parse(p.fetchedAt) > 30 * 60_000) { prepared.delete(t); await discardSource(p); } };
+  const noteKnown = (chatId, text) => { const set = known.get(String(chatId ?? '')) ?? new Set(); for (const m of String(text).matchAll(/https:\/\/[^\s)>"']+/g)) set.add(m[0].replace(/[.,;]+$/, '').toLowerCase()); known.set(String(chatId ?? ''), set); };
+  const isOpenWeb = (chatId, url) => !parseGithubUrl(url) && !(known.get(String(chatId ?? ''))?.has(String(url).trim().toLowerCase()));
+  async function prepareFromSource(url, chatId) {
+    if (!workDir) throw new Error('Installing from an address is not available here.');
+    await sweep();
+    const src = await prepareSource(url, { workDir, ...(fetchSource ? { fetchSource } : {}), ...(checkAddress ? { checkAddress } : {}), now });
+    prepared.set(src.token, src);
+    return { src, openWeb: isOpenWeb(chatId, url) };
+  }
+  async function installPrepared(token, { off = false } = {}) {
+    const src = prepared.get(String(token ?? ''));
+    if (!src) throw new Error('The source is no longer ready. Ask again to see it first.');
+    if (!(await stillTheSame(src))) { prepared.delete(src.token); await discardSource(src); throw new Error(CHANGED); }
+    try {
+      const record = await installParts({ ...src.plugin }, src.url, { off, pin: { kind: src.kind, url: src.url, sha256: src.sha256, treeHash: src.treeHash, fetchedAt: src.fetchedAt } });
+      return { record, plugin: src.plugin };
+    } finally { prepared.delete(src.token); await discardSource(src); }
   }
 
   async function installFromGithub(url, { off = false, pin = null } = {}) {
@@ -177,7 +204,16 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
    * F10: the one card for a plugin. `text` lists EVERY part by name (each skill, each connector with its address, and what is not imported); `listed` is the same list as data, kept by the server:
    * "Install and switch on" switches on exactly those parts and no other (F10-2). Over 1,800 characters the card cannot show it all: tooLong, no switch-on button, and it installs off.
    */
-  async function previewPluginCard(url) {
+  async function previewPluginCard(url, { chatId = '' } = {}) {
+    if (!parseGithubUrl(url)) {
+      try {
+        const { src, openWeb } = await prepareFromSource(url, chatId);
+        const full = describeSource(src, { openWeb });
+        const tooLong = full.length > 1800;
+        return { ok: true, name: src.plugin.name, token: src.token, openWeb, pin: src.sha256, text: tooLong ? `${full.slice(0, 1800)}
+…` : full, tooLong, listed: { skills: src.plugin.skills.map((s) => String(s.name)), connectors: src.plugin.connectors.map((c) => String(c.url)) } };
+      } catch (err) { return { ok: false, message: String(err.message).slice(0, 300) }; }
+    }
     try {
       const commit = await resolveCommit(url, { fetchImpl }); // the card and the install read this one commit
       const plugin = await readGithubPlugin(url, { fetchImpl, pin: commit });
@@ -329,7 +365,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   const run = {
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
-    search_plugins: async ({ query }) => searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) }),
+    search_plugins: async ({ query }, ctx) => { const found = await searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) }); noteKnown(ctx?.chatId, found); return found; },
     read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
@@ -343,7 +379,16 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       const slice = text.slice((at - 1) * SIZE, at * SIZE);
       return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
+    install_skill: (args, ctx) => run.install_plugin(args, ctx), // the same pipeline and the same card
     install_plugin: async ({ url }, ctx) => {
+      if (!parseGithubUrl(url)) { // INSTALL-ANYWHERE: only what the card showed, and only through the card
+        if (findInstalled(null, url)) return 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.';
+        if (!ctx?.expectToken) throw new Error('A source that is not on GitHub is installed only after the card shows it.');
+        const { plugin, record } = await installPrepared(ctx.expectToken, { off: true });
+        keep(ctx, { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors });
+        return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], ${plugin.connectors.length} connector(s). They are switched OFF until the person says to switch them on (they were just asked).`
+          + (plugin.skipped.length ? ` Not imported: ${plugin.skipped.join('; ')}.` : '');
+      }
       // F10-5: something already installed is never read or imported again from here (an update goes through Customize's own update path)
       if (findInstalled(null, url)) return 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.';
       const { plugin, record } = await installFromGithub(url, { off: true, pin: ctx?.expectCommit });
