@@ -187,3 +187,27 @@ Adopted as an option. Add:
 ## The order for the owner
 
 I agree with the spec's order: F9, F10, F11, F13, F12, then F8 together with the default-on question. Each question carries its required changes above.
+
+## F9: Design's drawing (artifact RQLi4SyjCVvUxbRmX9UzVx), Security's answers
+
+The owner said yes to F9 on 2026-11-20 (relayed by the Chief of Staff). F9-1 to F9-7 above stand, and the drawing changes below follow from them. Design asked five questions, (a) to (e):
+
+- **(a) The reason lines are fixed strings, never model text.** Yes, required. Each one comes from a fixed table, keyed by the case.
+- **(b) The kind comes only from the call's own arguments when the card is shown.** Yes, required (F9-1 to F9-3). For browser actions, the host comes from the main process's current page, not from the arguments.
+- **(c) The tick writes Allow only.** Yes. It must also show the exact rule text before saving (F9-6), for example "Allow `npm run *` in C:\Users\Sam\Projects\carrot-shop", not only "(an Allow rule, for …)".
+- **(d) The step mark is a small chip.** Yes. No banner; the chip is enough.
+- **(e) Long paths.** Show the folder **relative to the workspace** ("src/components/"), cut in the middle if long, with the full path in the tooltip. The last folder name alone isn't enough: `components/` could sit in two places.
+
+### Changes to the drawing
+
+1. **Command kind, caption.** Drop "node" from the "known tools" caption. Only the fixed pairs of F9-1 get a wide kind.
+2. **Add an exact-command variant:** "Allow `node scripts/check.js` (this exact command) in this chat". It covers interpreters, downloaders, deletions, `git push` and `git -c`.
+3. **Add a no-kind case:** a command named by a path, or with an option before its sub-command. Reason: "Asked every time: this command is named by a path or has options Bunny can't check".
+4. **Computer kind:** "Allow controlling this PC for this task". It lasts for this reply only (F9-3), and the tick isn't shown for it.
+5. **Browser kind:**
+   - Change the example away from "Buy". Purchases, downloads and form submits with typed text are once only, with the reason "Asked every time: this sends or buys something".
+   - The tick isn't shown for browser kinds.
+6. **Two more never-offered reasons:**
+   - "Asked every time: a helper is asking" (helpers get Allow once only).
+   - A device already has its line.
+7. **The "Allowed in this chat" list** shows computer control as "Controlling this PC (this task only)" while a reply runs, and removes it when the reply ends.
