@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
+import { capabilityMap } from './capabilityMap.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -2396,6 +2397,15 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         });
         history.unshift({ role: 'system', content: `Connectors: ${stand.join(', ')}. If one the person needs is not connected, say so.` });
       }
+      // AGENT-FLOW F2: which abilities are on and off right now, and how to get each (fixed wording from the real state; no tool, no grant). Not for the quick bar or a scheduled run: nobody can answer there.
+      if (!textOnly && !scheduledTask) {
+        const asleep = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((c) => inScope(c.folders, scopeFolder) && (!c.enabled || c.status === 'error' || c.status === 'needsSignIn'))
+          .map((c) => ({ name: c.name, state: !c.enabled ? 'off' : c.status === 'needsSignIn' ? 'needsSignIn' : 'failed' }));
+        history.unshift({ role: 'system', content: capabilityMap({
+          code: Boolean(workspace), computer: aiComputerOn, build: buildOn, browser: browserControl, pc: chatPc, google: googleOn, github: Boolean(githubToken),
+          device: Boolean(req.bunnyRemote ?? req.bunnyDevice), plan: permissionMode === 'plan', connectors: asleep,
+        }) });
+      }
       // L-1: what a connector says about itself (its handshake instructions), as information for the model: it is the connector's text, not the person's
       {
         const said = servers
@@ -2410,6 +2420,47 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
             + said.map((x) => `<connector name="${String(x.name).replace(/[^\w .-]/g, '')}">\n${plain(x.text)}\n</connector>`).join('\n') });
         }
       }
+      /**
+       * AGENT-FLOW F1: after install_plugin / add_connector and the person's yes to "switch on what was just added", read the new connector's tools and offer them in the SAME reply,
+       * the way request_capability adds its tools. No permission changes: the person's yes was already given on the card, and each tool still asks as any connector tool does.
+       * Returns one plain line for the model (the tool names, or why there are none), or ''.
+       */
+      const loadSwitchedOn = async (added) => {
+        const lines = [];
+        for (const sid of added?.connectorIds ?? []) {
+          const server = await mcp.get(sid);
+          if (!server || !server.enabled || !inScope(server.folders, scopeFolder) || servers.some((x) => x.id === server.id)) continue;
+          const label = String(server.name ?? 'the connector').replace(/[^\w .,:'-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'the connector';
+          try {
+            const startStep = `Start ${server.name}`;
+            server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }) });
+            await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
+          } catch (err) {
+            if (err.code === 'mcp.needsSignIn') { // the chat shows Sign in and Skip it, as for a connector found at the start of a reply
+              const said = await connectorSignIn.needsSignIn(server, err);
+              if (said.code === 'mcp.keyRefused') send('tool', { tool: `${server.name}`, status: 'failed', result: KEY_REFUSED });
+              else send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id });
+              lines.push(`${label} is on but needs the person to sign in first (a Sign in button is shown); its tools appear after that, in their next message.`);
+            } else lines.push(`${label} is on but did not start (${String(err.message).replace(/[^\w .,:'-]/g, ' ').slice(0, 100)}).`);
+            continue;
+          }
+          servers.push(server);
+          const offered = connectorTools([server], { planMode: permissionMode === 'plan' });
+          const names = [];
+          for (const def of offered.definitions.slice(0, 60)) {
+            let name = def.function.name;
+            const entry = offered.index.get(name);
+            for (let n = 2; toolIndex.has(name) || toolDefinitions.some((d) => d.function.name === name); n += 1) name = `${def.function.name.slice(0, 60)}_${n}`;
+            def.function.name = name;
+            toolDefinitions.push(def);
+            toolIndex.set(name, entry);
+            names.push(name);
+          }
+          const more = offered.definitions.length - names.length;
+          lines.push(names.length ? `${label} is ready. You now have its tools: ${names.join(', ')}${more > 0 ? ` (${more} more are not listed)` : ''}. Use them now to do the job.` : `${label} is on but offers no tools.`);
+        }
+        return lines.join('\n');
+      };
       // PV-2: too many tools for a provider: the connector tools are reached through two small tools instead
       const capped = capTools(toolDefinitions, toolIndex);
       const deferredTools = capped.deferred;
@@ -3228,7 +3279,12 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               const shown = `${added.title}\n${added.text}`;
               if (shown.length > 1800) return `${said}\nIt is too long to show you whole, so it stays switched OFF; the person can read and switch it on in Settings, Customize.`;
               const answer = await askCapability('switch_on_added', shown);
-              if (answer.granted) { await appTools.switchOn(added); return `${said}\nThe person said yes: it is now switched on.`; }
+              if (answer.granted) {
+                await appTools.switchOn(added);
+                // AGENT-FLOW F1: what was just switched on is loaded into THIS reply, so the person does not have to send another message
+                const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                return `${said}\nThe person said yes: it is now switched on.${loaded ? `\n${loaded}` : ''}`;
+              }
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
             })()
             : isWorkspace
@@ -3422,9 +3478,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             maxToolRounds: () => maxToolRounds,
             // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
             extendRounds: (round) => {
-              if (workMode !== 'code' && !workspace) return false;
+              // AGENT-FLOW F3: Chat mode is extended too (it was never: a research or browser job answered half done after 6 steps). Same caps, same loop-stop cards; the quick bar is never extended.
+              if (textOnly) return false;
               if (!replyCaps.steps || !replyCaps.minutes || round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
-              maxToolRounds = round + Math.max(EFFORT.code, 12);
+              maxToolRounds = round + (workMode === 'code' || workspace ? Math.max(EFFORT.code, 12) : Math.max(EFFORT.chat, 6));
               send('working', { step: round + 1 });
               return true;
             },
