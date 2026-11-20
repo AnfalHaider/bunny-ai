@@ -189,7 +189,7 @@ test('off by default: nothing listens; turning it on needs a passcode of 12+ cha
   await put(base, { enabled: false });
 });
 
-test('the passcode is saved only as a hash, and "on" is never read back: a new app starts OFF', async (t) => {
+test('the passcode is saved only as a hash, and the access module never reads "on" from a file: a new one starts OFF (only resumeRemote in app.js turns it on again, REMOTE-STAY)', async (t) => {
   const { base, dataDir } = await startApp(t, { lanAddress: '127.0.0.1' });
   await put(base, { enabled: true, passcode: PASS });
   const file = await readFile(join(dataDir, 'remote-access.json'), 'utf8');

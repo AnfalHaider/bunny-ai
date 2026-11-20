@@ -75,8 +75,7 @@ const FLOOR_LIST = `<div class="floor" id="engine-floor"><div class="floor-h">Al
   + `<li>Bunny's own data folder: your chats, memory, settings and keys.</li>`
   + `<li>Every engine's own folder, where its sign-in is kept.</li>`
   + '<li>Your private folders (keys, sign-ins, app data) when they lie outside the project.</li>'
-  + `<li>Bunny's own tools: the model may not use them.</li>`
-  + '</ul><div class="d">Commands are not blocked: Bunny cannot see what a command reads. When a command that names one of these folders comes to you on a card, the card says so; a command your Allow rules let through runs without a card.</div></div>';
+  + '</ul><div class="d" id="engine-floor-tools">Also: the model may never use Bunny&#39;s own tools.</div><div class="d">Commands are not blocked: Bunny cannot see what a command reads. When a command that names one of these folders comes to you on a card, the card says so; a command your Allow rules let through runs without a card.</div></div>';
 
 // The engine's own rules as lists (Deny, Ask, Allow), one row per rule with Remove and an add line per list. The same data shape as before ({ allow, ask, deny } of strings)
 // and the same checks on the server; the add line only repeats them so a mistake is said at once, next to the line.
