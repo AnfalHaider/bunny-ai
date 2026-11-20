@@ -1557,6 +1557,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
       const answer = await readBody(req);
+      if (pending.choices) { pending.resolve(typeof answer.choice === 'string' && pending.choices.includes(answer.choice) && answer.choice !== 'no' ? answer.choice : false); return sendJson(res, 200, { ok: true }); } // F10: a card with named choices takes only one of its own
       pending.resolve(answer.allowed === true && answer.forSession === true && pending.forSession ? 'session' : answer.allowed === true);
       return sendJson(res, 200, { ok: true });
     }
@@ -2519,15 +2520,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       };
       // Ask the person, and wait for the answer (or for them to leave).
       // `opts.forSession` offers a third answer, "Allow for this chat" (Codex's acceptForSession, only with Bunny's engine off): the answer is the text 'session', and only when this card offered it
+      // `opts.choices` ([{ id, label, primary? }]) makes the card carry those buttons instead of Allow and Deny (F10, one install card): the answer is the chosen id, or false for "no", and only an id this card offered counts
       const askPermission = (summary, detail, opts = {}) => new Promise((resolveAnswer) => {
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
         if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
         const timer = waitNudges({ kind: 'permission', title: summary });
-        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, choices: Array.isArray(opts.choices) ? opts.choices.map((c) => c.id) : null, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
-        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}) });
+        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}), ...(Array.isArray(opts.choices) ? { choices: opts.choices.map((c) => ({ id: c.id, label: c.label, ...(c.primary ? { primary: true } : {}) })) } : {}) });
       });
 
       // Ask the window to do a browser action, and wait for what happened.
@@ -3280,8 +3282,44 @@ Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${pars
 ${[parsed.command, ...(Array.isArray(parsed.args) ? parsed.args : [])].map((a) => (/\s|"/.test(String(a)) ? JSON.stringify(String(a)) : String(a))).join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
+        // F10: ONE card for what the model adds (a plugin, a connector, a tool from GitHub): it shows everything the two old cards showed, in every mode, Auto included. "Install and switch on" switches on exactly the parts
+        // the card listed (F10-2); too long to list whole: no switch-on button and it installs off (F10-1); "Install, keep off" leaves it off; devices never get here (these tools are not theirs, REMOTE_TOOLS_DENIED).
+        let oneCard = null;
+        let alreadyThere = false; // asking again about something that is already installed would be a card for nothing: the install itself answers
+        const remoteAdd = name === 'add_connector' && !localConnector && String(parsed.url ?? '').trim();
+        if (isApp && name === 'install_plugin') alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
+        if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
+        if (isApp && !alreadyThere && (name === 'install_plugin' || remoteAdd || localConnector || toolPlan)) {
+          let title; let body; let listed = null; let tooLong = false; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
+          if (name === 'install_plugin') {
+            const card = await appTools.previewPluginCard(parsed.url);
+            if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name;
+          } else if (remoteAdd) {
+            body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
+            listed = { skills: [], connectors: [String(parsed.url)] };
+          } else if (localConnector) {
+            body = detail; listed = { skills: [], connectors: [] };
+            const long = cardTooLong(detail);
+            if (long) { send('tool', { tool: summary, status: 'denied', result: long }); return long; } // a command is never installed without being shown whole
+          } else {
+            body = detail; listed = null; // one connector, the one this commit installs
+            const long = cardTooLong(detail);
+            if (long) { send('tool', { tool: summary, status: 'denied', result: long }); return long; }
+          }
+          if (tooLong) body = `Too long to show: it will be installed off. Switch it on in Customize.\n\n${body}`;
+          title = tooLong ? `Install ${display}?` : `Install and switch on ${display}?`;
+          const choices = [...(tooLong ? [] : [{ id: 'on', label: 'Install and switch on', primary: true }]), { id: 'off', label: 'Install, keep off', ...(tooLong ? { primary: true } : {}) }, { id: 'no', label: "Don't install" }];
+          const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices });
+          if (!answer) {
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            send('tool', { tool: summary, status: 'denied' });
+            return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
+          }
+          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong };
+        }
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
-        if (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        if (!oneCard && !alreadyThere && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')))) {
           const tooLong = (localConnector || toolPlan || name === 'run_command' || officeSpec) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
@@ -3300,11 +3338,21 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off' } : {}) });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
-              const added = appTools.takePending?.(id);
+              let added = appTools.takePending?.(id);
+              if (oneCard && toolPlan && oneCard.on) { // a tool from GitHub is already on when it is installed: load its tools into this reply too (F1)
+                const found = (await mcp.list()).find((x) => x.source?.repo === toolPlan.repo && x.source?.sha === toolPlan.sha);
+                if (found) added = { title: found.name, text: '', skillIds: [], connectorIds: [found.id] };
+              }
               if (!added) return said;
+              if (oneCard) { // the answer was given on the one card: no second card
+                if (!oneCard.on) return `${said}\nThe person chose to keep it off${oneCard.tooLong ? ' (it was too long to show whole, so the card could not offer to switch it on)' : ''}. It stays switched OFF; do not ask again, carry on without it.`;
+                const left = toolPlan ? { left: [] } : await appTools.switchOn(added, oneCard.listed); // exactly what the card listed, no more (F10-2)
+                const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                return `${said}\nThe person said yes: it is now switched on.${left.left.length ? ` Not switched on, because it was not on the card: ${left.left.join(', ')}.` : ''}${loaded ? `\n${loaded}` : ''}`;
+              }
               const shown = `${added.title}\n${added.text}`;
               if (shown.length > 1800) return `${said}\nIt is too long to show you whole, so it stays switched OFF; the person can read and switch it on in Settings, Customize.`;
               const answer = await askCapability('switch_on_added', shown);

@@ -43,7 +43,7 @@ async function run(t, mode, args, answer) {
     for (const m of part.matchAll(/event: permission\ndata: (.*)/g)) {
       const data = JSON.parse(m[1]);
       asked.push(data);
-      await post(base, `/api/sessions/${s.id}/permission/${data.id}`, { allowed: answer });
+      await post(base, `/api/sessions/${s.id}/permission/${data.id}`, { allowed: answer, ...(data.choices ? { choice: answer ? 'on' : 'no' } : {}) });
     }
   }
   const servers = await (await fetch(`${base}/api/mcp`)).json();
