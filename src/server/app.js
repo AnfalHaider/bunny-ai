@@ -1557,6 +1557,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
       const answer = await readBody(req);
+      if (pending.choices && (req.bunnyRemote || req.bunnyDevice)) return sendJson(res, 403, { code: 'request.windowOnly', message: "This is answered in Bunny's window." }); // F10-4: a device cannot approve an install; the card keeps waiting
       if (pending.choices) { pending.resolve(typeof answer.choice === 'string' && pending.choices.includes(answer.choice) && answer.choice !== 'no' ? answer.choice : false); return sendJson(res, 200, { ok: true }); } // F10: a card with named choices takes only one of its own
       pending.resolve(answer.allowed === true && answer.forSession === true && pending.forSession ? 'session' : answer.allowed === true);
       return sendJson(res, 200, { ok: true });
@@ -3289,17 +3290,18 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         const remoteAdd = name === 'add_connector' && !localConnector && String(parsed.url ?? '').trim();
         if (isApp && name === 'install_plugin') alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
         if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
+        if (alreadyThere) { const said = name === 'install_plugin' ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
         if (isApp && !alreadyThere && (name === 'install_plugin' || remoteAdd || localConnector || toolPlan)) {
-          let title; let body; let listed = null; let tooLong = false; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
+          let title; let body; let listed = null; let tooLong = false; let commit = null; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
           if (name === 'install_plugin') {
             const card = await appTools.previewPluginCard(parsed.url);
             if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
-            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name;
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null;
           } else if (remoteAdd) {
             body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
             listed = { skills: [], connectors: [String(parsed.url)] };
           } else if (localConnector) {
-            body = detail; listed = { skills: [], connectors: [] };
+            body = detail; listed = { skills: [], connectors: [String(parsed.name ?? '')] }; // the local connector's own name, so a later message about what was switched on is right
             const long = cardTooLong(detail);
             if (long) { send('tool', { tool: summary, status: 'denied', result: long }); return long; } // a command is never installed without being shown whole
           } else {
@@ -3316,7 +3318,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
-          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong };
+          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit };
         }
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
         if (!oneCard && !alreadyThere && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')))) {
@@ -3338,7 +3340,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off' } : {}) });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off', ...(oneCard.commit ? { expectCommit: oneCard.commit } : {}) } : {}) });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               let added = appTools.takePending?.(id);

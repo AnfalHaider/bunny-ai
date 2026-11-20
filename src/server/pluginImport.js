@@ -59,10 +59,23 @@ export function firstSentence(body) {
   return '';
 }
 
-export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {}) {
+/** F10 (Security LOW): the commit a link points at now, so the card and the install read the SAME commit. null when GitHub does not say (the read then goes unpinned, as before). */
+export async function resolveCommit(url, { fetchImpl = globalThis.fetch } = {}) {
+  const loc = parseGithubUrl(url);
+  if (!loc) return null;
+  try {
+    const res = await fetchImpl(`https://api.github.com/repos/${loc.owner}/${loc.repo}/commits/${encodeURIComponent(loc.ref)}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai' } });
+    if (!res.ok) return null;
+    const sha = String((await res.json())?.sha ?? '');
+    return /^[0-9a-f]{40}$/i.test(sha) ? sha.toLowerCase() : null;
+  } catch { return null; }
+}
+
+export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch, pin = null } = {}) {
   const loc = parseGithubUrl(url);
   if (!loc) throw new Error('That is not a GitHub repository link (github.com/owner/repo).');
-  const { owner, repo, ref, base } = loc;
+  const { owner, repo, base } = loc;
+  const ref = pin && /^[0-9a-f]{40}$/i.test(String(pin)) ? String(pin).toLowerCase() : loc.ref; // a pinned commit is read exactly
   const api = `https://api.github.com/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`;
   const treeRes = await fetchImpl(api, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai' } });
   if (treeRes.status === 404) throw new Error('GitHub could not find that repository (it may be private).');

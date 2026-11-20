@@ -3,7 +3,7 @@
  *   read  - web_search, read_url, search_plugins, read_skill
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
-import { parseGithubUrl, readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
+import { parseGithubUrl, readGithubPlugin, readUrl, resolveCommit, searchPlugins } from './pluginImport.js';
 import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
 import { inScope } from './scope.js';
@@ -136,8 +136,8 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     });
   }
 
-  async function installFromGithub(url, { off = false } = {}) {
-    const plugin = await readGithubPlugin(url, { fetchImpl });
+  async function installFromGithub(url, { off = false, pin = null } = {}) {
+    const plugin = await readGithubPlugin(url, { fetchImpl, pin });
     const record = await installParts(plugin, plugin.source, { off });
     return { record, plugin };
   }
@@ -167,7 +167,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     }
     for (const id of p?.connectorIds ?? []) {
       const server = listed ? await mcp.get(id) : null;
-      if (listed && !(server && urls.has(normUrl(server.url)))) { left.push(server?.name ?? id); continue; }
+      if (listed && !(server && (urls.has(normUrl(server.url)) || urls.has(normUrl(server.name))))) { left.push(server?.name ?? id); continue; }
       await mcp.update(id, { enabled: true }).catch(() => {});
     }
     return { left };
@@ -179,16 +179,17 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
    */
   async function previewPluginCard(url) {
     try {
-      const plugin = await readGithubPlugin(url, { fetchImpl });
+      const commit = await resolveCommit(url, { fetchImpl }); // the card and the install read this one commit
+      const plugin = await readGithubPlugin(url, { fetchImpl, pin: commit });
       const lines = [
-        `Plugin ${plugin.name}${plugin.description ? `: ${bunnyText(plugin.description)}` : ''}`,
+        `Plugin ${plugin.name}${plugin.description ? `: ${bunnyText(plugin.description)}` : ''}${commit ? ` (commit ${commit.slice(0, 7)})` : ''}`,
         ...(plugin.skills ?? []).map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${bunnyText(s.description) || '(no description)'}`),
         ...(plugin.connectors ?? []).map((c) => `Connector ${c.name}: ${c.url}`),
         ...(plugin.skipped?.length ? [`Not imported: ${plugin.skipped.join('; ')}`] : []),
       ];
       const full = lines.join('\n');
       const tooLong = full.length > 1800;
-      return { ok: true, name: plugin.name, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: (plugin.skills ?? []).map((s) => String(s.name)), connectors: (plugin.connectors ?? []).map((c) => String(c.url)) } };
+      return { ok: true, name: plugin.name, commit, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: (plugin.skills ?? []).map((s) => String(s.name)), connectors: (plugin.connectors ?? []).map((c) => String(c.url)) } };
     } catch (err) {
       return { ok: false, message: `Could not read that repository yet: ${String(err.message).slice(0, 200)}` };
     }
@@ -343,7 +344,9 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
     install_plugin: async ({ url }, ctx) => {
-      const { plugin, record } = await installFromGithub(url, { off: true });
+      // F10-5: something already installed is never read or imported again from here (an update goes through Customize's own update path)
+      if (findInstalled(null, url)) return 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.';
+      const { plugin, record } = await installFromGithub(url, { off: true, pin: ctx?.expectCommit });
       keep(ctx, { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors });
       return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], `
         + `${plugin.connectors.length} connector(s). They are switched OFF until the person says to switch them on (they were just asked); they appear in Settings, Customize.`
@@ -377,6 +380,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       }
       // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
       const remote = !String(args.command ?? '').trim();
+      if (remote && String(args.url ?? '').trim() && (await mcp.list()).some((x) => x.url && normUrl(x.url) === normUrl(args.url))) return 'A connector at that address is already installed, so nothing was added (F10-5). Changing it is done by the person in Settings, Customize.';
       const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: remote ? false : ctx?.switchOn !== 'off', ...(remote && args.key_headers ? { keyHeaders: args.key_headers } : {}) });
       if (remote) {
         keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
