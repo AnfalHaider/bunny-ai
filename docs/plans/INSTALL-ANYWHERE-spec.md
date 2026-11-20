@@ -78,7 +78,7 @@ find  ──>  fetch (bounded)  ──>  pin  ──>  unpack (safe)  ──>  i
 | A single `SKILL.md` | its sha256 | The same as an archive. |
 | An npm package | **name, exact version, and the registry's `dist.integrity` (sha512)** | `https://registry.npmjs.org/<name>/<version>`. A version range or `latest` is resolved to the exact version first. |
 | A PyPI package | **name, exact version, and the wheel's or sdist's sha256** from `https://pypi.org/pypi/<name>/<version>/json` | |
-| A remote MCP server | its **exact https address** (after redirects), and the host's TLS name | An address can't be pinned to content, so the card says: "This service can change what it does at any time." |
+| A remote MCP server | its **exact https address** and its hostname. No certificate is pinned, since that breaks on rotation (IA-6), and the card doesn't claim more. | An address can't be pinned to content, so the card says: "This service can change what it does at any time." |
 
 **The pin is kept in the install record** (`source: { kind, url, commit | sha256 | version + integrity, fetchedAt }`) and shown in Customize.
 
@@ -110,12 +110,12 @@ find  ──>  fetch (bounded)  ──>  pin  ──>  unpack (safe)  ──>  i
 
 - **npm.** A pinned `name@version` is installed into Bunny's tools folder:
   - Bunny fetches the tarball, checks `integrity`, and unpacks it under §2.4.
-  - It runs `npm install --ignore-scripts --omit=dev` **only** with a lockfile written from the pinned top version. Dependencies are resolved by npm and recorded in the install record, and `npm audit` runs.
+  - Every dependency is locked **at card time** and installed from that lock (IA-2, §2.9).
   - The connector runs as `node <bin>` from that folder, never `npx -y <name>`.
   - A package that needs its install script to work is reported: "needs an install script, which Bunny doesn't run".
 - **PyPI.** A pinned wheel (preferred) or sdist:
-  - It goes into a dedicated venv under Bunny's tools folder: `python -m venv`, then `pip install --no-deps <the pinned file>`. Its dependencies come from the wheel's metadata, each pinned with `--require-hashes`.
-  - **An sdist (which runs `setup.py`) is refused.** The card names this. Wheels only.
+  - It goes into a dedicated venv under Bunny's tools folder: `python -m venv`, then pip with binaries only, all the way down (IA-3, §2.9).
+  - **An sdist (which runs `setup.py`) is refused, for the package and for every dependency.** The card names this. Wheels only.
   - It runs with the venv's `python -m <module>` or its console script.
 - **Docker images** stay as today, a person-only path in Settings. They are not part of this spec.
 - **Existing `npx -y` and `uvx` connectors** keep working. New model-proposed ones are converted to the pinned form, and the card says so.
@@ -147,8 +147,122 @@ When the list is too long to show whole, there is no switch-on button (F10-1). T
 
 - **What is installed** is the temp folder that was inspected, moved into place, and only the listed parts.
 - **For a git source,** the commit checked out is the pinned one (checked again with `git rev-parse HEAD`).
-- **If anything differs** (a hash, a commit, or the part list), the install stops with "The source changed after you looked; nothing was installed".
+- **If anything differs** (a hash, a commit, the part list, or IA-5's tree hash), the install stops with "The source changed after you looked; nothing was installed".
 - **Updates are never automatic.** "Check for updates" in Customize runs the whole pipeline again, with a new card.
+
+### 2.9 Security's required changes (8da6595e)
+
+**IA-0 is a separate fix,** to land before v0.1.15 ships, and is given to Builder C. It covers model-proposed connectors:
+
+- https only, with no private hosts;
+- pinned DNS, and `redirect: 'error'` at every call;
+- `addedBy`, which only the window can set.
+
+It closes finding 1 in §1. This spec relies on IA-0 being in place.
+
+#### IA-1: git uses neither the person's git setup nor their credentials
+
+git does its own networking, so `fetchLimited` doesn't cover it.
+
+- **Before cloning,** Bunny resolves the host and refuses a private result.
+- **Every git call runs with:**
+  - `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=<an empty file>` and `HOME` set to an isolated folder. Then the person's `insteadOf` rewrites, hooks, credential helpers and proxies are never used.
+  - an empty credential helper, `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never` and an empty `GIT_ASKPASS`. The person's stored GitHub or Azure credentials are never offered to any host.
+  - only the https protocol allowed, and redirects not followed;
+  - fsmonitor off, hooks pointed at an empty folder, no submodules (`--no-recurse-submodules`, submodule recursion off);
+  - `GIT_LFS_SKIP_SMUDGE=1`, and no filter driver.
+
+#### IA-2: npm locks every dependency when the card is made
+
+- **At card time:**
+  - `npm install --package-lock-only --ignore-scripts` runs in the temp folder;
+  - it uses `--registry=https://registry.npmjs.org/` and empty `--userconfig` and `--globalconfig` files, so the person's `.npmrc` tokens and private registries are never used.
+- **The card shows:**
+  - the dependency count ("this adds 143 packages");
+  - the `npm audit` result;
+  - "includes compiled code" when any package ships `*.node`, or `binding.gyp` with prebuilt files.
+- **The install** is `npm ci --ignore-scripts --omit=dev` from **that** lockfile, whose sha256 is checked again first. The resolution never changes between card and install.
+- **The `bin` path** is resolved inside the package folder (realpath, no escape) before `node <bin>` is recorded.
+
+#### IA-3: PyPI takes binaries only, all the way down
+
+- **pip runs with:**
+  - `--only-binary=:all:` for every package, dependencies included;
+  - `--require-hashes`;
+  - `--index-url https://pypi.org/simple`;
+  - `--isolated`, so `pip.conf`, `PIP_*` and the person's index settings are ignored;
+  - `--no-input`.
+- **The card shows** the dependency count, and "includes compiled code" when a wheel holds `.pyd`.
+
+#### IA-4: stricter unpacking
+
+The checks are added to §2.4:
+
+- **Real sizes.** Count the **bytes actually written**, never the sizes the headers declare.
+- **Zip links.** A symlink in a zip is detected by the Unix mode in its external attributes.
+- **Tar names.** PAX and GNU long-name headers are applied before the path check.
+- **Hidden folders.** `.git/`, `.hg/` and `.svn/` inside an archive are skipped.
+- **Name clashes.** Names that collide under Windows 8.3 short names (`GIT~1`) or after Unicode NFC normalisation stop the install, as case clashes do.
+
+#### IA-5: what was inspected is what is installed
+
+- At card time, Bunny records a **tree hash**: sha256 over every kept file's path and bytes, in sorted order.
+- It re-checks that hash immediately before moving the folder into place, **for every source**.
+- If it differs, the install stops with "The source changed after you looked; nothing was installed".
+- This is needed because a command can write the data folder between card and install, even though model file tools can't. It extends §2.8.
+
+#### IA-6: remote connectors after install
+
+- IA-0's checks at every call apply to every remote connector a plugin brings.
+- The pin is the hostname only, with no certificate pin (the §2.3 table is corrected).
+
+#### IA-7: open-web sources default to off
+
+- For a source marked "Found on the open web: not from a known catalogue", the **primary** button is **Install, keep off**.
+- **Install and switch on** is still offered, as the second button.
+
+#### IA-8: never unattended
+
+- **A scheduled run** never installs. Its fixed line reads "Installing needs you; nobody is here to ask".
+- **Helpers** can't install: every install tool is in `HELPER_NEVER`.
+
+#### IA-9: existing unpinned connectors (LOW, not blocking)
+
+- Customize marks existing `npx -y` and `uvx` connectors "not pinned: runs whatever version the registry has today".
+- It offers **Pin this version**, which runs the pipeline and shows a card.
+
+#### Not changed
+
+- PG-1 applies at every hop. An allow never skips IA-0 or IA-1 (PG1-b).
+- The person's own **Add from address** in Customize uses this same pipeline, and may target private hosts (IA-0 point 3).
+
+#### Added tests
+
+- **IA-1:**
+  - a clone from a stand-in host that asks for credentials gets none, and fails;
+  - an `insteadOf` rewrite in a test global git config is not used;
+  - a host that resolves to a private address is refused before git starts;
+  - a redirect is not followed;
+  - a submodule and an LFS pointer are not fetched.
+- **IA-2:**
+  - the card's lockfile sha256 equals the one installed;
+  - a registry change between card and install doesn't change what installs;
+  - a test `.npmrc` with a token isn't read;
+  - a `*.node` file shows "includes compiled code";
+  - a `bin` pointing at `../x` is refused.
+- **IA-3:**
+  - a dependency that exists only as an sdist stops the install;
+  - a `PIP_INDEX_URL` in the environment is ignored.
+- **IA-4:**
+  - a zip whose headers say 1 KB but which writes 300 MB stops at the limit;
+  - a zip symlink (Unix mode `0120000`) is skipped;
+  - a PAX long name with `../` is refused;
+  - a `.git/` folder inside an archive is skipped;
+  - `GIT~1` against `.git1`, and NFC-equal names, stop the install.
+- **IA-5:** a file changed in the temp folder between card and install stops it, with nothing installed.
+- **IA-7:** an open-web source's primary button is **Install, keep off**.
+- **IA-8:** a scheduled run's install call gets the fixed line, and a helper's install call is refused.
+- **IA-9:** an existing `npx -y` connector shows "not pinned", and **Pin this version** shows a card.
 
 ## 3. The model's tools
 
