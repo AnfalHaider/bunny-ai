@@ -3,7 +3,8 @@
 Tech Lead, 2026-11-20. Plan item D in `docs/plans/2026-11-20-v0.1.15-plan.md`.
 
 - Design draws it first (O3). This spec is the behaviour Design draws against.
-- Risk: MEDIUM. Rewind writes files in the person's folder. Security looks at §3.4.
+- Risk: MEDIUM. Rewind writes files in the person's folder.
+- Security passed it with required changes RW-1 to RW-3 (33fac2db, `docs/security/2026-11-20-v0115-specs-review.md`). They are folded in below (§3.2 to §3.4, §6).
 
 ## 1. What exists today (read from the code)
 
@@ -74,10 +75,16 @@ These all go through `beforeWrite`:
   - `same`: it is already as it was.
 - **How the end state is worked out.** The checkpoints after the point are walked newest first. For each path, the state to restore is the **before** copy in the **oldest** of them that touched that path.
 - **Commands.** If `commandsRan` is true, the preview says: "Commands ran in these replies. Bunny can't put back what a command changed."
+- **Who may preview (RW-1).** The preview is open to any device that can open the chat. It shows paths and actions only, which that device already sees in the chat's tool steps, and never file contents.
+- **`to` (RW-3)** must be the id of a message in this chat. Anything else gets 404 `message.notFound`.
 
 ### 3.3 Files changed outside Bunny
 
 - A path is `changed` when its current hash differs from the `after` hash of the newest checkpoint (after the point) that touched it.
+- **RW-3: how the current hash is taken.** `lstat` the path first, without following links.
+  - A regular file is read and hashed.
+  - Nothing there means `absent`.
+  - A link, junction or directory is `refused`, never hashed through.
 - That catches all of these, which Bunny can't tell apart and shouldn't try to:
   - the person's own edit;
   - another chat;
@@ -96,6 +103,7 @@ These all go through `beforeWrite`:
   { to: messageId, include: [paths ticked from changed], conversation: "keep" | "new-chat" }
   ```
 - **The chat must not be busy.** If a reply is running, the answer is 409 `chat.busy`.
+- **`include` (RW-3)** accepts only paths that the preview, worked out again now on the server, lists as `changed`. Any other path in `include` is ignored, and logged with the count only, so a request can't add paths of its own.
 - **Every path is checked again now (closes G2):**
   - through the chat's **current** workspace: `insideEdit(rel, { mustExist: false })` against the folder's real path;
   - it must not be under `.git`;
@@ -107,10 +115,21 @@ These all go through `beforeWrite`:
 - **Rewind can itself be undone.**
   - Before anything is written, one new checkpoint, `kind: 'rewind'`, captures the current state of every path about to change.
   - The result card has "Undo the rewind".
-- **Each file** is written to `<file>.bunny-rewind-<rand>` in the same folder, then renamed over the target, so a crash never leaves half a file. A `delete` uses `rm`.
+- **RW-2: each path is checked again immediately before its own write,** not once for the whole rewind. The check is `insideEdit` plus the deny rules, as above. A link or junction that appears mid-rewind is then `refused` at write time.
+- **Restore (RW-2).**
+  - The target's parent folder is realpath-checked first.
+  - The bytes are written to `<file>.bunny-rewind-<rand>` in that folder with `flag: 'wx'`, so an existing file is never clobbered, and then renamed over the target.
+  - Renaming over a link replaces the link, not what it points to, and a crash never leaves half a file.
+- **A missing parent folder (RW-2).** A file whose folder is gone is restored only after its parents are made inside the checked folder, one level at a time. Each new level is checked (`lstat`, not a link, inside the folder) before the next is made.
+- **Delete (RW-2).** `lstat` first, and remove only a regular file, with `rm` and no `recursive`. A directory, link or junction is `refused`.
 - **If a write fails**, Bunny stops and reports which paths were done and which weren't. The rewind checkpoint still covers the done ones.
 - **Marking.** Every checkpoint after the point whose files were all handled (restored, same, or the person chose to leave it) is marked `restored`, and its message shows "Rewound".
-- **Remote devices.** Rewind is window-only (`windowOnly`), as are the other folder-changing person actions. A phone can see the preview. Security confirms this.
+- **RW-1: remote devices follow today's one-reply restore rule exactly,** so restore and rewind never differ. This is the Chief of Staff's recommendation, and Security accepts either level if the spec states it.
+  - **A Chats device** gets 403. `POST /api/sessions/:id/rewind` and "Undo the rewind" are never added to `remotePolicy`'s `WRITE` list or to `remoteException`, just as `.../checkpoints/:cid/restore` isn't today.
+  - **An Everything device** may rewind, as it may use today's restore. That matches the owner's OPEN-SIGNIN words: "Internet devices should be allowed to use the application as normal".
+  - **Why not window-only:** that would make rewind stricter than the Undo it extends. Tightening one would then have to tighten both, which is a separate decision.
+  - **If either is ever changed,** both change together, and a test holds them equal (§6, test 13).
+  - **Logged.** Every rewind from a device, and every Undo of a rewind, goes in the R-DF2 action log (`remote.logAction`) as kind `rewind` with the path count only, never the paths or their contents.
 
 ### 3.5 The conversation
 
@@ -163,6 +182,20 @@ These all go through `beforeWrite`:
 10. **Limits.** The 101st checkpoint removes the oldest, and the 1 GB cap is tested with a small cap injected. Deleting a chat removes its checkpoint folder.
 11. **The one-reply Undo** of a changed file now asks, and doesn't overwrite.
 12. **`commands`.** A reply with a `run_command` step sets `commands`, and the preview says so.
+13. **RW-1, devices:**
+    - a Chats device's `POST .../rewind`, `POST .../rewind` undo and `POST .../checkpoints/:cid/restore` all get 403;
+    - an Everything device's rewind and restore both succeed and each writes one `rewind` (or restore) action-log entry with a count and no paths;
+    - one test asserts that rewind and restore are treated the same in `remotePolicy`;
+    - the GET preview works from a Chats device that can open the chat, and holds no file contents.
+14. **RW-2, write time:**
+    - a link swapped in for a target after the preview is `refused` at write time, and nothing is written through it;
+    - a `delete` aimed at a directory or a junction is `refused`, and the directory is still there;
+    - an existing `<file>.bunny-rewind-<rand>`-style file is never clobbered (`wx`);
+    - a missing parent two levels deep is made level by level, and a link planted at the first level stops it.
+15. **RW-3:**
+    - a path that is now a link is `refused`, and its target is never read;
+    - an `include` naming a path the preview didn't list as `changed` is ignored and counted in the log;
+    - a `to` from another chat gets 404.
 
 ### End-to-end (invented profile, stand-in model)
 
