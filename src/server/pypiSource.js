@@ -5,11 +5,12 @@
  * removes the pending mark; no or a timeout deletes the folder. pip runs with `--isolated`, this index only, no input and none of the person's pip settings. Nothing runs at install time.
  */
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { treeHash } from './installSource.js';
 import { unpackZip } from './engines/unpack.js';
+import { execAbsolute, installEnv, pythonProgram } from './installExec.js';
 
 export const INDEX = 'https://pypi.org/simple';
 const NAME = /^[A-Za-z0-9]([A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/;
@@ -27,15 +28,14 @@ export function parsePypiSpec(text) {
   return { name: m[1], version: m[2] };
 }
 
-const defaultRun = (program, args, { cwd, env }) => new Promise((ok, bad) => {
-  execFile(program, args, { cwd, env, windowsHide: true, timeout: 600_000, maxBuffer: 16 * 1024 * 1024, shell: false }, (err, out, errText) => (err ? bad(new Error(String(errText || err.message).slice(0, 400))) : ok(String(out))));
-});
+// IA-12: python and pip are started by absolute path found before any download, with no shell, from a folder of ours that holds nothing downloaded
+const defaultRun = (program, args, { cwd, env }) => execAbsolute(program, args, { cwd, env, timeout: 600_000 });
 
 /** What pip runs with: this index only, none of the person's pip settings (--isolated), binaries only, hashes required, no prompts. */
 export const PIP_FLAGS = Object.freeze(['--isolated', '--no-input', '--disable-pip-version-check', '--only-binary=:all:', `--index-url=${INDEX}`, '--no-cache-dir']);
 export function pipEnv(home) {
   const env = { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? process.env.TMPDIR ?? '', HOME: home, USERPROFILE: home, APPDATA: home, PIP_CONFIG_FILE: process.platform === 'win32' ? 'NUL' : '/dev/null', PYTHONNOUSERSITE: '1', PYTHONDONTWRITEBYTECODE: '1' };
-  return env; // no PIP_INDEX_URL, PIP_EXTRA_INDEX_URL or PIP_* of the person's: only what is named here
+  return installEnv(env); // no PIP_INDEX_URL, PIP_EXTRA_INDEX_URL or PIP_* of the person's: only what is named here
 }
 
 async function walk(dir, base = dir, out = []) {
@@ -54,9 +54,10 @@ export function pickWheel(urls) {
  * Card time. `fetchJson(url)`, `fetchBytes(url, { maxBytes })` are the bounded public https reads; `run(program, args, { cwd, env })` runs python or pip (all injectable for tests); `python` is the program that makes the venv.
  * `dest` is the connector's final folder: the venv is made there, marked pending.
  */
-export async function preparePypi(text, { workDir, dest, python = 'python', fetchJson, fetchBytes, run = defaultRun, now = () => new Date() } = {}) {
+export async function preparePypi(text, { workDir, dest, python = null, fetchJson, fetchBytes, run = defaultRun, now = () => new Date() } = {}) {
   const parsed = parsePypiSpec(text);
   if (parsed.error) throw new Error(parsed.error);
+  if (!python) python = pythonProgram(workDir); // resolved now, before anything is downloaded
   const meta = await fetchJson(`https://pypi.org/pypi/${encodeURIComponent(parsed.name)}/${encodeURIComponent(parsed.version)}/json`);
   const wheel = pickWheel(meta?.urls);
   const bytes = Buffer.from(await fetchBytes(wheel.url, { maxBytes: PYPI_LIMITS.wheel }));
@@ -64,7 +65,8 @@ export async function preparePypi(text, { workDir, dest, python = 'python', fetc
   if (sha256(bytes) !== wheel.digests.sha256) throw new Error('The wheel does not match the hash PyPI published, so it was refused. Nothing was installed.');
   const home = join(workDir, 'pip-home', `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
   const scratch = join(workDir, 'pypi-scratch', `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
-  await mkdir(home, { recursive: true }); await mkdir(scratch, { recursive: true }); await rm(dest, { recursive: true, force: true }); await mkdir(dest, { recursive: true });
+  if (existsSync(dest)) throw new Error('That folder already exists, so Bunny will not build over it. Nothing was installed.'); // never delete something that is already there before the yes
+  await mkdir(home, { recursive: true }); await mkdir(scratch, { recursive: true }); await mkdir(dest, { recursive: true });
   const env = pipEnv(home);
   try {
     // 1. unpack the wheel to read its entry points and look at it (only read; never run)
@@ -81,10 +83,10 @@ export async function preparePypi(text, { workDir, dest, python = 'python', fetc
     if (!target && !top) throw new Error('That package does not say how to run it (no console script and no __main__), so Bunny cannot run it as a connector.');
     if (target && !(IDENT.test(target.func) && target.module.split('.').every((p) => IDENT.test(p)))) throw new Error('That package names its entry point in a way Bunny does not accept.');
     // 2. the venv at the final folder, then the whole set resolved with wheels only
-    await run(python, ['-m', 'venv', join(dest, 'venv')], { cwd: scratch, env });
+    await run(python, ['-m', 'venv', join(dest, 'venv')], { cwd: home, env });
     const venvPy = join(dest, 'venv', process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
     const report = join(scratch, 'report.json');
-    await run(venvPy, ['-m', 'pip', 'install', '--dry-run', '--ignore-installed', '--report', report, ...PIP_FLAGS, `${parsed.name}==${parsed.version}`], { cwd: scratch, env })
+    await run(venvPy, ['-m', 'pip', 'install', '--dry-run', '--ignore-installed', '--report', report, ...PIP_FLAGS, `${parsed.name}==${parsed.version}`], { cwd: home, env })
       .catch((err) => { throw new Error(`A package this one needs has no wheel, or could not be found, so Bunny will not install it (wheels only, all the way down): ${String(err.message).slice(0, 160)}`); });
     const rep = JSON.parse(await readFile(report, 'utf8'));
     const pins = [];
@@ -96,7 +98,7 @@ export async function preparePypi(text, { workDir, dest, python = 'python', fetc
     }
     const requirements = pins.map((p) => `${p.name}==${p.version} --hash=sha256:${p.sha256}`).join('\n') + '\n';
     const reqFile = join(dest, 'requirements.lock'); await writeFile(reqFile, requirements);
-    await run(venvPy, ['-m', 'pip', 'install', '--require-hashes', '--no-deps', '-r', reqFile, ...PIP_FLAGS], { cwd: scratch, env });
+    await run(venvPy, ['-m', 'pip', 'install', '--require-hashes', '--no-deps', '-r', reqFile, ...PIP_FLAGS], { cwd: home, env });
     // 3. what is in the whole tree
     await writeFile(join(dest, '.pending'), `${now().toISOString()}\n`);
     const files = (await walk(dest)).filter((f) => f !== '.pending');

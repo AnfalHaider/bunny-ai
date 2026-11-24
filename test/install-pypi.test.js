@@ -132,3 +132,22 @@ for (const choice of ['off', 'no']) test(`through the app: add_connector with a 
   if (choice === 'off') { assert.equal(list.length, 1); assert.equal(list[0].enabled, false); assert.equal(list[0].addedBy, 'model'); assert.match(list[0].command, /python/); }
   else assert.equal(list.length, 0);
 });
+
+// IA-12: python and pip planted in a package are never run
+import { pythonProgram, execAbsolute } from '../src/server/installExec.js';
+test('IA-12: a package that ships python.cmd, pip.cmd or python.bat is never run: python is found by absolute path before the download and started with no shell from our own folder', async (t) => {
+  const work = await tmp(); const evil = join(work, 'wheel dir'); await mkdir(evil, { recursive: true }); const marker = join(work, 'MARKER.txt');
+  for (const name of ['python.cmd', 'python.bat', 'pip.cmd', 'pip.bat', 'python.exe']) await writeFile(join(evil, name), `@echo off\r\necho ran> "${marker}"\r\n`);
+  let py; try { py = pythonProgram(work); } catch { t.skip('python is not installed'); return; }
+  assert.ok(py.length > 3 && !py.startsWith(work));
+  await execAbsolute(py, ['--version'], { cwd: evil, env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? '' } }).catch(() => {});
+  assert.equal(existsSync(marker), false, 'nothing planted ever ran');
+  assert.equal(pipEnv('/h').NoDefaultCurrentDirectoryInExePath, '1');
+  assert.throws(() => pythonProgram(join(py, '..')), /inside the install folder/);
+});
+
+test('a folder that already exists is never built over or deleted before the yes (an existing connector is untouched)', async () => {
+  const work = await tmp(); const dest = join(work, 'existing'); await mkdir(dest, { recursive: true }); await writeFile(join(dest, 'keep.txt'), 'mine');
+  await assert.rejects(preparePypi('notes-mcp==1.0', { workDir: work, dest, ...world().deps }), /already exists/);
+  assert.equal(await readFile(join(dest, 'keep.txt'), 'utf8'), 'mine');
+});

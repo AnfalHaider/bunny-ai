@@ -5,11 +5,11 @@
  * The connector runs as `node <bin>` from its folder, never `npx -y`. Nothing runs at install time.
  */
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { unpackTgz } from './engines/unpack.js';
 import { treeHash } from './installSource.js';
+import { execAbsolute, installEnv, npmProgram } from './installExec.js';
 
 export const REGISTRY = 'https://registry.npmjs.org';
 const NAME = /^(@[a-z0-9][a-z0-9._~-]{0,213}\/)?[a-z0-9][a-z0-9._~-]{0,213}$/;
@@ -31,16 +31,15 @@ export function parseNpmSpec(text) {
 export const integrityOf = (bytes) => `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
-const defaultNpm = (args, { cwd, env }) => new Promise((ok, bad) => {
-  execFile(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { cwd, env, windowsHide: true, timeout: 300_000, maxBuffer: 16 * 1024 * 1024, shell: process.platform === 'win32' }, (err, out, errText) => (err ? bad(new Error(String(errText || err.message).slice(0, 300))) : ok(String(out))));
-});
+// IA-12: npm is node.exe + npm-cli.js, both by absolute path found BEFORE any download, with no shell and a working folder that is not the package's
+export const runNpmWith = (program) => (args, { cwd, env }) => execAbsolute(program[0], [program[1], ...args], { cwd, env });
 
 /** The options and environment npm runs with: this registry only, an empty user and global config, no scripts, no audit or funding calls. */
 export function npmIsolation(home) {
   const empty = join(home, 'empty.npmrc');
   return {
     args: [`--registry=${REGISTRY}/`, `--userconfig=${empty}`, `--globalconfig=${empty}`, '--ignore-scripts', '--no-audit', '--no-fund', '--no-update-notifier', `--cache=${join(home, 'cache')}`],
-    env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? process.env.TMPDIR ?? '', HOME: home, USERPROFILE: home, APPDATA: home, npm_config_cache: join(home, 'cache') },
+    env: installEnv({ PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? process.env.TMPDIR ?? '', HOME: home, USERPROFILE: home, APPDATA: home, npm_config_cache: join(home, 'cache') }),
     empty,
   };
 }
@@ -70,14 +69,15 @@ async function walk(dir, base = dir, out = []) {
  * Card time: resolve, fetch, check, unpack, lock. Returns what the card shows and what the install will use. `fetchJson(url)` and `fetchBytes(url, { maxBytes })` are the bounded public https reads (tests hand in stand-ins);
  * `runNpm(args, { cwd, env })` runs npm (also injectable).
  */
-export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm = defaultNpm, now = () => new Date() } = {}) {
+export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm = null, now = () => new Date() } = {}) {
   const parsed = parseNpmSpec(text);
   if (parsed.error) throw new Error(parsed.error);
+  if (!runNpm) runNpm = runNpmWith(npmProgram(workDir)); // resolved now, before anything is downloaded
   const meta = await fetchJson(`${REGISTRY}/${parsed.name.replace('/', '%2f')}`);
   let version = parsed.spec;
   if (!EXACT.test(version)) {
     version = meta?.['dist-tags']?.[version] ?? (version === 'latest' ? meta?.['dist-tags']?.latest : null);
-    if (!version) { // a range: the highest listed exact version that equals it is only taken when it is an exact one; ranges are not guessed at
+    if (!version || !EXACT.test(version)) { // NPM-2: a tag that does not name an exact version is refused too; a range: the highest listed exact version that equals it is only taken when it is an exact one; ranges are not guessed at
       throw new Error(`Bunny pins an exact version. Say which one of ${Object.keys(meta?.versions ?? {}).slice(-3).join(', ') || 'its versions'}, or latest.`);
     }
   }
@@ -104,11 +104,11 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
     await mkdir(home, { recursive: true });
     const iso = npmIsolation(home);
     await writeFile(iso.empty, '');
-    await runNpm(['install', '--package-lock-only', '--omit=dev', ...iso.args], { cwd: root, env: iso.env });
+    await runNpm(['install', '--package-lock-only', '--omit=dev', '--prefix', root, ...iso.args], { cwd: workDir, env: iso.env }); // cwd is the work folder, never the package's own
     const lockBytes = await readFile(join(root, 'package-lock.json'));
     const lock = JSON.parse(lockBytes.toString('utf8'));
     const count = Math.max(0, Object.keys(lock.packages ?? {}).filter((k) => k).length);
-    await runNpm(['ci', '--omit=dev', ...iso.args], { cwd: root, env: iso.env }); // the whole tree, now, with no scripts
+    await runNpm(['ci', '--omit=dev', '--prefix', root, ...iso.args], { cwd: workDir, env: iso.env }); // the whole tree, now, with no scripts
     const files = await walk(root);
     const pkgOf = (f) => { const m = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(f.replace(/^/, '/')); return m ? m[1] : parsed.name; };
     const compiledPackages = [...new Set(files.filter((f) => /\.node$/i.test(f)).map(pkgOf))];

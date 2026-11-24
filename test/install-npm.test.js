@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseNpmSpec, integrityOf, prepareNpm, describeNpm, installNpm, discardNpm, npmIsolation, binOf } from '../src/server/npmSource.js';
+import { runNpmWith, parseNpmSpec, integrityOf, prepareNpm, describeNpm, installNpm, discardNpm, npmIsolation, binOf } from '../src/server/npmSource.js';
 import { makeTgz } from './helpers-archives.js';
 import { createServer } from 'node:http';
 import { startApp, post, json } from './helpers.js';
@@ -22,8 +24,9 @@ function world(bytes, { name = 'notes-mcp', version = '1.2.3' } = {}) {
     deps: {
       fetchJson: async () => meta,
       fetchBytes: async () => bytes,
-      runNpm: async (args, { cwd, env }) => {
-        npmCalls.push({ args, env, cwd });
+      runNpm: async (args, { env, cwd: runCwd }) => {
+        const cwd = args[args.indexOf('--prefix') + 1]; // the package folder
+        npmCalls.push({ args, env, cwd: runCwd });
         if (args.includes('--package-lock-only')) await writeFile(join(cwd, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'node_modules/a': {}, 'node_modules/b': { hasInstallScript: true } } }));
         if (args[0] === 'ci') { await mkdir(join(cwd, 'node_modules', 'a'), { recursive: true }); await mkdir(join(cwd, 'node_modules', 'b', 'build'), { recursive: true }); await writeFile(join(cwd, 'node_modules', 'a', 'package.json'), JSON.stringify({ name: 'a', version: '1.0.0' })); await writeFile(join(cwd, 'node_modules', 'b', 'package.json'), JSON.stringify({ name: 'b', version: '1.0.0', scripts: { postinstall: 'node-gyp rebuild' } })); await writeFile(join(cwd, 'node_modules', 'b', 'build', 'b.node'), 'x'); }
         return '';
@@ -86,7 +89,7 @@ test('each package is named on the card: "includes compiled code" for a .node fi
   for (const need of ['notes-mcp: includes compiled code', 'b: includes compiled code', "notes-mcp: needs a script Bunny doesn't run", "b: needs a script Bunny doesn't run"]) assert.ok(text.includes(need), need);
   assert.equal(dirty.npmCalls.some((c) => !c.args.includes('--ignore-scripts')), false, 'every npm call ignores scripts');
   const clean = world(tarball());
-  clean.deps.runNpm = async (args, { cwd }) => { if (args.includes('--package-lock-only')) await writeFile(join(cwd, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {} } })); return ''; };
+  clean.deps.runNpm = async (args) => { const cwd = args[args.indexOf('--prefix') + 1]; if (args.includes('--package-lock-only')) await writeFile(join(cwd, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {} } })); return ''; };
   const c = await prepareNpm('notes-mcp@1.2.3', { workDir: await tmp(), ...clean.deps });
   const ctext = describeNpm(c);
   assert.ok(ctext.includes('No compiled code in the whole tree.') && ctext.includes('No package needs an install script.'));
@@ -178,4 +181,27 @@ test('IA-8: a scheduled run gets the fixed line for an npm add_connector too, an
   assert.ok(!/^event: permission/m.test(text), 'no card');
   assert.match(text, /Installing needs you; nobody is here to ask/);
   assert.equal((await json(base, '/api/mcp')).body.length, 0); assert.equal(w.npmCalls.length, 0, 'npm never ran');
+});
+
+// IA-12 (Security HIGH): downloaded code never runs before the yes
+import { npmProgram, execAbsolute, installEnv } from '../src/server/installExec.js';
+test("IA-12: a package that ships npm.cmd or npm.bat is never run: npm is node + npm-cli.js by absolute path, no shell, from a folder that is not the package's", async () => {
+  const work = await tmp(); const evil = join(work, 'pkg with spaces'); await mkdir(evil, { recursive: true });
+  const marker = join(work, 'MARKER.txt');
+  for (const name of ['npm.cmd', 'npm.bat', 'npm.exe', 'npm']) await writeFile(join(evil, name), `@echo off\r\necho ran> "${marker}"\r\n`);
+  const [node, cli] = npmProgram(work);
+  assert.ok(node === process.execPath && cli.endsWith('npm-cli.js') && !cli.startsWith(work), 'absolute, outside the work folder');
+  const out = await runNpmWith([node, cli])(['--version'], { cwd: evil, env: installEnv({ PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? '' }) });
+  assert.match(out, /^\d+\.\d+\.\d+/m);
+  assert.equal(existsSync(marker), false, 'the planted npm never ran (also with a space in the folder, NPM-1)');
+  assert.throws(() => npmProgram(dirname(cli)), /inside the install folder/);
+  assert.equal(installEnv({}).NoDefaultCurrentDirectoryInExePath, '1');
+  await assert.rejects(execAbsolute('npm', ['--version'], { cwd: evil }), /full path/);
+});
+
+test('NPM-2: a dist-tag that does not name an exact version is refused', async () => {
+  const work = await tmp(); const w = world(tarball());
+  w.deps.fetchJson = async () => ({ 'dist-tags': { latest: 'not-a-version', next: '^2.0.0' }, versions: {} });
+  await assert.rejects(prepareNpm('notes-mcp@latest', { workDir: work, ...w.deps }), /exact version/);
+  await assert.rejects(prepareNpm('notes-mcp@next', { workDir: work, ...w.deps }), /exact version/);
 });

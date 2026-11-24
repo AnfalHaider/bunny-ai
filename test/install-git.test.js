@@ -73,3 +73,25 @@ test('with real git: a local repository is cloned at its commit, the commit is t
   assert.equal(got.commit, head);
   assert.ok(existsSync(join(work, 'out', 'skills', 'notes', 'SKILL.md'))); assert.ok(!existsSync(join(work, 'out', '.git')));
 });
+
+test('IA-12: a repository that ships git.cmd, git.bat or git.exe is never run: git is found by absolute path before the download, and every call runs from the work folder with -C', async (t) => {
+  try { execFileSync('git', ['--version'], { stdio: 'ignore' }); } catch { t.skip('git is not installed'); return; }
+  const work = await tmp(); const repo = join(work, 'repo with space'); const marker = join(work, 'MARKER.txt');
+  await mkdir(repo, { recursive: true });
+  await writeFile(join(repo, 'README.md'), 'x');
+  for (const name of ['git.cmd', 'git.bat', 'git.exe', 'git']) await writeFile(join(repo, name), `@echo off\r\necho ran> "${marker}"\r\n`);
+  const g = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: join(work, 'none') } });
+  g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'one');
+  const head = g('rev-parse', 'HEAD').trim();
+  const got = await fetchGitSource(repo, join(work, 'out'), { workDir: join(work, 'w'), allowFile: true });
+  assert.equal(got.commit, head);
+  assert.ok(existsSync(join(work, 'out', 'git.cmd')), 'the repository really did ship the planted files');
+  assert.equal(existsSync(marker), false, 'and none of them ever ran');
+  const { gitProgram } = await import('../src/server/installExec.js');
+  assert.ok(gitProgram(join(work, 'w')).toLowerCase().includes('git'), 'git is an absolute path');
+  assert.throws(() => gitProgram(join(gitProgram(work), '..')), /inside the install folder/);
+  const seen = [];
+  await fetchGitSource('https://git.example.com/a/b.git', join(work, 'o2'), { workDir: join(work, 'w2'), lookupImpl: async () => [{ address: '93.184.216.34', family: 4 }], runGit: async (args, o) => { seen.push({ args, cwd: o.cwd, env: o.env }); return args.includes('ls-remote') ? `${'d'.repeat(40)}\tHEAD` : args.includes('rev-parse') ? `${'d'.repeat(40)}\n` : ''; } });
+  for (const c of seen.filter((y) => !y.args.includes('ls-remote'))) { assert.ok(c.args.includes('-C') && c.args.includes(join(work, 'o2')), c.args.join(' ')); assert.equal(c.cwd, join(work, 'w2')); }
+  assert.ok(seen.every((c) => c.env.NoDefaultCurrentDirectoryInExePath === '1'));
+});

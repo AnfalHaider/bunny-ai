@@ -7,12 +7,12 @@
  *   - pins a 40-character commit with ls-remote, fetches exactly that commit (depth 1) and checks `git rev-parse HEAD` equals it;
  *   - removes the .git folder; the files are only read afterwards.
  */
-import { execFile } from 'node:child_process';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isPrivateAddress } from './download.js';
+import { execAbsolute, gitProgram, installEnv } from './installExec.js';
 
 const SHA = /^[0-9a-f]{40}$/;
 
@@ -41,19 +41,15 @@ export function parseGitAddress(address) {
 
 /** The environment git runs in: nothing of the person's own setup. */
 export function isolatedEnv(home) {
-  return {
+  return installEnv({
     PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? process.env.TMPDIR ?? '', TMP: process.env.TMP ?? process.env.TMPDIR ?? '',
     HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: home, APPDATA: home, LOCALAPPDATA: home,
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(home, 'empty.gitconfig'), GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GIT_ASKPASS: '', SSH_ASKPASS: '', GIT_LFS_SKIP_SMUDGE: '1',
     GIT_ALLOW_PROTOCOL: 'https', GIT_PROTOCOL_FROM_USER: '0', GIT_OPTIONAL_LOCKS: '0',
-  };
+  });
 }
 /** The options placed before every git sub-command. */
 export const isolatedArgs = (hooks) => ['-c', 'credential.helper=', '-c', `core.hooksPath=${hooks}`, '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', '-c', 'protocol.https.allow=always', '-c', 'http.followRedirects=false', '-c', 'http.proxy=', '-c', 'submodule.recurse=false', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=', '-c', 'filter.lfs.required=false', '-c', 'core.symlinks=false', '-c', 'core.autocrlf=false'];
-
-const defaultRun = (args, { cwd, env }) => new Promise((resolve, reject) => {
-  execFile('git', args, { cwd, env, windowsHide: true, timeout: 120_000, maxBuffer: 8 * 1024 * 1024, shell: false }, (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 300))) : resolve(String(stdout))));
-});
 
 /** Refuse a host that is, or resolves to, a private address, before git starts. */
 export async function checkGitHost(host, { lookupImpl = (h, o) => dnsLookup(h, o) } = {}) {
@@ -70,7 +66,9 @@ export async function checkGitHost(host, { lookupImpl = (h, o) => dnsLookup(h, o
  * Resolve the commit and fetch exactly it into `dest` (an empty folder). Returns { commit }. `workDir` holds the isolated home and the empty hooks folder.
  * `runGit(args, { cwd, env })` is injectable for tests; `allowFile` lets a test clone from a local bare repository (nothing in the app passes it).
  */
-export async function fetchGitSource(address, dest, { workDir, runGit = defaultRun, lookupImpl, allowFile = false } = {}) {
+export async function fetchGitSource(address, dest, { workDir, runGit = null, lookupImpl, allowFile = false } = {}) {
+  // IA-12: git by absolute path found BEFORE the download, no shell, and every call runs from the work folder with -C <dest>, never from inside the checkout (a git.cmd the repository ships is never picked up)
+  if (!runGit) { const bin = gitProgram(workDir); runGit = (args, o) => execAbsolute(bin, args, { cwd: o.cwd, env: o.env, timeout: 120_000 }); }
   const parsed = allowFile ? { url: String(address), ref: null, host: 'local' } : parseGitAddress(address); // a test's local bare repository is the only thing allowFile allows; nothing in the app passes it
   if (parsed.error) throw new Error(parsed.error);
   if (!allowFile) await checkGitHost(parsed.host, { lookupImpl });
@@ -86,10 +84,10 @@ export async function fetchGitSource(address, dest, { workDir, runGit = defaultR
   await mkdir(dest, { recursive: true });
   const e2 = allowFile ? { ...env, GIT_ALLOW_PROTOCOL: 'file' } : env;
   const fileArgs = allowFile ? ['-c', 'protocol.file.allow=always'] : [];
-  await runGit([...base, ...fileArgs, 'init', '-q'], { cwd: dest, env: e2 });
-  await runGit([...base, ...fileArgs, 'fetch', '-q', '--depth', '1', '--no-recurse-submodules', '--no-tags', url, commit], { cwd: dest, env: e2 });
-  await runGit([...base, 'checkout', '-q', '--detach', '--no-recurse-submodules', 'FETCH_HEAD'], { cwd: dest, env: e2 });
-  const head = String(await runGit([...base, 'rev-parse', 'HEAD'], { cwd: dest, env: e2 })).trim();
+  await runGit([...base, ...fileArgs, '-C', dest, 'init', '-q'], { cwd: workDir, env: e2 });
+  await runGit([...base, ...fileArgs, '-C', dest, 'fetch', '-q', '--depth', '1', '--no-recurse-submodules', '--no-tags', url, commit], { cwd: workDir, env: e2 });
+  await runGit([...base, '-C', dest, 'checkout', '-q', '--detach', '--no-recurse-submodules', 'FETCH_HEAD'], { cwd: workDir, env: e2 });
+  const head = String(await runGit([...base, '-C', dest, 'rev-parse', 'HEAD'], { cwd: workDir, env: e2 })).trim();
   if (head !== commit) throw new Error('The commit that was checked out is not the one that was pinned. Nothing was installed.');
   await rm(join(dest, '.git'), { recursive: true, force: true }); // the files are only read from here on
   return { commit, url: parsed.url };

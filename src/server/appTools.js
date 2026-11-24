@@ -187,7 +187,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
         fetchBytes: async (u, o) => (await fetchLimited(u, o)).bytes,
       };
       const name = String(spec ?? '').split('==')[0].replace(/[^A-Za-z0-9._-]/g, '_');
-      const dest = join(dirname(workDir), 'tools', 'pypi', `${name}-${String(spec ?? '').split('==')[1] ?? 'x'}`.replace(/[^A-Za-z0-9._-]/g, '_'));
+      const dest = join(dirname(workDir), 'tools', 'pypi', `${name}-${String(spec ?? '').split('==')[1] ?? 'x'}-${crypto.randomUUID().slice(0, 8)}`.replace(/[^A-Za-z0-9._-]/g, '_')); // a folder of its own for this card: an existing connector's folder is never touched before the yes
       const p = await preparePypi(spec, { workDir, dest, ...reg, now });
       preparedPypi.set(p.dest, p);
       const full = describePypi(p);
@@ -473,7 +473,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
         const p = preparedNpm.get(String(ctx?.expectToken ?? ''));
         if (!p) throw new Error('A package from npm is added only after the card shows it.');
         preparedNpm.delete(p.root);
-        const dest = join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}`);
+        const dest = join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`); // never over an existing connector's folder
         const placed = await installNpm(p, { dest });
         const added = await mcp.add({ name: args.name ?? p.name, command: placed.command, args: placed.args, env: {}, enabled: ctx?.switchOn !== 'off', addedBy: 'model', source: null });
         if (ctx?.oneCard) keep(ctx, { title: added.name, text: `Connector ${added.name} (runs on this computer)`, skillIds: [], connectorIds: [added.id] });
