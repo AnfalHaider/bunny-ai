@@ -9,6 +9,8 @@ import { prepareSource, sourceKind, stillTheSame, treeHash, CHANGED, LIMITS } fr
 import { checkPublicAddress } from '../src/server/publicFetch.js';
 import { REMOTE_TOOLS_DENIED } from '../src/server/remoteAccess.js';
 import { makeZip, makeTgz, sha256 } from './helpers-archives.js';
+import { gzipSync } from 'node:zlib';
+import { parsePax } from '../src/server/engines/unpack.js';
 import { startApp, post } from './helpers.js';
 
 // INSTALL-ANYWHERE (spec 9242f04c, Security IA-4, IA-5, IA-7, IA-8, IA-0/6 for the connectors a source brings): an archive or a SKILL.md at a public https address, fetched once, pinned, unpacked safely, inspected, shown on ONE card, installed exactly.
@@ -200,4 +202,29 @@ test('the remote connectors a source brings obey IA-0: an http or private addres
   const s = await prepareSource('https://x.example.com/p.zip', { workDir: work, fetchSource: standIn(bytes), checkAddress });
   assert.deepEqual(s.plugin.connectors, []); assert.equal(s.plugin.skipped.filter((x) => /not a public https address/.test(x)).length, 2);
   assert.equal(await readFile(join(s.root, 'skills/n/SKILL.md'), 'utf8').then((x) => x.length > 0), true);
+});
+
+// IA4-a: the path= record of a PAX header is the entry's real name and is checked like any other
+function tarEntry(name, data, type = '0') {
+  const body = Buffer.from(data);
+  const h = Buffer.alloc(512);
+  h.write(name, 0, 100, 'utf8'); h.write('0000644\0', 100, 8); h.write('0000000\0', 108, 8); h.write('0000000\0', 116, 8);
+  h.write(`${body.length.toString(8).padStart(11, '0')}\0`, 124, 12); h.write('00000000000\0', 136, 12); h.write('        ', 148, 8); h.write(type, 156, 1); h.write('ustar\0', 257, 6); h.write('00', 263, 2);
+  let sum = 0; for (const b of h) sum += b; h.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8);
+  const pad = (512 - (body.length % 512)) % 512;
+  return [h, body, Buffer.alloc(pad)];
+}
+const paxRecord = (key, value) => { const rest = ` ${key}=${value}\n`; let len = rest.length + 1; while (String(len).length + rest.length !== len) len = String(len).length + rest.length; return `${len}${rest}`; };
+const tgzOf = (parts) => gzipSync(Buffer.concat([...parts.flat(), Buffer.alloc(1024)]));
+
+test('IA4-a: a PAX path= record that leaves the folder is refused, a harmless one names the entry, and a PAX size is honoured', async () => {
+  const work = await tmp();
+  const escaped = tgzOf([tarEntry('pax-header', paxRecord('path', '../evil.md'), 'x'), tarEntry('harmless.md', 'x'), tarEntry('skills/n/SKILL.md', SKILL)]);
+  await assert.rejects(prepareSource('https://x.example.com/p.tgz', { workDir: work, fetchSource: standIn(escaped), checkAddress }), /climbs out of its folder/);
+  assert.deepEqual(await readdir(work), []);
+  const named = tgzOf([tarEntry('pax-header', paxRecord('path', 'skills/n/SKILL.md'), 'x'), tarEntry('short', SKILL)]);
+  const s = await prepareSource('https://x.example.com/p.tgz', { workDir: work, fetchSource: standIn(named), checkAddress });
+  assert.deepEqual(s.plugin.skills.map((k) => k.name), ['notes']);
+  assert.deepEqual(parsePax(Buffer.from(paxRecord('path', 'a/b') + paxRecord('size', '12'))), { path: 'a/b', size: 12 });
+  assert.throws(() => parsePax(Buffer.from('999 path=x\n')), /extended header/);
 });
