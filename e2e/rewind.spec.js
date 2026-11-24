@@ -114,9 +114,9 @@ test('Rewind: from the Changes pane the button opens the same panel; a file chan
   await send(page, 'write note');
   await send(page, 'edit greet');
   writeFileSync(join(dir, 'note.txt'), 'my own words\n');
-  await page.setViewportSize({ width: 360, height: 800 });
   await page.locator('.toolbar [data-view="diff"]').click();
   await page.locator('#diff-content').getByRole('button', { name: 'Rewind', exact: true }).click();
+  await page.setViewportSize({ width: 360, height: 800 });
   const panel = page.locator('.rewind-modal');
   await panel.locator('.rewind-row').nth(1).click();
   await expect(panel.locator('.rewind-changed')).toContainText('note.txt');

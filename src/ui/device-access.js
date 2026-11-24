@@ -47,6 +47,7 @@ export function describeAction(e) {
   if (e.kind === 'idle-signout') return { when, what: 'Signed out', note: e.level === 'everything' ? 'Ended: 30 minutes idle' : 'Ended: idle for 2 hours', bad: false };
   if (e.kind === 'refused') return { when, what: 'Refused a device', note: `${e.label ?? 'A device'}: ${REFUSAL_WORDS[e.reason] ?? 'not allowed'}`, bad: false };
   if (e.kind === 'level') return { when, what: `Level changed to ${level}`, note: "By Bunny's window", bad: e.level === 'everything' };
+  if (e.kind === 'rewind') return { when, what: 'Put files back (rewind or undo)', note: e.reason ? `Run by this device: ${e.reason}` : 'Run by this device', bad: true };
   if (e.kind === 'tool') return { when, what: `Tool: ${e.tool ?? 'unknown'}`, note: 'Run by this device', bad: e.tool === 'run_command' };
   if (e.kind === 'route') {
     if (e.method === 'PUT' && e.path === '/api/settings') return { when, what: 'Setting changed', note: 'PUT /api/settings (a setting; no value shown)', bad: true };

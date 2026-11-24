@@ -156,3 +156,10 @@ test('RW-1: a Chats device may look (GET) but never rewind or restore; the two w
   assert.equal(remotePolicy('POST', `/api/sessions/${id}/checkpoints/${id}/restore`), false);
   assert.equal(remotePolicy('POST', `/api/sessions/${id}/rewind`), remotePolicy('POST', `/api/sessions/${id}/checkpoints/${id}/restore`));
 });
+
+test('RW-1: the Activity screen words a device rewind by count, never by path', async () => {
+  const { describeAction } = await import('../src/ui/device-access.js');
+  const d = describeAction({ at: '2026-11-20T09:00:00.000Z', kind: 'rewind', reason: '3 files' });
+  assert.match(d.what, /files back/);
+  assert.match(d.note, /3 files/);
+});

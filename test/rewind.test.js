@@ -222,3 +222,15 @@ test('15. RW-3: "include" only counts paths the preview calls changed; the rest 
   assert.equal(await f.read('other.txt'), 'untouched');
   assert.equal(await f.read('a.txt'), '1');
 });
+
+test('14b. RW-2: the restore is written with flag wx, so a file already named like the temp file is never clobbered', async (t) => {
+  const f = await fixture(t);
+  await writeFile(join(f.root, 'a.txt'), '1');
+  const c1 = await f.reply({ 'a.txt': '2' });
+  const { writeFile: realWrite } = await import('node:fs/promises');
+  const seen = [];
+  const ops = { writeFile: async (p, data, o) => { seen.push(o?.flag); return realWrite(p, data, o); } };
+  await apply({ cps: [c1], root: f.root, checkpoints: f.cps, sessionId: SID, ops });
+  assert.ok(seen.includes('wx'));
+  assert.equal(await f.read('a.txt'), '1');
+});
