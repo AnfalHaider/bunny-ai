@@ -144,3 +144,22 @@ test('/remember in a project chat asks "for this project, or everywhere?" and st
   await expect.poll(async () => (await (await request.get('/api/memory')).json()).some((m) => m.text === 'I like short answers.')).toBe(true);
   expect((await (await request.get(`/api/projects/${project.id}/memory`)).json()).items).toHaveLength(1);
 });
+
+test('on a 360 px phone the project page, the suggestion card and the context view fit without sideways scrolling', async ({ page, request }) => {
+  await open(page);
+  const project = await (await request.post('/api/projects', { data: { name: 'Carrot shop', instructions: 'Plain HTML.' } })).json();
+  await request.post(`/api/projects/${project.id}/memory`, { data: { kind: 'decision', text: 'Use tabs, not spaces, in every file of the shop, including the long generated ones.' } });
+  const chat = await (await request.post('/api/sessions', { data: { title: 'Chat', projectId: project.id } })).json();
+  await page.goto(`/?s=${chat.id}`);
+  await page.setViewportSize({ width: 360, height: 800 });
+  const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  await send(page, 'we decided on tabs');
+  await expect(page.locator('.pm-card')).toBeVisible();
+  expect(await fits()).toBe(true);
+  await page.locator('#project-context-chip').click();
+  await expect(page.locator('.pm-modal .pm-part')).toHaveCount(5);
+  expect(await fits()).toBe(true);
+  const box = await page.locator('.pm-modal').boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(361);
+});
