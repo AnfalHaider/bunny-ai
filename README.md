@@ -311,13 +311,19 @@ flowchart TD
 - **Quick ask that just works.** When a model ignores its tools I run one web search myself; a "Search this PC is off" card links to the switch; the bar names the tools it really has.
 <!-- V0115:end quick-ask-dependable -->
 <!-- V0115:begin project-instructions -->
-- **Project instructions.** One shared set of instructions per project (AGENTS.md, with CLAUDE.md as the fallback) for every engine. The first time a folder has them, I ask **Follow them / Not now**, and you can read the files first. The Working folder card shows what's in use, with a switch per chat and **View what was read**.
+### Your project's instruction files
+A folder can carry `AGENTS.md` or `CLAUDE.md` (and `.cursorrules` or `.cursor/rules`). The first time you open such a folder in a chat, I show them in a card instead of quietly obeying them: **Read** shows the text, **Follow them** uses it, and **Not now** asks again later.
+
+Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same text, the text you were shown**, and none of them reads the files by itself. If somebody edits a file afterwards, the Working folder card says **changed since it was read** and keeps using the old text until you choose **Read again**, which shows the difference first; **Use the new text** or **Keep the old text** then decides. A file that isn't used is listed as such, and **Ask me again for this folder** forgets your answer. Only my own window can answer, not a phone.
 <!-- V0115:end project-instructions -->
 <!-- V0115:begin rewind -->
 - **Rewind.** A list of a chat's checkpoints, one per reply that changed files, so you can go back further than one reply and see what each step restores before you confirm.
 <!-- V0115:end rewind -->
 <!-- V0115:begin engine-switch -->
-- **Change a chat's engine midway.** The new engine gets the same folder, the same project instructions and a handover of the conversation and the files touched.
+### Switch a chat to another engine
+Open the engine chip in a Code chat and pick **Switch this chat to…**. Bunny, Claude Code and Codex CLI are listed. An engine that can't take the chat says why on its row, with the button that fixes it (**Download**, **Turn on**, **Sign in**), and a chat needs a working folder first.
+
+Before it happens, I say what the new engine gets: this chat's folder, the folder's instruction files you chose to follow, a summary of the conversation and the list of files this chat changed. Answers that used files from your PC are left out. Your files and **Undo** stay as they are, and a line in the chat shows where the engine changed. A switch waits until the current reply has finished, and only my own window can do it, not a phone.
 <!-- V0115:end engine-switch -->
 <!-- V0115:begin settings-overhaul -->
 - **A clearer Settings,** after every setting has been checked to work, stick and read clearly.
