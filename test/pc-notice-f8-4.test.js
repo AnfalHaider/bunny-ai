@@ -86,3 +86,19 @@ test('never on a device: an Everything device that searches gets no notice and d
   const saved = JSON.parse(await readFile(join(w.dirs.data, 'settings.json'), 'utf8').catch(() => '{}'));
   assert.ok(!saved.pcSearchNoticeShown, 'and the flag is not set by a device');
 });
+
+test('the bar\'s own first look-up (pcLookupFirst, round 2) shows the same notice once and sets the flag, and nothing more when the flag is set', async (t) => {
+  const ask = async (w, extra) => {
+    const made = await (await fetch(`${w.base}/api/sessions`, { method: 'POST', headers: json, body: JSON.stringify({ title: 'bar', origin: 'quick-ask', workMode: 'chat' }) })).json();
+    const res = await w.app.adminFetch(`/api/sessions/${made.id}/messages`, { method: 'POST', headers: json, body: JSON.stringify({ content: 'find my tax return', providerId: 'openai', model: 'm1', workMode: 'chat', textOnly: true, pcSearch: true, pcLookupFirst: true, pcTerms: ['tax'], ...extra }) });
+    return res.text();
+  };
+  const w = await pcWorld(t, { files, settings: {}, calls: [] });
+  const first = noticeIn(await ask(w));
+  assert.equal(first.length, 1, 'the look-up the bar makes by itself shows the notice');
+  assert.match(first[0].text, /^Search this PC is on, for finding files only\./);
+  assert.equal(JSON.parse(await readFile(join(w.dirs.data, 'settings.json'), 'utf8')).pcSearchNoticeShown, true);
+  assert.equal(noticeIn(await ask(w)).length, 0, 'not again');
+  const shown = await pcWorld(t, { files, settings: { pcSearchNoticeShown: true }, calls: [] });
+  assert.equal(noticeIn(await ask(shown)).length, 0, 'a flag already set sends none');
+});

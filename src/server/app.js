@@ -3466,11 +3466,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         }
         // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
         // F8 / QUICK-ASK-JUST-WORKS: the first time a search runs in this profile, one non-blocking notice says what goes where and how to turn it off. Never on a device or in the bar.
-        if (PC_TOOLS.includes(name) && !req.bunnyRemote && !req.bunnyDevice && settings.pcSearchNoticeShown !== true) { // F8-4: the bar searches by itself by default, so its first search shows the same notice, as a line under the answer
-          const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
-          send('notice', { text: `Search this PC is on, for finding files only. File names and folders it finds go to the model${cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)}, a cloud model)` : ''}. Turn it off in Settings › Capabilities.`, pcNotice: true });
-          await saveSettings({ pcSearchNoticeShown: true });
-        }
+        if (PC_TOOLS.includes(name)) await pcFirstNotice();
         if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, chat: id, send, logStep });
         if (pcTurn.tainted && !textOnly && !PC_TAINT_FREE.includes(name) && !(workspace?.has(name) && TOOL_RISK[name] === 'read') && !planRefuses(riskOf(name), name)) {
           const said = JSON.stringify(parsed ?? {}).slice(0, 300);
@@ -3822,11 +3818,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       }
       // QUICK-ASK (v0.1.14.2): the same retry for a question about files on this computer. Only with Search this PC on and the bar offered the file tools (barPc), from the main process only: Bunny runs search_pc itself
       // with the terms it was given, exactly as the model's own call would run (the same exclusions, the same read-after-search choice, the same taint rules), and asks the model again with the outcome as labelled data.
+      // F8-4: the first search in this profile, wherever it starts (the model's own tool call or the bar's own first look-up), shows the one notice and remembers it (Security)
+      const pcFirstNotice = async () => {
+        if (req.bunnyRemote || req.bunnyDevice || settings.pcSearchNoticeShown === true) return;
+        const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
+        send('notice', { text: `Search this PC is on, for finding files only. File names and folders it finds go to the model${cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)}, a cloud model)` : ''}. Turn it off in Settings › Capabilities.`, pcNotice: true });
+        await saveSettings({ pcSearchNoticeShown: true });
+      };
       if (barPc && body.pcLookupFirst === true) {
         const terms = (Array.isArray(body.pcTerms) ? body.pcTerms : []).map((t) => String(t ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, 60)).filter(Boolean).slice(0, 6);
         if (terms.length) {
           quickLookups += 1;
           try {
+            await pcFirstNotice();
             const outcome = await pc.runTool({ name: 'search_pc', parsed: { terms }, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: 'bar', chat: id, send, logStep });
             history.unshift({ role: 'system', content: 'Bunny searched this computer\'s files for this question; the results follow as data.' });
             const fenced = String(outcome).slice(0, 50_000).replace(/<<<SEARCH RESULTS|SEARCH RESULTS>>>/g, ' ');
