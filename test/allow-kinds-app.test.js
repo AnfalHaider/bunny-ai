@@ -26,8 +26,8 @@ async function scripted(t, steps) {
   return { seen, url: `http://127.0.0.1:${server.address().port}/v1` };
 }
 
-async function chat(base, id, content, onEvent) {
-  const res = await fetch(`${base}/api/sessions/${id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'gpt-4o', workMode: 'code' }) });
+async function chat(base, id, content, onEvent, extra = {}) {
+  const res = await fetch(`${base}/api/sessions/${id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'gpt-4o', workMode: 'code', ...extra }) });
   const reader = res.body.getReader(); const dec = new TextDecoder(); const events = []; let buf = '';
   for (;;) {
     const { done, value } = await reader.read(); if (done) break;
@@ -178,4 +178,92 @@ test('a helper never gets a kind and a taint card still shows a kind or a reason
   assert.match(reasonLine('helper'), /^Asked every time: a helper is asking/);
   assert.match(reasonLine('pcText'), /read text from your PC files/);
   assert.equal(reasonLine('anything the model wrote'), '', 'a reason is only ever one of the fixed strings');
+});
+
+// the connector kind and a helper's own card, with a stand-in MCP server (a swapped fetch, like agent-flow's) and a scripted model
+function mcpStandIn(t) {
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url) !== 'https://weather.example.com/mcp') return real(url, init);
+    const rpc = JSON.parse(String(init?.body ?? '{}'));
+    const reply = (result) => new Response(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result }), { status: 200, headers: { 'content-type': 'application/json', 'mcp-session-id': 's1' } });
+    if (rpc.method === 'initialize') return reply({ protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'weather', version: '1' } });
+    if (rpc.method === 'tools/list') return reply({ tools: [{ name: 'forecast', description: 'The forecast for a city', inputSchema: { type: 'object', properties: { city: { type: 'string' } } } }, { name: 'send_alert', description: 'Send an alert', inputSchema: { type: 'object', properties: {} } }] });
+    if (rpc.method === 'tools/call') return reply({ content: [{ type: 'text', text: 'Sunny' }] });
+    return new Response('', { status: 202 });
+  };
+  t.after(() => { globalThis.fetch = real; });
+}
+async function modelThat(t, decide) {
+  const seen = [];
+  const server = createServer((req, res) => {
+    let raw = ''; req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      const body = JSON.parse(raw); seen.push(body);
+      const step = decide(body, seen.length);
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const delta = step ? { tool_calls: [{ index: 0, id: `c${seen.length}`, function: { name: step.name, arguments: JSON.stringify(step.args) } }] } : { content: 'done' };
+      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r)); t.after(() => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }));
+  return { seen, url: `http://127.0.0.1:${server.address().port}/v1` };
+}
+const toolNamed = (body, re) => (body.tools ?? []).find((d) => re.test(d.function.name))?.function.name;
+
+test('a connector tool: the first call asks and offers its kind; the same tool again does not ask; a tool that sends gets no kind and the fixed reason', async (t) => {
+  mcpStandIn(t);
+  const { base } = await startApp(t, { fake: false });
+  const model = await modelThat(t, (body, n) => {
+    const forecast = toolNamed(body, /forecast/); const alert = toolNamed(body, /send_alert/);
+    const told = body.messages.filter((m) => m.role === 'tool').length;
+    if (told === 0 && forecast) return { name: forecast, args: { city: 'Lisbon' } };
+    if (told === 1 && forecast) return { name: forecast, args: { city: 'Porto' } };
+    if (told === 2 && alert) return { name: alert, args: {} };
+    return null;
+  });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: model.url });
+  const added = await post(base, '/api/mcp', { name: 'Weather', url: 'https://weather.example.com/mcp', enabled: true });
+  assert.equal(added.status, 200);
+  const { body: session } = await post(base, '/api/sessions', { title: 'Connector kind' });
+  await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: 'ask' }) });
+  const cards = [];
+  await chat(base, session.id, 'forecast twice, then alert', async (event, data) => {
+    if (event !== 'permission') return;
+    cards.push(data);
+    await post(base, `/api/sessions/${session.id}/permission/${data.id}`, data.kind ? { allowed: true, kind: true } : { allowed: true });
+  }, { workMode: 'chat' });
+  assert.equal(cards.length, 2, 'the second forecast did not ask; the alert did');
+  assert.match(cards[0].kind.button, /Weather: forecast/);
+  assert.equal(cards[1].kind ?? null, null); assert.match(cards[1].reason, /^Asked every time: this sends or buys something/);
+  const { body: list } = await json(base, `/api/sessions/${session.id}/allow-kinds`);
+  assert.equal(list.kinds.length, 1); assert.match(list.kinds[0].label, /Weather: forecast/);
+});
+
+test("a helper's own card offers no kind (only Allow once), the fixed reason says a helper is asking, and what the helper was allowed creates no kind", async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-f9h-')); await mkdir(join(folder, 'src', 'a'), { recursive: true }); t.after(() => rm(folder, { recursive: true, force: true }));
+  const { base } = await startApp(t, { fake: false });
+  const model = await modelThat(t, (body) => {
+    const isParent = Boolean(toolNamed(body, /^run_subagent$/));
+    const told = body.messages.filter((m) => m.role === 'tool').length;
+    if (isParent && told === 0) return { name: 'run_subagent', args: { title: 'Writer', task: 'write src/a/h.js' } };
+    if (!isParent && told === 0) return { name: 'write_file', args: { path: 'src/a/h.js', content: 'h\n' } };
+    return null;
+  });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: model.url });
+  const { body: session } = await post(base, '/api/sessions', { title: 'Helper' });
+  const set = (key, value) => fetch(`${base}/api/sessions/${session.id}/setting/${key}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) });
+  await set('permissionMode', 'ask'); await set('folder', folder);
+  const cards = [];
+  await chat(base, session.id, 'use a helper to write the file', async (event, data) => {
+    if (event !== 'permission') return;
+    cards.push(data);
+    await post(base, `/api/sessions/${session.id}/permission/${data.id}`, { allowed: true });
+  });
+  const editCards = cards.filter((c) => /h\.js/.test(`${c.title} ${c.detail}`));
+  assert.ok(editCards.length >= 1, `the helper's edit asked: ${cards.map((c) => c.title).join(' | ')}`);
+  assert.ok(editCards.every((c) => !c.kind), 'a helper is never offered a kind');
+  assert.match(editCards[0].reason, /^Asked every time: a helper is asking/);
+  assert.equal((await json(base, `/api/sessions/${session.id}/allow-kinds`)).body.kinds.length, 0);
 });
