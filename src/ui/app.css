@@ -2552,3 +2552,27 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .rewind-modal .btn-danger { background: var(--bad); color: var(--on-ink, #fff); }
 .rewind-modal .btn-danger:hover { background: var(--bad); opacity: .88; }
 @media (max-width: 480px) { .rewind-count { display: none; } .rewind-row { grid-template-columns: 18px minmax(0, 1fr); } }
+
+/* AGENT-FLOW F9: Allow for this chat. The mark on a step is a small chip (no banner); the tick shows the exact rule; the Working folder card lists what is allowed, with Forget */
+.tool-call-header .tag.is-allowed { color: var(--ok-text, var(--ok)); border-color: var(--ok); background: transparent; }
+.kind-tick { display: flex; gap: var(--sp-3); align-items: flex-start; font-size: var(--fs-sm); margin-top: var(--sp-3); }
+.kind-tick input { margin-top: 3px; }
+.kind-tick .hint { display: block; }
+.kind-reason { margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--text-dim); }
+.permission-actions { flex-wrap: wrap; }
+.allowed-kinds { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar); margin-top: var(--sp-5); overflow: hidden; }
+.allowed-kinds > * { padding: var(--sp-3) var(--sp-5); }
+.allowed-kinds .allowed-head { display: flex; gap: var(--sp-3); align-items: center; border-bottom: 1px solid var(--line); }
+.allowed-kinds .allowed-head .link { margin-left: auto; }
+.allowed-kinds .allowed-row { display: flex; gap: var(--sp-3); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+.allowed-kinds .allowed-row span { min-width: 0; overflow-wrap: anywhere; }
+.allowed-kinds .link { background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; font-size: var(--fs-sm); padding: 0; }
+.allowed-kinds .hint { font-size: var(--fs-sm); color: var(--text-dim); }
+@media (max-width: 520px) { .permission-actions .btn, .permission-actions button { flex: 1 1 100%; text-align: left; } }
+
+/* F9/F10 (QA): the permission card's buttons are touch targets on a phone, and the secondary ones have a visible border so they do not read as plain text */
+@media (max-width: 600px) {
+  .permission-actions button, .permission-actions .btn { min-height: 44px; padding-inline: var(--sp-5); }
+  .permission-actions button:not(.primary), .permission-actions .btn:not(.primary) { border: 1px solid var(--line-strong, var(--line)); background: transparent; border-radius: var(--r-md); }
+  .permission-actions { gap: var(--sp-3); }
+}

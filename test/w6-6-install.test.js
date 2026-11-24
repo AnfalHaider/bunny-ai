@@ -262,7 +262,7 @@ async function say(ctx, answer) {
     for (const m of part.matchAll(/event: permission\ndata: (.*)/g)) {
       const card = JSON.parse(m[1]);
       asked.push(card);
-      await post(ctx.base, `/api/sessions/${ctx.session.id}/permission/${card.id}`, { allowed: answer });
+      await post(ctx.base, `/api/sessions/${ctx.session.id}/permission/${card.id}`, { allowed: answer, ...(card.choices ? { choice: answer ? 'on' : 'no' } : {}) });
     }
   }
   return { asked, text };

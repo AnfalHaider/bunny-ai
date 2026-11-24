@@ -1462,6 +1462,7 @@ function renderMessage(m, { skipThinking = false } = {}) {
     else if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
     else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
+    if (m.allowedKind) header.append(element('span', { className: 'tag is-allowed', textContent: `allowed for this chat: ${m.allowedKind}` })); // F9: why nothing asked (a small chip, no banner)
     // A read step opens that file in the Files pane.
     const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
     if (readPath && state.session?.folder && !failedStep) {
@@ -2081,7 +2082,7 @@ function showLiveTool(bodyEl, info) {
   if (!line) {
     line = element('div', { className: 'msg assistant live-tool' });
     line.dataset.tool = info.tool;
-    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '' }).firstChild);
+    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '', ...(info.allowedKind ? { allowedKind: info.allowedKind } : {}) }).firstChild);
     msg.before(line);
   }
   line.dataset.status = info.status;
@@ -2522,23 +2523,38 @@ function showLivePermission(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const card = element('div', { className: 'permission-prompt live-permission' });
-  card.append(element('h4', { textContent: `Allow: ${info.title}?` }));
+  card.append(element('h4', { textContent: info.choices ? info.title : `Allow: ${info.title}?` }));
   if (info.detail) card.append(element('pre', { className: 'code' }, element('code', { textContent: info.detail })));
   const actions = element('div', { className: 'permission-actions' });
-  const answer = async (allowed, forSession = false) => {
-    actions.replaceChildren(element('span', { className: 'hint', textContent: allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
+  const answer = async (allowed, forSession = false, choice = null) => {
+    actions.replaceChildren(element('span', { className: 'hint', textContent: choice ? (info.choices.find((c) => c.id === choice)?.label ?? 'Answered') : allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
     try {
-      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', forSession ? { allowed, forSession: true } : { allowed });
+      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', choice ? { allowed, choice } : forSession ? { allowed, forSession: true } : { allowed });
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
     }
   };
-  actions.append(
-    button('Allow', { className: 'primary', onclick: () => answer(true) }),
+  // F9: the kind button, the tick that shows the exact rule, and the one fixed line that says why a kind is not offered. The words come from the server (fixed strings and the call's own arguments).
+  let tick = null;
+  const answerKind = async () => {
+    const saveRule = Boolean(tick?.checked);
+    actions.replaceChildren(element('span', { className: 'hint', textContent: info.kind.replyOnly ? 'Allowed for this task' : 'Allowed for this chat' }));
+    try { await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', saveRule ? { allowed: true, kind: true, saveRule: true } : { allowed: true, kind: true }); } catch (err) { actions.replaceChildren(element('span', { className: 'err', textContent: err.message })); }
+  };
+  if (info.choices) actions.append(...info.choices.map((c) => button(c.label, { className: c.primary ? 'primary' : 'ghost', onclick: () => answer(c.id !== 'no', false, c.id) })));
+  else actions.append(
+    button(info.kind ? 'Allow once' : 'Allow', { className: 'primary', onclick: () => answer(true) }),
+    ...(info.kind ? [button(info.kind.button.replace(/`([^`]*)`/g, '$1'), { className: 'ghost', onclick: answerKind })] : []),
     ...(info.forSession ? [button('Allow for this chat', { className: 'ghost', onclick: () => answer(true, true) })] : []),
-    button('Deny', { className: 'ghost', onclick: () => answer(false) }),
+    button(info.kind ? "Don't allow" : 'Deny', { className: 'ghost', onclick: () => answer(false) }),
   );
   card.append(actions);
+  if (info.kind?.rule) {
+    tick = element('input', { type: 'checkbox', id: `kind-save-${info.id}` });
+    card.append(element('label', { className: 'kind-tick', htmlFor: tick.id }, tick, element('span', {}, 'Also save as a rule for this folder', element('span', { className: 'hint', textContent: ` Saves exactly: ${String(info.kind.rule).replace(/`/g, '')}` }))));
+  }
+  if (info.reason) card.append(element('div', { className: 'hint kind-reason', textContent: info.reason }));
+  if (!info.kind && !info.reason && document.querySelector('meta[name="bunny-csrf"]')) card.append(element('div', { className: 'hint kind-reason', textContent: '"For this chat" can be given only on the PC.' }));
   msg.before(card);
   card.scrollIntoView({ block: 'end' });
 }
@@ -4021,6 +4037,21 @@ async function openWorkingFolder() {
     if (info.on) {
       status.textContent = info.gone ? (info.message ?? 'The copy is gone.') : `Branch ${info.branch} (new, from ${info.base ?? 'the current commit'} at ${String(info.baseSha ?? '').slice(0, 7)}). ${info.dirty ?? 0} file${info.dirty === 1 ? '' : 's'} changed, ${info.ahead ?? 0} commit${info.ahead === 1 ? '' : 's'} so far.`;
       foot.append(button('Finish…', { className: 'btn btn-primary', onclick: () => finishCard(info) }));
+    }
+    // F9: what is allowed for this chat: each kind in words, with Forget; hidden on a device
+    if (!document.querySelector('meta[name="bunny-csrf"]')) {
+      let allowed = { kinds: [], replyOnly: [] };
+      try { allowed = await getJSON(`/api/sessions/${sid}/allow-kinds`); } catch { /* the list is not there: shown as empty */ }
+      const total = (allowed.kinds?.length ?? 0) + (allowed.replyOnly?.length ?? 0);
+      const block = element('div', { className: 'allowed-kinds', id: 'allowed-kinds' });
+      const head = element('div', { className: 'allowed-head' }, element('b', { textContent: 'Allowed in this chat' }), element('span', { className: 'hint', textContent: ` · ${total} ${total === 1 ? 'kind' : 'kinds'}` }));
+      if (allowed.kinds?.length) head.append(button('Forget allowed actions', { className: 'link', onclick: async () => { await sendJSON(`/api/sessions/${sid}/allow-kinds/all`, 'DELETE'); await paint(); } }));
+      block.append(head);
+      if (!total) block.append(element('div', { className: 'hint', textContent: 'Nothing is allowed for this chat.' }));
+      for (const k of allowed.kinds ?? []) block.append(element('div', { className: 'allowed-row', title: k.title ?? '' }, element('span', { textContent: k.label }), button('Forget', { className: 'link', 'aria-label': `Forget ${k.label}`, onclick: async () => { await sendJSON(`/api/sessions/${sid}/allow-kinds/${k.i}`, 'DELETE'); await paint(); } })));
+      for (const k of allowed.replyOnly ?? []) block.append(element('div', { className: 'allowed-row' }, element('span', {}, k.label, element('small', { textContent: ` (${k.note})` })), element('span', { className: 'hint', textContent: 'ends with this reply' })));
+      block.append(element('div', { className: 'hint', textContent: 'Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode. Rules saved for this folder are in Settings, Code.' }));
+      body.append(block);
     }
     foot.append(button('Change folder', { className: 'btn btn-ghost', onclick: async () => { close(); await chooseFolder(); } }), button('Close', { className: 'btn btn-ghost', onclick: close }));
     sw.addEventListener('change', async () => {

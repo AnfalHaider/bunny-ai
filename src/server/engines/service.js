@@ -6,13 +6,14 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { spawnEngine } from './process.js';
 import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
+import { commandMatches, editMatches } from '../allowKinds.js';
 import { createBridge, keyFolders } from './bridge.js';
 import { AUTH_COMMANDS, denyRules, signInUrlFrom, startClaude } from './claude-code.js';
 import { loadSchema, startCodex } from './codex.js';
@@ -321,6 +322,15 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
       mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(settings.permissionRules, root)), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      // F9-7: in Bunny-rules mode an engine's command or edit that the person allowed as a KIND for this chat runs with no card (an engine's own rules mode keeps the engine's own "always")
+      allowed: ownRules ? undefined : async (call) => {
+        const kinds = (await turn.allowKinds?.()) ?? turn.session?.allowKinds ?? [];
+        for (const k of kinds) {
+          if (k.type === 'command' && call.command !== undefined && commandMatches(k, call.command, { cwd: root })) return true;
+          if (k.type === 'edit' && call.path && editMatches(k, resolve(root, String(call.path)), root)) return true;
+        }
+        return false;
+      },
       ask: async (summary, detail, opts = {}) => {
         // "Allow for this chat" is offered on Codex's cards only, and only with Bunny's engine off
         const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true && pins.codex?.sessionAllow === true ? { forSession: true } : {});

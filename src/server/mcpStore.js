@@ -26,7 +26,7 @@ const VAR = /^[A-Za-z_][A-Za-z0-9_]{0,60}$/;
 const keySecret = (id) => `mcp-key.${id}`;
 const HEADER_NAME = /^[A-Za-z0-9-]{1,64}$/;
 const NEVER_HEADERS = /^(host|cookie|set-cookie|content-length|content-type|content-encoding|transfer-encoding|connection|origin|referer|user-agent|accept|accept-encoding|te|upgrade|keep-alive|expect|forwarded|via|date|range|trailer|mcp-session-id|mcp-protocol-version|proxy-.*|sec-.*|x-forwarded-.*|if-.*)$/i;
-/** Why this header name may not carry a key, or '' (K-4). `authorization` only when the vendor's own entry named it (the connector's keyHeaders). */
+/** Why this header name may not carry a key, or '' (K-4). `authorization` only when a TRUSTED source named it (the registry's own entry or a curated entry, passed by Bunny's code as trustedKeyHeaders): never a name the model supplied. */
 export function keyHeaderProblem(name, { allowed = [] } = {}) {
   const n = String(name ?? '');
   if (!HEADER_NAME.test(n)) return 'A header name is letters, digits and hyphens, up to 64 characters.';
@@ -132,7 +132,7 @@ export function createMcpStore({ file, secrets = null }) {
     return { source: { repo, sha, folder } };
   }
 
-  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null, keyHeaders = [] }) {
+  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null, keyHeaders = [], trustedKeyHeaders = [] }) {
     await load();
     const clean = String(name ?? '').trim();
     const address = String(url ?? '').trim();
@@ -170,7 +170,8 @@ export function createMcpStore({ file, secrets = null }) {
       tools: [],
       lastError: null,
       createdAt: new Date().toISOString(),
-      ...(cleanHeaderNames(keyHeaders).length ? { keyHeaders: cleanHeaderNames(keyHeaders) } : {}), // the header names the vendor's own entry asked for: suggestions for the key card
+      ...(cleanHeaderNames(keyHeaders).filter((h) => !/^authorization$/i.test(h)).length ? { keyHeaders: cleanHeaderNames(keyHeaders).filter((h) => !/^authorization$/i.test(h)) } : {}), // names the MODEL passed: suggestions for the key card, and never Authorization (LOW from Security)
+      ...(cleanHeaderNames(trustedKeyHeaders).length ? { trustedKeyHeaders: cleanHeaderNames(trustedKeyHeaders) } : {}), // names from the registry's or a curated entry, given by Bunny's own code only
     };
     servers.push(server);
     await persist();
@@ -268,7 +269,7 @@ export function createMcpStore({ file, secrets = null }) {
     if (server.type === 'local') throw Object.assign(new Error('A local connector takes its settings in the settings list, not a key.'), { code: 'mcp.notRemote' });
     const origin = originOf(server.url);
     if (!origin || !/^https:$/.test(new URL(server.url).protocol)) throw Object.assign(new Error('A key is sent only over https, so this connector\'s address must be an https address.'), { code: 'mcp.keyNeedsHttps' });
-    const why = keyHeaderProblem(header, { allowed: server.keyHeaders ?? [] });
+    const why = keyHeaderProblem(header, { allowed: server.trustedKeyHeaders ?? [] });
     if (why) throw Object.assign(new Error(why), { code: 'mcp.badHeader' });
     const v = typeof value === 'string' ? value.trim() : '';
     if (!v || v.length > 4000 || /[\r\n\0]/.test(v)) throw Object.assign(new Error('The key is one line of text, up to 4,000 characters.'), { code: 'mcp.badKey' });
