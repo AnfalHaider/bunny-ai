@@ -90,7 +90,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, now = () => new Date() }) {
+export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, gitOptions = undefined, now = () => new Date() }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   let queue = Promise.resolve();
@@ -149,7 +149,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   async function prepareFromSource(url, chatId) {
     if (!workDir) throw new Error('Installing from an address is not available here.');
     await sweep();
-    const src = await prepareSource(url, { workDir, ...(fetchSource ? { fetchSource } : {}), ...(checkAddress ? { checkAddress } : {}), now });
+    const src = await prepareSource(url, { workDir, ...(fetchSource ? { fetchSource } : {}), ...(checkAddress ? { checkAddress } : {}), ...(gitOptions ? { gitOptions } : {}), now });
     prepared.set(src.token, src);
     return { src, openWeb: isOpenWeb(chatId, url) };
   }
@@ -158,7 +158,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     if (!src) throw new Error('The source is no longer ready. Ask again to see it first.');
     if (!(await stillTheSame(src))) { prepared.delete(src.token); await discardSource(src); throw new Error(CHANGED); }
     try {
-      const record = await installParts({ ...src.plugin }, src.url, { off, pin: { kind: src.kind, url: src.url, sha256: src.sha256, treeHash: src.treeHash, fetchedAt: src.fetchedAt } });
+      const record = await installParts({ ...src.plugin }, src.url, { off, pin: { kind: src.kind, url: src.url, ...(src.commit ? { commit: src.commit } : { sha256: src.sha256 }), treeHash: src.treeHash, fetchedAt: src.fetchedAt } });
       return { record, plugin: src.plugin };
     } finally { prepared.delete(src.token); await discardSource(src); }
   }

@@ -12,6 +12,7 @@ import { join, relative, sep } from 'node:path';
 import { fetchLimited } from './download.js';
 import { UnpackError, unpackTgz, unpackZip } from './engines/unpack.js';
 import { buildPlugin } from './pluginImport.js';
+import { fetchGitSource, parseGitAddress } from './gitSource.js';
 import { checkPublicAddress } from './publicFetch.js';
 
 export const LIMITS = Object.freeze({ file: 256 * 1024, archive: 50 * 1024 * 1024, unpacked: 200 * 1024 * 1024, entries: 5000 });
@@ -25,6 +26,8 @@ export function sourceKind(address) {
   if (u.protocol !== 'https:') return { error: 'Only https addresses are installed from: http is refused.' };
   if (u.username || u.password) return { error: 'An address with a user name or password in it is refused.' };
   const p = decodeURIComponent(u.pathname).toLowerCase();
+  // IA-1: a git host that is not GitHub's (any address ending .git, or a GitLab, Bitbucket or Codeberg page link)
+  if (u.hostname.toLowerCase() !== 'github.com' && (/\.git(\/|$)/.test(p) || /^(gitlab\.com|bitbucket\.org|codeberg\.org)$/i.test(u.hostname)) && !/\.(zip|tgz|tar\.gz)$/.test(p)) { const g = parseGitAddress(u.href); return g.error ? { error: g.error } : { kind: 'git', url: u }; }
   if (/\.zip$/.test(p)) return { kind: 'zip', url: u };
   if (/\.(tar\.gz|tgz)$/.test(p)) return { kind: 'tgz', url: u };
   if (/(^|\/)skill\.md$/.test(p) || /\.md$/.test(p)) return { kind: 'skill', url: u };
@@ -76,7 +79,7 @@ async function sizeOf(root) { let n = 0; for (const f of await walk(root)) n += 
  * Fetch, pin, unpack, inspect. Returns a prepared source (kept in a temp folder under `workDir`, never fetched twice) or throws a plain message; any failure leaves nothing behind.
  * `fetchSource(url, { maxBytes })` -> { bytes, url } is the bounded public https fetch (tests hand in a loopback stand-in).
  */
-export async function prepareSource(address, { workDir, fetchSource = (u, o) => fetchLimited(u, o), now = () => new Date(), checkAddress = checkPublicAddress } = {}) {
+export async function prepareSource(address, { workDir, fetchSource = (u, o) => fetchLimited(u, o), now = () => new Date(), checkAddress = checkPublicAddress, gitOptions = {} } = {}) {
   const found = sourceKind(address);
   if (found.error) throw new Error(found.error);
   const token = randomUUID();
@@ -84,15 +87,21 @@ export async function prepareSource(address, { workDir, fetchSource = (u, o) => 
   await mkdir(work, { recursive: true });
   try {
     const maxBytes = found.kind === 'skill' ? LIMITS.file : LIMITS.archive;
+    let root = join(work, 'src');
+    let repoName = decodeURIComponent(found.url.pathname).split('/').filter(Boolean).pop() ?? 'source';
+    let bytes = Buffer.alloc(0); let pin = ''; let commit = null;
+    if (found.kind === 'git') { // IA-1: the commit is the pin; git runs in isolation and only the files are kept
+      const got = await fetchGitSource(found.url.href, root, { workDir: work, ...gitOptions });
+      commit = got.commit; pin = got.commit;
+      repoName = repoName.replace(/\.git$/, '');
+    } else {
     const got = await fetchSource(found.url.href, { maxBytes });
     const finalUrl = new URL(String(got.url ?? found.url.href));
     if (finalUrl.protocol !== 'https:') throw new Error('The address sent Bunny to a page that is not https, which is refused.');
-    const bytes = Buffer.from(got.bytes);
+    bytes = Buffer.from(got.bytes);
     if (bytes.length > maxBytes) throw new Error(`That source is larger than the limit (${Math.round(maxBytes / 1024)} KB). Nothing was installed.`);
-    const pin = sha256(bytes);
-    let root = join(work, 'src');
+    pin = sha256(bytes);
     await mkdir(root, { recursive: true });
-    let repoName = decodeURIComponent(found.url.pathname).split('/').filter(Boolean).pop() ?? 'source';
     if (found.kind === 'skill') {
       await writeFile(join(root, 'SKILL.md'), bytes);
       repoName = decodeURIComponent(found.url.pathname).split('/').filter(Boolean).slice(-2, -1)[0] ?? found.url.hostname;
@@ -107,6 +116,7 @@ export async function prepareSource(address, { workDir, fetchSource = (u, o) => 
       const top = await readdir(root, { withFileTypes: true });
       if (top.length === 1 && top[0].isDirectory()) root = join(root, top[0].name);
       repoName = repoName.replace(/\.(zip|tar\.gz|tgz)$/i, '');
+    }
     }
     const real = await sizeOf(root);
     if (real > LIMITS.unpacked) throw new Error('That source is larger than Bunny installs from. Nothing was installed.');
@@ -124,7 +134,7 @@ export async function prepareSource(address, { workDir, fetchSource = (u, o) => 
     }
     plugin.connectors = connectors;
     if (!plugin.skills.length && !plugin.connectors.length) throw new Error('That source has no skills or remote connectors Bunny can use.');
-    return { token, kind: found.kind, url: found.url.href, host: found.url.host, sha256: pin, size: bytes.length, fetchedAt: now().toISOString(), root, work, treeHash: await treeHash(root), plugin };
+    return { token, kind: found.kind, url: found.url.href, host: found.url.host, sha256: pin, commit, size: bytes.length, fetchedAt: now().toISOString(), root, work, treeHash: await treeHash(root), plugin };
   } catch (err) {
     await rm(work, { recursive: true, force: true }).catch(() => {});
     throw err;
@@ -145,7 +155,7 @@ export function describeSource(prepared, { openWeb = false } = {}) {
   const lines = [
     ...(openWeb ? ['Found on the open web: not from a known catalogue.'] : []),
     `Source ${prepared.url}`,
-    `Fingerprint (sha256) ${prepared.sha256.slice(0, 16)}…, ${kb}, fetched just now`,
+    prepared.commit ? `Commit ${prepared.commit}, fetched just now` : `Fingerprint (sha256) ${prepared.sha256.slice(0, 16)}…, ${kb}, fetched just now`,
     `Plugin ${p.name}${p.description ? `: ${p.description}` : ''}`,
     ...p.skills.map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${s.description || '(no description)'}`),
     ...p.connectors.map((c) => `Connector ${c.name}: ${c.url}`),
