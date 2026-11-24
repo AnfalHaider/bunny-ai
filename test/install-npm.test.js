@@ -242,3 +242,35 @@ test('Security: only allowed package.json fields reach npm (peerDependencies, ov
   const lockCall = w.npmCalls.find((c) => c.args.includes('--package-lock-only'));
   assert.ok(/no-git$/.test(lockCall.env.npm_config_git) && lockCall.env.npm_config_git.startsWith(work) && !existsSync(lockCall.env.npm_config_git), 'git is a program that does not exist');
 });
+
+// IA-9: an existing unpinned npx / uvx connector is marked, and "Pin this version" runs the pipeline, shows a card, and the yes points the connector at the pinned copy
+import { unpinnedPackage } from '../src/server/pinning.js';
+test('IA-9: which connectors are not pinned', () => {
+  const local = (command, args) => ({ type: 'local', command, args });
+  assert.deepEqual(unpinnedPackage(local('npx', ['-y', 'notes-mcp'])), { kind: 'npm', name: 'notes-mcp', spec: 'notes-mcp@latest' });
+  assert.deepEqual(unpinnedPackage(local('npx', ['-y', '@acme/notes@latest'])), { kind: 'npm', name: '@acme/notes', spec: '@acme/notes@latest' });
+  assert.deepEqual(unpinnedPackage(local('uvx', ['notes-mcp'])), { kind: 'pypi', name: 'notes-mcp', spec: 'notes-mcp' });
+  for (const pinned of [local('npx', ['-y', 'notes-mcp@1.2.3']), local('uvx', ['notes-mcp==1.0']), local('node', ['server.js']), local('python', ['-m', 'x']), { type: 'remote', url: 'https://x' }, local('npx', [])]) assert.equal(unpinnedPackage(pinned), null, JSON.stringify(pinned));
+});
+
+test('IA-9 through the app: the list marks an unpinned connector, Pin this version shows the card, the yes repoints it at the pinned copy, cancel deletes the staging; a device cannot', async (t) => {
+  const w = world(tarball());
+  const { base } = await startApp(t, { fake: false, installSource: { npmDeps: w.deps } });
+  const J2 = { 'content-type': 'application/json' };
+  const made = await post(base, '/api/mcp', { name: 'Notes', command: 'npx', args: ['-y', 'notes-mcp'], confirmLocal: true, enabled: false });
+  assert.equal(made.status, 200);
+  const list = (await json(base, '/api/mcp')).body;
+  assert.equal(list[0].unpinned, true, 'marked not pinned');
+  const card = (await post(base, `/api/mcp/${made.body.id}/pin`, {})).body;
+  assert.equal(card.ok, true);
+  for (const need of ['runs notes-mcp at whatever version the registry has today', 'notes-mcp@1.2.3', 'integrity sha512-', 'This runs code from the internet on this computer']) assert.ok(card.text.includes(need), need);
+  // cancel first: the staging is deleted and the confirm no longer works
+  assert.equal((await fetch(`${base}/api/mcp/${made.body.id}/pin/${card.token}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await post(base, `/api/mcp/${made.body.id}/pin/${card.token}`, {})).status, 400);
+  const card2 = (await post(base, `/api/mcp/${made.body.id}/pin`, {})).body;
+  const done = await post(base, `/api/mcp/${made.body.id}/pin/${card2.token}`, {});
+  assert.equal(done.status, 200);
+  const after = (await json(base, '/api/mcp')).body[0];
+  assert.equal(after.command, 'node'); assert.ok(!JSON.stringify(after.args).includes('npx')); assert.equal(after.unpinned, undefined, 'no longer marked'); assert.equal(after.name, 'Notes');
+  assert.equal((await post(base, `/api/mcp/${made.body.id}/pin`, {})).body.ok, false, 'already pinned');
+});

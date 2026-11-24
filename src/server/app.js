@@ -56,6 +56,7 @@ import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
 import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited } from './download.js';
 import { checkPublicAddress } from './publicFetch.js';
+import { unpinnedPackage } from './pinning.js';
 import { createPcService } from './pcService.js';
 import { FIXED_EXCLUSIONS } from './pcExclusions.js';
 import { PC_TOOLS, pcToolDefinitions, PC_SYSTEM_TEXT, createPcTurn, holdsPcFileText } from './pcTools.js';
@@ -1171,7 +1172,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (path.startsWith('/api/connectors/') && await connectorSignIn.handle(req, res, path, method, url, () => readBody(req))) return;
 
     // ---- MCP servers ----
-    if (path === '/api/mcp' && method === 'GET') return sendJson(res, 200, await mcp.list());
+    if (path === '/api/mcp' && method === 'GET') return sendJson(res, 200, (await mcp.list()).map((s) => (unpinnedPackage(s) ? { ...s, unpinned: true } : s))); // IA-9: Customize marks an unpinned npx / uvx connector
     if (path === '/api/mcp' && method === 'POST') {
       try {
         const body = await readBody(req);
@@ -1197,6 +1198,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       } catch (err) {
         return sendJson(res, err.code === 'mcp.notFound' ? 404 : 400, { code: err.code ?? 'mcp.failed', message: String(err.message).slice(0, 300) });
       }
+    }
+    // IA-9: "Pin this version" on an unpinned npx / uvx connector: the card, then the yes. Window only (the route table).
+    const mcpPinMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/pin(?:\/([a-f0-9-]{36}))?$/);
+    if (mcpPinMatch) {
+      if (windowOnly(req, res)) return;
+      try {
+        if (method === 'POST' && !mcpPinMatch[2]) return sendJson(res, 200, await appTools.pinCard(mcpPinMatch[1]));
+        if (method === 'POST') return sendJson(res, 200, await appTools.pinConfirm(mcpPinMatch[1], mcpPinMatch[2]));
+        if (method === 'DELETE' && mcpPinMatch[2]) { await appTools.pinCancel(mcpPinMatch[2]); return sendJson(res, 200, { ok: true }); }
+      } catch (err) { return sendJson(res, 400, { code: err.code ?? 'mcp.pinFailed', message: String(err.message).slice(0, 300) }); }
     }
     const mcpMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})$/);
     if (mcpMatch && method === 'PATCH') {

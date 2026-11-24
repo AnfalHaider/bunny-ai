@@ -5,6 +5,7 @@
  */
 import { describeNpm, discardNpm, installNpm, prepareNpm } from './npmSource.js';
 import { describePypi, discardPypi, installPypi, preparePypi } from './pypiSource.js';
+import { unpinnedPackage } from './pinning.js';
 import { fetchLimited } from './download.js';
 import { dirname, join } from 'node:path';
 import { describeSource, discardSource, prepareSource, stillTheSame, CHANGED } from './installSource.js';
@@ -197,6 +198,36 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       return { ok: true, name: p.name, token: p.dest, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: [], connectors: [p.name] } };
     } catch (err) { return { ok: false, message: String(err.message).slice(0, 300) }; }
   }
+  // IA-9: "Pin this version" on an existing unpinned npx / uvx connector: the same pipeline and card; the yes points the connector at the pinned copy (its name, folders and settings stay)
+  const pins = new Map(); // card token -> { serverId, kind }
+  async function pinCard(serverId) {
+    const server = await mcp.get(serverId);
+    const what = unpinnedPackage(server);
+    if (!what) return { ok: false, message: 'That connector is already pinned, or is not a package Bunny can pin.' };
+    let card;
+    if (what.kind === 'npm') card = await previewNpmCard(what.spec);
+    else {
+      const reg = pypiDeps ?? { fetchJson: async (u) => JSON.parse(Buffer.from((await fetchLimited(u, { maxBytes: 8 * 1024 * 1024 })).bytes).toString('utf8')) };
+      let version = null;
+      try { version = (await reg.fetchJson(`https://pypi.org/pypi/${encodeURIComponent(what.name)}/json`))?.info?.version; } catch { /* below */ }
+      if (!version) return { ok: false, message: 'Could not find the current version of that package.' };
+      card = await previewPypiCard(`${what.name}==${version}`);
+    }
+    if (!card.ok) return card;
+    const id = crypto.randomUUID(); // the page gets an opaque id, never a folder path
+    pins.set(id, { serverId, kind: what.kind, token: card.token });
+    return { ok: true, token: id, text: `This connector runs ${what.name} at whatever version the registry has today. Pinning installs one exact version and points the connector at it.\n\n${card.text}`, tooLong: card.tooLong };
+  }
+  async function pinConfirm(serverId, token) {
+    const pin = pins.get(String(token ?? ''));
+    if (!pin || pin.serverId !== serverId) throw new Error('That pin is no longer waiting. Start again.');
+    pins.delete(token);
+    let placed;
+    if (pin.kind === 'npm') { const p = preparedNpm.get(pin.token); if (!p) throw new Error('That pin is no longer waiting. Start again.'); preparedNpm.delete(pin.token); placed = await installNpm(p, { dest: join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`) }); }
+    else { const p = preparedPypi.get(pin.token); if (!p) throw new Error('That pin is no longer waiting. Start again.'); preparedPypi.delete(pin.token); placed = await installPypi(p); }
+    return mcp.update(serverId, { command: placed.command, args: placed.args });
+  }
+  async function pinCancel(token) { const pin = pins.get(String(token ?? '')); pins.delete(String(token ?? '')); if (pin) { await discardNpmToken(pin.token); await discardPypiToken(pin.token); } }
   const discardPypiToken = async (token) => { const p = preparedPypi.get(token); preparedPypi.delete(token); if (p) await discardPypi(p); };
   const discardNpmToken = async (token) => { const p = preparedNpm.get(token); preparedNpm.delete(token); if (p) await discardNpm(p); };
 
@@ -530,7 +561,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     setFolders,
     updatePlugin,
     previewPlugin,
-    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm, previewPypiCard, discardPypiToken, sweepPypi,
+    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm, previewPypiCard, discardPypiToken, sweepPypi, pinCard, pinConfirm, pinCancel,
     /** F10: is this plugin already installed? (then there is nothing to ask: the install itself says so) */
     isPluginInstalled: (url) => Boolean(findInstalled(null, url)),
   };

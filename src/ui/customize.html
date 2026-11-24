@@ -220,6 +220,24 @@
         const plugin = pluginOf('connectors', s.id);
         const flow = flows.get(s.id);
         const signedIn = s.oauth?.signedIn === true;
+        // IA-9: "Pin this version": the same pipeline as a new install, then one card; the yes points this connector at the pinned copy
+        const pinThis = async (server) => {
+          let card;
+          try { card = await sendJSON(`/api/mcp/${server.id}/pin`, 'POST', {}); } catch (err) { notice = err.message; paint(); return; }
+          if (!card?.ok) { notice = card?.message ?? 'Could not pin that connector.'; paint(); return; }
+          const dlg = document.createElement('dialog'); dlg.className = 'cz-pin-card'; dlg.setAttribute('aria-label', `Pin ${server.name}`);
+          const h = document.createElement('h3'); h.textContent = `Pin ${server.name}?`;
+          const pre = document.createElement('pre'); pre.textContent = card.text; pre.className = 'code';
+          const bar = document.createElement('div'); bar.className = 'cz-pin-actions';
+          const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'btn'; yes.textContent = 'Pin this version';
+          const no = document.createElement('button'); no.type = 'button'; no.className = 'btn btn-ghost'; no.textContent = 'Cancel';
+          const msg = document.createElement('span'); msg.className = 'hint';
+          const close = () => { dlg.close(); dlg.remove(); };
+          no.onclick = async () => { await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'DELETE').catch(() => {}); close(); };
+          yes.onclick = async () => { yes.disabled = true; try { await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'POST', {}); close(); await load(); } catch (err) { msg.textContent = err.message; yes.disabled = false; } };
+          dlg.addEventListener('cancel', () => { sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'DELETE').catch(() => {}); });
+          bar.append(yes, no, msg); dlg.append(h, pre, bar); document.body.append(dlg); dlg.showModal();
+        };
         // IA-0: a connector the person added may use a private address or http, and says so; one saved before Bunny checked addresses (no addedBy) is marked once for review
         const addressChip = (x) => {
           if (x.type === 'local') return null;
@@ -235,13 +253,14 @@
         list.append(row({
           id: s.id,
           name: s.name,
-          chips: [plugin ? { text: 'Plugin' } : null, addressChip(s), needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
+          chips: [plugin ? { text: 'Plugin' } : null, addressChip(s), s.unpinned ? { text: 'Not pinned: runs whatever version the registry has today', tone: 'warn' } : null, needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
           dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : hostOrUrl(s.url), needs ? st.detail : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : '', s.hasKey ? `Key saved (${s.keyHeader})` : '', plugin ? '' : scopeDim(s)),
           extra: flows.clientIdBox(s) ?? (keyOpen.has(s.id) ? keyBox({ server: s, save: (header, value) => sendJSON(`/api/mcp/${s.id}/key`, 'PUT', { header, value }), done: async () => { keyOpen.delete(s.id); await load(); }, cancel: () => { keyOpen.delete(s.id); paint(); } }) : null),
           primary,
           toggle: { on: s.enabled, label: `Use ${s.name}`, change: async (on) => { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on }); await load(); } },
           items: [
             primary ? { label: primary.label, run: primary.run } : null,
+            s.unpinned ? { label: 'Pin this version', run: () => pinThis(s) } : null,
             { label: 'Test', run: async () => { notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); } },
             signedIn ? { label: 'Sign out', run: () => signOut(s) } : null,
             s.type !== 'local' ? { label: s.hasKey ? 'Change key…' : 'Add key…', run: () => { keyOpen.add(s.id); paint(); } } : null,

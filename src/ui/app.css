@@ -2491,3 +2491,10 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .made-card .made-said { flex-basis: 100%; font-size: var(--fs-sm); color: var(--text-dim); }
 .made-card .made-said:empty { display: none; }
 @media (max-width: 520px) { .made-card .made-actions { margin-left: 0; flex-basis: 100%; } }
+
+
+/* IA-9: the Pin this version card in Customize */
+dialog.cz-pin-card { max-width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-panel, var(--bg)); color: var(--text); padding: var(--sp-5); }
+dialog.cz-pin-card pre.code { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow: auto; font-size: var(--fs-sm); }
+.cz-pin-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-top: var(--sp-4); }
+@media (max-width: 600px) { .cz-pin-actions .btn { min-height: 44px; flex: 1 1 100%; } }
