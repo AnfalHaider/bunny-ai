@@ -1,5 +1,5 @@
 // Canaries E1, E2, OI-1 and spike S-F13B on the PINNED engine binaries, offline, no account, no sign-in (second run, Security's requests of 2026-11-24).
-//   node scripts/canary-engines.mjs <base> <out.json>   (keep <base> and <out.json> OUT of test-results/: Playwright empties that folder)
+//   node scripts/canary-engines.mjs <base> <out.json>   (use <base> = docs/security/canary-out (git-ignored) and copy the JSON to docs/security/canary-YYYY-MM-DD.json; never test-results/, Playwright empties that folder)
 // <base> holds cc/package/claude.exe and cx/codex-x86_64-pc-windows-msvc.exe (each file's sha256 is checked against src/server/engines/pins.json by whoever unpacked them).
 // A local stub endpoint records every request body; the fixture files carry unique marker text. Claude Code gets a dummy API key; Codex a dummy token.
 //   Static runs:   Claude Code under --setting-sources user and with default sources (control); Codex with project_doc_max_bytes = 0 and with the default (control), fixture is a git repo.

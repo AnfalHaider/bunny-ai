@@ -20,3 +20,6 @@ dist-*/
 .bootstrap/session.json
 .claude/settings.local.json
 .claude/launch.json
+
+# canary runs: binaries and scratch live here, never committed (the runner JSON is copied out to docs/security/)
+docs/security/canary-out/
