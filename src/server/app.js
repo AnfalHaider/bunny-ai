@@ -1277,8 +1277,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (installMatch) {
       if (windowOnly(req, res)) return;
       try {
-        if (method === 'POST' && !installMatch[1]) { const body = await readBody(req); return sendJson(res, 200, await appTools.addressCheck(body.address)); }
-        if (method === 'POST') { const body = await readBody(req); return sendJson(res, 200, await appTools.addressConfirm(installMatch[1], body.choice)); }
+        if (method === 'POST' && !installMatch[1]) { const body = await readBody(req); return sendJson(res, 200, await appTools.addressCheck(body.address, { by: req.bunnyRemote || req.bunnyDevice ? 'device' : 'person' })); }
+        if (method === 'POST') { const body = await readBody(req); const done = await appTools.addressConfirm(installMatch[1], body.choice, { by: req.bunnyRemote || req.bunnyDevice ? 'device' : 'person' }); if (req.bunnyDevice) remote.logAction(req.bunnyDevice, { kind: 'install', choice: body.choice === 'on' ? 'on' : body.choice === 'off' ? 'off' : 'no', item: String(done?.name ?? '').slice(0, 60) }); return sendJson(res, 200, done); } // ADDR-2 (R-DF2): an Everything device's answer is in the access log by choice and item name, never an address or key
         if (method === 'DELETE' && installMatch[1]) { await appTools.addressCancel(installMatch[1]); return sendJson(res, 200, { ok: true }); }
       } catch (err) { return sendJson(res, 400, { code: err.code ?? 'install.failed', message: String(err.message).slice(0, 300) }); }
     }

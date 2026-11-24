@@ -299,7 +299,7 @@ export function createRemoteAccess({ file = null, logFile = null, now = () => Da
   let saving = Promise.resolve();
   function logAction(device, entry) {
     const clean = { at: new Date(now()).toISOString(), device: device?.deviceId ?? null, label: device?.label ?? null, level: device?.level ?? null };
-    for (const key of ['kind', 'tool', 'method', 'path', 'reason']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
+    for (const key of ['kind', 'tool', 'method', 'path', 'reason', 'choice', 'item']) if (typeof entry[key] === 'string') clean[key] = entry[key].slice(0, 200);
     if (typeof entry.level === 'string') clean.level = entry.level;
     if (typeof entry.from === 'string') clean.from = entry.from;
     actions.push(clean);

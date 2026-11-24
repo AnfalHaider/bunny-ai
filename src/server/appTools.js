@@ -222,45 +222,50 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
     if (!found.error) return { kind: found.kind, url: t };
     return { kind: 'connector', url: t };
   };
-  async function addressCheck(text) {
+  // `by` is who is at the window: 'person' (Bunny's own window) or 'device' (an Everything device). Only the person's own typing may reach a private address; a device keeps every public-https rule and its connector is recorded as a device's.
+  async function addressCheck(text, { by = 'person' } = {}) {
     await sweep(); await sweepNpm(); await sweepPypi();
+    const person = by === 'person';
     const c = classify(text);
     if (c.error) return { ok: false, message: c.error };
     const id = crypto.randomUUID();
     try {
-      if (c.kind === 'npm') { const card = await previewNpmCard(/@/.test(c.spec.slice(1)) ? c.spec : `${c.spec}@latest`); if (!card.ok) return card; addresses.set(id, { kind: 'npm', token: card.token, name: card.name }); return { ok: true, id, kind: 'npm', name: card.name, text: card.text, tooLong: card.tooLong, understood: 'npm package: exact version + integrity' }; }
+      if (c.kind === 'npm') { const card = await previewNpmCard(/@/.test(c.spec.slice(1)) ? c.spec : `${c.spec}@latest`); if (!card.ok) return card; addresses.set(id, { kind: 'npm', token: card.token, name: card.name, tooLong: card.tooLong === true, by }); return { ok: true, id, kind: 'npm', name: card.name, text: card.text, tooLong: card.tooLong, understood: 'npm package: exact version + integrity' }; }
       if (c.kind === 'pypi') {
         let spec = c.spec;
         if (!spec.includes('==')) { const reg = pypiDeps ?? { fetchJson: async (u) => JSON.parse(Buffer.from((await fetchLimited(u, { maxBytes: 8 * 1024 * 1024 })).bytes).toString('utf8')) }; const v = (await reg.fetchJson(`https://pypi.org/pypi/${encodeURIComponent(spec)}/json`))?.info?.version; if (!v) return { ok: false, message: 'Could not find that package on PyPI.' }; spec = `${spec}==${v}`; }
-        const card = await previewPypiCard(spec); if (!card.ok) return card; addresses.set(id, { kind: 'pypi', token: card.token, name: card.name }); return { ok: true, id, kind: 'pypi', name: card.name, text: card.text, tooLong: card.tooLong, understood: 'PyPI package: a wheel with its sha256' };
+        const card = await previewPypiCard(spec); if (!card.ok) return card; addresses.set(id, { kind: 'pypi', token: card.token, name: card.name, tooLong: card.tooLong === true, by }); return { ok: true, id, kind: 'pypi', name: card.name, text: card.text, tooLong: card.tooLong, understood: 'PyPI package: a wheel with its sha256' };
       }
-      if (c.kind === 'github') { const card = await previewPluginCard(c.url, { chatId: `address:${id}` }); if (!card.ok) return card; const text = card.text.replace(/^Found on the open web: not from a known catalogue\.\n/, ''); addresses.set(id, { kind: 'github', url: c.url, commit: card.commit, listed: card.listed, name: card.name }); return { ok: true, id, kind: 'github', name: card.name, text, tooLong: card.tooLong, understood: 'git repository: a commit is pinned' }; }
+      if (c.kind === 'github') { const card = await previewPluginCard(c.url, { chatId: `address:${id}` }); if (!card.ok) return card; const text = card.text.replace(/^Found on the open web: not from a known catalogue\.\n/, ''); addresses.set(id, { kind: 'github', url: c.url, commit: card.commit, listed: card.listed, name: card.name, tooLong: card.tooLong === true, by }); return { ok: true, id, kind: 'github', name: card.name, text, tooLong: card.tooLong, understood: 'git repository: a commit is pinned' }; }
       if (c.kind === 'connector') {
-        const u = new URL(c.url); let local = false; try { await checkPublicAddress(c.url); } catch { local = true; }
-        addresses.set(id, { kind: 'connector', url: c.url, name: u.hostname });
+        const u = new URL(c.url); let local = false;
+        try { await checkPublicAddress(c.url); } catch (err) { if (!person) return { ok: false, message: err.message }; local = true; } // a device may not add an address on a network
+        addresses.set(id, { kind: 'connector', url: c.url, name: u.hostname, by });
         return { ok: true, id, kind: 'connector', name: u.hostname, text: `Connector at ${c.url}\nThis service can change what it does at any time.${local ? '\nThis address is on your own network. It is allowed because you added it.' : ''}`, understood: 'remote connector: cannot be pinned to content' };
       }
       // git host, archive, SKILL.md: the same pipeline, with the typed address allowed to be on the person's own network
       if (!workDir) return { ok: false, message: 'Installing from an address is not available here.' };
-      const src = await prepareSource(c.url, { workDir, ...(fetchSource ? { fetchSource } : {}), ...(checkAddress ? { checkAddress } : {}), ...(gitOptions ? { gitOptions } : {}), typedAddress: true, now });
+      const src = await prepareSource(c.url, { workDir, ...(fetchSource ? { fetchSource } : {}), ...(checkAddress ? { checkAddress } : {}), ...(gitOptions ? { gitOptions } : {}), typedAddress: person, now });
       prepared.set(src.token, src);
       const full = describeSource(src, { openWeb: false }); const tooLong = full.length > 1800;
-      addresses.set(id, { kind: 'source', token: src.token, listed: { skills: src.plugin.skills.map((s) => String(s.name)), connectors: src.plugin.connectors.map((x) => String(x.url)) }, name: src.plugin.name });
+      addresses.set(id, { kind: 'source', tooLong, by, token: src.token, listed: { skills: src.plugin.skills.map((s) => String(s.name)), connectors: src.plugin.connectors.map((x) => String(x.url)) }, name: src.plugin.name });
       return { ok: true, id, kind: src.kind, name: src.plugin.name, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, understood: src.kind === 'git' ? 'git repository: a commit is pinned' : src.kind === 'skill' ? 'skill file: its sha256 is pinned' : 'archive: its sha256 is pinned' };
     } catch (err) { return { ok: false, message: String(err.message).slice(0, 300) }; }
   }
-  async function addressConfirm(id, choice) {
+  async function addressConfirm(id, choice, { by = 'person' } = {}) {
     const a = addresses.get(String(id ?? '')); if (!a) throw new Error('That is no longer waiting. Check the address again.');
+    if (a.by !== by) throw new Error('That card was not shown here.');
     addresses.delete(id);
-    const on = choice === 'on';
-    if (a.kind === 'connector') { const added = await mcp.add({ name: a.name, url: a.url, enabled: on, addedBy: 'person' }); return { ok: true, id: added.id }; }
-    if (a.kind === 'npm') { const p = preparedNpm.get(a.token); if (!p) throw new Error('That is no longer waiting. Check the address again.'); preparedNpm.delete(a.token); const placed = await installNpm(p, { dest: join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`) }); const added = await mcp.add({ name: p.name, command: placed.command, args: placed.args, env: {}, enabled: on, addedBy: 'model' }); return { ok: true, id: added.id }; }
-    if (a.kind === 'pypi') { const p = preparedPypi.get(a.token); if (!p) throw new Error('That is no longer waiting. Check the address again.'); preparedPypi.delete(a.token); const placed = await installPypi(p); const added = await mcp.add({ name: p.name, command: placed.command, args: placed.args, env: {}, enabled: on, addedBy: 'model' }); return { ok: true, id: added.id }; }
+    const on = choice === 'on' && a.tooLong !== true; // ADDR-1 (F10-1): a card too long to show whole never switches anything on
+    a.item = a.name;
+    if (a.kind === 'connector') { const added = await mcp.add({ name: a.name, url: a.url, enabled: on, addedBy: by === 'person' ? 'person' : 'device' }); return { ok: true, id: added.id, name: a.name, switchedOn: on }; }
+    if (a.kind === 'npm') { const p = preparedNpm.get(a.token); if (!p) throw new Error('That is no longer waiting. Check the address again.'); preparedNpm.delete(a.token); const placed = await installNpm(p, { dest: join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`) }); const added = await mcp.add({ name: p.name, command: placed.command, args: placed.args, env: {}, enabled: on, addedBy: 'model' }); return { ok: true, id: added.id, name: a.name, switchedOn: on }; }
+    if (a.kind === 'pypi') { const p = preparedPypi.get(a.token); if (!p) throw new Error('That is no longer waiting. Check the address again.'); preparedPypi.delete(a.token); const placed = await installPypi(p); const added = await mcp.add({ name: p.name, command: placed.command, args: placed.args, env: {}, enabled: on, addedBy: 'model' }); return { ok: true, id: added.id, name: a.name, switchedOn: on }; }
     let record;
     if (a.kind === 'github') record = (await installFromGithub(a.url, { off: true, pin: a.commit })).record;
     else record = (await installPrepared(a.token, { off: true })).record;
     if (on) await switchOn({ skillIds: record.skills, connectorIds: record.connectors }, a.listed);
-    return { ok: true, id: record.id };
+    return { ok: true, id: record.id, name: a.name, switchedOn: on };
   }
   async function addressCancel(id) {
     const a = addresses.get(String(id ?? '')); addresses.delete(String(id ?? ''));

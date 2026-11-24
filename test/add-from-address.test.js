@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { startApp, post, json } from './helpers.js';
 import { checkPublicAddress } from '../src/server/publicFetch.js';
 import { makeZip } from './helpers-archives.js';
+import http from 'node:http';
+import { fetchLimited } from '../src/server/download.js';
 
 // INSTALL-ANYWHERE: Customize's "Add from address" (window only). One field, what was understood, then the same one card. Stand-ins only.
 const pub = async () => [{ address: '93.184.216.34', family: 4 }];
@@ -62,4 +64,62 @@ test('the field and its card are window only', async (t) => {
   const id = '00000000-0000-4000-8000-000000000000';
   for (const [m, p] of [['POST', '/api/install'], ['POST', `/api/install/${id}`], ['DELETE', `/api/install/${id}`]]) assert.equal(isWindowOnlyRoute(m, p), true, `${m} ${p}`);
   void t;
+});
+
+test('ADDR-1: a card too long to show whole never switches anything on, even when "on" is sent', async (t) => {
+  const skills = Array.from({ length: 20 }, (_, i) => ({ name: `pack/skills/s${i}/SKILL.md`, data: `---\nname: skill-number-${i}\ndescription: ${'a long description of what this does '.repeat(6)}\n---\nDo ${i}.` }));
+  const big = makeZip([{ name: 'pack/plugin.json', data: JSON.stringify({ name: 'big-pack', description: 'x' }) }, { name: 'pack/.mcp.json', data: JSON.stringify({ mcpServers: { cal: { url: 'https://mcp.example.com/mcp' } } }) }, ...skills]);
+  const { base } = await startApp(t, { fake: false, installSource: { fetchSource: async (u) => ({ bytes: big, url: u }), checkAddress } });
+  const c = (await check(base, 'https://files.example.com/big.zip')).body;
+  assert.equal(c.ok, true); assert.equal(c.tooLong, true);
+  const done = await post(base, `/api/install/${c.id}`, { choice: 'on' });
+  assert.equal(done.status, 200); assert.equal(done.body.switchedOn, false);
+  assert.deepEqual((await json(base, '/api/mcp')).body.map((x) => x.enabled), [false], 'installed off');
+  const skillsList = (await json(base, '/api/skills')).body;
+  assert.ok(skillsList.length >= 20 && skillsList.every((s) => s.enabled === false), 'every skill is off');
+});
+
+test('ADDR-3: a typed address on the LAN is allowed for that exact address only; any other private address (a redirect, another host) is refused', async () => {
+  const lookupImpl = async () => [{ address: '192.168.1.9', family: 4 }];
+  const typed = 'https://nas.example.org/tools/pack.zip';
+  const timeout = () => AbortSignal.timeout(250);
+  // allowed: the connection is attempted (it times out or is refused: it was NOT refused as private)
+  await assert.rejects(fetchLimited(typed, { lookupImpl, signal: timeout(), allowLoopback: (u) => u.href === typed }), (e) => !/private network/.test(e.message));
+  // not the typed address: refused as private
+  await assert.rejects(fetchLimited('https://other.example.org/x.zip', { lookupImpl, signal: timeout(), allowLoopback: (u) => u.href === typed }), /private network/);
+  await assert.rejects(fetchLimited(typed, { lookupImpl, signal: timeout() }), /private network/, 'with nothing typed it is refused');
+  await assert.rejects(fetchLimited('https://10.0.0.7/pack.zip', { signal: timeout(), allowLoopback: (u) => u.href === typed }), /private network/);
+});
+
+// ADDR-2 and the device rule: an Everything device may use the field, is logged by choice and item name, and gets none of the private-address allowances
+const PASS = 'correct horse battery staple'; const J = { 'content-type': 'application/json' };
+function lan(url, { method = 'GET', path = '/', headers = {}, body = null } = {}) {
+  const u = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: u.hostname, port: u.port, path, method, headers: { ...(body ? J : {}), ...headers } }, (res) => { let text = ''; res.on('data', (c) => { text += c; }); res.on('end', () => resolve({ status: res.statusCode, text, json: () => { try { return JSON.parse(text); } catch { return null; } }, headers: res.headers })); });
+    req.on('error', reject); req.end(body ? JSON.stringify(body) : undefined);
+  });
+}
+test('ADDR-2: an Everything device is logged (kind install, choice, item name, no address); its connector is a device\'s; a private address is refused for it', async (t) => {
+  const started = await startApp(t, { lanAddress: '127.0.0.1', fake: false, installSource: { fetchSource: async (u) => ({ bytes: ZIP, url: u }), checkAddress } });
+  const on = await (await fetch(`${started.base}/api/remote`, { method: 'PUT', headers: J, body: JSON.stringify({ enabled: true, passcode: PASS }) })).json();
+  t.after(() => started.app.remote.disable());
+  const url = on.url.replace(/\/$/, ''); const host = new URL(url).host;
+  const signin = await lan(url, { method: 'POST', path: '/api/remote/signin', headers: { host, origin: `http://${host}` }, body: { passcode: PASS } });
+  const cookie = String(signin.headers['set-cookie']?.[0] ?? '').split(';')[0];
+  const page = await lan(url, { path: '/src/ui/index.html', headers: { host, cookie } });
+  const csrf = /name="bunny-csrf" content="([a-f0-9]+)"/.exec(page.text)[1];
+  assert.equal((await fetch(`${started.base}/api/remote/devices/${started.app.remote.list()[0].id}/level`, { method: 'PATCH', headers: J, body: JSON.stringify({ level: 'everything' }) })).status, 200);
+  const dev = (method, path, body) => lan(url, { method, path, headers: { host, cookie, origin: `http://${host}`, 'x-bunny-csrf': csrf }, body });
+  const lanTry = (await dev('POST', '/api/install', { address: 'https://10.0.0.5/mcp' })).json();
+  assert.equal(lanTry.ok, false); assert.match(lanTry.message, /public https address/, 'no private allowance for a device');
+  const pub1 = (await dev('POST', '/api/install', { address: 'https://nas.example.org/mcp' })).json();
+  assert.equal(pub1.ok, true);
+  assert.equal((await dev('POST', `/api/install/${pub1.id}`, { choice: 'off' })).status, 200);
+  const list = (await json(started.base, '/api/mcp')).body; assert.equal(list[0].addedBy, 'device');
+  const log = JSON.stringify(await (await fetch(`${started.base}/api/remote/log`)).json());
+  assert.match(log, /"kind":"install"/); assert.match(log, /"choice":"off"/); assert.match(log, /"item":"nas\.example\.org"/); assert.ok(!/https:\/\/nas\.example\.org/.test(log), 'never an address');
+  // a card shown to the window cannot be answered by a device, nor the reverse
+  const mine = (await check(started.base, 'https://files.example.com/pack.zip')).body;
+  assert.notEqual((await dev('POST', `/api/install/${mine.id}`, { choice: 'on' })).status, 200);
 });
