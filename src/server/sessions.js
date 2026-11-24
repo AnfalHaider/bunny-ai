@@ -224,7 +224,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       at: new Date().toISOString(),
     };
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
-    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries', 'needsSignIn', 'serverId', 'fellBackKind', 'fellBackProvider', 'noAutoLoad', 'pcResults', 'pcSources']) {
+    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries', 'needsSignIn', 'serverId', 'fellBackKind', 'fellBackProvider', 'noAutoLoad', 'pcResults', 'pcSources', 'from', 'to', 'handover']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
     // W6-18: the model's own, longer copy of a step's result, and where the whole of it was saved.
@@ -293,10 +293,19 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.agentStatus !== undefined) session.agentStatus = patch.agentStatus;
     if (patch.engine !== undefined) { // CLI-ENGINES: the chat's engine, its auth mode and its own session, fixed at the first message (only the server sets it)
       const e = patch.engine;
-      if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny' }; // the person chose Bunny's own engine for this chat, explicitly
-      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...(e.restricted ? { restricted: true } : {}), ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
+      // ENGINE-SWITCH: where the chat came from, when it switched, whether Bunny's engine still owes its first note, and the engines Bunny's check failed for (restrictedFor: only the server sets it; the old
+      // `restricted: true` is read as the list of that chat's own engine)
+      const ENGINE_IDS = ['bunny', 'claude-code', 'codex'];
+      const restrictedFor = (e && typeof e === 'object') ? [...new Set((Array.isArray(e.restrictedFor) ? e.restrictedFor : (e.restricted ? [e.id] : [])).filter((x) => ['claude-code', 'codex'].includes(x)))] : [];
+      const carried = (e && typeof e === 'object') ? { ...(ENGINE_IDS.includes(e.from) ? { from: e.from } : {}), ...(typeof e.switchedAt === 'string' ? { switchedAt: e.switchedAt.slice(0, 40) } : {}), ...(e.handoverPending === true ? { handoverPending: true } : {}), ...(restrictedFor.length ? { restrictedFor } : {}) } : {};
+      if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny', ...carried }; // the person chose Bunny's own engine for this chat, explicitly
+      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...carried, ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
       else delete session.engine;
     }
+    // FOLDER-RULES: the chat's own switch (window-only), and the hash of the frozen set the chat's engine session was last told (server-written). The text itself lives in the folder's trust record, not here.
+    if (patch.folderRules !== undefined) { if (typeof patch.folderRules === 'boolean') session.folderRules = patch.folderRules; else delete session.folderRules; }
+    if (patch.folderRulesSent !== undefined) { if (typeof patch.folderRulesSent === 'string' && /^[a-f0-9]{64}$/.test(patch.folderRulesSent)) session.folderRulesSent = patch.folderRulesSent; else delete session.folderRulesSent; }
+    delete session.folderRulesRead; delete session.folderRulesNext; // (the earlier per-chat copy, if an old chat has one)
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;

@@ -7,6 +7,8 @@
  */
 
 import { loadEngines, paintEngineChip } from './engine-chip.js';
+import { openNoFolderCard, openSwitchCard, switchDivider } from './engine-switch.js';
+import { loadView as loadFolderRules, projectInstructions, trustCard } from './folder-rules-ui.js';
 import {
   getJSON, sendJSON, streamMessage, streamComplete, applyTheme, applyAppearance,
   computerScreenshot, computerClick, computerType, computerKey, computerWait, computerReset,
@@ -269,7 +271,8 @@ function renderComposerHeader() {
   const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
   const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
-  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
+  const frUsed = state.sessionId ? frCounts.get(state.sessionId) ?? 0 : 0; // FOLDER-RULES: the instruction files this chat's folder has, counted when the trust card or the folder card loaded them
+  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}${frUsed ? ` · ${frUsed} instruction file${frUsed === 1 ? '' : 's'}` : ''}` : 'Choose a folder to work in');
   // W2-9: a chat with its own copy shows the copy's branch in the accent colour, with "own copy"
   const copyBranch = state.sessionId ? state.session?.worktree?.branch ?? null : null;
   if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
@@ -277,7 +280,9 @@ function renderComposerHeader() {
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
   if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
   syncModeMenu();
-  paintEngineChip({ chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
+  const canSwitch = Boolean(state.sessionId && state.session?.messages?.length && !state.incognito && !isDevicePage());
+  paintEngineChip({ canSwitch, busy: Boolean(state.streaming), onSwitch: (row) => switchEngineTo(row.id), onFix: (row, what) => fixEngine(row, what), deviceNote: isDevicePage() ? 'The engine can be changed only on the PC.' : '', chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
+  showTrustCard().catch(() => {}); // FOLDER-RULES: the card for a folder with instruction files (once per chat and folder)
   if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
@@ -1440,6 +1445,9 @@ function signInStep(info) {
 function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
+  // ENGINE-SWITCH: the divider "Now on Codex CLI" stays in the transcript
+  if (m.kind === 'engine-switch') { wrap.className = 'msg engine-switch'; wrap.append(switchDivider(m)); return wrap; }
+
   // Tool call block: collapsible, shows the tool name, args and result
   if (m.kind === 'tool_call') {
     // A question the model asked is shown as its card, with the answer, not as a step line.
@@ -1576,6 +1584,9 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       if (report) wrap.append(report);
     }
   }
+
+  // ENGINE-SWITCH: the reply that followed a handover says how big it was (the handover text itself is never saved in the chat)
+  if (m.role === 'assistant' && m.handover) wrap.append(element('div', { className: 'sub es-handover', textContent: `Handover: ${m.handover.messages} message${m.handover.messages === 1 ? '' : 's'}, ${m.handover.files} file${m.handover.files === 1 ? '' : 's'}, ${Math.max(1, Math.round((m.handover.bytes ?? 0) / 1024))} KB` }));
 
   // The files this reply changed can be put back.
   if (m.role === 'assistant' && m.checkpoint?.files) wrap.append(undoBar(m));
@@ -3883,6 +3894,64 @@ async function useFolder(path) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// ENGINE-SWITCH (Design's drawing v2) and the trust card of FOLDER-RULES v4
+
+/** "Switch this chat to <engine>": the card says what the new engine gets, then the window asks the server (a window-only route), then the chat is read again so the divider shows. */
+async function switchEngineTo(to) {
+  const sid = state.sessionId;
+  if (!sid || state.streaming) return;
+  const session = state.session;
+  const useBunnyEngine = state.settings?.useBunnyEngine !== false;
+  if (to !== 'bunny' && (session?.workMode !== 'code' || !session?.folder)) {
+    const pick = await openNoFolderCard();
+    if (pick === 'bunny') return switchEngineTo('bunny');
+    if (pick === 'folder') await chooseFolder();
+    return;
+  }
+  let view = null;
+  try { if (to !== 'bunny') view = await loadFolderRules(sid); } catch { view = null; }
+  const restrictedAgain = Array.isArray(session?.engine?.restrictedFor) && session.engine.restrictedFor.includes(to);
+  if (!(await openSwitchCard({ to, session, folder: session?.folder ?? '', view, useBunnyEngine, restrictedAgain }))) return;
+  try {
+    await sendJSON(`/api/sessions/${sid}/engine`, 'POST', { to });
+    await refreshSession();
+    renderComposerHeader();
+  } catch (err) { flashStatus(err.message, 8000); }
+}
+
+/** An engine that is not ready: Download starts the download here; Sign in and a switched-off engine lead to Settings → Engines, where those are done. */
+async function fixEngine(row, what) {
+  if (what === 'download') {
+    try { await sendJSON(`/api/engines/${row.id}/download`, 'POST', {}); flashStatus(`${row.label} is downloading. Choose Switch again when it is ready.`, 8000); } catch (err) { flashStatus(err.message, 8000); }
+    return;
+  }
+  openSettings('engines');
+}
+
+let trustSeen = '';
+const trustDismissed = new Set();
+/** The card above the composer: a Code chat in a folder with instruction files nobody has answered for. Not now closes it for this chat for now; a new chat on that folder asks again. */
+const frCounts = new Map(); // session id -> how many instruction files its folder has (for the folder chip's tooltip)
+async function showTrustCard(force = false) {
+  const session = state.session;
+  const host = document.querySelector('.dock');
+  document.getElementById('fr-trust-card')?.remove();
+  if (!state.sessionId || !session || state.incognito || session.workMode !== 'code' || !session.folder || !host || trustDismissed.has(state.sessionId)) return;
+  const key = `${state.sessionId}|${session.folder}`;
+  if (!force && trustSeen === key) return;
+  trustSeen = key;
+  let view;
+  try { view = await loadFolderRules(state.sessionId); } catch { return; }
+  const nFiles = view.enabled && view.chatSwitch !== false ? view.files.filter((f) => f.state !== 'off').length : 0;
+  if (frCounts.get(state.sessionId) !== nFiles) { frCounts.set(state.sessionId, nFiles); renderComposerHeader(); }
+  if (!view.enabled || view.chatSwitch === false || view.trusted || !view.files.some((f) => f.state === 'waiting')) return;
+  const card = trustCard({ sid: state.sessionId, view, device: isDevicePage(), onAnswered: (followed) => { if (!followed) trustDismissed.add(state.sessionId); showTrustCard(true); renderComposerHeader(); } });
+  card.id = 'fr-trust-card';
+  host.insertBefore(card, $('composer'));
+}
+
 /**
  * W2-9: the Working folder card: the folder, a switch "Give this chat its own copy of the project", and once on, the branch, the base and Finish.
  * The server makes and removes the copy; this only asks.
@@ -3925,6 +3994,8 @@ async function openWorkingFolder() {
       } catch (err) { status.textContent = err.message; sw.checked = false; sw.disabled = false; return; }
       await paint();
     });
+    // FOLDER-RULES v4: the project's instruction files, one set for every engine
+    try { if (state.session?.workMode === 'code' && state.session?.folder) body.append(projectInstructions({ sid, view: await loadFolderRules(sid), engineId: state.session?.engine?.id ?? 'bunny', device: isDevicePage(), onChanged: () => { paint(); showTrustCard(true); } })); } catch { /* the block is a convenience: the card works without it */ }
     box.replaceChildren(element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Working folder' })), body, foot);
   };
   const finishCard = (info) => {
