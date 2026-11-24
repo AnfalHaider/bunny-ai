@@ -89,6 +89,7 @@ const agentScope = new AsyncLocalStorage();
 import { createProcessStore } from './processes.js';
 import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
+import { apply as applyRewind, plan as planRewind, publicPlan as publicRewindPlan } from './rewind.js';
 import { OFFICE_EXT, OFFICE_KIND, OFFICE_TOOLS, OfficeError, buildOffice, describeOffice, madeLine, officeToolDefinitions, outline as officeOutline, validateOffice } from './officeMake.js';
 import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
 import { buildHandover, handoverSaid } from './engines/handover.js'; // ENGINE-SWITCH
@@ -154,6 +155,7 @@ function sendJson(res, status, value) {
 // v0.1.10 (QA 4c-8): "type" is the route's size cap (messages, photos, imports, ... each have their own), so a slow import no longer blocks a chat message.
 // The most memory held at once is one body per cap, a handful of routes in all, instead of one for the whole app.
 const largeBodyBusy = new Set();
+const replying = new Set(); // chats with a reply running (a rewind waits for it)
 
 function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
@@ -315,7 +317,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     ...(probe ? { probe } : {}),
     ...(discover ? { discover } : {}),
   });
-  const sessions = createSessionStore({ dir: join(dataDir, 'sessions') });
+  const sessions = createSessionStore({ dir: join(dataDir, 'sessions'), onCheckpointed: (sid, cid, mid) => checkpoints.finish(sid, cid, mid), onRemoved: (sid) => checkpoints.removeChat(sid) });
   const projects = createProjectStore({ file: join(dataDir, 'projects.json') });
   const artifacts = createArtifactStore({ dir: join(dataDir, 'artifacts') });
   const MADE_MIME = { '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
@@ -1678,15 +1680,109 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
-    // ---- undo the files a reply changed ----
+    // ---- REWIND: put the files back to before an earlier reply (and Undo of one reply: the same code) ----
+    // The checkpoints a rewind covers: every reply after message `to`, or from the reply holding checkpoint `before`, or one checkpoint (`cp`). The messages say which.
+    const rewindSelect = async (session, q) => {
+      const msgs = session.messages ?? [];
+      const ids = [];
+      let from = 0;
+      if (q.cp) { ids.push(q.cp); from = Math.max(0, msgs.findIndex((m) => m.checkpoint?.id === q.cp)); }
+      else {
+        const at = q.to ? msgs.findIndex((m) => m.id === q.to) : msgs.findIndex((m) => m.checkpoint?.id === q.before);
+        if (at === -1) throw Object.assign(new Error('That point is not in this chat.'), { status: 404, code: 'message.notFound' });
+        from = q.to ? at + 1 : at;
+        for (const m of msgs.slice(from)) if (m.role === 'assistant' && m.checkpoint?.id) ids.push(m.checkpoint.id);
+      }
+      let tooOld = false;
+      const cps = [];
+      for (const cid of ids) {
+        const cp = await checkpoints.get(session.id, cid);
+        if (!cp) { tooOld = true; continue; }
+        if (!cp.restored) cps.push(cp);
+      }
+      cps.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+      // "reply N" is the Nth thing the person asked: the user messages before the first reply that is rewound
+      const firstAt = msgs.findIndex((m, i) => i >= from && m.role === 'assistant' && ids.includes(m.checkpoint?.id));
+      const replyNo = Math.max(1, msgs.slice(0, firstAt === -1 ? from : firstAt).filter((m) => m.role === 'user').length);
+      return { cps, tooOld, from, replyNo };
+    };
+    const rewindEnv = async (session) => {
+      const folder = await effectiveRoot(session);
+      if (!folder?.ok) throw Object.assign(new Error(folder?.reason ?? 'This chat has no folder to put files back into.'), { status: 409, code: 'rewind.noFolder' });
+      const rules = rulesFor(settings.permissionRules, folder.folder);
+      const deny = (rel) => { const v = checkPath(rules, rel, 'edits'); return v?.effect === 'deny' ? `Your rule ${describeRule(v)} blocks edits to this file.` : null; };
+      return { root: folder.folder, deny };
+    };
+    // RW-7: a rewind remembers which replies it flagged "undone"; undoing the rewind un-flags exactly those, so the same point can be rewound again
+    const afterRewindFlags = async (sid, cps, result) => {
+      if (result.undoId) await checkpoints.setRewound(sid, result.undoId, result.handled.filter((h) => !cps.some((c) => c.id === h && c.kind === 'rewind')));
+      for (const c of cps) {
+        if (c.kind === 'rewind' && result.handled.includes(c.id) && c.rewound?.length) {
+          await checkpoints.markRestored(sid, c.rewound, false);
+          await sessions.markCheckpointRestored(sid, c.rewound, false);
+        }
+      }
+    };
+    const rewindNoteText = (n) => `The person rewound the files to before reply ${n}; the later replies' file changes are gone, and commands' effects may remain.`;
+    const rewindMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/rewind$/);
+    if (rewindMatch && (method === 'GET' || method === 'POST')) {
+      try {
+        const session = await sessions.get(rewindMatch[1]);
+        if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
+        const body = method === 'POST' ? await readBody(req) : {};
+        const q = method === 'POST' ? body : Object.fromEntries(url.searchParams);
+        const spec = { to: typeof q.to === 'string' ? q.to : null, before: typeof q.before === 'string' ? q.before : null, cp: typeof q.cp === 'string' && /^[a-f0-9-]{36}$/.test(q.cp) ? q.cp : null };
+        if (!spec.to && !spec.before && !spec.cp) return sendJson(res, 400, { code: 'rewind.invalid', message: 'Say which point to go back to.' });
+        const env = await rewindEnv(session);
+        const picked = await rewindSelect(session, spec);
+        if (method === 'GET') return sendJson(res, 200, publicRewindPlan(await planRewind({ cps: picked.cps, root: env.root, dataDir, deny: env.deny, tooOld: picked.tooOld })));
+        if (replying.has(session.id)) return sendJson(res, 409, { code: 'chat.busy', message: 'Wait for the reply to finish, or press Stop first.' });
+        const result = await applyRewind({ cps: picked.cps, root: env.root, dataDir, deny: env.deny, include: body.include, checkpoints, sessionId: session.id });
+        await checkpoints.markRestored(session.id, result.handled);
+        await sessions.markCheckpointRestored(session.id, result.handled);
+        await afterRewindFlags(session.id, picked.cps, result);
+        const device = req.bunnyRemote ?? req.bunnyDevice;
+        if (device) remote.logAction(device, { kind: 'rewind', reason: `${result.done.length} files` }); // R-DF2: the count only, never paths or contents
+        if (result.ignored) console.warn(`rewind: ${result.ignored} path(s) in "include" were not changed files and were ignored`);
+        let newChatId = null;
+        if (body.conversation === 'new-chat' && (spec.to || spec.before)) {
+          const msgs = session.messages;
+          const idx = spec.to ? msgs.findIndex((m) => m.id === spec.to) : Math.max(0, msgs.findIndex((m) => m.checkpoint?.id === spec.before) - 1);
+          const child = await sessions.fork(session.id, { at: msgs[idx]?.id ?? null });
+          newChatId = child.id;
+          await sessions.update(child.id, { rewindNote: rewindNoteText(picked.replyNo) });
+        } else if (result.done.length) {
+          await sessions.update(session.id, { rewindNote: rewindNoteText(picked.replyNo) });
+        }
+        return sendJson(res, 200, { restored: result.done.length, putBack: result.putBack, removed: result.removed, left: result.left, refused: result.refused, failed: result.failed, big: result.big, undoId: result.undoId, commandsRan: result.commandsRan, ...(newChatId ? { newChatId } : {}) });
+      } catch (err) {
+        return sendJson(res, err.status ?? 400, { code: err.code ?? 'rewind.failed', message: err.message });
+      }
+    }
     const restoreMatch2 = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/checkpoints\/([a-f0-9-]{36})\/restore$/);
     if (restoreMatch2 && method === 'POST') {
       try {
-        const result = await checkpoints.restore(restoreMatch2[1], restoreMatch2[2]);
-        await sessions.markCheckpointRestored(restoreMatch2[1], restoreMatch2[2]);
-        return sendJson(res, 200, result);
+        const session = await sessions.get(restoreMatch2[1]);
+        const cp = session ? await checkpoints.get(restoreMatch2[1], restoreMatch2[2]) : null;
+        if (!cp) return sendJson(res, 404, { code: 'checkpoint.notFound', message: 'That checkpoint is gone.' });
+        if (cp.restored) return sendJson(res, 409, { code: 'checkpoint.used', message: 'These changes were already undone.' });
+        const body = await readBody(req).catch(() => ({}));
+        const env = await rewindEnv(session);
+        // a file that changed since the reply is not overwritten without the person's say-so (the same rule as a rewind)
+        const preview = await planRewind({ cps: [cp], root: env.root, dataDir, deny: env.deny });
+        const changed = preview.files.filter((f) => f.action === 'changed').map((f) => f.path);
+        const ticked = new Set((Array.isArray(body.include) ? body.include : []).map(String));
+        if (changed.some((p) => !ticked.has(p)) && body.leaveChanged !== true) return sendJson(res, 409, { code: 'rewind.changed', message: 'Some files changed since this reply.', ...publicRewindPlan(preview) });
+        if (replying.has(session.id)) return sendJson(res, 409, { code: 'chat.busy', message: 'Wait for the reply to finish, or press Stop first.' });
+        const result = await applyRewind({ cps: [cp], root: env.root, dataDir, deny: env.deny, include: body.include, checkpoints, sessionId: session.id });
+        await checkpoints.markRestored(session.id, result.handled);
+        await sessions.markCheckpointRestored(session.id, result.handled);
+        await afterRewindFlags(session.id, [cp], result);
+        const device = req.bunnyRemote ?? req.bunnyDevice;
+        if (device) remote.logAction(device, { kind: 'rewind', reason: `${result.done.length} files` });
+        return sendJson(res, 200, { restored: result.done.length, skipped: result.big, files: result.done, left: result.left, refused: result.refused, failed: result.failed, undoId: result.undoId, commandsRan: result.commandsRan });
       } catch (err) {
-        return sendJson(res, err.code === 'checkpoint.notFound' ? 404 : 409, { code: err.code ?? 'checkpoint.failed', message: err.message });
+        return sendJson(res, err.status ?? 409, { code: err.code ?? 'checkpoint.failed', message: err.message });
       }
     }
 
@@ -2395,17 +2491,22 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // The plan the model shows as a checklist (update_tasks), kept with the reply.
       let currentTasks = [];
       let askedThisReply = false; // W6-12: an ask_user card was shown in this reply
+      let commandsRan = false; // REWIND: a command step in this reply
+      const markCommand = () => { commandsRan = true; checkpoint?.markCommands().catch(() => {}); };
       const beforeWrite = async (abs) => {
         checkpoint ??= checkpoints.begin(id, workspace?.root ?? '', session.engine?.id ?? 'bunny'); // (each checkpoint records which engine made it)
+        if (commandsRan) await checkpoint.markCommands();
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [dataDir], allow: folder.copy ? [folder.folder] : [], beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [dataDir], allow: folder.copy ? [folder.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // W6-12: a Code chat carries its task list from one message to the next. The newest saved list that still has an open step
       // is the starting list of this reply (and is told to the model); a finished list is not carried. Not in Chat mode (no workspace).
       let taskText = '';
       let taskNote = '';
+      const rewindText = typeof session.rewindNote === 'string' ? session.rewindNote : ''; // REWIND: said once, to the next message (fixed text, no file contents)
+      if (rewindText) sessions.update(id, { rewindNote: null }).catch(() => {});
       let taskNudged = false; // W6-12: the open-steps nudge fires at most once per reply
       if (workspace) {
         const earlier = [...(session.messages ?? [])].reverse().find((m) => m.role === 'assistant' && Array.isArray(m.tasks) && m.tasks.length)?.tasks;
@@ -2524,7 +2625,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
       const textOnlyBase = today + (callName ? `The person you are talking to likes to be called ${callName}. ` : '') + 'You are Bunny AI. Never claim you did something you did not do.';
-      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '', folderRulesSet ? folderSystemLine(folderRulesSet.files.map((f) => f.name)) : '']).filter(Boolean).join('\n') });
+      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, rewindText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '', folderRulesSet ? folderSystemLine(folderRulesSet.files.map((f) => f.name)) : '']).filter(Boolean).join('\n') });
       if (taskNote) { // a user-role note after the app's own system text, before the conversation (the same way as a connector's own words)
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: taskNote });
@@ -2941,7 +3042,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           const fresh = await sessions.get(id);
           const checked = await effectiveRoot(fresh);
           if (!checked?.ok) return checked?.gone ? checked.reason : 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { protect: [dataDir], allow: checked.copy ? [checked.folder] : [], beforeWrite, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
+          workspace = createWorkspace(checked.folder, { protect: [dataDir], allow: checked.copy ? [checked.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.
@@ -3381,6 +3482,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
             case 'start_process': {
               if (!workspace) throw new Error('Programs run in Code mode, inside the workspace folder.');
               const cwd = parsed.cwd ? await workspace.folder(parsed.cwd) : workspace.root;
+              markCommand();
               let launch = null; // F13: through the low-integrity helper when "Confine commands" applies; never silently unconfined
               if (confined?.wrap) {
                 const w = await confined.wrap({ script: `${POWERSHELL_PRELUDE}\n${translateChains(String(parsed.command ?? '').trim())}`, cwd, extraEnv: NON_INTERACTIVE });
@@ -3760,9 +3862,11 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       const controller = new AbortController();
       let clientGone = false;
       replyingChats.add(id);
+      replying.add(id); // REWIND: the chat is busy until this reply is over
       res.on('finish', () => replyingChats.delete(id)); // (before the person's page has even read the end: a switch right after a reply must not meet a stale "busy")
       res.on('close', () => {
         replyingChats.delete(id);
+        replying.delete(id);
         if (!res.writableEnded) clientGone = true;
         controller.abort();
       });
@@ -3813,8 +3917,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           }
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
-            id, session, settings, content, handover, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
-            incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
+            id, session, settings, content: rewindText ? `(${rewindText})
+
+${content}` : content, handover, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            incognito: session.incognito, beforeWrite, onCommand: markCommand, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
             tokenBudget: replyCaps.tokens,

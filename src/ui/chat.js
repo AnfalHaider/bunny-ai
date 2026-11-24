@@ -16,6 +16,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { confirmRewind, openRewindPanel } from './rewind.js';
 import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
@@ -1697,6 +1698,10 @@ function renderActions(m, stored) {
     });
   }
 
+  if (state.messages.some((x, i) => i > state.messages.findIndex((y) => y.id === m.id) && x.checkpoint?.files && !x.checkpoint.restored)) {
+    act(say('rewind.here'), 'retry', async () => confirmRewind(rewindCtx(), { to: m.id }, `before the reply after this message`));
+  }
+
   act(say('chat.branch'), 'branch', async () => {
     const branch = await sendJSON(`/api/sessions/${state.sessionId}/fork`, 'POST', { at: m.id });
     await loadSessions();
@@ -1714,13 +1719,20 @@ function startEditing(m) {
   const save = button('Save and resend', { className: 'primary' });
   const cancel = button('Cancel', { className: 'ghost' });
 
-  body.replaceChildren(editor, element('div', { className: 'actions' }, save, cancel));
+  // REWIND: when replies after this message changed files, the person may put those files back too
+  const later = state.messages.slice(state.messages.findIndex((x) => x.id === m.id) + 1).some((x) => x.checkpoint?.files && !x.checkpoint.restored);
+  const alsoFiles = later ? element('input', { type: 'checkbox', id: 'edit-files' }) : null;
+  body.replaceChildren(editor, ...(alsoFiles ? [element('label', { className: 'rewind-tick' }, alsoFiles, ' ', say('rewind.alsoFiles'))] : []), element('div', { className: 'actions' }, save, cancel));
   editor.focus();
 
   cancel.addEventListener('click', () => paintMessages());
   save.addEventListener('click', async () => {
     const text = editor.value.trim();
     if (!text) { editor.focus(); return; }
+    if (alsoFiles?.checked) { // the same preview and card as a rewind; if the person backs out, nothing is edited
+      const went = await confirmRewind(rewindCtx(), { to: m.id }, 'before this message');
+      if (!went) return;
+    }
     const updated = await sendJSON(`/api/sessions/${state.sessionId}/messages/${m.id}`, 'PATCH', { content: text });
     state.messages = updated.messages;
     paintMessages();
@@ -2319,6 +2331,7 @@ function undoBar(m) {
   }
   bar.append(
     element('span', { className: 'hint', textContent: say('undo.changed', { n }) }),
+    button(say('rewind.further'), { className: 'ghost sm link-btn', onclick: () => openRewindPanel(rewindCtx()) }),
     button(say('undo.button'), {
       className: 'ghost sm',
       onclick: async (e) => {
@@ -2333,11 +2346,28 @@ function undoBar(m) {
           state.browser?.refresh?.();
         } catch (err) {
           b.disabled = false;
+          // a file changed since this reply: ask in words, through the same preview as a rewind (REWIND G1)
+          if (err.code === 'rewind.changed' || /changed since this reply/i.test(err.message ?? '')) { confirmRewind(rewindCtx(), { cp: m.checkpoint.id }, 'before this reply'); return; }
           $('error').textContent = err.message;
         }
       },
     }));
   return bar;
+}
+
+/** REWIND: what the Rewind panel and its confirm card need from the chat. */
+function rewindCtx() {
+  return {
+    sessionId: state.sessionId,
+    messages: () => state.messages,
+    running: () => Boolean(state.streaming),
+    openChat: (id) => { loadSessions().then(() => goToChat(id)); },
+    onDone: async () => {
+      try { state.session = await getJSON(`/api/sessions/${state.sessionId}`); state.messages = state.session.messages ?? state.messages; paintMessages(); } catch { /* the pane refresh below still runs */ }
+      state.browser?.refresh?.();
+      state.workPanes?.refresh?.();
+    },
+  };
 }
 
 /** A card for another chat a step started or talked to: a helper, a background chat. */
@@ -4503,6 +4533,7 @@ async function boot() {
     getPendingFolder: () => state.pendingFolder?.folder ?? null,
     onChanged: () => refreshSession(),
     copy: async (text) => { flashStatus((await copyText(text)) ? 'Path copied' : 'Could not copy'); },
+    rewindCtx,
   });
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();

@@ -81,7 +81,8 @@ for (const [scheme, width] of [['light', 1100], ['dark', 390]]) {
     await page.locator('.toolbar [data-view="diff"]').click();
     const pane = page.locator('#diff-content');
     await expect(pane.locator('.checkpoint-card .change-row .path')).toHaveText('reports/q3.docx');
-    await pane.getByRole('button', { name: 'Undo to here' }).click();
+    await pane.getByRole('button', { name: 'Rewind to before this' }).click();
+    await page.locator('.rewind-modal').getByRole('button', { name: 'Go back', exact: true }).click();
     await expect(pane.locator('.checkpoint-done')).toHaveText('Undone');
     expect(existsSync(join(dir, 'reports', 'q3.docx'))).toBe(false);
   });
