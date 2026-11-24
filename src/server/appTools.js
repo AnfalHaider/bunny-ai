@@ -216,9 +216,9 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     }
     if (!card.ok) return card;
     const id = crypto.randomUUID(); // the page gets an opaque id, never a folder path
-    pins.set(id, { serverId, kind: what.kind, token: card.token, rest: what.rest ?? [] });
+    pins.set(id, { serverId, kind: what.kind, token: card.token, rest: what.rest ?? [], tooLong: card.tooLong === true });
     const keeps = (what.rest ?? []).length ? `\nIt keeps the arguments it has now: ${what.rest.join(' ').slice(0, 200)}` : '';
-    return { ok: true, token: id, text: `This connector runs ${what.name} at whatever version the registry has today. Pinning installs one exact version and points the connector at it.${keeps}\n\n${card.text}`, tooLong: card.tooLong };
+    return { ok: true, token: id, text: `This connector runs ${what.name} at whatever version the registry has today. Pinning installs one exact version and points the connector at it.${keeps}${card.tooLong ? '\nToo long to show whole: it will be pinned and switched off. Switch it on in Customize afterwards.' : ''}\n\n${card.text}`, tooLong: card.tooLong };
   }
   async function pinConfirm(serverId, token) {
     const pin = pins.get(String(token ?? ''));
@@ -227,7 +227,8 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     let placed;
     if (pin.kind === 'npm') { const p = preparedNpm.get(pin.token); if (!p) throw new Error('That pin is no longer waiting. Start again.'); preparedNpm.delete(pin.token); placed = await installNpm(p, { dest: join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`) }); }
     else { const p = preparedPypi.get(pin.token); if (!p) throw new Error('That pin is no longer waiting. Start again.'); preparedPypi.delete(pin.token); placed = await installPypi(p); }
-    return mcp.update(serverId, { command: placed.command, args: [...placed.args, ...pin.rest] }); // the arguments after the package stay
+    // PIN-1 (F10-1): a card too long to show whole never switches anything on: the pinned connector is switched OFF as part of the pin
+    return mcp.update(serverId, { command: placed.command, args: [...placed.args, ...pin.rest], ...(pin.tooLong ? { enabled: false } : {}) }); // the arguments after the package stay
   }
   async function pinCancel(token) { const pin = pins.get(String(token ?? '')); pins.delete(String(token ?? '')); if (pin) { await discardNpmToken(pin.token); await discardPypiToken(pin.token); } }
   // INSTALL-ANYWHERE: the person's own "Add from address" field (window only). One field, what was understood, then the same one card. The person typed the address, so it is not "found on the open web", and a private address is

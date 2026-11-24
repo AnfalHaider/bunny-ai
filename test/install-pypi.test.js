@@ -156,3 +156,23 @@ test('a folder that already exists is never built over or deleted before the yes
   await assert.rejects(preparePypi('notes-mcp==1.0', { workDir: work, dest, ...world().deps }), /already exists/);
   assert.equal(await readFile(join(dest, 'keep.txt'), 'utf8'), 'mine');
 });
+
+test('a PyPI pin through the app: the venv\'s absolute python.exe is accepted and saved, the arguments after the package stay, and the connector is marked pinned', async (t) => {
+  const w = world();
+  const base0 = w.deps.fetchJson;
+  w.deps.fetchJson = async (u) => (/\/json$/.test(String(u)) && !/\/1\.0\/json$/.test(String(u)) ? { info: { version: '1.0' } } : base0(u));
+  const { base } = await startApp(t, { fake: false, installSource: { pypiDeps: w.deps } });
+  const J2 = { 'content-type': 'application/json' };
+  const made = await post(base, '/api/mcp', { name: 'Calc', command: 'uvx', args: ['notes-mcp', '--flag'], confirmLocal: true, enabled: false });
+  assert.equal(made.status, 200);
+  assert.equal((await json(base, '/api/mcp')).body[0].unpinned, true);
+  const card = (await post(base, `/api/mcp/${made.body.id}/pin`, {})).body;
+  assert.equal(card.ok, true, JSON.stringify(card));
+  assert.match(card.text, /notes-mcp==1\.0/); assert.match(card.text, /keeps the arguments it has now: --flag/);
+  const done = await post(base, `/api/mcp/${made.body.id}/pin/${card.token}`, {});
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const after = (await json(base, '/api/mcp')).body[0];
+  assert.match(after.command, /python(\.exe)?$/i); assert.ok(/^([A-Za-z]:)?[\\/]/.test(after.command), 'an absolute path was saved');
+  assert.deepEqual(after.args.slice(-1), ['--flag']); assert.equal(after.unpinned, undefined);
+  void J2;
+});

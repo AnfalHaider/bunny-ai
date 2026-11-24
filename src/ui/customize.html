@@ -230,7 +230,7 @@
           const h = document.createElement('h3'); h.textContent = `Pin ${server.name}?`;
           const pre = document.createElement('pre'); pre.textContent = card.text; pre.className = 'code';
           const bar = document.createElement('div'); bar.className = 'cz-pin-actions';
-          const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'btn'; yes.textContent = 'Pin this version';
+          const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'btn'; yes.textContent = card.tooLong ? 'Pin, switched off' : 'Pin this version';
           const no = document.createElement('button'); no.type = 'button'; no.className = 'btn btn-ghost'; no.textContent = 'Cancel';
           const msg = document.createElement('span'); msg.className = 'hint';
           const close = () => { dlg.close(); dlg.remove(); };

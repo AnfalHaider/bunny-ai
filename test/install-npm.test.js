@@ -291,3 +291,20 @@ test('Security review: pinning reads only the plain launcher forms and keeps the
   assert.deepEqual(after.args.slice(-2), ['--root', 'C:\\notes'], 'the connector keeps its own arguments after the pinned program');
   assert.equal(after.command, 'node');
 });
+
+test('PIN-1: a pin card too long to show whole pins the connector SWITCHED OFF (F10-1), and the card says so', async (t) => {
+  const w = world(tarball());
+  const ci = w.deps.runNpm;
+  w.deps.runNpm = async (args, o) => { // a tree whose packages have very long names and install scripts: the card cannot hold them all
+    const out = await ci(args, o);
+    if (args[0] === 'ci') { const prefix = args[args.indexOf('--prefix') + 1]; for (let i = 0; i < 12; i += 1) { const name = `${'x'.repeat(190)}${i}`; await mkdir(join(prefix, 'node_modules', name), { recursive: true }); await writeFile(join(prefix, 'node_modules', name, 'package.json'), JSON.stringify({ name, version: '1.0.0', scripts: { postinstall: 'x' } })); } }
+    return out;
+  };
+  const { base } = await startApp(t, { fake: false, installSource: { npmDeps: w.deps } });
+  const made = await post(base, '/api/mcp', { name: 'Big', command: 'npx', args: ['-y', 'notes-mcp'], confirmLocal: true, enabled: true });
+  const card = (await post(base, `/api/mcp/${made.body.id}/pin`, {})).body;
+  assert.equal(card.tooLong, true); assert.match(card.text, /Too long to show whole: it will be pinned and switched off/);
+  assert.equal((await post(base, `/api/mcp/${made.body.id}/pin/${card.token}`, {})).status, 200);
+  const after = (await json(base, '/api/mcp')).body[0];
+  assert.equal(after.command, 'node'); assert.equal(after.enabled, false, 'a pin from a card that could not be shown whole is never switched on');
+});
