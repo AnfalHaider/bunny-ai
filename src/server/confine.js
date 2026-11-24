@@ -25,7 +25,7 @@ export const NOT_COVERED = [
   'Reading files: a confined command can still read everything you can, Bunny\'s own data folder included. Files encrypted with your Windows account can be decrypted by any program running as you, so confinement limits writes, not the reading of secrets.',
   'The network: a confined command can still reach the internet.',
   'File tools: they are kept inside the project folder by their own checks, not by this.',
-  'Connectors, the browser and computer use.',
+  'Custom tools you made (each runs its own PowerShell script after you approve it), local connectors, other connectors, the browser and computer use.',
   'Engines: Codex has its own sandbox, and Claude Code on Windows has none.',
 ];
 
