@@ -32,7 +32,7 @@ test('connector_sign_in: the card, the Sign in step, the stand-in sign-in comple
   await ask(page, 'read my documents from Fake docs');
   const card = page.locator('.capability-card', { hasText: 'Sign in to Fake docs' });
   await expect(card).toBeVisible({ timeout: 15_000 });
-  await card.getByRole('button', { name: /^Allow|Yes|Sign in/i }).first().click();
+  await card.getByRole('button', { name: 'Sign in', exact: true }).click();
   // the same Sign in button a connector found at the start of a reply shows; the person's browser is played by this test
   const popup = page.waitForEvent('popup');
   await page.locator('.signin-step').getByRole('button', { name: 'Sign in' }).click();
@@ -61,7 +61,7 @@ test('sign_in: the card says Sign in to GitHub, and Allow opens Settings › Pro
   const card = page.locator('.capability-card', { hasText: 'Sign in to GitHub' });
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toContainText('Settings › Profile');
-  await card.getByRole('button', { name: /^Allow|Yes|Sign in/i }).first().click();
+  await card.getByRole('button', { name: 'Open Settings › Profile' }).click();
   await expect(page.locator('#settings-frame')).toBeVisible();
   expect(await page.locator('#settings-frame').getAttribute('src')).toContain('settings.html');
 });

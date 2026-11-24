@@ -2068,7 +2068,7 @@ function showLiveTool(bodyEl, info) {
     line.append(signInStep(info));
   }
   if (info.openInCustomize && !line.querySelector('.open-customize')) { // F5: an installed plugin that is off, too long to show: the button goes to Customize (nothing is switched on from here)
-    const open = button('Open in Customize', { className: 'ghost small open-customize', onclick: () => openSettings('customize') });
+    const open = button(say('step.openCustomize'), { className: 'ghost small open-customize', onclick: () => openSettings('customize') });
     line.append(open);
   }
   if (info.result) {
@@ -2417,6 +2417,9 @@ function showLiveCapability(bodyEl, info) {
     custom_tools: say('cap.build'),
     new_tool: say('cap.newTool'),
     switch_on_added: 'Switch on',
+    sign_in: say('cap.signIn'),
+    connector_sign_in: say('cap.connectorSignIn'),
+    pc_search: say('cap.pcSearch'),
   }[info.capability] ?? 'Allow';
   const card = element('div', { className: 'permission-prompt live-permission capability-card' });
   card.append(
@@ -2426,6 +2429,9 @@ function showLiveCapability(bodyEl, info) {
   if (info.reason) card.append(element('p', { className: 'capability-reason', textContent: info.reason }));
   if (info.capability === 'computer_use') card.append(element('p', { className: 'hint', textContent: say('cap.computerHint') }));
   if (info.capability === 'custom_tools') card.append(element('p', { className: 'hint', textContent: say('cap.buildHint') }));
+  if (info.capability === 'sign_in') card.append(element('p', { className: 'hint', textContent: say('cap.signInHint') }));
+  if (info.capability === 'connector_sign_in') card.append(element('p', { className: 'hint', textContent: say('cap.connectorSignInHint') }));
+  if (info.capability === 'pc_search') card.append(element('p', { className: 'hint', textContent: say('cap.pcSearchHint') }));
   const actions = element('div', { className: 'permission-actions' });
   const answer = async (granted) => {
     try {
