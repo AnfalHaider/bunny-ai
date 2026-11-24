@@ -228,3 +228,27 @@ test('IA4-a: a PAX path= record that leaves the folder is refused, a harmless on
   assert.deepEqual(parsePax(Buffer.from(paxRecord('path', 'a/b') + paxRecord('size', '12'))), { path: 'a/b', size: 12 });
   assert.throws(() => parsePax(Buffer.from('999 path=x\n')), /extended header/);
 });
+
+// IA-4: the real bytes written count, never the sizes the headers declare; and no 100:1 expansion
+test('IA-4 bombs: an entry that expands more than 100:1 stops the install (zip, and tgz as a whole), and a zip whose headers say 1 KB but which inflates to far more stops at the declared size; nothing is left', async () => {
+  const work = await tmp();
+  const zeros = Buffer.alloc(6 * 1024 * 1024, 0);
+  await assert.rejects(prepareSource('https://x.example.com/p.zip', { workDir: work, fetchSource: standIn(makeZip([{ name: 'skills/n/SKILL.md', data: SKILL }, { name: 'big.bin', data: zeros }]), 'https://x.example.com/p.zip'), checkAddress }), /compression bomb/);
+  await assert.rejects(prepareSource('https://x.example.com/p.tgz', { workDir: work, fetchSource: standIn(makeTgz([{ name: 'p/skills/n/SKILL.md', data: SKILL }, { name: 'p/big.bin', data: zeros }]), 'https://x.example.com/p.tgz'), checkAddress }), /compression bomb/);
+  // headers that lie: a small declared size, a stream that inflates to 5 MB of mixed data (a ratio under 100:1, so only the real-bytes count can stop it)
+  const noisy = Buffer.alloc(5 * 1024 * 1024); for (let i = 0; i < noisy.length; i += 1) noisy[i] = (i * 2654435761) >>> 24;
+  const honest = makeZip([{ name: 'a.bin', data: noisy }]);
+  const lie = Buffer.from(honest);
+  const central = lie.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  lie.writeUInt32LE(1000, 22); // the local header's uncompressed size
+  lie.writeUInt32LE(1000, central + 24); // the central directory's
+  await assert.rejects(prepareSource('https://x.example.com/p.zip', { workDir: work, fetchSource: standIn(lie, 'https://x.example.com/p.zip'), checkAddress }), /larger|bigger|declared|damaged|size/i);
+  assert.deepEqual(await readdir(work), [], 'nothing is left in the temp folder');
+});
+
+test('IA-4: more than 5,000 files stops the install', async () => {
+  const work = await tmp();
+  const many = makeZip([{ name: 'skills/n/SKILL.md', data: SKILL }, ...Array.from({ length: 5001 }, (_, i) => ({ name: `f/${i}.txt`, data: 'x' }))]);
+  await assert.rejects(prepareSource('https://x.example.com/p.zip', { workDir: work, fetchSource: standIn(many, 'https://x.example.com/p.zip'), checkAddress }), /more than 5000 files/);
+  assert.deepEqual(await readdir(work), []);
+});

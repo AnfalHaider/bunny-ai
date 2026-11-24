@@ -8,13 +8,14 @@
  *  - more than MAX_TOTAL_BYTES in all (an archive bomb), or an entry larger than the size it declares.
  */
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, open, writeFile } from 'node:fs/promises';
+import { mkdir, open, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { createGunzip, createInflateRaw } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB in all
+export const MAX_RATIO = 100; // IA-4: no entry (zip) and no archive (tgz) may expand more than 100:1 once it is over a few MB
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 
 export class UnpackError extends Error {
@@ -122,6 +123,7 @@ export async function unpackZip(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
       const out = target(dest, rel);
       if (e.isDir) { await mkdir(out, { recursive: true }); continue; }
       if (e.method !== 0 && e.method !== 8) throw new UnpackError('The zip file uses a compression this check does not accept.');
+      if (e.size > 1024 * 1024 && e.compressed > 0 && e.size / e.compressed > MAX_RATIO) throw new UnpackError(`The archive entry "${e.name.slice(0, 60)}" expands more than ${MAX_RATIO} times (a compression bomb).`); // IA-4: a ratio over 100:1 per entry
       await mkdir(dirname(out), { recursive: true });
       const head = Buffer.alloc(30);
       await handle.read(head, 0, 30, e.offset);
@@ -168,6 +170,7 @@ export function parsePax(buffer) {
 export async function unpackTgz(file, dest, { max = MAX_TOTAL_BYTES, strip = '' } = {}) {
   const state = { total: 0, max };
   const written = [];
+  const packedSize = Math.max(1, (await stat(file)).size);
   const gunzip = createGunzip();
   const source = createReadStream(file).pipe(gunzip);
   let buf = Buffer.alloc(0);
@@ -186,6 +189,7 @@ export async function unpackTgz(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
             const take = Math.min(current.remaining, buf.length);
             state.total += take;
             if (state.total > state.max) throw new UnpackError(`The archive is bigger than ${Math.round(state.max / 1048576)} MB unpacked: stopped.`);
+            if (state.total > 4 * 1048576 && state.total > packedSize * MAX_RATIO) throw new UnpackError(`The archive expands more than ${MAX_RATIO} times (a compression bomb).`);
             const piece = buf.subarray(0, take);
             if (current.stream) { if (!current.stream.write(piece)) await new Promise((r) => current.stream.once('drain', r)); } else current.collected.push(Buffer.from(piece));
             buf = buf.subarray(take); current.remaining -= take;
