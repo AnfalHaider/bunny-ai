@@ -2455,6 +2455,7 @@ function showLiveCapability(bodyEl, info) {
   const actions = element('div', { className: 'permission-actions' });
   const answer = async (granted) => {
     try {
+      if (granted && info.capability === 'sign_in') openSettings('profile'); // F5-4: the sign-in is in Settings › Profile
       if (granted && info.capability === 'code_mode') {
         if (!info.hasFolder) await chooseFolder();
         applyWorkMode('code', { save: true });

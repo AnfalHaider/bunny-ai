@@ -21,7 +21,7 @@ export async function getJSON(path) {
 
 // Writes that only Bunny's own window may make: a copy of src/server/windowOnly.js (the browser cannot import it; test/window-only.test.js keeps them equal).
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'braveKeySet'];
 
 /** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine'];
@@ -30,7 +30,7 @@ const WRITES = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const UUID = '[a-f0-9-]{36}';
 /** Routes that are window-only whatever their body says: [methods, path pattern]. */
 export const WINDOW_ONLY_ROUTES = [
-  [WRITES, `^/api/mcp(/${UUID}(/call)?)?$`],                // connectors: add, enable, change, remove, call
+  [WRITES, `^/api/mcp(/${UUID}(/call|/key)?)?$`],           // connectors: add, enable, change, remove, call, key
   [WRITES, `^/api/connectors(/.*)?$`],                      // connector sign-in (W3-6)
   [WRITES, `^/api/schedules(/${UUID})?$`],                  // schedules
   [WRITES, `^/api/hooks(/${UUID})?$`],                      // hooks run commands
@@ -54,6 +54,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], '^/api/oauth/[a-z0-9-]+/(start|finish)$'],     // provider sign-in
   [['GET'], '^/api/remote/log$'],                           // DEVICE-FULL R-DF2: what devices did; read only in Bunny's window
   [WRITES, '^/api/engines(/.*)?$'],                         // CLI-ENGINES: download, update, switch, roll back, remove, sign in and out of an engine
+  [WRITES, '^/api/web-search(/.*)?$'],                      // F6: the Brave Search key is the window's alone
   [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];
 

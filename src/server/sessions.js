@@ -345,6 +345,22 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
     return dropped;
   }
 
+  /** v0.1.14.3 (Quick ask): when Bunny shows its own words or results after a model's refusal, they are what the chat keeps as the reply. Only a quick-ask chat, only the last reply (an assistant message with no step
+   * after the last user message), only text. Returns true when a reply was replaced. */
+  async function replaceLastReply(id, content) {
+    const session = await get(requireId(id));
+    if (!session) throw new Error('Session not found');
+    if (session.origin !== 'quick-ask') return false;
+    const text = String(content ?? '').slice(0, 8000);
+    if (!text.trim()) return false;
+    const last = session.messages.at(-1);
+    if (!last || last.role !== 'assistant' || (last.kind && last.kind !== 'text')) return false;
+    last.content = text;
+    delete last.pcSources;
+    await save(session);
+    return true;
+  }
+
   /** v0.1.14.1 (Quick ask retry): cut everything after the last user message (the first reply, which is being replaced). The question itself stays, once. Returns how many were cut. */
   async function dropAfterLastUser(id) {
     const session = await get(requireId(id));
@@ -509,7 +525,7 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
 
   return {
     list, get, create, remove, fork, children, exportSession, context, summary,
-    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser),
+    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser), replaceLastReply: locked(replaceLastReply),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
     markCheckpointRestored: locked(markCheckpointRestored), setWorktree: locked(setWorktree),
   };

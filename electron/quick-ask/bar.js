@@ -465,6 +465,13 @@ function onAnswer(event) {
   if (event.type === 'done' || event.type === 'stopped') {
     ended(); showAnswer(false); showCopy(true);
     pcSourcesLine(event.sources);
+    // Bunny's own words (the model was not the one speaking): no model line, and for Search this PC being off the card with the way to the switch
+    if (event.type === 'done' && (event.own === 'pc-off' || event.own === 'pc-menu')) {
+      $('meta').hidden = true;
+      if (event.own === 'pc-off') card('warn', 'Search this PC is off', 'Turn it on in Settings › Capabilities to let Bunny look for files on this computer. Nothing was searched.', [['Open Bunny settings', () => openInBunny('search-settings'), 'fill']]);
+      $('follow').disabled = false; scheduleFit();
+      return;
+    }
     if (event.type === 'done' && typeof event.model === 'string' && event.model) { $('meta').textContent = (Array.isArray(event.sources) && event.sources.length) ? `Answered by ${event.model} · files read on this PC, sent to the model` : `Answered by ${event.model}${event.lookups > 0 ? ' · web search' : ''}`; $('meta').hidden = false; }
     $('follow').disabled = false; $('follow').focus(NOSCROLL); scheduleFit();
     return;
@@ -601,6 +608,7 @@ function applyLook(look) {
   const key = look && typeof look.font === 'string' && Object.hasOwn(FONT_STACKS, look.font) ? look.font : 'system';
   if (FONT_STACKS[key]) {
     const faces = (FONT_FACES[key] ?? []).map(([family, weight, file]) => `@font-face { font-family: "${family}"; font-style: normal; font-weight: ${weight}; font-display: swap; src: url("../../src/ui/fonts/${file}.woff2") format("woff2"); }`).join('\n');
+    document.getElementById('bar-fonts')?.remove();
     if (faces) { const style = document.createElement('style'); style.id = 'bar-fonts'; style.textContent = faces; document.head.append(style); }
     root.style.setProperty('--font', FONT_STACKS[key]);
   }
@@ -614,6 +622,8 @@ function applyLook(look) {
 const showPage = () => document.documentElement.removeAttribute('data-pending');
 setTimeout(showPage, 300); // whatever happens, the bar shows itself
 Promise.resolve(window.quickAsk.init?.()).then((look) => applyLook(look ?? {})).catch(() => {}).finally(showPage);
+// a kept bar (clicked away from, hidden) is shown again by the shortcut: it reads Bunny's settings again (Search this PC, the model line, the + menu), not only after Esc or 5 minutes
+window.quickAsk.onRefresh?.(() => { Promise.resolve(window.quickAsk.init?.()).then((look) => applyLook(look ?? {})).catch(() => {}); });
 
 setGo('send');
 refresh();

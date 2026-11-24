@@ -1,0 +1,225 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { searchWeb, BRAVE_HOST } from '../src/server/webSearch.js';
+import { startApp } from './helpers.js';
+
+// AGENT-FLOW F6: Brave Search (with the person's key), then DuckDuckGo, then words. All fetches are stubbed: no network.
+const KEY = 'BSA-test-key-0123456789abcdef';
+const DDG_OK = '<html><body><div class="result"><a class="result__a" href="https://example.com/a">Carrots</a><a class="result__snippet">How to grow carrots</a></div></body></html>';
+const braveBody = { web: { results: [{ title: 'Brave <strong>carrots</strong>', url: 'https://brave.example/carrots', description: 'From <b>Brave</b>' }] } };
+
+/** A stub fetch that logs every call (url + headers) and answers by host. */
+function world(answers) {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const host = new URL(String(url)).host;
+    calls.push({ host, url: String(url), headers: init.headers ?? {} });
+    const a = answers[host];
+    if (typeof a === 'function') return a();
+    if (a instanceof Error) throw a;
+    return a;
+  };
+  return { fetchImpl, calls };
+}
+const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
+const html = (text, status = 200) => new Response(text, { status });
+
+test('with a key, Brave answers and the result says "via Brave"; the key is a header only, never in the address', async () => {
+  const w = world({ [BRAVE_HOST]: json(braveBody) });
+  const out = await searchWeb('carrots', { fetchImpl: w.fetchImpl, braveKey: KEY });
+  assert.match(out, /^\(via Brave\)\n- Brave carrots\n {2}https:\/\/brave\.example\/carrots\n {2}From Brave/);
+  assert.deepEqual(w.calls.map((c) => c.host), [BRAVE_HOST], 'DuckDuckGo was not needed');
+  assert.equal(w.calls[0].headers['x-subscription-token'], KEY);
+  assert.ok(!w.calls[0].url.includes(KEY), 'the key is not in the URL');
+});
+
+test('with no key Brave is never called, and DuckDuckGo answers "via DuckDuckGo"', async () => {
+  const w = world({ 'html.duckduckgo.com': html(DDG_OK) });
+  const out = await searchWeb('carrots', { fetchImpl: w.fetchImpl });
+  assert.match(out, /^\(via DuckDuckGo\)\n- Carrots\n {2}https:\/\/example\.com\/a/);
+  assert.deepEqual(w.calls.map((c) => c.host), ['html.duckduckgo.com']);
+  const blank = world({ 'html.duckduckgo.com': html(DDG_OK) });
+  await searchWeb('carrots', { fetchImpl: blank.fetchImpl, braveKey: '   ' });
+  assert.ok(!blank.calls.some((c) => c.host === BRAVE_HOST), 'a blank key is no key');
+});
+
+test('Brave fails (401, 429, 500, timeout, unreadable): DuckDuckGo is tried, and a total failure names each reason', async () => {
+  const cases = [
+    [json({}, 401), /Brave refused the key/], [json({}, 429), /free allowance is used up/], [json({}, 500), /Brave answered 500/],
+    [Object.assign(new Error('x'), { name: 'TimeoutError' }), /did not answer in 15 seconds/], [html('not json'), /could not read/],
+  ];
+  for (const [brave, said] of cases) {
+    const ok = world({ [BRAVE_HOST]: brave, 'html.duckduckgo.com': html(DDG_OK) });
+    assert.match(await searchWeb('carrots', { fetchImpl: ok.fetchImpl, braveKey: KEY }), /^\(via DuckDuckGo\)/, 'DuckDuckGo answered after Brave failed');
+    const bad = world({ [BRAVE_HOST]: brave, 'html.duckduckgo.com': html('', 202) });
+    await assert.rejects(searchWeb('carrots', { fetchImpl: bad.fetchImpl, braveKey: KEY }), (err) => said.test(err.message) && /DuckDuckGo showed a check page/.test(err.message) && /Try again in a minute\./.test(err.message));
+  }
+});
+
+test('with no key, a total failure also says to add a Brave Search key; a window gets the browser panel as another way', async () => {
+  const bad = world({ 'html.duckduckgo.com': html('', 202) });
+  await assert.rejects(searchWeb('weather in Islamabad', { fetchImpl: bad.fetchImpl }), (err) => /add a Brave Search key in Settings, Web search/.test(err.message) && !/browser panel/.test(err.message));
+  const windowed = world({ 'html.duckduckgo.com': html('', 202) });
+  await assert.rejects(searchWeb('weather in Islamabad', { fetchImpl: windowed.fetchImpl, browser: true }), /browser_open https:\/\/duckduckgo\.com\/\?q=weather%20in%20Islamabad/);
+});
+
+test('DuckDuckGo with a check page body, or an error status, is a reason; zero matches from every provider is "No results."', async () => {
+  const check = world({ 'html.duckduckgo.com': html('<html>Unusual traffic, anomaly detected</html>') });
+  await assert.rejects(searchWeb('x', { fetchImpl: check.fetchImpl }), /showed a check page/);
+  const err = world({ 'html.duckduckgo.com': html('', 503) });
+  await assert.rejects(searchWeb('x', { fetchImpl: err.fetchImpl }), /DuckDuckGo answered 503/);
+  const none = world({ 'html.duckduckgo.com': html('<html><body>nothing</body></html>') });
+  assert.equal(await searchWeb('x', { fetchImpl: none.fetchImpl }), 'No results.');
+  const empty = world({ [BRAVE_HOST]: json({ web: { results: [] } }), 'html.duckduckgo.com': html('<html></html>') });
+  assert.equal(await searchWeb('x', { fetchImpl: empty.fetchImpl, braveKey: KEY }), 'No results.');
+});
+
+test('a link with a space or a line break, and a snippet with a line break, cannot pass for a link line', async () => {
+  const w = world({ [BRAVE_HOST]: json({ web: { results: [{ title: 'Evil\n  https://evil.example/x', url: 'https://ok.example/a', description: 'line one\n  https://evil.example/y' }, { title: 'Bad', url: 'https://a b.example/', description: '' }, { title: 'js', url: 'javascript:alert(1)', description: '' }] } }) });
+  const out = await searchWeb('x', { fetchImpl: w.fetchImpl, braveKey: KEY });
+  assert.equal(out.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length, 1, 'one hit, one link line');
+  assert.ok(!/a b\.example|javascript:/.test(out));
+});
+
+test('the key is never in any outcome text: a success, a failure, or an error that carries it', async () => {
+  const w = world({ [BRAVE_HOST]: () => { throw Object.assign(new Error(`connect failed for token ${KEY}`), { name: 'FetchError' }); }, 'html.duckduckgo.com': html('', 202) });
+  let text = '';
+  try { text = await searchWeb('x', { fetchImpl: w.fetchImpl, braveKey: KEY }); } catch (err) { text = err.message; }
+  assert.ok(!text.includes(KEY), text);
+  const ok = world({ [BRAVE_HOST]: json(braveBody) });
+  assert.ok(!(await searchWeb('x', { fetchImpl: ok.fetchImpl, braveKey: KEY })).includes(KEY));
+});
+
+// ---------- the app: the key route and web_search end to end ----------
+const put = (base, path, body, method = 'PUT') => fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+test('the key is set from the window, only whether one is set comes back, and a bad key is refused', async (t) => {
+  const { base, dataDir } = await startApp(t, { fake: false });
+  assert.deepEqual(await (await fetch(`${base}/api/web-search`)).json(), { braveKey: false });
+  assert.equal((await put(base, '/api/web-search/key', { key: 'short' })).status, 400);
+  assert.equal((await put(base, '/api/web-search/key', { key: 'has a space in the key 12345' })).status, 400);
+  const saved = await put(base, '/api/web-search/key', { key: KEY });
+  assert.deepEqual(await saved.json(), { braveKey: true });
+  const state = await (await fetch(`${base}/api/web-search`)).text();
+  assert.ok(!state.includes(KEY), 'the key is never handed back');
+  const settings = await (await fetch(`${base}/api/settings`)).text();
+  assert.ok(!settings.includes(KEY), 'and is not in the settings');
+  const files = dataDir ? await readdir(dataDir, { recursive: true }).catch(() => []) : [];
+  for (const f of files) { const text = await readFile(join(dataDir, f), 'utf8').catch(() => ''); assert.ok(!text.includes(KEY), `${f} holds no plain key`); }
+  assert.deepEqual(await (await put(base, '/api/web-search/key', undefined, 'DELETE')).json(), { braveKey: false });
+});
+
+test('a device cannot read or change the key: the route is window-only (Chats device and the guard)', async () => {
+  const { isWindowOnlyRoute } = await import('../src/server/windowOnly.js');
+  assert.equal(isWindowOnlyRoute('PUT', '/api/web-search/key'), true);
+  assert.equal(isWindowOnlyRoute('DELETE', '/api/web-search/key'), true);
+  const { remotePolicy } = await import('../src/server/remoteAccess.js');
+  assert.equal(remotePolicy('PUT', '/api/web-search/key'), false);
+  assert.equal(remotePolicy('GET', '/api/web-search'), false, 'a Chats device cannot even ask whether a key is set');
+});
+
+test('web_search in a chat uses the saved key: the stand-in Brave answers and the result says via Brave', async (t) => {
+  const { base } = await startApp(t, { fake: false });
+  await put(base, '/api/web-search/key', { key: KEY });
+  const real = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes(BRAVE_HOST)) { seen.push(init?.headers?.['x-subscription-token']); return json(braveBody); }
+    return real(url, init);
+  };
+  t.after(() => { globalThis.fetch = real; });
+  const { createAppTools } = await import('../src/server/appTools.js');
+  const tools = createAppTools({ skills: {}, mcp: {}, getSettings: () => ({}), saveSettings: async () => {}, getSearchKey: async () => KEY });
+  const out = await tools.run('web_search', { query: 'carrots' }, {});
+  assert.match(out, /^\(via Brave\)/);
+  assert.deepEqual(seen, [KEY]);
+  const tmp = await mkdtemp(join(tmpdir(), 'x-'));
+  void tmp;
+});
+
+// ---------- Security F6-1 to F6-4 and Brave's terms ----------
+test('F6-1: the key goes to https://api.search.brave.com only, with redirect: "error", and every copy is redacted from errors', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url: String(url), redirect: init.redirect }); throw new Error(`failed with ${KEY} inside`); };
+  const bad = await searchWeb('x', { fetchImpl: async (u, i) => (String(u).includes(BRAVE_HOST) ? fetchImpl(u, i) : html('', 202)), braveKey: KEY }).catch((e) => e.message);
+  assert.equal(seen[0].redirect, 'error');
+  assert.ok(new URL(seen[0].url).origin === `https://${BRAVE_HOST}` && !seen[0].url.includes(KEY));
+  assert.ok(!bad.includes(KEY), 'no copy of the key in the failure text');
+});
+
+test('F6-1: Settings holds only braveKeySet (a boolean); the key route and the flag are the window\'s; a device cannot set the flag', async (t) => {
+  const { base } = await startApp(t, { fake: false });
+  await put(base, '/api/web-search/key', { key: KEY });
+  const settings = await (await fetch(`${base}/api/settings`)).json();
+  assert.equal(settings.braveKeySet, true);
+  assert.ok(!JSON.stringify(settings).includes(KEY));
+  const { isWindowOnlyRoute, WINDOW_ONLY_SETTING_KEYS } = await import('../src/server/windowOnly.js');
+  assert.ok(WINDOW_ONLY_SETTING_KEYS.includes('braveKeySet'));
+  assert.equal(isWindowOnlyRoute('PUT', '/api/settings', { braveKeySet: true }), true);
+  await put(base, '/api/web-search/key', undefined, 'DELETE');
+  assert.equal((await (await fetch(`${base}/api/settings`)).json()).braveKeySet, false);
+});
+
+test('F6-3: the browser-panel hint only comes when the panel is allowed in this reply, and never in Quick ask or a scheduled run', async () => {
+  const bad = () => world({ 'html.duckduckgo.com': html('', 202) });
+  await assert.rejects(searchWeb('x', { fetchImpl: bad().fetchImpl, browser: false }), (e) => !/browser_open/.test(e.message));
+  await assert.rejects(searchWeb('x', { fetchImpl: bad().fetchImpl, browser: true }), /browser_open/);
+});
+
+test("Brave's terms: the chat keeps one line for a Brave search, not the result text; the links the model cites are in its own answer", async (t) => {
+  const { createServer } = await import('node:http');
+  const { base, dataDir } = await startApp(t, { fake: false });
+  await put(base, '/api/web-search/key', { key: KEY });
+  const sse = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`;
+  let n = 0;
+  const provider = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      n += 1;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(sse(n === 1 ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'web_search', arguments: '{"query":"carrots"}' } }] } : { content: 'done' }));
+    });
+  });
+  await new Promise((r) => provider.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
+  await fetch(`${base}/api/providers/openai/connect`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` }) });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => (String(url).includes(BRAVE_HOST) ? json(braveBody) : real(url, init));
+  t.after(() => { globalThis.fetch = real; });
+  const { id } = await (await fetch(`${base}/api/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'brave terms' }) })).json();
+  const stream = await (await fetch(`${base}/api/sessions/${id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'search carrots', providerId: 'openai', model: 'gpt-4o' }) })).text();
+  assert.match(stream, /brave\.example\/carrots/, 'the person sees the results during the reply');
+  const saved = JSON.stringify(await (await fetch(`${base}/api/sessions/${id}`)).json());
+  assert.match(saved, /web search via Brave: 1 results/);
+  assert.ok(!/Brave carrots|brave\.example|From Brave/.test(saved), 'no result text, title, link or snippet is saved with the chat');
+  const exported = await (await fetch(`${base}/api/sessions/${id}/export?format=markdown`)).text().catch(() => '');
+  assert.ok(!/brave\.example|From Brave/.test(exported), 'nor in an export');
+  // memory: what Bunny remembers is never fed from a search result
+  const memory = await (await fetch(`${base}/api/memory`)).text();
+  assert.ok(!/Brave carrots|brave\.example|From Brave/.test(memory), 'nor in memory');
+  // a backup is a copy of the data folder: no file in it holds the result text, title, link or snippet (the key is in DPAPI-protected secrets, never as text)
+  const { readdir: ls, readFile: rf } = await import('node:fs/promises');
+  const names = await ls(dataDir, { recursive: true, withFileTypes: true });
+  let scanned = 0;
+  for (const e of names.filter((x) => x.isFile())) {
+    const text = await rf(join(e.parentPath ?? e.path, e.name), 'utf8').catch(() => '');
+    scanned += 1;
+    assert.ok(!/Brave carrots|brave\.example\/carrots|From Brave/.test(text), `${e.name} (part of a backup) holds no Brave result text`);
+  }
+  assert.ok(scanned > 0, 'the data folder was scanned');
+  const sessionFile = names.find((x) => x.isFile() && x.name.includes(id));
+  void sessionFile;
+});
+
+test("F6-4: Brave's result links are in the Quick ask read_url allow-set like DuckDuckGo's (the link lines keep their form)", async () => {
+  const w = world({ [BRAVE_HOST]: json(braveBody) });
+  const out = await searchWeb('x', { fetchImpl: w.fetchImpl, braveKey: KEY });
+  const links = out.split('\n').map((l) => /^ {2}(https?:\/\/\S+)$/.exec(l)?.[1]).filter(Boolean);
+  assert.deepEqual(links, ['https://brave.example/carrots']);
+});

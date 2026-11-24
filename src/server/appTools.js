@@ -3,6 +3,7 @@
  *   read  - web_search, read_url, search_plugins, read_skill
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
+import { searchWeb } from './webSearch.js';
 import { parseGithubUrl, readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
 import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
@@ -24,7 +25,7 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { query: { type: 'string' } }, ['query']),
     fn('read_url', 'Read a web page as text. A github.com/owner/repo link reads its README.',
       { url: { type: 'string' } }, ['url']),
-    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: on GitHub, and in the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
+    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: a short list of known connectors first, then GitHub, then the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
     fn('read_skill', 'Load the instructions of a switched-on skill by name (Bunny\'s own skills, whichever app they were first written for). A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
@@ -38,7 +39,8 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
         command: { type: 'string', description: 'For a local connector: the program to run' },
         args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
-        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' } }, ['name']),
+        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' },
+        key_headers: { type: 'array', items: { type: 'string' }, description: 'For a remote connector that needs a key: the header NAMES its listing asks for (never a value). The person pastes the key themselves, in Settings, Customize, on that connector: never ask for it in the chat.' } }, ['name']),
     fn('install_from_github', 'Install a tool from a PUBLIC GitHub repository: an MCP server written in Node.js. The person sees a card first with the repository, the exact commit, the install command and "This runs code from the internet on this computer", and must say yes. It is installed into Bunny AI\'s own tools folder at that commit, npm install scripts are NOT run, and it is added as a connector. Use add_connector instead for a server that npx can run, and install_plugin for skills.',
       { repo: { type: 'string', description: 'owner/name or a github.com link' } }, ['repo']),
   ].filter((d) => risks.includes(APP_TOOL_RISK[d.function.name]));
@@ -58,36 +60,13 @@ export function describeAppTool(name, args = {}) {
   }
 }
 
-/** DuckDuckGo's HTML endpoint: no key, plain results. */
-async function webSearch(query, fetchImpl = globalThis.fetch) {
-  const q = String(query ?? '').trim();
-  if (!q) throw new Error('web_search needs a query');
-  const res = await fetchImpl(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
-    headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) bunny-ai', accept: 'text/html' },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`The search answered ${res.status}`);
-  const html = await res.text();
-  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim(); // one line each: a title or snippet written by a page can never start a line of its own
-  const out = [];
-  const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
-  for (let m = re.exec(html); m && out.length < 8; m = re.exec(html)) {
-    let link = m[1];
-    const real = /[?&]uddg=([^&]+)/.exec(link);
-    if (real) link = decodeURIComponent(real[1]);
-    if (link.startsWith('//')) link = `https:${link}`;
-    if (/[\s\u0000-\u001f\u007f]/.test(link)) continue; // a link with a line break or a space in it is not a link Bunny lists
-    out.push(`- ${strip(m[2])}\n  ${link}\n  ${strip(m[3] ?? '').slice(0, 220)}`);
-  }
-  return out.length ? out.join('\n') : 'No results.';
-}
-
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ toolInstaller = null, getSearchKey = async () => null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
+  const startFetch = globalThis.fetch; // web_search reads globalThis.fetch at call time unless a test passed its own
   let queue = Promise.resolve();
   const serial = (job) => { const next = queue.then(job, job); queue = next.catch(() => {}); return next; };
 
@@ -286,9 +265,9 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   }
 
   const run = {
-    web_search: ({ query }) => webSearch(query),
+    web_search: async ({ query }, ctx) => searchWeb(query, { fetchImpl: (u, i) => (fetchImpl === startFetch ? globalThis.fetch : fetchImpl)(u, i), braveKey: await Promise.resolve().then(getSearchKey).catch(() => null), browser: ctx?.browser === true }), // F6: Brave (with the person's key), then DuckDuckGo
     read_url: ({ url }) => readUrl(url),
-    search_plugins: ({ query }) => searchPlugins(query),
+    search_plugins: async ({ query }) => searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) }),
     read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
@@ -337,10 +316,10 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       }
       // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
       const remote = !String(args.command ?? '').trim();
-      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote });
+      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote, ...(remote && args.key_headers ? { keyHeaders: args.key_headers } : {}) });
       if (remote) {
         keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
-        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).`;
+        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).${added.keyHeaders?.length ? ` It needs a key (${added.keyHeaders.join(', ')}): tell the person to open Settings, Customize, this connector, Add key, and paste it there. Never ask for the key in the chat.` : ''}`;
       }
       return `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
     },
