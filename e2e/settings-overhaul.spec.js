@@ -37,7 +37,7 @@ test('Models: an allowed-models list with no model I know is refused, nothing is
 test('Code chats has its own headings, and a switch shows a Saved mark', async ({ page }) => {
   await page.goto('/src/ui/settings.html?embed=1&section=code');
   await expect(page.locator('[data-section="code"] h2').first()).toHaveText('Code chats');
-  await expect(page.locator('[data-section="code"] .grp-head')).toHaveText(['Effort and branches', 'Long jobs', 'Helpers', 'After a reply', 'New tasks']);
+  await expect(page.locator('[data-section="code"] .grp-head')).toHaveText(['Branches', 'Long jobs', 'Helpers', 'After a reply', 'New tasks']);
   const toggle = page.locator('[data-section="code"] input[type="checkbox"]').first();
   await toggle.click();
   await expect(toggle.locator('xpath=ancestor::div[contains(@class,"right")]').locator('.sv')).toHaveText('Saved');
@@ -59,4 +59,16 @@ test('Permissions is its own section (mode and rules); Code chats no longer hold
   await expect(page.locator('[data-section="permissions"] #perm-rules')).toBeVisible();
   await expect(page.locator('[data-section="code"] #perm-rules')).toHaveCount(0);
   await expect(page.locator('[data-section="code"] #default-permission')).toHaveCount(0);
+});
+
+test('merged sections: Notifications in Appearance, Connection and Default effort in Models, Privacy in Usage and data; the old sections are gone', async ({ page }) => {
+  await page.goto('/src/ui/settings.html');
+  for (const gone of ['notifications', 'privacy', 'connection']) await expect(page.locator(`section[data-section="${gone}"]`)).toHaveCount(0);
+  await expect(page.locator('section[data-section="appearance"] #notifications')).toHaveCount(1);
+  await expect(page.locator('section[data-section="models"] #cur-provider')).toHaveCount(1);
+  await expect(page.locator('section[data-section="models"] #default-effort')).toHaveCount(1);
+  await expect(page.locator('section[data-section="usage"] #storage')).toHaveCount(1);
+  await expect(page.locator('section[data-section="usage"] h2').first()).toHaveText('Usage and data');
+  await page.goto('/');
+  await expect(page.locator('#settings-nav-list [data-section="notifications"], #settings-nav-list [data-section="privacy"], #settings-nav-list [data-section="connection"]')).toHaveCount(0);
 });

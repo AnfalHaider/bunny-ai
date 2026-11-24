@@ -7,7 +7,7 @@ const DESKTOP_BRIDGE = () => { window.bunnyDesktop = { getPrefs: async () => ({}
 for (const [label, bridge] of [['a browser tab', false], ["Bunny's own window", true]]) {
   test(`${label}: the Desktop app section ("Use Bunny in a browser") shows in its own tab and in no other Settings tab`, async ({ page }) => {
     if (bridge) await page.addInitScript(DESKTOP_BRIDGE);
-    for (const tab of ['appearance', 'notifications', 'connection', 'models', 'about']) {
+    for (const tab of ['appearance', 'models', 'about']) {
       await page.goto(`/src/ui/settings.html?embed=1&section=${tab}`);
       await expect(page.locator(`section[data-section="${tab}"]`)).toBeVisible();
       await page.waitForTimeout(500); // the page starts the Desktop app section after it loads: give it the chance to (wrongly) show itself
@@ -24,7 +24,7 @@ for (const [label, bridge] of [['a browser tab', false], ["Bunny's own window", 
 }
 
 // Every Settings tab shows its own section and nothing of another one (owner: "only shown in its own category").
-const TABS = ['profile', 'usage', 'appearance', 'bunny', 'notifications', 'privacy', 'capabilities', 'models', 'connection', 'permissions', 'code', 'quickask', 'desktop', 'about'];
+const TABS = ['profile', 'usage', 'appearance', 'bunny', 'capabilities', 'models', 'permissions', 'code', 'quickask', 'desktop', 'about'];
 for (const [label, bridge] of [['a browser tab', false], ["Bunny's own window", true]]) {
   test(`${label}: every Settings tab shows only its own section, and every visible group, row and note sits inside it`, async ({ page }) => {
     test.setTimeout(120000);

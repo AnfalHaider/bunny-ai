@@ -184,10 +184,7 @@
         </select></div>
       </div>
     </div>
-  </section>
-
-  <section data-section="notifications">
-    <h2>Notifications</h2>
+      <h3 class="grp-head">Notifications</h3>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -199,7 +196,9 @@
         </div>
       </div>
     </div>
+
   </section>
+
 
   <section data-section="bunny">
     <h2>Instructions</h2>
@@ -246,11 +245,6 @@
     </div>
   </section>
 
-  <section data-section="privacy">
-    <h2>Privacy</h2>
-    <h2>Storage</h2>
-    <div class="group" id="storage"></div>
-  </section>
 
   <section data-section="capabilities">
     <h2>Capabilities</h2>
@@ -373,8 +367,27 @@
     </div>
   </section>
 
-  <section data-section="connection">
-    <h2>Connection</h2>
+
+  <section data-section="models">
+    <h2>Models</h2>
+    <h3 class="grp-head">Effort</h3>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Default effort</div>
+          <div class="desc">How hard the model thinks in a new chat.</div>
+        </div>
+        <div class="right">
+          <select id="default-effort" aria-label="Default effort">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="max">Max</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <h3 class="grp-head">Right now</h3>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -398,10 +411,6 @@
         <div class="right"><span class="tag" id="fake-mode">unknown</span></div>
       </div>
     </div>
-  </section>
-
-  <section data-section="models">
-    <h2>Models</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -547,21 +556,7 @@
   <section data-section="code">
     <h2>Code chats</h2>
     <div class="group">
-      <h3 class="grp-head">Effort and branches</h3>
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Default effort</div>
-          <div class="desc">How hard the model thinks in a new chat.</div>
-        </div>
-        <div class="right">
-          <select id="default-effort" aria-label="Default effort">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="max">Max</option>
-          </select>
-        </div>
-      </div>
+      <h3 class="grp-head">Branches</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Branch prefix</div><div class="desc">Added to the start of every git branch name Bunny creates.</div></div>
         <div class="right"><input class="pref" data-key="branchPrefix" data-default="bunny" maxlength="30" aria-label="Branch prefix" /></div>
@@ -631,10 +626,13 @@
   </section>
 
   <section data-section="usage">
-    <h2>Usage</h2>
+    <h2>Usage and data</h2>
     <div class="group" id="usage">
       <div class="row"><div class="desc">Nothing has been used yet.</div></div>
     </div>
+      <h3 class="grp-head">Where your data is</h3>
+    <div class="group" id="storage"></div>
+
   </section>
 
   <section data-section="quickask">
