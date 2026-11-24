@@ -337,13 +337,6 @@
         </div>
         <div class="right"><select id="pc-after" aria-label="After a search"><option value="read">Read the files, then answer</option><option value="show">Show what was found</option></select></div>
       </div>
-      <div class="row" id="pc-bar-row">
-        <div class="meta-col">
-          <div class="name">Quick ask searches by itself</div>
-          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
-        </div>
-        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
-      </div>
       <div class="row" id="pc-excl-row">
         <div class="meta-col">
           <div class="name"><button type="button" class="linklike" id="pc-excl-open" aria-expanded="false">Excluded folders (<span id="pc-excl-count">0</span>)</button></div>
@@ -638,9 +631,10 @@
     </div>
   </section>
 
-  <section data-section="desktop" id="desktop-section" hidden>
-    <h2>Desktop app</h2>
+  <section data-section="quickask">
+    <h2>Quick ask</h2>
     <div class="group">
+      <div id="quickask-desktop" hidden>
       <div class="row">
         <div class="meta-col">
           <div class="name">Quick ask</div>
@@ -652,6 +646,26 @@
           <label class="switch"><input type="checkbox" id="quick-ask" aria-label="Quick ask" /><span id="quick-state">off</span></label>
         </div>
       </div>
+      </div>
+      <div class="row" id="quickask-browser-note">
+        <div class="meta-col"><div class="name">Quick ask</div><div class="desc">Quick ask is a small bar of Bunny's desktop app. Its on/off switch and its shortcut are in Bunny's own window.</div></div>
+      </div>
+      <div class="row" id="pc-bar-row">
+        <div class="meta-col">
+          <div class="name">Quick ask searches by itself</div>
+          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col"><div class="name">Searching this PC from the bar</div><div class="desc" id="pc-bar-why">It uses the same Search this PC switch and excluded folders as chats, set in Capabilities.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="desktop" id="desktop-section" hidden>
+    <h2>Desktop app</h2>
+    <div class="group">
       <div class="row">
         <div class="meta-col">
           <div class="name">Start when I sign in</div>
@@ -1156,6 +1170,7 @@
       $('pc-bar-state').textContent = barAuto.checked ? 'on' : 'off';
       for (const id of ['pc-after-row', 'pc-bar-row']) $(id).classList.toggle('is-off', !on.checked);
       after.disabled = !on.checked; barAuto.disabled = !on.checked;
+      $('pc-bar-why').textContent = on.checked ? 'It uses the same Search this PC switch and excluded folders as chats, set in Capabilities.' : 'Search this PC is off, so "Quick ask searches by itself" does nothing yet. Turn Search this PC on in Capabilities.';
       $('pc-excl-count').textContent = String((s.pcSearchExcluded ?? []).length);
       mine(s.pcSearchExcluded ?? []);
     };
@@ -1705,9 +1720,10 @@
   // the Desktop app tab only (or to the whole page when no tab is named): a page that is not showing it must not show it, nor start it.
   const embedParams = new URLSearchParams(location.search);
   const namedTab = embedParams.get('embed') === '1' ? embedParams.get('section') : null;
-  const showsDesktop = !namedTab || namedTab === 'desktop';
+  const showsDesktop = !namedTab || namedTab === 'desktop' || namedTab === 'quickask';
+  const showsInstall = !namedTab || namedTab === 'desktop'; // the install row and the desktop section belong to the Desktop app tab only
   function bootInstall(desk) {
-    if (!showsDesktop) return;
+    if (!showsInstall) return;
     $('desktop-section').hidden = false;
     $('browser-section').hidden = false;
     const ctx = installContext(window);
@@ -1750,7 +1766,9 @@
     const desk = desktopBridge();
     bootInstall(desk);
     if (!desk) return;
-    $('desktop-section').hidden = false;
+    if (showsInstall) $('desktop-section').hidden = false;
+    $('quickask-desktop').hidden = false;
+    $('quickask-browser-note').hidden = true;
     const prefs = await desk.getPrefs();
     const bind = (id, stateId, key) => {
       const box = $(id);

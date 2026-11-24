@@ -42,3 +42,13 @@ test('Code chats has its own headings, and a switch shows a Saved mark', async (
   await toggle.click();
   await expect(toggle.locator('xpath=ancestor::div[contains(@class,"right")]').locator('.sv')).toHaveText('Saved');
 });
+
+// Quick ask has one home (v0.1.15 drawing): on/off and shortcut (desktop), searching by itself, and why it may be dimmed.
+test('Quick ask is one section: "searches by itself" is there and not under Capabilities; the dimmed row says why', async ({ page, request }) => {
+  await request.put('/api/settings', { data: { pcSearchEnabled: false } });
+  await page.goto('/src/ui/settings.html?embed=1&section=quickask');
+  await expect(page.locator('[data-section="quickask"] #pc-bar-auto')).toHaveCount(1);
+  await expect(page.locator('[data-section="capabilities"] #pc-bar-auto')).toHaveCount(0);
+  await expect(page.locator('#pc-bar-why')).toContainText('Search this PC is off');
+  await expect(page.locator('#quickask-browser-note')).toBeVisible(); // a browser tab: the on/off switch and shortcut are the desktop window's
+});
