@@ -94,3 +94,17 @@ test('no card in an incognito chat, with project memory switched off, or when th
   assert.equal(await b.card(), undefined);
   assert.ok(!b.provider.seen.some((r) => JSON.stringify(r.tools ?? []).includes('suggest_project_memory')), 'the tool is not even offered');
 });
+
+test('PC-4: search_chats in a project chat lists this project\'s chats first, says so, and never searches an incognito chat', async (t) => {
+  const { base, project, send, provider } = await setup(t, [null, null, null, { name: 'search_chats', args: { query: 'carrots' } }, null]);
+  const mk = async (title, extra = {}) => (await post(base, '/api/sessions', { title, ...extra })).body;
+  const say = (s, text) => fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: text, providerId: 'openai', model: 'gpt-4o', workMode: 'chat' }) }).then((r) => r.text());
+  await say(await mk('Elsewhere'), 'carrots are orange');
+  await say(await mk('Pricing', { projectId: project.id }), 'carrots cost 3 cents');
+  await say(await mk('Ghost', { incognito: true, projectId: project.id }), 'carrots in secret');
+  await send('search for carrots');
+  const result = provider.seen.at(-1).messages.filter((m) => m.role === 'tool').at(-1).content;
+  assert.match(result, /"Pricing" \[this project\]/);
+  assert.ok(result.indexOf('Pricing') < result.indexOf('Elsewhere'));
+  assert.doesNotMatch(result, /Ghost/);
+});

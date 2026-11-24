@@ -3178,7 +3178,10 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             case 'search_chats': {
               const q = String(parsed.query ?? '').trim();
               if (!q) throw new Error('search_chats needs words to look for');
-              const rows = (await sessions.list({ q })).filter((r) => r.id !== id).slice(0, 8);
+              // PROJECT-CONTEXT (PC-4): in a project chat this project's chats come first, and say so; incognito chats are never searched
+              const found = (await sessions.list({ q })).filter((r) => r.id !== id && !r.incognito);
+              const mine = session.projectId ? found.filter((r) => r.projectId === session.projectId) : [];
+              const rows = [...mine, ...found.filter((r) => !mine.includes(r))].slice(0, 8);
               if (!rows.length) { result = `No past chats mention "${q}".`; break; }
               const words = q.toLowerCase().split(/\s+/).filter(Boolean);
               const lines = [];
@@ -3187,7 +3190,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
                 const hit = full?.messages?.find((m) => words.some((w) => String(m.content ?? '').toLowerCase().includes(w)));
                 const text = String(hit?.content ?? '').replace(/\s+/g, ' ');
                 const at = Math.max(0, text.toLowerCase().indexOf(words[0]) - 80);
-                lines.push(`- "${r.title}" (id ${r.id}, ${String(r.updatedAt ?? '').slice(0, 10)})${text ? `: …${text.slice(at, at + 240)}…` : ''}`);
+                lines.push(`- "${r.title}"${mine.includes(r) ? ' [this project]' : ''} (id ${r.id}, ${String(r.updatedAt ?? '').slice(0, 10)})${text ? `: …${text.slice(at, at + 240)}…` : ''}`);
               }
               result = `Past chats that mention "${q}":\n${lines.join('\n')}\nRead more of one with read_session.`;
               break;
