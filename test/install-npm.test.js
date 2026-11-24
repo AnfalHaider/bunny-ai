@@ -199,9 +199,34 @@ test("IA-12: a package that ships npm.cmd or npm.bat is never run: npm is node +
   await assert.rejects(execAbsolute('npm', ['--version'], { cwd: evil }), /full path/);
 });
 
+test('the installed app: process.execPath is Bunny itself, so npm runs with ELECTRON_RUN_AS_NODE=1; without Node.js there is a plain line before any card', async () => {
+  assert.equal(installEnv({}, { electron: true }).ELECTRON_RUN_AS_NODE, '1');
+  assert.equal(installEnv({}, { electron: false }).ELECTRON_RUN_AS_NODE, undefined);
+  assert.equal(installEnv({ A: '1' }, { electron: true }).A, '1');
+  const empty = await tmp();
+  assert.throws(() => npmProgram(empty, { execPath: join(empty, 'bunny.exe'), pathText: '' }), /Packages from npm need Node\.js installed/);
+});
+
 test('NPM-2: a dist-tag that does not name an exact version is refused', async () => {
   const work = await tmp(); const w = world(tarball());
   w.deps.fetchJson = async () => ({ 'dist-tags': { latest: 'not-a-version', next: '^2.0.0' }, versions: {} });
   await assert.rejects(prepareNpm('notes-mcp@latest', { workDir: work, ...w.deps }), /exact version/);
   await assert.rejects(prepareNpm('notes-mcp@next', { workDir: work, ...w.deps }), /exact version/);
+});
+
+test('Security: a package cannot steer npm: its .npmrc and lockfiles are removed before npm runs, a dependency from git/http/file is refused, and a lock entry from any other host is refused', async () => {
+  const work = await tmp();
+  const steering = world(tarball([{ name: 'package/.npmrc', data: 'registry=https://evil.example.com/\nscript-shell=calc.exe\n' }, { name: 'package/package-lock.json', data: JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/x': { resolved: 'https://evil.example.com/x.tgz' } } }) }, { name: 'package/npm-shrinkwrap.json', data: '{}' }]));
+  let sawRc = null; const run = steering.deps.runNpm;
+  steering.deps.runNpm = async (args, o) => { const prefix = args[args.indexOf('--prefix') + 1]; sawRc = existsSync(join(prefix, '.npmrc')) || existsSync(join(prefix, 'npm-shrinkwrap.json')); return run(args, o); };
+  const p = await prepareNpm('notes-mcp@1.2.3', { workDir: work, ...steering.deps });
+  assert.equal(sawRc, false, 'npm never saw the packages own .npmrc or shrinkwrap');
+  assert.equal(JSON.parse(await readFile(join(p.root, 'package-lock.json'), 'utf8')).packages['node_modules/x'], undefined, 'and not the lockfile it shipped');
+  for (const range of ['git+https://evil.example.com/x.git', 'github:evil/x', 'http://evil.example.com/x.tgz', 'file:../x', 'evil/x']) {
+    const w = world(tarball([], { dependencies: { thing: range } }));
+    await assert.rejects(prepareNpm('notes-mcp@1.2.3', { workDir: await tmp(), ...w.deps }), /not from the npm registry/, range);
+  }
+  const offHost = world(tarball());
+  const base = offHost.deps.runNpm; offHost.deps.runNpm = async (args, o) => { const out = await base(args, o); if (args.includes('--package-lock-only')) await writeFile(join(args[args.indexOf('--prefix') + 1], 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'node_modules/y': { resolved: 'git+ssh://git@evil.example.com/y.git' } } })); return out; };
+  await assert.rejects(prepareNpm('notes-mcp@1.2.3', { workDir: await tmp(), ...offHost.deps }), /not from the npm registry/);
 });

@@ -146,6 +146,11 @@ test('IA-12: a package that ships python.cmd, pip.cmd or python.bat is never run
   assert.throws(() => pythonProgram(join(py, '..')), /inside the install folder/);
 });
 
+test('without Python on the PC there is a plain line before any card', async () => {
+  assert.throws(() => pythonProgram(tmpdirSync(), { pathText: '' }), /Packages from PyPI need Python installed/);
+});
+const tmpdirSync = () => tmpdir();
+
 test('a folder that already exists is never built over or deleted before the yes (an existing connector is untouched)', async () => {
   const work = await tmp(); const dest = join(work, 'existing'); await mkdir(dest, { recursive: true }); await writeFile(join(dest, 'keep.txt'), 'mine');
   await assert.rejects(preparePypi('notes-mcp==1.0', { workDir: work, dest, ...world().deps }), /already exists/);

@@ -9,7 +9,7 @@ import { mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { unpackTgz } from './engines/unpack.js';
 import { treeHash } from './installSource.js';
-import { execAbsolute, installEnv, npmProgram } from './installExec.js';
+import { execAbsolute, gitProgram, installEnv, npmProgram } from './installExec.js';
 
 export const REGISTRY = 'https://registry.npmjs.org';
 const NAME = /^(@[a-z0-9][a-z0-9._~-]{0,213}\/)?[a-z0-9][a-z0-9._~-]{0,213}$/;
@@ -96,7 +96,14 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
   try {
     await unpackTgz(archive, root, { max: NPM_LIMITS.unpacked, strip: 'package' });
     await rm(archive, { force: true });
+    // Security: nothing the package ships may steer npm. Its own config, lockfiles and shrinkwrap are removed before npm reads the folder (a project .npmrc can set the registry, script-shell or git program; a shipped lockfile can name any address)
+    for (const f of ['.npmrc', '.yarnrc', '.yarnrc.yml', '.pnpmrc', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml']) await rm(join(root, f), { force: true });
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    for (const group of ['dependencies', 'optionalDependencies']) {
+      for (const [dep, range] of Object.entries(pkg[group] ?? {})) {
+        if (!/^(npm:)?[\^~<>=*xX0-9.\s|\-a-zA-Z]*$/.test(String(range)) || /^(git|github|file|link|http|https|ssh|workspace)[:+]|\//.test(String(range))) throw new Error(`${dep} comes from ${String(range).slice(0, 60)}, not from the npm registry, so Bunny will not install it.`);
+      }
+    }
     const needsScript = ['preinstall', 'install', 'postinstall'].filter((k) => pkg.scripts?.[k]);
     const bin = await binOf(root, { ...pkg, name: parsed.name });
     // IA-2: the lockfile is made now, from the registry, with nothing of the person's npm setup; the install uses exactly it
@@ -104,9 +111,14 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
     await mkdir(home, { recursive: true });
     const iso = npmIsolation(home);
     await writeFile(iso.empty, '');
+    try { iso.env.npm_config_git = gitProgram(workDir); } catch { /* no git on this PC: a dependency from git is refused anyway */ } // npm uses the git found before the download, never one by name
     await runNpm(['install', '--package-lock-only', '--omit=dev', '--prefix', root, ...iso.args], { cwd: workDir, env: iso.env }); // cwd is the work folder, never the package's own
     const lockBytes = await readFile(join(root, 'package-lock.json'));
     const lock = JSON.parse(lockBytes.toString('utf8'));
+    for (const [k, v] of Object.entries(lock.packages ?? {})) { // every package must come from the public registry over https: no git, no file, no other host
+      if (k && v?.resolved && !String(v.resolved).startsWith(`${REGISTRY}/`)) throw new Error(`${k.replace(/^.*node_modules\//, '')} would be fetched from ${String(v.resolved).slice(0, 60)}, not from the npm registry, so Bunny will not install it.`);
+      if (k && v?.link) throw new Error('A linked package is not accepted.');
+    }
     const count = Math.max(0, Object.keys(lock.packages ?? {}).filter((k) => k).length);
     await runNpm(['ci', '--omit=dev', '--prefix', root, ...iso.args], { cwd: workDir, env: iso.env }); // the whole tree, now, with no scripts
     const files = await walk(root);

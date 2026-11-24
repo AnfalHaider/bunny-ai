@@ -13,8 +13,8 @@ const windows = process.platform === 'win32';
 /** Is `inner` the same as, or inside, `outer`? */
 export const isInside = (inner, outer) => { const r = relative(resolve(outer), resolve(inner)); return r === '' || (!r.startsWith('..') && !isAbsolute(r)); };
 
-/** The environment for an install child: nothing searched in the current folder. */
-export const installEnv = (extra = {}) => ({ ...extra, NoDefaultCurrentDirectoryInExePath: '1' });
+/** The environment for an install child: nothing searched in the current folder. In the installed app process.execPath is Bunny's own Electron program, which only acts as node with ELECTRON_RUN_AS_NODE=1. */
+export const installEnv = (extra = {}, { electron = Boolean(process.versions?.electron) } = {}) => ({ ...extra, NoDefaultCurrentDirectoryInExePath: '1', ...(electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}) });
 
 /** Refuse a program that lives inside `workDir` (the places downloads go). */
 function outside(program, workDir, what) {
@@ -35,20 +35,22 @@ export function npmProgram(workDir, { execPath = process.execPath, pathText = pr
     candidates.push(join(dirname(onPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dirname(real), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dirname(real), '..', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
   }
   const cli = candidates.map((c) => resolve(c)).find((c) => existsSync(c));
-  if (!cli) throw new Error('npm could not be found, so Bunny will not install this.');
+  if (!cli) throw new Error('Packages from npm need Node.js installed on this computer, and Bunny could not find it. Install Node.js (nodejs.org), then ask again.');
   outside(cli, workDir, 'npm'); outside(execPath, workDir, 'node');
   return [execPath, cli];
 }
 
 /** python as an absolute path found before any download, outside workDir. */
 export function pythonProgram(workDir, { pathText = process.env.PATH ?? process.env.Path ?? '' } = {}) {
-  return outside(findOnPath(windows ? ['python.exe', 'python3.exe'] : ['python3', 'python'], pathText), workDir, 'python');
+  const found = findOnPath(windows ? ['python.exe', 'python3.exe'] : ['python3', 'python'], pathText);
+  if (!found) throw new Error('Packages from PyPI need Python installed on this computer, and Bunny could not find it. Install Python (python.org), then ask again.');
+  return outside(found, workDir, 'python');
 }
 
 /** Run an absolute program with no shell. `cwd` must not be inside the downloaded files (the caller passes the work folder). */
-export function execAbsolute(program, args, { cwd, env, timeout = 300_000 } = {}) {
+export function execAbsolute(program, args, { cwd, env, timeout = 300_000, electron } = {}) {
   return new Promise((ok, bad) => {
     if (!isAbsolute(program)) { bad(new Error('A program must be started by its full path.')); return; }
-    execFile(program, args, { cwd, env: installEnv(env), windowsHide: true, timeout, maxBuffer: 16 * 1024 * 1024, shell: false }, (err, out, errText) => (err ? bad(new Error(String(errText || err.message).slice(0, 400))) : ok(String(out))));
+    execFile(program, args, { cwd, env: installEnv(env, electron === undefined ? undefined : { electron }), windowsHide: true, timeout, maxBuffer: 16 * 1024 * 1024, shell: false }, (err, out, errText) => (err ? bad(new Error(String(errText || err.message).slice(0, 400))) : ok(String(out))));
   });
 }
