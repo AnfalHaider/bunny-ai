@@ -47,8 +47,9 @@ export function createPcService({ dataDir, electronData = '', getSettings, run, 
   const refStore = new Map();
   const remember = (entries) => { for (const e of entries) refStore.set(e.ref, e); while (refStore.size > 3000) refStore.delete(refStore.keys().next().value); };
 
-  const enabled = () => getSettings().pcSearchEnabled === true;
-  const after = () => (getSettings().pcSearchAfter === 'show' ? 'show' : 'read');
+  // QUICK-ASK-JUST-WORKS (the owner: "Yes, finding only"): on where the person never chose (no value saved); a saved false stays off. Reading the best matches defaults to showing what it found.
+  const enabled = () => getSettings().pcSearchEnabled !== false;
+  const after = () => (getSettings().pcSearchAfter === 'read' ? 'read' : 'show');
   const labelOf = (terms) => (Array.isArray(terms) ? terms : []).map((t) => String(t ?? '').replace(/[^\p{L}\p{N} \-_.]/gu, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ').slice(0, LABEL_CHARS);
   /** How many folders are skipped, as the screens say it: the fixed list and the person's own. */
   const excludedCount = () => FIXED_EXCLUSIONS.folders.length + (getSettings().pcSearchExcluded?.length ?? 0);

@@ -14,7 +14,7 @@ async function barAsk(w, content, extra = {}, { admin = true, sessionId = null }
 const systemOf = (req) => req.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
 
 test('the bar\'s system text names the tools it got: the two web tools only, or the two web tools and the two file tools when Search this PC is on', async (t) => {
-  const off = await pcWorld(t, { files: {}, settings: {}, calls: [] });
+  const off = await pcWorld(t, { files: {}, settings: { pcSearchEnabled: false }, calls: [] });
   await barAsk(off, 'what is 429?', { pcSearch: true });
   assert.match(systemOf(off.requests[0]), /only tools you have are web_search and read_url:/);
   assert.doesNotMatch(systemOf(off.requests[0]), /search_pc|read_pc_file/);

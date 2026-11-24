@@ -68,7 +68,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
     if (state === 'read') return { ...base, sources: sourcesOf(d.pcSources) };
     return base;
   };
-  const pcFlag = (pc) => { const s = getSettings() ?? {}; if (s.pcSearchEnabled !== true) return {}; return pc ? { pcSearch: 'force' } : (s.pcSearchBarAuto === false ? {} : { pcSearch: true }); };
+  const pcFlag = (pc) => { const s = getSettings() ?? {}; if (s.pcSearchEnabled === false) return {}; return pc ? { pcSearch: 'force' } : (s.pcSearchBarAuto === false ? {} : { pcSearch: true }); };
 
   async function ensureSession(title) {
     if (sessionId) return sessionId;
