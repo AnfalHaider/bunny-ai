@@ -24,7 +24,7 @@ for (const [label, bridge] of [['a browser tab', false], ["Bunny's own window", 
 }
 
 // Every Settings tab shows its own section and nothing of another one (owner: "only shown in its own category").
-const TABS = ['profile', 'usage', 'appearance', 'bunny', 'notifications', 'privacy', 'capabilities', 'models', 'connection', 'code', 'quickask', 'desktop', 'about'];
+const TABS = ['profile', 'usage', 'appearance', 'bunny', 'notifications', 'privacy', 'capabilities', 'models', 'connection', 'permissions', 'code', 'quickask', 'desktop', 'about'];
 for (const [label, bridge] of [['a browser tab', false], ["Bunny's own window", true]]) {
   test(`${label}: every Settings tab shows only its own section, and every visible group, row and note sits inside it`, async ({ page }) => {
     test.setTimeout(120000);

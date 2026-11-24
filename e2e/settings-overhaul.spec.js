@@ -52,3 +52,11 @@ test('Quick ask is one section: "searches by itself" is there and not under Capa
   await expect(page.locator('#pc-bar-why')).toContainText('Search this PC is off');
   await expect(page.locator('#quickask-browser-note')).toBeVisible(); // a browser tab: the on/off switch and shortcut are the desktop window's
 });
+
+test('Permissions is its own section (mode and rules); Code chats no longer holds them', async ({ page }) => {
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
+  await expect(page.locator('[data-section="permissions"] #default-permission')).toHaveCount(1);
+  await expect(page.locator('[data-section="permissions"] #perm-rules')).toBeVisible();
+  await expect(page.locator('[data-section="code"] #perm-rules')).toHaveCount(0);
+  await expect(page.locator('[data-section="code"] #default-permission')).toHaveCount(0);
+});
