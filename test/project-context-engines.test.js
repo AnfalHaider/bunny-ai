@@ -13,10 +13,11 @@ const put = (base, path, body) => json(base, path, { method: 'PUT', headers: { '
 
 async function setup(t, engine) {
   const dump = join(await mkdtemp(join(tmpdir(), 'bunny-pc-eng-')), 'prompts.txt');
-  const keep = { fake: process.env.BUNNY_FAKE_ENGINE, script: process.env.BUNNY_FAKE_ENGINE_SCRIPT };
+  const keep = { fake: process.env.BUNNY_FAKE_ENGINE, script: process.env.BUNNY_FAKE_ENGINE_SCRIPT, log: process.env.BUNNY_FAKE_PROMPT_LOG };
   process.env.BUNNY_FAKE_ENGINE = '1';
-  process.env.BUNNY_FAKE_ENGINE_SCRIPT = JSON.stringify({ dumpPrompt: dump, steps: [{ say: 'ok' }] });
-  t.after(() => { for (const [k, v] of [['BUNNY_FAKE_ENGINE', keep.fake], ['BUNNY_FAKE_ENGINE_SCRIPT', keep.script]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  process.env.BUNNY_FAKE_ENGINE_SCRIPT = JSON.stringify({ steps: [{ say: 'ok' }] });
+  process.env.BUNNY_FAKE_PROMPT_LOG = dump; // the stand-in appends what it was sent, one JSON line per turn
+  t.after(() => { for (const [k, v] of [['BUNNY_FAKE_ENGINE', keep.fake], ['BUNNY_FAKE_ENGINE_SCRIPT', keep.script], ['BUNNY_FAKE_PROMPT_LOG', keep.log]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
   const { base } = await startApp(t);
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000' });
   await put(base, '/api/settings', { engine });
@@ -29,7 +30,7 @@ async function setup(t, engine) {
   const say = (content) => fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'test-model-1', workMode: 'code' }) }).then((r) => r.text());
   // Claude Code reads one JSON user message on stdin; Codex gets turn/start params: both are decoded to the text the engine was sent
   const decode = (raw) => { try { const j = JSON.parse(raw); return j?.message?.content?.[0]?.text ?? JSON.stringify(j?.input ?? j); } catch { return raw; } };
-  const prompts = async () => (await readFile(dump, 'utf8').catch(() => '')).split('\n=====\n').filter(Boolean).map(decode);
+  const prompts = async () => (await readFile(dump, 'utf8').catch(() => '')).split(/[\r\n]+/).filter(Boolean).map((line) => decode(JSON.parse(line).input));
   return { base, project, session, say, prompts };
 }
 
