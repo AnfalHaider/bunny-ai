@@ -3359,7 +3359,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
             }
           }
         }
-        const detail = officeSpec ? officeOutline(officeSpec) : name === 'install_plugin' ? await appTools.previewPlugin(parsed.url) : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
+        const detail = officeSpec ? officeOutline(officeSpec) : name === 'install_plugin' || name === 'install_skill' ? '' /* the one card reads the source itself, at the pinned commit; reading it here too went to HEAD (QA) */ : name === 'write_file' ? parsed.content : name === 'download_file' ? `Fetch ${parsed.url}
 Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${parsed.new_text}` : name === 'multi_edit' ? (Array.isArray(parsed.edits) ? parsed.edits : []).map((e, i) => `${i + 1}. - ${e?.old_text}\n   + ${e?.new_text}`).join('\n') : name === 'run_command' ? parsed.command
           : toolPlan ? toolPlan.cardText
           : localConnector ? `This runs on your computer:

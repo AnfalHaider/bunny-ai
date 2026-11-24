@@ -129,3 +129,51 @@ test("LOW: a local connector's own name on the card lets switchOn match it (no w
   const out = await tools.switchOn({ skillIds: [], connectorIds: ['c1'] }, { skills: [], connectors: ['files'] });
   assert.deepEqual(out.left, []); assert.equal(state.mcp[0].enabled, true);
 });
+
+test('QA: through the app, every raw GitHub read of an install uses the resolved commit, none goes to HEAD', async (t) => {
+  const SHA2 = 'a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0';
+  const files = { 'plugin.json': JSON.stringify({ name: 'notes', description: 'd' }), '.mcp.json': JSON.stringify({ mcpServers: { cal: { url: 'https://mcp.example.com/mcp' } } }), 'skills/a/SKILL.md': '---\nname: a\ndescription: A\n---\nDo a.' };
+  const seen = []; const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (/api\.github\.com|raw\.githubusercontent\.com/.test(u)) {
+      seen.push(u);
+      if (/\/commits\//.test(u)) return new Response(JSON.stringify({ sha: SHA2 }), { status: 200 });
+      if (/\/git\/trees\//.test(u)) return new Response(JSON.stringify({ tree: Object.keys(files).map((path) => ({ path, type: 'blob' })) }), { status: 200 });
+      const m = /raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/(.*)$/.exec(u);
+      return m && files[m[1]] !== undefined ? new Response(files[m[1]], { status: 200 }) : new Response('no', { status: 404 });
+    }
+    return real(url, init);
+  };
+  t.after(() => { globalThis.fetch = real; });
+  const upstream = createServer((req, res) => {
+    let raw = ''; req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      const done = JSON.parse(raw).messages.filter((m) => m.role === 'tool').length;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const delta = done === 0 ? { tool_calls: [{ index: 0, id: 'c0', function: { name: 'install_plugin', arguments: JSON.stringify({ url: 'https://github.com/someone/notes' }) } }] } : { content: 'done' };
+      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { upstream.closeAllConnections?.(); upstream.close(r); }));
+  const { base } = await startApp(t, { fake: false });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${upstream.address().port}/v1` });
+  const { body: session } = await post(base, '/api/sessions', { title: 'QA' });
+  await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: J, body: JSON.stringify({ value: 'ask' }) });
+  const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: J, body: JSON.stringify({ content: 'install it', providerId: 'openai', model: 'gpt-4o', workMode: 'chat' }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (/^event: permission/m.test(block)) { const card = JSON.parse(/^data: (.*)$/m.exec(block)[1]); await fetch(`${base}/api/sessions/${session.id}/permission/${card.id}`, { method: 'POST', headers: J, body: JSON.stringify({ choice: 'off', allowed: true }) }); }
+    }
+  }
+  const reads = seen.filter((u) => /raw\.githubusercontent|git\/trees/.test(u));
+  assert.ok(reads.length >= 3, `reads were seen: ${reads.length}`);
+  assert.deepEqual(reads.filter((u) => !u.includes(SHA2)), [], 'every read after the commit was resolved names that commit, none goes to HEAD');
+});
