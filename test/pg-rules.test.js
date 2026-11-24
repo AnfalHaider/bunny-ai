@@ -185,3 +185,13 @@ test('PG5-a: in an invented repository, git as Bunny runs it does not start a re
     assert.equal(existsSync(marker), true, 'control: the plain command does run the configured program');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('PG2-d: a hand-typed "notion:*" is refused; the picker\'s form (connector id, or *:) works', () => {
+  const typed = checkRule({ kind: 'tool', effect: 'ask', pattern: 'notion:*' });
+  assert.equal(typed.error, 'Pick the connector from the list, then type the tool name.');
+  assert.ok(checkRule({ kind: 'tool', effect: 'ask', pattern: 'notion:create_page' }).error);
+  const id = '123e4567-e89b-42d3-a456-426614174000';
+  assert.equal(checkRule({ kind: 'tool', effect: 'ask', pattern: `${id}:*` }).rule.pattern, `${id}:*`);
+  assert.equal(checkRule({ kind: 'tool', effect: 'deny', pattern: '*:delete_*' }).rule.pattern, '*:delete_*');
+  assert.equal(checkRule({ kind: 'tool', effect: 'ask', pattern: 'browser_*' }).rule.pattern, 'browser_*');
+});

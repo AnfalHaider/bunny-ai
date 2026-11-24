@@ -142,7 +142,9 @@ export function checkNewKind(kind, rawPattern) {
     return { pattern: host };
   }
   if (kind === 'tool') {
-    if (!/^[\w.*:-]{1,200}$/u.test(text)) return { error: 'A tool name has letters, numbers, - _ . : and * only, like browser_* or notion:*.' };
+    if (!/^[\w.*:-]{1,200}$/u.test(text)) return { error: 'A tool name has letters, numbers, - _ . : and * only, like browser_* or computer_*.' };
+    // PG2-d: a connector's tools are keyed by its id, so a hand-typed "notion:*" would never match: the form with a colon starts with a connector id (the picker's form) or *:
+    if (text.includes(':') && !/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\*):[\w.*-]+$/i.test(text)) return { error: 'Pick the connector from the list, then type the tool name.' };
     return { pattern: text };
   }
   if (kind === 'agent') {

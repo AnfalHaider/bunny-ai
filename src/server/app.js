@@ -2304,7 +2304,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
 
       // Tools from the MCP servers the person has switched on, in Chat and in Code (M-2: the person wants Bunny to use them; Plan mode hides the ones that may write).
-      const servers = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled && inScope(s.folders, scopeFolder));
+      const inReach = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((s) => s.enabled && inScope(s.folders, scopeFolder));
+      // PG1-e: a connector whose host the person's website rules deny is not started, listed or offered at all (its calls are stopped too, in pgGate)
+      const blockedServers = inReach.filter((s) => s.type !== 'local' && s.url && checkDomain(activeRules(), s.url)?.effect === 'deny');
+      const servers = inReach.filter((s) => !blockedServers.includes(s));
       const builtTools = buildOn ? await customTools.list() : [];
       const githubToken = await accounts.githubToken().catch(() => null);
       const githubAccount = githubToken ? (await accounts.status()).github : null;
@@ -2398,7 +2401,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         for (const [name, entry] of offered.index) toolIndex.set(name, entry);
       }
       // L-2: the model is told which connectors exist and how they stand, so it can say "your X connector is down" instead of guessing
-      if (servers.length) {
+      if (servers.length || blockedServers.length) {
         // names and error texts come from outside (the person's own list, the connector's answer): plain characters only, and the reason is the connector's own words, said to be so
         const safe = (t, n) => String(t ?? '').replace(/[^\w .,:'-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
         const stand = servers.map((sv0) => {
@@ -2410,6 +2413,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           const hidden = all.length - offered;
           return `${sv.name} (${offered} tool${offered === 1 ? '' : 's'}${hidden > 0 && permissionMode === 'plan' ? `; ${hidden} more need a mode that may change things, not Plan mode` : ''})`;
         });
+        for (const b of blockedServers) stand.push(`${safe(b.name, 60) || 'a connector'} is blocked by your website rule`);
         history.unshift({ role: 'system', content: `Connectors: ${stand.join(', ')}. If one the person needs is not connected, say so.` });
       }
       // L-1: what a connector says about itself (its handshake instructions), as information for the model: it is the connector's text, not the person's

@@ -35,13 +35,14 @@ async function setup(t, { connectorTool = null } = {}) {
   t.after(() => { provider.closeAllConnections?.(); provider.close(); });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   const calls = [];
+  const listed = [];
   let connectorId = null;
   if (connectorTool) {
     const mcp = createServer((req, res) => {
       let raw = ''; req.on('data', (c) => { raw += c; });
       req.on('end', () => {
         const r = JSON.parse(raw || '{}');
-        const result = r.method === 'tools/list' ? { tools: [{ name: connectorTool, description: 'a tool', inputSchema: { type: 'object', properties: {} } }] }
+        const result = r.method === 'tools/list' ? (listed.push(1), { tools: [{ name: connectorTool, description: 'a tool', inputSchema: { type: 'object', properties: {} } }] })
           : r.method === 'tools/call' ? (calls.push(r.params.name), { content: [{ type: 'text', text: 'ok' }] }) : {};
         res.writeHead(200, j); res.end(JSON.stringify({ jsonrpc: '2.0', id: r.id, result }));
       });
@@ -51,7 +52,7 @@ async function setup(t, { connectorTool = null } = {}) {
     const { body: added } = await post(base, '/api/mcp', { name: 'Notion', url: `http://127.0.0.1:${mcp.address().port}/mcp` });
     connectorId = added.id;
   }
-  return { base, calls, connectorId };
+  return { base, calls, listed, connectorId };
 }
 
 const putRules = (base, global) => fetch(`${base}/api/permission-rules`, { method: 'PUT', headers: j, body: JSON.stringify({ global, folders: {} }) });
@@ -120,7 +121,7 @@ test('PG1-d: a connector whose address is on a denied host cannot be added, and 
   assert.match(JSON.stringify(added.body), /blocks this address/);
   const r = await setup(t, { connectorTool: 'create_page' });
   const out = await run(r, 'auto', 'call notion__create_page', { rules: [rule('domain', 'deny', '127.0.0.1')] });
-  assert.equal(out.status, 'denied');
+  assert.notEqual(out.status, 'done'); // PG1-e: the connector is not offered at all now
   assert.deepEqual(r.calls, [], 'the connector was never called');
 });
 
@@ -181,4 +182,13 @@ test('PG-5: in Ask mode a read-only command runs with no card; a chained or off-
   const outside = await run(env, 'ask', 'call run_command {"command":"type ..\\\\outside.txt"}', { folder });
   assert.equal(outside.cards.length, 1, 'a path outside the folder gets a card');
   assert.equal(existsSync(join(folder, 'a.txt')), true);
+});
+
+test('PG1-e: a connector on a denied host is not listed or offered at reply start', async (t) => {
+  const env = await setup(t, { connectorTool: 'create_page' });
+  env.listed.length = 0;
+  const out = await run(env, 'auto', 'call notion__create_page', { rules: [rule('domain', 'deny', '127.0.0.1')] });
+  assert.notEqual(out.status, 'done', 'the tool was never offered');
+  assert.deepEqual(env.calls, [], 'the connector was not called');
+  assert.equal(env.listed.length, 0, 'and not even asked for its tools');
 });
