@@ -21,7 +21,7 @@ export async function getJSON(path) {
 
 // Writes that only Bunny's own window may make: a copy of src/server/windowOnly.js (the browser cannot import it; test/window-only.test.js keeps them equal).
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'braveKeySet', 'folderRulesEnabled', 'folderRulesTrusted', 'pcSearchNoticeShown'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'braveKeySet', 'folderRulesEnabled', 'folderRulesTrusted', 'pcSearchNoticeShown', 'confineCommands', 'confineFolders'];
 
 /** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine', 'folderRules'];
@@ -44,6 +44,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['POST'], '^/api/worktrees/remove$'],                    // removing a leftover copy (W2-9)
   [['POST'], `^/api/sessions/${UUID}/engine$`],             // ENGINE-SWITCH: moving a chat to another engine
   [['POST'], `^/api/sessions/${UUID}/folder-rules/(follow|read-again|ask-again)$`], // FOLDER-RULES (FR-2): the trust answer and its changes are the window's
+  [['POST'], `^/api/sessions/${UUID}/confine/remove$`], // F13: taking the folder's confinement label off is the window's
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
   [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)
   [['POST'], `^/api/sessions/${UUID}/question/${UUID}$`],   // answering a question card ("Keep going?")

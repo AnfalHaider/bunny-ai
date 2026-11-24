@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync, symlinkSync, lstatSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -26,6 +26,9 @@ test('F13-1: the label is refused on a drive root, the home folder, Desktop, Doc
   assert.match(refuse('C:\\Users', { protect: [] }), /holds your home folder/);
   assert.match(refuse('C:\\Users\\Sam\\AppData\\Local'), /holds Bunny's own data/);
   assert.match(refuse(`${home}\\AppData`), /holds Bunny's own data/);
+  assert.match(refuse(`${data}\\secrets`), /inside Bunny's own data/, 'nothing inside the data folder either');
+  assert.match(refuse(`${data}\\worktrees`), /inside Bunny's own data/, 'the worktrees folder itself is refused');
+  assert.equal(refuse(`${data}\\worktrees\\shop-ab12cd\\chat1`, { allowInside: [`${data}\\worktrees`] }), null, "a chat's own copy of a project, strictly inside worktrees, may be labelled");
   assert.match(refuse('C:\\Windows\\System32'), /system folder/);
   assert.equal(refuse(`${home}\\Documents\\carrot-shop`), null, 'a project inside Documents is fine');
   assert.equal(refuse('D:\\work\\shop'), null);
@@ -157,4 +160,25 @@ test('F13 on Windows: the median time a confined command adds is recorded (targe
   console.log(`F13 timing: confined median ${Math.round(confined)} ms, plain ${Math.round(plain)} ms, added ${Math.round(added)} ms`);
   assert.ok(added < 1500, `the helper adds ${Math.round(added)} ms`);
   await c.unlabel(root, { level: null, flags: '' });
+});
+
+test('F13 on Windows: a junction planted as .bunny or .bunny/tmp (a confined command may make one) is never written through or deleted through', { skip: !windows }, async (t) => {
+  const base = mkdtempSync(join(tmpdir(), 'bunny-confine-test-'));
+  t.after(() => rmSync(base, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }));
+  const root = join(base, 'project'); const elsewhere = join(base, 'elsewhere'); mkdirSync(root); mkdirSync(join(elsewhere, 'tmp'), { recursive: true });
+  writeFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'must survive');
+  const c = createConfiner({ dataDir: join(base, 'data') });
+  assert.equal((await c.label(root)).ok, true);
+  rmSync(join(root, '.bunny'), { recursive: true, force: true });
+  symlinkSync(elsewhere, join(root, '.bunny'), 'junction'); // .bunny -> elsewhere
+  const w = await c.wrap({ root, cwd: root, script: '$null' });
+  assert.equal(w.ok, true, w.why);
+  assert.equal(lstatSync(join(root, '.bunny')).isSymbolicLink(), false, 'the junction was replaced by a real folder');
+  assert.equal(existsSync(join(elsewhere, '.gitignore')), false, 'nothing was written through the junction');
+  assert.equal(readFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'utf8'), 'must survive');
+  // a junction as .bunny/tmp, then "Remove the label": the target is not emptied
+  rmSync(join(root, '.bunny', 'tmp'), { recursive: true, force: true });
+  symlinkSync(join(elsewhere, 'tmp'), join(root, '.bunny', 'tmp'), 'junction');
+  assert.equal((await c.unlabel(root, { level: null, flags: '' })).ok, true);
+  assert.equal(readFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'utf8'), 'must survive', 'Remove the label did not delete through the junction');
 });

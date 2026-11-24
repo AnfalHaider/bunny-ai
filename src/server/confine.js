@@ -14,7 +14,7 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, realpath, lstat } from 'node:fs/promises';
 import { join, parse, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { powershellPath, safeEnv } from './safeExec.js';
@@ -36,7 +36,7 @@ const norm = (p) => resolve(String(p)).replace(/[\\/]+$/, '').toLowerCase();
 const inside = (child, parent) => child === parent || child.startsWith(`${parent}${sep}`);
 
 /** Why the label may NOT go on this folder (F13-1), or null. `protect` are folders that must stay outside it (Bunny's data folder, key folders, an engine home). */
-export function labelRefusal(root, { protect = [], home = process.env.USERPROFILE || homedir() } = {}) {
+export function labelRefusal(root, { protect = [], allowInside = [], home = process.env.USERPROFILE || homedir() } = {}) {
   const r = norm(root);
   if (parse(resolve(String(root))).root.toLowerCase().replace(/[\\/]+$/, '') === r) return 'a whole drive';
   const h = norm(home);
@@ -45,7 +45,11 @@ export function labelRefusal(root, { protect = [], home = process.env.USERPROFIL
   const windir = norm(process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows');
   if (inside(r, windir)) return 'a Windows system folder';
   for (const pf of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramData]) if (pf && inside(r, norm(pf))) return 'a program folder';
-  for (const p of protect.filter(Boolean)) if (inside(norm(p), r)) return "a folder that holds Bunny's own data or key folders";
+  for (const p of protect.filter(Boolean)) {
+    if (inside(norm(p), r)) return "a folder that holds Bunny's own data or key folders";
+    // and nothing INSIDE a protected folder either (the data folder keeps keys and chats), except where Bunny keeps a chat's own copy of a project: strictly inside <data>/worktrees
+    if (inside(r, norm(p)) && !allowInside.some((a) => r !== norm(a) && inside(r, norm(a)))) return "a folder inside Bunny's own data or key folders";
+  }
   // a folder above your home folder (Users, the drive's top) is just as wide as the home folder itself
   if (inside(h, r)) return 'a folder that holds your home folder';
   return null;
@@ -72,11 +76,10 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
 
   async function compile() {
     await mkdir(dir, { recursive: true });
-    const src = join(dir, 'bunny-confine.cs');
-    await writeFile(src, HELPER_SOURCE, 'utf8');
     await rm(exe, { force: true });
-    const script = `Add-Type -TypeDefinition (Get-Content -Raw -LiteralPath '${src.replace(/'/g, "''")}') -OutputType ConsoleApplication -OutputAssembly '${exe.replace(/'/g, "''")}'`;
-    const r = await run(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 120_000 });
+    // the source goes in through the environment, never through a file another process could change before it is compiled
+    const script = `Add-Type -TypeDefinition $env:BUNNY_CONFINE_SOURCE -OutputType ConsoleApplication -OutputAssembly '${exe.replace(/'/g, "''")}'`;
+    const r = await run(powershellPath() ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 120_000, env: { ...process.env, BUNNY_CONFINE_SOURCE: HELPER_SOURCE } });
     if (!r.ok) throw new Error(`the helper could not be built: ${(r.stderr || r.stdout).slice(0, 200)}`);
     expected = sha256(await readFile(exe));
   }
@@ -103,9 +106,36 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
     const r = await run(exeFile('icacls.exe'), [root]);
     return { ...parseLabel(r.stdout), raw: r.stdout };
   }
+  /**
+   * <root>/.bunny/tmp, made safely. A confined command may create folders and junctions anywhere in the project, so before Bunny (a Medium process) writes or deletes through .bunny or .bunny/tmp it
+   * looks at each with lstat: a link, or anything that is not a plain folder, is removed (the link only, never what it points at) and made again, and the real path must still be inside the real project folder.
+   * Returns the tmp folder, or null when that cannot be made sure of (nothing is then written or deleted).
+   */
+  async function scratch(root, { create = true } = {}) {
+    const bunny = join(root, '.bunny'); const tmp = join(bunny, 'tmp');
+    const plain = async (p) => {
+      let st = null; try { st = await lstat(p); } catch { /* not there */ }
+      if (!st) return create ? 'make' : 'absent';
+      if (st.isSymbolicLink() || !st.isDirectory()) { // the link itself goes (never what it points at); if it will not, refuse
+        await rm(p, { force: true, recursive: false }).catch(() => {});
+        try { await lstat(p); return null; } catch { return create ? 'make' : 'absent'; }
+      }
+      return 'ok';
+    };
+    for (const p of [bunny, tmp]) {
+      const state = await plain(p);
+      if (state === null || state === 'absent') return null;
+      if (state === 'make') await mkdir(p).catch(() => {});
+    }
+    try {
+      const realRoot = norm(await realpath(root)); const realTmp = norm(await realpath(tmp));
+      if (!inside(realTmp, realRoot) || realTmp === realRoot) return null;
+    } catch { return null; }
+    return tmp;
+  }
   async function ignoreFile(root) {
-    const tmp = join(root, '.bunny', 'tmp');
-    await mkdir(tmp, { recursive: true });
+    const tmp = await scratch(root);
+    if (!tmp) return null;
     await writeFile(join(root, '.bunny', '.gitignore'), '*\n', 'utf8').catch(() => {}); // F13-5: Bunny's scratch is never committed
     return tmp;
   }
@@ -114,7 +144,7 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
   async function label(root, { protect = [] } = {}) {
     if (!windows) return { ok: false, why: 'Confinement is for Windows.' };
     let real; try { real = await realpath(root); } catch { return { ok: false, why: 'That folder is not there.' }; }
-    const refused = labelRefusal(real, { protect: [dataDir, ...protect] });
+    const refused = labelRefusal(real, { protect: [dataDir, ...protect], allowInside: [join(dataDir, 'worktrees')] });
     if (refused) return { ok: false, why: `Bunny will not label ${refused}.`, refused: true };
     const before = await readLabel(real);
     const set = await run(exeFile('icacls.exe'), [real, '/setintegritylevel', '(OI)(CI)L']);
@@ -138,7 +168,8 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
       const r = await run(v.path, ['--unlabel', real]);
       if (!r.ok) return { ok: false, why: `The label could not be removed: ${(r.stderr || r.stdout).trim().slice(0, 200)}` };
     }
-    await rm(join(real, '.bunny', 'tmp'), { recursive: true, force: true }).catch(() => {});
+    const tmp = await scratch(real, { create: false }); // only a plain folder inside the project is ever deleted, never through a link
+    if (tmp) await rm(tmp, { recursive: true, force: true }).catch(() => {});
     return { ok: true };
   }
 
@@ -150,6 +181,7 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
     const v = await use();
     if (!v.ok) return { ok: false, why: v.why };
     const tmp = await ignoreFile(root);
+    if (!tmp) return { ok: false, why: 'The scratch folder inside the project could not be made safely.' };
     const ps = powershellPath() ?? 'powershell.exe';
     const encoded = Buffer.from(String(script), 'utf16le').toString('base64');
     let commandLine;
