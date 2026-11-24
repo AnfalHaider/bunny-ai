@@ -11,7 +11,7 @@
 //   { exit: 3 }  { hang: true }                      end at once with a code / print nothing and stay alive
 // Options in the script object: { tools: [...] } overrides the init tool list; { noInit: true }.
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 
 const profile = process.argv[2];
@@ -72,6 +72,9 @@ if (profile === 'claude-code') {
   let started = false;
 
   async function play() {
+    if (script.dumpPrompt) appendFileSync(script.dumpPrompt, `${stdin}
+=====
+`); // tests read what the engine was sent
     if (!script.noInit) out({ type: 'system', subtype: 'init', cwd: process.cwd(), session_id: sessionId, tools, mcp_servers: [], model: 'fake', permissionMode: 'default', claude_code_version: '2.1.311' });
     let n = 0; let usage = { input_tokens: 10, output_tokens: 4 };
     for (const step of script.steps ?? []) {
@@ -121,7 +124,9 @@ else if (profile === 'codex') {
     if (m.method === 'thread/start') { threadId = 'thr-1'; if (script.trustProject && process.env.CODEX_HOME) writeFileSync(`${process.env.CODEX_HOME}/config.toml`, `[projects.'x']
 trust_level = "trusted"
 `); send({ id: m.id, result: { thread: { id: threadId }, approvalPolicy: script.policy ?? m.params.approvalPolicy, sandbox: { type: m.params.sandbox === 'read-only' ? 'readOnly' : 'workspaceWrite' }, model: m.params.model ?? 'm', modelProvider: m.params.modelProvider ?? 'p', cwd: m.params.cwd } }); if (script.dumpParams) writeFileSync(script.dumpParams, JSON.stringify({ init: JSON.parse(process.env.FAKE_INIT_PARAMS ?? 'null'), thread: m.params, env: { CODEX_HOME: process.env.CODEX_HOME, BUNNY_ENGINE_TOKEN: Boolean(process.env.BUNNY_ENGINE_TOKEN) } })); return; }
-    if (m.method === 'turn/start') { send({ id: m.id, result: { turn: { id: turnId, status: 'inProgress' } } }); if (!started) { started = true; play(); } return; }
+    if (m.method === 'turn/start') { if (script.dumpPrompt) appendFileSync(script.dumpPrompt, `${JSON.stringify(m.params)}
+=====
+`); send({ id: m.id, result: { turn: { id: turnId, status: 'inProgress' } } }); if (!started) { started = true; play(); } return; }
     if (m.method === 'turn/interrupt') { send({ id: m.id, result: {} }); send({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'interrupted' } } }); return; }
   }
   async function play() {
