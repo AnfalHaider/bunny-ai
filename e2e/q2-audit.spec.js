@@ -234,10 +234,10 @@ test('Q2-5: the Files pane lists the working folder', async ({ page }) => {
 
 test('Q2-6: the Session pane shows the folder, the branch, the model and the permission mode', async ({ page }) => {
   const dir = gitRepo();
-  await open(page, 'code'); await useFolder(page, dir); await send(page, 'hello');
+  await open(page, 'code'); await useFolder(page, dir); await pickMode(page, 'Manual'); await send(page, 'hello');
   await page.locator('#rail-toggle').click();
   const text = await page.locator('#rail').innerText();
-  expect(text).toMatch(/bunny-q2-e2e-git/); expect(text).toMatch(/main/); expect(text).toMatch(/bunny-code|Scripted/i); expect(text).toMatch(/Manual|Auto|Plan|Accept/);
+  expect(text).toMatch(/bunny-q2-e2e-git/); expect(text).toMatch(/main/); expect(text).toMatch(/bunny-code|Scripted/i); expect(text).toMatch(/Smart|Manual|Auto|Plan|Accept/);
 });
 
 test('Q2-9: opening a page whose server is not running says so in the pane', async ({ page }) => {

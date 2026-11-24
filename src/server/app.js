@@ -16,6 +16,7 @@ import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { capabilityMap } from './capabilityMap.js';
 import { createReplyJudge, goesToJudge, rulesWithoutBroadAllow } from './autoJudge.js';
+import { createFolderTrust, isGitWorkTree, smartMode } from './folderTrust.js';
 import { splitDeferred, namesLine, findTools, clean as cleanOutside } from './deferTools.js';
 import { BRAVE_SECRET } from './webSearch.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
@@ -313,6 +314,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     ...(discover ? { discover } : {}),
   });
   const sessions = createSessionStore({ dir: join(dataDir, 'sessions') });
+  const folderTrust = createFolderTrust({ file: join(dataDir, 'folder-trust.json') }); // F12: the folders trusted for Auto, by real path
   const projects = createProjectStore({ file: join(dataDir, 'projects.json') });
   const artifacts = createArtifactStore({ dir: join(dataDir, 'artifacts') });
   const MADE_MIME = { '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
@@ -858,6 +860,31 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const body = await readBody(req);
         return sendJson(res, 200, await pc.resolveRef(body.ref));
       }
+    }
+
+    // ---- F12: the folders trusted for Auto (the window's alone: a device never reads or changes them) ----
+    if (path === '/api/folder-trust' && method === 'GET') {
+      if (req.bunnyRemote || req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
+      const asked = new URL(req.url, 'http://x').searchParams.get('folder');
+      if (!asked) return sendJson(res, 200, { folders: await folderTrust.list() });
+      const checked = await checkFolder(asked);
+      if (!checked.ok) return sendJson(res, 400, { code: 'folder.notFound', message: checked.reason });
+      return sendJson(res, 200, { ...(await folderTrust.get(checked.folder)), git: await isGitWorkTree(checked.folder), judgeOn: settings.autoJudgeEnabled !== false });
+    }
+    if (path === '/api/folder-trust' && (method === 'PUT' || method === 'DELETE')) {
+      if (windowOnly(req, res)) return;
+      if (req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
+      const body = await readBody(req);
+      const checked = await checkFolder(body?.folder);
+      if (method === 'DELETE') {
+        await folderTrust.forget(checked.ok ? checked.folder : String(body?.folder ?? ''));
+        return sendJson(res, 200, { folders: await folderTrust.list() });
+      }
+      if (!checked.ok) return sendJson(res, 400, { code: 'folder.notFound', message: checked.reason });
+      if (typeof body?.auto !== 'boolean') return sendJson(res, 400, { code: 'folderTrust.bad', message: 'Trust is yes or no.' });
+      if (body.auto && !(await isGitWorkTree(checked.folder))) return sendJson(res, 400, { code: 'folderTrust.notGit', message: 'Auto is only for a git folder, so changes can be undone.' });
+      await folderTrust.set(checked.folder, { auto: body.auto });
+      return sendJson(res, 200, { ...(await folderTrust.get(checked.folder)), folders: await folderTrust.list() });
     }
 
     // ---- F6: the Brave Search key (Settings, Capabilities). The window's alone: it is stored in the secrets store, never in settings, and is never handed back, only whether one is set. ----
@@ -2171,8 +2198,13 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // ---- the work mode decides what the model may do ----
       //   chat      conversation only, no tools
       //   code      works inside the chosen folder with file and command tools, plus connectors
-      let permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask'; // changes only when the person answers a leave_plan_mode card (W4-14b)
+      const storedMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask';
       const folder = await effectiveRoot(session);
+      // F12: Smart is Auto only in a trusted git folder with the check on, on this computer's window; in every other case it is Ask (never looser)
+      const smart = storedMode === 'smart'
+        ? smartMode({ device: Boolean(req.bunnyRemote || req.bunnyDevice), folderOk: Boolean(folder?.ok) && workMode === 'code', judgeOn: settings.autoJudgeEnabled !== false, git: folder?.ok ? await isGitWorkTree(folder.folder) : false, trust: folder?.ok ? await folderTrust.get(folder.folder) : null })
+        : null;
+      let permissionMode = smart ? smart.mode : storedMode; // changes only when the person answers a leave_plan_mode card (W4-14b)
       if (folder?.gone && workMode !== 'chat') return sendJson(res, 409, { code: 'worktree.gone', message: folder.reason });
       // Undo: the first time this reply changes a file, the file is copied as it was.
       let checkpoint = null;
@@ -2224,7 +2256,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
       // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
       // F11-6: while the judge is on, the broad Allow rules (node*, powershell*, curl*, any wildcard in the first word ...) are not used in Auto
-      const judgeOn = () => permissionMode === 'auto' && settings.autoJudgeEnabled === true && !textOnly;
+      const judgeOn = () => permissionMode === 'auto' && settings.autoJudgeEnabled !== false && !textOnly; // F12: on unless the person turned it off
       const activeRules = () => rulesFor(judgeOn() ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
       const needsOk = (risk, name, args) => risk === 'send'

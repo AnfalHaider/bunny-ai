@@ -123,5 +123,5 @@ test('review: with the check on in Auto, a broad Allow rule is not used on the e
 test('review: the engine service builds its rules through that filter only when the check is on in Auto', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../src/server/engines/service.js', import.meta.url), 'utf8');
-  assert.match(src, /turn\.autoCheck && turn\.permissionMode === 'auto' && settings\.autoJudgeEnabled === true \? rulesWithoutBroadAllow\(settings\.permissionRules \?\? \{\}\) : settings\.permissionRules/);
+  assert.match(src, /turn\.autoCheck && turn\.permissionMode === 'auto' && settings\.autoJudgeEnabled !== false \? rulesWithoutBroadAllow\(settings\.permissionRules \?\? \{\}\) : settings\.permissionRules/);
 });

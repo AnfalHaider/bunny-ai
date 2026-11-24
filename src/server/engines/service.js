@@ -320,7 +320,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const root = turn.root;
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
-      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(turn.autoCheck && turn.permissionMode === 'auto' && settings.autoJudgeEnabled === true ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, root)), autoCheck: ownRules ? null : (turn.autoCheck ?? null), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }), // F11-6: with the check on in Auto, broad Allow rules are not used in the rules above either
+      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(turn.autoCheck && turn.permissionMode === 'auto' && settings.autoJudgeEnabled !== false ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, root)), autoCheck: ownRules ? null : (turn.autoCheck ?? null), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }), // F11-6: with the check on in Auto, broad Allow rules are not used in the rules above either
       ask: async (summary, detail, opts = {}) => {
         // "Allow for this chat" is offered on Codex's cards only, and only with Bunny's engine off
         const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true && pins.codex?.sessionAllow === true ? { forSession: true } : {});

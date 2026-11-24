@@ -183,7 +183,7 @@ test('AGENT-FLOW F11, the engines path: in Auto with the check on, a Bunny-rules
     const folder = await mkdtemp(join(tmpdir(), 'bunny-eng-'));
     const marker = join(folder, 'ran.txt');
     const { base } = await appWithEngines(t, { steps: [{ tool: 'Bash', input: { command: 'npm test' }, marker }, { say: 'ok' }] });
-    await put(base, '/api/settings', { engine: 'claude-code', ...(judgeOn ? { autoJudgeEnabled: true } : {}) });
+    await put(base, '/api/settings', { engine: 'claude-code', autoJudgeEnabled: judgeOn });
     await downloaded(base, 'claude-code');
     const { body: session } = await post(base, '/api/sessions', { title: 'Auto', workMode: 'code', folder, permissionMode: 'auto' });
     const events = await chatOn(base, session.id, 'run the tests');

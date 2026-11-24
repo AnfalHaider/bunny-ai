@@ -163,7 +163,7 @@ test('Session: folder, branch, model, permissions, effort, tokens and messages a
   await expect(rail.locator('#rail-folder')).toHaveText(/bunny-d2-panes/);
   await expect(rail.locator('#rail-branch')).toHaveText('Not a git folder');
   await expect(rail.locator('#rail-model')).toHaveText(/bunny-code|scripted/);
-  await expect(rail.locator('#rail-mode')).toHaveText(/Manual|Auto|Plan|Accept/);
+  await expect(rail.locator('#rail-mode')).toHaveText(/Smart|Manual|Auto|Plan|Accept/);
   await expect(rail.locator('#rail-effort')).toHaveText(/Medium|Low|High/);
   await expect(rail.locator('#rail-tokens')).toContainText('of');
   await expect(rail.locator('#rail-messages')).not.toHaveText('0');

@@ -50,7 +50,7 @@ async function world(t, { judge, judgeOn = true, judgeStatus = 200, mode = 'auto
   const { base } = await startApp(t, { fake: false });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
   await post(base, '/api/mcp', { name: 'Ship', url: `http://127.0.0.1:${connector.address().port}/mcp` });
-  if (judgeOn) assert.equal((await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ autoJudgeEnabled: true }) })).status, 200);
+  assert.equal((await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ autoJudgeEnabled: judgeOn }) })).status, 200); // F12: on unless turned off, so the off cases say so
   const { body: session } = await post(base, '/api/sessions', { title: 'judge' });
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: mode }) });
   const say = async (content, { answer = null } = {}) => {
@@ -117,7 +117,7 @@ test('the judge cannot be reached: Auto falls back to a card, and a yes runs it;
   assert.deepEqual(no.calls, []);
 });
 
-test('with the judge OFF (the default) Auto runs it as before: no judge request is made', async (t) => {
+test('with the judge turned OFF Auto runs it as before: no judge request is made', async (t) => {
   const w = await world(t, { judge: () => 'never', judgeOn: false });
   const r = await w.say('deploy it');
   assert.deepEqual(w.calls, ['deploy']);

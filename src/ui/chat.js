@@ -275,7 +275,7 @@ function renderComposerHeader() {
   if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
   $('branch-chip')?.classList.toggle('on', Boolean(copyBranch));
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
-  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   syncModeMenu();
   paintEngineChip({ chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
   if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
@@ -1848,8 +1848,8 @@ function renderRailDetails() {
   const autoPick = state.modelAuto && state.autoPick;
   const why = $('rail-why-row');
   if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}${whyPicked(autoPick, state.lastJob) ? `: ${whyPicked(autoPick, state.lastJob)}` : ''}`); }
-  const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
-  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  const modes = { smart: 'Smart', ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
+  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   put('rail-mode', modes[mode] ?? mode);
   put('rail-effort', ((state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium').replace(/^./, (c) => c.toUpperCase()));
   const ctx = state.session?.context;
@@ -2996,6 +2996,7 @@ async function send() {
     return;
   }
 
+  await maybeAskFolderTrust(); // F12: Smart in a git folder not yet answered asks once, before anything runs
   if (!state.sessionId) {
     const session = await sendJSON('/api/sessions', 'POST', {
       title: 'New chat',
@@ -3703,7 +3704,41 @@ function bindPushToTalk() {
 // ---------------------------------------------------------------------------
 // Chat / Cowork / Code switch and the permission-mode menu
 
-const MODE_LABELS = { auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
+const MODE_LABELS = { smart: 'Smart', auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
+// F12: what Smart does here, in words (the chip's tooltip). Smart is Auto only in a trusted git folder with the check on; otherwise it asks.
+const SMART_TIP = 'Smart: runs in Auto in a git folder you trusted, with a second model checking each risky action. Everywhere else it asks.';
+/** F12: the trust card. Asked once per folder, only when Smart would use it: a git folder, the check on, and no answer yet. Resolves to true (trust it), false (not now) or null (closed). */
+function askFolderTrust(folder) {
+  return new Promise((resolve) => {
+    const no = element('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Not now, ask me each time' });
+    const yes = element('button', { className: 'btn btn-primary', type: 'button', textContent: 'Trust this folder for Auto' });
+    const card = element('div', { className: 'palette modal ask-text', role: 'dialog', 'aria-label': 'Trust this folder for Auto?' },
+      element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Trust this folder for Auto?' })),
+      element('div', { className: 'modal-body' },
+        element('p', { textContent: folder }),
+        element('p', { className: 'modal-sub', textContent: 'In a trusted git folder, Smart runs in Auto: a second model checks each risky action before it runs, and Bunny asks you when it cannot. You can change this any time in Settings, under Trusted folders.' })),
+      element('div', { className: 'modal-foot actions' }, element('span', { className: 'spacer' }), no, yes));
+    const backdrop = element('div', { className: 'palette-backdrop modal-backdrop', id: 'folder-trust-backdrop' }, card);
+    const done = (result) => { backdrop.remove(); resolve(result); };
+    no.addEventListener('click', () => done(false));
+    yes.addEventListener('click', () => done(true));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
+    backdrop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); done(null); } });
+    document.body.append(backdrop);
+    yes.focus();
+  });
+}
+async function maybeAskFolderTrust() {
+  try {
+    if (($('permission-mode')?.value ?? '') !== 'smart' || (state.workMode ?? 'chat') === 'chat') return;
+    const folder = state.sessionId ? state.session?.folder : state.pendingFolder?.folder;
+    if (!folder) return;
+    const t = await getJSON(`/api/folder-trust?folder=${encodeURIComponent(folder)}`);
+    if (!t.git || !t.judgeOn || t.auto !== null) return;
+    const answer = await askFolderTrust(t.folder ?? folder);
+    if (answer !== null) await sendJSON('/api/folder-trust', 'PUT', { folder, auto: answer });
+  } catch { /* a failed lookup leaves Smart asking, which is the safe side */ }
+}
 
 const WORK_MODES = ['chat', 'code'];
 const MODE_HINTS = {
@@ -3742,9 +3777,10 @@ function bindModeSwitch() {
 }
 
 function syncModeMenu() {
-  const value = $('permission-mode')?.value ?? 'ask';
+  const value = $('permission-mode')?.value ?? 'smart';
   const label = $('mode-label');
   if (label) label.textContent = MODE_LABELS[value] ?? value;
+  $('mode-button')?.setAttribute('title', value === 'smart' ? SMART_TIP : 'Permission mode');
   document.querySelectorAll('#mode-menu [data-mode]').forEach((item) => {
     const on = item.dataset.mode === value;
     item.classList.toggle('is-selected', on);
@@ -3782,7 +3818,7 @@ function bindModeMenu() {
     item.addEventListener('click', () => chooseMode(item.dataset.mode));
   });
   menu.addEventListener('keydown', (e) => {
-    const map = { 1: 'auto', 2: 'ask', 3: 'accept', 4: 'plan' };
+    const map = { 1: 'smart', 2: 'auto', 3: 'ask', 4: 'accept', 5: 'plan' };
     if (map[e.key]) { e.preventDefault(); chooseMode(map[e.key]); }
     if (e.key === 'Escape') { closeModeMenu(); buttonEl.focus(); }
   });

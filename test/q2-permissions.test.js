@@ -47,7 +47,7 @@ async function setup(t) {
 
 /** Run one reply that calls `tool` in `mode`; answer cards; say what was asked and whether the tool ran. */
 async function run(base, mode, tool, { answer = true, settings = {}, suffix = '' } = {}) {
-  await fetch(`${base}/api/settings`, { method: 'PUT', headers: j, body: JSON.stringify(settings) });
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: j, body: JSON.stringify({ autoJudgeEnabled: false, ...settings }) }); // F12: the check is on by default; these tests are about the modes
   const folder = await mkdtemp(join(tmpdir(), 'bunny-q2-perm-'));
   const { body: s } = await post(base, '/api/sessions', { title: 'perm', providerId: 'openai', model: 'gpt-4o' });
   const set = (name, value) => fetch(`${base}/api/sessions/${s.id}/setting/${name}`, { method: 'PATCH', headers: j, body: JSON.stringify({ value }) });
