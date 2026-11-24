@@ -97,8 +97,8 @@ test('W6-16: a skill for folder A is in the prompt in A and A\\sub, not in B, A2
 
 test('W6-16: a connector for folder A offers its tools in A and A\\sub, not in B, A2 or a chat with no folder', async (t) => {
   const x = await setup(t);
-  const every = await x.app.mcp.add({ name: 'Everywhere', url: 'http://127.0.0.1:9/every' });
-  const only = await x.app.mcp.add({ name: 'OnlyA', url: 'http://127.0.0.1:9/only-a' });
+  const every = await x.app.mcp.add({ name: 'Everywhere', url: 'http://127.0.0.1:9/every', addedBy: 'person' });
+  const only = await x.app.mcp.add({ name: 'OnlyA', url: 'http://127.0.0.1:9/only-a', addedBy: 'person' });
   await x.app.mcp.setStatus(every.id, { status: 'ok', tools: [{ name: 'everyping', description: 'ping', readOnly: true }] });
   await x.app.mcp.setStatus(only.id, { status: 'ok', tools: [{ name: 'onlyaping', description: 'ping', readOnly: true }] });
   await x.app.mcp.update(only.id, { folders: [x.dirs.A] });
@@ -112,7 +112,7 @@ test('W6-16: a connector for folder A offers its tools in A and A\\sub, not in B
 test('W6-16: the routes accept only a folder the person chose, and save nothing otherwise', async (t) => {
   const x = await setup(t);
   const skill = await x.app.skills.add({ name: 'S', instructions: 'S-TEXT', enabled: true });
-  const conn = await x.app.mcp.add({ name: 'C', url: 'http://127.0.0.1:9/c' });
+  const conn = await x.app.mcp.add({ name: 'C', url: 'http://127.0.0.1:9/c', addedBy: 'person' });
   const patch = (path, body) => fetch(`${x.base}${path}`, { method: 'PATCH', headers: j, body: JSON.stringify(body) });
   // a folder nobody picked
   let r = await patch(`/api/skills/${skill.id}`, { folders: [x.dirs.A] });
@@ -142,7 +142,7 @@ test('W6-16: the routes accept only a folder the person chose, and save nothing 
 test('W6-16: a plugin carries its folders to its skills and connectors', async (t) => {
   const x = await setup(t);
   const skill = await x.app.skills.add({ name: 'PS', instructions: 'PLUGIN-SKILL', enabled: true });
-  const conn = await x.app.mcp.add({ name: 'PC', url: 'http://127.0.0.1:9/pc' });
+  const conn = await x.app.mcp.add({ name: 'PC', url: 'http://127.0.0.1:9/pc', addedBy: 'person' });
   const id = '22222222-2222-2222-2222-222222222222';
   await fetch(`${x.base}/api/settings`, { method: 'PUT', headers: j, body: JSON.stringify({ plugins: [{ id, name: 'P', description: '', skills: [skill.id], connectors: [conn.id] }] }) });
   const patch = (body) => fetch(`${x.base}/api/plugins/${id}`, { method: 'PATCH', headers: j, body: JSON.stringify(body) });
@@ -174,7 +174,7 @@ test('W6-16 (review): read_skill by name refuses a skill that is not for this ch
 
 test('W6-16 (review): a connector tool of another folder cannot be called by its name, directly or through call_connector_tool', async (t) => {
   const x = await setup(t);
-  const only = await x.app.mcp.add({ name: 'OnlyA', url: 'http://127.0.0.1:9/only-a' });
+  const only = await x.app.mcp.add({ name: 'OnlyA', url: 'http://127.0.0.1:9/only-a', addedBy: 'person' });
   await x.app.mcp.setStatus(only.id, { status: 'ok', tools: [{ name: 'onlyaping', description: 'ping', readOnly: true }] });
   await x.app.mcp.update(only.id, { folders: [x.dirs.A] });
   const inA = await x.say(x.dirs.A);

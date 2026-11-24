@@ -39,7 +39,7 @@ test('the store: a model-added or device-added connector must be public https; t
   const again = createMcpStore({ file: join(dir, 'mcp.json'), lookupImpl: pub });
   assert.equal((await again.list()).find((s) => s.name === 'Found').addedBy, 'model', 'it is remembered');
   const odd = await store.add({ name: 'Odd', url: 'https://odd.example.com/mcp', addedBy: 'anything-else' });
-  assert.equal(odd.addedBy, 'model', 'anything but the exact words person or device is the model's');
+  assert.equal(odd.addedBy, 'model', 'anything but the exact words person or device is the models own');
 });
 
 test('the window\'s POST makes the person\'s record; a posted addedBy is ignored; the model tool is refused at a private address', async (t) => {
@@ -95,4 +95,12 @@ test("the model's add_connector tool is refused at a private or http address, wi
   const ok = await tools.run('add_connector', { name: 'Fine', url: 'https://mcp.example.com/mcp' }, { chatId: 'c' });
   assert.match(ok, /remote connector Fine/);
   assert.equal((await store.list())[0].addedBy, 'model');
+});
+
+test('IA0-a: a swapped globalThis.fetch does not let a guarded connector reach a private address', async (t) => {
+  const real = globalThis.fetch; let reached = false;
+  globalThis.fetch = async () => { reached = true; return new Response('{}', { status: 200 }); };
+  t.after(() => { globalThis.fetch = real; });
+  await assert.rejects(listTools({ id: 'g1', name: 'x', url: 'https://127.0.0.1/mcp', addedBy: 'model' }), /public https address|refused|Could not/);
+  assert.equal(reached, false);
 });
