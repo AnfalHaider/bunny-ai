@@ -1143,7 +1143,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         for (const item of todo) {
           if (b.action === 'discard') { await sessions.setSuggestionState(session.id, card.id, item.id, 'discarded'); continue; }
           const text = b.action === 'keep' && typeof b.text === 'string' ? b.text : item.text; // exactly what was shown, or exactly the edit
-          kept.push(await projects.memoryAdd(card.suggestion.projectId, { kind: item.kind, text, source: 'suggested', chatId: session.id, replaces: item.replaces ?? null }));
+          kept.push(await projects.memoryAdd(card.suggestion.projectId, { kind: item.kind, text, source: 'suggested', chatId: session.id, replaces: item.replaces ?? null, allowSensitive: settings.memorySensitive === true }));
           await sessions.setSuggestionState(session.id, card.id, item.id, 'kept');
         }
         return sendJson(res, 200, { kept: kept.length });

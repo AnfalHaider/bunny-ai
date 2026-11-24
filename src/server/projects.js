@@ -10,10 +10,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { looksSecret } from './secretLike.js';
+import { SENSITIVE } from './agentTools.js';
 
 export const MEMORY_KINDS = ['decision', 'convention', 'open', 'fact'];
 export const MAX_PROJECT_MEMORY = 100;
-export const MAX_MEMORY_TEXT = 1000; // PC-6: what Keep may store; the model's own suggestions are cut to 400 before they reach a card
+export const MAX_MEMORY_TEXT = 1000; // what the person may write
+export const MAX_SUGGESTED_TEXT = 400; // PC-6a: what a model's suggestion may be, as shown or as edited before Keep
 
 const refused = (message, code) => Object.assign(new Error(message), { code });
 
@@ -100,12 +102,18 @@ export function createProjectStore({ file }) {
     return project;
   };
 
-  /** Exactly the text given is stored (PC-6): trimmed, never re-worded. A secret-looking item is refused. */
-  function checkText(text) {
+  /**
+   * Exactly the text given is stored (PC-6): trimmed, never re-worded. A key-looking item is refused on every path. An item that came from a model's
+   * suggestion (also after the person edited it on the card) is held to the suggestion rules (PC-6a): at most 400 characters, and no sensitive
+   * details unless the person allows them in Settings.
+   */
+  function checkText(text, { suggested = false, allowSensitive = false } = {}) {
     const clean = String(text ?? '').trim();
     if (!clean) throw refused('A memory needs something to remember', 'memory.empty');
-    if (clean.length > MAX_MEMORY_TEXT) throw refused(`That is longer than ${MAX_MEMORY_TEXT} characters`, 'memory.tooLong');
-    if (looksSecret(clean, '')) throw refused("This looks like a secret, so it isn't kept", 'memory.secret');
+    const max = suggested ? MAX_SUGGESTED_TEXT : MAX_MEMORY_TEXT;
+    if (clean.length > max) throw refused(`That is longer than ${max} characters`, 'memory.tooLong');
+    if (looksSecret(clean, '')) throw refused("This looks like a key; Bunny doesn't keep keys in memory", 'memory.secret');
+    if (suggested && !allowSensitive && SENSITIVE.test(clean)) throw refused('This looks like a sensitive detail, so it is not kept (Settings, memory, can allow it)', 'memory.sensitive');
     return clean;
   }
 
@@ -113,10 +121,10 @@ export function createProjectStore({ file }) {
     return [...((await need(id)).memory)];
   }
 
-  async function memoryAdd(id, { kind = 'fact', text, source = 'person', chatId = null, replaces = null }) {
+  async function memoryAdd(id, { kind = 'fact', text, source = 'person', chatId = null, replaces = null, allowSensitive = false }) {
     const project = await need(id);
     if (!MEMORY_KINDS.includes(kind)) throw refused('That kind of item is not known', 'memory.kind');
-    const clean = checkText(text);
+    const clean = checkText(text, { suggested: source === 'suggested', allowSensitive });
     if (replaces) project.memory = project.memory.filter((m) => m.id !== replaces);
     if (project.memory.length >= MAX_PROJECT_MEMORY) throw refused(`This project already keeps ${MAX_PROJECT_MEMORY} items`, 'memory.full');
     const entry = { id: randomUUID(), text: clean, kind, source: source === 'suggested' ? 'suggested' : 'person', ...(chatId ? { chatId } : {}), at: new Date().toISOString(), enabled: true };

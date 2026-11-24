@@ -108,3 +108,23 @@ test('PC-4: search_chats in a project chat lists this project\'s chats first, sa
   assert.ok(result.indexOf('Pricing') < result.indexOf('Elsewhere'));
   assert.doesNotMatch(result, /Ghost/);
 });
+
+test('PC-6a: an edit before Keep gets the same rules as a suggestion: 400 characters, no keys, no sensitive details', async (t) => {
+  const { send, card, items, act } = await setup(t, [suggest([{ kind: 'fact', text: 'Hosting is a static bucket.' }]), null]);
+  await send('go');
+  const c = await card();
+  const id = c.suggestion.items[0].id;
+  const long = await act({ messageId: c.id, itemId: id, action: 'keep', text: 'y'.repeat(401) });
+  assert.equal(long.status, 400);
+  assert.equal(long.body.code, 'memory.tooLong');
+  const key = await act({ messageId: c.id, itemId: id, action: 'keep', text: 'token sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789' });
+  assert.equal(key.body.code, 'memory.secret');
+  assert.equal(key.body.message, "This looks like a key; Bunny doesn't keep keys in memory");
+  const sensitive = await act({ messageId: c.id, itemId: id, action: 'keep', text: 'My password is hunter2' });
+  assert.equal(sensitive.body.code, 'memory.sensitive');
+  assert.deepEqual(await items(), []);
+  assert.equal((await card()).suggestion.items[0].state, 'open', 'a refused edit leaves the item open');
+  const fine = await act({ messageId: c.id, itemId: id, action: 'keep', text: 'x'.repeat(400) });
+  assert.equal(fine.status, 200);
+  assert.equal((await items())[0].text.length, 400);
+});
