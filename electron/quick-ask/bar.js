@@ -409,6 +409,7 @@ function enterPanel(q) {
   cardKind = '';
   $('foot').hidden = false;
   $('meta').hidden = true;
+  $('pcnote').hidden = true; $('pcnote').textContent = '';
   const thinking = document.createElement('div'); thinking.className = 'think'; thinking.id = 'busy';
   const spin = document.createElement('span'); spin.className = 'spin'; thinking.append(spin, document.createTextNode('Bunny is thinking…'));
   $('ans').append(thinking);
@@ -455,6 +456,7 @@ function onAnswer(event) {
   if (!event || typeof event !== 'object') return;
   if (event.type === 'start') return;
   if (event.type === 'pc') { pcState(event); return; }
+  if (event.type === 'pc-notice' && typeof event.text === 'string') { $('pcnote').textContent = event.text; $('pcnote').hidden = false; scheduleFit(); return; } // a small line under the answer, not a card
   if (event.type === 'restart') { // Bunny looks the web up itself and asks again: what the first reply said is dropped
     answerText = ''; $('ans').replaceChildren();
     const thinking = document.createElement('div'); thinking.className = 'think'; thinking.id = 'busy';

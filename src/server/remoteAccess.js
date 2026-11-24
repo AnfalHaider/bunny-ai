@@ -39,6 +39,7 @@ export const DEVICE_ACCESS_MESSAGE = "Only Bunny's window can change device acce
 export const isRemoteAdminPath = (path) => /^\/api\/remote(\/|$)/.test(String(path));
 /** CLI-ENGINES (CE-6): what a device at ANY level is told when it reaches for the engines. */
 export const ENGINE_REFUSED_MESSAGE = "Only Bunny's window can change engines.";
+export const FOLDER_RULES_REFUSED_MESSAGE = "Answer this in Bunny's window on the PC.";
 const UUID_ = '[a-f0-9-]{36}';
 const ENGINE_PATH = /^\/api\/engines(\/|$)/;
 /**
@@ -57,6 +58,12 @@ export function deviceRefusal(method, path, body = null) {
   if (p === '/api/sessions' && m === 'POST' && has('engine')) return ENGINE_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('engine')) return ENGINE_REFUSED_MESSAGE;
   if (new RegExp(`^/api/sessions/${UUID_}/setting/engine$`).test(p) && m === 'PATCH') return ENGINE_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}/engine$`).test(p) && m === 'POST') return ENGINE_REFUSED_MESSAGE; // ENGINE-SWITCH: a device never moves a chat to another engine (CE-6)
+  // FOLDER-RULES (FR-2, FR-3): whether a folder's instructions files are followed, and the two switches, are answered in Bunny's window only, never by a device at any level
+  if (new RegExp(`^/api/sessions/${UUID_}/folder-rules/`).test(p) && m !== 'GET') return FOLDER_RULES_REFUSED_MESSAGE;
+  if (p === '/api/settings' && m === 'PUT' && has('folderRulesEnabled', 'folderRulesTrusted')) return FOLDER_RULES_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}$`).test(p) && m === 'PATCH' && has('folderRules', 'folderRulesRead', 'folderRulesNext', 'folderRulesSent')) return FOLDER_RULES_REFUSED_MESSAGE;
+  if (new RegExp(`^/api/sessions/${UUID_}/setting/folderRules$`).test(p) && m === 'PATCH') return FOLDER_RULES_REFUSED_MESSAGE;
   return null;
 }
 export const isDeviceRefused = (method, path, body = null) => deviceRefusal(method, path, body) !== null;

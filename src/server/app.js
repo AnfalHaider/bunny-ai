@@ -7,7 +7,7 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +91,8 @@ import { createCustomTools, CUSTOM_PREFIX } from './customTools.js';
 import { createCheckpoints } from './checkpoints.js';
 import { OFFICE_EXT, OFFICE_KIND, OFFICE_TOOLS, OfficeError, buildOffice, describeOffice, madeLine, officeToolDefinitions, outline as officeOutline, validateOffice } from './officeMake.js';
 import { createEngineService, engineSettings, validateEngineSettings } from './engines/service.js';
+import { buildHandover, handoverSaid } from './engines/handover.js'; // ENGINE-SWITCH
+import { bunnyNote, cleanName, collectFolderRules, engineBlock, listDir, systemLine as folderSystemLine } from './folderRules.js'; // FOLDER-RULES, ONE-INSTRUCTIONS
 import { looksSecret } from './secretLike.js';
 import { replyCaps as capsFor } from './caps.js';
 import { buildHistory, CONTINUE_NOTE } from './history.js';
@@ -350,6 +352,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const processes = createProcessStore();
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
+  const replyingChats = new Set(); // ENGINE-SWITCH: chats with a reply running (a switch waits for it)
   const engines = createEngineService({ dataDir }); // CLI-ENGINES: Claude Code and Codex, downloaded on the person's click (src/server/engines)
   // W2-9: a chat's own copy of its project (ADR-002)
   const worktrees = createWorktrees({ dataDir });
@@ -389,6 +392,50 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     }
     const built = assembleProjectContext({ standing: settings.instructions, project, recent: recent ?? '', folderText: '', chatOn: session.projectContext !== false, memoryOn: settings.memoryEnabled !== false, incognito: Boolean(session.incognito) });
     return { project, built };
+  };
+  // FOLDER-RULES + ONE-INSTRUCTIONS (v0.1.15): the folder's instructions files, ONE set for every engine (see folderRules.js). FROZEN BY CONTENT (Security's replacement for PG-4's instructions part): at Follow them the exact
+  // text the person was shown is kept in the folder's trust record (settings.folderRulesTrusted[].frozen, per folder, not per chat) with its sha256. Every reply of Bunny's engine, every engine prompt and every handover
+  // sends THAT copy, never the file as it is on disk now; a new chat on the folder sends it too. Bunny never re-reads a followed file for sending. A change on disk (by the person, the model, an engine, git, anything) is
+  // found by hash and only shown ("changed since it was read", "no longer on disk"); only the person's Read again in the window, after the diff, replaces the copy. Nothing is sent before the folder is trusted (FR-2).
+  const frDeps = (workspace, rules) => ({
+    resolve: async (rel) => { if (readDenied(rules(), rel)) return null; try { return await workspace.folder(rel); } catch { return null; } }, // inside the folder, not through a link out, not the data folder, not hidden by a read-deny rule
+    dir: async (rel) => { try { return await listDir(await workspace.folder(rel)); } catch { return []; } },
+  });
+  /** The folder the answer is keyed by: the project's own folder (the original of a W2-9 copy), by real path. */
+  const frKey = async (session, folderInfo) => { const raw = session?.worktree?.repo ?? folderInfo?.folder ?? session?.folder ?? ''; try { return await realpath(raw); } catch { return String(raw); } };
+  const frTrusted = (key) => (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).find((e) => e?.folder === key) ?? null;
+  const frOn = (session) => settings.folderRulesEnabled !== false && session?.folderRules !== false;
+  const frFrozen = (entry) => (Array.isArray(entry?.frozen) ? entry.frozen : []).filter((f) => Array.isArray(entry?.files) && entry.files.includes(f.name));
+  /** One hash for a whole set (names and file hashes in order): what an engine session was last told. */
+  const frSetSha = (files) => createHash('sha256').update(JSON.stringify(files.map((f) => [f.name, f.sha256]))).digest('hex');
+  const frKeep = (f, at) => ({ name: f.name, kind: f.kind, size: f.size, sha256: f.sha256, text: f.text, cut: f.cut, readAt: at });
+  /** Write one folder's record (the followed names and their frozen copy), at most 200 folders. */
+  const frWrite = async (key, files, frozen) => {
+    const rest = (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key);
+    rest.push({ folder: key, files: files.slice(0, 100), frozen: frozen.slice(0, 100) });
+    await saveSettings({ folderRulesTrusted: rest.slice(-200) });
+  };
+  /**
+   * The set this reply follows, or null: the folder's FROZEN copy (no disk read). Returns { files, sha }.
+   */
+  const followedFolderRules = async (session, workspace, folderInfo) => {
+    if (!workspace || !frOn(session)) return null;
+    const files = frFrozen(frTrusted(await frKey(session, folderInfo)));
+    return files.length ? { files, sha: frSetSha(files) } : null;
+  };
+  /** What the Working folder card shows: every file, frozen or only on disk, and where it stands against the disk, found by hash; never any file text (View what was read asks for that). */
+  const folderRulesView = async (session, folderInfo, workspace, rules) => {
+    const found = await collectFolderRules(frDeps(workspace, rules));
+    const key = await frKey(session, folderInfo);
+    const trust = frTrusted(key);
+    const frozen = new Map(frFrozen(trust).map((f) => [f.name, f]));
+    const onDisk = new Map(found.files.map((f) => [f.name, f]));
+    const on = frOn(session);
+    const files = [];
+    for (const [name, f] of frozen) { const now = onDisk.get(name); files.push({ name, kind: f.kind, size: f.size, cut: f.cut, readAt: f.readAt, state: !on ? 'off' : !now ? 'gone' : now.sha256 !== f.sha256 ? 'changed' : 'in-use' }); }
+    for (const [name, f] of onDisk) if (!frozen.has(name)) files.push({ name, kind: f.kind, size: f.size, cut: f.cut, readAt: null, state: !on ? 'off' : 'waiting' });
+    return { enabled: settings.folderRulesEnabled !== false, chatSwitch: session.folderRules !== false, folder: key, trusted: Boolean(trust), files, notUsed: found.notUsed, skipped: found.skipped, leftOut: found.leftOut,
+      count: files.length, readAt: [...frozen.values()][0]?.readAt ?? null };
   };
   /** The processes a chat started stop before its copy is touched (Windows will not remove a folder something runs in). */
   const stopChatProcesses = async (sessionId) => { for (const p of processes.list(sessionId)) await processes.stop(p.id, p.owner).catch(() => {}); };
@@ -831,7 +878,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     }
 
     // The Windows user name rides along (never saved), so Bunny can greet you before you set a name.
-    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
+    if (path === '/api/settings' && method === 'GET') return sendJson(res, 200, req.bunnyRemote ? remoteSettings(settings) : { ...settings, folderRulesTrusted: (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).map((e) => ({ folder: e.folder, files: e.files, frozen: (e.frozen ?? []).map(({ name, size, sha256, readAt }) => ({ name, size, sha256, readAt })) })), systemUserName: systemUserName(fake ? { ...process.env, BUNNY_FAKE_UPSTREAM: '1' } : process.env) }); // R4: a device reads display settings only
     // ---- CLI-ENGINES: what is downloaded, and the window's buttons (device access is refused for all of these: remoteRoute, route's belt and windowOnly) ----
     if (path === '/api/engines' && method === 'GET') return sendJson(res, 200, await engines.status(settings));
     if (path === '/api/engines/record' && method === 'GET') return sendJson(res, 200, { record: await engines.store.record() });
@@ -861,6 +908,14 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (deviceRefusedBody(req, res, method, path, patch)) return;
       { const bad = validateEngineSettings(patch); if (bad) return sendJson(res, 400, { code: 'settings.badEngine', message: bad }); }
       if (patch.useBunnyEngine === false && !(await engines.status(settings)).engines.some((e) => e.enabled && e.downloaded && e.ownRules)) return sendJson(res, 409, { code: 'settings.noEngine', message: 'Download an engine first: chats need one to run on while Bunny\'s engine is off.' });
+      if (Object.hasOwn(patch, 'folderRulesEnabled') && typeof patch.folderRulesEnabled !== 'boolean') return sendJson(res, 400, { code: 'folderRules.bad', message: "Following the folder's instructions files is on or off." });
+      if (Object.hasOwn(patch, 'folderRulesTrusted')) { // FR-2: a list of { folder, files }, at most 200 folders; only Bunny's window writes it (window-only key, and refused to every device)
+        const list = Array.isArray(patch.folderRulesTrusted) ? patch.folderRulesTrusted : null;
+        if (!list || list.length > 200 || list.some((e) => !e || typeof e.folder !== 'string' || !e.folder || e.folder.length > 500 || !Array.isArray(e.files) || e.files.length > 100 || e.files.some((f) => typeof f !== 'string'))) return sendJson(res, 400, { code: 'folderRules.bad', message: 'The followed folders are a list of folders with the file names followed in each.' });
+        // the frozen copy is the server's: this write can remove a folder or a file name, never add or change frozen text
+        const prior = Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : [];
+        patch.folderRulesTrusted = list.map((e) => { const was = prior.find((p) => p.folder === e.folder); const names = [...new Set(e.files.map(cleanName).filter(Boolean))]; const frozen = (was?.frozen ?? []).filter((f) => names.includes(f.name)); return { folder: e.folder, files: frozen.map((f) => f.name), frozen }; }).filter((e) => e.files.length);
+      }
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       const rulesWas = engineSettings(settings).useBunnyEngine;
       // SEARCH-PC SP-1: no device, at any level, turns Search this PC on or changes what it may look at
@@ -1900,6 +1955,109 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
 
+    // FOLDER-RULES (FR-2): the Working folder card's view, the diff for Read again, and the answers that only Bunny's window may give. A Chats device sees nothing of the files.
+    const frMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/folder-rules(?:\/(diff|follow|read-again|ask-again))?$/);
+    if (frMatch) {
+      const action = frMatch[2];
+      const readOnly = !action || action === 'diff';
+      if (readOnly && method !== 'GET') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use GET.' });
+      if (!readOnly && method !== 'POST') return sendJson(res, 405, { code: 'method.notAllowed', message: 'Use POST.' });
+      if (!readOnly && windowOnly(req, res)) return;
+      if (req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "Answer this in Bunny's window on the PC." });
+      const id = frMatch[1];
+      const session = await sessions.get(id);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
+      const folderInfo = await effectiveRoot(session);
+      if (!folderInfo?.ok) return sendJson(res, 409, { code: 'folderRules.noFolder', message: 'This chat has no working folder.' });
+      const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir], allow: folderInfo.copy ? [folderInfo.folder] : [] });
+      const rules = () => rulesFor(settings.permissionRules, workspace.root);
+      const key = await frKey(session, folderInfo);
+      const trust = frTrusted(key);
+      if (!action) {
+        const view = await folderRulesView(session, folderInfo, workspace, rules);
+        const wantText = new URL(req.url, 'http://localhost').searchParams.get('text') === '1';
+        return sendJson(res, 200, wantText ? { ...view, read: frFrozen(trust).map((f) => ({ name: f.name, text: f.text, sha256: f.sha256, cut: f.cut, readAt: f.readAt })) } : view);
+      }
+      if (action === 'ask-again') { // "Ask me again for this folder": the entry goes, with its frozen copy
+        await saveSettings({ folderRulesTrusted: (Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : []).filter((e) => e?.folder !== key) });
+        return sendJson(res, 200, { ok: true });
+      }
+      const found = await collectFolderRules(frDeps(workspace, rules));
+      const onDisk = new Map(found.files.map((f) => [f.name, f]));
+      if (action === 'diff') { // Read again shows this first: per followed file the frozen text against the file now; a removed file is "will no longer be followed"; a file not followed yet is listed as new
+        const frozen = frFrozen(trust);
+        return sendJson(res, 200, {
+          files: frozen.map((f) => { const now = onDisk.get(f.name); return { name: f.name, status: !now ? 'removed' : now.sha256 === f.sha256 ? 'same' : 'changed', frozen: f.text, now: now ? now.text : null, frozenSha256: f.sha256, nowSha256: now?.sha256 ?? null }; }),
+          added: found.files.filter((f) => !frozen.some((z) => z.name === f.name)).map((f) => ({ name: f.name, text: f.text, sha256: f.sha256 })),
+        });
+      }
+      const asked = await readBody(req).catch(() => ({}));
+      const at = new Date().toISOString();
+      const shown = asked && typeof asked.shas === 'object' && asked.shas && !Array.isArray(asked.shas) ? asked.shas : null; // what the card showed (FG-2: required, one entry per file, nothing more): a file that changed since is refused, so the frozen bytes are exactly what the person saw
+      const needShas = (names) => { // 400 when the card's shas are missing, miss a file, or name one that is not part of this action
+        const ok = shown && names.every((n) => typeof shown[n] === 'string') && Object.keys(shown).every((n) => names.includes(n));
+        if (ok) return false;
+        sendJson(res, 400, { code: 'folderRules.shasRequired', message: 'Send the fingerprint of every file the card showed, and no others.' }); return true;
+      };
+      if (action === 'follow') { // Follow them: the answer is stored for the folder (never a "never": Not now stores nothing) with the exact text shown, frozen
+        const wanted = Array.isArray(asked?.names) ? asked.names.map(cleanName) : null;
+        const chosen = found.files.filter((f) => !wanted || wanted.includes(f.name));
+        if (!chosen.length) return sendJson(res, 409, { code: 'folderRules.none', message: 'This folder has no instructions files to follow.' });
+        if (needShas(chosen.map((f) => f.name))) return;
+        if (chosen.some((f) => shown[f.name] !== f.sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed since the card was shown. Look again.' });
+        const had = frFrozen(trust);
+        const frozen = [...had.filter((f) => !chosen.some((c) => c.name === f.name)), ...chosen.map((f) => frKeep(f, at))];
+        await frWrite(key, frozen.map((f) => f.name), frozen);
+      } else { // read-again: the person's click in the window, after the diff: "Use the new text" or "Keep the old text"
+        if (!trust) return sendJson(res, 409, { code: 'folderRules.notFollowed', message: 'Follow the folder first.' });
+        if (asked?.use === 'old') return sendJson(res, 200, { ok: true, changed: false, view: await folderRulesView(session, folderInfo, workspace, rules) });
+        if (asked?.use !== 'new') return sendJson(res, 400, { code: 'folderRules.choose', message: 'Choose Use the new text or Keep the old text.' });
+        const old = frFrozen(trust);
+        if (needShas(old.filter((f) => onDisk.has(f.name)).map((f) => f.name))) return;
+        if (old.some((f) => onDisk.has(f.name) && shown[f.name] !== onDisk.get(f.name).sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed again since the diff was shown. Look again.' });
+        const next = old.filter((f) => onDisk.has(f.name)).map((f) => (onDisk.get(f.name).sha256 === f.sha256 ? f : frKeep(onDisk.get(f.name), at))); // a removed file is no longer followed; a new name is never added here
+        await frWrite(key, next.map((f) => f.name), next);
+      }
+      const after = await sessions.get(id);
+      return sendJson(res, 200, { ok: true, changed: true, view: await folderRulesView(after, folderInfo, workspace, rules) });
+    }
+
+    // ENGINE-SWITCH (v0.1.15): move a chat to another engine, between replies. Only Bunny's own window may (the route is on the window-only list and refused to a device, CE-6). The engine's own session is dropped
+    // (the new engine gets a handover built from the chat, see engines/handover.js), the folder, the checkpoints and the task list stay the chat's. `PATCH engine` stays refused once the chat has messages.
+    const switchMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/engine$/);
+    if (switchMatch && method === 'POST') {
+      if (windowOnly(req, res)) return;
+      const id = switchMatch[1];
+      const body = await readBody(req);
+      const to = body?.to;
+      if (!['bunny', 'claude-code', 'codex'].includes(to)) return sendJson(res, 400, { code: 'engine.unknown', message: 'Choose Bunny, Claude Code or Codex.' });
+      const session = await sessions.get(id);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
+      if (replyingChats.has(id) || engines.busy(id)) return sendJson(res, 409, { code: 'chat.busy', message: 'A reply is still running in this chat. Switch when it has finished.' });
+      if (session.incognito) return sendJson(res, 409, { code: 'engine.incognito', message: 'An incognito chat does not use engines.' });
+      const from = session.engine?.id ?? 'bunny';
+      if (to === from) return sendJson(res, 409, { code: 'engine.same', message: 'This chat already runs on that engine.' });
+      const label = (x) => (x === 'claude-code' ? 'Claude Code' : x === 'codex' ? 'Codex' : "Bunny's engine");
+      if (to !== 'bunny') {
+        if ((session.workMode ?? 'chat') !== 'code') return sendJson(res, 409, { code: 'engine.needsCode', message: `${label(to)} works in a folder: switch this chat to Code mode first.` });
+        const folder = session.folder ? await effectiveRoot(session) : null;
+        if (!folder?.ok) return sendJson(res, 409, { code: 'engine.needsFolder', message: `${label(to)} needs a working folder: choose one for this chat first.` });
+        const row = (await engines.status(settings)).engines.find((e) => e.id === to);
+        if (!row?.downloaded) return sendJson(res, 409, { code: 'engine.notDownloaded', message: `Download ${label(to)} first (Settings, Engines).`, fix: 'download' });
+        if (row.enabled === false) return sendJson(res, 409, { code: 'engine.disabled', message: `${label(to)} is switched off in Settings, Engines.`, fix: 'enable' });
+        if (to === 'claude-code' && row.auth === 'account' && row.signedIn === false) return sendJson(res, 409, { code: 'engine.notSignedIn', message: 'Sign in to Claude Code first (Settings, Engines).', fix: 'signin' });
+      }
+      const cfg = engineSettings(settings);
+      const was = session.engine?.restrictedFor ?? (session.engine?.restricted ? [session.engine.id] : []);
+      const next = to === 'bunny'
+        ? { id: 'bunny', rules: 'bunny', handoverPending: true }
+        : { id: to, auth: cfg.engines[to].auth, rules: cfg.useBunnyEngine === false ? 'engine' : 'bunny', rulesFixed: true }; // the rules are fixed again now, from the current setting
+      const at = new Date().toISOString();
+      const updated = await sessions.update(id, { engine: { ...next, from, switchedAt: at, ...(was.length ? { restrictedFor: was } : {}) } });
+      await sessions.append(id, { role: 'assistant', kind: 'engine-switch', content: `(switched from ${label(from)} to ${label(to)})`, from, to });
+      return sendJson(res, 200, { ok: true, engine: updated.engine, restrictedAgain: to !== 'bunny' && was.includes(to) });
+    }
+
     const sessionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})$/);
     if (sessionMatch && method === 'GET') {
       const session = await sessions.get(sessionMatch[1]);
@@ -1915,6 +2073,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (deviceRefusedBody(req, res, method, path, rawPatch)) return;
         if (rawPatch?.engine !== undefined) { const current = await sessions.get(sessionMatch[1]); if (current?.messages?.length && current.engine) return sendJson(res, 409, { code: 'engine.fixed', message: 'This chat already runs on an engine. To use another, start a new chat.' }); } // CE-6: a device never moves a chat to another engine
         const patch = req.bunnyRemote ? remotePatch(rawPatch) : rawPatch; // from a device: only the chat's own title, modes, effort, model and provider
+        delete patch.folderRulesRead; delete patch.folderRulesNext; delete patch.folderRulesSent; // FOLDER-RULES: what an engine was last told is written only by the server
+        // ES-2 (Security): only the server writes which engines Bunny's check failed for. A PATCH that carries `restrictedFor` or `restricted` has it ignored, and never removes what is stored.
+        if (patch.engine && typeof patch.engine === 'object') { const cur = await sessions.get(sessionMatch[1]); const { restricted: _r, restrictedFor: _rf, ...rest } = patch.engine; patch.engine = { ...rest, ...(cur?.engine?.restrictedFor ? { restrictedFor: cur.engine.restrictedFor } : cur?.engine?.restricted ? { restricted: true } : {}) }; if (cur?.engine && patch.engine.id === cur.engine.id) { for (const k of ['from', 'switchedAt', 'handoverPending']) if (cur.engine[k] !== undefined && patch.engine[k] === undefined) patch.engine[k] = cur.engine[k]; } }
         if (isWindowOnlyRoute(method, path, patch) && !(req.bunnyRemote && remoteException(method, path, patch)) && windowOnly(req, res)) return; // a chat switched to Auto
         if (patch.folder !== undefined) {
           const stored = await folderToStore(patch.folder);
@@ -2286,7 +2447,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       let currentTasks = [];
       let askedThisReply = false; // W6-12: an ask_user card was shown in this reply
       const beforeWrite = async (abs) => {
-        checkpoint ??= checkpoints.begin(id, workspace?.root ?? '');
+        checkpoint ??= checkpoints.begin(id, workspace?.root ?? '', session.engine?.id ?? 'bunny'); // (each checkpoint records which engine made it)
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
@@ -2330,6 +2491,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
       // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
       const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
+      // FOLDER-RULES / ONE-INSTRUCTIONS: the folder's instructions files this reply follows (null: none, not trusted yet, or switched off). Only the text reaches a model; nothing here decides a permission.
+      let folderRulesSet = null;
+      if (workspace && body.textOnly !== true && !req.bunnyRemote) { try { folderRulesSet = await followedFolderRules(session, workspace, folder); } catch { folderRulesSet = null; } }
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
       const needsOk = (risk, name, args) => risk === 'send'
         || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
@@ -2411,7 +2575,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ? `This is the scheduled task "${scheduledTask}", running on its own. Nobody is watching: do not ask questions or for capabilities. Do what you can with your tools, then reply with a short report.` : '';
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
       const textOnlyBase = today + (callName ? `The person you are talking to likes to be called ${callName}. ` : '') + 'You are Bunny AI. Never claim you did something you did not do.';
-      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '']).filter(Boolean).join('\n') });
+      history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '', folderRulesSet ? folderSystemLine(folderRulesSet.files.map((f) => f.name)) : '']).filter(Boolean).join('\n') });
       for (const text of projectCtx.notes) { // P4 and P5: quoted data after every system message, never instructions
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: text });
@@ -2419,6 +2583,20 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (taskNote) { // a user-role note after the app's own system text, before the conversation (the same way as a connector's own words)
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: taskNote });
+      }
+      if (folderRulesSet && !(session.engine && session.engine.id !== 'bunny')) { // Bunny's engine: the files as quoted data in a user-role note, below Bunny's rules and the person's words
+        const noteAt = history.findIndex((m) => m.role !== 'system');
+        history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: bunnyNote(folderRulesSet.files) });
+      }
+      // ENGINE-SWITCH: Bunny's engine reads the chat itself, so on its first reply after a switch it gets only the taking-over line, the files the chat changed and the open steps, as a user-role note (the same pattern)
+      if (session.engine?.id === 'bunny' && session.engine.handoverPending === true && !textOnly && !scheduledTask) {
+        try {
+          const root = workspace?.root ?? '';
+          const built = await buildHandover({ messages: session.messages.at(-1)?.role === 'user' ? session.messages.slice(0, -1) : session.messages, root, fromId: session.engine.from ?? 'bunny', checkpoints: root ? await checkpoints.list(id).catch(() => []) : [], exists: async (rel) => stat(resolve(root, rel)).then(() => true, () => false), filesOnly: true });
+          const noteAt = history.findIndex((m) => m.role !== 'system');
+          history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: built.text });
+        } catch { /* a note is a convenience: the chat's own messages are all there */ }
+        session = await sessions.update(id, { engine: { ...session.engine, handoverPending: false } }).catch(() => session);
       }
 
       // Tools from the MCP servers the person has switched on, in Chat and in Code (M-2: the person wants Bunny to use them; Plan mode hides the ones that may write).
@@ -2706,7 +2884,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const timer = waitNudges({ kind: 'capability', title: CAPABILITIES[capability] }); // W6-25: waits, then nudges
         pendingCapabilities.set(cid, { sessionId: id, capability, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
-        send('capability', { id: cid, capability, title, reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
+        send('capability', { id: cid, capability, title, reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : capability === 'pc_search' ? 800 : 400), hasFolder: Boolean(folder?.ok) });
       });
       // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
       const askQuestion = (q) => new Promise((resolveAnswer) => {
@@ -2734,6 +2912,19 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
             ? 'The browser panel is already available in this reply: use browser_open, browser_read, browser_click and browser_type.'
             : "The browser panel is only in Bunny's window on the PC. Use web_search and read_url here, or tell the person to continue in Bunny's window.";
         }
+        if (capability === 'pc_search') {
+          // AGENT-FLOW F8 (Security F8-1..F8-3): a card in Bunny's window only; no card on a device, in a scheduled run or in the quick bar
+          if (req.bunnyRemote || req.bunnyDevice) return 'Search this PC can be turned on only on the PC.';
+          if (textOnly || scheduledTask) return 'Search this PC can be turned on only from a chat in Bunny\'s window.';
+          if (pc.enabled()) return 'Search this PC is already on: use search_pc.';
+          const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
+          const where = cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)} for a cloud model)` : '';
+          const asked = await askCapability('pc_search', `File names and paths it finds, and the text of files it reads, go to the model${where}. It finds file names and the text of documents; it never reads Bunny's data folder, key folders or the folders you excluded. It stays on until you turn it off in Settings › Capabilities.${reason ? ` Why it asks: "${String(reason).replace(/[\u0000-\u001f\u007f"]+/g, ' ').slice(0, 200)}"` : ''}`, 'Search this PC');
+          if (!asked.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+          await saveSettings({ pcSearchEnabled: true }); // finding only: pcSearchAfter is left as the person set it
+          toolDefinitions.push(...pcToolDefinitions());
+          return `Search this PC is on. You now have search_pc and read_pc_file: use them to find the file. ${PC_SYSTEM_TEXT}`; // its instructions travel in the tool result (the conversation of this reply is already in flight)
+        }
         if (capability === 'sign_in') {
           const service = String(args_.service ?? '');
           if (!['google', 'github'].includes(service)) return 'Give service: google or github.';
@@ -2742,7 +2933,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           if (await signedIn()) return `You are already signed in to ${service === 'github' ? 'GitHub' : 'Google'}.`;
           if (service === 'google' && !String(settings.googleClientId ?? '').trim()) return "Google isn't set up in Bunny yet. The person adds the Google client in Settings › Profile first.";
           const label = service === 'github' ? 'GitHub' : 'Google';
-          const answer = await askCapability('sign_in', `${reason ? `${reason} ` : ''}Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.`, `Sign in to ${label}`);
+          const answer = await askCapability('sign_in', `Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.${reason ? ` Why it asks: "${String(reason).replace(/[\r\n"]+/g, ' ').slice(0, 200)}"` : ''}`, `Sign in to ${label}`);
           if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
           // the person signs in on the card's Settings page; Bunny only watches for the result. The model is told signed in or not, never a code, address, token or name (F5-1).
           const until = Date.now() + 120_000;
@@ -2758,11 +2949,13 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         }
         if (capability === 'connector_sign_in') {
           if (req.bunnyRemote || req.bunnyDevice) return "Signing in to a connector is only in Bunny's window on the PC.";
+          if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so none can be signed in to.'; // the master switch holds before any card or connection
           // F5-2: an exact installed connector, by id or name, in scope; the sign-in goes to its own configured address only; the model never gives an address
           const wanted = String(args_.connector ?? '').trim();
           const server = wanted ? (await mcp.list()).find((c) => (c.id === wanted || c.name === wanted) && inScope(c.folders, scopeFolder)) : null;
           if (!server) return 'No installed connector has that exact name in this chat. Look at the Connectors line for the names.';
           if (!server.enabled) return `${server.name} is switched off. The person switches it on in Settings › Customize first.`;
+          if (server.type === 'local') return `${server.name} is a connector that runs on this computer and has no sign-in.`; // polling a local connector would start its program again and again
           const answer = await askCapability('connector_sign_in', reason, `Sign in to ${server.name}`);
           if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
           send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id }); // the same Sign in button as a connector found at the start of a reply
@@ -2830,7 +3023,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'pc_search', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -3370,6 +3563,8 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           return `${name} is not available in this reply, so it was not run.`;
         }
         // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
+        // F8 / QUICK-ASK-JUST-WORKS: the first time a search runs in this profile, one non-blocking notice says what goes where and how to turn it off. Never on a device or in the bar.
+        if (PC_TOOLS.includes(name)) await pcFirstNotice();
         if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, chat: id, send, logStep });
         if (pcTurn.tainted && !textOnly && !PC_TAINT_FREE.includes(name) && !(workspace?.has(name) && TOOL_RISK[name] === 'read') && !planRefuses(riskOf(name), name)) {
           const said = JSON.stringify(parsed ?? {}).slice(0, 300);
@@ -3509,7 +3704,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               if (!added) return said;
               const shown = `${added.title}\n${added.text}`;
               if (shown.length > 1800) {
-                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.' });
+                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.', openInCustomize: true });
                 return `${said}\nIt is installed and OFF: its description is too long to show whole. It stays off until the person switches it on in Settings › Customize.`;
               }
               const answer = await askCapability('switch_on_added', shown);
@@ -3517,6 +3712,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                 await appTools.switchOn(added);
                 // AGENT-FLOW F1: what was just switched on is loaded into THIS reply, so the person does not have to send another message
                 const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                if (settings.connectorsEnabled === false) return `${said}\nThe person said yes, but Connectors are turned off in Settings › Capabilities, so its tools are not loaded.`;
                 return `${said}\nThe person said yes: it is now switched on.${loaded ? `\n${loaded}` : ''}`;
               }
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
@@ -3601,7 +3797,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       // already arrived is kept, so a stopped reply is still a reply.
       const controller = new AbortController();
       let clientGone = false;
+      replyingChats.add(id);
+      res.on('finish', () => replyingChats.delete(id)); // (before the person's page has even read the end: a switch right after a reply must not meet a stale "busy")
       res.on('close', () => {
+        replyingChats.delete(id);
         if (!res.writableEnded) clientGone = true;
         controller.abort();
       });
@@ -3629,6 +3828,27 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const wantRules = cfg.useBunnyEngine === false ? 'engine' : 'bunny';
           if (!session.engine) session = await sessions.update(id, { engine: { id: wanted, auth: cfg.engines[wanted].auth, rules: wantRules, rulesFixed: true } });
           else if (!session.engine.rulesFixed) session = await sessions.update(id, { engine: { ...session.engine, rules: wantRules, rulesFixed: true } });
+          // ENGINE-SWITCH: the handover. Claude Code gets it on the first turn after a switch (its own session was dropped, so there is no --resume); Codex gets it on EVERY turn (its threads are ephemeral, so this is also its memory)
+          let handover = null; let handoverStats = null;
+          {
+            const eng = session.engine;
+            const prior = session.messages.at(-1)?.role === 'user' ? session.messages.slice(0, -1) : session.messages;
+            const talked = prior.some((m) => m && (m.role === 'user' || m.role === 'assistant') && (!m.kind || m.kind === 'text' || m.kind === 'partial' || m.kind === 'summary'));
+            // ONE-INSTRUCTIONS: the folder's one set. Claude Code reads CLAUDE.md under --setting-sources user only if the pin says it does (pins.json readsProjectDoc: then Bunny sends nothing to it); Codex's own reading is off
+            // (project_doc_max_bytes = 0), so it always gets the block. Claude Code gets it on its first turn (no --resume), after a switch, and once after Read again; Codex on every turn.
+            const pinReads = engines.pins?.[wanted]?.readsProjectDoc === true && wanted === 'claude-code';
+            const folderFiles = !pinReads && folderRulesSet ? folderRulesSet.files : [];
+            const setSha = folderRulesSet?.sha ?? null;
+            const owed = wanted === 'codex' || (wanted === 'claude-code' && (!eng.sessionId || session.folderRulesSent !== setSha)); // Claude Code resumes its own session: it is told again only when the frozen set is not the one it was last told
+            const folderBlock = folderFiles.length && owed ? engineBlock(folderFiles, { replaces: Boolean(eng.sessionId) && Boolean(session.folderRulesSent) && session.folderRulesSent !== setSha }) : '';
+            if (talked && (wanted === 'codex' || (wanted === 'claude-code' && !eng.sessionId && eng.from))) {
+              try {
+                const built = await buildHandover({ messages: prior, root: workspace.root, fromId: eng.from ?? wanted, checkpoints: await checkpoints.list(id).catch(() => []), exists: async (rel) => stat(resolve(workspace.root, rel)).then(() => true, () => false), folderBlock });
+                handover = built.text; handoverStats = built.stats;
+              } catch { /* the engine still gets the person's message */ }
+            }
+            if (!handover && folderBlock) handover = folderBlock; // no handover this turn: the folder's set goes alone in front of the person's message
+          }
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           // PROJECT-CONTEXT §5: the same parts for the engines, in one block: Codex every turn (its threads are ephemeral), Claude Code in the first prompt of a session and when a part changes
           const ctxBlock = projectEngineBlock(projectCtx);
@@ -3637,7 +3857,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const engineCtxPrefix = ctxBlock && (wanted === 'codex' || !session.engine?.sessionId || ctxChanged) ? projectEngineBlock(projectCtx, { replaces: ctxChanged && Boolean(session.engine?.ctxHash) }) : '';
           if (ctxHash !== (session.engine?.ctxHash ?? '')) session = await sessions.update(id, { engine: { ...session.engine, ctxHash } }).catch(() => session);
           const outcome = await engines.runTurn({
-            id, session, settings, content: (engineCtxPrefix ? engineCtxPrefix + String.fromCharCode(10, 10) + String.fromCharCode(45, 45, 45) + String.fromCharCode(10, 10) : '') + content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            id, session, settings, content: (engineCtxPrefix ? engineCtxPrefix + String.fromCharCode(10, 10) + String.fromCharCode(45, 45, 45) + String.fromCharCode(10, 10) : '') + content, handover, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
@@ -3651,17 +3871,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             },
             logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
+          if (folderRulesSet && session.folderRulesSent !== folderRulesSet.sha) session = await sessions.update(id, { folderRulesSent: folderRulesSet.sha }).catch(() => session); // what the engines were last told
           if (outcome.stoppedForCheck) {
-            session = await sessions.update(id, { engine: { ...session.engine, restricted: true } }).catch(() => session);
+            const failedFor = session.engine.restrictedFor ?? (session.engine.restricted ? [session.engine.id] : []); // ES-2: only this code writes the list
+            session = await sessions.update(id, { engine: { ...session.engine, restrictedFor: [...new Set([...failedFor, wanted])] } }).catch(() => session);
             const note = "Stopped: Bunny's check did not run. Your next message in this chat continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder. A new chat starts in full mode again.";
             send('delta', { text: `${outcome.text ? '\n\n' : ''}${note}` });
             outcome.text = `${outcome.text}${outcome.text ? '\n\n' : ''}${note}`;
           }
           if (clientGone) { if (outcome.text.trim()) await sessions.append(id, { role: 'assistant', content: outcome.text, kind: 'partial', ...undoInfo() }); }
           else if (outcome.text.trim()) {
-            const saved = await sessions.append(id, { role: 'assistant', content: outcome.text, ...undoInfo() });
+            const saved = await sessions.append(id, { role: 'assistant', content: outcome.text, ...undoInfo(), ...(handoverStats ? { handover: handoverStats } : {}) });
             session = await sessions.get(id);
-            send('done', { sessionId: id, model: cfg.engines[wanted] ? `${wanted}` : model, messageId: saved.messages.at(-1)?.id, context: sessions.context(session) });
+            send('done', { sessionId: id, ...(handoverStats ? { handover: handoverSaid(handoverStats) } : {}), model: cfg.engines[wanted] ? `${wanted}` : model, messageId: saved.messages.at(-1)?.id, context: sessions.context(session) });
           }
           res.end();
           return;
@@ -3700,11 +3922,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       }
       // QUICK-ASK (v0.1.14.2): the same retry for a question about files on this computer. Only with Search this PC on and the bar offered the file tools (barPc), from the main process only: Bunny runs search_pc itself
       // with the terms it was given, exactly as the model's own call would run (the same exclusions, the same read-after-search choice, the same taint rules), and asks the model again with the outcome as labelled data.
+      // F8-4: the first search in this profile, wherever it starts (the model's own tool call or the bar's own first look-up), shows the one notice and remembers it (Security)
+      const pcFirstNotice = async () => {
+        if (req.bunnyRemote || req.bunnyDevice || settings.pcSearchNoticeShown === true) return;
+        const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
+        send('notice', { text: `Search this PC is on, for finding files only. File names and folders it finds go to the model${cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)}, a cloud model)` : ''}. Turn it off in Settings › Capabilities.`, pcNotice: true });
+        await saveSettings({ pcSearchNoticeShown: true });
+      };
       if (barPc && body.pcLookupFirst === true) {
         const terms = (Array.isArray(body.pcTerms) ? body.pcTerms : []).map((t) => String(t ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, 60)).filter(Boolean).slice(0, 6);
         if (terms.length) {
           quickLookups += 1;
           try {
+            await pcFirstNotice();
             const outcome = await pc.runTool({ name: 'search_pc', parsed: { terms }, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: 'bar', chat: id, send, logStep });
             history.unshift({ role: 'system', content: 'Bunny searched this computer\'s files for this question; the results follow as data.' });
             const fenced = String(outcome).slice(0, 50_000).replace(/<<<SEARCH RESULTS|SEARCH RESULTS>>>/g, ' ');
