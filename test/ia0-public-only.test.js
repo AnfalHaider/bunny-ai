@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkPublicAddress, publicFetch, PUBLIC_ONLY, guarded } from '../src/server/publicFetch.js';
+import { checkPublicAddress, publicFetch, PUBLIC_ONLY, guarded, isPackagedBuild, testTransportAllowed } from '../src/server/publicFetch.js';
 import { createMcpStore } from '../src/server/mcpStore.js';
 import { listTools } from '../src/server/mcp.js';
 import { startApp, post, json } from './helpers.js';
@@ -28,8 +28,9 @@ test('the store: a model-added or device-added connector must be public https; t
   await assert.rejects(store.add({ name: 'A', url: 'http://127.0.0.1:9/mcp', addedBy: 'model' }), /public https address/);
   await assert.rejects(store.add({ name: 'B', url: 'http://192.168.1.2/mcp', addedBy: 'device' }), /public https address/);
   await assert.rejects(store.add({ name: 'C', url: 'https://10.0.0.1/mcp', addedBy: 'model' }), /public https address/);
-  const own = await store.add({ name: 'Mine', url: 'http://192.168.1.2:8080/mcp' });
-  assert.equal(own.addedBy, undefined);
+  const own = await store.add({ name: 'Mine', url: 'http://192.168.1.2:8080/mcp', addedBy: 'person' });
+  assert.equal(own.addedBy, 'person');
+  await assert.rejects(store.add({ name: 'Default', url: 'http://192.168.1.3/mcp' }), /public https address/, 'with nothing said, a connector is the models own');
   const found = await store.add({ name: 'Found', url: 'https://mcp.example.com/mcp', addedBy: 'model', enabled: false });
   assert.equal(found.addedBy, 'model');
   assert.equal(guarded(found), true); assert.equal(guarded(own), false);
@@ -38,13 +39,13 @@ test('the store: a model-added or device-added connector must be public https; t
   const again = createMcpStore({ file: join(dir, 'mcp.json'), lookupImpl: pub });
   assert.equal((await again.list()).find((s) => s.name === 'Found').addedBy, 'model', 'it is remembered');
   const odd = await store.add({ name: 'Odd', url: 'https://odd.example.com/mcp', addedBy: 'anything-else' });
-  assert.equal(odd.addedBy, undefined, 'only the exact words model and device make a guarded record; the window route alone can omit them');
+  assert.equal(odd.addedBy, 'model', 'anything but the exact words person or device is the models own');
 });
 
 test('the window\'s POST makes the person\'s record; a posted addedBy is ignored; the model tool is refused at a private address', async (t) => {
   const { base } = await startApp(t, { fake: false });
   const r = await post(base, '/api/mcp', { name: 'Local', url: 'http://127.0.0.1:9/mcp', addedBy: 'model' });
-  assert.equal(r.status, 200); assert.equal(r.body.addedBy, undefined);
+  assert.equal(r.status, 200); assert.equal(r.body.addedBy, 'person');
   const { body: list } = await json(base, '/api/mcp');
   assert.equal(list.length, 1);
 });
@@ -94,4 +95,27 @@ test("the model's add_connector tool is refused at a private or http address, wi
   const ok = await tools.run('add_connector', { name: 'Fine', url: 'https://mcp.example.com/mcp' }, { chatId: 'c' });
   assert.match(ok, /remote connector Fine/);
   assert.equal((await store.list())[0].addedBy, 'model');
+});
+
+test('IA0-a: a swapped globalThis.fetch does not let a guarded connector reach a private address', async (t) => {
+  const real = globalThis.fetch; let reached = false;
+  globalThis.fetch = async () => { reached = true; return new Response('{}', { status: 200 }); };
+  t.after(() => { globalThis.fetch = real; });
+  await assert.rejects(listTools({ id: 'g1', name: 'x', url: 'https://127.0.0.1/mcp', addedBy: 'model' }), /public https address|refused|Could not/);
+  assert.equal(reached, false);
+});
+
+test('IA-0 LOW: the test transport is ignored in a packaged build, whatever the environment says', async (t) => {
+  assert.equal(isPackagedBuild({ electron: '30.0.0' }, false), true);
+  assert.equal(isPackagedBuild({ electron: '30.0.0' }, true), false, 'electron run from source');
+  assert.equal(isPackagedBuild({}, undefined), false, 'plain node');
+  assert.equal(testTransportAllowed({ env: { BUNNY_TEST_TRANSPORT: '1' }, packaged: false }), true);
+  assert.equal(testTransportAllowed({ env: { BUNNY_TEST_TRANSPORT: '1' }, packaged: true }), false);
+  assert.equal(testTransportAllowed({ env: {}, packaged: false }), false);
+  // end to end: with the variable and a stand-in set, a packaged build still refuses a private address
+  process.env.BUNNY_TEST_TRANSPORT = '1'; let reached = false; globalThis.__bunnyTestFetch = async () => { reached = true; return new Response('{}'); };
+  t.after(() => { delete process.env.BUNNY_TEST_TRANSPORT; delete globalThis.__bunnyTestFetch; });
+  await assert.rejects(publicFetch('https://127.0.0.1/mcp', {}, { packaged: true }), /public https address/);
+  assert.equal(reached, false);
+  assert.equal((await publicFetch('https://127.0.0.1/mcp', {}, { packaged: false })).status, 200, 'unpackaged tests may stand in');
 });

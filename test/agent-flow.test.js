@@ -142,7 +142,8 @@ function standIn(t) {
     }
     return real(url, init);
   };
-  t.after(() => { globalThis.fetch = real; });
+  process.env.BUNNY_TEST_TRANSPORT = '1'; globalThis.__bunnyTestFetch = globalThis.fetch; // the guarded connector transport is stood in for only when a test says so
+  t.after(() => { globalThis.fetch = real; delete process.env.BUNNY_TEST_TRANSPORT; delete globalThis.__bunnyTestFetch; });
 }
 
 test('F1: after install_plugin and the person\'s yes, the new connector\'s tools are offered in the SAME reply and the model can use them', async (t) => {

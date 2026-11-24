@@ -46,7 +46,14 @@ export async function checkPublicAddress(address, { lookupImpl = (h, o) => dnsLo
  * A fetch-shaped request that connects only to a public address it checked itself, never follows a redirect and answers a real Response whose body streams.
  * `allowHttp` and `allowPrivate` exist for the tests' loopback stand-ins only; nothing in the app passes them.
  */
-export function publicFetch(url, init = {}, { lookupImpl = (h, o) => dnsLookup(h, o), allowHttp = false, allowPrivate = false } = {}) {
+/** A packaged desktop app (Electron, not run from source). */
+export const isPackagedBuild = (versions = process.versions, defaultApp = process.defaultApp) => Boolean(versions?.electron) && !defaultApp;
+/** The test stand-in is honoured only when the environment says so AND this is not a packaged build: a stray environment variable can never weaken the checks in the installed app. */
+export const testTransportAllowed = ({ env = process.env, packaged = isPackagedBuild() } = {}) => env.BUNNY_TEST_TRANSPORT === '1' && !packaged;
+
+export function publicFetch(url, init = {}, { lookupImpl = (h, o) => dnsLookup(h, o), allowHttp = false, allowPrivate = false, packaged = isPackagedBuild() } = {}) {
+  // a test may stand in for the network, and only when it says so in the environment (the app never sets this); anything else always goes through the checks below
+  if (testTransportAllowed({ packaged }) && typeof globalThis.__bunnyTestFetch === 'function') return globalThis.__bunnyTestFetch(url, init);
   return new Promise((resolve, reject) => {
     let u;
     try { u = new URL(String(url)); } catch { reject(refused()); return; }

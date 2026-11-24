@@ -24,6 +24,7 @@
 <main class="page cz-page">
   <h1>Customize</h1>
   <p class="sub">Connectors, skills and plugins the model can use in your chats</p>
+  <p class="sub" id="cz-address-help">A connector the AI finds is added only at a public https address, and is checked again at every call. A connector you add yourself here may use a private address or http, and says so. One saved before Bunny checked addresses is kept as it was and marked for review.</p>
   <p class="sub" id="cz-trust-help">A connector's tools that call themselves read-only run without asking only after you choose "Trust read-only labels" for it. Until then, Plan mode offers none of that connector's tools, even the ones it labels read-only.</p>
 
   <div class="cz-bar">
@@ -219,13 +220,22 @@
         const plugin = pluginOf('connectors', s.id);
         const flow = flows.get(s.id);
         const signedIn = s.oauth?.signedIn === true;
+        // IA-0: a connector the person added may use a private address or http, and says so; one saved before Bunny checked addresses (no addedBy) is marked once for review
+        const addressChip = (x) => {
+          if (x.type === 'local') return null;
+          const url = x.url ?? '';
+          const privateish = /^http:/i.test(url) || /^https?:\/\/(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[)/i.test(url);
+          if (x.addedBy === 'person') return privateish ? { text: 'Added by you · may use a private address' } : null;
+          if (!x.addedBy) return { text: 'Added before Bunny checked addresses: review', tone: 'warn' };
+          return null;
+        };
         const st = connectorStatus(s, flow);
         const needs = st.tone === 'warn' || st.tone === 'bad' || st.wait; // a chip shows only when something needs the person
         const primary = st.wait ? { label: 'Cancel', run: () => { flows.clear(s.id); paint(); } } : st.canSignIn ? { label: st.signInLabel, run: () => startSignIn(s) } : null;
         list.append(row({
           id: s.id,
           name: s.name,
-          chips: [plugin ? { text: 'Plugin' } : null, needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
+          chips: [plugin ? { text: 'Plugin' } : null, addressChip(s), needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
           dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : hostOrUrl(s.url), needs ? st.detail : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : '', s.hasKey ? `Key saved (${s.keyHeader})` : '', plugin ? '' : scopeDim(s)),
           extra: flows.clientIdBox(s) ?? (keyOpen.has(s.id) ? keyBox({ server: s, save: (header, value) => sendJSON(`/api/mcp/${s.id}/key`, 'PUT', { header, value }), done: async () => { keyOpen.delete(s.id); await load(); }, cancel: () => { keyOpen.delete(s.id); paint(); } }) : null),
           primary,
