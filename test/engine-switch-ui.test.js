@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeSwitch, engineName } from '../src/ui/engine-switch.js';
-import { blockNote, fileChip, lineDiff } from '../src/ui/folder-rules-ui.js';
+// the page modules read `window` when they load (api.js): a bare stand-in is enough for the pure functions tested here
+globalThis.window ??= {};
+const { describeSwitch, engineName } = await import('../src/ui/engine-switch.js');
+const { blockNote, fileChip, lineDiff } = await import('../src/ui/folder-rules-ui.js');
 
 // The words and the choices of the ENGINE-SWITCH card and the FOLDER-RULES block (Design's drawings v2 and v4), as plain functions of what the page knows. The screens are in e2e/engine-switch-ui.spec.js.
 

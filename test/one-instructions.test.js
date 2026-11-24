@@ -15,6 +15,15 @@ const put = (base, path, body) => json(base, path, { method: 'PUT', headers: { '
 const RULE = 'Always end with the word KIWI-41.';
 const RULE_RE = RULE.replace(/\./g, '\\.');
 
+// FG-2: Follow and Read again must carry the card's shas; these tests send what the card would (from the diff), unless a test passes its own `shas`
+const withShas = async (get, post, what, body) => {
+  if (body.shas || !(what === 'follow' || (what === 'read-again' && body.use === 'new'))) return body;
+  const d = await get();
+  const all = { ...Object.fromEntries((d.added ?? []).map((f) => [f.name, f.sha256])), ...Object.fromEntries((d.files ?? []).filter((f) => f.nowSha256).map((f) => [f.name, f.nowSha256])) };
+  const names = what === 'follow' ? (body.names ?? Object.keys(all)) : (d.files ?? []).filter((f) => f.nowSha256).map((f) => f.name);
+  return { ...body, shas: Object.fromEntries(names.filter((n) => all[n]).map((n) => [n, all[n]])) };
+};
+
 async function world(t, files = { 'AGENTS.md': RULE }) {
   const keep = { fake: process.env.BUNNY_FAKE_ENGINE, script: process.env.BUNNY_FAKE_ENGINE_SCRIPT, log: process.env.BUNNY_FAKE_PROMPT_LOG };
   const logDir = await mkdtemp(join(tmpdir(), 'bunny-oi-log-'));
@@ -30,7 +39,8 @@ async function world(t, files = { 'AGENTS.md': RULE }) {
   const prompts = async () => (await readFile(log, 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => { const p = JSON.parse(l); return { ...p, input: told(p) }; });
   const { body: s } = await post(started.base, '/api/sessions', { title: 'oi', workMode: 'code', folder });
   const say = async (content) => (await (await fetch(`${started.base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'test-model-1', workMode: 'code' }) })).text());
-  const act = (what, body = {}) => post(started.base, `/api/sessions/${s.id}/folder-rules/${what}`, body);
+  const diff = async () => (await json(started.base, `/api/sessions/${s.id}/folder-rules/diff`)).body;
+  const act = async (what, body = {}) => post(started.base, `/api/sessions/${s.id}/folder-rules/${what}`, await withShas(diff, post, what, body));
   const download = async (id) => { assert.equal((await post(started.base, `/api/engines/${id}/download`, {})).status, 202); for (let i = 0; i < 100; i += 1) { if ((await json(started.base, '/api/engines')).body.engines.find((e) => e.id === id).downloaded) return; await new Promise((r) => setTimeout(r, 50)); } throw new Error('no download'); };
   return { ...started, folder, id: s.id, say, act, prompts, download };
 }

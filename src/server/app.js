@@ -1867,12 +1867,18 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
       const asked = await readBody(req).catch(() => ({}));
       const at = new Date().toISOString();
-      const shown = asked && typeof asked.shas === 'object' && asked.shas ? asked.shas : null; // what the card showed: a file that changed since is refused, so the frozen bytes are exactly what the person saw
+      const shown = asked && typeof asked.shas === 'object' && asked.shas && !Array.isArray(asked.shas) ? asked.shas : null; // what the card showed (FG-2: required, one entry per file, nothing more): a file that changed since is refused, so the frozen bytes are exactly what the person saw
+      const needShas = (names) => { // 400 when the card's shas are missing, miss a file, or name one that is not part of this action
+        const ok = shown && names.every((n) => typeof shown[n] === 'string') && Object.keys(shown).every((n) => names.includes(n));
+        if (ok) return false;
+        sendJson(res, 400, { code: 'folderRules.shasRequired', message: 'Send the fingerprint of every file the card showed, and no others.' }); return true;
+      };
       if (action === 'follow') { // Follow them: the answer is stored for the folder (never a "never": Not now stores nothing) with the exact text shown, frozen
         const wanted = Array.isArray(asked?.names) ? asked.names.map(cleanName) : null;
         const chosen = found.files.filter((f) => !wanted || wanted.includes(f.name));
         if (!chosen.length) return sendJson(res, 409, { code: 'folderRules.none', message: 'This folder has no instructions files to follow.' });
-        if (shown && chosen.some((f) => shown[f.name] !== undefined && shown[f.name] !== f.sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed since the card was shown. Look again.' });
+        if (needShas(chosen.map((f) => f.name))) return;
+        if (chosen.some((f) => shown[f.name] !== f.sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed since the card was shown. Look again.' });
         const had = frFrozen(trust);
         const frozen = [...had.filter((f) => !chosen.some((c) => c.name === f.name)), ...chosen.map((f) => frKeep(f, at))];
         await frWrite(key, frozen.map((f) => f.name), frozen);
@@ -1881,7 +1887,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (asked?.use === 'old') return sendJson(res, 200, { ok: true, changed: false, view: await folderRulesView(session, folderInfo, workspace, rules) });
         if (asked?.use !== 'new') return sendJson(res, 400, { code: 'folderRules.choose', message: 'Choose Use the new text or Keep the old text.' });
         const old = frFrozen(trust);
-        if (shown && old.some((f) => onDisk.has(f.name) && shown[f.name] !== undefined && shown[f.name] !== onDisk.get(f.name).sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed again since the diff was shown. Look again.' });
+        if (needShas(old.filter((f) => onDisk.has(f.name)).map((f) => f.name))) return;
+        if (old.some((f) => onDisk.has(f.name) && shown[f.name] !== onDisk.get(f.name).sha256)) return sendJson(res, 409, { code: 'folderRules.changed', message: 'The files changed again since the diff was shown. Look again.' });
         const next = old.filter((f) => onDisk.has(f.name)).map((f) => (onDisk.get(f.name).sha256 === f.sha256 ? f : frKeep(onDisk.get(f.name), at))); // a removed file is no longer followed; a new name is never added here
         await frWrite(key, next.map((f) => f.name), next);
       }

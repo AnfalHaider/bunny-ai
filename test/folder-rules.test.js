@@ -121,6 +121,15 @@ const json2 = { 'content-type': 'application/json' };
 const sawNote = (req) => req.messages.some((m) => m.role === 'user' && String(m.content).startsWith(NOTE_START));
 const systemText = (req) => req.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
 
+// FG-2: Follow and Read again must carry the card's shas; these tests send what the card would (from the diff), unless a test passes its own `shas`
+const withShas = async (get, post, what, body) => {
+  if (body.shas || !(what === 'follow' || (what === 'read-again' && body.use === 'new'))) return body;
+  const d = await get();
+  const all = { ...Object.fromEntries((d.added ?? []).map((f) => [f.name, f.sha256])), ...Object.fromEntries((d.files ?? []).filter((f) => f.nowSha256).map((f) => [f.name, f.nowSha256])) };
+  const names = what === 'follow' ? (body.names ?? Object.keys(all)) : (d.files ?? []).filter((f) => f.nowSha256).map((f) => f.name);
+  return { ...body, shas: Object.fromEntries(names.filter((n) => all[n]).map((n) => [n, all[n]])) };
+};
+
 async function chatWorld(t, files, { settings = {}, calls = [], mode = 'auto' } = {}) {
   const w = await pcWorld(t, { files: {}, settings, calls, permissionMode: mode });
   const folder = folderWith(files);
@@ -128,8 +137,8 @@ async function chatWorld(t, files, { settings = {}, calls = [], mode = 'auto' } 
   const { body: s } = await post(w.base, '/api/sessions', { title: 'fr', workMode: 'code', folder, permissionMode: mode });
   const say = (content, onEvent) => w.say(content, { sessionId: s.id, extra: { workMode: 'code' }, ...(onEvent ? { onEvent } : {}) });
   const view = async () => (await json(w.base, `/api/sessions/${s.id}/folder-rules`)).body;
-  const act = (what, body = {}) => post(w.base, `/api/sessions/${s.id}/folder-rules/${what}`, body);
   const diff = async () => (await json(w.base, `/api/sessions/${s.id}/folder-rules/diff`)).body;
+  const act = async (what, body = {}) => post(w.base, `/api/sessions/${s.id}/folder-rules/${what}`, await withShas(diff, post, what, body));
   return { w, folder, id: s.id, say, view, act, diff };
 }
 
@@ -287,7 +296,7 @@ test('2 (worktree trust key): a W2-9 chat in its own copy follows when the ORIGI
   assert.equal(made.status, 200, `${await made.clone().text()} ` + 'the chat works in its own copy (a window-only action: the window\'s own secret)');
   const saved = (await json(w.base, `/api/sessions/${a.id}`)).body;
   assert.ok(saved.worktree?.branch, 'it has a copy');
-  assert.equal((await post(w.base, `/api/sessions/${a.id}/folder-rules/follow`, {})).status, 200);
+  assert.equal((await post(w.base, `/api/sessions/${a.id}/folder-rules/follow`, { shas: { 'AGENTS.md': sha256('repo rule') } })).status, 200);
   const rec = (await json(w.base, '/api/settings')).body.folderRulesTrusted;
   assert.equal(rec.length, 1);
   assert.equal(realpathSync(rec[0].folder), realpathSync(repo), 'the answer is keyed by the original folder, not the copy');
@@ -350,4 +359,24 @@ test('9 and 10 FR-2 FR-3: only Bunny\'s window answers: the routes, the two sett
   assert.equal((await put(c.w.base, '/api/settings', { folderRulesEnabled: 'yes' })).status, 400);
   assert.equal((await put(c.w.base, '/api/settings', { folderRulesTrusted: [{ folder: 5 }] })).status, 400);
   assert.equal((await put(c.w.base, '/api/settings', { folderRulesTrusted: Array.from({ length: 201 }, (_, i) => ({ folder: `f${i}`, files: [] })) })).status, 400);
+});
+
+test('FG-2: Follow and Read again REQUIRE the card\'s shas: none, a missing entry or an extra entry is 400, a wrong sha is 409, and nothing is stored by a refused call', async (t) => {
+  const c = await chatWorld(t, { 'AGENTS.md': 'rule one', '.cursorrules': 'rule two' });
+  const url = (what) => `/api/sessions/${c.id}/folder-rules/${what}`;
+  const raw = (what, body) => post(c.w.base, url(what), body);
+  const both = { 'AGENTS.md': sha256('rule one'), '.cursorrules': sha256('rule two') };
+  assert.equal((await raw('follow', {})).status, 400, 'no shas at all');
+  assert.equal((await raw('follow', { shas: 'x' })).status, 400, 'shas that is not a map');
+  assert.equal((await raw('follow', { shas: { 'AGENTS.md': both['AGENTS.md'] } })).status, 400, 'a chosen file with no entry');
+  assert.equal((await raw('follow', { names: ['AGENTS.md'], shas: both })).status, 400, 'an entry for a file that is not chosen');
+  assert.equal((await raw('follow', { shas: { ...both, 'AGENTS.md': sha256('other') } })).status, 409, 'a mismatch');
+  const vv = await c.view(); assert.equal(vv.trusted, false, 'refused calls stored nothing ' + JSON.stringify(vv).slice(0, 400));
+  assert.equal((await raw('follow', { shas: both })).status, 200);
+  writeFileSync(join(c.folder, 'AGENTS.md'), 'rule one, rewritten');
+  assert.equal((await raw('read-again', { use: 'new' })).status, 400, 'Read again with no shas');
+  assert.equal((await raw('read-again', { use: 'new', shas: { 'AGENTS.md': sha256('rule one, rewritten') } })).status, 400, 'a file being replaced has no entry');
+  assert.equal((await raw('read-again', { use: 'new', shas: { ...both, 'AGENTS.md': sha256('rule one'), nope: 'x' } })).status, 400, 'an extra entry');
+  assert.equal((await raw('read-again', { use: 'new', shas: { ...both, 'AGENTS.md': sha256('rule one') } })).status, 409, 'a stale sha');
+  assert.equal((await raw('read-again', { use: 'new', shas: { ...both, 'AGENTS.md': sha256('rule one, rewritten') } })).status, 200);
 });
