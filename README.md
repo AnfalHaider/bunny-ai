@@ -65,12 +65,6 @@ Each row also updates and rolls back:
 
 **The first Codex chat in a project can take a few minutes to start.** Windows' sandbox sets up its identity for each project folder the first time a command runs there. The first command in that folder can take minutes; later chats in the same project start in seconds.
 
-### Switch a chat to another engine
-Open the engine chip in a Code chat and pick **Switch this chat to…**. Bunny, Claude Code and Codex CLI are listed; an engine that cannot take the chat says why on its row, with the button that fixes it (**Download**, **Turn on**, **Sign in**), and a chat needs a working folder first. Bunny then says what the new engine gets: this chat's folder, the folder's instruction files you chose to follow, a summary of the conversation and the list of files this chat changed. Answers that used files from your PC are left out. Your files and **Undo** stay as they are, and a line in the chat shows where the engine changed. A switch waits until the current reply has finished, and only Bunny's own window can do it, not a phone.
-
-### Your project's instructions files
-A folder can carry `AGENTS.md` or `CLAUDE.md` (and `.cursorrules` or `.cursor/rules`). Bunny shows them in a card the first time you open such a folder in a chat: **Read** shows the text, **Follow them** uses it, **Not now** asks again later. Once you follow a folder, Bunny, Claude Code and Codex CLI all get the same text, the text you were shown, and none of them reads the files itself. If somebody edits a file afterwards, the Working folder card says **changed since it was read** and keeps using the old text until you choose **Read again**, which shows the difference first. **Use the new text** or **Keep the old text** then decides. A file that is not used is listed as such, and **Ask me again for this folder** forgets your answer. Only Bunny's own window can answer; a phone cannot.
-
 ---
 
 ## Why me, obviously

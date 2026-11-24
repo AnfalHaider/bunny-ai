@@ -74,7 +74,10 @@ export function paintEngineChip({ chip, menu, session, settings, chosen, onPick,
     ev.stopPropagation();
     if (switchable && menu) { openSwitchMenu({ menu, rows: switchRows({ session, list, busy }), onSwitch, onFix }); return; }
     if (st.fixed || !menu) return;
-    menu.innerHTML = menuItems(list).map((m) => `<button type="button" role="menuitem" data-id="${m.id}" data-auth="${m.auth ?? ''}" class="${m.id === st.id ? 'on' : ''}"><span>${m.text}</span><small>${m.small}</small></button>`).join('');
+    menu.replaceChildren(...menuItems(list).map((m) => { // Security LOW: engine labels and versions go in as text, never as markup
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.id = m.id; b.dataset.auth = m.auth ?? ''; b.className = m.id === st.id ? 'on' : '';
+      const t = document.createElement('span'); t.textContent = m.text; const sm = document.createElement('small'); sm.textContent = m.small; b.append(t, sm); return b;
+    }));
     menu.hidden = !menu.hidden;
     menu.onclick = (e2) => {
       const b = e2.target.closest('button'); if (!b) return;
