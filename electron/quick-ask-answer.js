@@ -156,7 +156,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
         for (const ev of parsed.events) {
           if (ev.name === 'delta' && typeof ev.data?.text === 'string') push(ev.data.text);
           else if (ev.name === 'tool' && typeof ev.data?.pcState === 'string') { const p = pcEvent(ev.data); if (p) { out(p); if (p.state === 'results') pcRows = p.rows ?? []; } }
-          else if (ev.name === 'notice' && ev.data?.pcNotice === true && typeof ev.data.text === 'string') out({ type: 'pc-notice', text: ev.data.text.replace(/[ -]+/g, ' ').slice(0, 400) }); // F8-4: one fixed line under the answer
+          else if (ev.name === 'notice' && ev.data?.pcNotice === true && typeof ev.data.text === 'string') out({ type: 'pc-notice', text: ev.data.text.replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 400) }); // F8-4: one fixed line under the answer
           else if (ev.name === 'done') { doneSources = ev.data?.pcSources; model = typeof ev.data?.model === 'string' ? ev.data.model : model; finished = true; lookups = num(ev.data?.lookups); lookupText = txt(ev.data?.lookupText, 4000); }
           else if (ev.name === 'error') {
             out({ type: 'error', kind: classifyFailure({ code: ev.data?.code, reason: ev.data?.reason, message: ev.data?.message }), message: String(ev.data?.message ?? 'Bunny could not answer.').slice(0, 400) });
