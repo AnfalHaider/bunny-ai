@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkPublicAddress, publicFetch, PUBLIC_ONLY, guarded } from '../src/server/publicFetch.js';
+import { checkPublicAddress, publicFetch, PUBLIC_ONLY, guarded, isPackagedBuild, testTransportAllowed } from '../src/server/publicFetch.js';
 import { createMcpStore } from '../src/server/mcpStore.js';
 import { listTools } from '../src/server/mcp.js';
 import { startApp, post, json } from './helpers.js';
@@ -103,4 +103,19 @@ test('IA0-a: a swapped globalThis.fetch does not let a guarded connector reach a
   t.after(() => { globalThis.fetch = real; });
   await assert.rejects(listTools({ id: 'g1', name: 'x', url: 'https://127.0.0.1/mcp', addedBy: 'model' }), /public https address|refused|Could not/);
   assert.equal(reached, false);
+});
+
+test('IA-0 LOW: the test transport is ignored in a packaged build, whatever the environment says', async (t) => {
+  assert.equal(isPackagedBuild({ electron: '30.0.0' }, false), true);
+  assert.equal(isPackagedBuild({ electron: '30.0.0' }, true), false, 'electron run from source');
+  assert.equal(isPackagedBuild({}, undefined), false, 'plain node');
+  assert.equal(testTransportAllowed({ env: { BUNNY_TEST_TRANSPORT: '1' }, packaged: false }), true);
+  assert.equal(testTransportAllowed({ env: { BUNNY_TEST_TRANSPORT: '1' }, packaged: true }), false);
+  assert.equal(testTransportAllowed({ env: {}, packaged: false }), false);
+  // end to end: with the variable and a stand-in set, a packaged build still refuses a private address
+  process.env.BUNNY_TEST_TRANSPORT = '1'; let reached = false; globalThis.__bunnyTestFetch = async () => { reached = true; return new Response('{}'); };
+  t.after(() => { delete process.env.BUNNY_TEST_TRANSPORT; delete globalThis.__bunnyTestFetch; });
+  await assert.rejects(publicFetch('https://127.0.0.1/mcp', {}, { packaged: true }), /public https address/);
+  assert.equal(reached, false);
+  assert.equal((await publicFetch('https://127.0.0.1/mcp', {}, { packaged: false })).status, 200, 'unpackaged tests may stand in');
 });
