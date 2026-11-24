@@ -72,3 +72,8 @@ test('merged sections: Notifications in Appearance, Connection and Default effor
   await page.goto('/');
   await expect(page.locator('#settings-nav-list [data-section="notifications"], #settings-nav-list [data-section="privacy"], #settings-nav-list [data-section="connection"]')).toHaveCount(0);
 });
+
+test('Appearance: "Code" is no longer a heading here; the group is "Code blocks"', async ({ page }) => {
+  await page.goto('/src/ui/settings.html?embed=1&section=appearance');
+  await expect(page.locator('#code-look')).toHaveText('Code blocks');
+});
