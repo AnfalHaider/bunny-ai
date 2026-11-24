@@ -143,3 +143,11 @@ test('F9-7: the bridge lets an allowed "npm run" kind through without asking, st
   }
   assert.equal(asks.length, 3, 'each of those asked');
 });
+
+test('F9-8 (Security): the one-word pairs pytest, tsc and eslint check their FIRST argument too', () => {
+  const opts = { cwd: 'c:\\work', resolve: (n) => ({ pytest: 'c:\\t\\pytest.exe', tsc: 'c:\\t\\tsc.cmd', eslint: 'c:\\t\\eslint.cmd' }[n] ?? null) };
+  for (const cmd of ['pytest ..\\other\\tests', 'pytest -p evil_plugin', 'pytest --rootdir ..\\x', 'pytest --rootdir=..\\x', 'tsc -p ..\\x\\tsconfig.json', 'tsc --project ..\\x', 'eslint --config C:\\evil.js', 'eslint --config=C:\\evil.js', 'eslint -r evil', 'eslint --require evil', 'eslint --plugin evil', 'eslint --plugin=evil', 'eslint ..\\x\\a.js']) {
+    assert.equal(commandKind(cmd, opts).kind?.mode, 'exact', cmd);
+  }
+  for (const cmd of ['pytest', 'pytest tests', 'tsc', 'tsc --noEmit', 'eslint src', 'eslint .']) assert.equal(commandKind(cmd, opts).kind?.mode, 'pair', cmd);
+});
