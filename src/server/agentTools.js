@@ -31,6 +31,7 @@ export const CAPABILITIES = {
   browser_panel: 'Use the browser beside the chat (only in the desktop window on the PC)',
   sign_in: 'Sign in to Google or GitHub (give service: google or github); the person signs in themselves in Settings, Profile',
   connector_sign_in: 'Sign in to a connector that is installed and needs it (give connector: its exact name)',
+  pc_search: 'Search this PC: find files by name and by what is in them (finding only)',
 };
 
 const fn = (name, description, properties = {}, required = []) => ({

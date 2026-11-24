@@ -17,7 +17,7 @@ export function capabilityMap(state = {}) {
   mark(state.computer, 'control of this computer', state.device ? 'only in the window' : 'off; call request_capability with computer_use');
   mark(state.build, 'building tools', state.device ? 'only in the window' : 'off; call request_capability with custom_tools');
   mark(state.browser, 'the browser panel', "only in Bunny's window on the PC; not here");
-  mark(state.pc, 'searching this PC', state.device ? 'only in the window' : "off; tell the person to turn on Search this PC in Settings › Capabilities");
+  mark(state.pc, 'searching this PC', state.device ? 'only in the window' : 'off; call request_capability with pc_search');
   const win = state.device ? " (in Bunny's window)" : '';
   mark(state.google, 'Gmail, Calendar and Drive', (state.device ? `not signed in; tell the person to sign in to Google in Settings › Profile${win}` : 'not signed in; call request_capability with sign_in (service: google), or tell the person to sign in in Settings › Profile'));
   mark(state.github, 'GitHub', (state.device ? `not signed in; tell the person to sign in to GitHub in Settings › Profile${win}` : 'not signed in; call request_capability with sign_in (service: github), or tell the person to sign in in Settings › Profile'));

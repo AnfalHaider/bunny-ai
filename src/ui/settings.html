@@ -335,7 +335,7 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Search this PC</div>
-          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. Off until you turn it on.</div>
+          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. It is on for finding files only: Bunny shows what it found (names, folders, dates) and does not open the files unless you choose that below. Turn it off here at any time.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" id="pc-on" aria-label="Search this PC" /><span id="pc-on-state">off</span></label></div>
       </div>
@@ -1142,9 +1142,9 @@
     const on = $('pc-on'), after = $('pc-after'), barAuto = $('pc-bar-auto');
     if (!on) return;
     const paint = (s) => {
-      on.checked = s.pcSearchEnabled === true;
+      on.checked = s.pcSearchEnabled !== false;
       $('pc-on-state').textContent = on.checked ? 'on' : 'off';
-      after.value = s.pcSearchAfter === 'show' ? 'show' : 'read';
+      after.value = s.pcSearchAfter === 'read' ? 'read' : 'show';
       barAuto.checked = s.pcSearchBarAuto !== false;
       $('pc-bar-state').textContent = barAuto.checked ? 'on' : 'off';
       for (const id of ['pc-after-row', 'pc-bar-row']) $(id).classList.toggle('is-off', !on.checked);

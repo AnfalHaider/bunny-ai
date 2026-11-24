@@ -2801,7 +2801,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const timer = waitNudges({ kind: 'capability', title: CAPABILITIES[capability] }); // W6-25: waits, then nudges
         pendingCapabilities.set(cid, { sessionId: id, capability, resolve: (a) => { timer.stop(); pendingCapabilities.delete(cid); resolveAnswer(a ?? {}); } });
         res.once('close', () => pendingCapabilities.get(cid)?.resolve({ granted: false }));
-        send('capability', { id: cid, capability, title, reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : 400), hasFolder: Boolean(folder?.ok) });
+        send('capability', { id: cid, capability, title, reason: String(reason ?? '').slice(0, capability === 'switch_on_added' ? 1800 : capability === 'pc_search' ? 800 : 400), hasFolder: Boolean(folder?.ok) });
       });
       // A question card: choices to click, or a typed answer. Nobody there (the reply ended) is no answer.
       const askQuestion = (q) => new Promise((resolveAnswer) => {
@@ -2829,6 +2829,19 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
             ? 'The browser panel is already available in this reply: use browser_open, browser_read, browser_click and browser_type.'
             : "The browser panel is only in Bunny's window on the PC. Use web_search and read_url here, or tell the person to continue in Bunny's window.";
         }
+        if (capability === 'pc_search') {
+          // AGENT-FLOW F8 (Security F8-1..F8-3): a card in Bunny's window only; no card on a device, in a scheduled run or in the quick bar
+          if (req.bunnyRemote || req.bunnyDevice) return 'Search this PC can be turned on only on the PC.';
+          if (textOnly || scheduledTask) return 'Search this PC can be turned on only from a chat in Bunny\'s window.';
+          if (pc.enabled()) return 'Search this PC is already on: use search_pc.';
+          const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
+          const where = cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)} for a cloud model)` : '';
+          const asked = await askCapability('pc_search', `File names and paths it finds, and the text of files it reads, go to the model${where}. It finds file names and the text of documents; it never reads Bunny's data folder, key folders or the folders you excluded. It stays on until you turn it off in Settings › Capabilities.${reason ? ` Why it asks: "${String(reason).replace(/[\u0000-\u001f\u007f"]+/g, ' ').slice(0, 200)}"` : ''}`, 'Search this PC');
+          if (!asked.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
+          await saveSettings({ pcSearchEnabled: true }); // finding only: pcSearchAfter is left as the person set it
+          toolDefinitions.push(...pcToolDefinitions());
+          return `Search this PC is on. You now have search_pc and read_pc_file: use them to find the file. ${PC_SYSTEM_TEXT}`; // its instructions travel in the tool result (the conversation of this reply is already in flight)
+        }
         if (capability === 'sign_in') {
           const service = String(args_.service ?? '');
           if (!['google', 'github'].includes(service)) return 'Give service: google or github.';
@@ -2837,7 +2850,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           if (await signedIn()) return `You are already signed in to ${service === 'github' ? 'GitHub' : 'Google'}.`;
           if (service === 'google' && !String(settings.googleClientId ?? '').trim()) return "Google isn't set up in Bunny yet. The person adds the Google client in Settings › Profile first.";
           const label = service === 'github' ? 'GitHub' : 'Google';
-          const answer = await askCapability('sign_in', `${reason ? `${reason} ` : ''}Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.`, `Sign in to ${label}`);
+          const answer = await askCapability('sign_in', `Bunny opens Settings › Profile, where you sign in to ${label} yourself. Bunny waits for it.${reason ? ` Why it asks: "${String(reason).replace(/[\r\n"]+/g, ' ').slice(0, 200)}"` : ''}`, `Sign in to ${label}`);
           if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
           // the person signs in on the card's Settings page; Bunny only watches for the result. The model is told signed in or not, never a code, address, token or name (F5-1).
           const until = Date.now() + 120_000;
@@ -2853,11 +2866,13 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         }
         if (capability === 'connector_sign_in') {
           if (req.bunnyRemote || req.bunnyDevice) return "Signing in to a connector is only in Bunny's window on the PC.";
+          if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so none can be signed in to.'; // the master switch holds before any card or connection
           // F5-2: an exact installed connector, by id or name, in scope; the sign-in goes to its own configured address only; the model never gives an address
           const wanted = String(args_.connector ?? '').trim();
           const server = wanted ? (await mcp.list()).find((c) => (c.id === wanted || c.name === wanted) && inScope(c.folders, scopeFolder)) : null;
           if (!server) return 'No installed connector has that exact name in this chat. Look at the Connectors line for the names.';
           if (!server.enabled) return `${server.name} is switched off. The person switches it on in Settings › Customize first.`;
+          if (server.type === 'local') return `${server.name} is a connector that runs on this computer and has no sign-in.`; // polling a local connector would start its program again and again
           const answer = await askCapability('connector_sign_in', reason, `Sign in to ${server.name}`);
           if (!answer.granted) return 'The person said no. Do not ask for this again; carry on without it, or say plainly what you could not do.';
           send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id }); // the same Sign in button as a connector found at the start of a reply
@@ -2925,7 +2940,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'pc_search', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -3450,6 +3465,12 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           return `${name} is not available in this reply, so it was not run.`;
         }
         // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
+        // F8 / QUICK-ASK-JUST-WORKS: the first time a search runs in this profile, one non-blocking notice says what goes where and how to turn it off. Never on a device or in the bar.
+        if (PC_TOOLS.includes(name) && !req.bunnyRemote && !req.bunnyDevice && settings.pcSearchNoticeShown !== true) { // F8-4: the bar searches by itself by default, so its first search shows the same notice, as a line under the answer
+          const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
+          send('notice', { text: `Search this PC is on, for finding files only. File names and folders it finds go to the model${cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)}, a cloud model)` : ''}. Turn it off in Settings › Capabilities.`, pcNotice: true });
+          await saveSettings({ pcSearchNoticeShown: true });
+        }
         if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, chat: id, send, logStep });
         if (pcTurn.tainted && !textOnly && !PC_TAINT_FREE.includes(name) && !(workspace?.has(name) && TOOL_RISK[name] === 'read') && !planRefuses(riskOf(name), name)) {
           const said = JSON.stringify(parsed ?? {}).slice(0, 300);
@@ -3589,7 +3610,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               if (!added) return said;
               const shown = `${added.title}\n${added.text}`;
               if (shown.length > 1800) {
-                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.' });
+                send('tool', { tool: `${String(added.title ?? 'It').slice(0, 60)} is installed and off`, status: 'done', result: 'Its description is too long to show here. Open Settings › Customize to read it and switch it on.', openInCustomize: true });
                 return `${said}\nIt is installed and OFF: its description is too long to show whole. It stays off until the person switches it on in Settings › Customize.`;
               }
               const answer = await askCapability('switch_on_added', shown);
@@ -3597,6 +3618,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
                 await appTools.switchOn(added);
                 // AGENT-FLOW F1: what was just switched on is loaded into THIS reply, so the person does not have to send another message
                 const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                if (settings.connectorsEnabled === false) return `${said}\nThe person said yes, but Connectors are turned off in Settings › Capabilities, so its tools are not loaded.`;
                 return `${said}\nThe person said yes: it is now switched on.${loaded ? `\n${loaded}` : ''}`;
               }
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
