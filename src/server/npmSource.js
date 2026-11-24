@@ -1,13 +1,15 @@
 /**
  * INSTALL-ANYWHERE IA-2: a local connector from npm, pinned. `name@version` becomes an exact version with the registry's own integrity (sha512); the tarball is fetched once and checked against it;
- * every dependency is locked at CARD time (`npm install --package-lock-only --ignore-scripts`, with the person's .npmrc and registries cut off); the install is `npm ci --ignore-scripts --omit=dev` from
- * THAT lockfile, whose sha256 is checked again first. The connector then runs as `node <bin>` from its folder, never `npx -y`. Nothing runs at install time.
+ * every dependency is locked AND installed into a staging folder at CARD time (`npm install --package-lock-only`, then `npm ci --ignore-scripts --omit=dev`, with the person's .npmrc and registries cut off), so the card
+ * can say what is really in the whole tree (compiled files, install scripts). After the yes, exactly that staged tree is moved into place, with its tree hash (IA-5) checked again: nothing is downloaded after the person has looked.
+ * The connector runs as `node <bin>` from its folder, never `npx -y`. Nothing runs at install time.
  */
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
-import { join, relative, resolve, sep } from 'node:path';
+import { mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { unpackTgz } from './engines/unpack.js';
+import { treeHash } from './installSource.js';
 
 export const REGISTRY = 'https://registry.npmjs.org';
 const NAME = /^(@[a-z0-9][a-z0-9._~-]{0,213}\/)?[a-z0-9][a-z0-9._~-]{0,213}$/;
@@ -37,7 +39,7 @@ const defaultNpm = (args, { cwd, env }) => new Promise((ok, bad) => {
 export function npmIsolation(home) {
   const empty = join(home, 'empty.npmrc');
   return {
-    args: [`--registry=${REGISTRY}/`, `--userconfig=${empty}`, `--globalconfig=${empty}`, '--ignore-scripts', '--no-audit', '--no-fund', '--no-update-notifier'],
+    args: [`--registry=${REGISTRY}/`, `--userconfig=${empty}`, `--globalconfig=${empty}`, '--ignore-scripts', '--no-audit', '--no-fund', '--no-update-notifier', `--cache=${join(home, 'cache')}`],
     env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', TEMP: process.env.TEMP ?? process.env.TMPDIR ?? '', HOME: home, USERPROFILE: home, APPDATA: home, npm_config_cache: join(home, 'cache') },
     empty,
   };
@@ -97,10 +99,8 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     const needsScript = ['preinstall', 'install', 'postinstall'].filter((k) => pkg.scripts?.[k]);
     const bin = await binOf(root, { ...pkg, name: parsed.name });
-    const files = await walk(root);
-    const compiled = files.some((f) => /\.node$/i.test(f) || /(^|\/)binding\.gyp$/i.test(f));
     // IA-2: the lockfile is made now, from the registry, with nothing of the person's npm setup; the install uses exactly it
-    const home = join(workDir, 'npm-home');
+    const home = join(workDir, 'npm-home', `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`); // this run's own npm home and cache, deleted when the card is made: nothing of the person's cache or config is reused
     await mkdir(home, { recursive: true });
     const iso = npmIsolation(home);
     await writeFile(iso.empty, '');
@@ -108,9 +108,22 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
     const lockBytes = await readFile(join(root, 'package-lock.json'));
     const lock = JSON.parse(lockBytes.toString('utf8'));
     const count = Math.max(0, Object.keys(lock.packages ?? {}).filter((k) => k).length);
+    await runNpm(['ci', '--omit=dev', ...iso.args], { cwd: root, env: iso.env }); // the whole tree, now, with no scripts
+    const files = await walk(root);
+    const pkgOf = (f) => { const m = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(f.replace(/^/, '/')); return m ? m[1] : parsed.name; };
+    const compiledPackages = [...new Set(files.filter((f) => /\.node$/i.test(f)).map(pkgOf))];
+    const scriptPackages = new Set();
+    for (const f of files.filter((x) => /(^|\/)binding\.gyp$/i.test(x))) scriptPackages.add(pkgOf(f)); // binding.gyp means a build step Bunny does not run
+    for (const f of files.filter((x) => /(^|\/)package\.json$/.test(x))) {
+      try { const pj = JSON.parse(await readFile(join(root, f), 'utf8')); if (['preinstall', 'install', 'postinstall'].some((k) => pj.scripts?.[k])) scriptPackages.add(String(pj.name ?? pkgOf(f))); } catch { /* not a package file */ }
+    }
+    for (const [k, v] of Object.entries(lock.packages ?? {})) if (k && v?.hasInstallScript) scriptPackages.add(k.replace(/^.*node_modules\//, ''));
+    const compiled = compiledPackages.length > 0;
+    const compiledFiles = files.filter((f) => /\.node$/i.test(f));
+    await rm(home, { recursive: true, force: true }).catch(() => {}); // npm's cache and home are gone
     return {
       name: parsed.name, version, integrity: entry.dist.integrity, tarballSha256: sha256(bytes), size: bytes.length, root, bin,
-      command: 'node', args: [bin.file], lockSha256: sha256(lockBytes), dependencies: count, compiled, needsScript, fetchedAt: now().toISOString(), home, iso,
+      command: 'node', args: [bin.file], lockSha256: sha256(lockBytes), treeHash: await treeHash(root), dependencies: count, compiled, compiledCount: compiledFiles.length, compiledPackages, scriptPackages: [...scriptPackages], needsScript, fetchedAt: now().toISOString(),
     };
   } catch (err) {
     await rm(root, { recursive: true, force: true }).catch(() => {});
@@ -125,19 +138,25 @@ export function describeNpm(p) {
     `Connector from npm: ${p.name}@${p.version}`,
     `Pinned: version ${p.version}, integrity ${p.integrity.slice(0, 22)}…, ${Math.round(p.size / 1024)} KB, fetched just now`,
     `This adds ${p.dependencies} package${p.dependencies === 1 ? '' : 's'}, installed from a list fixed now (${p.lockSha256.slice(0, 12)}…).`,
-    ...(p.compiled ? ['Includes compiled code.'] : []),
-    ...(p.needsScript.length ? [`Needs an install script (${p.needsScript.join(', ')}), which Bunny does not run. It may not work.`] : []),
+    ...(p.compiledPackages.length ? p.compiledPackages.slice(0, 12).map((n) => `${n}: includes compiled code`) : ['No compiled code in the whole tree.']),
+    ...(p.scriptPackages.length ? p.scriptPackages.slice(0, 12).map((n) => `${n}: needs a script Bunny doesn't run (it may not work)`) : ['No package needs an install script.']),
     `Runs: node ${p.bin.rel}   (in ${p.root})`,
     'This runs code from the internet on this computer.',
   ].join('\n');
 }
 
-/** Install exactly what the card showed: the lockfile must still hash the same, then `npm ci` from it, with no scripts. Returns { command, args }. */
-export async function installNpm(p, { runNpm = defaultNpm } = {}) {
-  const lockBytes = await readFile(join(p.root, 'package-lock.json')).catch(() => null);
-  if (!lockBytes || sha256(lockBytes) !== p.lockSha256) { await rm(p.root, { recursive: true, force: true }).catch(() => {}); throw new Error('The source changed after you looked; nothing was installed.'); }
-  await runNpm(['ci', '--omit=dev', ...p.iso.args], { cwd: p.root, env: p.iso.env });
-  const bin = await binOf(p.root, { name: p.name, bin: { [p.bin.name]: p.bin.rel } });
-  if (bin.file !== p.bin.file) throw new Error('The program to run changed after you looked; nothing was installed.');
-  return { command: p.command, args: [bin.file] };
+/** Install exactly what the card showed: the staged tree must still hash the same (IA-5), then that very folder is moved to `dest`. Nothing is downloaded and no npm command runs. Returns { command, args }. */
+export async function installNpm(p, { dest } = {}) {
+  let same = false;
+  try { same = (await treeHash(p.root)) === p.treeHash; } catch { same = false; }
+  if (!same) { await rm(p.root, { recursive: true, force: true }).catch(() => {}); throw new Error('The source changed after you looked; nothing was installed.'); }
+  if (!dest) throw new Error('There is nowhere to install it.');
+  await rm(dest, { recursive: true, force: true });
+  await mkdir(dirname(dest), { recursive: true });
+  await rename(p.root, dest);
+  const bin = await binOf(dest, { name: p.name, bin: { [p.bin.name]: p.bin.rel } });
+  return { command: p.command, args: [bin.file], folder: dest };
 }
+
+/** The staged folder is deleted when the person says no, when the card times out, and after the move. */
+export const discardNpm = (p) => rm(p?.root ?? '', { recursive: true, force: true }).catch(() => {});
