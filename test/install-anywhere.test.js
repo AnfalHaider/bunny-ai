@@ -252,3 +252,15 @@ test('IA-4: more than 5,000 files stops the install', async () => {
   await assert.rejects(prepareSource('https://x.example.com/p.zip', { workDir: work, fetchSource: standIn(many, 'https://x.example.com/p.zip'), checkAddress }), /more than 5000 files/);
   assert.deepEqual(await readdir(work), []);
 });
+
+test('open-web candidates: search_plugins lists web results last, marked as candidates; an address from them is still "found on the open web" and installs nothing by itself', async () => {
+  const work = await tmp(); const m = memory();
+  const html = (n) => `<a class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(`https://files.example.com/pack${n}.zip`)}">Pack ${n}</a><a class="result__snippet">A pack</a>`;
+  const tools = createAppTools({ ...m.deps, workDir: work, checkAddress, fetchSource: standIn(ZIP()), fetchImpl: async (url) => (/duckduckgo/.test(String(url)) ? { ok: true, status: 200, text: async () => html(String(url).length % 5) } : { ok: true, status: 200, json: async () => ({ items: [], servers: [] }), text: async () => '' }) });
+  const found = await tools.run('search_plugins', { query: 'notes' }, { chatId: 'w1' });
+  assert.match(found, /From the open web \(candidates only: not a known catalogue/);
+  assert.match(found, /https:\/\/files\.example\.com\/pack\d\.zip/);
+  assert.deepEqual(m.state.skills, [], 'a search installs nothing');
+  const url = /(https:\/\/files\.example\.com\/pack\d\.zip)/.exec(found)[1];
+  assert.equal((await tools.previewPluginCard(url, { chatId: 'w1' })).openWeb, true, 'a web candidate stays "found on the open web"');
+});

@@ -410,7 +410,21 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   const run = {
     web_search: ({ query }) => webSearch(query),
     read_url: ({ url }) => readUrl(url),
-    search_plugins: async ({ query }, ctx) => { const found = await searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) }); noteKnown(ctx?.chatId, found); return found; },
+    search_plugins: async ({ query }, ctx) => {
+      const found = await searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) });
+      noteKnown(ctx?.chatId, found); // only the catalogues' own results are "known" to this chat
+      // INSTALL-ANYWHERE: the open web, last. Candidates only: a link and a title, cleaned like any web result; nothing from it is installed without the pipeline and the one card, which says it was found on the open web.
+      const q = String(query ?? '').trim().slice(0, 100);
+      const lines = [];
+      for (const phrase of [`${q} MCP server`, `${q} SKILL.md`, `${q} claude plugin`]) {
+        try {
+          const text = await webSearch(phrase, fetchImpl);
+          for (const block of String(text).split(/\n(?=- )/)) { const m = /^- (.*)\n\s+(https:\/\/\S+)/.exec(block); if (m && !lines.some((l) => l.url === m[2])) lines.push({ title: m[1].slice(0, 100), url: m[2].slice(0, 300) }); }
+        } catch { /* the web is not reachable: the catalogues' answer stands */ }
+      }
+      const web = lines.slice(0, 6);
+      return web.length ? `${found}\n\nFrom the open web (candidates only: not a known catalogue; nothing here is installed without the one card, which says "Found on the open web"):\n${web.map((w) => `- ${w.title}\n  ${w.url}`).join('\n')}` : found;
+    },
     read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
