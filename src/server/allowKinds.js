@@ -24,6 +24,21 @@ export const COMMAND_PAIRS = Object.freeze([
 ]);
 /** Programs that take a sub-command: an option before it ("git -c", "npm --prefix") means no kind at all. */
 const SUBCOMMAND_PROGRAMS = new Set(['npm', 'pnpm', 'yarn', 'git', 'dotnet', 'cargo', 'go', 'pip', 'winget', 'choco']);
+/** F9-8: options that move a command elsewhere or change what runs (also in their --opt=value form), project files named by a path, and any argument that leads outside the folder. */
+const MOVING_OPTIONS = new Set(['--prefix', '--script-shell', '--userconfig', '--globalconfig', '--registry', '--cache', '--workspace', '-w', '--workspaces', '-c', '--dir', '--cwd', '--manifest-path', '--project', '--solution', '--root', '--config', '--git-dir', '--work-tree', '--output', '--output-file', '--config-file', '--ignore-path', '--rulesdir', '--resolve-plugins-relative-to', '--tsconfig', '-p']);
+export function reachesOut(args) {
+  for (const raw of args) {
+    const [name, ...rest] = String(raw).split('=');
+    if (MOVING_OPTIONS.has(name.toLowerCase()) || /^-C/.test(name) && name === '-C') return true;
+    for (const value of [name.startsWith('-') ? rest.join('=') : String(raw)]) {
+      if (!value) continue;
+      if (/\.(sln|slnx|csproj|fsproj|vbproj)$/i.test(value)) return true; // dotnet with a project or solution file
+      if (/(^|[\\/])\.\.([\\/]|$)/.test(value) || /^([\\/]|~|[A-Za-z]:)/.test(value)) return true; // up and out, absolute, home, or a drive
+    }
+  }
+  return false;
+}
+
 /** The reasons shown under a card that offers no kind: FIXED strings, keyed by the case, never model text (Security a). */
 export const REASONS = Object.freeze({
   compound: 'it has more than one part, so Bunny cannot tell what exactly will run',
@@ -107,7 +122,7 @@ export function commandKind(command, { cwd = null, env = process.env, resolve: r
     const [pp, ps] = p.split(' ');
     return program === pp && (ps === undefined || second === ps);
   });
-  const dangerous = program === 'git' && words.slice(1).some((w) => w === 'push' || w === '-c');
+  const dangerous = (program === 'git' && words.slice(1).some((w) => w === 'push' || w === '-c')) || reachesOut(words.slice(2)); // F9-8: an option or argument that can move the command out of the folder gets only the exact kind
   if (pairKey && !dangerous) {
     return { kind: { type: 'command', mode: 'pair', key: pairKey, program, exe, label: `${pairKey} commands`, button: `Allow \`${pairKey}\` commands in this chat`, pattern: `${pairKey} *`, ruleWords: pairKey }, reason: null };
   }

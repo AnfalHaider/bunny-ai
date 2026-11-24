@@ -107,3 +107,39 @@ test('the Forget route is window-only (a device cannot clear or read it as the w
   assert.ok(WINDOW_ONLY_ROUTES.length > 0);
   assert.equal(isWindowOnlyRoute('DELETE', route), true);
 });
+
+test('F9-8: an option after the sub-command that moves the command or changes what runs, or an argument that leaves the folder, gets only the exact kind', () => {
+  const opts = { cwd: 'c:\\work', resolve: (n) => ({ npm: 'c:\\t\\npm.cmd', pnpm: 'c:\\t\\pnpm.cmd', yarn: 'c:\\t\\yarn.cmd', cargo: 'c:\\t\\cargo.exe', go: 'c:\\t\\go.exe', dotnet: 'c:\\t\\dotnet.exe', git: 'c:\\t\\git.exe', pytest: 'c:\\t\\pytest.exe' }[n] ?? null) };
+  const exactOnly = [
+    'npm run build --prefix ..\\other', 'npm run build --prefix=..\\other', 'npm test --script-shell calc.exe', 'npm test --script-shell=calc.exe', 'npm run x --userconfig c:\\evil\\.npmrc', 'npm run x --userconfig=c:\\evil\\.npmrc', 'npm run x --registry https://evil.example.com', 'npm run x --registry=https://evil.example.com',
+    'pnpm run build -C ..\\other', 'pnpm run build --dir ..\\other', 'pnpm run build --dir=..\\other', 'yarn run build --cwd ..\\other', 'yarn run build --cwd=..\\other',
+    'cargo build --manifest-path ..\\x\\Cargo.toml', 'cargo build --manifest-path=..\\x\\Cargo.toml', 'go build -C ..\\x', 'dotnet build ..\\x\\a.sln', 'dotnet test c:\\other\\a.csproj', 'dotnet build --project ..\\x\\a.csproj',
+    'git add ..\\secret.txt', 'git add C:\\Users\\x\\file', 'git log --output=out.txt',
+  ];
+  for (const cmd of exactOnly) {
+    const k = commandKind(cmd, opts).kind;
+    assert.ok(k, cmd); assert.equal(k.mode, 'exact', `${cmd} must get only the exact kind`);
+  }
+  for (const cmd of ['npm run build', 'npm test', 'pnpm run lint', 'cargo build', 'go test', 'dotnet build', 'git add .', 'git status', 'pytest']) assert.equal(commandKind(cmd, opts).kind?.mode, 'pair', cmd);
+  // a pair kind given for "npm run build" does not cover the moved forms
+  const pair = commandKind('npm run build', opts).kind;
+  assert.equal(commandMatches(pair, 'npm run build --prefix ..\\other', opts), false);
+  assert.equal(commandMatches(pair, 'npm run lint', opts), true);
+});
+
+// F9-7: an engine's command in Bunny-rules mode follows the chat's kinds through the bridge
+import { createBridge } from '../src/server/engines/bridge.js';
+test('F9-7: the bridge lets an allowed "npm run" kind through without asking, still asks for a compound or a moved form, and a deny rule still wins', async () => {
+  const opts = { cwd: 'c:\work', resolve: (n) => (n === 'npm' ? 'c:\t\npm.cmd' : null) };
+  const kind = commandKind('npm run lint', opts).kind;
+  const asks = [];
+  const make = (rules = []) => createBridge({ mode: 'ask', rules, root: 'c:\work', protect: [], keyFolders: [], ask: async (summary) => { asks.push(summary); return false; }, allowed: async (call) => call.command !== undefined && commandMatches(kind, call.command, opts) });
+  const bridge = make();
+  const ok = await bridge.claude({ tool: 'Bash', input: { command: 'npm run test' } });
+  assert.equal(ok.allow, true); assert.equal(asks.length, 0);
+  for (const command of ['npm run test && npm run test', 'npm run test --prefix ..\\other', 'npm install evil']) {
+    const r = await bridge.claude({ tool: 'Bash', input: { command } });
+    assert.equal(r.allow, false, command);
+  }
+  assert.equal(asks.length, 3, 'each of those asked');
+});
