@@ -131,13 +131,13 @@
         </select></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Transcript text size</div></div>
+        <div class="meta-col"><div class="name">Transcript text size</div><div class="desc">How big the text in chats is.</div></div>
         <div class="right"><select class="appearance" data-key="transcriptSize" aria-label="Transcript text size">
           <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="xlarge">Extra large</option>
         </select></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Transcript width</div></div>
+        <div class="meta-col"><div class="name">Transcript width</div><div class="desc">How wide the chat column is on a large screen.</div></div>
         <div class="right"><select class="appearance" data-key="transcriptWidth" aria-label="Transcript width">
           <option value="narrow">Narrow</option><option value="medium">Medium</option><option value="wide">Wide</option><option value="full">Full width</option>
         </select></div>
@@ -162,6 +162,7 @@
 
     <h2 id="code-look">Code</h2>
     <div class="group">
+      <p class="section-note">Code colours: the colours used in code blocks, one choice for the light theme and one for the dark theme.</p>
       <div class="code-theme-pick">
         <div>
           <select class="appearance" data-key="codeThemeLight" id="code-theme-light" aria-label="Code colours in light mode"></select>
@@ -177,7 +178,7 @@
         <div class="right"><input class="appearance" data-key="codeFont" maxlength="60" placeholder="JetBrains Mono" aria-label="Code font" /></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Code font size</div></div>
+        <div class="meta-col"><div class="name">Code font size</div><div class="desc">The size of text inside code blocks.</div></div>
         <div class="right"><select class="appearance" data-key="codeFontSize" aria-label="Code font size">
           <option value="">Default (12)</option><option value="11">11</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="18">18</option>
         </select></div>
@@ -202,7 +203,7 @@
 
   <section data-section="bunny">
     <h2>Instructions</h2>
-    <p class="section-note">Bunny keeps these in mind in every chat: how you like answers, what you work on, rules to follow.</p>
+    <p class="section-note">Sent to the model at the start of every chat: how you like answers, what you work on, rules to follow. Keep it short. It saves as you type.</p>
     <div class="group instructions-box">
       <textarea id="instructions" rows="10" maxlength="20000" placeholder="For example: Answer briefly. I work in TypeScript and deploy to Vercel. Explain things like I'm new to them." aria-label="Instructions for every chat"></textarea>
       <div class="instructions-foot"><span id="instructions-count">0 / 20000</span><span id="instructions-saved" aria-live="polite"></span></div>
@@ -460,6 +461,7 @@
         </div>
         <div class="right wide-col">
           <textarea id="allowlist" rows="3" aria-label="Allowed models"></textarea>
+          <span class="field-err" id="allowlist-err" role="alert"></span>
         </div>
       </div>
       <div class="row">
@@ -468,17 +470,15 @@
           <div class="desc">One "name = model-id" per line, so a model can be picked by a short name.</div>
         </div>
         <div class="right wide-col">
-          <textarea id="aliases" rows="3" aria-label="Model aliases"></textarea>
+          <textarea id="aliases" rows="3" aria-label="Aliases"></textarea>
+          <span class="field-err" id="aliases-err" role="alert"></span>
         </div>
-      </div>
-      <div class="row">
-        <div class="right"><button id="save-models" class="primary">Save models</button></div>
       </div>
     </div>
   </section>
 
   <section data-section="code">
-    <h2>Code</h2>
+    <h2>Code chats</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -541,6 +541,7 @@
           <div id="rules-try-out" role="status" aria-live="polite"></div>
         </div>
       </div>
+      <h3 class="grp-head">Effort and branches</h3>
       <div class="row">
         <div class="meta-col">
           <div class="name">Default effort</div>
@@ -564,6 +565,7 @@
           <div id="wt-leftovers"></div></div>
         <div class="right"></div>
       </div>
+      <h3 class="grp-head">Long jobs</h3>
       <div class="row">
         <div class="meta-col">
           <div class="name">Keep going on long jobs</div>
@@ -582,10 +584,12 @@
         <div class="meta-col"><div class="name">Code theme and font</div><div class="desc">Change how code looks in replies, files, diffs and the terminal.</div></div>
         <div class="right"><button type="button" class="btn" id="open-appearance">Open Appearance</button></div>
       </div>
+      <h3 class="grp-head">Helpers</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Helpers (dynamic workflows)</div><div class="desc">Let Bunny run several helper agents at once on big jobs. Uses your limits faster.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="helpersEnabled" data-default="true" aria-label="Helpers" /><span class="pref-state"></span></label></div>
       </div>
+      <h3 class="grp-head">After a reply</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Prompt suggestions</div><div class="desc">Suggest next messages after Bunny replies. Each suggestion asks the model once more, so it adds a little to your usage.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="promptSuggestions" data-default="false" aria-label="Prompt suggestions" /><span class="pref-state"></span></label></div>
@@ -594,8 +598,9 @@
         <div class="meta-col"><div class="name">Summary and next steps</div><div class="desc">Bunny ends its work with what it did, what is left and what it needs from you.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="summaryNextSteps" data-default="true" aria-label="Summary and next steps" /><span class="pref-state"></span></label></div>
       </div>
+      <h3 class="grp-head">New tasks</h3>
       <div class="row">
-        <div class="meta-col"><div class="name">When you ask for an unrelated task</div><div class="desc">What happens when you ask for something the chat isn't working on.</div></div>
+        <div class="meta-col"><div class="name">When you ask for an unrelated task</div><div class="desc">Ask shows a choice. Start a new chat picks that choice for you. Do it here never offers it.</div></div>
         <div class="right"><select class="pref" data-key="unrelatedTask" data-default="ask" aria-label="When you ask for an unrelated task">
           <option value="ask">Ask me</option><option value="new">Start a new chat</option><option value="here">Do it in this chat</option>
         </select></div>
@@ -796,8 +801,22 @@
   const notifications = $('notifications');
   // The window that shows this page waits for the saves in flight before it closes it (closeSettings in chat.js), so a change made just before closing is never lost.
   const pendingSaves = (window.bunnyPendingSaves = new Set());
+  // The "Saved" mark: the same small word beside whatever the person just changed.
+  const markSaved = (control) => {
+    const slot = control?.closest('.right') ?? control?.parentElement;
+    if (!slot) return;
+    let mark = slot.querySelector(':scope > .sv');
+    if (!mark) { mark = document.createElement('span'); mark.className = 'sv'; mark.setAttribute('role', 'status'); slot.append(mark); }
+    mark.textContent = 'Saved';
+    clearTimeout(mark.timer);
+    mark.timer = setTimeout(() => { mark.textContent = ''; }, 1800);
+  };
+  let lastChanged = null;
+  document.addEventListener('change', (e) => { lastChanged = e.target; }, true);
   const save = (patch) => {
     const p = sendJSON('/api/settings', 'PUT', patch);
+    const control = lastChanged;
+    p.then(() => { if (control && control.id !== 'aliases' && control.id !== 'allowlist') markSaved(control); }, () => {});
     pendingSaves.add(p);
     const done = () => pendingSaves.delete(p);
     p.then(done, done);
@@ -1493,14 +1512,44 @@
   });
   $('restart-update')?.addEventListener('click', () => updates?.install());
 
-  $('save-models').addEventListener('click', async () => {
+  // One way of saving: a change is saved when the box is left; a wrong entry saves nothing and says why, under the box.
+  const closest = (word, options) => {
+    const score = (a, b) => { // how many characters two ids share in order, a cheap "did you mean"
+      let i = 0; for (const c of a) { const at = b.indexOf(c, i); if (at >= 0) i = at + 1; } return i / Math.max(a.length, b.length);
+    };
+    return options.map((o) => [o, score(word.toLowerCase(), o.toLowerCase())]).sort((x, y) => y[1] - x[1])[0];
+  };
+  const saveAliases = async () => {
+    const lines = aliases.value.split('\n');
+    const bad = lines.findIndex((l) => l.trim() && !/^\s*[^=\s]+\s*=\s*\S.*$/.test(l));
+    $('aliases-err').textContent = bad < 0 ? '' : `Not saved: line ${bad + 1} has no " = ". Write it as name = model.`;
+    aliases.classList.toggle('bad', bad >= 0);
+    if (bad >= 0) return;
+    await save({ aliases: parseAliases(aliases.value) });
+    markSaved(aliases);
+  };
+  const saveAllowlist = async () => {
     const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
-    const map = parseAliases(aliases.value);
-    await save({ allowlist: list, aliases: map });
-    const button = $('save-models');
-    button.textContent = 'Saved';
-    setTimeout(() => { button.textContent = 'Save models'; }, 1200);
-  });
+    let message = '';
+    if (list.length) {
+      let known = [];
+      try { known = (await getJSON('/api/models')).map((m) => m.id); } catch { /* without the list nothing can be checked */ }
+      const aliasNames = Object.keys(parseAliases(aliases.value));
+      const ok = (id) => known.includes(id) || aliasNames.includes(id);
+      if (known.length && !list.some(ok)) {
+        const missing = list.find((id) => !ok(id));
+        const [guess, closeness] = closest(missing, known);
+        message = `Not saved: "${missing}" is not a model I know. Nothing would be left to choose from.${closeness > 0.7 ? ` Did you mean ${guess}?` : ''}`;
+      }
+    }
+    $('allowlist-err').textContent = message;
+    allowlist.classList.toggle('bad', Boolean(message));
+    if (message) return;
+    await save({ allowlist: list });
+    markSaved(allowlist);
+  };
+  aliases.addEventListener('change', saveAliases);
+  allowlist.addEventListener('change', saveAllowlist);
 
   // ---- desktop app (only inside the Electron shell, which exposes window.bunnyDesktop) ----
   // BROWSER step 2: open to other devices on the local network (window only). Off until turned on; then on after every restart until turned off (REMOTE-STAY), on the same network only.
@@ -1739,6 +1788,7 @@
       const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key.replace('Arrow', '');
       const combo = [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Win', key].filter(Boolean).join('+');
       stopRecording();
+      if (!(event.altKey || event.metaKey || /^F\d+$/.test(key))) { quickNote(`Not saved: ${combo} is a key other apps use (Ctrl+C copies, for one). Choose a shortcut that uses Alt or Win, for example Ctrl+Alt+Space.`); return; }
       saveQuick({ quickAskShortcut: combo, quickAskEnabled: true });
     }
     changeButton.addEventListener('click', () => {

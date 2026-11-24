@@ -2494,3 +2494,11 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .made-card .made-said { flex-basis: 100%; font-size: var(--fs-sm); color: var(--text-dim); }
 .made-card .made-said:empty { display: none; }
 @media (max-width: 520px) { .made-card .made-actions { margin-left: 0; flex-basis: 100%; } }
+
+/* SETTINGS-OVERHAUL: sub-headings inside a long group, the "Saved" mark and the red line under a refused entry */
+.grp-head { margin: 18px 0 6px; font-size: var(--fs-sm); letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+.sv { font-size: 12px; color: var(--ok, #2f8f5b); white-space: nowrap; }
+.sv:not(:empty)::before { content: "\2713  "; }
+.field-err { display: block; margin-top: 4px; font-size: 12px; color: var(--bad); }
+.field-err:empty { display: none; }
+textarea.bad, input.bad { border-color: var(--bad); }
