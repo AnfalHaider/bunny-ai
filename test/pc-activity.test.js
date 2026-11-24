@@ -50,6 +50,7 @@ test('old entries are pruned: 500 at most, and nothing older than 30 days', asyn
   assert.equal((await a.list())[0].results, ACTIVITY_MAX_ENTRIES + 29, 'the newest kept');
   now += ACTIVITY_MAX_AGE_MS + 1000;
   assert.equal((await a.list()).length, 0, 'older than 30 days: gone');
+  await a.flush(); // the first instance's own save must be finished before the file is written by hand (a write still queued would land after it)
   await writeFile(file, JSON.stringify([{ at: new Date(now - ACTIVITY_MAX_AGE_MS - 5000).toISOString(), who: 'window', kind: 'search', results: 1 }]));
   assert.equal((await createPcActivity({ file, now: () => now }).list()).length, 0, 'and not read back from the saved file either');
 });
