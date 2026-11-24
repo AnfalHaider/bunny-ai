@@ -511,6 +511,20 @@
           </select>
         </div>
       </div>
+      <div class="row" id="auto-judge-row">
+        <div class="meta-col">
+          <div class="name">Check Auto actions with a second model</div>
+          <div class="desc">In Auto, a second model checks each risky action before it runs: commands, connector changes, computer and browser clicks, downloads and installs. It sees only your own typed words and the action, never file or page text, and it can only let through what Auto would already run, or stop it. If it stops too many actions, does not answer, or cannot be reached, Bunny asks you instead. While this is on, broad Allow rules (such as node*, powershell* or curl*) are not used in Auto.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoJudgeEnabled" data-cap-default="off" aria-label="Check Auto actions with a second model" /><span>off</span></label></div>
+      </div>
+      <div class="row" id="auto-judge-model-row">
+        <div class="meta-col">
+          <div class="name">Model that checks Auto actions</div>
+          <div class="desc">By default the model of the chat's own provider. Another provider can be chosen below; each checked command and its arguments are then sent to that provider. <span id="auto-judge-note" role="status"></span></div>
+        </div>
+        <div class="right"><select id="auto-judge-model" aria-label="Model that checks Auto actions"><option value="">This chat's own model</option></select></div>
+      </div>
       <div class="rules" id="perm-rules">
         <h3>Permission rules</h3>
         <p class="lead" id="rules-engine-off" hidden></p>
@@ -1423,6 +1437,19 @@
 
   // ---- code defaults ----
   $('default-permission').addEventListener('change', (e) => save({ defaultPermissionMode: e.target.value }));
+  // F11: the model that checks Auto actions (window-only): the chat's own by default; another provider's model is named, because the checked actions are sent there
+  async function bindJudgeModel(settings) {
+    const sel = $('auto-judge-model');
+    const note = () => { const v = sel.value; $('auto-judge-note').textContent = v ? `Each checked command and its arguments are sent to ${v.split('/')[0]}.` : ''; };
+    try {
+      const models = await getJSON('/api/models');
+      const seen = new Set();
+      for (const m of models) { const v = `${m.providerId}/${m.id}`; if (seen.has(v) || !/^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(v)) continue; seen.add(v); const o = document.createElement('option'); o.value = v; o.textContent = `${m.providerName ?? m.providerId}: ${m.name ?? m.id}`; sel.append(o); }
+    } catch { /* no model list: the default stays */ }
+    sel.value = [...sel.options].some((o) => o.value === settings.autoJudgeModel) ? settings.autoJudgeModel : '';
+    note();
+    sel.addEventListener('change', async () => { note(); await save({ autoJudgeModel: sel.value }); });
+  }
   $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
 
   // ---- models ----
@@ -1812,6 +1839,7 @@
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
     $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
+    bindJudgeModel(settings).catch(() => {});
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);

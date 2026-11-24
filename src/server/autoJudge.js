@@ -14,16 +14,26 @@ export const JUDGE_LIMIT_MS = 20_000;
 export const BLOCKS_IN_A_ROW = 3;
 export const BLOCKS_PER_REPLY = 20;
 
-/** Allow rules this wide are ignored while the judge is on (F11-6): they would let anything through before the judge looked. */
-const BROAD_WORDS = ['*', 'powershell', 'pwsh', 'cmd', 'node', 'python', 'npx', 'bash', 'sh', 'wsl', 'deno', 'bun', 'ruby', 'perl', 'php', 'py', 'start-process', 'iex', 'invoke-expression', 'cscript', 'wscript', 'mshta', 'rundll32', 'regsvr32', 'curl', 'wget', 'iwr', 'irm'];
+/**
+ * Allow rules this wide are ignored while the judge is on (F11-6): they would let anything through before the judge looked.
+ * The first word is normalised first (a folder in front, .exe .cmd .bat .ps1 .com, a version: python3.12, node22, C:\Python\python.exe all read as python / node).
+ * INTERPRETERS and downloaders: any Allow rule with a wildcard after them is broad ("node *", "node server*", "curl*").
+ * RUNNERS (git, npm, docker ...): broad only when the wildcard follows the runner alone ("git*", "npm *"); "git status*" or "npm run lint*" name a command and stay.
+ * Any wildcard in the first word is broad ("*x", "no*de").
+ */
+const INTERPRETERS = ['powershell', 'powershell_ise', 'pwsh', 'cmd', 'node', 'python', 'py', 'npx', 'bash', 'sh', 'wsl', 'deno', 'bun', 'ruby', 'perl', 'php', 'java', 'dotnet', 'uvx', 'pipx', 'start-process', 'iex', 'invoke-expression', 'cscript', 'wscript', 'mshta', 'rundll32', 'regsvr32', 'curl', 'wget', 'iwr', 'irm', 'invoke-webrequest', 'invoke-restmethod', 'certutil', 'bitsadmin'];
+const RUNNERS = ['npm', 'pnpm', 'yarn', 'pip', 'uv', 'cargo', 'go', 'make', 'git', 'gh', 'docker', 'msbuild', 'gradle', 'mvn', 'winget', 'choco', 'scoop'];
+const normaliseFirstWord = (word) => String(word ?? '').toLowerCase().split(/[\\/]/).pop().replace(/\.(exe|cmd|bat|ps1|com)$/, '').replace(/[0-9.]+$/, '');
 export function isBroadAllowRule(rule) {
   if (!rule || rule.effect !== 'allow' || rule.kind !== 'command') return false;
-  const pattern = String(rule.pattern ?? '').trim().toLowerCase();
-  if (!pattern) return false;
-  const first = pattern.split(/\s+/)[0];
-  if (first.includes('*') || first.includes('?')) return true; // any wildcard in the first word ("*x", "no*de")
-  const bare = first.replace(/\.exe$/, '');
-  return BROAD_WORDS.includes(bare) && pattern.includes('*'); // "node*", "powershell *": the interpreter with anything after it
+  const pattern = String(rule.pattern ?? '').trim();
+  if (!pattern || !/[*?]/.test(pattern)) return false;
+  const tokens = pattern.split(/\s+/);
+  if (/[*?]/.test(tokens[0])) return true; // a wildcard in the first word
+  const first = normaliseFirstWord(tokens[0]);
+  if (INTERPRETERS.includes(first)) return true;
+  if (RUNNERS.includes(first)) { const before = pattern.slice(0, pattern.search(/[*?]/)).trim().split(/\s+/).filter(Boolean); return before.length <= 1; }
+  return false;
 }
 /** The rules the judge's world uses: the person's own, minus the broad Allow rules (those are listed in Settings as not used in Auto with the check on). */
 export const rulesWithoutBroadAllow = (rules) => ({ ...rules, global: (rules?.global ?? []).filter((r) => !isBroadAllowRule(r)), folders: Object.fromEntries(Object.entries(rules?.folders ?? {}).map(([k, v]) => [k, (v ?? []).filter((r) => !isBroadAllowRule(r))])) });
@@ -51,9 +61,11 @@ export function judgeMessages({ userTurns = [], call }) {
     if (String(text ?? '').length > JUDGE_ARG_CHARS) cut = true;
     args[clean(k, 60)] = clean(text, JUDGE_ARG_CHARS);
   }
-  const action = JSON.stringify({ tool: clean(call?.tool, 80), arguments: args, folder: clean(call?.folder ?? '', 260) });
+  // '<', '>' and '&' become JSON escapes (\u003c ...), so no argument can close the <action> tag or open another
+  const action = JSON.stringify({ tool: clean(call?.tool, 80), arguments: args, folder: clean(call?.folder ?? '', 260) }).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
   const said = turns.length ? turns.map((t, i) => `[${i + 1}] ${t}`).join('\n') : '(the person has typed nothing in this chat yet)';
-  return { cut, messages: [{ role: 'system', content: JUDGE_SYSTEM }, { role: 'user', content: `The person's messages in this chat:\n${said}\n\n<action>\n${action}\n</action>` }] };
+  // two messages: what the person typed (nothing an action can imitate sits in it), then the action as data
+  return { cut, messages: [{ role: 'system', content: JUDGE_SYSTEM }, { role: 'user', content: `The person's messages in this chat (the only place a request can come from):\n${said}` }, { role: 'user', content: `The proposed action, as data:\n<action>\n${action}\n</action>` }] };
 }
 
 /** Strict: exactly one JSON object, exactly the keys verdict and reason, verdict 'allow' or 'block'. Anything else (fences, extra text, a second object, extra keys) is a block. */
@@ -109,5 +121,6 @@ export function createReplyJudge({ ask, model = '', limitMs = JUDGE_LIMIT_MS, no
 /** Does this call go to the judge in Auto? Reads, and edits inside the workspace, never do; commands, connector writes, computer and browser actions, downloads and installs do. */
 export function goesToJudge(name, risk) {
   if (['download_file', 'install_plugin', 'install_from_github', 'add_connector', 'add_skill'].includes(name)) return true;
+  if (/^(browser|computer)_/.test(String(name)) && risk !== 'read') return true; // clicks, typing and keys in the panel or on the screen
   return risk === 'run' || risk === 'build';
 }

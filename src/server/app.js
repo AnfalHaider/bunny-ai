@@ -15,6 +15,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { capabilityMap } from './capabilityMap.js';
+import { createReplyJudge, goesToJudge, rulesWithoutBroadAllow } from './autoJudge.js';
 import { splitDeferred, namesLine, findTools, clean as cleanOutside } from './deferTools.js';
 import { BRAVE_SECRET } from './webSearch.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
@@ -814,6 +815,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
       const unknown = Object.keys(patch).filter((k) => !WINDOW_ONLY_SETTING_KEYS.includes(k) && !ORDINARY_SETTING_KEYS.includes(k));
       if (unknown.length) return sendJson(res, 400, { code: 'settings.unknownKey', message: `Bunny AI has no setting called ${unknown.slice(0, 3).map((k) => JSON.stringify(k.slice(0, 40))).join(', ')}.` });
+      // F11: the check on Auto actions: its switch and its model are the window's alone (a device, even at Everything, is refused)
+      if (Object.hasOwn(patch, 'autoJudgeEnabled') && typeof patch.autoJudgeEnabled !== 'boolean') return sendJson(res, 400, { code: 'settings.autoJudge', message: 'The check on Auto actions is on or off.' });
+      if (Object.hasOwn(patch, 'autoJudgeModel') && !(patch.autoJudgeModel === '' || /^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(String(patch.autoJudgeModel)))) return sendJson(res, 400, { code: 'settings.autoJudge', message: "Choose a model from the list, or the chat's own." });
+      if ((Object.hasOwn(patch, 'autoJudgeEnabled') || Object.hasOwn(patch, 'autoJudgeModel')) && (req.bunnyDevice || req.bunnyRemote)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
       if (Object.hasOwn(patch, 'firstReplyWaitSeconds') && validWaitSeconds(patch.firstReplyWaitSeconds) === null) {
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
@@ -2218,12 +2223,59 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // W2-7: the person's permission rules for this folder (its own, then the global ones), read fresh at every call.
       // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
       // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
-      const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
+      // F11-6: while the judge is on, the broad Allow rules (node*, powershell*, curl*, any wildcard in the first word ...) are not used in Auto
+      const judgeOn = () => permissionMode === 'auto' && settings.autoJudgeEnabled === true && !textOnly;
+      const activeRules = () => rulesFor(judgeOn() ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
       const needsOk = (risk, name, args) => risk === 'send'
         || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
+
+      // AGENT-FLOW F11: Auto with a judge (autoJudge.js). It can only allow what Auto would already run unasked, or block; every fall-back is a card (a block in a scheduled run).
+      let replyJudge = null;
+      let judgeNoticeShown = false;
+      const typedTurns = async () => {
+        const saved = await sessions.get(id).catch(() => null);
+        return (saved?.messages ?? []).filter((m) => m.role === 'user' && typeof m.content === 'string' && m.kind === 'text').map((m) => m.content); // the person's own typed words: never Bunny's notes, a tool result or an assistant turn
+      };
+      const askJudgeModel = async (messages, signal) => {
+        // the chat's own provider by default (F11-4); another one only if the person chose it in Settings, and never one with no key or a model off the allowlist
+        let p = provider; let key = apiKey; let judgeModel = model;
+        const chosen = String(settings.autoJudgeModel ?? '');
+        if (chosen) {
+          const [pid, ...rest] = chosen.split('/');
+          const other = registry.find(pid);
+          const otherKey = other ? await secrets.get(`provider:${other.id}`) : null;
+          if (!other || !otherKey) throw new Error('the chosen check model has no key');
+          if (Array.isArray(settings.allowlist) && settings.allowlist.length && !settings.allowlist.includes(rest.join('/'))) throw new Error('the chosen check model is not on the allowlist');
+          p = other; key = otherKey; judgeModel = rest.join('/');
+        }
+        let text = '';
+        for await (const delta of streamChat({ waitSeconds: 20, baseUrl: p.baseUrl, apiKey: key ?? undefined, model: judgeModel, messages, fake: fake && !p.custom, signal, tools: null, maxTokens: 300 })) text += delta;
+        return text;
+      };
+      const judgeModelLabel = () => String(settings.autoJudgeModel || model || '');
+      /** @returns {Promise<{ proceed: true } | { stop: string } | { card: string }>} */
+      const autoCheck = async (summary, name, parsed, risk) => {
+        if (!judgeOn() || !goesToJudge(name, risk)) return { proceed: true };
+        replyJudge ??= createReplyJudge({ ask: askJudgeModel, model: judgeModelLabel() });
+        const out = await replyJudge.judge({ tool: name, args: parsed, folder: workspace?.root ?? folder?.folder ?? '' }, { userTurns: await typedTurns(), scheduled: Boolean(scheduledTask) });
+        const stats = replyJudge.stats;
+        if (out.action === 'run') {
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: `Checked: ${summary}`, status: 'done', content: '', result: `Allowed (${judgeModelLabel()}): ${out.reason}` });
+          send('tool', { tool: `Checked: ${summary}`, status: 'done', result: `Allowed: ${out.reason}` });
+          return { proceed: true };
+        }
+        if (out.action === 'stop') {
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: `Stopped by Bunny's check (${judgeModelLabel()}): ${out.reason}` });
+          send('tool', { tool: summary, status: 'denied', result: `Stopped by Bunny's check: ${out.reason}` });
+          if (out.fellBack && !judgeNoticeShown) { judgeNoticeShown = true; send('notice', { text: `Bunny's check stopped ${stats.blocked} actions in this reply, so it asks you before each one for the rest of it.` }); }
+          return { stop: `Bunny's check stopped this: ${out.reason} Find a safer way, or ask the person with ask_user.` };
+        }
+        if (!judgeNoticeShown) { judgeNoticeShown = true; send('notice', { text: out.why }); }
+        return { card: out.why };
+      };
 
       // Settings → Code.
       const branchPrefix = String(settings.branchPrefix ?? 'bunny').trim().replace(/[^\w.-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'bunny';
@@ -2954,10 +3006,13 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
-        if (ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        let askWhy = '';
+        let mustAsk = ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'));
+        if (!mustAsk && ruledProcess?.effect !== 'allow') { const judged = await autoCheck(summary, name, parsed, risk); if (judged.stop) return judged.stop; if (judged.card) { mustAsk = true; askWhy = judged.card; } }
+        if (mustAsk) {
           const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || name === 'schedule_task' || custom) ? cardTooLong(detail, name === 'schedule_task' ? parsed.prompt : detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
-          const allowed = await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail);
+          const allowed = await askPermission(summary, (ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail) + (askWhy ? `\n\n${askWhy}` : ''));
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
@@ -3272,8 +3327,11 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
             send('tool', { tool: summary, status: 'denied' });
             return planRefusal(name);
           }
-          if (needsOk(BROWSER_TOOL_RISK[name], name, parsed)) {
-            const allowed = await askPermission(summary, '');
+          let browserAsk = needsOk(BROWSER_TOOL_RISK[name], name, parsed);
+          let browserWhy = '';
+          if (!browserAsk) { const judged = await autoCheck(summary, name, parsed, BROWSER_TOOL_RISK[name]); if (judged.stop) return judged.stop; if (judged.card) { browserAsk = true; browserWhy = judged.card; } }
+          if (browserAsk) {
+            const allowed = await askPermission(summary, browserWhy);
             if (!allowed) {
               await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
               send('tool', { tool: summary, status: 'denied' });
@@ -3371,10 +3429,13 @@ ${[parsed.command, ...(Array.isArray(parsed.args) ? parsed.args : [])].map((a) =
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
-        if (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        let mustAskHere = Boolean(localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')));
+        let whyHere = '';
+        if (!mustAskHere && ruled?.effect !== 'allow' && !(isWorkspace && risk === 'edit')) { const judged = await autoCheck(summary, name, parsed, risk); if (judged.stop) return judged.stop; if (judged.card) { mustAskHere = true; whyHere = judged.card; } } // edits inside the workspace never go to the judge
+        if (mustAskHere) {
           const tooLong = (localConnector || toolPlan || name === 'run_command' || officeSpec) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
-          const allowed = await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail);
+          const allowed = await askPermission(summary, (ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail) + (whyHere ? `\n\n${whyHere}` : ''));
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
