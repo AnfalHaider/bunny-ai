@@ -3291,7 +3291,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         const npmAdd = name === 'add_connector' && !localConnector && String(parsed.npm ?? '').trim(); // IA-2
         const remoteAdd = name === 'add_connector' && !localConnector && !npmAdd && String(parsed.url ?? '').trim();
         const installsSource = name === 'install_plugin' || name === 'install_skill'; // INSTALL-ANYWHERE: both take a GitHub link, an archive or a SKILL.md at a public https address
-        if (isApp && installsSource && scheduledTask) { const said = 'Installing needs you; nobody is here to ask.'; send('tool', { tool: summary, status: 'denied', result: said }); return said; } // IA-8: never unattended
+        if (isApp && (installsSource || (name === 'add_connector' && String(parsed.npm ?? '').trim())) && scheduledTask) { const said = 'Installing needs you; nobody is here to ask.'; send('tool', { tool: summary, status: 'denied', result: said }); return said; } // IA-8: never unattended
         if (isApp && installsSource) alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
         if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
         if (alreadyThere) { const said = installsSource ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported

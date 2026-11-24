@@ -158,14 +158,16 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   }
   // IA-2: a pinned npm connector: fetched, locked and installed into staging ONCE for the card; the yes moves exactly that tree
   const preparedNpm = new Map();
+  const sweepNpm = async () => { for (const [k, p] of preparedNpm) if (now().getTime() - Date.parse(p.fetchedAt) > 30 * 60_000) { preparedNpm.delete(k); await discardNpm(p); } }; // a card nobody answered: its staging is deleted
   async function previewNpmCard(spec) {
+    await sweepNpm();
     if (!workDir) return { ok: false, message: 'Installing from npm is not available here.' };
     try {
       const reg = npmDeps ?? {
         fetchJson: async (u) => JSON.parse(Buffer.from((await fetchLimited(u, { maxBytes: 8 * 1024 * 1024 })).bytes).toString('utf8')),
         fetchBytes: async (u, o) => (await fetchLimited(u, o)).bytes,
       };
-      const p = await prepareNpm(spec, { workDir, ...reg });
+      const p = await prepareNpm(spec, { workDir, ...reg, now });
       preparedNpm.set(p.root, p);
       const full = describeNpm(p);
       const tooLong = full.length > 1800;
@@ -479,7 +481,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     setFolders,
     updatePlugin,
     previewPlugin,
-    previewPluginCard, previewNpmCard, discardNpmToken,
+    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm,
     /** F10: is this plugin already installed? (then there is nothing to ask: the install itself says so) */
     isPluginInstalled: (url) => Boolean(findInstalled(null, url)),
   };
