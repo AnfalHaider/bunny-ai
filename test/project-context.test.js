@@ -93,13 +93,15 @@ test('PC-1: a chat with PC file text, a pcSources or noAutoLoad message, or a se
     chat({ id: 'a', title: 'Taxes 2025', messages: [{ role: 'tool', content: '<<<FILE' }] }),
     chat({ id: 'b', title: 'Passport scan', messages: [{ role: 'assistant', content: 'x', pcSources: [{ n: 1 }] }] }),
     chat({ id: 'c', title: 'Bank letters', messages: [{ role: 'assistant', content: 'x', noAutoLoad: true }] }),
+    chat({ id: 'e', title: 'Only searched', messages: [{ role: 'assistant', kind: 'tool_call', tool: 'Searched this PC for invoices', pcResults: [{ name: 'a.pdf' }], content: '' }, { role: 'assistant', kind: 'text', content: 'Found two.' }] }),
     chat({ id: 'd', title: 'Medical notes', messages: [{ role: 'assistant', kind: 'tool_call', tool: 'search_pc: invoices', content: '' }] }),
   ];
   const { holdsPcFileText } = await import('../src/server/pcTools.js');
   void holdsPcFileText;
   const r = await recentWorkPart({ chats: tainted.slice(1), selfId: 'x' });
+  assert.doesNotMatch(r.text, /Only searched|Found two/, 'a chat that only searched (names, no read) is left out too');
   assert.doesNotMatch(r.text, /Passport scan|Bank letters|Medical notes/);
-  assert.equal(r.text.split(LEFT_OUT_PC).length - 1, 3);
+  assert.equal(r.text.split(LEFT_OUT_PC).length - 1, 4);
 });
 
 test('PC-2: a secret-looking piece is replaced; a planted fence marker is removed and stays inside one fence', async () => {

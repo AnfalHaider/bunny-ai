@@ -39,7 +39,7 @@ const safePiece = (text, max) => { const t = cleanPiece(text, max); return t && 
 /** PC-1: a chat that ever touched files from this PC. */
 export function usedPcFiles(session) {
   const msgs = Array.isArray(session?.messages) ? session.messages : [];
-  return holdsPcFileText(msgs) || msgs.some((m) => m?.pcSources || m?.noAutoLoad || /search_pc|read_pc_file/.test(String(m?.tool ?? '')));
+  return holdsPcFileText(msgs) || msgs.some((m) => m?.pcSources || m?.pcResults || m?.noAutoLoad || /search_pc|read_pc_file/.test(String(m?.tool ?? '')));
 }
 
 /** P3: the project's memory as one system message. Entries done more than 7 days ago have left; the newest come first when it has to be cut. */
