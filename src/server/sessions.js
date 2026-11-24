@@ -141,6 +141,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       pinned: Boolean(session.pinned),
       archived: Boolean(session.archived),
       incognito: Boolean(session.incognito),
+      engine: session.engine?.id ?? null, // PROJECT-CONTEXT: which engine a chat uses, for the project page's "where this text goes" line
       // A chat a helper agent or another chat started: who made it, and how its work is going.
       agent: session.agent ?? null,
       agentStatus: session.agentStatus ?? null,
