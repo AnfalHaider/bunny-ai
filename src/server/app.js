@@ -3253,9 +3253,9 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         }
         // SEARCH-PC: the two tools. Their text is data, and once any file text is in the reply every other tool that is not a plain local read asks, even in Auto (SP-3).
         // F8 / QUICK-ASK-JUST-WORKS: the first time a search runs in this profile, one non-blocking notice says what goes where and how to turn it off. Never on a device or in the bar.
-        if (PC_TOOLS.includes(name) && !textOnly && !req.bunnyRemote && !req.bunnyDevice && settings.pcSearchNoticeShown !== true) {
+        if (PC_TOOLS.includes(name) && !req.bunnyRemote && !req.bunnyDevice && settings.pcSearchNoticeShown !== true) { // F8-4: the bar searches by itself by default, so its first search shows the same notice, as a line under the answer
           const cloud = (() => { try { return !/^(localhost|127\.|\[?::1)/.test(new URL(provider.baseUrl).hostname); } catch { return true; } })();
-          send('notice', { text: `Search this PC is on, for finding files only. File names and folders it finds go to the model${cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)}, a cloud model)` : ''}. Turn it off in Settings › Capabilities.` });
+          send('notice', { text: `Search this PC is on, for finding files only. File names and folders it finds go to the model${cloud ? ` (to ${String(provider?.name ?? providerId ?? 'the provider').replace(/[^\w .-]/g, ' ').slice(0, 40)}, a cloud model)` : ''}. Turn it off in Settings › Capabilities.`, pcNotice: true });
           await saveSettings({ pcSearchNoticeShown: true });
         }
         if (PC_TOOLS.includes(name)) return pc.runTool({ name, parsed, turn: pcTurn, who: pcWho, incognito: Boolean(session.incognito), gate: textOnly ? 'bar' : id, chat: id, send, logStep });
