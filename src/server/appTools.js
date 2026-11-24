@@ -225,7 +225,7 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
   // `by` is who is at the window: 'person' (Bunny's own window) or 'device' (an Everything device). Only the person's own typing may reach a private address; a device keeps every public-https rule and its connector is recorded as a device's.
   async function addressCheck(text, { by = 'person' } = {}) {
     await sweep(); await sweepNpm(); await sweepPypi();
-    const person = by === 'person';
+    const person = by === 'person'; // `by` is 'person' (Bunny's own window) or 'device:<id>' (one particular Everything device): a card belongs to whoever opened it
     const c = classify(text);
     if (c.error) return { ok: false, message: c.error };
     const id = crypto.randomUUID();
@@ -267,9 +267,11 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
     if (on) await switchOn({ skillIds: record.skills, connectorIds: record.connectors }, a.listed);
     return { ok: true, id: record.id, name: a.name, switchedOn: on };
   }
-  async function addressCancel(id) {
-    const a = addresses.get(String(id ?? '')); addresses.delete(String(id ?? ''));
+  async function addressCancel(id, { by = 'person' } = {}) {
+    const a = addresses.get(String(id ?? ''));
     if (!a) return;
+    if (a.by !== by) throw new Error('That card was not shown here.'); // a second device (or the window) cannot cancel another's card
+    addresses.delete(String(id ?? ''));
     if (a.kind === 'npm') await discardNpmToken(a.token);
     if (a.kind === 'pypi') await discardPypiToken(a.token);
     if (a.kind === 'source') { const p = prepared.get(a.token); prepared.delete(a.token); if (p) await discardSource(p); }

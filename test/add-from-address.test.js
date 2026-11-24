@@ -123,3 +123,27 @@ test('ADDR-2: an Everything device is logged (kind install, choice, item name, n
   const mine = (await check(started.base, 'https://files.example.com/pack.zip')).body;
   assert.notEqual((await dev('POST', `/api/install/${mine.id}`, { choice: 'on' })).status, 200);
 });
+
+test('LOW: a card belongs to whoever opened it: a second Everything device (or the window) cannot answer or cancel it', async (t) => {
+  const started = await startApp(t, { lanAddress: '127.0.0.1', fake: false, installSource: { fetchSource: async (u) => ({ bytes: ZIP, url: u }), checkAddress } });
+  const on = await (await fetch(`${started.base}/api/remote`, { method: 'PUT', headers: J, body: JSON.stringify({ enabled: true, passcode: PASS }) })).json();
+  t.after(() => started.app.remote.disable());
+  const url = on.url.replace(/\/$/, ''); const host = new URL(url).host;
+  async function signIn() {
+    const signin = await lan(url, { method: 'POST', path: '/api/remote/signin', headers: { host, origin: `http://${host}`, 'user-agent': `device-${Math.random()}` }, body: { passcode: PASS } });
+    const cookie = String(signin.headers['set-cookie']?.[0] ?? '').split(';')[0];
+    const page = await lan(url, { path: '/src/ui/index.html', headers: { host, cookie } });
+    const csrf = /name="bunny-csrf" content="([a-f0-9]+)"/.exec(page.text)[1];
+    return (method, path, body) => lan(url, { method, path, headers: { host, cookie, origin: `http://${host}`, 'x-bunny-csrf': csrf }, body });
+  }
+  const one = await signIn(); const two = await signIn();
+  for (const d of started.app.remote.list()) assert.equal((await fetch(`${started.base}/api/remote/devices/${d.id}/level`, { method: 'PATCH', headers: J, body: JSON.stringify({ level: 'everything' }) })).status, 200);
+  assert.ok(started.app.remote.list().length >= 2, 'two devices');
+  const card = (await one('POST', '/api/install', { address: 'https://nas.example.org/mcp' })).json();
+  assert.equal(card.ok, true);
+  assert.notEqual((await two('POST', `/api/install/${card.id}`, { choice: 'off' })).status, 200, 'the second device cannot answer it');
+  assert.notEqual((await two('DELETE', `/api/install/${card.id}`)).status, 200, 'nor cancel it');
+  assert.equal((await post(started.base, `/api/install/${card.id}`, { choice: 'off' })).status, 400, 'nor the window');
+  assert.deepEqual((await json(started.base, '/api/mcp')).body, [], 'nothing was installed by any of them');
+  assert.equal((await one('POST', `/api/install/${card.id}`, { choice: 'off' })).status, 200, 'the device that opened it can');
+});
