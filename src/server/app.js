@@ -65,7 +65,8 @@ import { bunnyText } from './bunnyText.js';
 import { createSpeech } from './speech.js';
 import { browserToolDefinitions, describeBrowserTool, isBrowserTool, browserResultText, BROWSER_TOOL_RISK } from './browserTools.js';
 import { MAX_RULES, checkCommand, checkPath, checkRule, checkToolCall, coveredByDeny, describeRule, normaliseRules, readDenied, rulesFor } from './permissionRules.js';
-import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK } from './workspace.js';
+import { createConfiner, confineApplies, confineMode, CONFINE_VALUES, NOT_COVERED } from './confine.js';
+import { createWorkspace, workspaceToolDefinitions, describeToolCall, checkFolder, gitBranch, detectDevServer, TOOL_RISK, POWERSHELL_PRELUDE, NON_INTERACTIVE, translateChains } from './workspace.js';
 import { asksInAuto } from './autoAsks.js';
 import { createWorktrees } from './worktrees.js';
 import {
@@ -349,6 +350,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const terminals = createTerminalStore();
   // Programs the model started and left running, and tools it built for itself.
   const processes = createProcessStore();
+  const confiner = createConfiner({ dataDir }); // F13: the low-integrity helper for "Confine commands"
+  const confineDeclined = new Set(); // chat ids whose person answered the label card with Deny: their commands run normally
   const customTools = createCustomTools({ dir: join(dataDir, 'tools') });
   const checkpoints = createCheckpoints({ dir: join(dataDir, 'checkpoints') });
   const replyingChats = new Set(); // ENGINE-SWITCH: chats with a reply running (a switch waits for it)
@@ -890,6 +893,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const prior = Array.isArray(settings.folderRulesTrusted) ? settings.folderRulesTrusted : [];
         patch.folderRulesTrusted = list.map((e) => { const was = prior.find((p) => p.folder === e.folder); const names = [...new Set(e.files.map(cleanName).filter(Boolean))]; const frozen = (was?.frozen ?? []).filter((f) => names.includes(f.name)); return { folder: e.folder, files: frozen.map((f) => f.name), frozen }; }).filter((e) => e.files.length);
       }
+      if (Object.hasOwn(patch, 'confineCommands') && !CONFINE_VALUES.includes(patch.confineCommands)) return sendJson(res, 400, { code: 'confine.bad', message: 'Confine commands is off, on in Auto, or always on.' });
+      delete patch.confineFolders; // F13: which folders carry the label (and what label they had) is written only by the server, when the person answers the card
       if (WINDOW_ONLY_SETTING_KEYS.some((k) => Object.hasOwn(patch, k)) && windowOnly(req, res)) return;
       const rulesWas = engineSettings(settings).useBunnyEngine;
       // SEARCH-PC SP-1: no device, at any level, turns Search this PC on or changes what it may look at
@@ -1943,6 +1948,26 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       return sendJson(res, 200, { ok: true, changed: true, view: await folderRulesView(after, folderInfo, workspace, rules) });
     }
 
+    // F13: the Working folder card's "Confine commands" row: what is set, and "Remove the label" (window only: the route is on the window-only list and refused to a device)
+    const confineMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/confine(?:\/(remove))?$/);
+    if (confineMatch && (method === 'GET' || (method === 'POST' && confineMatch[2] === 'remove'))) {
+      if (method === 'POST' && windowOnly(req, res)) return;
+      const session = await sessions.get(confineMatch[1]);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
+      const folderInfo = await effectiveRoot(session);
+      const root = folderInfo?.ok ? await realpath(folderInfo.folder).catch(() => folderInfo.folder) : null;
+      const list = Array.isArray(settings.confineFolders) ? settings.confineFolders : [];
+      const rec = root ? list.find((e) => String(e?.folder).toLowerCase() === root.toLowerCase()) : null;
+      if (method === 'GET') return sendJson(res, 200, { supported: process.platform === 'win32', mode: confineMode(settings), applies: confineApplies(settings, session.permissionMode ?? settings.defaultPermissionMode ?? 'ask'), folder: root, labelled: Boolean(rec), notCovered: NOT_COVERED });
+      if (!rec) return sendJson(res, 409, { code: 'confine.notLabelled', message: 'This folder has no label from Bunny.' });
+      for (const proc of processes.list(session.id).filter((x) => x.running)) await processes.stop(proc.id, session.id).catch(() => {}); // programs this chat started under the label end first: nothing may still be writing while the label comes off
+      const gone = await confiner.unlabel(rec.folder, rec.before);
+      if (!gone.ok) return sendJson(res, 409, { code: 'confine.failed', message: gone.why });
+      await saveSettings({ confineFolders: list.filter((e) => e !== rec) });
+      confineDeclined.delete(session.id);
+      return sendJson(res, 200, { ok: true, labelled: false });
+    }
+
     // ENGINE-SWITCH (v0.1.15): move a chat to another engine, between replies. Only Bunny's own window may (the route is on the window-only list and refused to a device, CE-6). The engine's own session is dropped
     // (the new engine gets a handover built from the chat, see engines/handover.js), the folder, the checkpoints and the task list stay the chat's. `PATCH engine` stays refused once the chat has messages.
     const switchMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/engine$/);
@@ -2753,6 +2778,31 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}) });
       });
 
+      // F13: "Confine commands to the project folder" (Windows; setting off / auto / always). null = run normally; { wrap } = start it through the low-integrity helper; { denied: true } = the person said no.
+      // A command is never run unconfined without the person having been asked: the label card (Deny = this chat's commands run normally), or "Couldn't confine this command: run it normally?".
+      const confineStep = async () => {
+        if (!workspace || process.platform !== 'win32' || !confineApplies(settings, permissionMode) || confineDeclined.has(id)) return null;
+        const root = await realpath(workspace.root).catch(() => workspace.root);
+        const has = () => (Array.isArray(settings.confineFolders) ? settings.confineFolders : []).some((e) => String(e?.folder).toLowerCase() === root.toLowerCase());
+        if (!has()) {
+          const cardText = `Bunny will run this chat's commands in a low-rights mode that can only write inside this folder:\n${root}\n\nTo do that it changes this folder's security label once, with this Windows command:\nicacls "${root}" /setintegritylevel (OI)(CI)L\n\nOnly this folder and what is inside it change. It is not a system or network setting. "Remove the label" on the Working folder card puts the label back exactly as it was.\n\nNot covered: ${NOT_COVERED.map((t) => t.replace(/\.$/, '')).join('; ')}.\n\nAllow: label the folder and confine commands. Deny: this chat's commands run normally.`;
+          if (!(await askPermission('Confine commands to this folder?', cardText))) { confineDeclined.add(id); return null; }
+          const done = await confiner.label(root);
+          if (!done.ok) {
+            if (!(await askPermission("Couldn't confine this command", `${done.why}\n\nRun it normally?`))) return { denied: true };
+            confineDeclined.add(id); return null;
+          }
+          const list = (Array.isArray(settings.confineFolders) ? settings.confineFolders : []).filter((e) => String(e?.folder).toLowerCase() !== done.folder.toLowerCase());
+          await saveSettings({ confineFolders: [...list, { folder: done.folder, before: done.before, at: new Date().toISOString() }].slice(-200) });
+        }
+        const helper = await confiner.use();
+        if (!helper.ok) {
+          if (!(await askPermission("Couldn't confine this command", `${helper.why}\n\nBunny is rebuilding its helper. Run this command normally?`))) return { denied: true };
+          return null;
+        }
+        return { wrap: (opts) => confiner.wrap({ root, ...opts }) };
+      };
+
       // Ask the window to do a browser action, and wait for what happened.
       const askBrowser = (action, parsed) => new Promise((resolveAnswer) => {
         const rid = randomUUID();
@@ -3177,6 +3227,8 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
         }
+        const confined = name === 'start_process' ? await confineStep() : null; // F13
+        if (confined?.denied) { await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' }); send('tool', { tool: summary, status: 'denied' }); return 'The person did not allow this. Do not try it again; carry on without it or ask them.'; }
         send('tool', { tool: summary, status: 'running' });
         let status = 'done';
         let result = '';
@@ -3329,7 +3381,13 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
             case 'start_process': {
               if (!workspace) throw new Error('Programs run in Code mode, inside the workspace folder.');
               const cwd = parsed.cwd ? await workspace.folder(parsed.cwd) : workspace.root;
-              const p = processes.start({ command: String(parsed.command ?? ''), cwd, owner: id });
+              let launch = null; // F13: through the low-integrity helper when "Confine commands" applies; never silently unconfined
+              if (confined?.wrap) {
+                const w = await confined.wrap({ script: `${POWERSHELL_PRELUDE}\n${translateChains(String(parsed.command ?? '').trim())}`, cwd, extraEnv: NON_INTERACTIVE });
+                if (!w.ok) throw new Error(`Couldn't confine this command (${w.why}). It was not started.`);
+                launch = { file: w.file, args: w.args, env: w.env };
+              }
+              const p = processes.start({ command: String(parsed.command ?? ''), cwd, owner: id, launch });
               const r = await processes.settle(p.id, id, parsed.wait_seconds ?? 5);
               result = `${r.running ? `Started ${r.id}; it is still running.` : `${r.id} finished with exit code ${r.exitCode}.`}\nOutput:\n${r.output.slice(-6000) || '(nothing yet)'}`;
               if (r.running && browserControl && /https?:\/\/(localhost|127\.0\.0\.1)/i.test(r.output)) result += '\nOpen its address with browser_open to look at it.';
@@ -3403,7 +3461,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
         }
         result = clip(String(result), 30_000);
         await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
-        send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}) });
+        send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(confined?.wrap ? { confined: true } : {}) });
         return images.length ? { content: result, images } : result;
       };
 
@@ -3591,6 +3649,8 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           }
         }
 
+        const confined = name === 'run_command' ? await confineStep() : null; // F13
+        if (confined?.denied) { await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' }); send('tool', { tool: summary, status: 'denied' }); return 'The person did not allow this. Do not try it again; carry on without it or ask them.'; }
         send('tool', { tool: summary, status: 'running' });
         let result;
         let status = 'done';
@@ -3620,7 +3680,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
             })()
             : isWorkspace
-            ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) })
+            ? await workspace.run(name, parsed, { onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }), ...(confined?.wrap ? { confine: confined.wrap } : {}) })
             : await (async () => { // D-1: the text the connector sent, not its raw JSON; an answer that says isError is a failed step
               const shaped = mcpResultText(await mcpCallTool(entry.server, { name: entry.tool.name, arguments: parsed, signal: controller.signal, onProgress: (text) => send('tool', { tool: summary, status: 'running', result: text }) }), { vision });
               if (shaped.isError) status = 'failed';
@@ -3649,7 +3709,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         const bravePage = name === 'web_search' && wholeResult.startsWith('(via Brave)\n');
         const keptResult = bravePage ? `web search via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results` : clip(result, 1200);
         await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: keptResult, fullResult: bravePage ? '' : wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
-        send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}) });
+        send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}), ...(confined?.wrap ? { confined: true } : {}) });
         if (signIn) return `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.`;
         return connectorPictures.length ? { content: result, images: connectorPictures } : result;
       };

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync, symlinkSync, lstatSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync, symlinkSync, readdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -98,13 +98,13 @@ test('F13 on Windows: inside the labelled folder writes work; outside it, the ho
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0' }));
   const npm = await go('npm install ./stand-in --no-audit --no-fund --loglevel=error; if (Test-Path node_modules/stand-in) { "installed" }');
   assert.match(npm.out, /installed/, `npm install with the cache redirect works: ${npm.out.slice(0, 300)}`);
-  assert.ok(existsSync(join(root, '.bunny', 'tmp')), 'the caches live in <folder>/.bunny/tmp');
-  assert.equal(readFileSync(join(root, '.bunny', '.gitignore'), 'utf8').trim(), '*', 'F13-5: git ignores Bunny\'s scratch');
+  assert.ok(existsSync(c.scratchPath(root)), 'the caches live in the data folder, in a folder of their own for this project');
+  assert.equal(existsSync(join(root, '.bunny')), false, 'nothing is written into the project (F13-5: nothing for git to ignore, nothing for a command to swap)');
 
   // F13-1: the recorded label goes back EXACTLY, and the caches go with it
   const removed = await c.unlabel(root, labelled.before);
   assert.equal(removed.ok, true, removed.why);
-  assert.equal(existsSync(join(root, '.bunny', 'tmp')), false, 'F13-5: Remove the label deletes .bunny/tmp');
+  assert.equal(existsSync(c.scratchPath(root)), false, 'F13-5: Remove the label deletes the scratch folder');
   assert.equal(icacls(root).replace(/\r/g, ''), before.replace(/\r/g, ''), 'the folder\'s icacls output is exactly what it was before labelling');
   assert.equal(parseLabel(icacls(root)).level, null);
   assert.equal(parseLabel(icacls(join(root, 'in.txt'))).level, null, 'files made while confined lose their inherited label too');
@@ -162,23 +162,19 @@ test('F13 on Windows: the median time a confined command adds is recorded (targe
   await c.unlabel(root, { level: null, flags: '' });
 });
 
-test('F13 on Windows: a junction planted as .bunny or .bunny/tmp (a confined command may make one) is never written through or deleted through', { skip: !windows }, async (t) => {
+test('F13 on Windows: a junction a confined command plants (as .bunny in the project, or inside the scratch folder) is never written through or deleted through', { skip: !windows }, async (t) => {
   const base = mkdtempSync(join(tmpdir(), 'bunny-confine-test-'));
   t.after(() => rmSync(base, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }));
   const root = join(base, 'project'); const elsewhere = join(base, 'elsewhere'); mkdirSync(root); mkdirSync(join(elsewhere, 'tmp'), { recursive: true });
   writeFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'must survive');
   const c = createConfiner({ dataDir: join(base, 'data') });
   assert.equal((await c.label(root)).ok, true);
-  rmSync(join(root, '.bunny'), { recursive: true, force: true });
-  symlinkSync(elsewhere, join(root, '.bunny'), 'junction'); // .bunny -> elsewhere
+  symlinkSync(elsewhere, join(root, '.bunny'), 'junction'); // a command planted .bunny -> elsewhere: Bunny no longer uses any path in the project
   const w = await c.wrap({ root, cwd: root, script: '$null' });
   assert.equal(w.ok, true, w.why);
-  assert.equal(lstatSync(join(root, '.bunny')).isSymbolicLink(), false, 'the junction was replaced by a real folder');
-  assert.equal(existsSync(join(elsewhere, '.gitignore')), false, 'nothing was written through the junction');
-  assert.equal(readFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'utf8'), 'must survive');
-  // a junction as .bunny/tmp, then "Remove the label": the target is not emptied
-  rmSync(join(root, '.bunny', 'tmp'), { recursive: true, force: true });
-  symlinkSync(join(elsewhere, 'tmp'), join(root, '.bunny', 'tmp'), 'junction');
+  assert.deepEqual(readdirSync(elsewhere).sort(), ['tmp'], 'nothing was written through the junction');
+  symlinkSync(join(elsewhere, 'tmp'), join(c.scratchPath(root), 'planted'), 'junction'); // and one inside the scratch folder
   assert.equal((await c.unlabel(root, { level: null, flags: '' })).ok, true);
   assert.equal(readFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'utf8'), 'must survive', 'Remove the label did not delete through the junction');
+  assert.equal(existsSync(c.scratchPath(root)), false);
 });

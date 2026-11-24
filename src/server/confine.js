@@ -10,7 +10,7 @@
  *          confined: the caller shows the "Couldn't confine this command" card, never a silent unconfined run.
  *   F13-3  a Low token only: all privileges removed, a new hidden console, and the environment is safeEnv plus the cache variables.
  *   F13-4  NOT_COVERED is the list the help text carries word for word.
- *   F13-5  caches live in <folder>/.bunny/tmp, git-ignored, and are removed with the label.
+ *   F13-5  caches live in <data folder>/confine/tmp/<project hash> (not in the project: nothing for git to ignore, nothing a confined command can swap under Bunny), and are removed with the label.
  */
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -107,37 +107,29 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
     return { ...parseLabel(r.stdout), raw: r.stdout };
   }
   /**
-   * <root>/.bunny/tmp, made safely. A confined command may create folders and junctions anywhere in the project, so before Bunny (a Medium process) writes or deletes through .bunny or .bunny/tmp it
-   * looks at each with lstat: a link, or anything that is not a plain folder, is removed (the link only, never what it points at) and made again, and the real path must still be inside the real project folder.
-   * Returns the tmp folder, or null when that cannot be made sure of (nothing is then written or deleted).
+   * The scratch folder of one project: <data folder>/confine/tmp/<hash of the project path>. It holds the TEMP and package caches of confined commands, so it carries the Low label itself; it is NOT inside the
+   * project, so a confined command can never swap a path that Bunny (a Medium process) later writes or deletes through (an automated review's finding: the first version kept it in <project>/.bunny/tmp, where a
+   * junction planted by a still-running command could have redirected Bunny's write or its recursive delete). Every parent of it is Medium-only: Low cannot change them. Long scripts are written to <data>/confine/cmd,
+   * also Medium-only (the Low child may read them; reads are not stopped).
    */
-  async function scratch(root, { create = true } = {}) {
-    const bunny = join(root, '.bunny'); const tmp = join(bunny, 'tmp');
-    const plain = async (p) => {
-      let st = null; try { st = await lstat(p); } catch { /* not there */ }
-      if (!st) return create ? 'make' : 'absent';
-      if (st.isSymbolicLink() || !st.isDirectory()) { // the link itself goes (never what it points at); if it will not, refuse
-        await rm(p, { force: true, recursive: false }).catch(() => {});
-        try { await lstat(p); return null; } catch { return create ? 'make' : 'absent'; }
-      }
-      return 'ok';
-    };
-    for (const p of [bunny, tmp]) {
-      const state = await plain(p);
-      if (state === null || state === 'absent') return null;
-      if (state === 'make') await mkdir(p).catch(() => {});
+  const scratchPath = (root) => join(dir, 'tmp', sha256(Buffer.from(norm(root))).slice(0, 16));
+  async function scratch(root) {
+    const tmp = scratchPath(root);
+    let st = null; try { st = await lstat(tmp); } catch { /* new */ }
+    if (st && !st.isDirectory()) return null; // not a plain folder (nothing of Low's can be here: only Bunny makes this path)
+    if (!st) {
+      await mkdir(tmp, { recursive: true });
+      const set = await run(exeFile('icacls.exe'), [tmp, '/setintegritylevel', '(OI)(CI)L']);
+      if (!set.ok) { await rm(tmp, { recursive: true, force: true }).catch(() => {}); return null; }
     }
-    try {
-      const realRoot = norm(await realpath(root)); const realTmp = norm(await realpath(tmp));
-      if (!inside(realTmp, realRoot) || realTmp === realRoot) return null;
-    } catch { return null; }
     return tmp;
   }
-  async function ignoreFile(root) {
-    const tmp = await scratch(root);
-    if (!tmp) return null;
-    await writeFile(join(root, '.bunny', '.gitignore'), '*\n', 'utf8').catch(() => {}); // F13-5: Bunny's scratch is never committed
-    return tmp;
+  async function purgeOldScripts() {
+    const cmdDir = join(dir, 'cmd');
+    await mkdir(cmdDir, { recursive: true });
+    const { readdir, stat } = await import('node:fs/promises');
+    for (const name of await readdir(cmdDir).catch(() => [])) { const f = join(cmdDir, name); if (Date.now() - (await stat(f).catch(() => ({ mtimeMs: Date.now() }))).mtimeMs > 86_400_000) await rm(f, { force: true }).catch(() => {}); }
+    return cmdDir;
   }
 
   /** Put the one-time Low label on the folder. Returns { ok, before } (the label it had), or { ok: false, why }. */
@@ -149,7 +141,6 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
     const before = await readLabel(real);
     const set = await run(exeFile('icacls.exe'), [real, '/setintegritylevel', '(OI)(CI)L']);
     if (!set.ok) return { ok: false, why: `The label could not be set: ${(set.stderr || set.stdout).trim().slice(0, 200)}` };
-    await ignoreFile(real);
     return { ok: true, folder: real, before: { level: before.level, flags: before.flags } };
   }
 
@@ -168,26 +159,25 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
       const r = await run(v.path, ['--unlabel', real]);
       if (!r.ok) return { ok: false, why: `The label could not be removed: ${(r.stderr || r.stdout).trim().slice(0, 200)}` };
     }
-    const tmp = await scratch(real, { create: false }); // only a plain folder inside the project is ever deleted, never through a link
-    if (tmp) await rm(tmp, { recursive: true, force: true }).catch(() => {});
+    await rm(scratchPath(real), { recursive: true, force: true }).catch(() => {}); // the project's scratch folder goes with its label (a junction inside it is unlinked, never followed)
     return { ok: true };
   }
 
   /**
    * What to start instead of PowerShell: { file, args, env }. `script` is the whole PowerShell script (prelude and command), `extraEnv` the usual command environment (NON_INTERACTIVE).
-   * Nothing the model wrote is ever part of a path or an option: it is only the base64 of the script (or a file in <folder>/.bunny/tmp for a long one).
+   * Nothing the model wrote is ever part of a path or an option: it is only the base64 of the script (or a file in <data>/confine/cmd for a long one).
    */
   async function wrap({ root, cwd, script, extraEnv = {} }) {
     const v = await use();
     if (!v.ok) return { ok: false, why: v.why };
-    const tmp = await ignoreFile(root);
-    if (!tmp) return { ok: false, why: 'The scratch folder inside the project could not be made safely.' };
+    const tmp = await scratch(root);
+    if (!tmp) return { ok: false, why: 'The scratch folder could not be made.' };
     const ps = powershellPath() ?? 'powershell.exe';
     const encoded = Buffer.from(String(script), 'utf16le').toString('base64');
     let commandLine;
     if (encoded.length <= 24_000) commandLine = `"${ps}" -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
     else {
-      const file = join(tmp, `cmd-${randomBytes(6).toString('hex')}.ps1`);
+      const file = join(await purgeOldScripts(), `cmd-${randomBytes(6).toString('hex')}.ps1`);
       await writeFile(file, `\ufeff${script}`, 'utf8');
       commandLine = `"${ps}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${file}"`;
     }
@@ -195,7 +185,7 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
     return { ok: true, file: v.path, args: [cwd, commandLine], env: safeEnv({ ...extraEnv, ...caches }) };
   }
 
-  return { dir, exe, use, verify, rebuild, readLabel, label, unlabel, wrap, helperSha: () => expected };
+  return { dir, exe, use, verify, rebuild, readLabel, label, unlabel, wrap, scratchPath, helperSha: () => expected };
 }
 
 /** The setting: 'off', 'auto' (confine while the chat is in Auto) or 'always'. Anything else is 'off'. */
