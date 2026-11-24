@@ -4148,7 +4148,7 @@ async function closeSettings() {
     applyProfile(settings);
     applyCapabilities(settings);
     applyAppearanceNow(settings);
-    state.language = settings.language ?? 'en';
+    state.language = 'en'; // English only for now
     applyLanguage(state.language);
     state.providers = await getJSON('/api/providers');
     state.models = visibleModels(await getJSON('/api/models'));
@@ -4644,7 +4644,7 @@ async function boot() {
     applyProfile(settings);
     applyCapabilities(settings);
     applyAppearance(settings);
-    state.language = settings.language ?? 'en';
+    state.language = 'en'; // English only for now
     applyLanguage(state.language);
 
     // The saved choice counts only while its provider is still connected; a removed or

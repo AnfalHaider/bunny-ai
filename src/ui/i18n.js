@@ -455,7 +455,7 @@ export function t(key, code = 'en') {
  * the placeholder; data-i18n-label gets the accessible label.
  */
 export function applyLanguage(code) {
-  const lang = STRINGS[code] ? code : 'en';
+  const lang = 'en'; // English only for now (owner, 2026-11-24): `code` is ignored; the other tables stay in the file, unused
   document.documentElement.lang = lang;
   document.documentElement.dir = directionOf(lang);
 

@@ -82,6 +82,16 @@
         </div>
         <div class="right" id="google-actions"></div>
       </div>
+      <details class="row" id="google-howto" open hidden>
+        <summary class="name">How to connect Google</summary>
+        <ol class="desc">
+          <li>Open the Google Cloud console and create a project (free).</li>
+          <li>APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Desktop app.</li>
+          <li>Copy the client ID, and the client secret if Google shows one.</li>
+          <li>Paste them under Sign-in apps below. The Sign in button turns on at once.</li>
+        </ol>
+        <p class="desc">Nothing is sent to Google until you press Sign in. Your chats and keys stay on this computer.</p>
+      </details>
       <details class="row account-apps">
         <summary class="name"><span data-i18n="account.apps">Sign-in apps</span> <span class="opt">(advanced)</span></summary>
         <p class="desc">GitHub's "Sign in with GitHub" and Google sign-in need an OAuth app you register once with them. GitHub: Settings → Developer settings → OAuth Apps, tick "Enable Device Flow". Google: Cloud console → APIs &amp; Services → Credentials → OAuth client ID → Desktop app.</p>
@@ -171,26 +181,6 @@
         <div class="right"><select class="appearance" data-key="codeFontSize" aria-label="Code font size">
           <option value="">Default (12)</option><option value="11">11</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="18">18</option>
         </select></div>
-      </div>
-    </div>
-  </section>
-
-  <section data-section="language">
-    <h2>Language</h2>
-    <div class="group">
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Language</div>
-          <div class="desc">The interface language. Everything stays on this machine.</div>
-        </div>
-        <div class="right">
-          <select id="language" aria-label="Language">
-            <option value="en">English</option>
-            <option value="es">Español</option>
-            <option value="fr">Français</option>
-            <option value="ar">العربية</option>
-          </select>
-        </div>
       </div>
     </div>
   </section>
@@ -792,7 +782,7 @@
   import { installContext, installRowState, installRowText, runInstall } from './install-app.js';
   import { describeAction, activityView, chooseLevel, levelPill, paintStatus, warningBox, everythingDevices, IDLE_SHORT, DEVICE_ACCESS_SENTENCE } from './device-access.js';
   import { deviceLevel } from './browser-mode.js';
-  import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
+  import { applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
   const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
   import { applyEmbed } from './embed.js';
@@ -803,7 +793,6 @@
   const theme = $('theme');
   const allowlist = $('allowlist');
   const aliases = $('aliases');
-  const language = $('language');
   const notifications = $('notifications');
   // The window that shows this page waits for the saves in flight before it closes it (closeSettings in chat.js), so a change made just before closing is never lost.
   const pendingSaves = (window.bunnyPendingSaves = new Set());
@@ -814,19 +803,6 @@
     p.then(done, done);
     return p;
   };
-
-  // The list of languages comes from one place, so the page and the app agree.
-  language.replaceChildren(...LANGUAGES.map((l) => {
-    const option = document.createElement('option');
-    option.value = l.code;
-    option.textContent = l.name;
-    return option;
-  }));
-
-  language.addEventListener('change', async () => {
-    applyLanguage(language.value);
-    await save({ language: language.value });
-  });
 
   notifications.addEventListener('change', async () => {
     const wanted = notifications.checked;
@@ -1072,6 +1048,7 @@
         throw new Error('The Google sign-in was not finished.');
       }));
       b.disabled = !a.googleReady;
+      $('google-howto').hidden = Boolean(a.googleReady); // the honest note: why the button is off, and the steps that turn it on
       go.append(b);
     }
   }
@@ -1819,8 +1796,7 @@
     $('auto-steps').value = settings.autoContinueSteps ?? 500;
     $('auto-minutes').value = settings.autoContinueMinutes ?? 120;
     $('auto-tokens').value = settings.autoContinueTokens ?? 5000000;
-    language.value = settings.language ?? 'en';
-    applyLanguage(language.value);
+    applyLanguage('en'); // English only for now
     notifications.checked = Boolean(settings.notifications);
     $('notifications-state').textContent = settings.notifications ? 'on' : 'off';
     $('instructions').value = settings.instructions ?? '';

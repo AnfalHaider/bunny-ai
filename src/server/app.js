@@ -404,6 +404,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     allowlist: [],      // model ids the picker is allowed to offer
   });
 
+  // ENGLISH ONLY (owner, 2026-11-24: "dont need language translations just yet, keep only english for now"): a saved language that is not English goes back to English.
+  if (settings.language && settings.language !== 'en') settings = { ...settings, language: 'en' };
+
   /** Resolve an alias to the model it stands for. */
   function resolveModel(model) {
     if (!model) return model;
@@ -810,6 +813,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (path === '/api/settings' && method === 'PUT') {
       const body = await readBody(req);
       const { systemUserName: _computed, ...patch } = body; // worked out each time, never saved
+      if (Object.hasOwn(patch, 'language')) patch.language = 'en'; // English only for now: the translation tables stay in the repo, unused
       const unknown = Object.keys(patch).filter((k) => !WINDOW_ONLY_SETTING_KEYS.includes(k) && !ORDINARY_SETTING_KEYS.includes(k));
       if (unknown.length) return sendJson(res, 400, { code: 'settings.unknownKey', message: `Bunny AI has no setting called ${unknown.slice(0, 3).map((k) => JSON.stringify(k.slice(0, 40))).join(', ')}.` });
       if (Object.hasOwn(patch, 'firstReplyWaitSeconds') && validWaitSeconds(patch.firstReplyWaitSeconds) === null) {
