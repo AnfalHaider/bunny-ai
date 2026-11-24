@@ -1585,6 +1585,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
       const answer = await readBody(req);
+      // F9 (Security, QA): "for this chat" (and saving it as a rule) is never given by a device, whatever card it answers: refused, never quietly read as a plain Allow
+      if ((answer.kind === true || answer.saveRule === true) && (req.bunnyRemote || req.bunnyDevice)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_LINE });
+      if (pending.choices && (answer.kind === true || answer.saveRule === true)) return sendJson(res, 400, { code: 'kind.notOffered', message: 'That card did not offer it.' });
       if (pending.choices && req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "This is answered in Bunny's window." }); // F10-4: a device cannot approve an install; the card keeps waiting
       if (pending.choices && req.bunnyDevice) remote.logAction(req.bunnyDevice, { kind: 'install', choice: typeof answer.choice === 'string' && pending.choices.includes(answer.choice) ? answer.choice : 'no', item: String(pending.display ?? '').slice(0, 60) }); // F10-4 (R-DF2): an Everything device may answer the one install card; the access log gets the choice and the item's name, never an address or a key
       if (pending.choices) { pending.resolve(typeof answer.choice === 'string' && pending.choices.includes(answer.choice) && answer.choice !== 'no' ? answer.choice : false); return sendJson(res, 200, { ok: true }); } // F10: a card with named choices takes only one of its own
