@@ -502,11 +502,11 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
   }
 
   /** Note that a reply's file changes were undone, so its button goes away (one id, or a list for a rewind). */
-  async function markCheckpointRestored(id, checkpointId) {
+  async function markCheckpointRestored(id, checkpointId, value = true) {
     const session = await get(requireId(id));
     if (!session) throw new Error('Session not found');
     const ids = new Set([].concat(checkpointId));
-    for (const m of session.messages) if (m.checkpoint && ids.has(m.checkpoint.id)) m.checkpoint.restored = true;
+    for (const m of session.messages) if (m.checkpoint && ids.has(m.checkpoint.id)) m.checkpoint.restored = value;
     await save(session);
     return session;
   }

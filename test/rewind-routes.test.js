@@ -163,3 +163,27 @@ test('RW-1: the Activity screen words a device rewind by count, never by path', 
   assert.match(d.what, /files back/);
   assert.match(d.note, /3 files/);
 });
+
+test('RW-7: rewind, undo the rewind, then rewind to the same point again works (undoing un-flags exactly what the rewind flagged)', async (t) => {
+  const { base, folder, session, chat } = await threeReplies(t);
+  const first = (await chat()).messages[0];
+  const one = await post(base, `/api/sessions/${session.id}/rewind`, { to: first.id });
+  assert.equal(one.status, 200);
+  assert.ok(one.body.undoId);
+  assert.equal(await readFile(join(folder, 'a.txt'), 'utf8'), 'one');
+  const undone = await post(base, `/api/sessions/${session.id}/checkpoints/${one.body.undoId}/restore`, {});
+  assert.equal(undone.status, 200);
+  assert.equal(await readFile(join(folder, 'a.txt'), 'utf8'), 'three');
+  assert.ok((await chat()).messages.filter((m) => m.checkpoint).every((m) => !m.checkpoint.restored), 'the replies are no longer flagged undone');
+  const two = await post(base, `/api/sessions/${session.id}/rewind`, { to: first.id });
+  assert.equal(two.status, 200);
+  assert.equal(two.body.restored, 2, 'the same point can be rewound again');
+  assert.ok(two.body.undoId);
+  assert.equal(await readFile(join(folder, 'a.txt'), 'utf8'), 'one');
+  assert.ok(!(await exists(join(folder, 'b.txt'))));
+  // and through the rewind route's own undo (cp), a third time
+  const back = await post(base, `/api/sessions/${session.id}/rewind`, { cp: two.body.undoId });
+  assert.equal(back.status, 200);
+  assert.equal(await readFile(join(folder, 'a.txt'), 'utf8'), 'three');
+  assert.equal((await post(base, `/api/sessions/${session.id}/rewind`, { to: first.id })).body.restored, 2);
+});

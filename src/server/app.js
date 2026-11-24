@@ -1653,6 +1653,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       const deny = (rel) => { const v = checkPath(rules, rel, 'edits'); return v?.effect === 'deny' ? `Your rule ${describeRule(v)} blocks edits to this file.` : null; };
       return { root: folder.folder, deny };
     };
+    // RW-7: a rewind remembers which replies it flagged "undone"; undoing the rewind un-flags exactly those, so the same point can be rewound again
+    const afterRewindFlags = async (sid, cps, result) => {
+      if (result.undoId) await checkpoints.setRewound(sid, result.undoId, result.handled.filter((h) => !cps.some((c) => c.id === h && c.kind === 'rewind')));
+      for (const c of cps) {
+        if (c.kind === 'rewind' && result.handled.includes(c.id) && c.rewound?.length) {
+          await checkpoints.markRestored(sid, c.rewound, false);
+          await sessions.markCheckpointRestored(sid, c.rewound, false);
+        }
+      }
+    };
     const rewindNoteText = (n) => `The person rewound the files to before reply ${n}; the later replies' file changes are gone, and commands' effects may remain.`;
     const rewindMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/rewind$/);
     if (rewindMatch && (method === 'GET' || method === 'POST')) {
@@ -1670,6 +1680,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const result = await applyRewind({ cps: picked.cps, root: env.root, dataDir, deny: env.deny, include: body.include, checkpoints, sessionId: session.id });
         await checkpoints.markRestored(session.id, result.handled);
         await sessions.markCheckpointRestored(session.id, result.handled);
+        await afterRewindFlags(session.id, picked.cps, result);
         const device = req.bunnyRemote ?? req.bunnyDevice;
         if (device) remote.logAction(device, { kind: 'rewind', reason: `${result.done.length} files` }); // R-DF2: the count only, never paths or contents
         if (result.ignored) console.warn(`rewind: ${result.ignored} path(s) in "include" were not changed files and were ignored`);
@@ -1706,6 +1717,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const result = await applyRewind({ cps: [cp], root: env.root, dataDir, deny: env.deny, include: body.include, checkpoints, sessionId: session.id });
         await checkpoints.markRestored(session.id, result.handled);
         await sessions.markCheckpointRestored(session.id, result.handled);
+        await afterRewindFlags(session.id, [cp], result);
         const device = req.bunnyRemote ?? req.bunnyDevice;
         if (device) remote.logAction(device, { kind: 'rewind', reason: `${result.done.length} files` });
         return sendJson(res, 200, { restored: result.done.length, skipped: result.big, files: result.done, left: result.left, refused: result.refused, failed: result.failed, undoId: result.undoId, commandsRan: result.commandsRan });

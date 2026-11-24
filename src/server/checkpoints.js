@@ -116,13 +116,21 @@ export function createCheckpoints({ dir, maxPerChat = MAX_PER_CHAT, maxBytes = M
   }
 
   /** Mark checkpoints as put back (their rows say "Undone"). */
-  async function markRestored(sessionId, ids) {
+  async function markRestored(sessionId, ids, value = true) {
     for (const id of ids) {
       const cp = await get(sessionId, id);
       if (!cp) continue;
-      cp.restored = true;
+      cp.restored = value;
       await writeFile(fileFor(sessionId, id), JSON.stringify(cp));
     }
+  }
+
+  /** A rewind's safety checkpoint remembers which replies' checkpoints it flagged, so undoing the rewind can un-flag exactly those. */
+  async function setRewound(sessionId, id, ids) {
+    const cp = await get(sessionId, id);
+    if (!cp) return;
+    cp.rewound = ids.filter((x) => safe(x));
+    await writeFile(fileFor(sessionId, id), JSON.stringify(cp));
   }
 
   /** Delete a chat's checkpoints (the chat was deleted): its copies of the person's files go with it. */
@@ -164,6 +172,6 @@ export function createCheckpoints({ dir, maxPerChat = MAX_PER_CHAT, maxBytes = M
     }
   }
 
-  return { begin, get, list, finish, markRestored, removeChat, prune, dirOf: (sessionId) => join(dir, sessionId), fileFor };
+  return { begin, get, list, finish, markRestored, setRewound, removeChat, prune, dirOf: (sessionId) => join(dir, sessionId), fileFor };
 }
 
