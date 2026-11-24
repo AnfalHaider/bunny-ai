@@ -86,6 +86,7 @@ test('Auto with the judge ON: an allow runs the action once, the judge saw only 
   assert.match(user, /<action>\n\{"tool":"ship__deploy","arguments":\{"target":"production"\}/);
   assert.match(r.text, /Checked: Ship: deploy|"tool":"Checked:/);
   assert.match(r.text, /Allowed: It deploys what you asked for\./);
+  assert.match(r.text, /"tool":"Checked 1 action, blocked 0"/, 'the summary line at the end of the reply');
   assert.ok(!JSON.stringify(j.messages).includes('system prompt'), 'nothing of the chat\'s own system text');
 });
 
@@ -93,6 +94,7 @@ test('Auto with the judge ON: a block stops it, nothing runs, and the model is t
   const w = await world(t, { judge: () => '{"verdict":"block","reason":"It deploys, which you did not ask for."}' });
   const r = await w.say('look at the project');
   assert.deepEqual(w.calls, [], 'nothing ran');
+  assert.match(r.text, /"tool":"Checked 1 action, blocked 1"/);
   assert.equal(r.card, null);
   const told = w.seen.filter((b) => !isJudge(b)).at(-1).messages.filter((m) => m.role === 'tool').at(-1).content;
   assert.equal(told, "Bunny's check stopped this: It deploys, which you did not ask for. Find a safer way, or ask the person with ask_user.");

@@ -2256,6 +2256,14 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return text;
       };
       const judgeModelLabel = () => String(settings.autoJudgeModel || model || '');
+      /** F11: "Checked 14 actions, blocked 1" in the reply's details, once, when the reply ends and the check was used. */
+      const judgeSummary = async () => {
+        const st = replyJudge?.stats;
+        if (!st || !st.checked) return;
+        const text = `Checked ${st.checked} action${st.checked === 1 ? '' : 's'}, blocked ${st.blocked}`;
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: text, status: 'done', content: '', result: `The check (${judgeModelLabel()}) read only your own words and each action.` });
+        send('tool', { tool: text, status: 'done' });
+      };
       /** @returns {Promise<{ proceed: true } | { stop: string } | { card: string }>} */
       const autoCheck = async (summary, name, parsed, risk) => {
         if (!judgeOn() || !goesToJudge(name, risk)) return { proceed: true };
@@ -3581,7 +3589,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           else if (!session.engine.rulesFixed) session = await sessions.update(id, { engine: { ...session.engine, rules: wantRules, rulesFixed: true } });
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
           const outcome = await engines.runTurn({
-            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+            id, session, settings, content, root: workspace.root, permissionMode, send, logStep, askPermission, autoCheck: (summary, name, args, risk) => autoCheck(summary, name, args, risk), signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
@@ -3595,6 +3603,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             },
             logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
+          await judgeSummary();
           if (outcome.stoppedForCheck) {
             session = await sessions.update(id, { engine: { ...session.engine, restricted: true } }).catch(() => session);
             const note = "Stopped: Bunny's check did not run. Your next message in this chat continues in restricted mode: the engine works in a copy, and Bunny checks each change before it reaches your folder. A new chat starts in full mode again.";
@@ -3780,6 +3789,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             closeThinking();
             const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, ...(pcTurn.tainted ? { noAutoLoad: true } : {}), ...(pcTurn.files.length ? { pcSources: pc.sourcesOf(pcTurn) } : {}), attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
             session = await sessions.get(id);
+            await judgeSummary();
             send('done', { sessionId: id, lookups: textOnly ? quickLookups : undefined, noAutoLoad: pcTurn.tainted || undefined, pcSources: pcTurn.files.length ? pc.sourcesOf(pcTurn) : undefined, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
           await usage.record({

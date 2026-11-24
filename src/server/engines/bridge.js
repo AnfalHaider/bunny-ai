@@ -19,6 +19,8 @@
  *   keyFolders      absolute paths always refused when they lie outside the workspace (the person's ~\.ssh, ~\.claude, %APPDATA% ...)
  *   ask(summary, detail) -> Promise<boolean>
  *   canon(path) -> optional: the workspace's own canon(); when missing the bridge canonicalises itself
+ *   autoCheck(summary, name, args, risk) -> optional (F11): the check on Auto actions, the same one Bunny's own engine uses; { proceed } | { stop: text } | { card: why }. Only in Auto, only for a command or an
+ *                   unknown tool that Auto would run unasked, and never with the engine's own rules; reads and edits inside the folder never reach it
  */
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -126,6 +128,19 @@ export function createBridge(ctx) {
 
   const needsOk = (risk) => (mode() === 'ask' && (risk === 'edit' || risk === 'run')) || (mode() === 'accept' && risk === 'run');
 
+  /** F11: Auto's check for a call that would run unasked. Returns null to go on, or a decision. A fall-back is a card (no answer means no). */
+  async function checkedInAuto(summary, name, args, risk, base) {
+    if (mode() !== 'auto' || typeof ctx.autoCheck !== 'function') return null;
+    let out;
+    try { out = await ctx.autoCheck(summary, name, args, risk); } catch { out = { card: 'The check on Auto actions failed, so Bunny asks you.' }; }
+    if (out?.stop) return { ...base, allow: false, reason: out.stop };
+    if (out?.card) {
+      const ok = await asked(summary, `${args.command ?? `The engine wants to use "${name}".`}\n\n${out.card}`);
+      return ok ? { ...base, allow: true, reason: 'Allowed by the person.', asked: true } : { ...base, allow: false, reason: 'The person did not allow this.', asked: true };
+    }
+    return null; // the check allowed it
+  }
+
   async function asked(summary, detail) {
     try { return (await ctx.ask(summary, detail)) === true; } catch { return false; }
   }
@@ -157,6 +172,7 @@ export function createBridge(ctx) {
             const ok = await asked(summary, ruled?.effect === 'ask' ? `${call.command}\n\nAsked because of your rule ${describeRule(ruled)}.` : call.command);
             return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };
           }
+          if (ruled?.effect !== 'allow') { const c = await checkedInAuto(summary, 'run_command', { command: call.command }, risk, { name, risk, summary }); if (c) return c; }
           return { allow: true, reason: 'Allowed.', name, risk, summary };
         }
         // an unknown tool: judged as a command with no text; no rule can read it, so only the mode speaks
@@ -164,6 +180,7 @@ export function createBridge(ctx) {
           const ok = await asked(summary, `The engine wants to use "${call.engineTool}". Bunny cannot read what it will do, so it asks as it would for a command.`);
           return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };
         }
+        { const c = await checkedInAuto(summary, String(call.engineTool ?? 'engine_tool'), {}, risk, { name, risk, summary }); if (c) return c; }
         return { allow: true, reason: 'Allowed.', name, risk, summary };
       }
       // paths
