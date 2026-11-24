@@ -24,7 +24,7 @@ export async function getJSON(path) {
 export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'braveKeySet'];
 
 /** A session setting that decides the same. */
-export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine'];
+export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine', 'projectContext'];
 
 const WRITES = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const UUID = '[a-f0-9-]{36}';
@@ -41,6 +41,8 @@ export const WINDOW_ONLY_ROUTES = [
   [['DELETE', 'PATCH'], `^/api/plugins/${UUID}$`],         // uninstall a plugin (W4-10), switch one on or off as a whole (W4-11 P-5)
   [['DELETE'], '^/api/tools/[a-z][a-z0-9_]{1,39}$'],        // custom tools
   [['POST', 'DELETE'], `^/api/sessions/${UUID}/worktree(/finish)?$`], // a chat's own copy of its project (W2-9): it makes and removes folders and branches
+  [WRITES, `^/api/projects/${UUID}/memory(/${UUID})?$`],       // PROJECT-CONTEXT: what a project keeps is written only from Bunny's window
+  [['POST'], `^/api/sessions/${UUID}/project-memory$`],      // PROJECT-CONTEXT: Keep on a suggestion
   [['POST'], '^/api/worktrees/remove$'],                    // removing a leftover copy (W2-9)
   [['POST'], `^/api/sessions/${UUID}/permission/${UUID}$`], // answering a permission prompt
   [['POST'], `^/api/sessions/${UUID}/capability/${UUID}$`], // answering a capability prompt (computer use, building tools)
@@ -68,8 +70,8 @@ export function isWindowOnlyRoute(method, path, body = null) {
   if (path === '/api/sessions' && m === 'POST') return has('permissionMode', 'engine');
   if (new RegExp(`^/api/sessions/${UUID}$`).test(path) && m === 'PATCH') return has('permissionMode', 'engine');
   // a project's instructions steer the model in every chat that uses it
-  if (path === '/api/projects' && m === 'POST') return has('instructions');
-  if (new RegExp(`^/api/projects/${UUID}$`).test(path) && m === 'PATCH') return has('instructions');
+  if (path === '/api/projects' && m === 'POST') return has('instructions', 'folder', 'useMemory', 'shareRecent');
+  if (new RegExp(`^/api/projects/${UUID}$`).test(path) && m === 'PATCH') return has('instructions', 'folder', 'useMemory', 'shareRecent');
   const session = new RegExp(`^/api/sessions/${UUID}/setting/([A-Za-z-]+)$`).exec(path);
   if (session && m === 'PATCH') return WINDOW_ONLY_SESSION_SETTINGS.includes(session[1]);
   return false;
