@@ -144,3 +144,38 @@ test('a compound command gets no kind and the fixed reason; a device-style kind 
   assert.equal(cards.length, 1); assert.equal(cards[0].kind ?? null, null);
   assert.match(cards[0].reason, /^Asked every time: it has more than one part/);
 });
+
+test('a scheduled run neither creates nor uses a kind: with a kind already given to the chat, its edit still has nobody to ask and writes nothing', async (t) => {
+  const { base, folder, session } = await setup(t, [
+    { name: 'write_file', args: { path: 'src/a/one.js', content: '1\n' } },
+    { name: 'write_file', args: { path: 'src/a/two.js', content: '2\n' } },
+  ]);
+  await chat(base, session.id, 'write', async (event, data) => { if (event === 'permission') await post(base, `/api/sessions/${session.id}/permission/${data.id}`, { allowed: true, kind: true }); });
+  assert.equal((await json(base, `/api/sessions/${session.id}/allow-kinds`)).body.kinds.length, 1, 'the chat has a kind');
+  assert.equal(await readFile(join(folder, 'src/a/one.js'), 'utf8').catch(() => null), '1\n');
+  // the same chat, now as a scheduled run: the kind is not used, and no card offers one
+  const { base: b2, folder: f2, session: s2 } = await setup(t, [{ name: 'write_file', args: { path: 'src/a/x.js', content: 'x\n' } }]);
+  const cards = [];
+  const res = await fetch(`${b2}/api/sessions/${s2.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'nightly', providerId: 'openai', model: 'gpt-4o', workMode: 'code', scheduledTask: 'nightly' }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (/^event: permission/m.test(block)) { const card = JSON.parse(/^data: (.*)$/m.exec(block)[1]); cards.push(card); await post(b2, `/api/sessions/${s2.id}/permission/${card.id}`, { allowed: false }); }
+    }
+  }
+  assert.ok(cards.every((c) => !c.kind), 'a scheduled run is never offered a kind');
+  assert.equal((await json(b2, `/api/sessions/${s2.id}/allow-kinds`)).body.kinds.length, 0, 'and creates none');
+  assert.equal(await readFile(join(f2, 'src/a/x.js'), 'utf8').catch(() => null), null, 'nobody was there to allow it');
+});
+
+test('a helper never gets a kind and a taint card still shows a kind or a reason: only the exact fixed strings are used', async () => {
+  const { REASONS, reasonLine } = await import('../src/server/allowKinds.js');
+  for (const key of ['helper', 'pcText', 'scheduled', 'compound', 'root', 'protectedPath', 'sends', 'sending', 'building', 'askRule', 'path', 'noHost']) assert.ok(REASONS[key], key);
+  assert.match(reasonLine('helper'), /^Asked every time: a helper is asking/);
+  assert.match(reasonLine('pcText'), /read text from your PC files/);
+  assert.equal(reasonLine('anything the model wrote'), '', 'a reason is only ever one of the fixed strings');
+});
