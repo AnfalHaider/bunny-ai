@@ -271,7 +271,8 @@ function renderComposerHeader() {
   const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
   const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
-  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
+  const frUsed = state.sessionId ? frCounts.get(state.sessionId) ?? 0 : 0; // FOLDER-RULES: the instruction files this chat's folder has, counted when the trust card or the folder card loaded them
+  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}${frUsed ? ` · ${frUsed} instruction file${frUsed === 1 ? '' : 's'}` : ''}` : 'Choose a folder to work in');
   // W2-9: a chat with its own copy shows the copy's branch in the accent colour, with "own copy"
   const copyBranch = state.sessionId ? state.session?.worktree?.branch ?? null : null;
   if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
@@ -3931,6 +3932,7 @@ async function fixEngine(row, what) {
 let trustSeen = '';
 const trustDismissed = new Set();
 /** The card above the composer: a Code chat in a folder with instruction files nobody has answered for. Not now closes it for this chat for now; a new chat on that folder asks again. */
+const frCounts = new Map(); // session id -> how many instruction files its folder has (for the folder chip's tooltip)
 async function showTrustCard(force = false) {
   const session = state.session;
   const host = document.querySelector('.dock');
@@ -3941,6 +3943,8 @@ async function showTrustCard(force = false) {
   trustSeen = key;
   let view;
   try { view = await loadFolderRules(state.sessionId); } catch { return; }
+  const nFiles = view.enabled && view.chatSwitch !== false ? view.files.filter((f) => f.state !== 'off').length : 0;
+  if (frCounts.get(state.sessionId) !== nFiles) { frCounts.set(state.sessionId, nFiles); renderComposerHeader(); }
   if (!view.enabled || view.chatSwitch === false || view.trusted || !view.files.some((f) => f.state === 'waiting')) return;
   const card = trustCard({ sid: state.sessionId, view, device: isDevicePage(), onAnswered: (followed) => { if (!followed) trustDismissed.add(state.sessionId); showTrustCard(true); renderComposerHeader(); } });
   card.id = 'fr-trust-card';

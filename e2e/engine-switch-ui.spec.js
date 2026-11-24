@@ -33,6 +33,7 @@ test('the trust card appears for a folder with instruction files; Read shows the
   const card = page.locator('#fr-trust-card');
   await expect(card).toContainText('This folder has instruction files');
   await expect(card).toContainText('AGENTS.md');
+  await expect(page.locator('#folder-chip')).toHaveAttribute('title', /· 2 instruction files$/); // the chip's tooltip counts them
   await card.getByRole('button', { name: 'Follow them' }).click();
   const dlg = page.locator('.folder-rules-modal');
   await expect(dlg).toContainText('Bunny, Claude Code and Codex CLI all get the same text');
