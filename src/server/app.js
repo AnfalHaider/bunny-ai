@@ -1557,7 +1557,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
       const answer = await readBody(req);
-      if (pending.choices && (req.bunnyRemote || req.bunnyDevice)) return sendJson(res, 403, { code: 'request.windowOnly', message: "This is answered in Bunny's window." }); // F10-4: a device cannot approve an install; the card keeps waiting
+      if (pending.choices && req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "This is answered in Bunny's window." }); // F10-4: a device cannot approve an install; the card keeps waiting
+      if (pending.choices && req.bunnyDevice) remote.logAction(req.bunnyDevice, { kind: 'install', choice: typeof answer.choice === 'string' && pending.choices.includes(answer.choice) ? answer.choice : 'no', item: String(pending.display ?? '').slice(0, 60) }); // F10-4 (R-DF2): an Everything device may answer the one install card; the access log gets the choice and the item's name, never an address or a key
       if (pending.choices) { pending.resolve(typeof answer.choice === 'string' && pending.choices.includes(answer.choice) && answer.choice !== 'no' ? answer.choice : false); return sendJson(res, 200, { ok: true }); } // F10: a card with named choices takes only one of its own
       pending.resolve(answer.allowed === true && answer.forSession === true && pending.forSession ? 'session' : answer.allowed === true);
       return sendJson(res, 200, { ok: true });
@@ -2528,7 +2529,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
         const timer = waitNudges({ kind: 'permission', title: summary });
-        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, choices: Array.isArray(opts.choices) ? opts.choices.map((c) => c.id) : null, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        pendingPermissions.set(pid, { sessionId: id, forSession: opts.forSession === true, choices: Array.isArray(opts.choices) ? opts.choices.map((c) => c.id) : null, display: opts.display ?? null, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
         send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}), ...(Array.isArray(opts.choices) ? { choices: opts.choices.map((c) => ({ id: c.id, label: c.label, ...(c.primary ? { primary: true } : {}) })) } : {}) });
       });
@@ -3312,7 +3313,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           if (tooLong) body = `Too long to show: it will be installed off. Switch it on in Customize.\n\n${body}`;
           title = tooLong ? `Install ${display}?` : `Install and switch on ${display}?`;
           const choices = [...(tooLong ? [] : [{ id: 'on', label: 'Install and switch on', primary: true }]), { id: 'off', label: 'Install, keep off', ...(tooLong ? { primary: true } : {}) }, { id: 'no', label: "Don't install" }];
-          const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices });
+          const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices, display });
           if (!answer) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
