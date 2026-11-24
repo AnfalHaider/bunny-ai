@@ -147,3 +147,14 @@ test('LOW: a card belongs to whoever opened it: a second Everything device (or t
   assert.deepEqual((await json(started.base, '/api/mcp')).body, [], 'nothing was installed by any of them');
   assert.equal((await one('POST', `/api/install/${card.id}`, { choice: 'off' })).status, 200, 'the device that opened it can');
 });
+
+test('cancelling a card that is already gone (answered, cancelled or swept) is quietly fine, not an error', async (t) => {
+  const { base } = await app(t);
+  const c = (await check(base, 'https://files.example.com/pack.zip')).body;
+  assert.equal((await post(base, `/api/install/${c.id}`, { choice: 'off' })).status, 200);
+  assert.equal((await fetch(`${base}/api/install/${c.id}`, { method: 'DELETE' })).status, 200, 'cancel after the answer');
+  const d = (await check(base, 'https://files.example.com/other.zip')).body;
+  assert.equal((await fetch(`${base}/api/install/${d.id}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await fetch(`${base}/api/install/${d.id}`, { method: 'DELETE' })).status, 200, 'cancel twice');
+  assert.equal((await fetch(`${base}/api/install/00000000-0000-4000-8000-000000000000`, { method: 'DELETE' })).status, 200, 'an id that never existed');
+});
