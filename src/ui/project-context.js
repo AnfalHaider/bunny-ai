@@ -161,3 +161,21 @@ export async function contextPartCount(sessionId) {
   } catch { return null; }
 }
 export { plural };
+
+/** /remember in a project chat: "Remember for this project, or everywhere?" Resolves 'project', 'everywhere' or null (cancel). */
+export function askRememberWhere(text, projectName = 'this project') {
+  return new Promise((resolve) => {
+    const back = el('div', { className: 'modal-backdrop pm-backdrop' });
+    const done = (v) => { back.remove(); resolve(v); };
+    back.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
+    const box = el('div', { className: 'modal pm-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Remember' },
+      el('div', { className: 'modal-head' }, el('h3', { className: 'modal-title', textContent: 'Remember for this project, or everywhere?' }), el('p', { className: 'modal-sub', textContent: `"${String(text).slice(0, 200)}"` })),
+      el('div', { className: 'modal-foot actions' },
+        el('button', { type: 'button', className: 'btn btn-primary', textContent: `For ${projectName}`, onclick: () => done('project') }),
+        el('button', { type: 'button', className: 'btn btn-ghost', textContent: 'Everywhere', onclick: () => done('everywhere') }),
+        el('button', { type: 'button', className: 'btn btn-ghost', textContent: 'Cancel', onclick: () => done(null) })));
+    back.append(box);
+    document.body.append(back);
+    box.querySelector('button')?.focus();
+  });
+}

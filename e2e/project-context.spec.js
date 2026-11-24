@@ -125,3 +125,22 @@ test('the project page: memory is listed with Edit and Delete, an item can be ad
   await form.getByRole('button', { name: 'Clear 2 items' }).click();
   await expect(form).toContainText('Nothing kept for this project yet');
 });
+
+test('/remember in a project chat asks "for this project, or everywhere?" and stores where the person says', async ({ page, request }) => {
+  await open(page);
+  const project = await (await request.post('/api/projects', { data: { name: 'Carrot shop' } })).json();
+  const chat = await (await request.post('/api/sessions', { data: { title: 'Chat', projectId: project.id } })).json();
+  await page.goto(`/?s=${chat.id}`);
+  await page.locator('#input').fill('/remember Prices are in cents.');
+  await page.locator('#send').click();
+  const dialog = page.locator('.pm-modal');
+  await expect(dialog).toContainText('Remember for this project, or everywhere?');
+  await dialog.getByRole('button', { name: 'For Carrot shop' }).click();
+  await expect.poll(async () => (await (await request.get(`/api/projects/${project.id}/memory`)).json()).items.map((m) => m.text)).toEqual(['Prices are in cents.']);
+  await expect(page.locator('#input')).toHaveValue('');
+  await page.locator('#input').fill('/remember I like short answers.');
+  await page.locator('#send').click();
+  await page.locator('.pm-modal').getByRole('button', { name: 'Everywhere' }).click();
+  await expect.poll(async () => (await (await request.get('/api/memory')).json()).some((m) => m.text === 'I like short answers.')).toBe(true);
+  expect((await (await request.get(`/api/projects/${project.id}/memory`)).json()).items).toHaveLength(1);
+});

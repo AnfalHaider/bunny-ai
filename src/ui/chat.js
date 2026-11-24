@@ -14,7 +14,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
-import { PROVIDER_SENTENCE, contextPartCount, engineLine, memoryPanel, openContextView, suggestionCard } from './project-context.js';
+import { PROVIDER_SENTENCE, contextPartCount, engineLine, memoryPanel, openContextView, suggestionCard, askRememberWhere } from './project-context.js';
 import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
@@ -3304,6 +3304,7 @@ const COMMANDS = [
   { name: '/clear', hint: 'Start a new chat, keeping this one' },
   { name: '/export', hint: 'Download this chat as Markdown' },
   { name: '/new', hint: 'Start a new chat' },
+  { name: '/remember', hint: 'Remember something (for this project or everywhere)' },
   { name: '/help', hint: 'Show what commands exist' },
 ];
 
@@ -3361,6 +3362,17 @@ function renderSlashMenu() {
 async function runCommand(text) {
   const [name] = text.split(/\s+/);
   switch (name) {
+    case '/remember': {
+      const what = text.slice(name.length).trim();
+      if (!what) { flashStatus('Say what to remember: /remember <text>'); return true; }
+      try {
+        const projectId = state.session?.projectId;
+        const where = projectId ? await askRememberWhere(what, projectName(projectId) || 'this project') : 'everywhere';
+        if (where === 'project') { await sendJSON(`/api/projects/${projectId}/memory`, 'POST', { kind: 'fact', text: what }); flashStatus('Kept for this project'); }
+        else if (where === 'everywhere') { await sendJSON('/api/memory', 'POST', { text: what }); flashStatus('Remembered everywhere'); }
+      } catch (err) { $('error').textContent = err.message; }
+      return true;
+    }
     case '/help':
       state.messages.push({
         id: `local-h-${Date.now()}`,
