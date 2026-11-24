@@ -247,9 +247,9 @@ test('Security: only allowed package.json fields reach npm (peerDependencies, ov
 import { unpinnedPackage } from '../src/server/pinning.js';
 test('IA-9: which connectors are not pinned', () => {
   const local = (command, args) => ({ type: 'local', command, args });
-  assert.deepEqual(unpinnedPackage(local('npx', ['-y', 'notes-mcp'])), { kind: 'npm', name: 'notes-mcp', spec: 'notes-mcp@latest' });
-  assert.deepEqual(unpinnedPackage(local('npx', ['-y', '@acme/notes@latest'])), { kind: 'npm', name: '@acme/notes', spec: '@acme/notes@latest' });
-  assert.deepEqual(unpinnedPackage(local('uvx', ['notes-mcp'])), { kind: 'pypi', name: 'notes-mcp', spec: 'notes-mcp' });
+  assert.deepEqual(unpinnedPackage(local('npx', ['-y', 'notes-mcp'])), { kind: 'npm', name: 'notes-mcp', spec: 'notes-mcp@latest', rest: [] });
+  assert.deepEqual(unpinnedPackage(local('npx', ['-y', '@acme/notes@latest'])), { kind: 'npm', name: '@acme/notes', spec: '@acme/notes@latest', rest: [] });
+  assert.deepEqual(unpinnedPackage(local('uvx', ['notes-mcp'])), { kind: 'pypi', name: 'notes-mcp', spec: 'notes-mcp', rest: [] });
   for (const pinned of [local('npx', ['-y', 'notes-mcp@1.2.3']), local('uvx', ['notes-mcp==1.0']), local('node', ['server.js']), local('python', ['-m', 'x']), { type: 'remote', url: 'https://x' }, local('npx', [])]) assert.equal(unpinnedPackage(pinned), null, JSON.stringify(pinned));
 });
 
@@ -273,4 +273,21 @@ test('IA-9 through the app: the list marks an unpinned connector, Pin this versi
   const after = (await json(base, '/api/mcp')).body[0];
   assert.equal(after.command, 'node'); assert.ok(!JSON.stringify(after.args).includes('npx')); assert.equal(after.unpinned, undefined, 'no longer marked'); assert.equal(after.name, 'Notes');
   assert.equal((await post(base, `/api/mcp/${made.body.id}/pin`, {})).body.ok, false, 'already pinned');
+});
+
+test('Security review: pinning reads only the plain launcher forms and keeps the arguments after the package', async (t) => {
+  const local = (command, args) => ({ type: 'local', command, args });
+  assert.deepEqual(unpinnedPackage(local('npx', ['-y', 'notes-mcp', '--root', 'C:\\notes'])).rest, ['--root', 'C:\\notes']);
+  assert.deepEqual(unpinnedPackage(local('uvx', ['notes-mcp', '--flag'])).rest, ['--flag']);
+  assert.equal(unpinnedPackage(local('uv', ['tool', 'run', 'notes-mcp'])).name, 'notes-mcp');
+  for (const unclear of [local('uvx', ['--from', 'evil-pkg', 'notes-mcp']), local('uvx', ['--python', '3.12', 'notes-mcp']), local('uv', ['run', 'notes-mcp']), local('npx', ['--package', 'evil', 'notes-mcp']), local('npx', ['-p', 'evil', 'x']), local('uvx', ['notes-mcp==1.0'])]) assert.equal(unpinnedPackage(unclear), null, JSON.stringify(unclear));
+  const w = world(tarball());
+  const { base } = await startApp(t, { fake: false, installSource: { npmDeps: w.deps } });
+  const made = await post(base, '/api/mcp', { name: 'Notes', command: 'npx', args: ['-y', 'notes-mcp', '--root', 'C:\\notes'], confirmLocal: true, enabled: false });
+  const card = (await post(base, `/api/mcp/${made.body.id}/pin`, {})).body;
+  assert.match(card.text, /keeps the arguments it has now: --root C:\\notes/);
+  await post(base, `/api/mcp/${made.body.id}/pin/${card.token}`, {});
+  const after = (await json(base, '/api/mcp')).body[0];
+  assert.deepEqual(after.args.slice(-2), ['--root', 'C:\\notes'], 'the connector keeps its own arguments after the pinned program');
+  assert.equal(after.command, 'node');
 });

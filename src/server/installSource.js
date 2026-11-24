@@ -79,7 +79,7 @@ async function sizeOf(root) { let n = 0; for (const f of await walk(root)) n += 
  * Fetch, pin, unpack, inspect. Returns a prepared source (kept in a temp folder under `workDir`, never fetched twice) or throws a plain message; any failure leaves nothing behind.
  * `fetchSource(url, { maxBytes })` -> { bytes, url } is the bounded public https fetch (tests hand in a loopback stand-in).
  */
-export async function prepareSource(address, { workDir, fetchSource = (u, o) => fetchLimited(u, o), now = () => new Date(), checkAddress = checkPublicAddress, gitOptions = {} } = {}) {
+export async function prepareSource(address, { workDir, fetchSource = (u, o) => fetchLimited(u, o), now = () => new Date(), checkAddress = checkPublicAddress, gitOptions = {}, typedAddress = false } = {}) {
   const found = sourceKind(address);
   if (found.error) throw new Error(found.error);
   const token = randomUUID();
@@ -91,11 +91,11 @@ export async function prepareSource(address, { workDir, fetchSource = (u, o) => 
     let repoName = decodeURIComponent(found.url.pathname).split('/').filter(Boolean).pop() ?? 'source';
     let bytes = Buffer.alloc(0); let pin = ''; let commit = null;
     if (found.kind === 'git') { // IA-1: the commit is the pin; git runs in isolation and only the files are kept
-      const got = await fetchGitSource(found.url.href, root, { workDir: work, ...gitOptions });
+      const got = await fetchGitSource(found.url.href, root, { workDir: work, ...(typedAddress ? { allowPrivateHost: true } : {}), ...gitOptions });
       commit = got.commit; pin = got.commit;
       repoName = repoName.replace(/\.git$/, '');
     } else {
-    const got = await fetchSource(found.url.href, { maxBytes });
+    const got = await fetchSource(found.url.href, { maxBytes, ...(typedAddress ? { allowLoopback: (u) => u.href === found.url.href } : {}) }); // the person's own typed address may be on their network; a redirect elsewhere may not
     const finalUrl = new URL(String(got.url ?? found.url.href));
     if (finalUrl.protocol !== 'https:') throw new Error('The address sent Bunny to a page that is not https, which is refused.');
     bytes = Buffer.from(got.bytes);

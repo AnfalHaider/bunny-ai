@@ -66,12 +66,12 @@ export async function checkGitHost(host, { lookupImpl = (h, o) => dnsLookup(h, o
  * Resolve the commit and fetch exactly it into `dest` (an empty folder). Returns { commit }. `workDir` holds the isolated home and the empty hooks folder.
  * `runGit(args, { cwd, env })` is injectable for tests; `allowFile` lets a test clone from a local bare repository (nothing in the app passes it).
  */
-export async function fetchGitSource(address, dest, { workDir, runGit = null, lookupImpl, allowFile = false } = {}) {
+export async function fetchGitSource(address, dest, { workDir, runGit = null, lookupImpl, allowFile = false, allowPrivateHost = false } = {}) {
   // IA-12: git by absolute path found BEFORE the download, no shell, and every call runs from the work folder with -C <dest>, never from inside the checkout (a git.cmd the repository ships is never picked up)
   if (!runGit) { const bin = gitProgram(workDir); runGit = (args, o) => execAbsolute(bin, args, { cwd: o.cwd, env: o.env, timeout: 120_000 }); }
   const parsed = allowFile ? { url: String(address), ref: null, host: 'local' } : parseGitAddress(address); // a test's local bare repository is the only thing allowFile allows; nothing in the app passes it
   if (parsed.error) throw new Error(parsed.error);
-  if (!allowFile) await checkGitHost(parsed.host, { lookupImpl });
+  if (!allowFile && !allowPrivateHost) await checkGitHost(parsed.host, { lookupImpl }); // allowPrivateHost: the person typed this very address in their own field (Add from address)
   const home = join(workDir, 'git-home'); const hooks = join(workDir, 'git-hooks');
   await mkdir(home, { recursive: true }); await mkdir(hooks, { recursive: true });
   await writeFile(join(home, 'empty.gitconfig'), '');

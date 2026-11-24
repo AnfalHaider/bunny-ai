@@ -1199,6 +1199,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, err.code === 'mcp.notFound' ? 404 : 400, { code: err.code ?? 'mcp.failed', message: String(err.message).slice(0, 300) });
       }
     }
+    // INSTALL-ANYWHERE: Customize's "Add from address". Window only (the route table): check, answer the one card, cancel.
+    const installMatch = path.match(/^\/api\/install(?:\/([a-f0-9-]{36}))?$/);
+    if (installMatch) {
+      if (windowOnly(req, res)) return;
+      try {
+        if (method === 'POST' && !installMatch[1]) { const body = await readBody(req); return sendJson(res, 200, await appTools.addressCheck(body.address)); }
+        if (method === 'POST') { const body = await readBody(req); return sendJson(res, 200, await appTools.addressConfirm(installMatch[1], body.choice)); }
+        if (method === 'DELETE' && installMatch[1]) { await appTools.addressCancel(installMatch[1]); return sendJson(res, 200, { ok: true }); }
+      } catch (err) { return sendJson(res, 400, { code: err.code ?? 'install.failed', message: String(err.message).slice(0, 300) }); }
+    }
     // IA-9: "Pin this version" on an unpinned npx / uvx connector: the card, then the yes. Window only (the route table).
     const mcpPinMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/pin(?:\/([a-f0-9-]{36}))?$/);
     if (mcpPinMatch) {

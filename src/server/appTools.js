@@ -8,7 +8,8 @@ import { describePypi, discardPypi, installPypi, preparePypi } from './pypiSourc
 import { unpinnedPackage } from './pinning.js';
 import { fetchLimited } from './download.js';
 import { dirname, join } from 'node:path';
-import { describeSource, discardSource, prepareSource, stillTheSame, CHANGED } from './installSource.js';
+import { describeSource, discardSource, prepareSource, sourceKind, stillTheSame, CHANGED } from './installSource.js';
+import { checkPublicAddress } from './publicFetch.js';
 import { parseGithubUrl, readGithubPlugin, readUrl, resolveCommit, searchPlugins } from './pluginImport.js';
 import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
@@ -215,8 +216,9 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     }
     if (!card.ok) return card;
     const id = crypto.randomUUID(); // the page gets an opaque id, never a folder path
-    pins.set(id, { serverId, kind: what.kind, token: card.token });
-    return { ok: true, token: id, text: `This connector runs ${what.name} at whatever version the registry has today. Pinning installs one exact version and points the connector at it.\n\n${card.text}`, tooLong: card.tooLong };
+    pins.set(id, { serverId, kind: what.kind, token: card.token, rest: what.rest ?? [] });
+    const keeps = (what.rest ?? []).length ? `\nIt keeps the arguments it has now: ${what.rest.join(' ').slice(0, 200)}` : '';
+    return { ok: true, token: id, text: `This connector runs ${what.name} at whatever version the registry has today. Pinning installs one exact version and points the connector at it.${keeps}\n\n${card.text}`, tooLong: card.tooLong };
   }
   async function pinConfirm(serverId, token) {
     const pin = pins.get(String(token ?? ''));
@@ -225,9 +227,69 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     let placed;
     if (pin.kind === 'npm') { const p = preparedNpm.get(pin.token); if (!p) throw new Error('That pin is no longer waiting. Start again.'); preparedNpm.delete(pin.token); placed = await installNpm(p, { dest: join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`) }); }
     else { const p = preparedPypi.get(pin.token); if (!p) throw new Error('That pin is no longer waiting. Start again.'); preparedPypi.delete(pin.token); placed = await installPypi(p); }
-    return mcp.update(serverId, { command: placed.command, args: placed.args });
+    return mcp.update(serverId, { command: placed.command, args: [...placed.args, ...pin.rest] }); // the arguments after the package stay
   }
   async function pinCancel(token) { const pin = pins.get(String(token ?? '')); pins.delete(String(token ?? '')); if (pin) { await discardNpmToken(pin.token); await discardPypiToken(pin.token); } }
+  // INSTALL-ANYWHERE: the person's own "Add from address" field (window only). One field, what was understood, then the same one card. The person typed the address, so it is not "found on the open web", and a private address is
+  // allowed for exactly that address; everything the source brings stays under the public-https rule.
+  const addresses = new Map(); // opaque id -> { kind, ... }
+  const classify = (text) => {
+    const t = String(text ?? '').trim();
+    if (/^npm:/i.test(t)) return { kind: 'npm', spec: t.replace(/^npm:/i, '') };
+    if (/^pypi:/i.test(t)) { const s = t.replace(/^pypi:/i, ''); return { kind: 'pypi', spec: s.includes('==') ? s : s }; }
+    if (!/^https:\/\//i.test(t)) return { error: /^http:\/\//i.test(t) ? 'Only https addresses can be installed.' : "I can't tell what this is. Paste an https address, or npm:name or pypi:name." };
+    if (parseGithubUrl(t)) return { kind: 'github', url: t };
+    const found = sourceKind(t);
+    if (!found.error) return { kind: found.kind, url: t };
+    return { kind: 'connector', url: t };
+  };
+  async function addressCheck(text) {
+    await sweep(); await sweepNpm(); await sweepPypi();
+    const c = classify(text);
+    if (c.error) return { ok: false, message: c.error };
+    const id = crypto.randomUUID();
+    try {
+      if (c.kind === 'npm') { const card = await previewNpmCard(/@/.test(c.spec.slice(1)) ? c.spec : `${c.spec}@latest`); if (!card.ok) return card; addresses.set(id, { kind: 'npm', token: card.token, name: card.name }); return { ok: true, id, kind: 'npm', name: card.name, text: card.text, tooLong: card.tooLong, understood: 'npm package: exact version + integrity' }; }
+      if (c.kind === 'pypi') {
+        let spec = c.spec;
+        if (!spec.includes('==')) { const reg = pypiDeps ?? { fetchJson: async (u) => JSON.parse(Buffer.from((await fetchLimited(u, { maxBytes: 8 * 1024 * 1024 })).bytes).toString('utf8')) }; const v = (await reg.fetchJson(`https://pypi.org/pypi/${encodeURIComponent(spec)}/json`))?.info?.version; if (!v) return { ok: false, message: 'Could not find that package on PyPI.' }; spec = `${spec}==${v}`; }
+        const card = await previewPypiCard(spec); if (!card.ok) return card; addresses.set(id, { kind: 'pypi', token: card.token, name: card.name }); return { ok: true, id, kind: 'pypi', name: card.name, text: card.text, tooLong: card.tooLong, understood: 'PyPI package: a wheel with its sha256' };
+      }
+      if (c.kind === 'github') { const card = await previewPluginCard(c.url, { chatId: `address:${id}` }); if (!card.ok) return card; const text = card.text.replace(/^Found on the open web: not from a known catalogue\.\n/, ''); addresses.set(id, { kind: 'github', url: c.url, commit: card.commit, listed: card.listed, name: card.name }); return { ok: true, id, kind: 'github', name: card.name, text, tooLong: card.tooLong, understood: 'git repository: a commit is pinned' }; }
+      if (c.kind === 'connector') {
+        const u = new URL(c.url); let local = false; try { await checkPublicAddress(c.url); } catch { local = true; }
+        addresses.set(id, { kind: 'connector', url: c.url, name: u.hostname });
+        return { ok: true, id, kind: 'connector', name: u.hostname, text: `Connector at ${c.url}\nThis service can change what it does at any time.${local ? '\nThis address is on your own network. It is allowed because you added it.' : ''}`, understood: 'remote connector: cannot be pinned to content' };
+      }
+      // git host, archive, SKILL.md: the same pipeline, with the typed address allowed to be on the person's own network
+      if (!workDir) return { ok: false, message: 'Installing from an address is not available here.' };
+      const src = await prepareSource(c.url, { workDir, ...(fetchSource ? { fetchSource } : {}), ...(checkAddress ? { checkAddress } : {}), ...(gitOptions ? { gitOptions } : {}), typedAddress: true, now });
+      prepared.set(src.token, src);
+      const full = describeSource(src, { openWeb: false }); const tooLong = full.length > 1800;
+      addresses.set(id, { kind: 'source', token: src.token, listed: { skills: src.plugin.skills.map((s) => String(s.name)), connectors: src.plugin.connectors.map((x) => String(x.url)) }, name: src.plugin.name });
+      return { ok: true, id, kind: src.kind, name: src.plugin.name, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, understood: src.kind === 'git' ? 'git repository: a commit is pinned' : src.kind === 'skill' ? 'skill file: its sha256 is pinned' : 'archive: its sha256 is pinned' };
+    } catch (err) { return { ok: false, message: String(err.message).slice(0, 300) }; }
+  }
+  async function addressConfirm(id, choice) {
+    const a = addresses.get(String(id ?? '')); if (!a) throw new Error('That is no longer waiting. Check the address again.');
+    addresses.delete(id);
+    const on = choice === 'on';
+    if (a.kind === 'connector') { const added = await mcp.add({ name: a.name, url: a.url, enabled: on, addedBy: 'person' }); return { ok: true, id: added.id }; }
+    if (a.kind === 'npm') { const p = preparedNpm.get(a.token); if (!p) throw new Error('That is no longer waiting. Check the address again.'); preparedNpm.delete(a.token); const placed = await installNpm(p, { dest: join(dirname(workDir), 'tools', 'npm', `${p.name.replace('/', '__')}-${p.version}-${crypto.randomUUID().slice(0, 8)}`) }); const added = await mcp.add({ name: p.name, command: placed.command, args: placed.args, env: {}, enabled: on, addedBy: 'model' }); return { ok: true, id: added.id }; }
+    if (a.kind === 'pypi') { const p = preparedPypi.get(a.token); if (!p) throw new Error('That is no longer waiting. Check the address again.'); preparedPypi.delete(a.token); const placed = await installPypi(p); const added = await mcp.add({ name: p.name, command: placed.command, args: placed.args, env: {}, enabled: on, addedBy: 'model' }); return { ok: true, id: added.id }; }
+    let record;
+    if (a.kind === 'github') record = (await installFromGithub(a.url, { off: true, pin: a.commit })).record;
+    else record = (await installPrepared(a.token, { off: true })).record;
+    if (on) await switchOn({ skillIds: record.skills, connectorIds: record.connectors }, a.listed);
+    return { ok: true, id: record.id };
+  }
+  async function addressCancel(id) {
+    const a = addresses.get(String(id ?? '')); addresses.delete(String(id ?? ''));
+    if (!a) return;
+    if (a.kind === 'npm') await discardNpmToken(a.token);
+    if (a.kind === 'pypi') await discardPypiToken(a.token);
+    if (a.kind === 'source') { const p = prepared.get(a.token); prepared.delete(a.token); if (p) await discardSource(p); }
+  }
   const discardPypiToken = async (token) => { const p = preparedPypi.get(token); preparedPypi.delete(token); if (p) await discardPypi(p); };
   const discardNpmToken = async (token) => { const p = preparedNpm.get(token); preparedNpm.delete(token); if (p) await discardNpm(p); };
 
@@ -561,7 +623,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     setFolders,
     updatePlugin,
     previewPlugin,
-    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm, previewPypiCard, discardPypiToken, sweepPypi, pinCard, pinConfirm, pinCancel,
+    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm, previewPypiCard, discardPypiToken, sweepPypi, pinCard, pinConfirm, pinCancel, addressCheck, addressConfirm, addressCancel,
     /** F10: is this plugin already installed? (then there is nothing to ask: the install itself says so) */
     isPluginInstalled: (url) => Boolean(findInstalled(null, url)),
   };
