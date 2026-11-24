@@ -27,13 +27,13 @@ test('Settings, Code: the model that checks starts as the chat\'s own, names the
   await page.goto('/src/ui/settings.html?embed=1&section=code');
   const sel = page.locator('#auto-judge-model');
   await expect(sel).toHaveValue('');
-  await expect(page.locator('#auto-judge-model-row')).toContainText('each checked command and its arguments are then sent to that provider');
+  await expect(page.locator('#auto-judge-model-row')).toContainText('Each checked action is sent to that provider');
   const options = await sel.locator('option').evaluateAll((os) => os.map((o) => o.value));
   expect(options[0]).toBe('');
   const other = options.find((v) => v !== '');
   if (other) {
     await sel.selectOption(other);
-    await expect(page.locator('#auto-judge-note')).toContainText(`are sent to ${other.split('/')[0]}`);
+    await expect(page.locator('#auto-judge-note')).toContainText(`Each checked action is sent to ${other.split('/')[0]}`);
     await expect.poll(async () => (await (await request.get('/api/settings')).json()).autoJudgeModel).toBe(other);
   }
   expect((await request.put('/api/settings', { data: { autoJudgeModel: 'not a model' } })).status()).toBe(400);

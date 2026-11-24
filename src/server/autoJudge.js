@@ -104,7 +104,7 @@ export function createReplyJudge({ ask, model = '', limitMs = JUDGE_LIMIT_MS, no
     stats.checked += 1;
     const v = parseVerdict(text);
     let out;
-    if (v.verdict === 'allow' && cut) out = { action: 'card', why: 'An argument was too long for the check to read whole, so Bunny asks you.' };
+    if (v.verdict === 'allow' && cut) out = fall('An argument was too long for the check to read whole, so Bunny asks you.'); // F11-8: a card, and a stop in a scheduled run (nobody can answer)
     else if (v.verdict === 'allow') out = { action: 'run', reason: v.reason };
     else out = { action: 'stop', reason: v.reason };
     if (out.action === 'stop') {
