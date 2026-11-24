@@ -148,8 +148,10 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   const prepared = new Map(); // token -> prepared source (a temp folder under workDir)
   const known = new Map(); // chat -> the addresses the catalogues showed it (curated, GitHub, registry): anything else is "found on the open web"
   const sweep = async () => { for (const [t, p] of prepared) if (Date.now() - Date.parse(p.fetchedAt) > 30 * 60_000) { prepared.delete(t); await discardSource(p); } };
-  const noteKnown = (chatId, text) => { const set = known.get(String(chatId ?? '')) ?? new Set(); for (const m of String(text).matchAll(/https:\/\/[^\s)>"']+/g)) set.add(m[0].replace(/[.,;]+$/, '').toLowerCase()); known.set(String(chatId ?? ''), set); };
-  const isOpenWeb = (chatId, url) => !parseGithubUrl(url) && !(known.get(String(chatId ?? ''))?.has(String(url).trim().toLowerCase()));
+  // a GitHub link counts as known only when this chat's own catalogue results listed that repository (Security LOW: not every GitHub link is a catalogue link)
+  const sourceKey = (url) => { const g = parseGithubUrl(url); return g ? `gh:${g.owner}/${g.repo}`.toLowerCase() : String(url).trim().toLowerCase().replace(/[.,;]+$/, '').replace(/\/+$/, ''); };
+  const noteKnown = (chatId, text) => { const set = known.get(String(chatId ?? '')) ?? new Set(); for (const m of String(text).matchAll(/https:\/\/[^\s)>"']+/g)) set.add(sourceKey(m[0])); known.set(String(chatId ?? ''), set); };
+  const isOpenWeb = (chatId, url) => !(known.get(String(chatId ?? ''))?.has(sourceKey(url)));
   async function prepareFromSource(url, chatId) {
     if (!workDir) throw new Error('Installing from an address is not available here.');
     await sweep();
@@ -269,8 +271,10 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
         ...(plugin.skipped?.length ? [`Not imported: ${plugin.skipped.join('; ')}`] : []),
       ];
       const full = lines.join('\n');
-      const tooLong = full.length > 1800;
-      return { ok: true, name: plugin.name, commit, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: (plugin.skills ?? []).map((s) => String(s.name)), connectors: (plugin.connectors ?? []).map((c) => String(c.url)) } };
+      const openWeb = isOpenWeb(chatId, url);
+      const shown = openWeb ? `Found on the open web: not from a known catalogue.\n${full}` : full;
+      const tooLong = shown.length > 1800;
+      return { ok: true, name: plugin.name, commit, openWeb, text: tooLong ? `${shown.slice(0, 1800)}\n…` : shown, tooLong, listed: { skills: (plugin.skills ?? []).map((s) => String(s.name)), connectors: (plugin.connectors ?? []).map((c) => String(c.url)) } };
     } catch (err) {
       return { ok: false, message: `Could not read that repository yet: ${String(err.message).slice(0, 200)}` };
     }

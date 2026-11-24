@@ -264,3 +264,25 @@ test('open-web candidates: search_plugins lists web results last, marked as cand
   const url = /(https:\/\/files\.example\.com\/pack\d\.zip)/.exec(found)[1];
   assert.equal((await tools.previewPluginCard(url, { chatId: 'w1' })).openWeb, true, 'a web candidate stays "found on the open web"');
 });
+
+test('Security LOW: a GitHub link is "known" only when this chat\'s own catalogue results listed that repository; any other GitHub link is found on the open web', async () => {
+  const m = memory();
+  const tree = { 'plugin.json': JSON.stringify({ name: 'notes', description: 'd' }), 'skills/a/SKILL.md': '---\nname: a\ndescription: A\n---\nDo a.' };
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (/duckduckgo/.test(u)) return { ok: true, status: 200, text: async () => '' };
+    if (/\/commits\//.test(u)) return { ok: false, status: 404, json: async () => ({}) };
+    if (/\/git\/trees\//.test(u)) return { ok: true, status: 200, json: async () => ({ tree: Object.keys(tree).map((path) => ({ path, type: 'blob' })) }) };
+    const raw = /raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/(.*)$/.exec(u);
+    if (raw && tree[raw[1]] !== undefined) return { ok: true, status: 200, text: async () => tree[raw[1]], json: async () => JSON.parse(tree[raw[1]]) };
+    return { ok: true, status: 200, json: async () => ({ items: [{ full_name: 'someone/notes', html_url: 'https://github.com/someone/notes', description: 'Notes', stargazers_count: 5 }], servers: [] }), text: async () => '' };
+  };
+  const tools = createAppTools({ ...m.deps, fetchImpl });
+  const unlisted = await tools.previewPluginCard('https://github.com/someone/notes', { chatId: 'g1' });
+  assert.equal(unlisted.openWeb, true); assert.match(unlisted.text, /^Found on the open web: not from a known catalogue\./);
+  await tools.run('search_plugins', { query: 'notes' }, { chatId: 'g1' }); // the catalogue lists someone/notes to THIS chat
+  assert.equal((await tools.previewPluginCard('https://github.com/someone/notes', { chatId: 'g1' })).openWeb, false, 'listed by this chat\'s catalogue results');
+  assert.equal((await tools.previewPluginCard('https://github.com/someone/notes/', { chatId: 'g1' })).openWeb, false, 'the same repository however it is spelled');
+  assert.equal((await tools.previewPluginCard('https://github.com/someone/notes', { chatId: 'g2' })).openWeb, true, 'another chat did not see it');
+  assert.equal((await tools.previewPluginCard('https://github.com/someone/other', { chatId: 'g1' })).openWeb, true, 'a different repository was not listed');
+});
