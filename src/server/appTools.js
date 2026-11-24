@@ -4,6 +4,7 @@
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
 import { describeNpm, discardNpm, installNpm, prepareNpm } from './npmSource.js';
+import { describePypi, discardPypi, installPypi, preparePypi } from './pypiSource.js';
 import { fetchLimited } from './download.js';
 import { dirname, join } from 'node:path';
 import { describeSource, discardSource, prepareSource, stillTheSame, CHANGED } from './installSource.js';
@@ -41,7 +42,7 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
     fn('add_connector', 'Add an MCP server to Bunny AI as a connector: a remote one by its https address (added switched OFF until the person says yes), '
       + `or a local one by the program that runs it (one of ${LOCAL_COMMANDS.join(', ')}; for example command "npx", args ["-y", "@modelcontextprotocol/server-filesystem", "C:\\notes"]). `
       + 'The person always sees the exact command line on a card and confirms it before anything runs. The first start can take a few minutes.',
-      { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' }, npm: { type: 'string', description: 'For a local connector from npm: name@version (an exact version, or latest). Bunny pins the version, installs the whole tree with no scripts, and shows it on one card first' },
+      { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' }, pypi: { type: 'string', description: 'For a local connector from PyPI: name==version (an exact version). Wheels only, all the way down; one card first' }, npm: { type: 'string', description: 'For a local connector from npm: name@version (an exact version, or latest). Bunny pins the version, installs the whole tree with no scripts, and shows it on one card first' },
         command: { type: 'string', description: 'For a local connector: the program to run' },
         args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
         env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' },
@@ -93,7 +94,7 @@ async function webSearch(query, fetchImpl = globalThis.fetch) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, gitOptions = undefined, npmDeps = undefined, now = () => new Date() }) {
+export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, gitOptions = undefined, npmDeps = undefined, pypiDeps = undefined, now = () => new Date() }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   let queue = Promise.resolve();
@@ -174,6 +175,27 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       return { ok: true, name: p.name, token: p.root, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: [], connectors: [p.name] } };
     } catch (err) { return { ok: false, message: String(err.message).slice(0, 300) }; }
   }
+  // IA-3: a pinned PyPI connector (wheels only): the venv is made at its final folder at card time, marked pending; the yes removes the mark, no or a timeout deletes the folder
+  const preparedPypi = new Map();
+  const sweepPypi = async () => { for (const [k, p] of preparedPypi) if (now().getTime() - Date.parse(p.fetchedAt) > 30 * 60_000) { preparedPypi.delete(k); await discardPypi(p); } };
+  async function previewPypiCard(spec) {
+    await sweepPypi();
+    if (!workDir) return { ok: false, message: 'Installing from PyPI is not available here.' };
+    try {
+      const reg = pypiDeps ?? {
+        fetchJson: async (u) => JSON.parse(Buffer.from((await fetchLimited(u, { maxBytes: 8 * 1024 * 1024 })).bytes).toString('utf8')),
+        fetchBytes: async (u, o) => (await fetchLimited(u, o)).bytes,
+      };
+      const name = String(spec ?? '').split('==')[0].replace(/[^A-Za-z0-9._-]/g, '_');
+      const dest = join(dirname(workDir), 'tools', 'pypi', `${name}-${String(spec ?? '').split('==')[1] ?? 'x'}`.replace(/[^A-Za-z0-9._-]/g, '_'));
+      const p = await preparePypi(spec, { workDir, dest, ...reg, now });
+      preparedPypi.set(p.dest, p);
+      const full = describePypi(p);
+      const tooLong = full.length > 1800;
+      return { ok: true, name: p.name, token: p.dest, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: [], connectors: [p.name] } };
+    } catch (err) { return { ok: false, message: String(err.message).slice(0, 300) }; }
+  }
+  const discardPypiToken = async (token) => { const p = preparedPypi.get(token); preparedPypi.delete(token); if (p) await discardPypi(p); };
   const discardNpmToken = async (token) => { const p = preparedNpm.get(token); preparedNpm.delete(token); if (p) await discardNpm(p); };
 
   async function installPrepared(token, { off = false } = {}) {
@@ -438,6 +460,15 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       return toolInstaller.install({ repo: args.repo, expectSha: ctx?.expectSha, enabled: ctx?.switchOn !== 'off' });
     },
     add_connector: async (args, ctx) => {
+      if (String(args.pypi ?? '').trim()) { // a pinned PyPI package: only what the card showed, only through the card
+        const p = preparedPypi.get(String(ctx?.expectToken ?? ''));
+        if (!p) throw new Error('A package from PyPI is added only after the card shows it.');
+        preparedPypi.delete(p.dest);
+        const placed = await installPypi(p);
+        const added = await mcp.add({ name: args.name ?? p.name, command: placed.command, args: placed.args, env: {}, enabled: ctx?.switchOn !== 'off', addedBy: 'model', source: null });
+        if (ctx?.oneCard) keep(ctx, { title: added.name, text: `Connector ${added.name} (runs on this computer)`, skillIds: [], connectorIds: [added.id] });
+        return added.enabled === false ? `Added the local connector ${added.name} (${p.name}==${p.version}, pinned, wheels only). It is switched OFF, as the person chose; they can switch it on in Settings, Customize.` : `Added the local connector ${added.name} (${p.name}==${p.version}, pinned, wheels only). It is switched on; its tools are offered from the next message.`;
+      }
       if (String(args.npm ?? '').trim()) { // a pinned npm package: only what the card showed, only through the card
         const p = preparedNpm.get(String(ctx?.expectToken ?? ''));
         if (!p) throw new Error('A package from npm is added only after the card shows it.');
@@ -481,7 +512,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
     setFolders,
     updatePlugin,
     previewPlugin,
-    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm,
+    previewPluginCard, previewNpmCard, discardNpmToken, sweepNpm, previewPypiCard, discardPypiToken, sweepPypi,
     /** F10: is this plugin already installed? (then there is nothing to ask: the install itself says so) */
     isPluginInstalled: (url) => Boolean(findInstalled(null, url)),
   };

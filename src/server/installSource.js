@@ -67,9 +67,9 @@ async function tidy(root) {
 }
 
 /** IA-5: sha256 over every kept file's path and bytes, in sorted order. */
-export async function treeHash(root) {
+export async function treeHash(root, { skip = [] } = {}) {
   const h = createHash('sha256');
-  for (const f of (await walk(root)).sort()) { h.update(`${f}\0`); h.update(createHash('sha256').update(await readFile(join(root, f))).digest()); }
+  for (const f of (await walk(root)).filter((x) => !skip.includes(x)).sort()) { h.update(`${f}\0`); h.update(createHash('sha256').update(await readFile(join(root, f))).digest()); }
   return h.digest('hex');
 }
 
