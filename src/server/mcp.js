@@ -50,8 +50,9 @@ async function send(url, server, body, { signal, auth, fetchImpl }) {
       },
       body: JSON.stringify(body),
       signal,
+      ...(server.keyed ? { redirect: 'error' } : {}), // K-3: a request that carries a key never follows a redirect
     });
-    if (res.status === 401 && auth) {
+    if (res.status === 401 && (auth || server.keyed)) {
       if (attempt === 0 && Object.keys(extra).length > 0) continue;
       throw new McpError('This connector needs you to sign in.', 'mcp.needsSignIn', { signInUrl: resourceMetadataFrom(res) });
     }
@@ -296,34 +297,6 @@ export function connectorTools(servers, { planMode = false } = {}) {
     }
   }
   return { definitions, index };
-}
-
-/**
- * PV-2: a provider takes at most about 128 tools, and a long tool list costs context on every turn. Over the limit (100 tools or 20,000 characters
- * of definitions), only the built-in tools are offered, with two small tools: list_connector_tools (what a connector can do) and call_connector_tool
- * (call one by name). Every connector tool stays reachable; none is dropped.
- */
-export const META_TOOLS = ['list_connector_tools', 'call_connector_tool'];
-export function capTools(definitions, index, { maxTools = 100, maxChars = 20_000 } = {}) {
-  // The size is the CONNECTORS' share: in Code mode the built-in tools alone are over 20,000 characters, and one small connector must not be hidden for that
-  const chars = JSON.stringify(definitions.filter((d) => index.has(d.function.name))).length;
-  if (definitions.length <= maxTools && chars <= maxChars) return { definitions, deferred: new Map() };
-  const offered = definitions.filter((d) => !index.has(d.function.name));
-  const deferred = new Map();
-  for (const d of definitions) if (index.has(d.function.name)) deferred.set(d.function.name, d);
-  offered.push(
-    { type: 'function', function: { name: 'list_connector_tools', description: `Connector tools are not all listed here (there are ${deferred.size}). Call this to see the tools of the connectors, optionally only those whose name or description contains the text given. Then use call_connector_tool.`, parameters: { type: 'object', properties: { match: { type: 'string', description: 'Optional text to look for in names and descriptions' } } } } },
-    { type: 'function', function: { name: 'call_connector_tool', description: 'Call one connector tool by the exact name list_connector_tools gave, with its arguments.', parameters: { type: 'object', properties: { name: { type: 'string' }, arguments: { type: 'object' } }, required: ['name'] } } },
-  );
-  return { definitions: offered, deferred };
-}
-
-/** The text list_connector_tools answers with. */
-export function describeDeferred(deferred, match = '') {
-  const q = String(match ?? '').toLowerCase();
-  const rows = [...deferred.values()].filter((d) => !q || `${d.function.name} ${d.function.description ?? ''}`.toLowerCase().includes(q));
-  if (!rows.length) return 'No connector tool matches.';
-  return rows.slice(0, 60).map((d) => `${d.function.name}: ${String(d.function.description ?? '').slice(0, 160)}`).join('\n') + (rows.length > 60 ? `\n… ${rows.length - 60} more: narrow it with match.` : '');
 }
 
 /**

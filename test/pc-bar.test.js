@@ -30,7 +30,7 @@ test('from the main process with the switch on: exactly the two web look-ups and
 });
 
 test('with the switch off, or without pcSearch in the request, the bar has no pc tools even from the main process', async (t) => {
-  const off = await pcWorld(t, { files, settings: {}, calls: [] });
+  const off = await pcWorld(t, { files, settings: { pcSearchEnabled: false }, calls: [] }); // a saved false is off (no value saved is on, for finding only)
   await barAsk(off, 'find my tax return', { pcSearch: true });
   assert.deepEqual(off.toolNames(off.requests[0]).sort(), ['read_url', 'web_search']);
   const noFlag = await pcWorld(t, { files, settings: { pcSearchEnabled: true }, calls: [] });
@@ -72,7 +72,7 @@ async function answererWith(settings, frames = [['delta', { text: 'ok' }], ['don
 }
 
 test('the bar asks for Search this PC only with the switch on: by itself (unless turned off) or when chosen in the + menu', async () => {
-  const off = await answererWith({});
+  const off = await answererWith({ pcSearchEnabled: false });
   await off.a.ask({ text: 'find my tax return', pc: true });
   assert.equal('pcSearch' in off.sent[0], false, 'switch off: nothing asked for, even from the menu');
   const auto = await answererWith({ pcSearchEnabled: true });
@@ -115,7 +115,8 @@ test('the bar is told each state as plain data: searching, the list (with the co
 
 test('the + menu offers Search this PC only when the switch is on; the server also honours "by itself: off"', async (t) => {
   assert.equal(barLook({ pcSearchEnabled: true }).pcSearch, true);
-  assert.equal(barLook({}).pcSearch, false);
+  assert.equal(barLook({}).pcSearch, true, 'no value saved: on');
+  assert.equal(barLook({ pcSearchEnabled: false }).pcSearch, false);
   const w = await pcWorld(t, { files, settings: { pcSearchEnabled: true, pcSearchBarAuto: false }, calls: [] });
   await barAsk(w, 'find my tax return', { pcSearch: true });
   assert.deepEqual(w.toolNames(w.requests[0]).sort(), ['read_url', 'web_search'], 'by itself is off and nothing was chosen');
