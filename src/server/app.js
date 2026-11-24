@@ -72,7 +72,7 @@ import { createWorktrees } from './worktrees.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
-  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, SENSITIVE, cleanQuestion, asksToRunCommands, describeAnyAgentTool as describeAgentTool,
+  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, projectMemoryToolDefinition, SENSITIVE, cleanQuestion, asksToRunCommands, describeAnyAgentTool as describeAgentTool,
 } from './agentTools.js';
 
 import { createAccounts } from './accounts.js';
@@ -1126,6 +1126,29 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 405, { code: 'method.notAllowed', message: 'Not allowed' });
       } catch (err) {
         return sendJson(res, err.code === 'project.notFound' || err.code === 'memory.notFound' ? 404 : 400, { code: err.code ?? 'memory.failed', message: err.message });
+      }
+    }
+    // Keep / Discard on a suggestion card (window-only). Keep stores exactly the text shown, or the person's edit of it, byte for byte (PC-6).
+    const keepMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/project-memory$/);
+    if (keepMatch && method === 'POST') {
+      if (!(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
+      try {
+        const b = await readBody(req);
+        const session = await sessions.get(keepMatch[1]);
+        const card = session?.messages?.find((m) => m.id === b.messageId && m.suggestion);
+        if (!card) return sendJson(res, 404, { code: 'suggestion.notFound', message: 'That suggestion is gone.' });
+        const todo = b.action === 'keepAll' ? card.suggestion.items.filter((i) => i.state === 'open') : card.suggestion.items.filter((i) => i.id === b.itemId && i.state === 'open');
+        if (!todo.length) return sendJson(res, 409, { code: 'suggestion.done', message: 'That one is already decided.' });
+        const kept = [];
+        for (const item of todo) {
+          if (b.action === 'discard') { await sessions.setSuggestionState(session.id, card.id, item.id, 'discarded'); continue; }
+          const text = b.action === 'keep' && typeof b.text === 'string' ? b.text : item.text; // exactly what was shown, or exactly the edit
+          kept.push(await projects.memoryAdd(card.suggestion.projectId, { kind: item.kind, text, source: 'suggested', chatId: session.id, replaces: item.replaces ?? null }));
+          await sessions.setSuggestionState(session.id, card.id, item.id, 'kept');
+        }
+        return sendJson(res, 200, { kept: kept.length });
+      } catch (err) {
+        return sendJson(res, err.code === 'project.notFound' ? 404 : 400, { code: err.code ?? 'suggestion.failed', message: err.message });
       }
     }
     // "What this chat was given": the five parts with their sizes and the exact text (PROJECT-CONTEXT §6)
@@ -2410,6 +2433,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
       // SEARCH-PC: the chat gets the two tools when the switch is on; the bar only for a request from the main process (the admin secret) that asks for them; a Chats device never (REMOTE_TOOLS_DENIED)
       const pcWho = (req.bunnyRemote ?? req.bunnyDevice)?.label ?? (textOnly ? 'bar' : 'window');
+      // PROJECT-CONTEXT 3.2: a suggestion card is never shown in an incognito chat, a scheduled run, a helper's chat, from a device, or once PC file text is in the chat
+      const suggestOk = () => Boolean(project) && settings.memoryEnabled !== false && project.useMemory !== false && session.projectContext !== false && !session.incognito && !scheduledTask && !session.agent && !session.origin && !req.bunnyRemote && !req.bunnyDevice && !pcTurn.tainted;
       const chatPc = !textOnly && pc.enabled() && !scheduledTask && !req.bunnyRemote;
       const pcTurn = createPcTurn();
       pcTurn.tainted = holdsPcFileText(history); // file text from this PC still in what the model holds: the chat acts only with the person's click
@@ -2427,6 +2452,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
         ...teamToolDefinitions({ canDelegate: helpersOn }),
         ...(settings.searchChats === false ? [] : [chatSearchToolDefinition()]),
+        ...(project && suggestOk() ? [projectMemoryToolDefinition()] : []),
         ...(scheduledTask || unrelatedTask === 'here' || permissionMode === 'plan' ? [] : [newChatToolDefinition()]),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
@@ -3122,6 +3148,18 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             case 'list_models':
               result = await listHelperModels();
               break;
+            case 'suggest_project_memory': {
+              if (!suggestOk()) { result = 'No suggestion card is shown in this chat, so nothing was suggested.'; break; }
+              const known = new Map((await projects.memoryList(project.id)).map((m) => [m.id, m.text]));
+              const items = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 20).map((i) => ({
+                id: randomUUID(), kind: ['decision', 'convention', 'fact', 'open'].includes(i?.kind) ? i.kind : 'fact', text: String(i?.text ?? '').trim().slice(0, 400),
+                ...(known.has(String(i?.replaces ?? '')) ? { replaces: String(i.replaces), replacesText: known.get(String(i.replaces)) } : {}),
+              })).filter((i) => i.text && !looksSecret(i.text, '') && (settings.memorySensitive === true || !SENSITIVE.test(i.text))).slice(0, 5); // at most 5 are shown, after the refused ones are out
+              if (!items.length) { result = 'Nothing to suggest (empty, secret-looking or sensitive items are not shown).'; break; }
+              await sessions.append(id, { role: 'assistant', kind: 'memory_suggestion', content: '', suggestion: { projectId: project.id, items } });
+              result = 'Shown to the person as a card. Nothing is stored unless they press Keep.';
+              break;
+            }
             case 'remember': {
               const saved = await memory.add({ text: parsed.text, source: 'assistant', chatId: id });
               result = `Saved to memory: "${saved.text}". Every new chat will know it; the person can edit or remove it in Automation, Memory.`;

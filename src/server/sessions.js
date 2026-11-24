@@ -265,6 +265,13 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       const { id: fileId, name, kind, size } = message.madeFile;
       entry.madeFile = { id: fileId, name: String(name ?? 'File').slice(0, 120), kind: ['Word', 'Excel', 'PowerPoint'].includes(kind) ? kind : 'Word', size: Math.max(0, Number(size) || 0) };
     }
+    // PROJECT-CONTEXT: a card under a reply, "Remember for <project>?": the items as shown (nothing is stored until the person presses Keep)
+    if (message.suggestion && typeof message.suggestion === 'object' && Array.isArray(message.suggestion.items)) {
+      entry.suggestion = {
+        projectId: String(message.suggestion.projectId ?? '').slice(0, 64),
+        items: message.suggestion.items.slice(0, 5).map((i) => ({ id: String(i.id), kind: String(i.kind), text: String(i.text).slice(0, 400), ...(i.replaces ? { replaces: String(i.replaces), replacesText: String(i.replacesText ?? '').slice(0, 400) } : {}), state: 'open' })),
+      };
+    }
     session.messages.push(entry);
     // First user line becomes the title, so the sidebar is useful immediately.
     if (session.title === 'New chat' && message.role === 'user') {
@@ -499,6 +506,16 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     };
   }
 
+  /** Change one suggestion item of a card (open, kept or discarded). Returns the item, or null. */
+  async function setSuggestionState(id, messageId, itemId, state) {
+    const session = await get(requireId(id));
+    const item = session?.messages?.find((m) => m.id === messageId && m.suggestion)?.suggestion.items.find((i) => i.id === itemId);
+    if (!item) return null;
+    item.state = state;
+    await save(session);
+    return item;
+  }
+
   /** Note that a reply's file changes were undone, so its button goes away. */
   async function markCheckpointRestored(id, checkpointId) {
     const session = await get(requireId(id));
@@ -524,6 +541,6 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     list, get, create, remove, fork, children, exportSession, context, summary,
     append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser), replaceLastReply: locked(replaceLastReply),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
-    markCheckpointRestored: locked(markCheckpointRestored), setWorktree: locked(setWorktree),
+    markCheckpointRestored: locked(markCheckpointRestored), setSuggestionState: locked(setSuggestionState), setWorktree: locked(setWorktree),
   };
 }
