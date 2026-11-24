@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createBridge, keyFolders } from '../src/server/engines/bridge.js';
+import { createBridge, keyFolders, mapClaudeCall } from '../src/server/engines/bridge.js';
+import { rulesWithoutBroadAllow } from '../src/server/autoJudge.js';
 import { checkRule } from '../src/server/permissionRules.js';
 
 // AGENT-FLOW F11, the engines path: a Bunny-rules engine chat in Auto goes through the bridge to the SAME check Bunny's own engine uses. Only for a command or an unknown tool that Auto would run unasked.
@@ -96,4 +97,31 @@ test('the deny rules, the floor and a protected folder are decided before the ch
   assert.equal((await b.claude(bash('git push --force origin main'))).allow, false);
   assert.equal((await b.claude(bash(`type ${w.data}\\secret.json`))).allow, false, 'a command that names a private folder is refused');
   assert.equal(calls, 0);
+});
+
+test('review: an unknown engine tool is checked WITH its arguments (the check must see what runs); arguments that cannot be read are a card, never an allow', async () => {
+  const w = await world();
+  const seen = [];
+  const b = bridgeFor(w, { autoCheck: async (summary, name, args) => { seen.push([name, args]); return { proceed: true }; } });
+  assert.deepEqual(mapClaudeCall('mcp__github__merge_pull_request', { number: 7 }).input, { number: 7 });
+  await b.claude({ tool: 'mcp__github__merge_pull_request', input: { number: 7, repo: 'a/b' } });
+  assert.deepEqual(seen[0], ['mcp__github__merge_pull_request', { number: 7, repo: 'a/b' }]);
+  const asks = [];
+  const unreadable = bridgeFor(w, { asks, answer: false, autoCheck: async () => { throw new Error('the check must not be asked about arguments it cannot read'); } });
+  const r = await unreadable.claude({ tool: 'mcp__github__merge_pull_request', input: 'not an object' });
+  assert.equal(r.allow, false);
+  assert.equal(asks.length, 1, 'a card, not an allow');
+  assert.match(asks[0].detail, /arguments of that tool could not be read/);
+});
+
+test('review: with the check on in Auto, a broad Allow rule is not used on the engines path either (the service filters the rules before the bridge); a specific one is', () => {
+  const allow = (pattern) => ({ kind: 'command', effect: 'allow', pattern });
+  const kept = rulesWithoutBroadAllow({ global: [allow('node*'), allow('npm test')], folders: {} });
+  assert.deepEqual(kept.global.map((r) => r.pattern), ['npm test']);
+});
+
+test('review: the engine service builds its rules through that filter only when the check is on in Auto', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/server/engines/service.js', import.meta.url), 'utf8');
+  assert.match(src, /turn\.autoCheck && turn\.permissionMode === 'auto' && settings\.autoJudgeEnabled === true \? rulesWithoutBroadAllow\(settings\.permissionRules \?\? \{\}\) : settings\.permissionRules/);
 });

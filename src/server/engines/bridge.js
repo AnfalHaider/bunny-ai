@@ -53,7 +53,7 @@ export function mapClaudeCall(tool, input) {
   const engineTool = String(tool ?? '');
   const i = input && typeof input === 'object' && !Array.isArray(input) ? input : null;
   const row = CLAUDE_TOOLS[engineTool];
-  if (!row) return { name: 'run_command', unknown: true, engineTool }; // MCP, Agent, WebFetch, a new tool: judged as a command
+  if (!row) return { name: 'run_command', unknown: true, engineTool, input: i }; // MCP, Agent, WebFetch, a new tool: judged as a command; its arguments travel with it (the check must see what runs)
   if (!i) return { bad: 'The request could not be read.', engineTool };
   if (row[0] === 'run_command') {
     if (typeof i.command !== 'string' || !i.command.trim()) return { bad: 'The command could not be read.', engineTool };
@@ -132,10 +132,11 @@ export function createBridge(ctx) {
   async function checkedInAuto(summary, name, args, risk, base) {
     if (mode() !== 'auto' || typeof ctx.autoCheck !== 'function') return null;
     let out;
-    try { out = await ctx.autoCheck(summary, name, args, risk); } catch { out = { card: 'The check on Auto actions failed, so Bunny asks you.' }; }
+    if (args === null || args === undefined) out = { card: 'The arguments of that tool could not be read, so Bunny asks you.' }; // never an allow on what it could not read
+    else try { out = await ctx.autoCheck(summary, name, args, risk); } catch { out = { card: 'The check on Auto actions failed, so Bunny asks you.' }; }
     if (out?.stop) return { ...base, allow: false, reason: out.stop };
     if (out?.card) {
-      const ok = await asked(summary, `${args.command ?? `The engine wants to use "${name}".`}\n\n${out.card}`);
+      const ok = await asked(summary, `${args?.command ?? `The engine wants to use "${name}".`}\n\n${out.card}`);
       return ok ? { ...base, allow: true, reason: 'Allowed by the person.', asked: true } : { ...base, allow: false, reason: 'The person did not allow this.', asked: true };
     }
     return null; // the check allowed it
@@ -180,7 +181,7 @@ export function createBridge(ctx) {
           const ok = await asked(summary, `The engine wants to use "${call.engineTool}". Bunny cannot read what it will do, so it asks as it would for a command.`);
           return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };
         }
-        { const c = await checkedInAuto(summary, String(call.engineTool ?? 'engine_tool'), {}, risk, { name, risk, summary }); if (c) return c; }
+        { const c = await checkedInAuto(summary, String(call.engineTool ?? 'engine_tool'), call.input ?? null, risk, { name, risk, summary }); if (c) return c; }
         return { allow: true, reason: 'Allowed.', name, risk, summary };
       }
       // paths
