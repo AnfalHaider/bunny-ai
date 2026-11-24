@@ -94,8 +94,9 @@ test('the slash menu lists the commands', async ({ page }) => {
   await page.goto('/');
   await page.locator('#input').fill('/');
   await expect(page.locator('#slash')).toBeVisible();
-  await expect(page.locator('#slash .slash-item')).toHaveCount(5);
+  await expect(page.locator('#slash .slash-item')).toHaveCount(6);
   await expect(page.locator('#slash')).toContainText('/compact');
+  await expect(page.locator('#slash')).toContainText('/remember');
 });
 
 test('branching a message opens a nested chat', async ({ page }) => {
