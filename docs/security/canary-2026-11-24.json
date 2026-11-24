@@ -1,0 +1,286 @@
+{
+ "ran": "2026-11-24",
+ "stub": "local 127.0.0.1, dummy tokens, empty account folders, no sign-in",
+ "runs": [
+  {
+   "label": "claude-static-user-root",
+   "what": "E1/E2: user sources only, cwd = root",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/messages?beta=true",
+     "bytes": 81393,
+     "hasToolResult": false,
+     "marks": []
+    }
+   ],
+   "marks": [],
+   "tail": "API Error: 400 stub "
+  },
+  {
+   "label": "claude-static-user-sub",
+   "what": "E1/E2: user sources only, cwd = subfolder",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/messages?beta=true",
+     "bytes": 81407,
+     "hasToolResult": false,
+     "marks": []
+    }
+   ],
+   "marks": [],
+   "tail": "API Error: 400 stub "
+  },
+  {
+   "label": "claude-static-default-sub-CONTROL",
+   "what": "control: default sources, cwd = subfolder (expects root, .claude and sub CLAUDE.md)",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/messages?beta=true",
+     "bytes": 82516,
+     "hasToolResult": false,
+     "marks": [
+      "MARK_ROOT_CLAUDE_MD",
+      "MARK_DOTCLAUDE_CLAUDE_MD",
+      "MARK_SUB_CLAUDE_MD"
+     ]
+    }
+   ],
+   "marks": [
+    "MARK_ROOT_CLAUDE_MD",
+    "MARK_DOTCLAUDE_CLAUDE_MD",
+    "MARK_SUB_CLAUDE_MD"
+   ],
+   "tail": "API Error: 400 stub "
+  },
+  {
+   "label": "claude-static-default-root-CONTROL",
+   "what": "control: default sources, cwd = root",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/messages?beta=true",
+     "bytes": 82277,
+     "hasToolResult": false,
+     "marks": [
+      "MARK_ROOT_CLAUDE_MD",
+      "MARK_DOTCLAUDE_CLAUDE_MD"
+     ]
+    }
+   ],
+   "marks": [
+    "MARK_ROOT_CLAUDE_MD",
+    "MARK_DOTCLAUDE_CLAUDE_MD"
+   ],
+   "tail": "API Error: 400 stub "
+  },
+  {
+   "label": "claude-lazy-user-root",
+   "what": "lazy subfolder case, user sources only, cwd = root: the model reads sub/x.txt; the SECOND request must not carry MARK_SUB_CLAUDE_MD",
+   "requests": 2,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/messages?beta=true",
+     "bytes": 81415,
+     "hasToolResult": false,
+     "marks": []
+    },
+    {
+     "n": 2,
+     "url": "/v1/messages?beta=true",
+     "bytes": 81869,
+     "hasToolResult": true,
+     "marks": []
+    }
+   ],
+   "marks": [],
+   "tail": "done ",
+   "secondRequestMarks": [],
+   "sawSecondRequest": true
+  },
+  {
+   "label": "claude-lazy-default-root-CONTROL",
+   "what": "lazy control, default sources, cwd = root: the SECOND request should carry MARK_SUB_CLAUDE_MD",
+   "requests": 2,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/messages?beta=true",
+     "bytes": 82299,
+     "hasToolResult": false,
+     "marks": [
+      "MARK_ROOT_CLAUDE_MD",
+      "MARK_DOTCLAUDE_CLAUDE_MD"
+     ]
+    },
+    {
+     "n": 2,
+     "url": "/v1/messages?beta=true",
+     "bytes": 82989,
+     "hasToolResult": true,
+     "marks": [
+      "MARK_ROOT_CLAUDE_MD",
+      "MARK_DOTCLAUDE_CLAUDE_MD",
+      "MARK_SUB_CLAUDE_MD"
+     ]
+    }
+   ],
+   "marks": [
+    "MARK_ROOT_CLAUDE_MD",
+    "MARK_DOTCLAUDE_CLAUDE_MD",
+    "MARK_SUB_CLAUDE_MD"
+   ],
+   "tail": "done ",
+   "secondRequestMarks": [
+    "MARK_ROOT_CLAUDE_MD",
+    "MARK_DOTCLAUDE_CLAUDE_MD",
+    "MARK_SUB_CLAUDE_MD"
+   ],
+   "sawSecondRequest": true
+  },
+  {
+   "label": "codex-max0-root",
+   "what": "OI-1: project_doc_max_bytes = 0, git root, cwd = root",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/responses",
+     "bytes": 42693,
+     "hasToolResult": false,
+     "marks": []
+    }
+   ],
+   "marks": [],
+   "tail": "ort: none reasoning summaries: none session id: 01a20d49-5c98-7570-8729-9e230fd52927 -------- user say hi ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} "
+  },
+  {
+   "label": "codex-max0-sub",
+   "what": "OI-1: project_doc_max_bytes = 0, cwd = subfolder of the git root",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/responses",
+     "bytes": 42703,
+     "hasToolResult": false,
+     "marks": []
+    }
+   ],
+   "marks": [],
+   "tail": "ort: none reasoning summaries: none session id: 01a20d49-6821-7aa0-9f4e-1356fd6e3dee -------- user say hi ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} "
+  },
+  {
+   "label": "codex-default-root-CONTROL",
+   "what": "control: default, cwd = root",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/responses",
+     "bytes": 42929,
+     "hasToolResult": false,
+     "marks": [
+      "MARK_ROOT_AGENTS_MD"
+     ]
+    }
+   ],
+   "marks": [
+    "MARK_ROOT_AGENTS_MD"
+   ],
+   "tail": "ort: none reasoning summaries: none session id: 01a20d49-7168-7890-9afb-d6d77c2461fd -------- user say hi ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} "
+  },
+  {
+   "label": "codex-default-sub-CONTROL",
+   "what": "control: default, cwd = subfolder of the git root (expects root and sub AGENTS.md)",
+   "requests": 1,
+   "perRequest": [
+    {
+     "n": 1,
+     "url": "/v1/responses",
+     "bytes": 42966,
+     "hasToolResult": false,
+     "marks": [
+      "MARK_ROOT_AGENTS_MD",
+      "MARK_SUB_AGENTS_MD"
+     ]
+    }
+   ],
+   "marks": [
+    "MARK_ROOT_AGENTS_MD",
+    "MARK_SUB_AGENTS_MD"
+   ],
+   "tail": "ort: none reasoning summaries: none session id: 01a20d49-7c0b-7902-8495-a9acf4dd0462 -------- user say hi ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} ERROR: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"stub\"}} "
+  }
+ ],
+ "sF13B": {
+  "home": "D:\\Projects\\OPEN CODE PROJECTS\\BUNNY-AI\\.claude\\worktrees\\builder-efa9a9\\docs\\security\\canary-out\\codex-home-f13",
+  "project": "D:\\Projects\\OPEN CODE PROJECTS\\BUNNY-AI\\.claude\\worktrees\\builder-efa9a9\\docs\\security\\canary-out\\f13\\project",
+  "outside": "D:\\Projects\\OPEN CODE PROJECTS\\BUNNY-AI\\.claude\\worktrees\\builder-efa9a9\\docs\\security\\canary-out\\f13\\outside",
+  "steps": [
+   {
+    "label": "write inside the project, workspaceWrite policy (first command: sets up the sandbox identity, can be slow)",
+    "seconds": 3,
+    "result": {
+     "exitCode": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   {
+    "label": "write outside the project, workspaceWrite policy (expect refused)",
+    "seconds": 0.7,
+    "result": {
+     "exitCode": 1,
+     "stdout": "",
+     "stderr": "Set-Content : Access to the path 'D:\\Projects\\OPEN CODE \r\nPROJECTS\\BUNNY-AI\\.claude\\worktrees\\builder-efa9a9\\docs\\security\\canary-out\\f13\\outside\\outside.txt' is denied.\r\nAt line:1 char:1\r\n+ Set-Content -LiteralPath 'D:\\Projects\\OPEN CODE PROJECTS\\BUNNY-AI\\.cl ...\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    }
+   },
+   {
+    "label": "read outside the project, workspaceWrite policy (reads are not stopped)",
+    "seconds": 0.5,
+    "result": {
+     "exitCode": 0,
+     "stdout": "MARK_ROOT_CLAUDE_MD\r\n",
+     "stderr": ""
+    }
+   },
+   {
+    "label": "write inside, readOnly policy (expect refused)",
+    "seconds": 0.5,
+    "result": {
+     "exitCode": 1,
+     "stdout": "",
+     "stderr": "Set-Content : Access to the path 'D:\\Projects\\OPEN CODE \r\nPROJECTS\\BUNNY-AI\\.claude\\worktrees\\builder-efa9a9\\docs\\security\\canary-out\\f13\\project\\ro.txt' is denied.\r\nAt line:1 char:1\r\n+ Set-Content -LiteralPath 'D:\\Projects\\OPEN CODE PROJECTS\\BUNNY-AI\\.cl ...\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    }
+   },
+   {
+    "label": "write outside with NO sandboxPolicy (the configured default)",
+    "seconds": 0.5,
+    "result": {
+     "exitCode": 1,
+     "stdout": "",
+     "stderr": "Set-Content : Access to the path 'D:\\Projects\\OPEN CODE \r\nPROJECTS\\BUNNY-AI\\.claude\\worktrees\\builder-efa9a9\\docs\\security\\canary-out\\f13\\outside\\default.txt' is denied.\r\nAt line:1 char:1\r\n+ Set-Content -LiteralPath 'D:\\Projects\\OPEN CODE PROJECTS\\BUNNY-AI\\.cl ...\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    }
+   }
+  ],
+  "initialize": "ok",
+  "files": {
+   "project/inside.txt": true,
+   "outside/outside.txt": false,
+   "project/ro.txt": false,
+   "outside/default.txt": false
+  },
+  "otherMessages": [
+   "{\"method\":\"remoteControl/status/changed\",\"params\":{\"status\":\"disabled\",\"serverName\":\"Victus\",\"installationId\":\"95d984e4-fbec-4791-bfbf-17cb2e2a40bf\",\"environmentId\":null},\"emittedAtMs\":1795519252171}"
+  ],
+  "stderrTail": ""
+ }
+}

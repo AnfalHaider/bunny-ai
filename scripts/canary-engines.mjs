@@ -139,13 +139,14 @@ async function exec13b() {
   out.initialize = init.timeout ? 'timeout' : (init.error ? init.error : 'ok');
   send({ method: 'initialized' });
   const attempt = async (label, command, extra = {}) => { const t0 = Date.now(); const r = await call('command/exec', { command, cwd: project, ...extra }); out.steps.push({ label, seconds: Math.round((Date.now() - t0) / 100) / 10, result: r.timeout ? 'timeout' : (r.error ?? { exitCode: r.result?.exitCode, stdout: String(r.result?.stdout ?? '').slice(0, 200), stderr: String(r.result?.stderr ?? '').slice(0, 300) }) }); };
-  const sh = (script) => ['cmd.exe', '/d', '/c', script];
+  const ps = (script) => ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script]; // PowerShell: paths with spaces are single-quoted inside the one argument (cmd /c quoting made the first run's outside steps fail for the wrong reason)
+  const put = (path) => ps(`Set-Content -LiteralPath '${path}' -Value x -ErrorAction Stop`);
   const policy = { type: 'workspaceWrite', writableRoots: [project], networkAccess: false };
-  await attempt('write inside the project, workspaceWrite policy (first command: sets up the sandbox identity, can be slow)', sh('echo in> inside.txt'), { sandboxPolicy: policy });
-  await attempt('write outside the project, workspaceWrite policy (expect refused)', sh(`echo out> "${join(outside, 'outside.txt')}"`), { sandboxPolicy: policy });
-  await attempt('read outside the project, workspaceWrite policy (reads are not stopped)', sh(`type "${join(base, 'work', 'claude', 'CLAUDE.md')}"`), { sandboxPolicy: policy });
-  await attempt('write inside, readOnly policy (expect refused)', sh('echo ro> ro.txt'), { sandboxPolicy: { type: 'readOnly' } });
-  await attempt('write outside with NO sandboxPolicy (the configured default)', sh(`echo dflt> "${join(outside, 'default.txt')}"`));
+  await attempt('write inside the project, workspaceWrite policy (first command: sets up the sandbox identity, can be slow)', put(join(project, 'inside.txt')), { sandboxPolicy: policy });
+  await attempt('write outside the project, workspaceWrite policy (expect refused)', put(join(outside, 'outside.txt')), { sandboxPolicy: policy });
+  await attempt('read outside the project, workspaceWrite policy (reads are not stopped)', ps(`Get-Content -LiteralPath '${join(base, 'work', 'claude', 'CLAUDE.md')}' -ErrorAction Stop`), { sandboxPolicy: policy });
+  await attempt('write inside, readOnly policy (expect refused)', put(join(project, 'ro.txt')), { sandboxPolicy: { type: 'readOnly' } });
+  await attempt('write outside with NO sandboxPolicy (the configured default)', put(join(outside, 'default.txt')));
   out.files = { 'project/inside.txt': existsSync(join(project, 'inside.txt')), 'outside/outside.txt': existsSync(join(outside, 'outside.txt')), 'project/ro.txt': existsSync(join(project, 'ro.txt')), 'outside/default.txt': existsSync(join(outside, 'default.txt')) };
   out.otherMessages = log.slice(0, 5); out.stderrTail = err.slice(-300).replace(/\s+/g, ' ');
   try { child.kill(); } catch {}
