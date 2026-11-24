@@ -186,3 +186,28 @@ export function projectInstructions({ sid, view, engineId = 'bunny', device = fa
   block.append(note, links);
   return block;
 }
+
+/**
+ * F13: the Working folder card's "Confine commands" block: what is set for this chat and, once the folder carries Bunny's label, "Remove the label" (window only; it puts the label back as it was).
+ * Returns null where there is nothing to say (not Windows, or the setting is off and the folder has no label).
+ */
+export async function confineBlock({ sid, device = false, onChanged = () => {} }) {
+  let v; try { v = await getJSON(`/api/sessions/${sid}/confine`); } catch { return null; }
+  if (!v?.supported || (v.mode === 'off' && !v.labelled)) return null;
+  const block = el('div', { className: 'fr-block', id: 'confine-block' });
+  const status = el('div', { className: 'fr-note' });
+  const say = (labelled) => { status.textContent = labelled ? 'Commands in this chat run in a low-rights mode that can only write inside this folder.' : v.applies ? 'Bunny will ask once before it labels this folder and confines commands.' : 'This chat runs commands normally: the setting confines them only in Auto.'; };
+  say(v.labelled);
+  block.append(el('div', { className: 'fr-hd' }, el('b', { textContent: 'Confine commands' })), status);
+  block.append(el('div', { className: 'fr-note' }, el('small', { textContent: `Not covered: ${(v.notCovered ?? []).join(' ')}` })));
+  if (v.labelled) {
+    const out = el('div', { className: 'fr-note' });
+    const link = el('button', { type: 'button', className: 'lnk', textContent: 'Remove the label', disabled: device, title: device ? "Answer this in Bunny's window on the PC." : '' });
+    link.addEventListener('click', async () => {
+      link.disabled = true;
+      try { await sendJSON(`/api/sessions/${sid}/confine/remove`, 'POST', {}); say(false); link.remove(); out.textContent = 'The label is removed. The folder is as it was before.'; onChanged(); } catch (err) { link.disabled = false; out.textContent = err.message; }
+    });
+    block.append(el('div', { className: 'fr-links' }, link), out);
+  }
+  return block;
+}

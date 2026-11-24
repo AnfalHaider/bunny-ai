@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connectAnthropic, pickFirstModel, resetProfile } from './helpers.js';
@@ -102,4 +102,24 @@ test('Not now closes the trust card; the engine chip offers "Switch this chat to
   await expect(page.locator('#engine-chip .engine-text')).toContainText('Codex CLI');
   const chat = await (await request.get(`/api/sessions/${id}`)).json();
   expect(chat.engine.id).toBe('codex');
+});
+
+test('F13: the Working folder card has a "Confine commands" block when the setting is on, with the not-covered list; Settings has the three-value setting', async ({ page, request }) => {
+  const folder = mkdtempSync(join(tmpdir(), 'bunny-confine-ui-'));
+  await request.put('/api/settings', { data: { confineCommands: 'auto' } });
+  try {
+    await connectAnthropic(page);
+    const id = await codeChat(request, folder);
+    await page.goto(`/?s=${id}`);
+    await page.locator('#folder-chip').click();
+    const block = page.locator('.modal[aria-label="Working folder"] #confine-block');
+    await expect(block).toContainText('Confine commands');
+    await expect(block).toContainText('Bunny will ask once before it labels this folder');
+    await expect(block).toContainText('Not covered: Reading files');
+    await expect(block).toContainText('Claude Code on Windows has none');
+    await expect(block.getByRole('button', { name: 'Remove the label' })).toHaveCount(0); // nothing labelled yet
+    await page.goto('/src/ui/settings.html?embed=1&section=code');
+    await expect(page.locator('#confine-commands')).toHaveValue('auto');
+    await expect(page.locator('#confine-row')).toContainText('Not covered:');
+  } finally { await request.put('/api/settings', { data: { confineCommands: 'off' } }); rmSync(folder, { recursive: true, force: true }); }
 });

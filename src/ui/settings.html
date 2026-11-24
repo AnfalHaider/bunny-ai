@@ -511,6 +511,19 @@
           </select>
         </div>
       </div>
+      <div class="row" id="confine-row">
+        <div class="meta-col">
+          <div class="name">Confine commands to the project folder</div>
+          <div class="desc">Windows only. Commands Bunny runs in Code mode run in a low-rights mode that can only write inside the project folder: no admin, nothing installed. Bunny asks once per folder before it changes the folder's security label, and "Remove the label" on the Working folder card puts it back as it was. On in Auto is recommended. <b>Not covered:</b> reading files (a confined command can still read everything you can, Bunny's own data folder included; files encrypted with your Windows account can be decrypted by any program running as you, so this limits writes, not the reading of secrets); the network; file tools (they have their own folder checks); connectors, the browser and computer use; engines (Codex has its own sandbox, Claude Code on Windows has none).</div>
+        </div>
+        <div class="right">
+          <select id="confine-commands" aria-label="Confine commands to the project folder">
+            <option value="off">Off</option>
+            <option value="auto">On in Auto</option>
+            <option value="always">Always on</option>
+          </select>
+        </div>
+      </div>
       <div class="rules" id="perm-rules">
         <h3>Permission rules</h3>
         <p class="lead" id="rules-engine-off" hidden></p>
@@ -1423,6 +1436,7 @@
 
   // ---- code defaults ----
   $('default-permission').addEventListener('change', (e) => save({ defaultPermissionMode: e.target.value }));
+  $('confine-commands').addEventListener('change', (e) => save({ confineCommands: e.target.value }));
   $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
 
   // ---- models ----
@@ -1812,6 +1826,8 @@
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
     $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
+    $('confine-commands').value = ['off', 'auto', 'always'].includes(settings.confineCommands) ? settings.confineCommands : 'off';
+    $('confine-row').hidden = !/Windows/i.test(navigator.userAgent); // Windows only
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);

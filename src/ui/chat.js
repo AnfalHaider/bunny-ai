@@ -8,7 +8,7 @@
 
 import { loadEngines, paintEngineChip } from './engine-chip.js';
 import { openNoFolderCard, openSwitchCard, switchDivider } from './engine-switch.js';
-import { loadView as loadFolderRules, projectInstructions, trustCard } from './folder-rules-ui.js';
+import { confineBlock, loadView as loadFolderRules, projectInstructions, trustCard } from './folder-rules-ui.js';
 import {
   getJSON, sendJSON, streamMessage, streamComplete, applyTheme, applyAppearance,
   computerScreenshot, computerClick, computerType, computerKey, computerWait, computerReset,
@@ -2074,6 +2074,7 @@ function showLiveTool(bodyEl, info) {
   }
   line.dataset.status = info.status;
   line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
+  if (info.confined && !line.querySelector('.confined-mark')) line.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13
   if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
     line.querySelector('.tag')?.classList.add('is-blocked');
     line.append(signInStep(info));
@@ -4006,6 +4007,7 @@ async function openWorkingFolder() {
     });
     // FOLDER-RULES v4: the project's instruction files, one set for every engine
     try { if (state.session?.workMode === 'code' && state.session?.folder) body.append(projectInstructions({ sid, view: await loadFolderRules(sid), engineId: state.session?.engine?.id ?? 'bunny', device: isDevicePage(), onChanged: () => { paint(); showTrustCard(true); } })); } catch { /* the block is a convenience: the card works without it */ }
+    try { if (state.session?.workMode === 'code' && state.session?.folder) { const cb = await confineBlock({ sid, device: isDevicePage(), onChanged: () => paint() }); if (cb) body.append(cb); } } catch { /* a convenience */ }
     box.replaceChildren(element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Working folder' })), body, foot);
   };
   const finishCard = (info) => {
