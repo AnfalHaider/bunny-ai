@@ -104,21 +104,21 @@ test('3: only the bar\'s own page can say "handled" or "close"; anything else ch
   assert.equal(win.destroyed, true, 'a stranger could not stop the bar from closing');
 });
 
-test('3: the bridge lists exactly the functions the redesign needs, and the page listens to the answer and to Esc only', async () => {
+test('3: the bridge lists exactly the functions the redesign needs, and the page listens to the answer, to Esc and to "shown again" only', async () => {
   const src = await readFile(new URL('../electron/quick-ask/preload.cjs', import.meta.url), 'utf8');
   const bridge = /exposeInMainWorld\('quickAsk', \{([\s\S]*?)\}\);/.exec(src)[1];
   const names = [...bridge.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
   assert.ok(names.includes('close') && names.includes('escHandled') && names.includes('onEscape'));
   assert.doesNotMatch(src, /ipcRenderer\.(send|once)\b|require\((?!'electron')/);
   const listened = [...src.matchAll(/ipcRenderer\.on\('([^']+)'/g)].map((m) => m[1]);
-  assert.ok(listened.every((l) => ['quickask:answer', 'quickask:esc'].includes(l)), listened.join(','));
+  assert.ok(listened.every((l) => ['quickask:answer', 'quickask:esc', 'quickask:refresh'].includes(l)), listened.join(','));
 });
 
 test('8 and 9: what the bar is told about Bunny\'s looks is cleaned to fixed keys: a theme name, a font key from the list, reduced motion, and a plain model name', async () => {
   const { barLook, BAR_FONT_KEYS } = await import('../electron/quick-ask-logic.js');
-  assert.deepEqual(barLook({ theme: 'dark', interfaceFont: 'lexend', motion: 'reduced', model: 'meta/llama-3-70b' }), { theme: 'dark', font: 'lexend', motion: 'reduced', pcSearch: false, model: 'llama-3-70b' });
-  assert.deepEqual(barLook({}), { theme: 'system', font: 'system', motion: '', pcSearch: false, model: '' });
-  assert.deepEqual(barLook(null), { theme: 'system', font: 'system', motion: '', pcSearch: false, model: '' });
+  assert.deepEqual(barLook({ theme: 'dark', interfaceFont: 'lexend', motion: 'reduced', model: 'meta/llama-3-70b' }), { theme: 'dark', font: 'lexend', motion: 'reduced', pcSearch: true, model: 'llama-3-70b' });
+  assert.deepEqual(barLook({}), { theme: 'system', font: 'system', motion: '', pcSearch: true, model: '' });
+  assert.deepEqual(barLook(null), { theme: 'system', font: 'system', motion: '', pcSearch: true, model: '' });
   // anything that is not on the list becomes the safe default: a url, a path, a style, markup
   const evil = barLook({ theme: 'url(http://x)', interfaceFont: '../../secrets/x', motion: '<b>', model: '<img src=x onerror=alert(1)> gpt\nnext' });
   assert.deepEqual([evil.theme, evil.font, evil.motion], ['system', 'system', '']);
@@ -136,7 +136,7 @@ test('8 and 9: the bar gets its look through one call that only its own page may
   createQuickAsk({ ...e, onSubmit: () => true, getSettings: () => ({ theme: 'dark', interfaceFont: 'nunito', model: 'a/b-model', motion: 'reduced', providerKey: 'sk-should-never-travel' }) }).open();
   const win = e.windows[0];
   const init = e.handlers.get('quickask:init');
-  assert.deepEqual(await init(fromBar(win)), { theme: 'dark', font: 'nunito', motion: 'reduced', pcSearch: false, model: 'b-model' });
+  assert.deepEqual(await init(fromBar(win)), { theme: 'dark', font: 'nunito', motion: 'reduced', pcSearch: true, model: 'b-model' });
   assert.deepEqual(await init(stranger), {}, 'not the bar: nothing');
   const e2 = fakes();
   createQuickAsk({ ...e2, onSubmit: () => true, getSettings: () => { throw new Error('settings are not readable'); } }).open();

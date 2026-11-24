@@ -292,6 +292,13 @@
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" aria-label="Connectors" /><span>on</span></label></div>
       </div>
+      <div class="row" id="brave-row">
+        <div class="meta-col">
+          <div class="name">Brave Search key</div>
+          <div class="desc">Web search tries Brave first when you add a key, then DuckDuckGo. Brave needs a card to sign up (it gives free monthly credits: about 1,000 searches). Bunny sends your searches to Brave when a key is set. The key is kept encrypted on this computer, is sent only to Brave, and is never shown again. <span id="brave-state" role="status"></span></div>
+          <div class="desc"><input type="password" id="brave-key" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Paste your Brave Search key" aria-label="Brave Search key" /> <button type="button" id="brave-save" class="ghost small">Save key</button> <button type="button" id="brave-remove" class="ghost small" hidden>Remove key</button> <span class="err" id="brave-err" role="alert"></span></div>
+        </div>
+      </div>
     </div>
 
     <h2>Voice</h2>
@@ -328,7 +335,7 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Search this PC</div>
-          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. Off until you turn it on.</div>
+          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. It is on for finding files only: Bunny shows what it found (names, folders, dates) and does not open the files unless you choose that below. Turn it off here at any time.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" id="pc-on" aria-label="Search this PC" /><span id="pc-on-state">off</span></label></div>
       </div>
@@ -950,6 +957,17 @@
       window.parent?.postMessage?.({ type: 'bunny:profile' }, location.origin);
     } catch (err) { $('photo-error').textContent = err.message ?? 'That picture could not be saved.'; }
   });
+  // F6: the Brave Search key. Only whether one is set comes back; the key itself is never shown.
+  const paintBrave = (set) => { $('brave-state').textContent = set ? 'A key is saved.' : 'No key: DuckDuckGo only.'; $('brave-remove').hidden = !set; };
+  getJSON('/api/web-search').then((r) => paintBrave(r.braveKey)).catch(() => { $('brave-row').hidden = true; });
+  $('brave-save').addEventListener('click', async () => {
+    $('brave-err').textContent = '';
+    try { const r = await sendJSON('/api/web-search/key', 'PUT', { key: $('brave-key').value.trim() }); $('brave-key').value = ''; paintBrave(r.braveKey); } catch (err) { $('brave-err').textContent = err.message ?? 'The key could not be saved.'; }
+  });
+  $('brave-remove').addEventListener('click', async () => {
+    $('brave-err').textContent = '';
+    try { paintBrave((await sendJSON('/api/web-search/key', 'DELETE')).braveKey); } catch (err) { $('brave-err').textContent = err.message ?? 'The key could not be removed.'; }
+  });
   $('photo-remove').addEventListener('click', async () => {
     showPhoto(await sendJSON('/api/profile/photo', 'DELETE'));
     window.parent?.postMessage?.({ type: 'bunny:profile' }, location.origin);
@@ -1124,9 +1142,9 @@
     const on = $('pc-on'), after = $('pc-after'), barAuto = $('pc-bar-auto');
     if (!on) return;
     const paint = (s) => {
-      on.checked = s.pcSearchEnabled === true;
+      on.checked = s.pcSearchEnabled !== false;
       $('pc-on-state').textContent = on.checked ? 'on' : 'off';
-      after.value = s.pcSearchAfter === 'show' ? 'show' : 'read';
+      after.value = s.pcSearchAfter === 'read' ? 'read' : 'show';
       barAuto.checked = s.pcSearchBarAuto !== false;
       $('pc-bar-state').textContent = barAuto.checked ? 'on' : 'off';
       for (const id of ['pc-after-row', 'pc-bar-row']) $(id).classList.toggle('is-off', !on.checked);

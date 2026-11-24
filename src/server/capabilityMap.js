@@ -16,17 +16,17 @@ export function capabilityMap(state = {}) {
   mark(state.code, 'files and commands', state.device ? 'a folder must be chosen in the window first' : 'off; call request_capability with code_mode (the person chooses a folder)');
   mark(state.computer, 'control of this computer', state.device ? 'only in the window' : 'off; call request_capability with computer_use');
   mark(state.build, 'building tools', state.device ? 'only in the window' : 'off; call request_capability with custom_tools');
-  mark(state.browser, 'the browser panel', 'only in the desktop window; not here');
-  mark(state.pc, 'searching this PC', state.device ? 'only in the window' : "off; tell the person to turn on Search this PC in Settings › Capabilities");
+  mark(state.browser, 'the browser panel', "only in Bunny's window on the PC; not here");
+  mark(state.pc, 'searching this PC', state.device ? 'only in the window' : 'off; call request_capability with pc_search');
   const win = state.device ? " (in Bunny's window)" : '';
-  mark(state.google, 'Gmail, Calendar and Drive', `not signed in; tell the person to sign in to Google in Settings › Profile${win}`);
-  mark(state.github, 'GitHub', `not signed in; tell the person to sign in to GitHub in Settings › Profile${win}`);
+  mark(state.google, 'Gmail, Calendar and Drive', (state.device ? `not signed in; tell the person to sign in to Google in Settings › Profile${win}` : 'not signed in; call request_capability with sign_in (service: google), or tell the person to sign in in Settings › Profile'));
+  mark(state.github, 'GitHub', (state.device ? `not signed in; tell the person to sign in to GitHub in Settings › Profile${win}` : 'not signed in; call request_capability with sign_in (service: github), or tell the person to sign in in Settings › Profile'));
   const parts = [`Abilities now. On: ${on.length ? on.join(', ') : 'none beyond chatting, web search and reading pages'}.`];
   if (how.length) parts.push(`Off, and how to get each: ${how.join('; ')}.`);
   const waiting = (state.connectors ?? []).slice(0, 6);
   if (waiting.length) {
     const word = { off: 'switched off', needsSignIn: 'needs sign-in', failed: 'did not start' };
-    parts.push(`Connectors installed but not working: ${waiting.map((c) => `${plain(c.name)} (${word[c.state] ?? 'not working'})`).join(', ')}; the person switches them on or signs in under Settings › Customize.`);
+    parts.push(`Connectors installed but not working: ${waiting.map((c) => `${plain(c.name)} (${word[c.state] ?? 'not working'})`).join(', ')}; the person switches them on in Settings › Customize; for one that needs sign-in, call request_capability with connector_sign_in (connector: its exact name).`);
   }
   parts.push('When a task needs something that is off, ask for it or say the one step: do not just say you cannot.');
   return parts.join(' ');

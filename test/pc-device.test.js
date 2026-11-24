@@ -22,8 +22,8 @@ function lan(url, { path = '/', method = 'GET', headers = {}, body } = {}) {
   });
 }
 
-async function withDevice(t, calls) {
-  const w = await pcWorld(t, { files, settings: { pcSearchEnabled: true, pcSearchAfter: 'show' }, calls, startOptions: { lanAddress: '127.0.0.1' } });
+async function withDevice(t, calls, settings = { pcSearchEnabled: true, pcSearchAfter: 'show' }) {
+  const w = await pcWorld(t, { files, settings, calls, startOptions: { lanAddress: '127.0.0.1' } });
   const on = await (await fetch(`${w.base}/api/remote`, { method: 'PUT', headers: json, body: JSON.stringify({ enabled: true, passcode: PASS }) })).json();
   t.after(() => w.app.remote.disable());
   const url = on.url.replace(/\/$/, '');
@@ -75,4 +75,12 @@ test('an Everything device may search in its chats, is logged by tool name, and 
   const record = (await (await fetch(`${d.base}/api/pcsearch/activity`)).json()).entries;
   assert.match(record[0].who, /./);
   assert.notEqual(record[0].who, 'window');
+});
+
+test('AGENT-FLOW F8: a device cannot turn Search this PC on with the card: no card, the fixed sentence, and the setting stays off', async (t) => {
+  const d = await withDevice(t, [['request_capability', { capability: 'pc_search', reason: 'find a file' }]], { pcSearchEnabled: false });
+  const text = await d.chat();
+  assert.ok(!/event: capability/.test(text), 'no card reached the device');
+  assert.match(d.toolAnswers()[0], /^Search this PC can be turned on only on the PC\./);
+  assert.equal((await (await fetch(`${d.base}/api/settings`)).json()).pcSearchEnabled, false);
 });

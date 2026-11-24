@@ -7,6 +7,7 @@ import { describeNpm, discardNpm, installNpm, prepareNpm } from './npmSource.js'
 import { describePypi, discardPypi, installPypi, preparePypi } from './pypiSource.js';
 import { unpinnedPackage } from './pinning.js';
 import { fetchLimited } from './download.js';
+import { searchWeb } from './webSearch.js';
 import { dirname, join } from 'node:path';
 import { describeSource, discardSource, prepareSource, sourceKind, stillTheSame, CHANGED } from './installSource.js';
 import { checkPublicAddress } from './publicFetch.js';
@@ -69,36 +70,13 @@ export function describeAppTool(name, args = {}) {
   }
 }
 
-/** DuckDuckGo's HTML endpoint: no key, plain results. */
-async function webSearch(query, fetchImpl = globalThis.fetch) {
-  const q = String(query ?? '').trim();
-  if (!q) throw new Error('web_search needs a query');
-  const res = await fetchImpl(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
-    headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) bunny-ai', accept: 'text/html' },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`The search answered ${res.status}`);
-  const html = await res.text();
-  const strip = (t) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim(); // one line each: a title or snippet written by a page can never start a line of its own
-  const out = [];
-  const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
-  for (let m = re.exec(html); m && out.length < 8; m = re.exec(html)) {
-    let link = m[1];
-    const real = /[?&]uddg=([^&]+)/.exec(link);
-    if (real) link = decodeURIComponent(real[1]);
-    if (link.startsWith('//')) link = `https:${link}`;
-    if (/[\s\u0000-\u001f\u007f]/.test(link)) continue; // a link with a line break or a space in it is not a link Bunny lists
-    out.push(`- ${strip(m[2])}\n  ${link}\n  ${strip(m[3] ?? '').slice(0, 220)}`);
-  }
-  return out.length ? out.join('\n') : 'No results.';
-}
-
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, gitOptions = undefined, npmDeps = undefined, pypiDeps = undefined, now = () => new Date() }) {
+export function createAppTools({ toolInstaller = null, getSearchKey = async () => null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch, workDir = null, fetchSource = undefined, checkAddress = undefined, gitOptions = undefined, npmDeps = undefined, pypiDeps = undefined, now = () => new Date() }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
+  const startFetch = globalThis.fetch; // web_search reads globalThis.fetch at call time unless a test passed its own
   let queue = Promise.resolve();
   const serial = (job) => { const next = queue.then(job, job); queue = next.catch(() => {}); return next; };
 
@@ -506,7 +484,7 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
   }
 
   const run = {
-    web_search: ({ query }) => webSearch(query),
+    web_search: async ({ query }, ctx) => searchWeb(query, { fetchImpl: (u, i) => (fetchImpl === startFetch ? globalThis.fetch : fetchImpl)(u, i), braveKey: await Promise.resolve().then(getSearchKey).catch(() => null), browser: ctx?.browser === true }), // F6: Brave (with the person's key), then DuckDuckGo
     read_url: ({ url }) => readUrl(url),
     search_plugins: async ({ query }, ctx) => {
       const found = await searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) });
@@ -514,14 +492,17 @@ export function createAppTools({ toolInstaller = null, skills, mcp, getSettings,
       // INSTALL-ANYWHERE: the open web, last. Candidates only: a link and a title, cleaned like any web result; nothing from it is installed without the pipeline and the one card, which says it was found on the open web.
       const q = String(query ?? '').trim().slice(0, 100);
       const lines = [];
+      let viaBrave = false;
+      const braveKey = await Promise.resolve().then(getSearchKey).catch(() => null);
       for (const phrase of [`${q} MCP server`, `${q} SKILL.md`, `${q} claude plugin`]) {
         try {
-          const text = await webSearch(phrase, fetchImpl);
+          const text = await searchWeb(phrase, { fetchImpl: (u, i) => (fetchImpl === startFetch ? globalThis.fetch : fetchImpl)(u, i), braveKey }); // F6: Brave (with the person's key), then DuckDuckGo
+          if (String(text).startsWith('(via Brave)')) viaBrave = true;
           for (const block of String(text).split(/\n(?=- )/)) { const m = /^- (.*)\n\s+(https:\/\/\S+)/.exec(block); if (m && !lines.some((l) => l.url === m[2])) lines.push({ title: m[1].slice(0, 100), url: m[2].slice(0, 300) }); }
         } catch { /* the web is not reachable: the catalogues' answer stands */ }
       }
       const web = lines.slice(0, 6);
-      return web.length ? `${found}\n\nFrom the open web (candidates only: not a known catalogue; nothing here is installed without the one card, which says "Found on the open web"):\n${web.map((w) => `- ${w.title}\n  ${w.url}`).join('\n')}` : found;
+      return web.length ? `${found}\n\nFrom the open web (candidates only: not a known catalogue; nothing here is installed without the one card, which says "Found on the open web")${viaBrave ? ' (via Brave)' : ''}:\n${web.map((w) => `- ${w.title}\n  ${w.url}`).join('\n')}` : found;
     },
     read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);

@@ -286,3 +286,23 @@ test('Security LOW: a GitHub link is "known" only when this chat\'s own catalogu
   assert.equal((await tools.previewPluginCard('https://github.com/someone/notes', { chatId: 'g2' })).openWeb, true, 'another chat did not see it');
   assert.equal((await tools.previewPluginCard('https://github.com/someone/other', { chatId: 'g1' })).openWeb, true, 'a different repository was not listed');
 });
+
+test('F6 at the merge: the open-web candidates use searchWeb (Brave with the person\'s key, then DuckDuckGo); when Brave answered the part is marked via Brave, and the key never appears in the text', async () => {
+  const m = memory(); const KEY = 'BSA-secret-key-1234567890';
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    const u = String(url); seen.push({ u, init });
+    if (/api\.search\.brave\.com/.test(u)) return { ok: true, status: 200, json: async () => ({ web: { results: [{ title: 'Pack', url: 'https://files.example.com/pack.zip', description: 'A pack' }] } }) };
+    return { ok: true, status: 200, json: async () => ({ items: [], servers: [] }), text: async () => '' };
+  };
+  const tools = createAppTools({ ...m.deps, fetchImpl, getSearchKey: async () => KEY });
+  const found = await tools.run('search_plugins', { query: 'notes' }, { chatId: 'b1' });
+  assert.match(found, /From the open web \(candidates only[^)]*\) \(via Brave\):/);
+  assert.match(found, /https:\/\/files\.example\.com\/pack\.zip/);
+  assert.ok(!found.includes(KEY), 'the key is never in the text');
+  const brave = seen.filter((s) => /api\.search\.brave\.com/.test(s.u));
+  assert.ok(brave.length >= 1 && brave.every((s) => s.init.headers['x-subscription-token'] === KEY && s.init.redirect === 'error'), 'the key only as the header, no redirect');
+  assert.ok(seen.every((s) => /api\.search\.brave\.com/.test(s.u) || !JSON.stringify(s.init ?? {}).includes(KEY)), 'the key goes nowhere else');
+  const without = createAppTools({ ...m.deps, fetchImpl, getSearchKey: async () => null });
+  assert.ok(!(await without.run('search_plugins', { query: 'notes' }, { chatId: 'b2' })).includes('(via Brave)'));
+});
