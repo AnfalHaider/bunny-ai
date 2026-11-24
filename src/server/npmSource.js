@@ -9,7 +9,7 @@ import { mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { unpackTgz } from './engines/unpack.js';
 import { treeHash } from './installSource.js';
-import { execAbsolute, gitProgram, installEnv, npmProgram } from './installExec.js';
+import { execAbsolute, installEnv, npmProgram } from './installExec.js';
 
 export const REGISTRY = 'https://registry.npmjs.org';
 const NAME = /^(@[a-z0-9][a-z0-9._~-]{0,213}\/)?[a-z0-9][a-z0-9._~-]{0,213}$/;
@@ -104,14 +104,18 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
         if (!/^(npm:)?[\^~<>=*xX0-9.\s|\-a-zA-Z]*$/.test(String(range)) || /^(git|github|file|link|http|https|ssh|workspace)[:+]|\//.test(String(range))) throw new Error(`${dep} comes from ${String(range).slice(0, 60)}, not from the npm registry, so Bunny will not install it.`);
       }
     }
-    const needsScript = ['preinstall', 'install', 'postinstall'].filter((k) => pkg.scripts?.[k]);
+    const scriptsOfMain = { ...(pkg.scripts ?? {}) }; // read for the card before the file is rewritten
+    // Security: npm reads only the fields Bunny allows. Everything else in the package's own package.json (peerDependencies, overrides, resolutions, bundleDependencies, workspaces, publishConfig, config ...) is dropped before any npm command runs
+    const allowed = { name: pkg.name, version: pkg.version, bin: pkg.bin, main: pkg.main, type: pkg.type, dependencies: pkg.dependencies, optionalDependencies: pkg.optionalDependencies };
+    await writeFile(join(root, 'package.json'), JSON.stringify(Object.fromEntries(Object.entries(allowed).filter(([, v]) => v !== undefined)), null, 2));
+    const needsScript = ['preinstall', 'install', 'postinstall'].filter((k) => scriptsOfMain[k]);
     const bin = await binOf(root, { ...pkg, name: parsed.name });
     // IA-2: the lockfile is made now, from the registry, with nothing of the person's npm setup; the install uses exactly it
     const home = join(workDir, 'npm-home', `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`); // this run's own npm home and cache, deleted when the card is made: nothing of the person's cache or config is reused
     await mkdir(home, { recursive: true });
     const iso = npmIsolation(home);
     await writeFile(iso.empty, '');
-    try { iso.env.npm_config_git = gitProgram(workDir); } catch { /* no git on this PC: a dependency from git is refused anyway */ } // npm uses the git found before the download, never one by name
+    iso.env.npm_config_git = join(home, 'no-git'); // a program that does not exist: a dependency (of a dependency) that names a git address can never be cloned, so nothing outside the registry is fetched while the lock is made
     await runNpm(['install', '--package-lock-only', '--omit=dev', '--prefix', root, ...iso.args], { cwd: workDir, env: iso.env }); // cwd is the work folder, never the package's own
     const lockBytes = await readFile(join(root, 'package-lock.json'));
     const lock = JSON.parse(lockBytes.toString('utf8'));
@@ -135,7 +139,7 @@ export async function prepareNpm(text, { workDir, fetchJson, fetchBytes, runNpm 
     await rm(home, { recursive: true, force: true }).catch(() => {}); // npm's cache and home are gone
     return {
       name: parsed.name, version, integrity: entry.dist.integrity, tarballSha256: sha256(bytes), size: bytes.length, root, bin,
-      command: 'node', args: [bin.file], lockSha256: sha256(lockBytes), treeHash: await treeHash(root), dependencies: count, compiled, compiledCount: compiledFiles.length, compiledPackages, scriptPackages: [...scriptPackages], needsScript, fetchedAt: now().toISOString(),
+      command: 'node', args: [bin.file], lockSha256: sha256(lockBytes), treeHash: await treeHash(root), dependencies: count, compiled, compiledCount: compiledFiles.length, compiledPackages, scriptPackages: [...new Set([...scriptPackages, ...(needsScript.length ? [parsed.name] : [])])], needsScript, fetchedAt: now().toISOString(),
     };
   } catch (err) {
     await rm(root, { recursive: true, force: true }).catch(() => {});

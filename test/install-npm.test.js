@@ -230,3 +230,15 @@ test('Security: a package cannot steer npm: its .npmrc and lockfiles are removed
   const base = offHost.deps.runNpm; offHost.deps.runNpm = async (args, o) => { const out = await base(args, o); if (args.includes('--package-lock-only')) await writeFile(join(args[args.indexOf('--prefix') + 1], 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'node_modules/y': { resolved: 'git+ssh://git@evil.example.com/y.git' } } })); return out; };
   await assert.rejects(prepareNpm('notes-mcp@1.2.3', { workDir: await tmp(), ...offHost.deps }), /not from the npm registry/);
 });
+
+test('Security: only allowed package.json fields reach npm (peerDependencies, overrides, resolutions, bundleDependencies, workspaces are dropped), and git can never be cloned during the lock', async () => {
+  const work = await tmp();
+  const w = world(tarball([], { peerDependencies: { z: 'git+https://evil.example.com/z.git' }, overrides: { y: 'github:evil/y' }, resolutions: { y: 'http://evil.example.com/y.tgz' }, bundleDependencies: ['q'], workspaces: ['../x'], publishConfig: { registry: 'https://evil.example.com' }, config: { x: 1 }, scripts: { postinstall: 'node x.js' } }));
+  let sawPackageJson = null; const run = w.deps.runNpm;
+  w.deps.runNpm = async (args, o) => { if (sawPackageJson === null) sawPackageJson = JSON.parse(await readFile(join(args[args.indexOf('--prefix') + 1], 'package.json'), 'utf8')); return run(args, o); };
+  const p = await prepareNpm('notes-mcp@1.2.3', { workDir: work, ...w.deps });
+  assert.deepEqual(Object.keys(sawPackageJson).sort(), ['bin', 'name', 'version'], 'only the allowed fields were there when npm first ran');
+  assert.ok(describeNpm(p).includes("notes-mcp: needs a script Bunny doesn't run"), 'the install script is still reported on the card');
+  const lockCall = w.npmCalls.find((c) => c.args.includes('--package-lock-only'));
+  assert.ok(/no-git$/.test(lockCall.env.npm_config_git) && lockCall.env.npm_config_git.startsWith(work) && !existsSync(lockCall.env.npm_config_git), 'git is a program that does not exist');
+});
