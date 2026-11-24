@@ -61,7 +61,7 @@ async function modelInstalls(t, call, { mode = 'ask', grant = false } = {}) {
       const m = !cards[kind] && new RegExp(`event: ${kind}\\ndata: (.*)\\n`).exec(text);
       if (m) {
         cards[kind] = JSON.parse(m[1]);
-        const answer = kind === 'permission' ? { allowed: true } : { granted: grant };
+        const answer = kind === 'permission' ? (cards[kind].choices ? { allowed: true, choice: grant === false ? 'off' : 'on' } : { allowed: true }) : { granted: grant };
         await post(base, `/api/sessions/${session.id}/${kind}/${cards[kind].id}`, answer);
       }
     }
@@ -72,17 +72,16 @@ const installCall = { name: 'install_plugin', arguments: JSON.stringify({ url: '
 
 test('P-6: in Auto, a plugin the model installs is added OFF, a card lists the skill, its size and the connector address, and a no keeps it off', async (t) => {
   const r = await modelInstalls(t, installCall, { mode: 'auto', grant: false });
-  const card = r.cards.capability;
-  assert.ok(card, 'the card was shown');
-  assert.equal(card.capability, 'switch_on_added');
-  assert.match(card.reason, /Skill grow \(\d+ characters of instructions\): How to grow carrots/);
-  assert.match(card.reason, /Connector weather: https:\/\/weather\.example\.com\/mcp/);
-  assert.match(card.reason, /switched OFF/);
+  const card = r.cards.permission; // F10: ONE card now shows what the two old cards showed
+  assert.ok(card, 'the card was shown'); assert.equal(r.cards.capability, undefined, 'and there is no second card');
+  assert.deepEqual(card.choices.map((c) => c.id), ['on', 'off', 'no']);
+  assert.match(card.detail, /Skill grow \(\d+ characters of instructions\): How to grow carrots/);
+  assert.match(card.detail, /Connector weather: https:\/\/weather\.example\.com\/mcp/);
   const skills = (await json(r.base, '/api/skills')).body;
   const connectors = (await json(r.base, '/api/mcp')).body;
   assert.deepEqual(skills.map((s) => [s.name, s.enabled]), [['grow', false]]);
   assert.deepEqual(connectors.map((c) => [c.name, c.enabled]), [['weather', false]]);
-  assert.match(r.text, /did not switch it on/);
+  assert.match(r.text, /chose to keep it off/);
 });
 
 test('P-6: a yes from the window switches the skill and the connector on', async (t) => {
@@ -102,7 +101,7 @@ test('P-6: in Ask mode the question before installing already lists the same thi
 test('P-6: add_connector with an address is added OFF with a card showing the address; a no keeps it off', async (t) => {
   const call = { name: 'add_connector', arguments: JSON.stringify({ name: 'Maps', url: 'https://maps.example.com/mcp' }) };
   const r = await modelInstalls(t, call, { mode: 'auto', grant: false });
-  assert.match(r.cards.capability.reason, /https:\/\/maps\.example\.com\/mcp/);
+  assert.match(r.cards.permission.detail, /https:\/\/maps\.example\.com\/mcp/);
   assert.deepEqual((await json(r.base, '/api/mcp')).body.map((c) => [c.name, c.enabled]), [['Maps', false]]);
 });
 

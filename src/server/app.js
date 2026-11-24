@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
+import { capabilityMap } from './capabilityMap.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -36,6 +37,7 @@ import { suggestMemories } from './suggestions.js';
 import { createMemoryStore } from './memory.js';
 import { createMcpStore } from './mcpStore.js';
 import { COMPUTER_TOOLS, DEVICE_LINE, addKind, browserKind, browserMatches, commandKind, commandMatches, computerKind, connectorKind, connectorMatches, editKind, editMatches, reasonLine, saveRuleFor } from './allowKinds.js';
+import { redactDeep, redactError } from './redactKey.js';
 import { thinkingBody } from '../providers/thinking.js';
 import { createConnectorSignIn, NEEDS_SIGN_IN, KEY_REFUSED } from './connectorSignIn.js';
 import { createScheduleStore } from './scheduler.js';
@@ -385,10 +387,24 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   const connectorSignIn = createConnectorSignIn({ secrets, mcp, getBase: () => `http://127.0.0.1:${server.address().port}` });
   // L-4: a local connector's settings come back from the secret store only to start it
   const withEnv = async (server) => ({ ...server, env: await mcp.resolveEnv(server.id) });
-  const mcpListTools = async (server, extra = {}) => (server.type === 'local' ? localMcp.listTools(await withEnv(server), extra) : httpListTools(server, { auth: connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }));
-  const mcpCallTool = async (server, call) => (server.type === 'local' ? localMcp.callTool(await withEnv(server), call) : httpCallTool(server, { ...call, auth: connectorSignIn.authFor(server) }));
+  // K-3 / K-5: a remote connector's KEY is fetched for one request only, goes only as its own header to the origin it was saved for, with no redirect and never to OAuth; every form of it is blanked
+  // from what the connector answers and from any error before the model or the window sees it.
+  const keyed = async (server) => {
+    const k = server.type === 'local' ? null : await mcp.resolveKey(server.id);
+    return k ? { server: { ...server, headers: { ...(server.headers ?? {}), [k.header]: k.value }, keyed: true }, secret: k.value } : { server, secret: null };
+  };
+  const mcpListTools = async (server, extra = {}) => {
+    if (server.type === 'local') return localMcp.listTools(await withEnv(server), extra);
+    const { server: sent, secret } = await keyed(server);
+    try { return redactDeep(await httpListTools(sent, { auth: secret ? undefined : connectorSignIn.authFor(server), ...(extra.timeoutMs ? { timeoutMs: extra.timeoutMs } : {}) }), secret); } catch (err) { throw redactError(err, secret); }
+  };
+  const mcpCallTool = async (server, call) => {
+    if (server.type === 'local') return localMcp.callTool(await withEnv(server), call);
+    const { server: sent, secret } = await keyed(server);
+    try { return redactDeep(await httpCallTool(sent, { ...call, auth: secret ? undefined : connectorSignIn.authFor(server) }), secret); } catch (err) { throw redactError(err, secret); }
+  };
   const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
-  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server) });
+  const appTools = createAppTools({ toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -1178,10 +1194,23 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (String(body.command ?? '').trim() && body.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'A local connector runs a program on this computer. Confirm the command to add it.' });
         }
-        const { source: _dropped, ...plain } = body; // W6-6: only the tool installer may say where a connector came from
+        const { source: _dropped, trustedKeyHeaders: _trusted, ...plain } = body; // W6-6: only the tool installer may say where a connector came from; only Bunny's own code names the trusted key headers
         return sendJson(res, 200, await mcp.add(plain));
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });
+      }
+    }
+    // K-2: a remote connector's key. Window only (the route table), a password field in the screen, and the answer is only the connector as the list shows it: the header name and whether a key is set.
+    const mcpKeyMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/key$/);
+    if (mcpKeyMatch && (method === 'PUT' || method === 'DELETE')) {
+      if (windowOnly(req, res)) return;
+      try {
+        if (method === 'DELETE') return sendJson(res, 200, await mcp.clearKey(mcpKeyMatch[1]));
+        const body = await readBody(req);
+        const saved = await mcp.setKey(mcpKeyMatch[1], { header: body.header, value: body.value });
+        return sendJson(res, 200, saved);
+      } catch (err) {
+        return sendJson(res, err.code === 'mcp.notFound' ? 404 : 400, { code: err.code ?? 'mcp.failed', message: String(err.message).slice(0, 300) });
       }
     }
     const mcpMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})$/);
@@ -1556,6 +1585,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 404, { code: 'permission.gone', message: 'That request is no longer waiting' });
       }
       const answer = await readBody(req);
+      if (pending.choices && req.bunnyRemote) return sendJson(res, 403, { code: 'request.windowOnly', message: "This is answered in Bunny's window." }); // F10-4: a device cannot approve an install; the card keeps waiting
+      if (pending.choices && req.bunnyDevice) remote.logAction(req.bunnyDevice, { kind: 'install', choice: typeof answer.choice === 'string' && pending.choices.includes(answer.choice) ? answer.choice : 'no', item: String(pending.display ?? '').slice(0, 60) }); // F10-4 (R-DF2): an Everything device may answer the one install card; the access log gets the choice and the item's name, never an address or a key
+      if (pending.choices) { pending.resolve(typeof answer.choice === 'string' && pending.choices.includes(answer.choice) && answer.choice !== 'no' ? answer.choice : false); return sendJson(res, 200, { ok: true }); } // F10: a card with named choices takes only one of its own
       if (answer.kind === true || answer.saveRule === true) { // F9: "for this chat" is given only from Bunny's window, only on a card that offered a kind (the kind itself is the server's, made from the call)
         if (req.bunnyRemote || req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_LINE });
         if (!pending.kind) return sendJson(res, 400, { code: 'kind.notOffered', message: 'That card did not offer it.' });
@@ -2432,6 +2464,15 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         });
         history.unshift({ role: 'system', content: `Connectors: ${stand.join(', ')}. If one the person needs is not connected, say so.` });
       }
+      // AGENT-FLOW F2: which abilities are on and off right now, and how to get each (fixed wording from the real state; no tool, no grant). Not for the quick bar or a scheduled run: nobody can answer there.
+      if (!textOnly && !scheduledTask) {
+        const asleep = settings.connectorsEnabled === false ? [] : (await mcp.list()).filter((c) => inScope(c.folders, scopeFolder) && (!c.enabled || c.status === 'error' || c.status === 'needsSignIn'))
+          .map((c) => ({ name: c.name, state: !c.enabled ? 'off' : c.status === 'needsSignIn' ? 'needsSignIn' : 'failed' }));
+        history.unshift({ role: 'system', content: capabilityMap({
+          code: Boolean(workspace), computer: aiComputerOn, build: buildOn, browser: browserControl, pc: chatPc, google: googleOn, github: Boolean(githubToken),
+          device: Boolean(req.bunnyRemote ?? req.bunnyDevice), plan: permissionMode === 'plan', connectors: asleep,
+        }) });
+      }
       // L-1: what a connector says about itself (its handshake instructions), as information for the model: it is the connector's text, not the person's
       {
         const said = servers
@@ -2446,6 +2487,48 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
             + said.map((x) => `<connector name="${String(x.name).replace(/[^\w .-]/g, '')}">\n${plain(x.text)}\n</connector>`).join('\n') });
         }
       }
+      /**
+       * AGENT-FLOW F1: after install_plugin / add_connector and the person's yes to "switch on what was just added", read the new connector's tools and offer them in the SAME reply,
+       * the way request_capability adds its tools. No permission changes: the person's yes was already given on the card, and each tool still asks as any connector tool does.
+       * Returns one plain line for the model (the tool names, or why there are none), or ''.
+       */
+      const loadSwitchedOn = async (added) => {
+        if (settings.connectorsEnabled === false) return 'Connectors are turned off in Settings › Capabilities, so its tools are not loaded'; // the master switch holds here too (Security F1-1)
+        const lines = [];
+        for (const sid of added?.connectorIds ?? []) {
+          const server = await mcp.get(sid);
+          if (!server || !server.enabled || !inScope(server.folders, scopeFolder) || servers.some((x) => x.id === server.id)) continue;
+          const label = String(server.name ?? 'the connector').replace(/[^\w .,:'-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'the connector';
+          try {
+            const startStep = `Start ${server.name}`;
+            server.tools = await mcpListTools(server, { onProgress: (text) => send('tool', { tool: startStep, status: 'running', result: text }) });
+            await mcp.setStatus(server.id, { status: 'connected', tools: server.tools, error: null });
+          } catch (err) {
+            if (err.code === 'mcp.needsSignIn') { // the chat shows Sign in and Skip it, as for a connector found at the start of a reply
+              const said = await connectorSignIn.needsSignIn(server, err);
+              if (said.code === 'mcp.keyRefused') send('tool', { tool: `${server.name}`, status: 'failed', result: KEY_REFUSED });
+              else send('tool', { tool: `${server.name}`, status: 'failed', result: NEEDS_SIGN_IN, needsSignIn: true, serverId: server.id });
+              lines.push(`${label} is on but needs the person to sign in first (a Sign in button is shown); its tools appear after that, in their next message.`);
+            } else lines.push(`${label} is on but did not start (${String(err.message).replace(/[^\w .,:'-]/g, ' ').slice(0, 100)}).`);
+            continue;
+          }
+          servers.push(server);
+          const offered = connectorTools([server], { planMode: permissionMode === 'plan' });
+          const names = [];
+          for (const def of offered.definitions.slice(0, 60)) {
+            let name = def.function.name;
+            const entry = offered.index.get(name);
+            for (let n = 2; toolIndex.has(name) || toolDefinitions.some((d) => d.function.name === name); n += 1) name = `${def.function.name.slice(0, 60)}_${n}`;
+            def.function.name = name;
+            toolDefinitions.push(def);
+            toolIndex.set(name, entry);
+            names.push(name);
+          }
+          const more = offered.definitions.length - names.length;
+          lines.push(names.length ? `${label} is ready. You now have its tools: ${names.join(', ')}${more > 0 ? ` (${more} more are not listed)` : ''}. Use them now to do the job.` : `${label} is on but offers no tools.`);
+        }
+        return lines.join('\n');
+      };
       // PV-2: too many tools for a provider: the connector tools are reached through two small tools instead
       const capped = capTools(toolDefinitions, toolIndex);
       const deferredTools = capped.deferred;
@@ -2475,15 +2558,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       };
       // Ask the person, and wait for the answer (or for them to leave).
       // `opts.forSession` offers a third answer, "Allow for this chat" (Codex's acceptForSession, only with Bunny's engine off): the answer is the text 'session', and only when this card offered it
+      // `opts.choices` ([{ id, label, primary? }]) makes the card carry those buttons instead of Allow and Deny (F10, one install card): the answer is the chosen id, or false for "no", and only an id this card offered counts
       const askPermission = (summary, detail, opts = {}) => new Promise((resolveAnswer) => {
         // Nobody is there to answer once the reply has ended (a background chat): that is a no.
         if (res.writableEnded || res.destroyed) { resolveAnswer(false); return; }
         const pid = randomUUID();
         // W6-25: not denied by itself: it waits for the person, and the window is nudged after a while
         const timer = waitNudges({ kind: 'permission', title: summary });
-        pendingPermissions.set(pid, { sessionId: id, kind: opts.kind ?? null, forSession: opts.forSession === true, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
+        pendingPermissions.set(pid, { sessionId: id, kind: opts.kind ?? null, forSession: opts.forSession === true, choices: Array.isArray(opts.choices) ? opts.choices.map((c) => c.id) : null, display: opts.display ?? null, resolve: (allowed) => { timer.stop(); pendingPermissions.delete(pid); resolveAnswer(allowed); } });
         res.once('close', () => pendingPermissions.get(pid)?.resolve(false));
-        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}), ...(opts.kind ? { kind: { button: opts.kind.button, ...(opts.kindRule ? { rule: opts.kindRule } : {}), ...(opts.kind.thisReplyOnly ? { replyOnly: true } : {}) } } : {}), ...(opts.reason ? { reason: opts.reason } : {}) });
+        send('permission', { id: pid, title: summary, detail: cardText(detail), ...(opts.forSession === true ? { forSession: true } : {}), ...(Array.isArray(opts.choices) ? { choices: opts.choices.map((c) => ({ id: c.id, label: c.label, ...(c.primary ? { primary: true } : {}) })) } : {}), ...(opts.kind ? { kind: { button: opts.kind.button, ...(opts.kindRule ? { rule: opts.kindRule } : {}), ...(opts.kind.thisReplyOnly ? { replyOnly: true } : {}) } } : {}), ...(opts.reason ? { reason: opts.reason } : {}) });
       });
 
       // Ask the window to do a browser action, and wait for what happened.
@@ -3282,8 +3366,45 @@ Save as ${parsed.path}` : name === 'edit_file' ? `- ${parsed.old_text}\n+ ${pars
 ${[parsed.command, ...(Array.isArray(parsed.args) ? parsed.args : [])].map((a) => (/\s|"/.test(String(a)) ? JSON.stringify(String(a)) : String(a))).join(' ')}${parsed.env && Object.keys(parsed.env).length ? `
 with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
 
+        // F10: ONE card for what the model adds (a plugin, a connector, a tool from GitHub): it shows everything the two old cards showed, in every mode, Auto included. "Install and switch on" switches on exactly the parts
+        // the card listed (F10-2); too long to list whole: no switch-on button and it installs off (F10-1); "Install, keep off" leaves it off; devices never get here (these tools are not theirs, REMOTE_TOOLS_DENIED).
+        let oneCard = null;
+        let alreadyThere = false; // asking again about something that is already installed would be a card for nothing: the install itself answers
+        const remoteAdd = name === 'add_connector' && !localConnector && String(parsed.url ?? '').trim();
+        if (isApp && name === 'install_plugin') alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
+        if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
+        if (alreadyThere) { const said = name === 'install_plugin' ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
+        if (isApp && !alreadyThere && (name === 'install_plugin' || remoteAdd || localConnector || toolPlan)) {
+          let title; let body; let listed = null; let tooLong = false; let commit = null; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
+          if (name === 'install_plugin') {
+            const card = await appTools.previewPluginCard(parsed.url);
+            if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null;
+          } else if (remoteAdd) {
+            body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
+            listed = { skills: [], connectors: [String(parsed.url)] };
+          } else if (localConnector) {
+            body = detail; listed = { skills: [], connectors: [String(parsed.name ?? '')] }; // the local connector's own name, so a later message about what was switched on is right
+            const long = cardTooLong(detail);
+            if (long) { send('tool', { tool: summary, status: 'denied', result: long }); return long; } // a command is never installed without being shown whole
+          } else {
+            body = detail; listed = null; // one connector, the one this commit installs
+            const long = cardTooLong(detail);
+            if (long) { send('tool', { tool: summary, status: 'denied', result: long }); return long; }
+          }
+          if (tooLong) body = `Too long to show: it will be installed off. Switch it on in Customize.\n\n${body}`;
+          title = tooLong ? `Install ${display}?` : `Install and switch on ${display}?`;
+          const choices = [...(tooLong ? [] : [{ id: 'on', label: 'Install and switch on', primary: true }]), { id: 'off', label: 'Install, keep off', ...(tooLong ? { primary: true } : {}) }, { id: 'no', label: "Don't install" }];
+          const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices, display });
+          if (!answer) {
+            await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
+            send('tool', { tool: summary, status: 'denied' });
+            return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
+          }
+          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit };
+        }
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
-        if (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        if (!oneCard && !alreadyThere && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')))) {
           const tooLong = (localConnector || toolPlan || name === 'run_command' || officeSpec) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const f9 = await f9Judge({ name, parsed, entry, askRule: ruled?.effect === 'ask' });
@@ -3305,15 +3426,30 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off', ...(oneCard.commit ? { expectCommit: oneCard.commit } : {}) } : {}) });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
-              const added = appTools.takePending?.(id);
+              let added = appTools.takePending?.(id);
+              if (oneCard && toolPlan && oneCard.on) { // a tool from GitHub is already on when it is installed: load its tools into this reply too (F1)
+                const found = (await mcp.list()).find((x) => x.source?.repo === toolPlan.repo && x.source?.sha === toolPlan.sha);
+                if (found) added = { title: found.name, text: '', skillIds: [], connectorIds: [found.id] };
+              }
               if (!added) return said;
+              if (oneCard) { // the answer was given on the one card: no second card
+                if (!oneCard.on) return `${said}\nThe person chose to keep it off${oneCard.tooLong ? ' (it was too long to show whole, so the card could not offer to switch it on)' : ''}. It stays switched OFF; do not ask again, carry on without it.`;
+                const left = toolPlan ? { left: [] } : await appTools.switchOn(added, oneCard.listed); // exactly what the card listed, no more (F10-2)
+                const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                return `${said}\nThe person said yes: it is now switched on.${left.left.length ? ` Not switched on, because it was not on the card: ${left.left.join(', ')}.` : ''}${loaded ? `\n${loaded}` : ''}`;
+              }
               const shown = `${added.title}\n${added.text}`;
               if (shown.length > 1800) return `${said}\nIt is too long to show you whole, so it stays switched OFF; the person can read and switch it on in Settings, Customize.`;
               const answer = await askCapability('switch_on_added', shown);
-              if (answer.granted) { await appTools.switchOn(added); return `${said}\nThe person said yes: it is now switched on.`; }
+              if (answer.granted) {
+                await appTools.switchOn(added);
+                // AGENT-FLOW F1: what was just switched on is loaded into THIS reply, so the person does not have to send another message
+                const loaded = await loadSwitchedOn(added).catch((err) => `Its tools could not be loaded now (${String(err.message).slice(0, 120)}); they will be there in the next message.`);
+                return `${said}\nThe person said yes: it is now switched on.${loaded ? `\n${loaded}` : ''}`;
+              }
               return `${said}\nThe person did not switch it on. It stays off; do not ask again, carry on without it.`;
             })()
             : isWorkspace
@@ -3507,9 +3643,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             maxToolRounds: () => maxToolRounds,
             // W6-2: out of steps in Code mode is not the end: keep going, up to the cap set in Settings, and say so.
             extendRounds: (round) => {
-              if (workMode !== 'code' && !workspace) return false;
+              // AGENT-FLOW F3: Chat mode is extended too (it was never: a research or browser job answered half done after 6 steps). Same caps, same loop-stop cards; the quick bar is never extended.
+              if (textOnly) return false;
               if (!replyCaps.steps || !replyCaps.minutes || round >= replyCaps.steps || Date.now() - replyStartedAt >= replyCaps.minutes * 60_000) return false;
-              maxToolRounds = round + Math.max(EFFORT.code, 12);
+              maxToolRounds = round + (workMode === 'code' || workspace ? Math.max(EFFORT.code, 12) : Math.max(EFFORT.chat, 6));
               send('working', { step: round + 1 });
               return true;
             },

@@ -1556,3 +1556,10 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .allowed-kinds .link { background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; font-size: var(--fs-sm); padding: 0; }
 .allowed-kinds .hint { font-size: var(--fs-sm); color: var(--text-dim); }
 @media (max-width: 520px) { .permission-actions .btn, .permission-actions button { flex: 1 1 100%; text-align: left; } }
+
+/* F9/F10 (QA): the permission card's buttons are touch targets on a phone, and the secondary ones have a visible border so they do not read as plain text */
+@media (max-width: 600px) {
+  .permission-actions button, .permission-actions .btn { min-height: 44px; padding-inline: var(--sp-5); }
+  .permission-actions button:not(.primary), .permission-actions .btn:not(.primary) { border: 1px solid var(--line-strong, var(--line)); background: transparent; border-radius: var(--r-md); }
+  .permission-actions { gap: var(--sp-3); }
+}
