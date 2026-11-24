@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseNpmSpec, integrityOf, prepareNpm, describeNpm, installNpm, discardNpm, npmIsolation, binOf } from '../src/server/npmSource.js';
 import { makeTgz } from './helpers-archives.js';
+import { createServer } from 'node:http';
+import { startApp, post, json } from './helpers.js';
 
 // INSTALL-ANYWHERE IA-2: a pinned npm connector. The registry, the tarball and npm itself are stand-ins; nothing touches the internet and no install script runs.
 const dirs = []; const tmp = async () => { const d = await mkdtemp(join(tmpdir(), 'bunny-npm-')); dirs.push(d); return d; };
@@ -98,4 +100,46 @@ test('a bin that leaves the package is refused, and a package with no bin cannot
   }
   await assert.rejects(binOf(work, { name: 'x' }), /no "bin"/);
   assert.ok(npmIsolation('/h').args.includes('--no-audit'));
+});
+
+// through the app: add_connector({ npm }) shows ONE card with the pin and the whole-tree facts; keep-off installs the staged tree off; no deletes the staging
+for (const [choice, label] of [['off', 'keep off'], ['no', "don't install"]]) test(`through the app: add_connector with an npm package, ${label}`, async (t) => {
+  const w = world(tarball());
+  const upstream = createServer((req, res) => {
+    let raw = ''; req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      const done = JSON.parse(raw).messages.filter((m) => m.role === 'tool').length;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const delta = done === 0 ? { tool_calls: [{ index: 0, id: 'c0', function: { name: 'add_connector', arguments: JSON.stringify({ name: 'Notes', npm: 'notes-mcp@1.2.3' }) } }] } : { content: 'done' };
+      res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r)); t.after(() => new Promise((r) => { upstream.closeAllConnections?.(); upstream.close(r); }));
+  const { base, app } = await startApp(t, { fake: false, installSource: { npmDeps: w.deps } });
+  await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${upstream.address().port}/v1` });
+  const { body: session } = await post(base, '/api/sessions', { title: 'npm' });
+  const J2 = { 'content-type': 'application/json' };
+  await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: J2, body: JSON.stringify({ value: 'ask' }) });
+  const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: J2, body: JSON.stringify({ content: 'add notes', providerId: 'openai', model: 'gpt-4o', workMode: 'chat' }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; const cards = [];
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (/^event: permission/m.test(block)) { const card = JSON.parse(/^data: (.*)$/m.exec(block)[1]); cards.push(card); await fetch(`${base}/api/sessions/${session.id}/permission/${card.id}`, { method: 'POST', headers: J2, body: JSON.stringify({ choice, allowed: choice !== 'no' }) }); }
+    }
+  }
+  assert.equal(cards.length, 1);
+  assert.deepEqual(cards[0].choices.map((c) => [c.id, !!c.primary]), [['off', true], ['on', false], ['no', false]], 'a package the model named is from no catalogue: keep-off is the main button');
+  for (const need of ['notes-mcp@1.2.3', 'integrity sha512-', 'b: includes compiled code', 'Runs: node bin/server.js']) assert.ok(cards[0].detail.includes(need), need);
+  const list = (await json(base, '/api/mcp')).body;
+  if (choice === 'off') {
+    assert.equal(list.length, 1); assert.equal(list[0].command, 'node'); assert.equal(list[0].enabled, false); assert.equal(list[0].addedBy, 'model'); assert.ok(!/npx/.test(JSON.stringify(list[0])));
+  } else {
+    assert.equal(list.length, 0);
+    assert.deepEqual(await readdir(join(app.dataDir ?? '', 'installing', 'npm')).catch(() => []), [], 'the staged tree is gone');
+  }
 });

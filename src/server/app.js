@@ -3288,13 +3288,14 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // the card listed (F10-2); too long to list whole: no switch-on button and it installs off (F10-1); "Install, keep off" leaves it off; devices never get here (these tools are not theirs, REMOTE_TOOLS_DENIED).
         let oneCard = null;
         let alreadyThere = false; // asking again about something that is already installed would be a card for nothing: the install itself answers
-        const remoteAdd = name === 'add_connector' && !localConnector && String(parsed.url ?? '').trim();
+        const npmAdd = name === 'add_connector' && !localConnector && String(parsed.npm ?? '').trim(); // IA-2
+        const remoteAdd = name === 'add_connector' && !localConnector && !npmAdd && String(parsed.url ?? '').trim();
         const installsSource = name === 'install_plugin' || name === 'install_skill'; // INSTALL-ANYWHERE: both take a GitHub link, an archive or a SKILL.md at a public https address
         if (isApp && installsSource && scheduledTask) { const said = 'Installing needs you; nobody is here to ask.'; send('tool', { tool: summary, status: 'denied', result: said }); return said; } // IA-8: never unattended
         if (isApp && installsSource) alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
         if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
         if (alreadyThere) { const said = installsSource ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
-        if (isApp && !alreadyThere && (installsSource || remoteAdd || localConnector || toolPlan)) {
+        if (isApp && !alreadyThere && (installsSource || remoteAdd || npmAdd || localConnector || toolPlan)) {
           let title; let body; let listed = null; let tooLong = false; let commit = null; let token = null; let openWeb = false; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
           if (installsSource) {
             const card = await appTools.previewPluginCard(parsed.url, { chatId: id });
@@ -3304,6 +3305,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             try { await checkPublicAddress(parsed.url); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; } // IA-0: refused before any card, with the one sentence
             body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
             listed = { skills: [], connectors: [String(parsed.url)] };
+          } else if (npmAdd) {
+            const card = await appTools.previewNpmCard(parsed.npm);
+            if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; token = card.token; openWeb = true; // a package the model named is not from a known catalogue: keep-off is the main button
           } else if (localConnector) {
             body = detail; listed = { skills: [], connectors: [String(parsed.name ?? '')] }; // the local connector's own name, so a later message about what was switched on is right
             const long = cardTooLong(detail);
@@ -3321,6 +3326,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const choices = [...(openWeb ? [offButton, ...onButton] : [...onButton, offButton]), { id: 'no', label: "Don't install" }];
           const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices });
           if (!answer) {
+            if (npmAdd && token) await appTools.discardNpmToken(token); // a no deletes the staged tree
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
