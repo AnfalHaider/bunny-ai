@@ -1,9 +1,9 @@
 ---
 piece: release-0.1.15
 role: tech-lead
-sha: 7c81da08
+sha: 80626b03
 verdict: PASS
 date: 2026-11-25
 ---
 
-Supersedes baa6a8b6 (PASS at 2cd562ec). 2cd562ec is an ancestor of 7c81da08; git diff --stat 2cd562ec 7c81da08 shows README.md, docs/images/permission-rules.png and docs/images/pictures.json only (eb2c4f8d, 0d4e21f7, 7c81da08): no src, electron, scripts, test, e2e or .bootstrap change. README text read: the folder-trust card's second question (Run in Auto here, Trusted folders under Settings > Permissions) matches FOLDER-RULES-spec (two separate questions). Code review unchanged from 2cd562ec; gate 12/12 at 7c81da08 per the Chief (not re-run by me). Non-blocking items as in baa6a8b6: G2 (Security's call), F3-F7 deviations, SIGNIN-OPEN real-CLI check UNKNOWN, FG-1/FG-2 and IA-10/IA-11 judged against code only, PG-5 repository clean filters.
+Supersedes 9d732ba7 (PASS at 7c81da08). 80626b03 is the merge of origin/claude/v0115-integration (7c81da08) into main (a2877e09). git diff --stat 7c81da08 80626b03: four added docs files only (main's v0.1.15 plan, the 7c81da08 gate evidence, the v0.1.15 notes, the Chief of Staff sign-off), 255 insertions; nothing outside docs/ or *.md differs, so the code is exactly what I reviewed at 2cd562ec and 7c81da08. Gate at 80626b03 is being run by Builder A per the Chief (not re-run by me). Non-blocking items as in baa6a8b6.
