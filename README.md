@@ -258,7 +258,7 @@ Plugins, skills and downloads from other apps are shown in my words: a `SKILL.md
 - **Tighter rows:** connectors, skills, plugins and the other lists take one row per item, with the switch on the same line.
 - **Quick ask:** a light floating bar for a quick question, with the answer opening below it. It can search the web and read pages, cites its sources, and in the bar I can only search and read; I can't change files or run anything. **Ctrl+Enter** opens the chat in me, and with no model connected it offers **Open Bunny settings**.
 - **13 fonts and instant themes:** Inter, Source Sans 3, IBM Plex Sans, Atkinson Hyperlegible, Lexend, Nunito, Quicksand, Lora, Literata, Source Serif 4, Noto Serif, JetBrains Mono and IBM Plex Mono are built in. Changing the theme applies at once everywhere. Licences are under **Settings → About**.
-- **Chats open without a reload:** Back and Forward work, and Ctrl-click opens a chat in a new window.
+- **Chats open without a reload:** Back and Forward work, and Ctrl-click a chat link to open it the way your browser would.
 - **Settings stay put:** what you change is kept after a restart, and each Settings tab shows only its own settings.
 
 ---
@@ -316,7 +316,7 @@ flowchart TD
 <!-- V0115:end quick-ask-dependable -->
 <!-- V0115:begin project-instructions -->
 ### Your project's instruction files
-A folder can carry `AGENTS.md` or `CLAUDE.md` (and Cursor's `.cursorrules` or `.cursor/rules` files marked always-apply, which I add after the main file). The first time you open such a folder in a chat, I show them in a card instead of quietly obeying them: **Read** shows the text, **Follow them** uses it, and **Not now** asks again later.
+A folder can carry `AGENTS.md` or `CLAUDE.md` (and Cursor's `.cursorrules`, read as it is, and `.cursor/rules` files marked `alwaysApply`, which I add after the main file). The first time you open such a folder in a chat, I show them in a card instead of quietly obeying them: **Read** shows the text, **Follow them** uses it, and **Not now** asks again later.
 
 Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same text, the text you were shown**, and none of them reads the files by itself. If somebody edits a file afterwards, the Working folder card says **changed since it was read** and keeps using the old text until you choose **Read again**, which shows the difference first; **Use the new text** or **Keep the old text** then decides. A file that isn't used is listed as such, and **Ask me again for this folder** forgets your answer. Only my own window can answer, not a phone.
 
@@ -362,7 +362,7 @@ This writes the installer to `dist/`.
 
 **Updates**
 
-I check GitHub Releases a few seconds after I start and then every six hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, I install it then. Switch this off, or check at once, in **Settings → About**.
+I check GitHub Releases about 15 seconds after I start and then every six hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, I install it then. Switch this off, or check at once, in **Settings → About**.
 
 **Run me in your browser instead**
 
