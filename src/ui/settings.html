@@ -82,6 +82,16 @@
         </div>
         <div class="right" id="google-actions"></div>
       </div>
+      <details class="row" id="google-howto" open hidden>
+        <summary class="name">How to connect Google</summary>
+        <ol class="desc">
+          <li>Open the Google Cloud console and create a project (free).</li>
+          <li>APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Desktop app.</li>
+          <li>Copy the client ID, and the client secret if Google shows one.</li>
+          <li>Paste them under Sign-in apps below. The Sign in button turns on at once.</li>
+        </ol>
+        <p class="desc">Nothing is sent to Google until you press Sign in. Your chats and keys stay on this computer.</p>
+      </details>
       <details class="row account-apps">
         <summary class="name"><span data-i18n="account.apps">Sign-in apps</span> <span class="opt">(advanced)</span></summary>
         <p class="desc">GitHub's "Sign in with GitHub" and Google sign-in need an OAuth app you register once with them. GitHub: Settings → Developer settings → OAuth Apps, tick "Enable Device Flow". Google: Cloud console → APIs &amp; Services → Credentials → OAuth client ID → Desktop app.</p>
@@ -171,26 +181,6 @@
         <div class="right"><select class="appearance" data-key="codeFontSize" aria-label="Code font size">
           <option value="">Default (12)</option><option value="11">11</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="18">18</option>
         </select></div>
-      </div>
-    </div>
-  </section>
-
-  <section data-section="language">
-    <h2>Language</h2>
-    <div class="group">
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Language</div>
-          <div class="desc">The interface language. Everything stays on this machine.</div>
-        </div>
-        <div class="right">
-          <select id="language" aria-label="Language">
-            <option value="en">English</option>
-            <option value="es">Español</option>
-            <option value="fr">Français</option>
-            <option value="ar">العربية</option>
-          </select>
-        </div>
       </div>
     </div>
   </section>
@@ -545,7 +535,11 @@
             <option value="command">Command</option>
             <option value="path:edits">Path · edits</option>
             <option value="path:reads">Path · reads</option>
+            <option value="domain">Website</option>
+            <option value="tool">Tool</option>
+            <option value="agent">Helper or chat</option>
           </select>
+          <select id="rules-connector" hidden aria-label="Which connector this tool rule is for"><option value="">Any tool</option></select>
           <input id="rules-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
           <select id="rules-effect" aria-label="What happens">
             <option value="allow">Allow</option>
@@ -555,6 +549,13 @@
           <button type="button" class="btn primary" id="rules-add-btn">Add rule</button>
         </div>
         <div class="rules-line" id="rules-line" role="status" aria-live="polite"></div>
+        <details class="rules-notes" id="rules-notes">
+          <summary>What each kind of rule covers</summary>
+          <p><b>Website</b>, like <code>example.com</code> (that site only) or <code>*.example.com</code> (its subdomains, not the bare name). Bunny judges the address of every page it reads, every download, and every address it is sent on to by a redirect. In the browser panel, a Deny or Ask also stops every picture, script and frame a page loads from that site, and an Ask on one of those counts as a Deny because a page cannot wait for a question. Website rules for All folders apply in the panel. Not covered: what a command does on the network, because Bunny cannot see inside a command.</p>
+          <p><b>Tool</b>, by name, like <code>browser_*</code> or <code>computer_*</code>, or one connector's tools (choose the connector). An Allow never switches a tool on, and it never removes a question that always comes first: sending, building a tool, installing code, running a local connector.</p>
+          <p><b>Helper or chat</b>: <code>helper:*</code> (or <code>helper:code</code>, <code>research</code>, <code>see</code>, <code>chat</code>), <code>chat:start</code> and <code>chat:message</code>. A message to another chat speaks for you, so it always asks, whatever the rule says.</p>
+          <p><b>Commands that never ask in Ask mode</b> (your own rules still come first, and a file from this PC that was just read still asks): <span id="rules-readonly"></span>. Only these forms, with a short list of options each, inside your folder; anything chained, redirected or with another option asks.</p>
+        </details>
         <div class="addr" id="rules-starters"><span class="rules-dim">Start from:</span></div>
         <div class="try" id="rules-try-box">
           <label for="rules-try">Try a command</label>
@@ -803,7 +804,7 @@
   import { installContext, installRowState, installRowText, runInstall } from './install-app.js';
   import { describeAction, activityView, chooseLevel, levelPill, paintStatus, warningBox, everythingDevices, IDLE_SHORT, DEVICE_ACCESS_SENTENCE } from './device-access.js';
   import { deviceLevel } from './browser-mode.js';
-  import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
+  import { applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
   const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
   import { applyEmbed } from './embed.js';
@@ -814,7 +815,6 @@
   const theme = $('theme');
   const allowlist = $('allowlist');
   const aliases = $('aliases');
-  const language = $('language');
   const notifications = $('notifications');
   // The window that shows this page waits for the saves in flight before it closes it (closeSettings in chat.js), so a change made just before closing is never lost.
   const pendingSaves = (window.bunnyPendingSaves = new Set());
@@ -825,19 +825,6 @@
     p.then(done, done);
     return p;
   };
-
-  // The list of languages comes from one place, so the page and the app agree.
-  language.replaceChildren(...LANGUAGES.map((l) => {
-    const option = document.createElement('option');
-    option.value = l.code;
-    option.textContent = l.name;
-    return option;
-  }));
-
-  language.addEventListener('change', async () => {
-    applyLanguage(language.value);
-    await save({ language: language.value });
-  });
 
   notifications.addEventListener('change', async () => {
     const wanted = notifications.checked;
@@ -1094,6 +1081,7 @@
         throw new Error('The Google sign-in was not finished.');
       }));
       b.disabled = !a.googleReady;
+      $('google-howto').hidden = Boolean(a.googleReady); // the honest note: why the button is off, and the steps that turn it on
       go.append(b);
     }
   }
@@ -1322,6 +1310,16 @@
     const lists = $('rules-lists');
     const line = $('rules-line');
     const state = { rules: { global: [], folders: {} }, tab: 'all', folder: null, folders: [] };
+    const FIXED_ASKS = ['gmail_send', 'create_tool', 'install_from_github', 'add_connector', 'message_session', 'chat:message']; // PG2-c: an Allow never removes these questions
+    const wild = (pat, text) => { // * is the only wildcard; every other character is literal
+      const parts = pat.toLowerCase().split('*'); const t = text.toLowerCase();
+      if (parts.length === 1) return t === parts[0];
+      if (!t.startsWith(parts[0]) || !t.endsWith(parts[parts.length - 1]) || t.length < parts[0].length + parts[parts.length - 1].length) return false;
+      let at = parts[0].length;
+      for (const mid of parts.slice(1, -1)) { const i = t.indexOf(mid, at); if (i < 0) return false; at = i + mid.length; }
+      return true;
+    };
+    const connectorNames = new Map();
     const EFFECTS = [['deny', 'Deny', 'Bunny is told no'], ['ask', 'Ask', 'Bunny always asks first'], ['allow', 'Allow', 'Bunny goes ahead']];
     const STARTERS = [
       { label: 'Ask before git push*', rule: { kind: 'command', effect: 'ask', pattern: 'git push*' } },
@@ -1344,7 +1342,10 @@
 
     function row(rule, scopeLabel) {
       const r = el('div', 'rr');
-      r.append(el('span', 'kind', rule.kind === 'command' ? 'Command' : `Path · ${rule.ops === 'reads' ? 'reads' : 'edits'}`), el('span', 'pat', rule.pattern));
+      const KIND = { command: 'Command', domain: 'Website', tool: 'Tool', agent: 'Helper or chat' };
+      const shown = rule.kind === 'tool' ? rule.pattern.replace(/^([0-9a-f-]{36}):/, (m, id) => (connectorNames.has(id) ? `${connectorNames.get(id)}:` : m)) : rule.pattern; // PG2-a: the rule keeps the connector's id; the person sees its name
+      r.append(el('span', 'kind', KIND[rule.kind] ?? `Path · ${rule.ops === 'reads' ? 'reads' : 'edits'}`), el('span', 'pat', shown));
+      if (rule.effect === 'allow' && (rule.kind === 'tool' || rule.kind === 'agent') && FIXED_ASKS.some((t) => wild(rule.pattern, t))) r.append(el('span', 'chip', 'always asks'));
       if (scopeLabel) r.append(el('span', 'chip', scopeLabel));
       else {
         const rm = el('button', 'rm', 'Remove');
@@ -1388,14 +1389,16 @@
 
     $('rules-add-btn').addEventListener('click', async () => {
       const [kind, ops] = $('rules-kind').value.split(':');
-      const pattern = $('rules-pattern').value;
+      let pattern = $('rules-pattern').value;
+      if (kind === 'tool' && $('rules-connector').value) pattern = `${$('rules-connector').value}:${pattern.trim() || '*'}`;
       const effect = $('rules-effect').value;
       $('rules-pattern').value = '';
       await queued(() => add({ kind, pattern, effect, ...(ops ? { ops } : {}) }));
       if (line.classList.contains('is-bad') && !$('rules-pattern').value) $('rules-pattern').value = pattern; // keep what was typed so it can be fixed
     });
     $('rules-pattern').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('rules-add-btn').click(); } });
-    $('rules-kind').addEventListener('change', () => { $('rules-pattern').placeholder = $('rules-kind').value === 'command' ? 'npm run lint*' : 'secrets/**'; });
+    const PLACEHOLDER = { command: 'npm run lint*', 'path:edits': 'secrets/**', 'path:reads': 'secrets/**', domain: '*.example.com', tool: 'browser_*', agent: 'helper:*' };
+    $('rules-kind').addEventListener('change', () => { $('rules-pattern').placeholder = PLACEHOLDER[$('rules-kind').value] ?? ''; $('rules-connector').hidden = $('rules-kind').value !== 'tool'; });
     for (const s of STARTERS) {
       const b = el('button', 'chip', s.label);
       b.type = 'button';
@@ -1429,6 +1432,12 @@
         for (const f of [...sessions.map((s) => s.folder), ...Object.keys(state.rules.folders)]) if (f && !seen.some((x) => x.toLowerCase() === f.toLowerCase())) seen.push(f);
         state.folders = seen;
         state.folder = seen[0] ?? null;
+        try { // the connectors a Tool rule can be for: the rule keeps the id, the screen shows the name
+          const connectors = await getJSON('/api/mcp');
+          for (const c of connectors) connectorNames.set(c.id, c.name);
+          $('rules-connector').replaceChildren(Object.assign(el('option', '', 'Any tool'), { value: '' }), ...connectors.map((c) => { const o = el('option', '', c.name); o.value = c.id; return o; }));
+        } catch { /* a Tool rule by plain name still works */ }
+        try { $('rules-readonly').textContent = (await getJSON('/api/permission-rules/read-only')).commands.join(', '); } catch { /* the notes still read without the list */ }
         const pick = $('rules-folder');
         pick.replaceChildren(...seen.map((f) => { const o = el('option', '', f.split(/[\\/]/).filter(Boolean).pop() ?? f); o.value = f; o.title = f; return o; }));
         paint();
@@ -1821,8 +1830,7 @@
     $('auto-steps').value = settings.autoContinueSteps ?? 500;
     $('auto-minutes').value = settings.autoContinueMinutes ?? 120;
     $('auto-tokens').value = settings.autoContinueTokens ?? 5000000;
-    language.value = settings.language ?? 'en';
-    applyLanguage(language.value);
+    applyLanguage('en'); // English only for now
     notifications.checked = Boolean(settings.notifications);
     $('notifications-state').textContent = settings.notifications ? 'on' : 'off';
     $('instructions').value = settings.instructions ?? '';

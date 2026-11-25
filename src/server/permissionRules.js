@@ -15,6 +15,7 @@
 import { posix } from 'node:path';
 import { analyseCommand, splitPowerShell } from './commandSplit.js';
 import { globMatcher } from './glob.js';
+import { NEW_KINDS, checkNewKind, wildcard as textWildcard } from './pgRules.js';
 
 export const MAX_RULES = 200;
 export const MAX_PATTERN = 200;
@@ -23,13 +24,18 @@ const STRENGTH = { deny: 3, ask: 2, allow: 1 };
 
 /** Validate and tidy one rule from the settings screen. Returns { rule } or { error }. */
 export function checkRule(raw) {
-  const kind = raw?.kind === 'path' ? 'path' : raw?.kind === 'command' ? 'command' : null;
-  if (!kind) return { error: 'Choose Command or Path.' };
+  const kind = raw?.kind === 'path' ? 'path' : raw?.kind === 'command' ? 'command' : NEW_KINDS.includes(raw?.kind) ? raw.kind : null;
+  if (!kind) return { error: 'Choose Command or Path (or Website, Tool or Helper).' };
   if (!EFFECTS.includes(raw?.effect)) return { error: 'Choose Deny, Ask or Allow.' };
   const pattern = String(raw?.pattern ?? '').replace(/\s+/g, ' ').trim();
   if (!pattern) return { error: 'Type a pattern first.' };
   if (pattern.length > MAX_PATTERN) return { error: `A pattern can be at most ${MAX_PATTERN} characters.` };
   if (/[\r\n\0]/.test(String(raw?.pattern ?? ''))) return { error: 'A pattern is one line.' };
+  if (NEW_KINDS.includes(kind)) { // PERMISSIONS-GAPS: a website, a tool by name, helpers and other chats (pgRules.js)
+    const checked = checkNewKind(kind, pattern);
+    if (checked.error) return { error: checked.error };
+    return { rule: { id: typeof raw?.id === 'string' && raw.id ? raw.id.slice(0, 64) : `r_${Math.random().toString(36).slice(2, 10)}`, kind, pattern: checked.pattern, effect: raw.effect } };
+  }
   const rule = { id: typeof raw?.id === 'string' && raw.id ? raw.id.slice(0, 64) : `r_${Math.random().toString(36).slice(2, 10)}`, kind, pattern, effect: raw.effect };
   if (kind === 'path') {
     const text = pattern.replace(/\\/g, '/');
@@ -181,6 +187,7 @@ export function describeRule(verdict) {
 /** A new Allow that a Deny already covers never applies: say so. Returns the covering rule or null. */
 export function coveredByDeny(rules, rule) {
   if (rule.effect !== 'allow') return null;
+  if (NEW_KINDS.includes(rule.kind)) return rules.find((r) => r.kind === rule.kind && r.effect === 'deny' && textWildcard(r.pattern, rule.pattern)) ?? null;
   if (rule.kind === 'command') return rules.find((r) => r.kind === 'command' && r.effect === 'deny' && wildcard(r.pattern, rule.pattern)) ?? null;
   return rules.find((r) => r.kind === 'path' && r.effect === 'deny' && r.ops === rule.ops && globMatcher(r.pattern)(norm(rule.pattern))) ?? null;
 }

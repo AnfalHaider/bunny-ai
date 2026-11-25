@@ -2118,6 +2118,9 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .rules .addr { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; padding: 10px 12px; border: 1px dashed var(--line-strong, var(--line)); border-radius: var(--r-md); margin: var(--sp-3) 0; }
 .rules .addr input { flex: 1; min-width: 150px; }
 .rules .rules-dim { font-size: var(--fs-sm); color: var(--text-dim); }
+.rules .rules-notes { margin-top: var(--sp-3, 12px); font-size: var(--fs-sm); color: var(--text-dim); }
+.rules .rules-notes summary { cursor: pointer; color: var(--text); }
+.rules .rules-notes p { margin: 8px 0 0; line-height: 1.5; }
 .rules .rules-line { font-size: 12.5px; color: var(--warn); min-height: 1em; }
 .rules .rules-line.is-bad { color: var(--bad); }
 .rules .try { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar); padding: 10px 12px; font-size: var(--fs-sm); }

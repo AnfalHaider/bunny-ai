@@ -28,9 +28,10 @@ async function scripted(t, steps) {
 }
 
 /** One reply on a fresh chat in `mode`; every card is answered by `answer(card)` (a choice id or false). Reports the cards, the capability cards and the whole stream. */
-async function run(t, steps, { mode = 'ask', answer = () => 'on', overrides = {} } = {}) {
+async function run(t, steps, { mode = 'ask', answer = () => 'on', overrides = {}, rules = null } = {}) {
   const { base } = await startApp(t, { fake: false, ...overrides });
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: await scripted(t, steps) });
+  if (rules) await fetch(`${base}/api/permission-rules`, { method: 'PUT', headers: J, body: JSON.stringify({ global: rules, folders: {} }) });
   const { body: session } = await post(base, '/api/sessions', { title: 'F10' });
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: J, body: JSON.stringify({ value: mode }) });
   const res = await fetch(`${base}/api/sessions/${session.id}/messages`, { method: 'POST', headers: J, body: JSON.stringify({ content: 'add it', providerId: 'openai', model: 'gpt-4o', workMode: 'chat' }) });
@@ -173,3 +174,11 @@ test('adding something that is already there asks nothing: no card for nothing, 
   assert.equal(r.cards.length, 1, 'the second, identical add shows no card');
   assert.equal((await mcpList(r.base)).length, 1);
 });
+
+test('PG1 (Security): a connector added and switched on in the same reply is not listed or started when a rule denies its address', async (t) => {
+  const r = await run(t, [addRemote()], { mode: 'auto', answer: () => 'on', rules: [{ kind: 'domain', effect: 'deny', pattern: '*.example-notion.test' }] });
+  assert.doesNotMatch(r.all, /did not start|You now have its tools|is ready/, 'its tools were not loaded into the reply');
+  const open = await run(t, [addRemote()], { mode: 'auto', answer: () => 'on' });
+  assert.match(open.all, /did not start|is ready|You now have its tools/, 'control: with no deny rule the same reply tries to start it');
+});
+

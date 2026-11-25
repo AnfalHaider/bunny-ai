@@ -102,7 +102,7 @@ export const AGENT_STRINGS = {
     'account.signIn': 'Sign in',
     'account.signOut': 'Sign out',
     'account.googleDesc': 'Sign in with your Google (Gmail) account.',
-    'account.googleNeedsApp': 'Sign in with your Google (Gmail) account. Needs a Google client ID under Sign-in apps first.',
+    'account.googleNeedsApp': 'Google sign-in is switched off because Bunny AI has no Google client ID yet. Google only lets an app sign people in once its maker registers it, and Bunny AI ships without one. Follow the steps below once, and the button turns on.',
     'account.signInGoogle': 'Sign in with Google',
     'account.googleWorkspace': 'Also let Bunny use Gmail, Calendar and Drive (it drafts emails; sending always asks you first)',
     'account.apps': 'Sign-in apps',

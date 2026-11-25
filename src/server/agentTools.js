@@ -145,7 +145,7 @@ export function screenLinesText(lines, scale = 1, max = 150) {
 // ---- helpers and other chats ----
 
 export const TEAM_TOOL_RISK = {
-  run_subagent: 'own', start_session: 'own', list_models: 'read', list_sessions: 'read', read_session: 'read', message_session: 'edit',
+  run_subagent: 'own', start_session: 'own', list_models: 'read', list_sessions: 'read', read_session: 'read', message_session: 'send', // PG3-a: a message to another chat speaks for the person, so it asks in every mode and no allow rule skips it
 };
 Object.assign(AGENT_TOOL_RISK, TEAM_TOOL_RISK);
 

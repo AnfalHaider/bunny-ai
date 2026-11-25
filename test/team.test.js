@@ -45,6 +45,22 @@ const send = (base, sid, content) => fetch(`${base}/api/sessions/${sid}/messages
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'gpt-4o' }),
 }).then((r) => r.text());
 
+// PG3-a: a message to another chat speaks for the person, so it asks in every mode, Auto included: this sender says yes to every card
+async function sendAnswering(base, sid, content) {
+  const res = await fetch(`${base}/api/sessions/${sid}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content, providerId: 'openai', model: 'gpt-4o' }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let all = '';
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    const piece = dec.decode(value, { stream: true }); buf += piece; all += piece;
+    let i;
+    while ((i = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (/^event: permission/m.test(block)) await fetch(`${base}/api/sessions/${sid}/permission/${JSON.parse(/^data: (.*)$/m.exec(block)[1]).id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ allowed: true }) });
+    }
+  }
+  return all;
+}
+
 test('two helpers run side by side, report back, and are kept as chats nested under this one', async (t) => {
   const { base } = await startApp(t, { fake: false });
   const provider = await teamProvider(t, (toolsSoFar) => (toolsSoFar === 0 ? [
@@ -99,7 +115,7 @@ test('one chat can message another and read it; a background chat works on its o
   await send(base, other.id, 'Remember: the secret word is carrot.');
   const { body: asker } = await post(base, '/api/sessions', { title: 'Asker' });
   await fetch(`${base}/api/sessions/${asker.id}/setting/permissionMode`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: 'auto' }) });
-  await send(base, asker.id, 'send it');
+  await sendAnswering(base, asker.id, 'send it');
 
   const tools = provider.seen.filter((b) => /send it/.test(JSON.stringify(b.messages)) && !/helper agent/.test(b.messages[0].content))
     .at(-1).messages.filter((m) => m.role === 'tool').map((m) => m.content);
