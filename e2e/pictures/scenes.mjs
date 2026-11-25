@@ -8,8 +8,7 @@
 //   api.open(url)      go to a page of the app and wait for the fonts
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { heldProvider } from './held-provider.mjs';
 
 export const FIXED_TIME = '2026-01-15T14:12:00';
@@ -41,9 +40,12 @@ async function live(api, steps) {
   return provider;
 }
 
-/** An invented project folder with a fixed name (so the page shows the same words), made again each time. */
+/** The folder every invented project lives under: a fixed place that does not depend on the user name or on TEMP (a picture draws the folder's path), the system drive's root. */
+const PICTURE_ROOT = join(`${process.env.SystemDrive ?? 'C:'}${sep}`, 'bunny-pictures');
+
+/** An invented project folder with a fixed path (so the page shows the same words on every PC), made again each time. */
 function project(name, files) {
-  const root = join(tmpdir(), 'bunny-pictures', name);
+  const root = join(PICTURE_ROOT, name);
   rmSync(root, { recursive: true, force: true });
   for (const [rel, text] of Object.entries(files)) { const f = join(root, rel); mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, text); }
   return root;
