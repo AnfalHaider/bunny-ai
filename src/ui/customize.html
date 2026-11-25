@@ -24,7 +24,7 @@
 <main class="page cz-page">
   <h1>Customize</h1>
   <p class="sub">Connectors, skills and plugins the model can use in your chats</p>
-  <p class="sub" id="cz-address-help">A connector the AI finds is added only at a public https address, and is checked again at every call. A connector you add yourself here may use a private address or http, and says so. One saved before Bunny checked addresses is kept as it was and marked for review. "Add from address…" takes a git host, an archive (.zip, .tar.gz), a SKILL.md, a remote connector, npm:name or pypi:name, shows what it understood, then shows one card with the exact source and its fingerprint (a commit, a sha256, or a version with its integrity). Nothing runs while it is installed, and what is installed is exactly what the card showed. "Not pinned" connectors (npx or uvx) can be pinned to one exact version from their menu.</p>
+  <p class="sub" id="cz-address-help">A connector the AI finds is added only at a public https address, and is checked again at every call. A connector you add yourself here may use a private address or http, and says so. One saved before Bunny checked addresses is kept as it was and marked for review. "Add from address…" takes a git host, an archive (.zip, .tar.gz), a skill file, a remote connector, npm:name or pypi:name, shows what it understood, then shows one card with the exact source and its fingerprint (a commit, a sha256, or a version with its integrity). Nothing runs while it is installed, and what is installed is exactly what the card showed. "Not pinned" connectors (npx or uvx) can be pinned to one exact version from their menu.</p>
   <p class="sub" id="cz-trust-help">A connector's tools that call themselves read-only run without asking only after you choose "Trust read-only labels" for it. Until then, Plan mode offers none of that connector's tools, even the ones it labels read-only.</p>
 
   <div class="cz-bar">
@@ -44,7 +44,7 @@
         <button class="menu-item" role="menuitem" data-add="connector"><span class="label">Connector<small>An MCP server reached over https</small></span></button>
         <button class="menu-item" role="menuitem" data-add="skill"><span class="label">Skill<small>Instructions the model follows when it is on</small></span></button>
         <button class="menu-item" role="menuitem" data-add="github"><span class="label">Plugin from GitHub<small>Paste a repository link: its skills and connectors are added</small></span></button>
-        <button class="menu-item" role="menuitem" data-add="address"><span class="label">Add from address…<small>A link, a package name or a SKILL.md</small></span></button>
+        <button class="menu-item" role="menuitem" data-add="address"><span class="label">Add from address…<small>A link, a package name or a skill file</small></span></button>
         <button class="menu-item" role="menuitem" data-add="plugin"><span class="label">Plugin from file<small>A .json bundle of connectors and skills</small></span></button>
       </div>
       <input type="file" id="cz-plugin-file" accept=".json,application/json" hidden />
@@ -471,7 +471,7 @@
   function addFromAddress() {
     const dlg = document.createElement('dialog'); dlg.className = 'cz-pin-card cz-address'; dlg.setAttribute('aria-label', 'Add from address');
     const h = document.createElement('h3'); h.textContent = 'Add from address';
-    const sub = document.createElement('p'); sub.className = 'hint'; sub.textContent = 'A plugin, a skill or a connector, from any website. Accepted: a git host, an archive (.zip, .tar.gz), a SKILL.md, a remote connector, npm:name, pypi:name. Only https. Nothing is installed until you answer the next card.';
+    const sub = document.createElement('p'); sub.className = 'hint'; sub.textContent = 'A plugin, a skill or a connector, from any website. Accepted: a git host, an archive (.zip, .tar.gz), a skill file, a remote connector, npm:name, pypi:name. Only https. Nothing is installed until you answer the next card.';
     const row = document.createElement('div'); row.className = 'cz-pin-actions';
     const input = document.createElement('input'); input.className = 'input'; input.type = 'text'; input.placeholder = 'https://github.com/example/meeting-notes'; input.setAttribute('aria-label', 'Address'); input.style.flex = '1 1 260px';
     const check = document.createElement('button'); check.type = 'button'; check.className = 'btn'; check.textContent = 'Check';

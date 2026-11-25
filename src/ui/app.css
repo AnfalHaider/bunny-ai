@@ -2630,6 +2630,7 @@ textarea.bad, input.bad { border-color: var(--bad); }
   .pm-modal .modal-foot .btn, .pm-card-head .btn { min-height: 44px; }
   .pm-backdrop { padding-top: 8px; }
   .modal.pm-modal { max-height: calc(100dvh - 16px); width: calc(100vw - 16px); overflow-y: auto; }
+}
 
 /* IA-9 (QA): the Pin card's buttons are touch targets on a phone, with a visible border on the secondary one, like the permission card */
 @media (max-width: 600px) {
