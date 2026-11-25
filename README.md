@@ -322,7 +322,7 @@ Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same te
 
 <p align="center"><img src="docs/images/folder-trust.png" alt="The card &quot;Trust this folder?&quot; with two separate questions: follow the folder's instruction files, and run in Auto here" width="700" /></p>
 
-The same card asks a second question, **Run in Auto here?**: **Trust this folder for Auto** lets commands and changes run without asking you, unless Bunny's check stops them or a rule asks, and **Not now, ask me each time** keeps asking. You can change it any time in **Settings**, under **Trusted folders**.
+The same card asks a second question, **Run in Auto here?**: **Trust this folder for Auto** lets commands and changes run without asking you, unless Bunny's check stops them or a rule asks, and **Not now, ask me each time** keeps asking. You can change it any time in **Settings → Permissions**, under **Trusted folders**.
 
 <p align="center"><img src="docs/images/project-instructions-changed.png" alt="The Working folder card's Project instructions block, with AGENTS.md marked &quot;changed since it was read&quot;" width="700" /></p>
 <!-- V0115:end project-instructions -->
