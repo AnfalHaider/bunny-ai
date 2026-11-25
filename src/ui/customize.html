@@ -235,7 +235,13 @@
           const msg = document.createElement('span'); msg.className = 'hint';
           const close = () => { dlg.close(); dlg.remove(); };
           no.onclick = async () => { await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'DELETE').catch(() => {}); close(); };
-          yes.onclick = async () => { yes.disabled = true; try { await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'POST', {}); close(); await load(); } catch (err) { msg.textContent = err.message; yes.disabled = false; } };
+          yes.onclick = async () => { yes.disabled = true; try {
+            const pinned = await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'POST', {});
+            close();
+            // the row changes AT ONCE from the answer (no waiting for the whole list to reload), then the list refreshes behind it
+            if (pinned?.id) { const i = data.connectors.findIndex((c) => c.id === pinned.id); if (i >= 0) data.connectors[i] = { ...data.connectors[i], ...pinned, unpinned: false }; paint(); }
+            load().catch(() => {});
+          } catch (err) { msg.textContent = err.message; yes.disabled = false; } };
           dlg.addEventListener('cancel', () => { sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'DELETE').catch(() => {}); });
           bar.append(yes, no, msg); dlg.append(h, pre, bar); document.body.append(dlg); dlg.showModal();
         };

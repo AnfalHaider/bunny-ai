@@ -2537,3 +2537,9 @@ dialog.cz-pin-card pre.code { white-space: pre-wrap; overflow-wrap: anywhere; ma
 .fr-dh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin: var(--sp-4) 0 var(--sp-2); }
 .fr-files { border: 1px solid var(--line); border-radius: var(--r-md); margin: var(--sp-3) 0; }
 .fr-files .fr-row:last-child { border-bottom: 0; }
+
+/* IA-9 (QA): the Pin card's buttons are touch targets on a phone, with a visible border on the secondary one, like the permission card */
+@media (max-width: 600px) {
+  dialog.cz-pin-card .cz-pin-actions .btn, dialog.cz-pin-card .cz-pin-actions button { min-height: 44px; }
+  dialog.cz-pin-card .cz-pin-actions .btn-ghost { border: 1px solid var(--line-strong, var(--line)); background: transparent; }
+}
