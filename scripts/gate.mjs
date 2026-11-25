@@ -5,11 +5,12 @@
 //   node scripts/gate.mjs            everything
 //   node scripts/gate.mjs --quick    skip the end-to-end suite (local iteration only, never for a push)
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditStep, exceptionsSource } from './audit-exceptions.mjs';
-import { failureDetail } from './gate-report.mjs';
+import { failureDetail, playwrightSummary } from './gate-report.mjs';
 import { FAIL_MARKS } from './gate-marks.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -18,17 +19,19 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 const results = [];
-function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures = false, lines = null } = {}) {
+function step(name, cmd, args, { tail = 6, ok = (r) => r.status === 0, failures = false, lines = null, env = null, extra = null } = {}) {
   const t0 = Date.now();
   // Only npm/npx (.cmd files on Windows) need a shell; a shell would mangle git patterns and paths with spaces.
   const shell = process.platform === 'win32' && /\.cmd$/.test(cmd);
-  const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', shell, maxBuffer: 64 << 20 });
+  const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', shell, maxBuffer: 64 << 20, ...(env ? { env } : {}) });
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split(/\r?\n/);
-  const pass = ok(r, out);
+  const extraInfo = extra ? extra(r) : null; // { lines, fail }: more to print, and a failure the exit status did not show
+  const pass = ok(r, out) && !extraInfo?.fail;
   const shown = lines ? lines(r) : out.slice(-tail); // a step may say what to show instead of its last lines (the audit prints JSON)
   results.push({ name, pass, secs: Math.round((Date.now() - t0) / 1000) });
   console.log(`\n== ${pass ? 'PASS' : 'FAIL'}  ${name}  (${Math.round((Date.now() - t0) / 1000)}s)`);
   console.log(shown.map((l) => `   ${l}`).join('\n'));
+  if (extraInfo?.lines?.length) console.log(extraInfo.lines.map((l) => `   ${l}`).join('\n'));
   // GATE-WHY: every failed step says how it ended (exit status, signal, spawn error such as ENOBUFS, and any HUNG:/EXIT: lines).
   if (!pass) {
     console.log('   -- why it failed --');
@@ -94,7 +97,22 @@ step('engine pins', process.execPath, ['scripts/engine-pins.mjs'], { tail: 6 });
 step('help pictures listed', process.execPath, ['scripts/pictures-check.mjs'], { tail: 12 }); // O7: every help picture is listed once, shown, and described the same way (no browser; also in --quick)
 step('css matches its build', process.execPath, ['scripts/build-css.mjs', '--check'], { tail: 6 }); // CSS-CHECK: src/ui/app.css is generated; a hand edit would be lost at the next build (no browser; also in --quick)
 step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
-if (!quick) step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line'], { tail: 8 });
+// GATE-E2E-LIST: the line reporter for the log, the JSON reporter for the list: every failed test, spec:line and title, and the totals are printed whatever the tail shows (see playwrightSummary).
+const e2eJson = join(tmpdir(), `bunny-gate-e2e-${process.pid}.json`);
+if (!quick) {
+  step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line,json'], {
+    tail: 8,
+    env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: e2eJson },
+    extra: (r) => {
+      let report = null;
+      try { report = JSON.parse(readFileSync(e2eJson, 'utf8')); } catch { /* no report */ }
+      try { rmSync(e2eJson, { force: true }); } catch { /* a temp file */ }
+      if (!report) return { lines: ['no JSON report was written, so there is no list of failed tests (the run crashed before it ended)'], fail: r.status !== 0 };
+      const sum = playwrightSummary(report);
+      return { lines: sum.lines, fail: sum.failed > 0 }; // a failed test fails the step even if the exit status said otherwise
+    },
+  });
+}
 step('memory check', process.execPath, ['.bootstrap/bin/mem.mjs', 'check'], { tail: 4 });
 // Everything npm installs is audited at high; a high finding passes only if the COMMITTED docs/security/audit-exceptions.json lists it, with the owner's words, signed and not expired (an uncommitted edit fails the step).
 let auditJudged = { ok: false, lines: [] };
