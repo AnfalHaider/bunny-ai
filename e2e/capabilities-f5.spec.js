@@ -35,7 +35,7 @@ test('connector_sign_in: the card, the Sign in step, the stand-in sign-in comple
   await card.getByRole('button', { name: 'Sign in', exact: true }).click();
   // the same Sign in button a connector found at the start of a reply shows; the person's browser is played by this test
   const popup = page.waitForEvent('popup');
-  await page.locator('.signin-step').getByRole('button', { name: 'Sign in' }).first().click();
+  await page.locator('.signin-step').getByRole('button', { name: 'Sign in' }).click();
   const opened = await popup;
   const { code, state } = fake.browse(opened.url());
   const back = await fetch(`${baseURL}/api/connectors/oauth/callback?${new URLSearchParams({ state, code })}`, { headers: { 'sec-fetch-site': 'cross-site' } });

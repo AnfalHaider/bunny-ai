@@ -1406,8 +1406,13 @@ function renderTitle() {
  * W3-6: a connector that needs the person to sign in. The step says "Needs sign-in" and offers Sign in (the person's own browser opens,
  * and the chat carries on by itself once they are back) and Skip it (just dismisses; a later message works as usual once signed in).
  */
+/** Is a Sign in step for this connector already on screen? (a chat shows one step per connector, not one per place that noticed) */
+function openSignInFor(serverId) {
+  return [...document.querySelectorAll('.signin-step')].some((b) => b.dataset.server === String(serverId) && [...b.querySelectorAll('button')].some((x) => x.textContent === 'Sign in')); // one still waiting for the person
+}
 function signInStep(info) {
   const box = element('div', { className: 'signin-step' });
+  box.dataset.server = String(info.serverId ?? '');
   const note = element('span', { className: 'hint' });
   const clientBox = element('input', { className: 'input', placeholder: 'Client ID', hidden: true });
   clientBox.setAttribute('aria-label', 'Client ID');
@@ -1489,7 +1494,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       tc.append(copy);
     }
     wrap.append(tc);
-    if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
+    if (m.needsSignIn && m.serverId && !openSignInFor(m.serverId)) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
     if (m.madeFile) wrap.append(madeFileCard(m.madeFile));
@@ -2088,7 +2093,8 @@ function showLiveTool(bodyEl, info) {
   line.dataset.status = info.status;
   line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
   if (info.confined && !line.querySelector('.confined-mark')) line.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13
-  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
+  // one Sign in step per connector in this reply: the connector found at the start and the one the person just allowed are the same connector
+  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step') && !openSignInFor(info.serverId)) {
     line.querySelector('.tag')?.classList.add('is-blocked');
     line.append(signInStep(info));
   }

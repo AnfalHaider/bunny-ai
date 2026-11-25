@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createFolderTrust, isGitWorkTree, smartMode } from '../src/server/folderTrust.js';
 import { startApp, post } from './helpers.js';
+import http from 'node:http';
 import { WINDOW_ONLY_SETTING_KEYS } from '../src/server/windowOnly.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 
@@ -148,20 +149,59 @@ test('F12 gap: a new chat starts in the default mode from Settings; a device\'s 
   assert.equal((await post(base, '/api/sessions', { title: 'm', permissionMode: 'plan' })).body.permissionMode, 'plan', 'an explicit mode wins');
 });
 
-test('F12: a chat a device starts is Ask even when the default is an explicit auto or smart; Smart starts in Ask while the check is off or was down', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const src = await readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
-  assert.match(src, /body\.permissionMode === undefined && !req\.bunnyRemote && !req\.bunnyDevice && \['smart', 'ask', 'accept', 'plan', 'auto'\]\.includes\(settings\.defaultPermissionMode\)/);
-  assert.equal(smartMode({ ...ok, judgeOn: false }).mode, 'ask');
-  assert.equal(smartMode({ ...ok, judgeDown: true }).mode, 'ask');
-  assert.match(smartMode({ ...ok, judgeDown: true }).why, /Smart starts in Ask while Bunny's check is off or can't be reached/);
-  assert.match(src, /judgeDown: Date\.now\(\) < judgeDownUntil/);
-});
+const PASS = 'correct horse battery staple';
+function lan(url, { method = 'GET', path = '/', headers = {}, body = null } = {}) {
+  const u = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: u.hostname, port: u.port, path, method, headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...headers } }, (res) => {
+      let text = '';
+      res.on('data', (c) => { text += c; });
+      res.on('end', () => resolve({ status: res.statusCode, text, json: () => { try { return JSON.parse(text); } catch { return null; } }, headers: res.headers }));
+    });
+    req.on('error', reject);
+    req.end(body ? JSON.stringify(body) : undefined);
+  });
+}
 
-test('F12: every place that refuses a device uses a message that exists (a device\'s folder-trust or judge write is a clean 403, never a 500)', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const src = await readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
-  assert.match(src, /import \{[^}]*\bDEVICE_ACCESS_MESSAGE\b[^}]*\} from '\.\/remoteAccess\.js'/, 'the constant the refusals use is imported');
-  const { DEVICE_ACCESS_MESSAGE } = await import('../src/server/remoteAccess.js');
-  assert.ok(typeof DEVICE_ACCESS_MESSAGE === 'string' && DEVICE_ACCESS_MESSAGE.length > 5);
-});
+async function device(t, level) {
+  const started = await startApp(t, { lanAddress: '127.0.0.1' });
+  const on = await (await fetch(`${started.base}/api/remote`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true, passcode: PASS }) })).json();
+  assert.ok(on.url, JSON.stringify(on));
+  t.after(() => started.app.remote.disable());
+  const url = on.url.replace(/\/$/, '');
+  const host = new URL(url).host;
+  const signin = await lan(url, { method: 'POST', path: '/api/remote/signin', headers: { host, origin: `http://${host}` }, body: { passcode: PASS } });
+  const cookie = String(signin.headers['set-cookie']?.[0] ?? '').split(';')[0];
+  const page = await lan(url, { path: '/src/ui/index.html', headers: { host, cookie } });
+  const csrf = /name="bunny-csrf" content="([a-f0-9]+)"/.exec(page.text)[1];
+  if (level === 'everything') {
+    const id = started.app.remote.list()[0].id;
+    assert.equal((await fetch(`${started.base}/api/remote/devices/${id}/level`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ level: 'everything' }) })).status, 200);
+  }
+  const w = { host, cookie, origin: `http://${host}`, 'x-bunny-csrf': csrf };
+  const call = (method, path, body = null) => lan(url, { method, path, headers: w, body });
+  return { ...started, call };
+}
+
+
+for (const level of ['everything', 'chats']) {
+  test(`F12 over real HTTP: a device at ${level} cannot change trusted folders or the check (403), and its new chat starts in Ask even when the default is an explicit auto`, async (t) => {
+    const d = await device(t, level);
+    const win = (path, method, body) => fetch(`${d.base}${path}`, { method, headers: jsonH, body: JSON.stringify(body) });
+    const repo = await mkdtemp(join(tmpdir(), 'bunny-f12-dev-'));
+    execFileSync('git', ['init', '-q'], { cwd: repo });
+    for (const [m, p, b] of [['PUT', '/api/folder-trust', { folder: repo, auto: true }], ['DELETE', '/api/folder-trust', { folder: repo }], ['GET', '/api/folder-trust'], ['PUT', '/api/settings', { autoJudgeEnabled: false }]]) {
+      const r = await d.call(m, p, b ?? null);
+      assert.equal(r.status, 403, `${m} ${p} -> ${r.status} ${r.text.slice(0, 120)}`);
+    }
+    assert.equal((await (await win(`/api/folder-trust?folder=${encodeURIComponent(repo)}`, 'GET')).json()).auto, null, 'nothing was trusted by the refused writes');
+    for (const mode of ['auto', 'smart']) {
+      assert.equal((await win('/api/settings', 'PUT', { defaultPermissionMode: mode })).status, 200);
+      const made = await d.call('POST', '/api/sessions', { title: 'from a device' });
+      assert.equal(made.status, 200, made.text.slice(0, 120));
+      assert.equal(made.json().permissionMode, 'ask', `a device's new chat is Ask when the default is ${mode}`);
+      const own = await (await win('/api/sessions', 'POST', { title: 'from the window' })).json();
+      assert.equal(own.permissionMode, mode, 'the window own new chat takes the default');
+    }
+  });
+}
