@@ -151,15 +151,19 @@ test('on a 360 px phone the project page, the suggestion card and the context vi
   await request.post(`/api/projects/${project.id}/memory`, { data: { kind: 'decision', text: 'Use tabs, not spaces, in every file of the shop, including the long generated ones.' } });
   const chat = await (await request.post('/api/sessions', { data: { title: 'Chat', projectId: project.id } })).json();
   await page.goto(`/?s=${chat.id}`);
-  await page.setViewportSize({ width: 360, height: 800 });
+  await page.setViewportSize({ width: 360, height: 740 });
   const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
   await send(page, 'we decided on tabs');
   await expect(page.locator('.pm-card')).toBeVisible();
   expect(await fits()).toBe(true);
+  for (const b of await page.locator('.pm-card .pm-item button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(43.5); // Keep, Edit, Discard are real buttons on a phone
   await page.locator('#project-context-chip').click();
   await expect(page.locator('.pm-modal .pm-part')).toHaveCount(5);
   expect(await fits()).toBe(true);
   const box = await page.locator('.pm-modal').boundingBox();
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(361);
+  expect(box.y + box.height).toBeLessThanOrEqual(740); // the panel fits the screen
+  const sizes = await page.locator('.pm-modal .pm-part').first().innerText();
+  expect((sizes.match(/KB/g) ?? []).length).toBeLessThanOrEqual(1); // each size is shown once
 });

@@ -138,7 +138,7 @@ export async function openContextView({ sessionId, onChange = () => {} }) {
     const rows = v.parts.map((p) => {
       const shown = el('pre', { className: 'pm-text-view', hidden: true, textContent: p.text ?? '' });
       const view = p.text ? el('button', { type: 'button', className: 'link-btn', textContent: 'View', onclick: () => { shown.hidden = !shown.hidden; } }) : null;
-      return el('div', { className: 'pm-part' }, el('span', { className: 'pm-no', textContent: `P${p.n}` }), el('span', {}, p.title, el('small', { textContent: p.state || `${(p.size / 1024).toFixed(1)} KB` })), el('span', { className: 'pm-acts' }, el('span', { className: 'pm-count', textContent: p.size ? `${(p.size / 1024).toFixed(1)} KB` : '0 KB' }), view), shown);
+      return el('div', { className: 'pm-part' }, el('span', { className: 'pm-no', textContent: `P${p.n}` }), el('span', {}, p.title, el('small', { textContent: p.state })), el('span', { className: 'pm-acts' }, el('span', { className: 'pm-count', textContent: p.size ? `${(p.size / 1024).toFixed(1)} KB` : '0 KB' }), view), shown);
     });
     const on = el('input', { type: 'checkbox', id: 'pc-chat-switch', ...(v.enabled ? { checked: '' } : {}) });
     on.checked = v.enabled;
