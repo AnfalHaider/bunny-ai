@@ -1567,6 +1567,13 @@ dialog.cz-pin-card { max-width: min(560px, calc(100vw - 32px)); border: 1px soli
 dialog.cz-pin-card pre.code { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow: auto; font-size: var(--fs-sm); }
 .cz-pin-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-top: var(--sp-4); }
 @media (max-width: 600px) { .cz-pin-actions .btn { min-height: 44px; flex: 1 1 100%; } }
+/* SETTINGS-OVERHAUL: sub-headings inside a long group, the "Saved" mark and the red line under a refused entry */
+.grp-head { margin: 18px 0 6px; font-size: var(--fs-sm); letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+.sv { font-size: 12px; color: var(--ok, #2f8f5b); white-space: nowrap; }
+.sv:not(:empty)::before { content: "\2713  "; }
+.field-err { display: block; margin-top: 4px; font-size: 12px; color: var(--bad); }
+.field-err:empty { display: none; }
+textarea.bad, input.bad { border-color: var(--bad); }
 /* ENGINE-SWITCH (v0.1.15, Design's drawing v2) and FOLDER-RULES v4: the switch menu on the engine chip, its confirm card, the divider and handover line in the transcript, the trust card, the Project instructions block */
 #engine-menu .es-head { padding: 7px 12px; font-size: var(--fs-sm); color: var(--text-dim); border-bottom: 1px solid var(--line); }
 #engine-menu .es-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); }
@@ -1676,3 +1683,10 @@ dialog.cz-pin-card pre.code { white-space: pre-wrap; overflow-wrap: anywhere; ma
   dialog.cz-pin-card .cz-pin-actions .btn, dialog.cz-pin-card .cz-pin-actions button { min-height: 44px; }
   dialog.cz-pin-card .cz-pin-actions .btn-ghost { border: 1px solid var(--line-strong, var(--line)); background: transparent; }
 }
+.group .grp-head { padding: 0 16px; margin: 16px 0 4px; }
+.group > .section-note { padding: 8px 16px 0; margin: 0; }
+.rules .rules-form-help { list-style: none; margin: 0 0 8px; padding: 0 12px; font-size: 12px; color: var(--text-dim); display: grid; gap: 2px; }
+.rules .rules-form-help b { color: var(--text); font-weight: 600; margin-right: 6px; }
+/* Sign-in apps: the three inputs fit a phone (360 to 390 px) */
+.account-apps .field { min-width: 0; }
+.account-apps .field input { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }

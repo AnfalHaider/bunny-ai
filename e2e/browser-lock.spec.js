@@ -9,7 +9,7 @@ test('a Settings page in a browser: the window-only controls are disabled, greye
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await locked(page);
-  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
   const mode = page.locator('#default-permission');
   await expect(mode).toBeDisabled();
   await expect(mode).toHaveCSS('opacity', '0.5');
@@ -52,7 +52,7 @@ test('a write the server refuses puts the value back, and says the sentence once
 });
 
 test('on a server without the lock (the plain web build) nothing is switched off', async ({ page }) => {
-  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
   await expect(page.locator('#default-permission')).toBeEnabled();
   await expect(page.locator('.window-only-note')).toHaveCount(0);
 });
@@ -157,7 +157,7 @@ test('F-2: in a tab on this computer the permission-rules controls are really di
   const writes = [];
   page.on('request', (r) => { if (r.method() !== 'GET' && /permission-rules/.test(r.url())) writes.push(r.url()); });
   await locked(page);
-  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
   await page.waitForTimeout(800);
   const real = () => page.evaluate(() => [...document.querySelectorAll('#perm-rules input, #perm-rules select, #perm-rules textarea, #perm-rules button')].map((c) => [c.id || c.className || c.tagName, c.disabled]));
   const bad = async () => (await real()).filter(([, d]) => d !== true);

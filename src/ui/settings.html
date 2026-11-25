@@ -131,13 +131,13 @@
         </select></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Transcript text size</div></div>
+        <div class="meta-col"><div class="name">Transcript text size</div><div class="desc">How big the text in chats is.</div></div>
         <div class="right"><select class="appearance" data-key="transcriptSize" aria-label="Transcript text size">
           <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="xlarge">Extra large</option>
         </select></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Transcript width</div></div>
+        <div class="meta-col"><div class="name">Transcript width</div><div class="desc">How wide the chat column is on a large screen.</div></div>
         <div class="right"><select class="appearance" data-key="transcriptWidth" aria-label="Transcript width">
           <option value="narrow">Narrow</option><option value="medium">Medium</option><option value="wide">Wide</option><option value="full">Full width</option>
         </select></div>
@@ -160,8 +160,9 @@
       </div>
     </div>
 
-    <h2 id="code-look">Code</h2>
+    <h2 id="code-look">Code blocks</h2>
     <div class="group">
+      <p class="section-note">Code colours: the colours used in code blocks, one choice for the light theme and one for the dark theme.</p>
       <div class="code-theme-pick">
         <div>
           <select class="appearance" data-key="codeThemeLight" id="code-theme-light" aria-label="Code colours in light mode"></select>
@@ -177,16 +178,13 @@
         <div class="right"><input class="appearance" data-key="codeFont" maxlength="60" placeholder="JetBrains Mono" aria-label="Code font" /></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Code font size</div></div>
+        <div class="meta-col"><div class="name">Code font size</div><div class="desc">The size of text inside code blocks.</div></div>
         <div class="right"><select class="appearance" data-key="codeFontSize" aria-label="Code font size">
           <option value="">Default (12)</option><option value="11">11</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="18">18</option>
         </select></div>
       </div>
     </div>
-  </section>
-
-  <section data-section="notifications">
-    <h2>Notifications</h2>
+      <h3 class="grp-head">Notifications</h3>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -198,11 +196,13 @@
         </div>
       </div>
     </div>
+
   </section>
+
 
   <section data-section="bunny">
     <h2>Instructions</h2>
-    <p class="section-note">Bunny keeps these in mind in every chat: how you like answers, what you work on, rules to follow.</p>
+    <p class="section-note">Sent to the model at the start of every chat: how you like answers, what you work on, rules to follow. Keep it short. It saves as you type.</p>
     <div class="group instructions-box">
       <textarea id="instructions" rows="10" maxlength="20000" placeholder="For example: Answer briefly. I work in TypeScript and deploy to Vercel. Explain things like I'm new to them." aria-label="Instructions for every chat"></textarea>
       <div class="instructions-foot"><span id="instructions-count">0 / 20000</span><span id="instructions-saved" aria-live="polite"></span></div>
@@ -245,11 +245,6 @@
     </div>
   </section>
 
-  <section data-section="privacy">
-    <h2>Privacy</h2>
-    <h2>Storage</h2>
-    <div class="group" id="storage"></div>
-  </section>
 
   <section data-section="capabilities">
     <h2>Capabilities</h2>
@@ -336,13 +331,6 @@
         </div>
         <div class="right"><select id="pc-after" aria-label="After a search"><option value="read">Read the files, then answer</option><option value="show">Show what was found</option></select></div>
       </div>
-      <div class="row" id="pc-bar-row">
-        <div class="meta-col">
-          <div class="name">Quick ask searches by itself</div>
-          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
-        </div>
-        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
-      </div>
       <div class="row" id="pc-excl-row">
         <div class="meta-col">
           <div class="name"><button type="button" class="linklike" id="pc-excl-open" aria-expanded="false">Excluded folders (<span id="pc-excl-count">0</span>)</button></div>
@@ -379,8 +367,27 @@
     </div>
   </section>
 
-  <section data-section="connection">
-    <h2>Connection</h2>
+
+  <section data-section="models">
+    <h2>Models</h2>
+    <h3 class="grp-head">Effort</h3>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Default effort</div>
+          <div class="desc">How hard the model thinks in a new chat.</div>
+        </div>
+        <div class="right">
+          <select id="default-effort" aria-label="Default effort">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="max">Max</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <h3 class="grp-head">Right now</h3>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -404,10 +411,6 @@
         <div class="right"><span class="tag" id="fake-mode">unknown</span></div>
       </div>
     </div>
-  </section>
-
-  <section data-section="models">
-    <h2>Models</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -467,6 +470,7 @@
         </div>
         <div class="right wide-col">
           <textarea id="allowlist" rows="3" aria-label="Allowed models"></textarea>
+          <span class="field-err" id="allowlist-err" role="alert"></span>
         </div>
       </div>
       <div class="row">
@@ -475,17 +479,15 @@
           <div class="desc">One "name = model-id" per line, so a model can be picked by a short name.</div>
         </div>
         <div class="right wide-col">
-          <textarea id="aliases" rows="3" aria-label="Model aliases"></textarea>
+          <textarea id="aliases" rows="3" aria-label="Aliases"></textarea>
+          <span class="field-err" id="aliases-err" role="alert"></span>
         </div>
-      </div>
-      <div class="row">
-        <div class="right"><button id="save-models" class="primary">Save models</button></div>
       </div>
     </div>
   </section>
 
-  <section data-section="code">
-    <h2>Code</h2>
+  <section data-section="permissions">
+    <h2>Permissions</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -527,11 +529,11 @@
           <button type="button" class="tab" role="tab" id="rules-tab-folder" aria-selected="false">One folder</button>
         </div>
         <label class="rules-folder" id="rules-folder-wrap" hidden>Folder
-          <select id="rules-folder" aria-label="Folder the rules apply to"></select>
+          <select id="rules-folder" aria-label="Folder the rules apply to" aria-describedby="rules-help-folder"></select>
         </label>
         <div id="rules-lists"></div>
         <div class="addr" id="rules-add">
-          <select id="rules-kind" aria-label="What the rule matches">
+          <select id="rules-kind" aria-label="What the rule matches" aria-describedby="rules-help-kind">
             <option value="command">Command</option>
             <option value="path:edits">Path · edits</option>
             <option value="path:reads">Path · reads</option>
@@ -540,14 +542,20 @@
             <option value="agent">Helper or chat</option>
           </select>
           <select id="rules-connector" hidden aria-label="Which connector this tool rule is for"><option value="">Any tool</option></select>
-          <input id="rules-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
-          <select id="rules-effect" aria-label="What happens">
+          <input id="rules-pattern" aria-describedby="rules-help-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
+          <select id="rules-effect" aria-label="What happens" aria-describedby="rules-help-effect">
             <option value="allow">Allow</option>
             <option value="ask">Ask</option>
             <option value="deny">Deny</option>
           </select>
           <button type="button" class="btn primary" id="rules-add-btn">Add rule</button>
         </div>
+        <ul class="rules-form-help">
+          <li id="rules-help-folder"><b>Folder</b> Where the rule applies: every folder, or just one.</li>
+          <li id="rules-help-kind"><b>What it matches</b> A command, a file path, a website, a tool, or helpers and other chats.</li>
+          <li id="rules-help-pattern"><b>Pattern</b> Use * as a wildcard, for example npm test*.</li>
+          <li id="rules-help-effect"><b>What happens</b> Allow runs with no question. Ask shows a card. Deny always stops it.</li>
+        </ul>
         <div class="rules-line" id="rules-line" role="status" aria-live="polite"></div>
         <details class="rules-notes" id="rules-notes">
           <summary>What each kind of rule covers</summary>
@@ -563,20 +571,13 @@
           <div id="rules-try-out" role="status" aria-live="polite"></div>
         </div>
       </div>
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Default effort</div>
-          <div class="desc">How hard the model thinks in a new chat.</div>
-        </div>
-        <div class="right">
-          <select id="default-effort" aria-label="Default effort">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="max">Max</option>
-          </select>
-        </div>
-      </div>
+    </div>
+  </section>
+
+  <section data-section="code">
+    <h2>Code chats</h2>
+    <div class="group">
+      <h3 class="grp-head">Branches</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Branch prefix</div><div class="desc">Added to the start of every git branch name Bunny creates.</div></div>
         <div class="right"><input class="pref" data-key="branchPrefix" data-default="bunny" maxlength="30" aria-label="Branch prefix" /></div>
@@ -586,6 +587,7 @@
           <div id="wt-leftovers"></div></div>
         <div class="right"></div>
       </div>
+      <h3 class="grp-head">Long jobs</h3>
       <div class="row">
         <div class="meta-col">
           <div class="name">Keep going on long jobs</div>
@@ -604,10 +606,12 @@
         <div class="meta-col"><div class="name">Code theme and font</div><div class="desc">Change how code looks in replies, files, diffs and the terminal.</div></div>
         <div class="right"><button type="button" class="btn" id="open-appearance">Open Appearance</button></div>
       </div>
+      <h3 class="grp-head">Helpers</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Helpers (dynamic workflows)</div><div class="desc">Let Bunny run several helper agents at once on big jobs. Uses your limits faster.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="helpersEnabled" data-default="true" aria-label="Helpers" /><span class="pref-state"></span></label></div>
       </div>
+      <h3 class="grp-head">After a reply</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Prompt suggestions</div><div class="desc">Suggest next messages after Bunny replies. Each suggestion asks the model once more, so it adds a little to your usage.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="promptSuggestions" data-default="false" aria-label="Prompt suggestions" /><span class="pref-state"></span></label></div>
@@ -616,8 +620,9 @@
         <div class="meta-col"><div class="name">Summary and next steps</div><div class="desc">Bunny ends its work with what it did, what is left and what it needs from you.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="summaryNextSteps" data-default="true" aria-label="Summary and next steps" /><span class="pref-state"></span></label></div>
       </div>
+      <h3 class="grp-head">New tasks</h3>
       <div class="row">
-        <div class="meta-col"><div class="name">When you ask for an unrelated task</div><div class="desc">What happens when you ask for something the chat isn't working on.</div></div>
+        <div class="meta-col"><div class="name">When you ask for an unrelated task</div><div class="desc">Ask shows a choice. Start a new chat picks that choice for you. Do it here never offers it.</div></div>
         <div class="right"><select class="pref" data-key="unrelatedTask" data-default="ask" aria-label="When you ask for an unrelated task">
           <option value="ask">Ask me</option><option value="new">Start a new chat</option><option value="here">Do it in this chat</option>
         </select></div>
@@ -642,15 +647,19 @@
   </section>
 
   <section data-section="usage">
-    <h2>Usage</h2>
+    <h2>Usage and data</h2>
     <div class="group" id="usage">
       <div class="row"><div class="desc">Nothing has been used yet.</div></div>
     </div>
+      <h3 class="grp-head">Where your data is</h3>
+    <div class="group" id="storage"></div>
+
   </section>
 
-  <section data-section="desktop" id="desktop-section" hidden>
-    <h2>Desktop app</h2>
+  <section data-section="quickask">
+    <h2>Quick ask</h2>
     <div class="group">
+      <div id="quickask-desktop" hidden>
       <div class="row">
         <div class="meta-col">
           <div class="name">Quick ask</div>
@@ -662,6 +671,26 @@
           <label class="switch"><input type="checkbox" id="quick-ask" aria-label="Quick ask" /><span id="quick-state">off</span></label>
         </div>
       </div>
+      </div>
+      <div class="row" id="quickask-browser-note">
+        <div class="meta-col"><div class="name">Quick ask</div><div class="desc">Quick ask is a small bar of Bunny's desktop app. Its on/off switch and its shortcut are in Bunny's own window.</div></div>
+      </div>
+      <div class="row" id="pc-bar-row">
+        <div class="meta-col">
+          <div class="name">Quick ask searches by itself</div>
+          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col"><div class="name">Searching this PC from the bar</div><div class="desc" id="pc-bar-why">It uses the same Search this PC switch and excluded folders as chats, set in Capabilities.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="desktop" id="desktop-section" hidden>
+    <h2>Desktop app</h2>
+    <div class="group">
       <div class="row">
         <div class="meta-col">
           <div class="name">Start when I sign in</div>
@@ -818,8 +847,22 @@
   const notifications = $('notifications');
   // The window that shows this page waits for the saves in flight before it closes it (closeSettings in chat.js), so a change made just before closing is never lost.
   const pendingSaves = (window.bunnyPendingSaves = new Set());
+  // The "Saved" mark: the same small word beside whatever the person just changed.
+  const markSaved = (control) => {
+    const slot = control?.closest('.right') ?? control?.parentElement;
+    if (!slot) return;
+    let mark = slot.querySelector(':scope > .sv');
+    if (!mark) { mark = document.createElement('span'); mark.className = 'sv'; mark.setAttribute('role', 'status'); slot.append(mark); }
+    mark.textContent = 'Saved';
+    clearTimeout(mark.timer);
+    mark.timer = setTimeout(() => { mark.textContent = ''; }, 1800);
+  };
+  let lastChanged = null;
+  document.addEventListener('change', (e) => { lastChanged = e.target; }, true);
   const save = (patch) => {
     const p = sendJSON('/api/settings', 'PUT', patch);
+    const control = lastChanged;
+    p.then(() => { if (control && control.id !== 'aliases' && control.id !== 'allowlist') markSaved(control); }, () => {});
     pendingSaves.add(p);
     const done = () => pendingSaves.delete(p);
     p.then(done, done);
@@ -1152,6 +1195,7 @@
       $('pc-bar-state').textContent = barAuto.checked ? 'on' : 'off';
       for (const id of ['pc-after-row', 'pc-bar-row']) $(id).classList.toggle('is-off', !on.checked);
       after.disabled = !on.checked; barAuto.disabled = !on.checked;
+      $('pc-bar-why').textContent = on.checked ? 'It uses the same Search this PC switch and excluded folders as chats, set in Capabilities.' : 'Search this PC is off, so "Quick ask searches by itself" does nothing yet. Turn Search this PC on in Capabilities.';
       $('pc-excl-count').textContent = String((s.pcSearchExcluded ?? []).length);
       mine(s.pcSearchExcluded ?? []);
     };
@@ -1527,14 +1571,44 @@
   });
   $('restart-update')?.addEventListener('click', () => updates?.install());
 
-  $('save-models').addEventListener('click', async () => {
+  // One way of saving: a change is saved when the box is left; a wrong entry saves nothing and says why, under the box.
+  const closest = (word, options) => {
+    const score = (a, b) => { // how many characters two ids share in order, a cheap "did you mean"
+      let i = 0; for (const c of a) { const at = b.indexOf(c, i); if (at >= 0) i = at + 1; } return i / Math.max(a.length, b.length);
+    };
+    return options.map((o) => [o, score(word.toLowerCase(), o.toLowerCase())]).sort((x, y) => y[1] - x[1])[0];
+  };
+  const saveAliases = async () => {
+    const lines = aliases.value.split('\n');
+    const bad = lines.findIndex((l) => l.trim() && !/^\s*[^=\s]+\s*=\s*\S.*$/.test(l));
+    $('aliases-err').textContent = bad < 0 ? '' : `Not saved: line ${bad + 1} has no " = ". Write it as name = model.`;
+    aliases.classList.toggle('bad', bad >= 0);
+    if (bad >= 0) return;
+    await save({ aliases: parseAliases(aliases.value) });
+    markSaved(aliases);
+  };
+  const saveAllowlist = async () => {
     const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
-    const map = parseAliases(aliases.value);
-    await save({ allowlist: list, aliases: map });
-    const button = $('save-models');
-    button.textContent = 'Saved';
-    setTimeout(() => { button.textContent = 'Save models'; }, 1200);
-  });
+    let message = '';
+    if (list.length) {
+      let known = [];
+      try { known = (await getJSON('/api/models')).map((m) => m.id); } catch { /* without the list nothing can be checked */ }
+      const aliasNames = Object.keys(parseAliases(aliases.value));
+      const ok = (id) => known.includes(id) || aliasNames.includes(id);
+      if (known.length && !list.some(ok)) {
+        const missing = list.find((id) => !ok(id));
+        const [guess, closeness] = closest(missing, known);
+        message = `Not saved: "${missing}" is not a model I know. Nothing would be left to choose from.${closeness > 0.7 ? ` Did you mean ${guess}?` : ''}`;
+      }
+    }
+    $('allowlist-err').textContent = message;
+    allowlist.classList.toggle('bad', Boolean(message));
+    if (message) return;
+    await save({ allowlist: list });
+    markSaved(allowlist);
+  };
+  aliases.addEventListener('change', saveAliases);
+  allowlist.addEventListener('change', saveAllowlist);
 
   // ---- desktop app (only inside the Electron shell, which exposes window.bunnyDesktop) ----
   // BROWSER step 2: open to other devices on the local network (window only). Off until turned on; then on after every restart until turned off (REMOTE-STAY), on the same network only.
@@ -1672,9 +1746,10 @@
   // the Desktop app tab only (or to the whole page when no tab is named): a page that is not showing it must not show it, nor start it.
   const embedParams = new URLSearchParams(location.search);
   const namedTab = embedParams.get('embed') === '1' ? embedParams.get('section') : null;
-  const showsDesktop = !namedTab || namedTab === 'desktop';
+  const showsDesktop = !namedTab || namedTab === 'desktop' || namedTab === 'quickask';
+  const showsInstall = !namedTab || namedTab === 'desktop'; // the install row and the desktop section belong to the Desktop app tab only
   function bootInstall(desk) {
-    if (!showsDesktop) return;
+    if (!showsInstall) return;
     $('desktop-section').hidden = false;
     $('browser-section').hidden = false;
     const ctx = installContext(window);
@@ -1717,7 +1792,9 @@
     const desk = desktopBridge();
     bootInstall(desk);
     if (!desk) return;
-    $('desktop-section').hidden = false;
+    if (showsInstall) $('desktop-section').hidden = false;
+    $('quickask-desktop').hidden = false;
+    $('quickask-browser-note').hidden = true;
     const prefs = await desk.getPrefs();
     const bind = (id, stateId, key) => {
       const box = $(id);
