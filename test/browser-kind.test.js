@@ -66,18 +66,41 @@ test('the panel reports the current address (top level, from the main process): 
   assert.deepEqual((await json(r.base, `/api/sessions/${r.session.id}/allow-kinds`)).body.kinds.map((k) => k.label), ['Actions on 127.0.0.1']);
 });
 
-test('an older panel answer with the address only inside the page still works; a page on another host asks again; a panel that reports nothing usable never offers a kind', async (t) => {
+test('F9-9: the page\'s own claim is never the host: an answer with the address only inside `page` gives no kind (Allow once only); a different top-level host asks again; about:blank gives no kind', async (t) => {
   let n = 0;
   const hosts = ['http://one.example.com/a', 'http://two.example.com/b'];
   const moved = await run(t, [{ name: 'browser_click', args: { ref: 1 } }, { name: 'browser_click', args: { ref: 2 } }],
-    (action) => (action === 'read' ? { page: { url: hosts[Math.min(n++, 1)], title: 'x', text: 'x', elements: [] } } : { page: { text: 'ok', elements: [] } }),
+    (action) => (action === 'read' ? { url: hosts[Math.min(n++, 1)], page: { url: 'http://spoof.example.com/', title: 'x', text: 'x', elements: [] } } : { page: { text: 'ok', elements: [] } }),
     (card) => (card.kind ? { allowed: true, kind: true } : { allowed: true }));
   assert.equal(moved.cards.length, 2, 'a different host asks again');
   assert.match(moved.cards[0].kind.button, /one\.example\.com/); assert.match(moved.cards[1].kind.button, /two\.example\.com/);
+  const claimOnly = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
+    (action) => (action === 'read' ? { page: { url: 'http://one.example.com/a', title: 'x', text: 'x', elements: [] } } : { page: { text: 'ok', elements: [] } }),
+    () => ({ allowed: true }));
+  assert.equal(claimOnly.cards[0].kind ?? null, null, 'no top-level address: no kind'); assert.match(claimOnly.cards[0].reason, /could not tell which site/);
   const none = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
     (action) => (action === 'read' ? { url: 'about:blank', page: { url: 'about:blank' } } : { page: { text: 'ok', elements: [] } }),
     () => ({ allowed: true }));
   assert.equal(none.cards[0].kind ?? null, null); assert.match(none.cards[0].reason, /could not tell which site/);
+});
+
+test('F9-10: the host is checked again at the moment of the action; a page that moved itself between the read and the click means nothing is done and the person is asked once, with no kind to give', async (t) => {
+  const seen = [];
+  const r = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
+    (action, args) => {
+      seen.push([action, args?.expectHost ?? null]);
+      if (action === 'read') return { url: 'http://shop.example.com/cart', page: { url: 'http://shop.example.com/cart', text: 'x', elements: [] } };
+      if (args?.expectHost) return { moved: true, host: 'evil.example.net', error: 'The page is now on evil.example.net, not shop.example.com, so nothing was done.' };
+      return { page: { text: 'clicked there', elements: [] } };
+    },
+    (card, count) => (count === 1 ? { allowed: true, kind: true } : { allowed: true }));
+  assert.equal(r.cards.length, 2, 'the first card gave the kind; the move asks once more');
+  assert.equal(r.cards[1].kind ?? null, null, 'the second card offers no kind'); assert.match(r.cards[1].detail, /moved to evil\.example\.net/); assert.match(r.cards[1].reason, /^Asked every time: the page moved to another site/);
+  assert.deepEqual(seen.filter(([a]) => a === 'click').map(([, h]) => h), ['shop.example.com', null], 'the action carried the host it was allowed for; the retry after the new yes carries none');
+  const denied = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
+    (action, args) => (action === 'read' ? { url: 'http://shop.example.com/cart' } : args?.expectHost ? { moved: true, host: 'evil.example.net', error: 'moved' } : { page: { text: 'SHOULD NOT HAPPEN' } }),
+    (card, count) => (count === 1 ? { allowed: true } : { allowed: false }));
+  assert.equal(denied.actions.filter((a) => a === 'click').length, 1, 'a no to the move means the click is never retried');
 });
 
 // the Electron main process side: controlView's answer to a read carries webContents.getURL() at the TOP level (the page's own location.href is only inside `page`)
@@ -93,4 +116,17 @@ test('Electron main: a read answers with the main process\'s own address for the
   assert.equal(answer.page.url, 'http://spoofed.invalid/', 'the page\'s own claim stays inside `page`, and is not what the kind uses');
   const other = await controlView({ ...contents, getURL: () => 'https://shop.example.com/cart' }, 'bunny-tab-1', 'read', {});
   assert.equal(other.url, 'https://shop.example.com/cart');
+});
+
+test('Electron main (F9-10): a click or typing with an expected host does nothing when the view is on another host now, and acts when it is on that host', async () => {
+  let ran = 0; let url = 'https://shop.example.com/cart';
+  const contents = { getZoomFactor: () => 1, getURL: () => url, executeJavaScript: async (code) => { ran += 1; return /"click"|"type"/.test(code) ? { ok: true } : { url, title: 'x', text: 'page', elements: [] }; } };
+  assert.equal((await controlView(contents, 'bunny-tab-1', 'click', { ref: 1, expectHost: 'shop.example.com' })).moved, undefined, 'same host: it acts');
+  url = 'https://evil.example.net/phish'; ran = 0;
+  for (const action of ['click', 'type']) {
+    const out = await controlView(contents, 'bunny-tab-1', action, { ref: 1, text: 'hi', expectHost: 'shop.example.com' });
+    assert.equal(out.moved, true); assert.equal(out.host, 'evil.example.net'); assert.match(out.error, /nothing was done/);
+  }
+  assert.equal(ran, 0, 'nothing was run in the page');
+  assert.equal((await controlView(contents, 'bunny-tab-1', 'click', { ref: 1 })).moved, undefined, 'with no expected host (a person\'s one-off yes) it acts as before');
 });

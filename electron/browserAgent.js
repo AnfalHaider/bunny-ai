@@ -262,6 +262,12 @@ export async function controlView(contents, name, action, args = {}, world = nul
     return { page: await inView(contents, 'read', {}, world) };
   }
   if (action === 'click' || action === 'type') {
+    // F9-10: the page may have moved on since Bunny last looked: the host is compared with the view's own address right before acting, and a different one means nothing is done
+    if (args.expectHost) {
+      let now = '';
+      try { now = new URL(String(contents.getURL?.() ?? '')).hostname.toLowerCase(); } catch { now = ''; }
+      if (now !== String(args.expectHost).toLowerCase()) return { moved: true, host: now, error: `The page is now on ${now || 'another page'}, not ${String(args.expectHost).slice(0, 100)}, so nothing was done.` };
+    }
     const pageArgs = action === 'click' ? { ref: args.ref } : { ref: args.ref, text: String(args.text ?? '').slice(0, 5000), submit: Boolean(args.submit) };
     const done = await inView(contents, action, pageArgs, world);
     if (done?.error) return done;
