@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { createConfiner, labelRefusal, parseLabel, confineApplies, confineMode, NOT_COVERED } from '../src/server/confine.js';
+import { createConfiner, labelRefusal, parseLabel, confineApplies, confineMode, confineDefault, NOT_COVERED } from '../src/server/confine.js';
 
 // F13 command confinement, option A (Tech Lead's spec, Security's F13-1 to F13-5). The Windows tests use invented temp folders only, never a real project and never the real profile; each cleans up after itself.
 const windows = process.platform === 'win32';
@@ -186,4 +186,11 @@ test('F13 on Windows: a junction a confined command plants (as .bunny in the pro
   assert.equal((await c.unlabel(root, { level: null, flags: '' })).ok, true);
   assert.equal(readFileSync(join(elsewhere, 'tmp', 'keep.txt'), 'utf8'), 'must survive', 'Remove the label did not delete through the junction');
   assert.equal(existsSync(c.scratchPath(root)), false);
+});
+
+test('BUNNY_CONFINE_DEFAULT only moves the default outside a packaged build: in a packaged build it is ignored', () => {
+  assert.equal(confineDefault({ env: {}, packaged: false }), 'auto');
+  assert.equal(confineDefault({ env: { BUNNY_CONFINE_DEFAULT: 'off' }, packaged: false }), 'off', 'a test run can turn it off');
+  assert.equal(confineDefault({ env: { BUNNY_CONFINE_DEFAULT: 'off' }, packaged: true }), 'auto', 'a packaged build ignores it');
+  assert.equal(confineDefault({ env: { BUNNY_CONFINE_DEFAULT: 'nonsense' }, packaged: false }), 'auto');
 });

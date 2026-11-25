@@ -18,6 +18,7 @@ import { mkdir, readFile, writeFile, rm, realpath, lstat } from 'node:fs/promise
 import { join, parse, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { powershellPath, safeEnv } from './safeExec.js';
+import { isPackagedBuild } from './publicFetch.js';
 import { HELPER_SOURCE } from './confineHelper.js';
 
 /** What confinement does NOT cover: this exact list is in the help (F13-4, F13B-5). */
@@ -189,6 +190,8 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
   return { dir, exe, use, verify, rebuild, readLabel, label, unlabel, wrap, scratchPath, helperSha: () => expected };
 }
 
+/** What "not set" means: on in Auto. BUNNY_CONFINE_DEFAULT can change that for the test suites only, and is IGNORED in a packaged build (as BUNNY_TEST_TRANSPORT is): an environment switch must not weaken a security default for a person. */
+export const confineDefault = ({ env = process.env, packaged = isPackagedBuild() } = {}) => (!packaged && CONFINE_VALUES.includes(env.BUNNY_CONFINE_DEFAULT) ? env.BUNNY_CONFINE_DEFAULT : 'auto');
 /** The setting: 'off', 'auto' (confine while the chat is in Auto) or 'always'. Anything else is 'off'. */
-export const confineMode = (settings) => (CONFINE_VALUES.includes(settings?.confineCommands) ? settings.confineCommands : (CONFINE_VALUES.includes(process.env.BUNNY_CONFINE_DEFAULT) ? process.env.BUNNY_CONFINE_DEFAULT : 'auto')); // not set: on in Auto (the label card still asks first); a person's saved choice is kept
+export const confineMode = (settings) => (CONFINE_VALUES.includes(settings?.confineCommands) ? settings.confineCommands : confineDefault()); // not set: on in Auto (the label card still asks first); a person's saved choice is kept
 export const confineApplies = (settings, permissionMode) => { const m = confineMode(settings); return m === 'always' || (m === 'auto' && permissionMode === 'auto'); };
