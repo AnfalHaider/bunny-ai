@@ -108,7 +108,7 @@ test('no permission change: the search tool is still a read tool, and adding a c
   const { APP_TOOL_RISK, createAppTools } = await import('../src/server/appTools.js');
   assert.equal(APP_TOOL_RISK.search_plugins, 'read'); assert.equal(APP_TOOL_RISK.add_connector, 'edit');
   const added = []; const kept = [];
-  const tools = createAppTools({ skills: {}, mcp: { add: async (a) => { added.push(a); return { id: 'c1', name: a.name, url: a.url }; } }, getSettings: () => ({}), saveSettings: async () => ({}), getGithubToken: async () => SECRET, fetchImpl: recorder().fetchImpl });
+  const tools = createAppTools({ skills: {}, mcp: { list: async () => [], add: async (a) => { added.push(a); return { id: 'c1', name: a.name, url: a.url }; } }, getSettings: () => ({}), saveSettings: async () => ({}), getGithubToken: async () => SECRET, fetchImpl: recorder().fetchImpl });
   const out = await tools.run('add_connector', { name: 'Notion', url: 'https://mcp.notion.com/mcp' }, { keep: (x) => kept.push(x) });
   assert.equal(added[0].enabled, false, 'switched OFF'); assert.match(out, /switched OFF until the person says to switch it on/);
   // the tool passes the stored sign-in to the search and nothing else

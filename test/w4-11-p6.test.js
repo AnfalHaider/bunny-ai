@@ -74,7 +74,7 @@ test('P-6: in Auto, a plugin the model installs is added OFF, a card lists the s
   const r = await modelInstalls(t, installCall, { mode: 'auto', grant: false });
   const card = r.cards.permission; // F10: ONE card now shows what the two old cards showed
   assert.ok(card, 'the card was shown'); assert.equal(r.cards.capability, undefined, 'and there is no second card');
-  assert.deepEqual(card.choices.map((c) => c.id), ['on', 'off', 'no']);
+  assert.deepEqual(card.choices.map((c) => c.id), ['off', 'on', 'no']); // IA-7: a plugin the model found on the open web lists "Install, keep off" first
   assert.match(card.detail, /Skill grow \(\d+ characters of instructions\): How to grow carrots/);
   assert.match(card.detail, /Connector weather: https:\/\/weather\.example\.com\/mcp/);
   const skills = (await json(r.base, '/api/skills')).body;
