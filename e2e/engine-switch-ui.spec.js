@@ -46,11 +46,11 @@ test('the trust card appears for a folder with instruction files; Read shows the
 
   await page.locator('#folder-chip').click();
   const wf = page.locator('.modal[aria-label="Working folder"]');
-  await expect(wf.locator('.fr-block')).toContainText('Project instructions');
+  await expect(wf.locator('.fr-block:not(#confine-block)')).toContainText('Project instructions');
   await expect(wf.locator('.fr-row:has(.fr-n:text-is("AGENTS.md"))')).toContainText('in use');
   await expect(wf.locator('.fr-row:has(.fr-n:text-is("CLAUDE.md"))')).toContainText('not used');
-  await expect(wf.locator('.fr-note')).toContainText('Followed for this folder');
-  await wf.getByRole('button', { name: 'Close' }).click();
+  await expect(wf.locator('.fr-block:not(#confine-block) .fr-note')).toContainText('Followed for this folder');
+  await wf.getByRole('button', { name: 'Close', exact: true }).click();
 
   // somebody changes the file: the card says so, every engine keeps the frozen text, and Read again shows the difference first
   writeFileSync(join(folder, 'AGENTS.md'), 'Use tabs.\nSay goodbye.\n');

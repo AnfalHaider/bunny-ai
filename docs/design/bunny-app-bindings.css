@@ -1623,3 +1623,6 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
   .permission-actions button:not(.primary), .permission-actions .btn:not(.primary) { border: 1px solid var(--line-strong, var(--line)); background: transparent; border-radius: var(--r-md); }
   .permission-actions { gap: var(--sp-3); }
 }
+
+/* F13 + FOLDER-RULES: the Working folder card grows with its blocks (own copy, Project instructions, Confine commands): it scrolls inside the window instead of pushing Close out of reach */
+.modal[aria-label="Working folder"] { max-height: calc(100vh - 9rem); overflow-y: auto; }
