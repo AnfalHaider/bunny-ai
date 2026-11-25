@@ -90,13 +90,13 @@ test('F9-10: the host is checked again at the moment of the action; a page that 
     (action, args) => {
       seen.push([action, args?.expectHost ?? null]);
       if (action === 'read') return { url: 'http://shop.example.com/cart', page: { url: 'http://shop.example.com/cart', text: 'x', elements: [] } };
-      if (args?.expectHost) return { moved: true, host: 'evil.example.net', error: 'The page is now on evil.example.net, not shop.example.com, so nothing was done.' };
+      if (args?.expectHost === 'shop.example.com') return { moved: true, host: 'evil.example.net', error: 'The page is now on evil.example.net, not shop.example.com, so nothing was done.' };
       return { page: { text: 'clicked there', elements: [] } };
     },
     (card, count) => (count === 1 ? { allowed: true, kind: true } : { allowed: true }));
   assert.equal(r.cards.length, 2, 'the first card gave the kind; the move asks once more');
   assert.equal(r.cards[1].kind ?? null, null, 'the second card offers no kind'); assert.match(r.cards[1].detail, /moved to evil\.example\.net/); assert.match(r.cards[1].reason, /^Asked every time: the page moved to another site/);
-  assert.deepEqual(seen.filter(([a]) => a === 'click').map(([, h]) => h), ['shop.example.com', null], 'the action carried the host it was allowed for; the retry after the new yes carries none');
+  assert.deepEqual(seen.filter(([a]) => a === 'click').map(([, h]) => h), ['shop.example.com', 'evil.example.net'], 'the action carried the host it was allowed for; the retry carries the host the person was shown');
   const denied = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
     (action, args) => (action === 'read' ? { url: 'http://shop.example.com/cart' } : args?.expectHost ? { moved: true, host: 'evil.example.net', error: 'moved' } : { page: { text: 'SHOULD NOT HAPPEN' } }),
     (card, count) => (count === 1 ? { allowed: true } : { allowed: false }));
@@ -129,4 +129,30 @@ test('Electron main (F9-10): a click or typing with an expected host does nothin
   }
   assert.equal(ran, 0, 'nothing was run in the page');
   assert.equal((await controlView(contents, 'bunny-tab-1', 'click', { ref: 1 })).moved, undefined, 'with no expected host (a person\'s one-off yes) it acts as before');
+});
+
+test('F9-10a: the retry carries the host that was shown; a page with no website host gets no retry; a page that moves again stops without a second question', async (t) => {
+  // empty shown host (about:blank): refused with the plain line, no card for it
+  const blank = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
+    (action, args) => (action === 'read' ? { url: 'http://shop.example.com/cart' } : args?.expectHost ? { moved: true, host: '', error: 'moved' } : { page: { text: 'SHOULD NOT HAPPEN' } }),
+    () => ({ allowed: true }));
+  assert.equal(blank.cards.length, 1, 'only the first card: no "Do it there?" for a page that is not a website');
+  assert.equal(blank.actions.filter((a) => a === 'click').length, 1, 'no retry');
+  // moved again on the retry: stop, and do not ask a second time
+  let clicks = 0;
+  const twice = await run(t, [{ name: 'browser_click', args: { ref: 1 } }],
+    (action, args) => { if (action === 'read') return { url: 'http://shop.example.com/cart' }; clicks += 1; return { moved: true, host: clicks === 1 ? 'one.example.net' : 'two.example.net', error: 'moved' }; },
+    () => ({ allowed: true }));
+  assert.equal(twice.cards.length, 2, 'the first card, and ONE "Do it there?" — never a third');
+  assert.equal(clicks, 2);
+});
+
+// F9-10b: a browser kind never covers an action that goes through the old frame fallback: its read gives no address from the main process, so no host, so no kind (Allow once only)
+import { controlFrame } from '../electron/browserAgent.js';
+test('F9-10b: the frame fallback\'s read has no top-level address, so a kind can never cover it', async () => {
+  const main = { framesInSubtree: [] }; const frame = { name: 'bunny-tab-1', parent: main, executeJavaScript: async () => ({ url: 'http://one.example.com/', title: 'x', text: 'page', elements: [] }) }; main.framesInSubtree.push(frame);
+  const contents = { getZoomFactor: () => 1, getURL: () => 'http://127.0.0.1:1/the-bunny-app-window', mainFrame: main };
+  const out = await controlFrame(contents, 'bunny-tab-1', 'read', {});
+  assert.equal(out.url, undefined, 'the frame path reports nothing the kind could take a host from (its webContents is the app window)');
+  assert.ok(out.page);
 });

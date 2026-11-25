@@ -2998,11 +2998,14 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           return { text: saved.text, attachments: [], images: [] };
         }
         let answer = await askBrowser(name.replace(/^browser_/, ''), { ...parsed, ...(expectHost ? { expectHost } : {}) });
-        if (answer?.moved) { // F9-10: the page is on another site than the one that was allowed: nothing was done; ask once instead, with no kind to give
-          const where = String(answer.host ?? '').slice(0, 100) || 'another page';
-          const again = await askPermission(describeBrowserTool(name, parsed), `The page moved to ${where} since it was read, so nothing was done. Do it there?`, { reason: reasonLine('moved') });
+        if (answer?.moved) { // F9-10: the page is on another site than the one that was allowed: nothing was done
+          const shown = String(answer.host ?? '').slice(0, 100);
+          if (!shown) return { text: 'The page is not on a website now, so nothing was done.', attachments: [], images: [] }; // about:blank, file: and the like: no retry is offered
+          const again = await askPermission(describeBrowserTool(name, parsed), `The page moved to ${shown} since it was read, so nothing was done. Do it there?`, { reason: reasonLine('moved') });
           if (!again) return { text: 'The page moved to another site, and the person did not allow it there. Read the page again, and ask them before going on.', attachments: [], images: [] };
-          answer = await askBrowser(name.replace(/^browser_/, ''), parsed);
+          // the retry carries the host the person was shown: if the page moves again, it stops there and does not ask a second time
+          answer = await askBrowser(name.replace(/^browser_/, ''), { ...parsed, expectHost: shown });
+          if (answer?.moved) return { text: 'The page moved again, so nothing was done. Read the page again before going on.', attachments: [], images: [] };
         }
         let attachments = [];
         // one picture (a screenshot), or several (W6-11: one comparison picture per width)
