@@ -48,7 +48,7 @@ test.beforeEach(async ({ request, page }) => {
   await resetProfile(request);
   for (const s of await (await request.get('/api/mcp')).json()) await request.delete(`/api/mcp/${s.id}`);
   for (const p of (await (await request.get('/api/providers')).json()).filter((x) => x.custom)) await request.delete(`/api/providers/${p.id}`);
-  await request.put('/api/settings', { data: { modelFilter: 'all' } });
+  await request.put('/api/settings', { data: { modelFilter: 'all', autoJudgeEnabled: false } }); // F11: the scripted model is not an Auto-check judge
   expect((await request.post('/api/providers/custom', { data: { name: 'Scripted', baseUrl: `http://127.0.0.1:${modelPort}/v1` } })).ok()).toBeTruthy();
   page.on('dialog', (d) => d.accept());
 });
