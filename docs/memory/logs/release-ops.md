@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-26 - Published v0.1.15
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-25 22:07) "update the release and push when done"; the question as asked ("Release v0.1.15 without asking again, once the final gate passes, QA's walk passes and all six sign-offs are in? ... If anything fails or a real bug turns up, I stop and ask you."); the answer "Yes, release v0.1.15 when all pass (Recommended)". Shas: 80626b03 (merges gated 7c81da08), main 2fe1803a = that plus docs only. Gate 12/12 at 80626b03 with its results listed; six sign-offs at 80626b03. Accepted because the answer names v0.1.15 and the release.
+
+**Commands (PST)**
+
+- Fresh worktree (scratchpad `release-0.1.15`) detached at 2fe1803a = origin/main; version 0.1.15, tag absent; I created it, the Chief set the role there.
+- `npm ci`, `npm run dist` -> build-sha 2fe1803a, tree clean, `latest.yml` 0.1.15 with sha512 (built before the role was set; the build needs no role).
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.15-notes.md` at 01:24, clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.15-notes.md` ran 01:24:53 to 01:25:24 (GitHub publishedAt 2026-11-25T20:25:24Z); no retry needed -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.15
+- Checks: not draft, not prerelease; .exe 125043766, .blockmap 131634, latest.yml 348; tag v0.1.15 -> 2fe1803a; feed serves 0.1.15. Downloaded the uploaded .exe: sha256 7c9e3742d1147e325feb6ab2b25b5a36f233409fc1f017ec44f4fdf35c9f5a15 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.16) with 0.1.14's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
 ## 2026-11-20 - Published v0.1.14
 
 **Word:** the Chief of Staff's 7E relay: the owner's words, typed in the Chief's chat. 2026-11-19, answering "Should v0.1.14 ship now without internet sign-in, or wait for it?": "Ship 0.1.14 as soon as it can be without the internet sign-in."; 2026-11-20: "check all sessions, and continue, then release and publish 0.1.14 manage everything yourself. i am going to sleep. give me a report of gaps and features vs claude app and cursor vs Bunny AI when done." The relay listed the gate (12/12 at a579d7e9, run alone) with each result, the shas (code a579d7e9, main f20f1640 = code plus docs only) and all six sign-offs PASS at a579d7e9. The gate was listed result by result, with the full output in a file I cannot read, so I took the listing as the pasted check.
