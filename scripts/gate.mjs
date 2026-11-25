@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditStep, exceptionsSource } from './audit-exceptions.mjs';
-import { failureDetail, playwrightSummary } from './gate-report.mjs';
+import { failureDetail, judgeReport } from './gate-report.mjs';
 import { FAIL_MARKS } from './gate-marks.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -100,16 +100,16 @@ step('unit tests', npm, ['test', '--silent'], { tail: 8, failures: true });
 // GATE-E2E-LIST: the line reporter for the log, the JSON reporter for the list: every failed test, spec:line and title, and the totals are printed whatever the tail shows (see playwrightSummary).
 const e2eJson = join(tmpdir(), `bunny-gate-e2e-${process.pid}.json`);
 if (!quick) {
+  try { rmSync(e2eJson, { force: true }); } catch { /* no stale report can be read */ }
   step('end-to-end tests', npx, ['playwright', 'test', '--reporter=line,json'], {
     tail: 8,
     env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: e2eJson },
-    extra: (r) => {
+    extra: () => {
       let report = null;
-      try { report = JSON.parse(readFileSync(e2eJson, 'utf8')); } catch { /* no report */ }
+      try { report = JSON.parse(readFileSync(e2eJson, 'utf8')); } catch { /* missing or unreadable: judgeReport fails the step */ }
       try { rmSync(e2eJson, { force: true }); } catch { /* a temp file */ }
-      if (!report) return { lines: ['no JSON report was written, so there is no list of failed tests (the run crashed before it ended)'], fail: r.status !== 0 };
-      const sum = playwrightSummary(report);
-      return { lines: sum.lines, fail: sum.failed > 0 }; // a failed test fails the step even if the exit status said otherwise
+      const verdict = judgeReport(report);
+      return { lines: verdict.lines, fail: !verdict.pass }; // the step passes only when the exit status is 0 AND the report is clean
     },
   });
 }
