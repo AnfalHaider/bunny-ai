@@ -158,7 +158,7 @@ test('on a 360 px phone the project page, the suggestion card and the context vi
   await send(page, 'we decided on tabs');
   await expect(page.locator('.pm-card')).toBeVisible();
   expect(await fits()).toBe(true);
-  for (const b of await page.locator('.pm-card .pm-item button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(43.5); // Keep, Edit, Discard are real buttons on a phone
+  for (const b of await page.locator('.pm-card button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(43.5); // Keep, Edit, Discard are real buttons on a phone
   await page.locator('#project-context-chip').click();
   await expect(page.locator('.pm-modal .pm-part')).toHaveCount(5);
   expect(await fits()).toBe(true);
