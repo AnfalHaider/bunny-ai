@@ -320,7 +320,9 @@ A folder can carry `AGENTS.md` or `CLAUDE.md` (and Cursor's `.cursorrules`, read
 
 Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same text, the text you were shown**, and none of them reads the files by itself. If somebody edits a file afterwards, the Working folder card says **changed since it was read** and keeps using the old text until you choose **Read again**, which shows the difference first; **Use the new text** or **Keep the old text** then decides. A file that isn't used is listed as such, and **Ask me again for this folder** forgets your answer. Only my own window can answer, not a phone.
 
-<p align="center"><img src="docs/images/folder-trust.png" alt="The card &quot;Trust this folder?&quot; with two separate questions: follow the folder's instruction files, and start new chats here in Auto" width="700" /></p>
+<p align="center"><img src="docs/images/folder-trust.png" alt="The card &quot;Trust this folder?&quot; with two separate questions: follow the folder's instruction files, and run in Auto here" width="700" /></p>
+
+The same card asks a second question, **Run in Auto here?**: **Trust this folder for Auto** lets commands and changes run without asking you, unless Bunny's check stops them or a rule asks, and **Not now, ask me each time** keeps asking. You can change it any time in **Settings**, under **Trusted folders**.
 
 <p align="center"><img src="docs/images/project-instructions-changed.png" alt="The Working folder card's Project instructions block, with AGENTS.md marked &quot;changed since it was read&quot;" width="700" /></p>
 <!-- V0115:end project-instructions -->
