@@ -62,6 +62,7 @@ async function ask(page, text) {
 /** A Code chat in an invented project, on Auto, ready to send. */
 async function codeChat(page, api, name, files, title, extra = {}) {
   const folder = project(name, files);
+  await api.request.put('/api/settings', { data: { autoJudgeEnabled: false } }); // these pictures show Auto running on its own; the check (on by default) would put a card in the way. begin() resets the profile for the next scene.
   await api.request.post('/api/folder/check', { data: { folder } });
   const made = await api.seed({ title, workMode: 'code', folder, permissionMode: 'auto', ...extra });
   await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'code'); } catch { /* storage blocked */ } });
