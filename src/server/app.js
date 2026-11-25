@@ -1046,6 +1046,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
         body.folder = stored;
       }
+      // F12: a new chat starts in the person's default mode (set in Settings); a chat a device starts is always Ask
+      if (body.permissionMode === undefined && !req.bunnyRemote && !req.bunnyDevice && ['smart', 'ask', 'accept', 'plan', 'auto'].includes(settings.defaultPermissionMode)) body.permissionMode = settings.defaultPermissionMode;
       const session = await noteRemoteMode(req, await sessions.create(body));
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
@@ -2259,7 +2261,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       const judgeOn = () => permissionMode === 'auto' && settings.autoJudgeEnabled !== false && !textOnly; // F12: on unless the person turned it off
       const activeRules = () => rulesFor(judgeOn() ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
+      // F12: Smart in Auto whose check could not answer acts as Ask for the rest of the reply (edits and commands too), never looser
+      let smartDown = false;
       const needsOk = (risk, name, args) => risk === 'send'
+        || (smartDown && (risk === 'edit' || risk === 'run' || risk === 'build'))
         || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run');
@@ -2313,6 +2318,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           if (out.fellBack && !judgeNoticeShown) { judgeNoticeShown = true; send('notice', { text: `Bunny's check stopped ${stats.blocked} actions in this reply, so it asks you before each one for the rest of it.` }); }
           return { stop: `Bunny's check stopped this: ${out.reason} Find a safer way, or ask the person with ask_user.` };
         }
+        if (smart) smartDown = true;
         if (!judgeNoticeShown) { judgeNoticeShown = true; send('notice', { text: out.why }); }
         return { card: out.why };
       };

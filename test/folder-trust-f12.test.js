@@ -139,3 +139,12 @@ test('the judge is on by default: nothing saved means on; only an explicit off t
   assert.match(svc, /settings\.autoJudgeEnabled !== false \? rulesWithoutBroadAllow/);
   assert.doesNotMatch(html, /data-cap="autoJudgeEnabled" data-cap-default="off"/);
 });
+
+test('F12 gap: a new chat starts in the default mode from Settings; a device\'s chat is Ask', async (t) => {
+  const { base } = await startApp(t, { fake: true });
+  const mode = async () => (await post(base, '/api/sessions', { title: 'm' })).body.permissionMode;
+  assert.equal(await mode(), 'ask', 'nothing set: as before');
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ defaultPermissionMode: 'smart' }) });
+  assert.equal(await mode(), 'smart');
+  assert.equal((await post(base, '/api/sessions', { title: 'm', permissionMode: 'plan' })).body.permissionMode, 'plan', 'an explicit mode wins');
+});
