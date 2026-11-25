@@ -21,3 +21,7 @@ process.env.BUNNY_E2E_PORT = String(PORT);
 /** The e2e server's launch token (honoured only in fake-upstream mode). */
 export const E2E_TOKEN = 'e2e-launch-token-0123456789abcdef0123456789abcdef0123456789abcdef';
 export const dataDir = join(tmpdir(), `bunny-e2e-${PORT}`);
+
+// IA-0: a connector the model adds must be a public https address, so the e2e's stand-in connector is a public-looking host that the SERVER's test transport sends to a fixed local port (never in a packaged build)
+export const STANDIN_MCP_PORT = Number(process.env.BUNNY_E2E_MCP_PORT ?? 47931);
+export const STANDIN_MCP_HOST = 'mcp.stand-in.test';
