@@ -261,16 +261,26 @@ export function createWorkspace(rootFolder, { protect = [], allow = [], envRunne
       if (isProtected(real)) throw new Error(PROTECTED); // a link or junction that leads to them
       if (real !== realRoot && !real.startsWith(realRoot + sep)) throw new Error(`${path} points outside the workspace folder`);
     } else {
-      // A new file: its nearest existing parent must still be inside.
+      // S-LINK-1: a target that already exists as a link (a file link, a junction, one that points nowhere) is never written through: where the write lands is the link's business, not the folder's.
+      const here = await lstat(target).catch((err) => { if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') return null; throw err; });
+      if (here?.isSymbolicLink()) throw new Error(`${path} is a link. Bunny does not write through links.`);
+      if (here) { // an existing plain file: the same checks as a path that must exist
+        const real = await realpath(target);
+        const realRoot = await realpath(root);
+        if (isProtected(real)) throw new Error(PROTECTED);
+        if (real !== realRoot && !real.startsWith(realRoot + sep)) throw new Error(`${path} points outside the workspace folder`);
+      }
+      // A new file: its nearest existing parent must still be inside, and not Bunny's own folder.
       let parent = dirname(target);
       for (;;) {
         try {
           const real = await realpath(parent);
           const realRoot = await realpath(root);
+          if (isProtected(real)) throw new Error(PROTECTED);
           if (real !== realRoot && !real.startsWith(realRoot + sep)) throw new Error(`${path} points outside the workspace folder`);
           break;
         } catch (err) {
-          if (err.message.includes('outside')) throw err;
+          if (err.message.includes('outside') || err.message === PROTECTED) throw err;
           const up = dirname(parent);
           if (up === parent) break;
           parent = up;

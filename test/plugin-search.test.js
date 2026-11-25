@@ -35,7 +35,7 @@ test('the curated list is pinned and safe: remote https addresses at the vendor\
 });
 
 test('F4-3: every curated entry is https on that vendors own domain', () => {
-  const own = { notion: 'notion.com', linear: 'linear.app', sentry: 'sentry.dev', atlassian: 'atlassian.com', stripe: 'stripe.com', context7: 'context7.com', deepwiki: 'deepwiki.com', 'microsoft-learn': 'learn.microsoft.com' };
+  const own = { notion: 'notion.com', linear: 'linear.app', sentry: 'sentry.dev', atlassian: 'atlassian.com', context7: 'context7.com', deepwiki: 'deepwiki.com', 'microsoft-learn': 'learn.microsoft.com' };
   assert.deepEqual(CURATED.map((e) => e.id).sort(), Object.keys(own).sort(), 'every entry has a named vendor domain');
   for (const e of CURATED) { const u = new URL(e.url); assert.equal(u.protocol, 'https:', e.id); assert.ok(u.hostname === own[e.id] || u.hostname.endsWith(`.${own[e.id]}`), `${e.id}: ${u.hostname} is not on ${own[e.id]}`); }
   const sources = readFileSync(new URL('../docs/plans/curated-connectors-sources.md', import.meta.url), 'utf8');
