@@ -105,3 +105,22 @@ test('Settings: Smart is the recommended default, the check is on, and the Trust
   await expect(page.locator('#auto-judge-row input')).toBeChecked();
   await expect(page.locator('#trusted-folders-row')).toContainText('Smart runs in Auto only in these git folders');
 });
+
+test('Follow them stays disabled until every instruction file has been read, and the card\'s buttons are 44 px tall on a phone', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'bunny-f12-e2e-rules-'));
+  writeFileSync(join(dir, 'AGENTS.md'), 'Invented rules: be kind.\n');
+  await open(page);
+  await useFolder(page, dir);
+  await page.locator('#input').fill('hello'); await page.locator('#send').click();
+  const card = page.getByRole('group', { name: 'Trust this folder?' });
+  await expect(card).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const b of await card.getByRole('button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(43.5);
+  await card.getByRole('button', { name: 'Follow them' }).click();
+  const follow = page.getByRole('dialog').getByRole('button', { name: 'Follow them' });
+  await expect(follow).toBeDisabled();
+  await expect(page.getByRole('dialog')).toContainText('Read the file before you follow it.');
+  await page.getByRole('dialog').getByRole('button', { name: 'Read', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Invented rules: be kind.');
+  await expect(follow).toBeEnabled();
+});

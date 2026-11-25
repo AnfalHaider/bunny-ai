@@ -2576,3 +2576,5 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
   .permission-actions button:not(.primary), .permission-actions .btn:not(.primary) { border: 1px solid var(--line-strong, var(--line)); background: transparent; border-radius: var(--r-md); }
   .permission-actions { gap: var(--sp-3); }
 }
+/* F12 (QA): the trust card's buttons are touch targets on a phone, like the other cards */
+@media (max-width: 600px) { .fr-card .btn, .fr-card button { min-height: 44px; padding-inline: var(--sp-5); } }
