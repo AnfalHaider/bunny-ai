@@ -89,6 +89,11 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch, pin 
     return res.text();
   };
 
+  return buildPlugin({ files, raw, repo, source: `https://github.com/${owner}/${repo}` });
+}
+
+/** The importer's reading of a plugin's files, wherever they came from: GitHub's API or an unpacked folder. `files` are relative paths; `raw(path)` gives a file's text. */
+export async function buildPlugin({ files, raw, repo, source }) {
   // name and description
   let meta = {};
   for (const p of ['plugin.json', '.claude-plugin/plugin.json', 'package.json']) {
@@ -177,7 +182,7 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch, pin 
     name: String(meta.name ?? repo).slice(0, 60),
     description: String(meta.description ?? '').slice(0, 200),
     version: meta.version ?? null,
-    source: `https://github.com/${owner}/${repo}`,
+    source,
     skills, connectors, skipped,
   };
 }

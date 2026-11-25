@@ -24,6 +24,7 @@
 <main class="page cz-page">
   <h1>Customize</h1>
   <p class="sub">Connectors, skills and plugins the model can use in your chats</p>
+  <p class="sub" id="cz-address-help">A connector the AI finds is added only at a public https address, and is checked again at every call. A connector you add yourself here may use a private address or http, and says so. One saved before Bunny checked addresses is kept as it was and marked for review. "Add from address…" takes a git host, an archive (.zip, .tar.gz), a SKILL.md, a remote connector, npm:name or pypi:name, shows what it understood, then shows one card with the exact source and its fingerprint (a commit, a sha256, or a version with its integrity). Nothing runs while it is installed, and what is installed is exactly what the card showed. "Not pinned" connectors (npx or uvx) can be pinned to one exact version from their menu.</p>
   <p class="sub" id="cz-trust-help">A connector's tools that call themselves read-only run without asking only after you choose "Trust read-only labels" for it. Until then, Plan mode offers none of that connector's tools, even the ones it labels read-only.</p>
 
   <div class="cz-bar">
@@ -43,6 +44,7 @@
         <button class="menu-item" role="menuitem" data-add="connector"><span class="label">Connector<small>An MCP server reached over https</small></span></button>
         <button class="menu-item" role="menuitem" data-add="skill"><span class="label">Skill<small>Instructions the model follows when it is on</small></span></button>
         <button class="menu-item" role="menuitem" data-add="github"><span class="label">Plugin from GitHub<small>Paste a repository link: its skills and connectors are added</small></span></button>
+        <button class="menu-item" role="menuitem" data-add="address"><span class="label">Add from address…<small>A link, a package name or a SKILL.md</small></span></button>
         <button class="menu-item" role="menuitem" data-add="plugin"><span class="label">Plugin from file<small>A .json bundle of connectors and skills</small></span></button>
       </div>
       <input type="file" id="cz-plugin-file" accept=".json,application/json" hidden />
@@ -219,19 +221,53 @@
         const plugin = pluginOf('connectors', s.id);
         const flow = flows.get(s.id);
         const signedIn = s.oauth?.signedIn === true;
+        // IA-9: "Pin this version": the same pipeline as a new install, then one card; the yes points this connector at the pinned copy
+        const pinThis = async (server) => {
+          let card;
+          try { card = await sendJSON(`/api/mcp/${server.id}/pin`, 'POST', {}); } catch (err) { notice = err.message; paint(); return; }
+          if (!card?.ok) { notice = card?.message ?? 'Could not pin that connector.'; paint(); return; }
+          const dlg = document.createElement('dialog'); dlg.className = 'cz-pin-card'; dlg.setAttribute('aria-label', `Pin ${server.name}`);
+          const h = document.createElement('h3'); h.textContent = `Pin ${server.name}?`;
+          const pre = document.createElement('pre'); pre.textContent = card.text; pre.className = 'code';
+          const bar = document.createElement('div'); bar.className = 'cz-pin-actions';
+          const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'btn'; yes.textContent = card.tooLong ? 'Pin, switched off' : 'Pin this version';
+          const no = document.createElement('button'); no.type = 'button'; no.className = 'btn btn-ghost'; no.textContent = 'Cancel';
+          const msg = document.createElement('span'); msg.className = 'hint';
+          const close = () => { dlg.close(); dlg.remove(); };
+          no.onclick = async () => { await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'DELETE').catch(() => {}); close(); };
+          yes.onclick = async () => { yes.disabled = true; try {
+            const pinned = await sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'POST', {});
+            close();
+            // the row changes AT ONCE from the answer (no waiting for the whole list to reload), then the list refreshes behind it
+            if (pinned?.id) { const i = data.connectors.findIndex((c) => c.id === pinned.id); if (i >= 0) data.connectors[i] = { ...data.connectors[i], ...pinned, unpinned: false }; paint(); }
+            load().catch(() => {});
+          } catch (err) { msg.textContent = err.message; yes.disabled = false; } };
+          dlg.addEventListener('cancel', () => { sendJSON(`/api/mcp/${server.id}/pin/${card.token}`, 'DELETE').catch(() => {}); });
+          bar.append(yes, no, msg); dlg.append(h, pre, bar); document.body.append(dlg); dlg.showModal();
+        };
+        // IA-0: a connector the person added may use a private address or http, and says so; one saved before Bunny checked addresses (no addedBy) is marked once for review
+        const addressChip = (x) => {
+          if (x.type === 'local') return null;
+          const url = x.url ?? '';
+          const privateish = /^http:/i.test(url) || /^https?:\/\/(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[)/i.test(url);
+          if (x.addedBy === 'person') return privateish ? { text: 'Added by you · may use a private address' } : null;
+          if (!x.addedBy) return { text: 'Added before Bunny checked addresses: review', tone: 'warn' };
+          return null;
+        };
         const st = connectorStatus(s, flow);
         const needs = st.tone === 'warn' || st.tone === 'bad' || st.wait; // a chip shows only when something needs the person
         const primary = st.wait ? { label: 'Cancel', run: () => { flows.clear(s.id); paint(); } } : st.canSignIn ? { label: st.signInLabel, run: () => startSignIn(s) } : null;
         list.append(row({
           id: s.id,
           name: s.name,
-          chips: [plugin ? { text: 'Plugin' } : null, needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
+          chips: [plugin ? { text: 'Plugin' } : null, addressChip(s), s.unpinned ? { text: 'Not pinned: runs whatever version the registry has today', tone: 'warn' } : null, needs ? { text: st.word, tone: st.tone === 'bad' ? 'bad' : 'warn' } : null].filter(Boolean),
           dim: dimLine(plugin ? `Provided by the ${plugin.name} plugin` : hostOrUrl(s.url), needs ? st.detail : signedIn ? `Signed in as ${s.oauth.account ?? 'your account'}` : st.tone === 'ok' ? st.word.replace('✓ ', '') : '', s.hasKey ? `Key saved (${s.keyHeader})` : '', plugin ? '' : scopeDim(s)),
           extra: flows.clientIdBox(s) ?? (keyOpen.has(s.id) ? keyBox({ server: s, save: (header, value) => sendJSON(`/api/mcp/${s.id}/key`, 'PUT', { header, value }), done: async () => { keyOpen.delete(s.id); await load(); }, cancel: () => { keyOpen.delete(s.id); paint(); } }) : null),
           primary,
           toggle: { on: s.enabled, label: `Use ${s.name}`, change: async (on) => { await sendJSON(`/api/mcp/${s.id}`, 'PATCH', { enabled: on }); await load(); } },
           items: [
             primary ? { label: primary.label, run: primary.run } : null,
+            s.unpinned ? { label: 'Pin this version', run: () => pinThis(s) } : null,
             { label: 'Test', run: async () => { notice = ''; await fetch(`/api/mcp/${s.id}/tools`); flows.clear(s.id); await load(); } },
             signedIn ? { label: 'Sign out', run: () => signOut(s) } : null,
             s.type !== 'local' ? { label: s.hasKey ? 'Change key…' : 'Add key…', run: () => { keyOpen.add(s.id); paint(); } } : null,
@@ -428,8 +464,43 @@
     if (b.dataset.add === 'connector') { $('cz-connector-form').hidden = false; $('cz-connector-form').elements.namedItem('title').focus(); }
     if (b.dataset.add === 'skill') { $('cz-skill-form').hidden = false; $('cz-skill-form').elements.namedItem('title').focus(); }
     if (b.dataset.add === 'plugin') $('cz-plugin-file').click();
+    if (b.dataset.add === 'address') addFromAddress();
     if (b.dataset.add === 'github') { $('cz-github-form').hidden = false; $('cz-github-form').elements.namedItem('url').focus(); }
   }));
+  // INSTALL-ANYWHERE: "Add from address": one field, what was understood, then the same one card (window only)
+  function addFromAddress() {
+    const dlg = document.createElement('dialog'); dlg.className = 'cz-pin-card cz-address'; dlg.setAttribute('aria-label', 'Add from address');
+    const h = document.createElement('h3'); h.textContent = 'Add from address';
+    const sub = document.createElement('p'); sub.className = 'hint'; sub.textContent = 'A plugin, a skill or a connector, from any website. Accepted: a git host, an archive (.zip, .tar.gz), a SKILL.md, a remote connector, npm:name, pypi:name. Only https. Nothing is installed until you answer the next card.';
+    const row = document.createElement('div'); row.className = 'cz-pin-actions';
+    const input = document.createElement('input'); input.className = 'input'; input.type = 'text'; input.placeholder = 'https://github.com/example/meeting-notes'; input.setAttribute('aria-label', 'Address'); input.style.flex = '1 1 260px';
+    const check = document.createElement('button'); check.type = 'button'; check.className = 'btn'; check.textContent = 'Check';
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'btn btn-ghost'; cancel.textContent = 'Cancel';
+    const out = document.createElement('div'); out.setAttribute('aria-live', 'polite');
+    row.append(input, check, cancel); dlg.append(h, sub, row, out);
+    let card = null;
+    const close = async () => { if (card) { await sendJSON(`/api/install/${card.id}`, 'DELETE').catch(() => {}); card = null; } dlg.close(); dlg.remove(); };
+    cancel.onclick = close; dlg.addEventListener('cancel', () => { if (card) sendJSON(`/api/install/${card.id}`, 'DELETE').catch(() => {}); });
+    const answer = async (choice) => {
+      const err = out.querySelector('.err'); if (err) err.textContent = '';
+      try { await sendJSON(`/api/install/${card.id}`, 'POST', { choice }); card = null; dlg.close(); dlg.remove(); await load(); } catch (e) { const s = out.querySelector('.err') ?? Object.assign(document.createElement('span'), { className: 'err' }); s.textContent = e.message; out.append(s); }
+    };
+    check.onclick = async () => {
+      out.replaceChildren(); if (card) { await sendJSON(`/api/install/${card.id}`, 'DELETE').catch(() => {}); card = null; }
+      let res; try { res = await sendJSON('/api/install', 'POST', { address: input.value }); } catch (e) { res = { ok: false, message: e.message }; }
+      if (!res?.ok) { const s = document.createElement('p'); s.className = 'err'; s.textContent = res?.message ?? 'Could not read that.'; out.append(s); return; }
+      card = res;
+      const u = document.createElement('p'); u.className = 'hint'; u.textContent = `Understood: ${res.understood}`;
+      const pre = document.createElement('pre'); pre.className = 'code'; pre.textContent = res.text;
+      const bar = document.createElement('div'); bar.className = 'cz-pin-actions';
+      const mk = (label, choice, primary) => { const b = document.createElement('button'); b.type = 'button'; b.className = primary ? 'btn' : 'btn btn-ghost'; b.textContent = label; b.onclick = choice ? () => answer(choice) : close; return b; };
+      bar.append(...(res.tooLong ? [] : [mk('Install and switch on', 'on', true)]), mk('Install, keep off', 'off', res.tooLong), mk("Don't install", null, false));
+      out.append(u, pre, bar);
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); check.click(); } });
+    document.body.append(dlg); dlg.showModal(); input.focus();
+  }
+
   document.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => { b.closest('form').hidden = true; }));
 
   async function submit(form, url, body, kind) {

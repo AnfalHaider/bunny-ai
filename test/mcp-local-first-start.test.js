@@ -146,7 +146,7 @@ test('add_connector refuses a program outside the list, a command line in one pi
   assert.deepEqual(added, [], 'nothing was added, so nothing can start');
   const ok = await tools.run('add_connector', { name: 'Files', command: 'npx', args: ['-y', 'some-server', 'C:\\notes'] });
   assert.match(ok, /local connector Files/);
-  assert.deepEqual(added[0], { name: 'Files', url: undefined, command: 'npx', args: ['-y', 'some-server', 'C:\\notes'], env: {}, enabled: true });
+  assert.deepEqual(added[0], { addedBy: 'model', name: 'Files', url: undefined, command: 'npx', args: ['-y', 'some-server', 'C:\\notes'], env: {}, enabled: true });
 });
 
 test('the model offers local connectors only with a command it must have confirmed (the add_connector tool says so)', async () => {

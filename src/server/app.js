@@ -59,6 +59,8 @@ import { createToolInstaller } from './toolInstall.js';
 import { capturePage, captureFolderName, authorizeWrites } from './capture.js';
 import { registerOwnPort } from './ownAddress.js';
 import { fetchLimited, hopJudge } from './download.js';
+import { checkPublicAddress } from './publicFetch.js';
+import { unpinnedPackage } from './pinning.js';
 import { createPcService } from './pcService.js';
 import { FIXED_EXCLUSIONS } from './pcExclusions.js';
 import { PC_TOOLS, pcToolDefinitions, PC_SYSTEM_TEXT, createPcTurn, holdsPcFileText } from './pcTools.js';
@@ -234,7 +236,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, installSource: installSourceOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
   // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
   const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
@@ -485,7 +487,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     try { return redactDeep(await httpCallTool(sent, { ...call, auth: secret ? undefined : connectorSignIn.authFor(server) }), secret); } catch (err) { throw redactError(err, secret); }
   };
   const toolInstaller = toolInstallerOverride ?? createToolInstaller({ dataDir, mcp }); // (a test may hand in its own)
-  const appTools = createAppTools({ toolInstaller, getSearchKey: () => secrets.get(BRAVE_SECRET), skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
+  const appTools = createAppTools({ getSearchKey: () => secrets.get(BRAVE_SECRET), workDir: join(dataDir, 'installing'), ...(installSourceOverride ?? {}), toolInstaller, skills, mcp, getSettings: () => settings, saveSettings, stopConnector: (id) => localMcp.stop(id), signOutConnector: (server) => connectorSignIn.signOutQuietly(server), getGithubToken: () => accounts.githubToken() });
   // GitHub and Google sign-in; the GitHub device flow waiting for the person, in memory only.
   const accounts = createAccounts({ file: join(dataDir, 'account.json'), secrets, getSettings: () => settings });
   let githubDevice = null;
@@ -1357,7 +1359,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (path.startsWith('/api/connectors/') && await connectorSignIn.handle(req, res, path, method, url, () => readBody(req))) return;
 
     // ---- MCP servers ----
-    if (path === '/api/mcp' && method === 'GET') return sendJson(res, 200, await mcp.list());
+    if (path === '/api/mcp' && method === 'GET') return sendJson(res, 200, (await mcp.list()).map((s) => (unpinnedPackage(s) ? { ...s, unpinned: true } : s))); // IA-9: Customize marks an unpinned npx / uvx connector
     if (path === '/api/mcp' && method === 'POST') {
       try {
         const body = await readBody(req);
@@ -1365,10 +1367,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (String(body.command ?? '').trim() && body.confirmLocal !== true) {
           return sendJson(res, 400, { code: 'mcp.confirmLocal', message: 'A local connector runs a program on this computer. Confirm the command to add it.' });
         }
-        const { source: _dropped, trustedKeyHeaders: _trusted, ...plain } = body; // W6-6: only the tool installer may say where a connector came from; only Bunny's own code names the trusted key headers
+        const { source: _dropped, trustedKeyHeaders: _trusted, addedBy: _by, ...plain } = body; // W6-6: only the tool installer may say where a connector came from; only Bunny's own code names the trusted key headers
         const barred = checkDomain(rulesFor(settings.permissionRules, null), plain.url ?? ''); // PG1-d: judged when it is added
         if (barred?.effect === 'deny') return sendJson(res, 400, { code: 'rules.denied', message: `Your permission rule ${describeRule(barred)} blocks this address.` });
-        return sendJson(res, 200, await mcp.add(plain));
+        return sendJson(res, 200, await mcp.add({ ...plain, addedBy: req.bunnyRemote || req.bunnyDevice ? 'device' : 'person' })); // IA-0: only the window's own add is the person's
       } catch (err) {
         return sendJson(res, 400, { code: err.code ?? 'mcp.failed', message: err.message });
       }
@@ -1385,6 +1387,27 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       } catch (err) {
         return sendJson(res, err.code === 'mcp.notFound' ? 404 : 400, { code: err.code ?? 'mcp.failed', message: String(err.message).slice(0, 300) });
       }
+    }
+    // INSTALL-ANYWHERE: Customize's "Add from address". Window only (the route table): check, answer the one card, cancel.
+    const installMatch = path.match(/^\/api\/install(?:\/([a-f0-9-]{36}))?$/);
+    if (installMatch) {
+      if (windowOnly(req, res)) return;
+      const installBy = req.bunnyRemote || req.bunnyDevice ? `device:${(req.bunnyRemote ?? req.bunnyDevice)?.deviceId ?? 'unknown'}` : 'person'; // the card belongs to the window or to ONE device
+      try {
+        if (method === 'POST' && !installMatch[1]) { const body = await readBody(req); return sendJson(res, 200, await appTools.addressCheck(body.address, { by: installBy })); }
+        if (method === 'POST') { const body = await readBody(req); const done = await appTools.addressConfirm(installMatch[1], body.choice, { by: installBy }); if (req.bunnyDevice) remote.logAction(req.bunnyDevice, { kind: 'install', choice: body.choice === 'on' ? 'on' : body.choice === 'off' ? 'off' : 'no', item: String(done?.name ?? '').slice(0, 60) }); return sendJson(res, 200, done); } // ADDR-2 (R-DF2): an Everything device's answer is in the access log by choice and item name, never an address or key
+        if (method === 'DELETE' && installMatch[1]) { await appTools.addressCancel(installMatch[1], { by: installBy }); return sendJson(res, 200, { ok: true }); }
+      } catch (err) { return sendJson(res, 400, { code: err.code ?? 'install.failed', message: String(err.message).slice(0, 300) }); }
+    }
+    // IA-9: "Pin this version" on an unpinned npx / uvx connector: the card, then the yes. Window only (the route table).
+    const mcpPinMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})\/pin(?:\/([a-f0-9-]{36}))?$/);
+    if (mcpPinMatch) {
+      if (windowOnly(req, res)) return;
+      try {
+        if (method === 'POST' && !mcpPinMatch[2]) return sendJson(res, 200, await appTools.pinCard(mcpPinMatch[1]));
+        if (method === 'POST') return sendJson(res, 200, await appTools.pinConfirm(mcpPinMatch[1], mcpPinMatch[2]));
+        if (method === 'DELETE' && mcpPinMatch[2]) { await appTools.pinCancel(mcpPinMatch[2]); return sendJson(res, 200, { ok: true }); }
+      } catch (err) { return sendJson(res, 400, { code: err.code ?? 'mcp.pinFailed', message: String(err.message).slice(0, 300) }); }
     }
     const mcpMatch = path.match(/^\/api\/mcp\/([a-f0-9-]{36})$/);
     if (mcpMatch && method === 'PATCH') {
@@ -3249,7 +3272,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ?? (toolIndex.has(name) ? (isReadOnlyTool(toolIndex.get(name).server, toolIndex.get(name).tool) ? 'read' : 'run') : 'run');
       // What a helper never gets: it cannot ask the person, build tools, start chats,
       // or share the one browser panel and screen with the main reply.
-      const HELPER_NEVER = new Set(['request_capability', 'pc_search', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
+      const HELPER_NEVER = new Set(['request_capability', 'pc_search', 'browser_panel', 'sign_in', 'connector_sign_in', 'create_tool', 'install_from_github', 'install_plugin', 'install_skill', 'add_connector', 'add_skill', 'start_session', 'message_session', 'ask_user', 'move_to_new_chat']);
 
       /**
        * Run a helper: a fresh conversation with a task, this chat's model and tools,
@@ -4021,19 +4044,32 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // the card listed (F10-2); too long to list whole: no switch-on button and it installs off (F10-1); "Install, keep off" leaves it off; devices never get here (these tools are not theirs, REMOTE_TOOLS_DENIED).
         let oneCard = null;
         let alreadyThere = false; // asking again about something that is already installed would be a card for nothing: the install itself answers
-        const remoteAdd = name === 'add_connector' && !localConnector && String(parsed.url ?? '').trim();
-        if (isApp && name === 'install_plugin') alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
+        const npmAdd = name === 'add_connector' && !localConnector && String(parsed.npm ?? '').trim(); // IA-2
+        const pypiAdd = name === 'add_connector' && !localConnector && !npmAdd && String(parsed.pypi ?? '').trim(); // IA-3
+        const remoteAdd = name === 'add_connector' && !localConnector && !npmAdd && !pypiAdd && String(parsed.url ?? '').trim();
+        const installsSource = name === 'install_plugin' || name === 'install_skill'; // INSTALL-ANYWHERE: both take a GitHub link, an archive or a SKILL.md at a public https address
+        if (isApp && (installsSource || (name === 'add_connector' && (String(parsed.npm ?? '').trim() || String(parsed.pypi ?? '').trim()))) && scheduledTask) { const said = 'Installing needs you; nobody is here to ask.'; send('tool', { tool: summary, status: 'denied', result: said }); return said; } // IA-8: never unattended
+        if (isApp && installsSource) alreadyThere = Boolean(appTools.isPluginInstalled?.(parsed.url));
         if (isApp && remoteAdd) { const want = String(parsed.url).trim().toLowerCase().replace(/\/+$/, ''); alreadyThere = (await mcp.list()).some((x) => x.url && String(x.url).trim().toLowerCase().replace(/\/+$/, '') === want); }
-        if (alreadyThere) { const said = name === 'install_plugin' ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
-        if (isApp && !alreadyThere && (name === 'install_plugin' || remoteAdd || localConnector || toolPlan)) {
-          let title; let body; let listed = null; let tooLong = false; let commit = null; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
-          if (name === 'install_plugin') {
-            const card = await appTools.previewPluginCard(parsed.url);
+        if (alreadyThere) { const said = installsSource ? 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.' : 'A connector at that address is already installed, so nothing was added. Changing it is done by the person in Settings, Customize.'; send('tool', { tool: summary, status: 'done', result: said }); return said; } // F10-5: no card, and nothing re-imported
+        if (isApp && !alreadyThere && (installsSource || remoteAdd || npmAdd || pypiAdd || localConnector || toolPlan)) {
+          let title; let body; let listed = null; let tooLong = false; let commit = null; let token = null; let openWeb = false; let display = String(parsed.name ?? parsed.repo ?? 'this').slice(0, 60);
+          if (installsSource) {
+            const card = await appTools.previewPluginCard(parsed.url, { chatId: id });
             if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
-            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null;
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; commit = card.commit ?? null; token = card.token ?? null; openWeb = card.openWeb === true;
           } else if (remoteAdd) {
+            try { await checkPublicAddress(parsed.url); } catch (err) { send('tool', { tool: summary, status: 'denied', result: err.message }); return err.message; } // IA-0: refused before any card, with the one sentence
             body = `Adds a connector at\n${String(parsed.url).slice(0, 300)}${Array.isArray(parsed.key_headers) && parsed.key_headers.length ? `\nIt needs a key (${parsed.key_headers.slice(0, 5).join(', ')}): you paste it in Settings, Customize, on that connector, after it is installed.` : ''}`;
             listed = { skills: [], connectors: [String(parsed.url)] };
+          } else if (pypiAdd) {
+            const card = await appTools.previewPypiCard(parsed.pypi);
+            if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; token = card.token; openWeb = true;
+          } else if (npmAdd) {
+            const card = await appTools.previewNpmCard(parsed.npm);
+            if (!card.ok) { send('tool', { tool: summary, status: 'denied', result: card.message }); return card.message; }
+            body = card.text; listed = card.listed; tooLong = card.tooLong; display = card.name; token = card.token; openWeb = true; // a package the model named is not from a known catalogue: keep-off is the main button
           } else if (localConnector) {
             body = detail; listed = { skills: [], connectors: [String(parsed.name ?? '')] }; // the local connector's own name, so a later message about what was switched on is right
             const long = cardTooLong(detail);
@@ -4045,14 +4081,19 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           }
           if (tooLong) body = `Too long to show: it will be installed off. Switch it on in Customize.\n\n${body}`;
           title = tooLong ? `Install ${display}?` : `Install and switch on ${display}?`;
-          const choices = [...(tooLong ? [] : [{ id: 'on', label: 'Install and switch on', primary: true }]), { id: 'off', label: 'Install, keep off', ...(tooLong ? { primary: true } : {}) }, { id: 'no', label: "Don't install" }];
+          const offFirst = tooLong || openWeb; // IA-7: from the open web, "Install, keep off" is the main button
+          const onButton = tooLong ? [] : [{ id: 'on', label: 'Install and switch on', ...(offFirst ? {} : { primary: true }) }];
+          const offButton = { id: 'off', label: 'Install, keep off', ...(offFirst ? { primary: true } : {}) };
+          const choices = [...(openWeb ? [offButton, ...onButton] : [...onButton, offButton]), { id: 'no', label: "Don't install" }];
           const answer = await askPermission(title, ruled?.effect === 'ask' ? `${body}\n\nAsked because of your rule ${describeRule(ruled)}.` : body, { choices, display });
           if (!answer) {
+            if (npmAdd && token) await appTools.discardNpmToken(token); // a no deletes the staged tree
+            if (pypiAdd && token) await appTools.discardPypiToken(token);
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
             send('tool', { tool: summary, status: 'denied' });
             return 'The person did not allow this. Do not try it again; carry on without it or ask them.';
           }
-          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit };
+          oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit, token };
         }
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
         if (!oneCard && !alreadyThere && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')))) {
@@ -4079,7 +4120,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         try {
           result = name === 'read_url' && /^file:/i.test(String(parsed.url ?? '').trim()) ? await readFileUrlIn(workspace, parsed.url)
             : isApp ? await (async () => {
-              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, browser: browserControl && !textOnly && !scheduledTask, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off', ...(oneCard.commit ? { expectCommit: oneCard.commit } : {}) } : {}) });
+              const said = await appTools.run(name, parsed, { chatId: id, folder: scopeFolder, expectSha: toolPlan?.sha, browser: browserControl && !textOnly && !scheduledTask, ...(oneCard ? { oneCard: true, switchOn: oneCard.on ? 'on' : 'off', ...(oneCard.commit ? { expectCommit: oneCard.commit } : {}), ...(oneCard.token ? { expectToken: oneCard.token } : {}) } : {}) });
               if (textOnly && name === 'web_search') for (const line of String(said).split('\n')) { const m = /^ {2}(https?:\/\/\S+)$/.exec(line); if (m && quickKey(m[1])) quickAllowed.add(quickKey(m[1])); } // the link lines only, never the snippets
               // P-6: what the model just added is off; one card shows it, and only the window's yes switches it on
               let added = appTools.takePending?.(id);
@@ -4137,8 +4178,10 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         if (isWorkspace && name === 'run_command' && status === 'done' && /^\[(exit code [1-9]\d*|could not start|stopped after)/.test(result)) status = 'failed';
         const command = name === 'run_command' ? clip(String(parsed.command ?? ''), 1200) : '';
         // Brave's terms: no storing of its results. The chat keeps one line (who answered and how many), not the text; the person and the model see the results during this reply only.
-        const bravePage = name === 'web_search' && wholeResult.startsWith('(via Brave)\n');
-        const keptResult = bravePage ? `web search via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results` : clip(result, 1200);
+        // search_plugins keeps its catalogue part and, when Brave answered the open-web part, only one line for that part (never Brave's titles or links)
+        const braveCandidates = name === 'search_plugins' && /\(via Brave\):\n/.test(wholeResult);
+        const bravePage = (name === 'web_search' && wholeResult.startsWith('(via Brave)\n')) || braveCandidates;
+        const keptResult = braveCandidates ? `${clip(wholeResult.split('\n\nFrom the open web')[0], 1000)}\nopen web candidates via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results (not stored)` : bravePage ? `web search via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results` : clip(result, 1200);
         await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: keptResult, ...(confined?.wrap ? { confined: true } : {}), fullResult: bravePage ? '' : wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
         send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}), ...(confined?.wrap ? { confined: true } : {}) });
         if (signIn) return `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.`;

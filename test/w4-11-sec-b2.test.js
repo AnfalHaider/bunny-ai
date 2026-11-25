@@ -88,7 +88,7 @@ test('P6-2: what one chat just added is shown only in that chat, once', async ()
 });
 
 test('P6-3: the tool descriptions say what really happens: switched OFF until the person says yes', () => {
-  const by = Object.fromEntries(appToolDefinitions(['read', 'edit']).map((d) => [d.function.name, d.function.description]));
+  const by = Object.fromEntries(appToolDefinitions(['read', 'edit', 'build']).map((d) => [d.function.name, d.function.description]));
   for (const name of ['install_plugin', 'add_skill', 'add_connector']) {
     assert.match(by[name], /OFF/, name);
     assert.doesNotMatch(by[name], /and switch(es)? (them |it )?on\.?$/i, `${name} must not promise it is switched on`);

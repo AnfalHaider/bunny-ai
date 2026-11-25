@@ -7,6 +7,7 @@
  */
 
 import { readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { checkPublicAddress } from './publicFetch.js';
 import { trustSnapshot } from './mcp.js';
 import { randomUUID } from 'node:crypto';
 import { cleanFolders } from './scope.js';
@@ -37,7 +38,7 @@ export function keyHeaderProblem(name, { allowed = [] } = {}) {
 const cleanHeaderNames = (list) => [...new Set((Array.isArray(list) ? list : []).map((h) => String(h ?? '')).filter((h) => HEADER_NAME.test(h) && !NEVER_HEADERS.test(h)))].slice(0, 5);
 const originOf = (url) => { try { return new URL(String(url)).origin; } catch { return null; } };
 
-export function createMcpStore({ file, secrets = null }) {
+export function createMcpStore({ file, secrets = null, lookupImpl }) {
   let servers = [];
   let loaded = false;
 
@@ -132,14 +133,14 @@ export function createMcpStore({ file, secrets = null }) {
     return { source: { repo, sha, folder } };
   }
 
-  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null, keyHeaders = [], trustedKeyHeaders = [] }) {
+  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null, keyHeaders = [], trustedKeyHeaders = [], addedBy = 'model' }) {
     await load();
     const clean = String(name ?? '').trim();
     const address = String(url ?? '').trim();
     if (!clean) throw Object.assign(new Error('A server needs a name'), { code: 'mcp.nameRequired' });
     if (String(command ?? '').trim()) {
       const local = cleanLocal({ command, args, env, cwd });
-      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), ...cleanSource(source), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
+      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', addedBy: addedBy === 'person' || addedBy === 'device' ? addedBy : 'model', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), ...cleanSource(source), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
       if (secrets && Object.keys(local.env).length) {
         try {
           for (const [k, v] of Object.entries(local.env)) await putSecret(server.id, k, v);
@@ -157,6 +158,8 @@ export function createMcpStore({ file, secrets = null }) {
     if (!/^https?:\/\//i.test(address)) {
       throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
     }
+    const by = addedBy === 'person' || addedBy === 'device' ? addedBy : 'model'; // IA-0: fail closed: anything but the exact words 'person' (the window's own add) or 'device' is the model's, and must be public https
+    if (by !== 'person') await checkPublicAddress(address, { lookupImpl });
     // W4-11 R-4: the same address twice would offer every tool twice
     const same = servers.find((s) => s.url && String(s.url).trim().toLowerCase().replace(/\/+$/, '') === address.toLowerCase().replace(/\/+$/, ''));
     if (same) throw Object.assign(new Error(`That address is already a connector (${same.name}).`), { code: 'mcp.duplicate', existing: same.id });
@@ -170,6 +173,7 @@ export function createMcpStore({ file, secrets = null }) {
       tools: [],
       lastError: null,
       createdAt: new Date().toISOString(),
+      addedBy: by,
       ...(cleanHeaderNames(keyHeaders).filter((h) => !/^authorization$/i.test(h)).length ? { keyHeaders: cleanHeaderNames(keyHeaders).filter((h) => !/^authorization$/i.test(h)) } : {}), // names the MODEL passed: suggestions for the key card, and never Authorization (LOW from Security)
       ...(cleanHeaderNames(trustedKeyHeaders).length ? { trustedKeyHeaders: cleanHeaderNames(trustedKeyHeaders) } : {}), // names from the registry's or a curated entry, given by Bunny's own code only
     };
@@ -188,6 +192,7 @@ export function createMcpStore({ file, secrets = null }) {
       if (!/^https?:\/\//i.test(address)) {
         throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
       }
+      if (server.addedBy === 'model' || server.addedBy === 'device') await checkPublicAddress(address, { lookupImpl }); // IA-0: a changed address obeys the same rule
       // RO-1: trust was given to the connector at its old address; a different address is a different connector
       if (address.slice(0, 500) !== server.url) { server.trustReadOnly = false; delete server.trustedTools; server.tools = []; server.status = 'unknown'; } // a new address is a new list
       if (address.slice(0, 500) !== server.url && server.keySet) { await dropKeyOf(server); } // K-3: a key belongs to the address it was saved for

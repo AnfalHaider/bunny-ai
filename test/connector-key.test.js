@@ -52,7 +52,7 @@ test('K-3: the key is given back only for the exact saved origin; any address ch
   const same = await store.update(c.id, { url: 'https://mcp.keyed.test/v2/mcp' }); assert.equal(same.hasKey, false);
   await store.setKey(c.id, { header: 'X-Api-Key', value: KEY });
   await store.update(c.id, { name: 'Renamed' }); assert.ok(await store.resolveKey(c.id), 'a rename keeps it');
-  const http = await store.add({ name: 'Plain', url: 'http://mcp.plain.test/mcp' });
+  const http = await store.add({ name: 'Plain', url: 'http://mcp.plain.test/mcp', addedBy: 'person' });
   await assert.rejects(() => store.setKey(http.id, { header: 'X-Api-Key', value: KEY }), /https/);
   const local = await store.add({ name: 'Local', command: 'node', args: ['x.js'] });
   await assert.rejects(() => store.setKey(local.id, { header: 'X-Api-Key', value: KEY }), /local connector/);
