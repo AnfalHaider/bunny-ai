@@ -131,7 +131,7 @@ const withShas = async (get, post, what, body) => {
 };
 
 async function chatWorld(t, files, { settings = {}, calls = [], mode = 'auto' } = {}) {
-  const w = await pcWorld(t, { files: {}, settings, calls, permissionMode: mode });
+  const w = await pcWorld(t, { files: {}, settings: { autoJudgeEnabled: false, ...settings }, calls, permissionMode: mode }); // F12: the check is on by default; these tests are about the instructions files
   const folder = folderWith(files);
   t.after(() => rmSync(folder, { recursive: true, force: true }));
   const { body: s } = await post(w.base, '/api/sessions', { title: 'fr', workMode: 'code', folder, permissionMode: mode });
@@ -174,6 +174,7 @@ test('9: Not now stores nothing; "Ask me again" removes the entry and the chat\'
   const trusted = (await json(c.w.base, '/api/settings')).body.folderRulesTrusted;
   assert.equal(trusted.length, 1);
   assert.deepEqual(trusted[0].files, ['AGENTS.md']);
+  assert.equal(trusted[0].frozen.length, 1, 'the frozen copy is in the folder record'); // F12: so removing the record (ask-again) removes the copy with it
   assert.equal((await c.act('ask-again')).status, 200);
   assert.deepEqual((await json(c.w.base, '/api/settings')).body.folderRulesTrusted, []);
   await c.say('after ask again');

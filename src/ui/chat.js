@@ -280,7 +280,7 @@ function renderComposerHeader() {
   if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
   $('branch-chip')?.classList.toggle('on', Boolean(copyBranch));
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
-  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   syncModeMenu();
   const canSwitch = Boolean(state.sessionId && state.session?.messages?.length && !state.incognito && !isDevicePage());
   paintEngineChip({ canSwitch, busy: Boolean(state.streaming), onSwitch: (row) => switchEngineTo(row.id), onFix: (row, what) => fixEngine(row, what), deviceNote: isDevicePage() ? 'The engine can be changed only on the PC.' : '', chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
@@ -1443,8 +1443,13 @@ function renderTitle() {
  * W3-6: a connector that needs the person to sign in. The step says "Needs sign-in" and offers Sign in (the person's own browser opens,
  * and the chat carries on by itself once they are back) and Skip it (just dismisses; a later message works as usual once signed in).
  */
+/** Is a Sign in step for this connector already on screen? (a chat shows one step per connector, not one per place that noticed) */
+function openSignInFor(serverId) {
+  return [...document.querySelectorAll('.signin-step')].some((b) => b.dataset.server === String(serverId) && [...b.querySelectorAll('button')].some((x) => x.textContent === 'Sign in')); // one still waiting for the person
+}
 function signInStep(info) {
   const box = element('div', { className: 'signin-step' });
+  box.dataset.server = String(info.serverId ?? '');
   const note = element('span', { className: 'hint' });
   const clientBox = element('input', { className: 'input', placeholder: 'Client ID', hidden: true });
   clientBox.setAttribute('aria-label', 'Client ID');
@@ -1527,7 +1532,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     }
     wrap.append(tc);
     if (m.confined) tc.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13: kept with the step
-    if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
+    if (m.needsSignIn && m.serverId && !openSignInFor(m.serverId)) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
     if (m.madeFile) wrap.append(madeFileCard(m.madeFile));
@@ -1916,8 +1921,8 @@ function renderRailDetails() {
   const autoPick = state.modelAuto && state.autoPick;
   const why = $('rail-why-row');
   if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}${whyPicked(autoPick, state.lastJob) ? `: ${whyPicked(autoPick, state.lastJob)}` : ''}`); }
-  const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
-  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  const modes = { smart: 'Smart', ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
+  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   put('rail-mode', modes[mode] ?? mode);
   put('rail-effort', ((state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium').replace(/^./, (c) => c.toUpperCase()));
   const ctx = state.session?.context;
@@ -2132,7 +2137,8 @@ function showLiveTool(bodyEl, info) {
   line.dataset.status = info.status;
   line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
   if (info.confined && !line.querySelector('.confined-mark')) line.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13
-  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
+  // one Sign in step per connector in this reply: the connector found at the start and the one the person just allowed are the same connector
+  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step') && !openSignInFor(info.serverId)) {
     line.querySelector('.tag')?.classList.add('is-blocked');
     line.append(signInStep(info));
   }
@@ -2710,6 +2716,7 @@ async function refreshSession({ expectAssistant = false } = {}) {
   paintMessages();
   renderContext(state.session.context);
   if (state.sidePaneOpen) state.workPanes?.refresh();
+  showTrustCard().catch(() => {}); // F12: a chat made by the first message has its folder now; the card asks once
 }
 
 // ---------------------------------------------------------------------------
@@ -3817,8 +3824,9 @@ function bindPushToTalk() {
 // ---------------------------------------------------------------------------
 // Chat / Cowork / Code switch and the permission-mode menu
 
-const MODE_LABELS = { auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
-
+const MODE_LABELS = { smart: 'Smart', auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
+// F12: what Smart does here, in words (the chip's tooltip). Smart is Auto only in a trusted git folder with the check on; otherwise it asks.
+const SMART_TIP = "Smart: runs in Auto in a git folder you trusted, with a second model checking each risky action. Everywhere else it asks. Smart starts in Ask while Bunny's check is off or can't be reached.";
 const WORK_MODES = ['chat', 'code'];
 const MODE_HINTS = {
   chat: { placeholder: 'Send a message…', empty: 'Type below to start.' }, // a model is always in effect (Auto or the one chosen), so the empty chat does not ask for one
@@ -3856,9 +3864,10 @@ function bindModeSwitch() {
 }
 
 function syncModeMenu() {
-  const value = $('permission-mode')?.value ?? 'ask';
+  const value = $('permission-mode')?.value ?? 'smart';
   const label = $('mode-label');
   if (label) label.textContent = MODE_LABELS[value] ?? value;
+  $('mode-button')?.setAttribute('title', value === 'smart' ? SMART_TIP : 'Permission mode');
   document.querySelectorAll('#mode-menu [data-mode]').forEach((item) => {
     const on = item.dataset.mode === value;
     item.classList.toggle('is-selected', on);
@@ -3896,7 +3905,7 @@ function bindModeMenu() {
     item.addEventListener('click', () => chooseMode(item.dataset.mode));
   });
   menu.addEventListener('keydown', (e) => {
-    const map = { 1: 'auto', 2: 'ask', 3: 'accept', 4: 'plan' };
+    const map = { 1: 'smart', 2: 'auto', 3: 'ask', 4: 'accept', 5: 'plan' };
     if (map[e.key]) { e.preventDefault(); chooseMode(map[e.key]); }
     if (e.key === 'Escape') { closeModeMenu(); buttonEl.focus(); }
   });
@@ -4050,17 +4059,23 @@ const frCounts = new Map(); // session id -> how many instruction files its fold
 async function showTrustCard(force = false) {
   const session = state.session;
   const host = document.querySelector('.dock');
-  document.getElementById('fr-trust-card')?.remove();
-  if (!state.sessionId || !session || state.incognito || session.workMode !== 'code' || !session.folder || !host || trustDismissed.has(state.sessionId)) return;
+  if (!state.sessionId || !session || state.incognito || session.workMode !== 'code' || !session.folder || !host || trustDismissed.has(state.sessionId)) { document.getElementById('fr-trust-card')?.remove(); return; }
   const key = `${state.sessionId}|${session.folder}`;
-  if (!force && trustSeen === key) return;
+  if (!force && trustSeen === key) return; // the card (if one is up) stays: a re-render of the header must not take it away before it is answered
+  document.getElementById('fr-trust-card')?.remove();
   trustSeen = key;
   let view;
-  try { view = await loadFolderRules(state.sessionId); } catch { return; }
+  try { view = await loadFolderRules(state.sessionId); } catch { trustSeen = ''; return; } // not ready yet (the folder is saved just after the chat): look again at the next render
   const nFiles = view.enabled && view.chatSwitch !== false ? view.files.filter((f) => f.state !== 'off').length : 0;
   if (frCounts.get(state.sessionId) !== nFiles) { frCounts.set(state.sessionId, nFiles); renderComposerHeader(); }
-  if (!view.enabled || view.chatSwitch === false || view.trusted || !view.files.some((f) => f.state === 'waiting')) return;
-  const card = trustCard({ sid: state.sessionId, view, device: isDevicePage(), onAnswered: (followed) => { if (!followed) trustDismissed.add(state.sessionId); showTrustCard(true); renderComposerHeader(); } });
+  const needFollow = view.enabled && view.chatSwitch !== false && !view.trusted && view.files.some((f) => f.state === 'waiting');
+  // F12 question 2: Smart in a git folder nobody has answered for, with the check on (the PC's window only: a device never sees or answers it)
+  let auto = null;
+  if (($('permission-mode')?.value ?? '') === 'smart' && !isDevicePage()) {
+    try { const t = await getJSON(`/api/folder-trust?folder=${encodeURIComponent(session.folder)}`); if (t.git && t.judgeOn && t.auto === null) auto = { folder: t.folder ?? session.folder }; } catch { /* no answer: Smart asks, the safe side */ }
+  }
+  if (!needFollow && !auto) return;
+  const card = trustCard({ sid: state.sessionId, view: needFollow ? view : { ...view, files: [] }, auto, device: isDevicePage(), onAnswered: (followed) => { if (!followed) trustDismissed.add(state.sessionId); showTrustCard(true); renderComposerHeader(); } });
   card.id = 'fr-trust-card';
   host.insertBefore(card, $('composer'));
 }

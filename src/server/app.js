@@ -15,6 +15,8 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { ORDINARY_SETTING_KEYS } from './settingKeys.js';
 import { inScope, cleanFolders } from './scope.js';
 import { capabilityMap } from './capabilityMap.js';
+import { createReplyJudge, goesToJudge, rulesWithoutBroadAllow } from './autoJudge.js';
+import { createFolderTrust, isGitWorkTree, smartMode } from './folderTrust.js';
 import { splitDeferred, namesLine, findTools, clean as cleanOutside } from './deferTools.js';
 import { BRAVE_SECRET } from './webSearch.js';
 import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRoute } from './windowOnly.js';
@@ -105,7 +107,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, deviceRefusal, ENGINE_REFUSED_MESSAGE, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { DEVICE_ACCESS_MESSAGE, NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, deviceRefusal, ENGINE_REFUSED_MESSAGE, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
@@ -323,6 +325,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     ...(discover ? { discover } : {}),
   });
   const sessions = createSessionStore({ dir: join(dataDir, 'sessions'), onCheckpointed: (sid, cid, mid) => checkpoints.finish(sid, cid, mid), onRemoved: (sid) => checkpoints.removeChat(sid) });
+  const folderTrust = createFolderTrust({ file: join(dataDir, 'folder-trust.json') }); // F12: the folders trusted for Auto, by real path
+  let judgeDownUntil = 0; // F12: while Bunny's check could not answer, Smart starts every chat in Ask (never plain Auto)
   const projects = createProjectStore({ file: join(dataDir, 'projects.json') });
   const artifacts = createArtifactStore({ dir: join(dataDir, 'artifacts') });
   const MADE_MIME = { '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
@@ -930,6 +934,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (Object.hasOwn(patch, 'language')) patch.language = 'en'; // English only for now: the translation tables stay in the repo, unused
       const unknown = Object.keys(patch).filter((k) => !WINDOW_ONLY_SETTING_KEYS.includes(k) && !ORDINARY_SETTING_KEYS.includes(k));
       if (unknown.length) return sendJson(res, 400, { code: 'settings.unknownKey', message: `Bunny AI has no setting called ${unknown.slice(0, 3).map((k) => JSON.stringify(k.slice(0, 40))).join(', ')}.` });
+      // F11: the check on Auto actions: its switch and its model are the window's alone (a device, even at Everything, is refused)
+      if (Object.hasOwn(patch, 'autoJudgeEnabled') && typeof patch.autoJudgeEnabled !== 'boolean') return sendJson(res, 400, { code: 'settings.autoJudge', message: 'The check on Auto actions is on or off.' });
+      if (Object.hasOwn(patch, 'autoJudgeModel') && !(patch.autoJudgeModel === '' || /^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(String(patch.autoJudgeModel)))) return sendJson(res, 400, { code: 'settings.autoJudge', message: "Choose a model from the list, or the chat's own." });
+      if ((Object.hasOwn(patch, 'autoJudgeEnabled') || Object.hasOwn(patch, 'autoJudgeModel')) && (req.bunnyDevice || req.bunnyRemote)) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
       if (Object.hasOwn(patch, 'firstReplyWaitSeconds') && validWaitSeconds(patch.firstReplyWaitSeconds) === null) {
         return sendJson(res, 400, { code: 'settings.badWait', message: 'Use a whole number of seconds from 10 to 600. Not saved.' });
       }
@@ -979,6 +987,31 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const body = await readBody(req);
         return sendJson(res, 200, await pc.resolveRef(body.ref));
       }
+    }
+
+    // ---- F12: the folders trusted for Auto (the window's alone: a device never reads or changes them) ----
+    if (path === '/api/folder-trust' && method === 'GET') {
+      if (req.bunnyRemote || req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
+      const asked = new URL(req.url, 'http://x').searchParams.get('folder');
+      if (!asked) return sendJson(res, 200, { folders: await folderTrust.list() });
+      const checked = await checkFolder(asked);
+      if (!checked.ok) return sendJson(res, 400, { code: 'folder.notFound', message: checked.reason });
+      return sendJson(res, 200, { ...(await folderTrust.get(checked.folder)), git: await isGitWorkTree(checked.folder), judgeOn: settings.autoJudgeEnabled !== false });
+    }
+    if (path === '/api/folder-trust' && (method === 'PUT' || method === 'DELETE')) {
+      if (windowOnly(req, res)) return;
+      if (req.bunnyDevice) return sendJson(res, 403, { code: 'request.windowOnly', message: DEVICE_ACCESS_MESSAGE });
+      const body = await readBody(req);
+      const checked = await checkFolder(body?.folder);
+      if (method === 'DELETE') {
+        await folderTrust.forget(checked.ok ? checked.folder : String(body?.folder ?? ''));
+        return sendJson(res, 200, { folders: await folderTrust.list() });
+      }
+      if (!checked.ok) return sendJson(res, 400, { code: 'folder.notFound', message: checked.reason });
+      if (typeof body?.auto !== 'boolean') return sendJson(res, 400, { code: 'folderTrust.bad', message: 'Trust is yes or no.' });
+      if (body.auto && !(await isGitWorkTree(checked.folder))) return sendJson(res, 400, { code: 'folderTrust.notGit', message: 'Auto is only for a git folder, so changes can be undone.' });
+      await folderTrust.set(checked.folder, { auto: body.auto });
+      return sendJson(res, 200, { ...(await folderTrust.get(checked.folder)), folders: await folderTrust.list() });
     }
 
     // ---- F6: the Brave Search key (Settings, Capabilities). The window's alone: it is stored in the secrets store, never in settings, and is never handed back, only whether one is set. ----
@@ -1144,6 +1177,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (stored === null) return sendJson(res, 403, { code: 'folder.notChosen', message: 'Choose that folder with the folder picker first.' });
         body.folder = stored;
       }
+      // F12: a new chat starts in the person's default mode (set in Settings); a chat a device starts is always Ask
+      if (body.permissionMode === undefined) body.permissionMode = req.bunnyRemote || req.bunnyDevice ? 'ask' : (['smart', 'ask', 'accept', 'plan', 'auto'].includes(settings.defaultPermissionMode) ? settings.defaultPermissionMode : 'ask'); // F12-6: a device's chat stores Ask itself
       const session = await noteRemoteMode(req, await sessions.create(body));
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
@@ -2641,8 +2676,13 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // ---- the work mode decides what the model may do ----
       //   chat      conversation only, no tools
       //   code      works inside the chosen folder with file and command tools, plus connectors
-      let permissionMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask'; // changes only when the person answers a leave_plan_mode card (W4-14b)
+      const storedMode = session.permissionMode ?? (req.bunnyRemote || req.bunnyDevice ? 'ask' : settings.defaultPermissionMode) ?? 'ask'; // F12-6: from a device a missing mode is Ask, never the default
       const folder = await effectiveRoot(session);
+      // F12: Smart is Auto only in a trusted git folder with the check on, on this computer's window; in every other case it is Ask (never looser)
+      const smart = storedMode === 'smart'
+        ? smartMode({ device: Boolean(req.bunnyRemote || req.bunnyDevice), folderOk: Boolean(folder?.ok) && workMode === 'code', judgeOn: settings.autoJudgeEnabled !== false, judgeDown: Date.now() < judgeDownUntil, git: folder?.ok ? await isGitWorkTree(folder.folder) : false, trust: folder?.ok ? await folderTrust.get(folder.folder) : null })
+        : null;
+      let permissionMode = smart ? smart.mode : storedMode; // changes only when the person answers a leave_plan_mode card (W4-14b)
       if (folder?.gone && workMode !== 'chat') return sendJson(res, 409, { code: 'worktree.gone', message: folder.reason });
       // Undo: the first time this reply changes a file, the file is copied as it was.
       let checkpoint = null;
@@ -2698,18 +2738,78 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // W2-7: the person's permission rules for this folder (its own, then the global ones), read fresh at every call.
       // Order of a tool call: Plan mode, then the person's deny, then ask (a rule's ask, a build or send question), then allow. An allow
       // skips the mode's question for reads, edits and commands only: it never skips the question for building a tool or sending mail.
-      const activeRules = () => rulesFor(settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
+      // F11-6: while the judge is on, the broad Allow rules (node*, powershell*, curl*, any wildcard in the first word ...) are not used in Auto
+      const judgeOn = () => permissionMode === 'auto' && settings.autoJudgeEnabled !== false && !textOnly; // F12: on unless the person turned it off
+      const activeRules = () => rulesFor(judgeOn() ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, workspace?.root ?? folder?.folder ?? null);
       // FOLDER-RULES / ONE-INSTRUCTIONS: the folder's instructions files this reply follows (null: none, not trusted yet, or switched off). Only the text reaches a model; nothing here decides a permission.
       let folderRulesSet = null;
       if (workspace && body.textOnly !== true && !req.bunnyRemote) { try { folderRulesSet = await followedFolderRules(session, workspace, folder); } catch { folderRulesSet = null; } }
       // W3-3: in Auto, build actions run unasked except asksInAuto (a new tool, a schedule that may change things, a local connector).
+      // F12: Smart in Auto whose check could not answer acts as Ask for the rest of the reply (edits and commands too), never looser
+      let smartDown = false;
       // PERMISSIONS-GAPS: a website, tool or helper rule that allowed this call (or that the person said yes to) skips the mode's question for reads, edits and commands;
       // never a send or a build, and never a message to another chat (pgRules.allowSkipsCard).
       const pgSettled = new WeakSet();
       const needsOk = (risk, name, args) => !(args && typeof args === 'object' && pgSettled.has(args) && risk !== 'send' && risk !== 'build' && allowSkipsCard(name)) && (risk === 'send'
+        || (smartDown && (risk === 'edit' || risk === 'run' || risk === 'build'))
         || (risk === 'build' && (permissionMode !== 'auto' || asksInAuto(name, args)))
         || (permissionMode === 'ask' && (risk === 'edit' || risk === 'run'))
         || (permissionMode === 'accept' && risk === 'run'));
+
+      // AGENT-FLOW F11: Auto with a judge (autoJudge.js). It can only allow what Auto would already run unasked, or block; every fall-back is a card (a block in a scheduled run).
+      let replyJudge = null;
+      let judgeNoticeShown = false;
+      const typedTurns = async () => {
+        const saved = await sessions.get(id).catch(() => null);
+        return (saved?.messages ?? []).filter((m) => m.role === 'user' && typeof m.content === 'string' && m.kind === 'text').map((m) => m.content); // the person's own typed words: never Bunny's notes, a tool result or an assistant turn
+      };
+      const askJudgeModel = async (messages, signal) => {
+        // the chat's own provider by default (F11-4); another one only if the person chose it in Settings, and never one with no key or a model off the allowlist
+        let p = provider; let key = apiKey; let judgeModel = model;
+        const chosen = String(settings.autoJudgeModel ?? '');
+        if (chosen) {
+          const [pid, ...rest] = chosen.split('/');
+          const other = registry.find(pid);
+          const otherKey = other ? await secrets.get(`provider:${other.id}`) : null;
+          if (!other || !otherKey) throw new Error('the chosen check model has no key');
+          if (Array.isArray(settings.allowlist) && settings.allowlist.length && !settings.allowlist.includes(rest.join('/'))) throw new Error('the chosen check model is not on the allowlist');
+          p = other; key = otherKey; judgeModel = rest.join('/');
+        }
+        let text = '';
+        for await (const delta of streamChat({ waitSeconds: 20, baseUrl: p.baseUrl, apiKey: key ?? undefined, model: judgeModel, messages, fake: fake && !p.custom, signal, tools: null, maxTokens: 300 })) text += delta;
+        return text;
+      };
+      const judgeModelLabel = () => String(settings.autoJudgeModel || model || '');
+      /** F11: "Checked 14 actions, blocked 1" in the reply's details, once, when the reply ends and the check was used. */
+      const judgeSummary = async () => {
+        const st = replyJudge?.stats;
+        if (!st || !st.checked) return;
+        const text = `Checked ${st.checked} action${st.checked === 1 ? '' : 's'}, blocked ${st.blocked}`;
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: text, status: 'done', content: '', result: `The check (${judgeModelLabel()}) read only your own words and each action.` });
+        send('tool', { tool: text, status: 'done' });
+      };
+      /** @returns {Promise<{ proceed: true } | { stop: string } | { card: string }>} */
+      const autoCheck = async (summary, name, parsed, risk) => {
+        if (!judgeOn() || !goesToJudge(name, risk)) return { proceed: true };
+        replyJudge ??= createReplyJudge({ ask: askJudgeModel, model: judgeModelLabel() });
+        const out = await replyJudge.judge({ tool: name, args: parsed, folder: workspace?.root ?? folder?.folder ?? '' }, { userTurns: await typedTurns(), scheduled: Boolean(scheduledTask) });
+        const stats = replyJudge.stats;
+        if (out.action === 'run') {
+          judgeDownUntil = 0;
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: `Checked: ${summary}`, status: 'done', content: '', result: `Allowed (${judgeModelLabel()}): ${out.reason}` });
+          send('tool', { tool: `Checked: ${summary}`, status: 'done', result: `Allowed: ${out.reason}` });
+          return { proceed: true };
+        }
+        if (out.action === 'stop') {
+          await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '', result: `Stopped by Bunny's check (${judgeModelLabel()}): ${out.reason}` });
+          send('tool', { tool: summary, status: 'denied', result: `Stopped by Bunny's check: ${out.reason}` });
+          if (out.fellBack && !judgeNoticeShown) { judgeNoticeShown = true; send('notice', { text: `Bunny's check stopped ${stats.blocked} actions in this reply, so it asks you before each one for the rest of it.` }); }
+          return { stop: `Bunny's check stopped this: ${out.reason} Find a safer way, or ask the person with ask_user.` };
+        }
+        if (smart) { smartDown = true; judgeDownUntil = Date.now() + 5 * 60_000; }
+        if (!judgeNoticeShown) { judgeNoticeShown = true; send('notice', { text: out.why }); }
+        return { card: out.why };
+      };
 
       // Settings → Code.
       const branchPrefix = String(settings.branchPrefix ?? 'bunny').trim().replace(/[^\w.-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'bunny';
@@ -3537,12 +3637,15 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
         else if (isGithubTool(name) && AGENT_TOOL_RISK[name] !== 'read') {
           detail = [parsed.title, parsed.body, parsed.head && `${parsed.head} → ${parsed.base || 'default branch'}`].filter(Boolean).join('\n\n');
         }
-        if (ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'))) {
+        let askWhy = '';
+        let mustAsk = ruledProcess?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruledProcess?.effect === 'allow' && risk !== 'send' && risk !== 'build'));
+        if (!mustAsk && ruledProcess?.effect !== 'allow') { const judged = await autoCheck(summary, name, parsed, risk); if (judged.stop) return judged.stop; if (judged.card) { mustAsk = true; askWhy = judged.card; } }
+        if (mustAsk) {
           const tooLong = (name === 'start_process' || name === 'create_tool' || name === 'computer_type' || name === 'schedule_task' || custom) ? cardTooLong(detail, name === 'schedule_task' ? parsed.prompt : detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const f9 = await f9Judge({ name, parsed, askRule: ruledProcess?.effect === 'ask' });
           if (f9.covered) kindNotes.set(summary, f9.covered);
-          const allowed = f9.covered ? true : await askPermission(summary, ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail, f9.opts);
+          const allowed = f9.covered ? true : await askPermission(summary, (ruledProcess?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruledProcess)}.` : detail) + (askWhy ? `\n\n${askWhy}` : ''), f9.opts);
           if (allowed) await f9Give(allowed, f9.opts);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -3929,12 +4032,15 @@ Asked because of your rule ${describeRule(v)}.`)) { said.add(host); approveSite(
             send('tool', { tool: summary, status: 'denied' });
             return planRefusal(name);
           }
-          if (needsOk(BROWSER_TOOL_RISK[name], name, parsed)) {
+          let browserAsk = needsOk(BROWSER_TOOL_RISK[name], name, parsed);
+          let browserWhy = '';
+          if (!browserAsk) { const judged = await autoCheck(summary, name, parsed, BROWSER_TOOL_RISK[name]); if (judged.stop) return judged.stop; if (judged.card) { browserAsk = true; browserWhy = judged.card; } }
+          if (browserAsk) {
             // F9-3: the host is what the panel reports for its CURRENT page now, never one from the call's arguments
             const host = kindsActive && ['browser_click', 'browser_type'].includes(name) ? await askBrowser('read', {}).then((a) => { try { return new URL(String(a?.url ?? '')).hostname; } catch { return null; } }, () => null) : null;
             const f9 = await f9Judge({ name, parsed, host });
             if (f9.covered) kindNotes.set(summary, f9.covered);
-            const allowed = f9.covered ? true : await askPermission(summary, '', f9.opts);
+            const allowed = f9.covered ? true : await askPermission(summary, browserWhy, f9.opts);
             if (allowed) await f9Give(allowed, f9.opts);
             if (!allowed) {
               await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -4096,12 +4202,16 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           oneCard = { on: answer === 'on' && !tooLong, listed, tooLong, commit, token };
         }
         // W6-14: a local connector is confirmed in every mode, Auto included: nothing starts a program the person did not see.
-        if (!oneCard && !alreadyThere && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build')))) {
+        const wantsCard = !oneCard && !alreadyThere;
+        let mustAskHere = Boolean(wantsCard && (localConnector || toolPlan || ruled?.effect === 'ask' || (needsOk(risk, name, parsed) && !(ruled?.effect === 'allow' && risk !== 'send' && risk !== 'build'))));
+        let whyHere = '';
+        if (wantsCard && !mustAskHere && ruled?.effect !== 'allow' && !(isWorkspace && risk === 'edit')) { const judged = await autoCheck(summary, name, parsed, risk); if (judged.stop) return judged.stop; if (judged.card) { mustAskHere = true; whyHere = judged.card; } } // edits inside the workspace never go to the judge
+        if (mustAskHere) {
           const tooLong = (localConnector || toolPlan || name === 'run_command' || officeSpec) ? cardTooLong(detail) : null;
           if (tooLong) { send('tool', { tool: summary, status: 'denied', result: tooLong }); return tooLong; }
           const f9 = await f9Judge({ name, parsed, entry, askRule: ruled?.effect === 'ask' });
           if (f9.covered) kindNotes.set(summary, f9.covered);
-          const allowed = f9.covered ? true : await askPermission(summary, ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail, f9.opts);
+          const allowed = f9.covered ? true : await askPermission(summary, (ruled?.effect === 'ask' ? `${detail}\n\nAsked because of your rule ${describeRule(ruled)}.` : detail) + (whyHere ? `\n\n${whyHere}` : ''), f9.opts);
           if (allowed) await f9Give(allowed, f9.opts);
           if (!allowed) {
             await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status: 'denied', content: '' });
@@ -4298,7 +4408,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
           const outcome = await engines.runTurn({
             id, session, settings, content: (engineCtxPrefix ? engineCtxPrefix + String.fromCharCode(10, 10) + String.fromCharCode(45, 45, 45) + String.fromCharCode(10, 10) : '') + (rewindText ? `(${rewindText})
 
-${content}` : content), handover, root: workspace.root, permissionMode, send, logStep, askPermission, allowKinds: () => sessions.allowKindsOf(id), signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+${content}` : content), handover, root: workspace.root, permissionMode, send, logStep, askPermission, autoCheck: (summary, name, args, risk) => autoCheck(summary, name, args, risk), allowKinds: () => sessions.allowKindsOf(id), signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, onCommand: markCommand, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced
@@ -4312,6 +4422,7 @@ ${content}` : content), handover, root: workspace.root, permissionMode, send, lo
             },
             logTool: req.bunnyDevice ? (name) => remote.logAction(req.bunnyDevice, { kind: 'tool', tool: name }) : null, // EN-7 (R-DF2): an Everything device's engine tools, by name only
           });
+          await judgeSummary();
           if (folderRulesSet && session.folderRulesSent !== folderRulesSet.sha) session = await sessions.update(id, { folderRulesSent: folderRulesSet.sha }).catch(() => session); // what the engines were last told
           if (outcome.stoppedForCheck) {
             const failedFor = session.engine.restrictedFor ?? (session.engine.restricted ? [session.engine.id] : []); // ES-2: only this code writes the list
@@ -4525,6 +4636,8 @@ ${content}` : content), handover, root: workspace.root, permissionMode, send, lo
             closeThinking();
             const savedSession = await sessions.append(id, { role: 'assistant', content: assembled, ...(pcTurn.tainted ? { noAutoLoad: true } : {}), ...(pcTurn.files.length ? { pcSources: pc.sourcesOf(pcTurn) } : {}), attachments: spoken, ...answeredBy, ...undoInfo(), ...(currentTasks.length ? { tasks: currentTasks } : {}), ...(thinking.trim() ? { thinking, ...(thinkingMs > 0 ? { thinkingMs } : {}) } : {}) });
             session = await sessions.get(id);
+            await judgeSummary();
+            send('done', { sessionId: id, lookups: textOnly ? quickLookups : undefined, noAutoLoad: pcTurn.tainted || undefined, pcSources: pcTurn.files.length ? pc.sourcesOf(pcTurn) : undefined, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
             send('done', { sessionId: id, lookups: textOnly ? quickLookups : undefined, lookupText: lookupFound ?? undefined, noAutoLoad: pcTurn.tainted || undefined, pcSources: pcTurn.files.length ? pc.sourcesOf(pcTurn) : undefined, model, messageId: savedSession.messages.at(-1)?.id, context: sessions.context(session) });
           }
           await usage.record({

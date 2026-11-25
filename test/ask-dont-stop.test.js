@@ -67,8 +67,8 @@ test('with open plan steps, a reply that stops to ask permission is told to carr
     'All pages are built and checked.',
   ]);
   assert.equal(seen.length, 3, 'asked again instead of ending on the question');
-  assert.match(seen[0].messages[0].content, /Never stop to ask permission for work the person already asked for/);
-  assert.match(seen[0].messages[0].content, /Bunny runs commands, installs packages and starts servers itself/);
+  assert.match(seen[0].messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), /Never stop to ask permission for work the person already asked for/);
+  assert.match(seen[0].messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), /Bunny runs commands, installs packages and starts servers itself/);
   assert.match(seen[2].messages.at(-1).content, /Your plan still has 1 open step\. Carry on/);
 });
 
@@ -102,5 +102,5 @@ test('the no-plan nudge counts toward the same limit of three', async (t) => {
 
 test('the Code prompt asks long jobs to keep a task list (W6-12)', async (t) => {
   const seen = await run(t, ['Done.']);
-  assert.match(seen[0].messages[0].content, /about ten steps or more[\s\S]*task list with update_tasks/);
+  assert.match(seen[0].messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), /about ten steps or more[\s\S]*task list with update_tasks/);
 });

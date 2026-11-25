@@ -139,6 +139,7 @@ test('REWIND: a reply that ran a command is flagged and the preview warns', asyn
   const { base } = await startApp(t, { fake: false });
   const provider = await scripted(t, [w('a.txt', 'x'), { name: 'run_command', args: { command: 'echo hi' } }, null]);
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: provider.url });
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ autoJudgeEnabled: false }) }); // F11: this test is about the rewind note, not the Auto check
   const { body: session } = await post(base, '/api/sessions', { title: 'Cmd' });
   const set = (key, value) => fetch(`${base}/api/sessions/${session.id}/setting/${key}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) });
   await set('permissionMode', 'auto');

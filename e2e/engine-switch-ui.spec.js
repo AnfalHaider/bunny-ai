@@ -31,7 +31,7 @@ test('the trust card appears for a folder with instruction files; Read shows the
   const id = await codeChat(request, folder);
   await page.goto(`/?s=${id}`);
   const card = page.locator('#fr-trust-card');
-  await expect(card).toContainText('This folder has instruction files');
+  await expect(card).toContainText('Follow its instruction files?');
   await expect(card).toContainText('AGENTS.md');
   await expect(page.locator('#folder-chip')).toHaveAttribute('title', /· 1 instruction file$/); // the chip's tooltip counts them
   await card.getByRole('button', { name: 'Follow them' }).click();

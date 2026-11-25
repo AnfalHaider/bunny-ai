@@ -15,7 +15,7 @@ const post = async (base, path, body) => { const r = await fetch(`${base}${path}
 const icacls = (folder) => execFileSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'icacls.exe'), [folder], { encoding: 'utf8', windowsHide: true });
 const q = (p) => p.replace(/'/g, "''");
 
-async function world(t, calls, settings = { confineCommands: 'auto' }) {
+async function world(t, calls, settings = { confineCommands: 'auto', autoJudgeEnabled: false }) {
   const project = mkdtempSync(join(tmpdir(), 'bunny-confrun-project-'));
   const outside = mkdtempSync(join(tmpdir(), 'bunny-confrun-outside-'));
   t.after(() => { rmSync(project, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); rmSync(outside, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); });
@@ -62,7 +62,7 @@ test('F13: Deny on the label card means this chat\'s commands run normally; "off
   assert.equal(denied.cards.length, 1);
   assert.ok(existsSync(join(denied.outside, 'free.txt')), 'Deny: the command ran normally');
   assert.equal(parseLabel(icacls(denied.project)).level, null, 'and nothing was labelled');
-  const off = await world(t, ({ outside }) => [['run_command', { command: `Set-Content -LiteralPath '${q(join(outside, 'free.txt'))}' -Value x; 'wrote'` }]], { confineCommands: 'off' });
+  const off = await world(t, ({ outside }) => [['run_command', { command: `Set-Content -LiteralPath '${q(join(outside, 'free.txt'))}' -Value x; 'wrote'` }]], { confineCommands: 'off', autoJudgeEnabled: false });
   await off.say('write outside');
   assert.equal(off.cards.length, 0); assert.ok(existsSync(join(off.outside, 'free.txt')));
   const bad = await fetch(`${off.w.base}/api/settings`, { method: 'PUT', headers: json, body: JSON.stringify({ confineCommands: 'sometimes' }) });

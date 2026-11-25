@@ -15,6 +15,7 @@ import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
 import { commandMatches, editMatches } from '../allowKinds.js';
 import { createBridge, keyFolders } from './bridge.js';
+import { rulesWithoutBroadAllow } from '../autoJudge.js';
 import { AUTH_COMMANDS, denyRules, signInUrlFrom, startClaude } from './claude-code.js';
 import { loadSchema, startCodex } from './codex.js';
 import { loadPins } from './pins.js';
@@ -321,7 +322,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const root = turn.root;
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
-      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(settings.permissionRules, root)), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(turn.autoCheck && turn.permissionMode === 'auto' && settings.autoJudgeEnabled !== false ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, root)), autoCheck: ownRules ? null : (turn.autoCheck ?? null), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
       // F9-7: in Bunny-rules mode an engine's command or edit that the person allowed as a KIND for this chat runs with no card (an engine's own rules mode keeps the engine's own "always")
       allowed: ownRules ? undefined : async (call) => {
         const kinds = (await turn.allowKinds?.()) ?? turn.session?.allowKinds ?? [];
@@ -407,7 +408,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     if (staged) {
       try {
         const changes = await diff({ root, dir: staged.dir, manifest: staged.manifest });
-        const collector = createBridge({ ...ctx, ask: async (summary, detail) => { void summary; void detail; return false; } });
+        const collector = createBridge({ ...ctx, autoCheck: null, ask: async (summary, detail) => { void summary; void detail; return false; } });
         const result = await review({ root, dir: staged.dir, changes, mode: turn.permissionMode, judge: (c) => collector.judge(c), ask: (summary, detail) => turn.askPermission(summary, detail), writeReal: (rel, buf) => turn.writeReal(rel, buf) });
         const said = describeReview(result);
         assembled += `${assembled ? '\n\n' : ''}${said}`; turn.send('delta', { text: `${assembled === said ? '' : '\n\n'}${said}` });

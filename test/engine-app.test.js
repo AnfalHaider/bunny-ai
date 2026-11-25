@@ -177,3 +177,23 @@ test('Claude Code account sign-in: the state is signed out until the vendor flow
   assert.ok((await (await fetch(`${base}/api/engines/record`)).json()).record.some((r) => r.action === 'signout'));
   assert.equal((await post(base, '/api/engines/codex/signin', {})).status, 400, 'only Claude Code has an account sign-in for now');
 });
+
+test('AGENT-FLOW F11, the engines path: in Auto with the check on, a Bunny-rules engine chat command goes through the bridge to the check (a bad answer is a block, so it does not run) and the reply says "Checked 1 action, blocked 1"; with the check off it runs as before', async (t) => {
+  for (const judgeOn of [true, false]) {
+    const folder = await mkdtemp(join(tmpdir(), 'bunny-eng-'));
+    const marker = join(folder, 'ran.txt');
+    const { base } = await appWithEngines(t, { steps: [{ tool: 'Bash', input: { command: 'npm test' }, marker }, { say: 'ok' }] });
+    await put(base, '/api/settings', { engine: 'claude-code', autoJudgeEnabled: judgeOn });
+    await downloaded(base, 'claude-code');
+    const { body: session } = await post(base, '/api/sessions', { title: 'Auto', workMode: 'code', folder, permissionMode: 'auto' });
+    const events = await chatOn(base, session.id, 'run the tests');
+    const summary = events.find((e) => e.event === 'tool' && /^Checked \d+ action/.test(e.data.tool ?? ''));
+    if (judgeOn) {
+      assert.equal(existsSync(marker), false, 'the stand-in check answered in no valid form: a block, so the command did not run');
+      assert.equal(summary?.data.tool, 'Checked 1 action, blocked 1');
+    } else {
+      assert.equal(existsSync(marker), true, 'with the check off Auto runs it as before');
+      assert.equal(summary, undefined);
+    }
+  }
+});

@@ -120,9 +120,10 @@ export async function openFollowCard(sid) {
     const status = el('div', { className: 'modal-sub', role: 'status' });
     const list = el('div', { className: 'fr-files' });
     const reader = el('pre', { className: 'fr-view', hidden: true });
+    const seen = new Set(); // the files whose text was opened here: Follow means something only for text that was seen
     for (const f of waiting) {
       const row = el('div', { className: 'fr-row' }, el('span', { className: 'fr-n', textContent: f.name }), el('small', { textContent: kb(f.size) }), el('span', { className: `fr-chip ${f.kind === 'main' ? 'ok' : ''}`, textContent: f.kind === 'main' ? 'main file' : 'added' }));
-      const read = btn('Read', { className: 'lnk', onclick: () => { const t = texts.get(f.name); reader.hidden = false; reader.textContent = `# ${f.name}\n${t?.text ?? ''}`; } });
+      const read = btn('Read', { className: 'lnk', onclick: () => { const t = texts.get(f.name); reader.hidden = false; reader.textContent = `# ${f.name}\n${t?.text ?? ''}`; seen.add(f.name); const left = waiting.filter((w) => !seen.has(w.name)).length; follow.disabled = left > 0; status.textContent = left > 0 ? `Read ${left === 1 ? 'the other file' : `the other ${left} files`} before you follow them.` : ''; } });
       row.append(read); list.append(row);
     }
     for (const n of view.notUsed) list.append(el('div', { className: 'fr-row' }, el('span', { className: 'fr-n', textContent: n.name }), el('small', { textContent: '' }), el('span', { className: 'fr-chip', textContent: n.why.startsWith('points') ? 'points to AGENTS.md' : 'not used' })));
@@ -131,6 +132,8 @@ export async function openFollowCard(sid) {
       // only the files this card showed: Follow never re-freezes a file that was followed before (that is Read again)
       try { await sendJSON(`/api/sessions/${sid}/folder-rules/follow`, 'POST', { names: waiting.map((f) => f.name), shas }); done(true); } catch (err) { status.textContent = err.message; }
     } });
+    follow.disabled = true; // until every file listed has been opened with Read
+    status.textContent = waiting.length === 1 ? 'Read the file before you follow it.' : 'Read every file before you follow them.';
     const later = btn('Not now', { className: 'btn btn-ghost', onclick: () => done(false) });
     box.append(el('div', { className: 'modal-head' }, el('h3', { className: 'modal-title', textContent: 'This folder has instruction files' }),
       el('p', { className: 'modal-sub', textContent: view.folder })),
@@ -142,19 +145,38 @@ export async function openFollowCard(sid) {
   });
 }
 
-/** The card in the chat, above the composer: the first time a Code chat starts in a folder that has instruction files and no answer. Not on a device (the answer is the PC's). */
-export function trustCard({ sid, view, onAnswered, device = false }) {
+/**
+ * The card in the chat, above the composer: the first time a Code chat starts in a folder nobody has answered for. One card, up to two answers (F12):
+ * question 1 "Follow its instruction files?" (only when the folder has some; it goes through FOLDER-RULES' own Follow card, which shows the text and sends its shas),
+ * question 2 "Run in Auto here?" (only when `auto` is given: a git folder, Smart, the check on). Not on a device (the answers are the PC's).
+ */
+export function trustCard({ sid, view, onAnswered, device = false, auto = null }) {
   const waiting = view.files.filter((f) => f.state === 'waiting');
-  const card = el('div', { className: 'fr-card', role: 'group', 'aria-label': 'This folder has instruction files' });
-  card.append(el('b', { textContent: 'This folder has instruction files' }),
-    el('p', { className: 'fr-p', textContent: `The project in ${view.folder} has instruction files (${waiting.map((f) => f.name).join(', ')}). If I follow them, they steer what I do here whichever engine this chat uses, including commands run in Auto mode.` }));
-  const acts = el('div', { className: 'fr-acts' });
-  if (device) acts.append(el('span', { className: 'modal-sub', textContent: DEVICE_NOTE }));
-  else {
-    acts.append(btn('Follow them', { className: 'btn btn-primary', onclick: async () => { const ok = await openFollowCard(sid).catch(() => false); if (ok) { card.remove(); onAnswered?.(true); } } }),
-      btn('Not now', { className: 'btn btn-ghost', onclick: () => { card.remove(); onAnswered?.(false); } }));
+  const card = el('div', { className: 'fr-card', role: 'group', 'aria-label': 'Trust this folder?' });
+  card.append(el('b', { textContent: 'Trust this folder?' }), el('p', { className: 'modal-sub', textContent: view.folder }));
+  let open = (waiting.length ? 1 : 0) + (auto && !device ? 1 : 0);
+  let followed = false;
+  const answered = (isFollow, yes) => { if (isFollow) followed = yes; open -= 1; if (open <= 0) { card.remove(); onAnswered?.(followed); } };
+  if (waiting.length) {
+    const q = el('div', { className: 'fr-q' });
+    q.append(el('b', { textContent: 'Follow its instruction files?' }),
+      el('p', { className: 'fr-p', textContent: `The project has instruction files (${waiting.map((f) => f.name).join(', ')}). If I follow them, they steer what I do here whichever engine this chat uses, including commands run in Auto mode.` }));
+    if (device) q.append(el('span', { className: 'modal-sub', textContent: DEVICE_NOTE }));
+    else q.append(el('div', { className: 'fr-acts' },
+      btn('Follow them', { className: 'btn btn-primary', onclick: async () => { const ok = await openFollowCard(sid).catch(() => false); if (ok) { q.remove(); answered(true, true); } } }),
+      btn('Not now', { className: 'btn btn-ghost', onclick: () => { q.remove(); answered(true, false); } })));
+    card.append(q);
   }
-  card.append(acts);
+  if (auto && !device) {
+    const q = el('div', { className: 'fr-q', id: 'fr-auto-q' });
+    q.append(el('b', { textContent: 'Run in Auto here?' }),
+      el('p', { className: 'fr-p', textContent: "Commands and changes run without asking you, unless Bunny's check stops them or a rule asks." }),
+      el('p', { className: 'fr-p', textContent: 'A second model checks each risky action before it runs, and Bunny asks you when it cannot. This is a git folder, so changes can be undone. You can change this any time in Settings, under Trusted folders.' }),
+      el('div', { className: 'fr-acts' },
+        btn('Trust this folder for Auto', { className: 'btn btn-primary', onclick: async () => { try { await sendJSON('/api/folder-trust', 'PUT', { folder: auto.folder, auto: true }); q.remove(); answered(false, false); } catch (err) { q.append(el('span', { className: 'modal-sub', textContent: err.message })); } } }),
+        btn('Not now, ask me each time', { className: 'btn btn-ghost', onclick: () => { q.remove(); answered(false, false); } })));
+    card.append(q);
+  }
   return card;
 }
 

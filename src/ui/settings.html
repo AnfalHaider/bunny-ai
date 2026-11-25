@@ -492,16 +492,38 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Default permission mode</div>
-          <div class="desc">How careful a new chat starts out. You can change it per chat under the message box. In Auto, commands run without asking, and a command can read anything your Windows account can, Bunny's saved keys included.</div>
+          <div class="desc">How careful a new chat starts out. You can change it per chat under the message box. Smart (the recommended start) runs in Auto only in a git folder you trusted, with the second-model check on, and asks everywhere else, including on a phone or another device. In Auto, commands run without asking, and a command can read anything your Windows account can, Bunny's saved keys included.</div>
         </div>
         <div class="right">
           <select id="default-permission" aria-label="Default permission mode">
+            <option value="smart">Smart (recommended)</option>
             <option value="ask">Manual</option>
             <option value="accept">Accept edits</option>
             <option value="plan">Plan</option>
             <option value="auto">Auto</option>
           </select>
         </div>
+      </div>
+      <div class="row" id="trusted-folders-row">
+        <div class="meta-col">
+          <div class="name">Trusted folders</div>
+          <div class="desc">Smart runs in Auto only in these git folders. A folder is added when you say yes on its card; remove one to be asked again. A folder that was moved or renamed is new to Bunny and is asked about again. Only this window can change the list.</div>
+          <ul id="trusted-folders" class="plain-list" aria-label="Trusted folders"></ul>
+        </div>
+      </div>
+      <div class="row" id="auto-judge-row">
+        <div class="meta-col">
+          <div class="name">Check Auto actions with a second model</div>
+          <div class="desc">In Auto, a second model checks each risky action before it runs: commands, connector changes, computer and browser clicks, downloads and installs. It sees only your own typed words and the action, never file or page text, and it can only let through what Auto would already run, or stop it. If it stops too many actions, does not answer, or cannot be reached, Bunny asks you instead. While this is on, broad Allow rules (such as node*, powershell* or curl*) are not used in Auto.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoJudgeEnabled" aria-label="Check Auto actions with a second model" /><span>off</span></label></div>
+      </div>
+      <div class="row" id="auto-judge-model-row">
+        <div class="meta-col">
+          <div class="name">Model that checks Auto actions</div>
+          <div class="desc">By default the model of the chat's own provider. Another provider can be chosen below. Each checked action is sent to that provider. <span id="auto-judge-note" role="status"></span></div>
+        </div>
+        <div class="right"><select id="auto-judge-model" aria-label="Model that checks Auto actions"><option value="">This chat's own model</option></select></div>
       </div>
       <div class="row" id="confine-row">
         <div class="meta-col">
@@ -1491,6 +1513,36 @@
 
   // ---- code defaults ----
   $('default-permission').addEventListener('change', (e) => save({ defaultPermissionMode: e.target.value }));
+  // F12: the folders trusted for Auto (window-only), with a Remove for each
+  async function bindTrustedFolders() {
+    const list = $('trusted-folders');
+    const paint = (folders) => {
+      list.replaceChildren();
+      const trusted = folders.filter((f) => f.auto === true);
+      if (!trusted.length) { const li = document.createElement('li'); li.textContent = 'None yet. Smart asks in every folder.'; list.append(li); return; }
+      for (const f of trusted) {
+        const li = document.createElement('li');
+        const name = document.createElement('span'); name.textContent = f.folder;
+        const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn btn-ghost'; rm.textContent = 'Remove'; rm.setAttribute('aria-label', `Stop trusting ${f.folder}`);
+        rm.addEventListener('click', async () => { try { paint((await sendJSON('/api/folder-trust', 'DELETE', { folder: f.folder })).folders ?? []); } catch { /* stays as it was */ } });
+        li.append(name, ' ', rm); list.append(li);
+      }
+    };
+    try { paint((await getJSON('/api/folder-trust')).folders ?? []); } catch { list.textContent = 'The list could not be read.'; }
+  }
+  // F11: the model that checks Auto actions (window-only): the chat's own by default; another provider's model is named, because the checked actions are sent there
+  async function bindJudgeModel(settings) {
+    const sel = $('auto-judge-model');
+    const note = () => { const v = sel.value; $('auto-judge-note').textContent = v ? `Each checked action is sent to ${v.split('/')[0]}.` : ''; };
+    try {
+      const models = await getJSON('/api/models');
+      const seen = new Set();
+      for (const m of models) { const v = `${m.providerId}/${m.id}`; if (seen.has(v) || !/^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(v)) continue; seen.add(v); const o = document.createElement('option'); o.value = v; o.textContent = `${m.providerName ?? m.providerId}: ${m.name ?? m.id}`; sel.append(o); }
+    } catch { /* no model list: the default stays */ }
+    sel.value = [...sel.options].some((o) => o.value === settings.autoJudgeModel) ? settings.autoJudgeModel : '';
+    note();
+    sel.addEventListener('change', async () => { note(); await save({ autoJudgeModel: sel.value }); });
+  }
   $('confine-commands').addEventListener('change', (e) => save({ confineCommands: e.target.value }));
   $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
 
@@ -1912,10 +1964,12 @@
     $('notifications-state').textContent = settings.notifications ? 'on' : 'off';
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
-    $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
+    $('default-permission').value = settings.defaultPermissionMode ?? 'smart';
     $('confine-commands').value = ['off', 'auto', 'always'].includes(settings.confineCommands) ? settings.confineCommands : 'auto';
     $('confine-row').hidden = !/Windows/i.test(navigator.userAgent); // Windows only
     getJSON('/api/confine').then((c) => { const ul = $('confine-notcovered'); ul.replaceChildren(); const h = document.createElement('li'); h.innerHTML = ''; const b = document.createElement('b'); b.textContent = 'Not covered:'; h.append(b); ul.append(h); for (const t of c.notCovered ?? []) { const li = document.createElement('li'); li.textContent = t; ul.append(li); } }).catch(() => {}); // F13-4: the same list the label card shows, from the server, word for word
+    bindJudgeModel(settings).catch(() => {});
+    bindTrustedFolders().catch(() => {});
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);

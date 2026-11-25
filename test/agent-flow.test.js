@@ -156,6 +156,7 @@ test('F1: after install_plugin and the person\'s yes, the new connector\'s tools
     return { content: `final: ${told.at(-1)?.content ?? ''}`.slice(0, 300) };
   });
   const { body: session } = await post(base, '/api/sessions', { title: 'F1' });
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ autoJudgeEnabled: false }) }); // F12: the check is on by default; these tests are about install_plugin
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: 'auto' }) });
   const text = await say(base, session.id, 'find me a weather tool and tell me the forecast', { grant: true });
   const second = seen[1];
@@ -172,6 +173,7 @@ test('F1: a no on the card changes nothing: no tool arrives and the connector st
   standIn(t);
   const { base, seen } = await startModel(t, (body, n) => (n === 1 ? { tool_calls: [{ index: 0, id: 'c1', function: { name: 'install_plugin', arguments: JSON.stringify({ url: 'https://github.com/bunny/carrot-helper' }) } }] } : { content: 'ok' }));
   const { body: session } = await post(base, '/api/sessions', { title: 'F1 no' });
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ autoJudgeEnabled: false }) }); // F12: the check is on by default; these tests are about install_plugin
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: 'auto' }) });
   await say(base, session.id, 'add a weather tool', { grant: false });
   assert.ok(!(seen[1].tools ?? []).some((d) => /forecast/.test(d.function.name)));
@@ -184,6 +186,7 @@ test('F1-1: with Connectors turned off globally, a yes switches nothing on in th
   await post(base, '/api/settings', {}).catch(() => {});
   await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ connectorsEnabled: false }) });
   const { body: session } = await post(base, '/api/sessions', { title: 'F1-1' });
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ autoJudgeEnabled: false }) }); // F12: the check is on by default; these tests are about install_plugin
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: 'auto' }) });
   await say(base, session.id, 'add a weather tool', { grant: true });
   assert.ok(!(seen[1].tools ?? []).some((d) => /forecast/.test(d.function.name)), 'no connector tool was loaded');

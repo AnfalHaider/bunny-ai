@@ -14,7 +14,7 @@
  */
 
 /** Settings keys that decide what Bunny may do or where it may go. */
-export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'braveKeySet', 'folderRulesEnabled', 'folderRulesTrusted', 'pcSearchNoticeShown', 'confineCommands', 'confineFolders'];
+export const WINDOW_ONLY_SETTING_KEYS = ['permissionRules', 'defaultPermissionMode', 'aiComputerUse', 'computerUseEnabled', 'pcSearchEnabled', 'pcSearchAfter', 'pcSearchExcluded', 'pcSearchBarAuto', 'customToolsEnabled', 'allowlist', 'aliases', 'connectorsEnabled', 'plugins', 'instructions', 'skillsEnabled', 'updateUrl', 'githubClientId', 'googleClientId', 'googleClientSecret', 'googleWorkspace', 'autoContinueSteps', 'autoContinueMinutes', 'autoContinueTokens', 'scheduledContinueSteps', 'scheduledContinueMinutes', 'scheduledContinueTokens', 'maxTokens', 'helpersEnabled', 'modelFilter', 'autoUpdate', 'fallbackWhenBusy', 'quickAskEnabled', 'quickAskShortcut', 'engine', 'engines', 'useBunnyEngine', 'braveKeySet', 'folderRulesEnabled', 'folderRulesTrusted', 'pcSearchNoticeShown', 'confineCommands', 'confineFolders', 'autoJudgeEnabled', 'autoJudgeModel'];
 
 /** A session setting that decides the same. */
 export const WINDOW_ONLY_SESSION_SETTINGS = ['permissionMode', 'engine', 'folderRules', 'projectContext'];
@@ -54,6 +54,7 @@ export const WINDOW_ONLY_ROUTES = [
   [['GET'], '^/api/remote/log$'],                           // DEVICE-FULL R-DF2: what devices did; read only in Bunny's window
   [WRITES, '^/api/engines(/.*)?$'],                         // CLI-ENGINES: download, update, switch, roll back, remove, sign in and out of an engine
   [WRITES, '^/api/web-search(/.*)?$'],                      // F6: the Brave Search key is the window's alone
+  [WRITES, '^/api/folder-trust(/.*)?$'],                    // F12: which folders may run in Auto is the window's alone
   [WRITES, `^/api/sessions/${UUID}/allow-kinds(/(all|\d{1,2}))?$`],       // F9: Forget what was allowed for this chat (the list is only ever written by the server)
   [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];

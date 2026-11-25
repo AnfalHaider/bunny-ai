@@ -226,6 +226,7 @@
         </button>
         <!-- the real control chat.js reads and saves; the menu drives it -->
         <select id="permission-mode" class="sr" tabindex="-1" aria-hidden="true" data-i18n-label="composer.permissionMode">
+          <option value="smart">Smart</option>
           <option value="ask">Ask each time</option>
           <option value="accept">Accept edits</option>
           <option value="plan">Plan mode</option>
@@ -233,10 +234,11 @@
         </select>
         <div class="menu up" id="mode-menu" role="menu" hidden>
           <div class="menu-title">Mode</div>
-          <button class="menu-item" role="menuitemradio" data-mode="auto"><span class="label">Auto<small>Runs what you allowed without asking; sending an email still asks</small></span><span class="check">✓</span><span class="key">1</span></button>
-          <button class="menu-item" role="menuitemradio" data-mode="ask"><span class="label">Manual<small>Always ask before making changes</small></span><span class="check">✓</span><span class="key">2</span></button>
-          <button class="menu-item" role="menuitemradio" data-mode="accept"><span class="label">Accept edits<small>File edits go through, commands still ask</small></span><span class="check">✓</span><span class="key">3</span></button>
-          <button class="menu-item" role="menuitemradio" data-mode="plan"><span class="label">Plan<small>Agree a plan before any change</small></span><span class="check">✓</span><span class="key">4</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="smart"><span class="label">Smart<small>Runs on its own in a git folder you trusted, with a check on each risky action; asks elsewhere</small></span><span class="check">✓</span><span class="key">1</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="auto"><span class="label">Auto<small>Runs what you allowed without asking; sending an email still asks</small></span><span class="check">✓</span><span class="key">2</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="ask"><span class="label">Manual<small>Always ask before making changes</small></span><span class="check">✓</span><span class="key">3</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="accept"><span class="label">Accept edits<small>File edits go through, commands still ask</small></span><span class="check">✓</span><span class="key">4</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="plan"><span class="label">Plan<small>Agree a plan before any change</small></span><span class="check">✓</span><span class="key">5</span></button>
         </div>
 
         <span class="under-sep">|</span>
