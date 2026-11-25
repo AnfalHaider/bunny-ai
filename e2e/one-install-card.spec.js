@@ -77,6 +77,9 @@ for (const [scheme, width] of [['light', 1100], ['dark', 390]]) {
     await expect(card.locator('h4')).toHaveText('Install and switch on Stand-in docs?');
     await expect(card).toContainText('Adds a connector at'); await expect(card).toContainText(mcpUrl);
     await expect(card.getByRole('button')).toHaveText(['Install and switch on', 'Install, keep off', "Don't install"]);
+    if (width <= 400) { // on a phone every button of the card is at least 44 px tall (touch size)
+      for (const b of await card.getByRole('button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    }
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(over).toBeLessThanOrEqual(1);
     await page.evaluate(() => { window.__later = 0; new MutationObserver((list) => { for (const m of list) for (const n of m.addedNodes) if (n.nodeType === 1 && (n.matches?.('.live-permission, .capability-card') || n.querySelector?.('.live-permission, .capability-card'))) window.__later += 1; }).observe(document.body, { childList: true, subtree: true }); });

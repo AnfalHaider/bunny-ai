@@ -352,3 +352,19 @@ test('6: an old chat with `restricted: true` is read as restrictedFor of its own
   assert.equal((await sessions.get(made.id)).engine.restricted, undefined);
   await rm(dir, { recursive: true, force: true });
 });
+
+test('F9 and ENGINE-SWITCH (Security): what was allowed for this chat ("Allow this kind") is cleared when the chat moves to another engine, and kept when the engine stays', async () => {
+  const { createSessionStore } = await import('../src/server/sessions.js');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-allowkinds-'));
+  const sessions = createSessionStore({ dir });
+  const made = await sessions.create({ title: 'kinds', workMode: 'code' });
+  await sessions.update(made.id, { engine: { id: 'bunny', rules: 'bunny' } });
+  await sessions.setAllowKinds(made.id, [{ type: 'edit', key: 'x', label: 'x' }]);
+  await sessions.update(made.id, { engine: { id: 'bunny', rules: 'bunny', handoverPending: true } });
+  assert.equal((await sessions.allowKindsOf(made.id)).length, 1, 'the same engine again changes nothing');
+  await sessions.update(made.id, { engine: { id: 'codex', auth: 'local', rules: 'bunny', rulesFixed: true, from: 'bunny', switchedAt: new Date().toISOString() } });
+  assert.deepEqual(await sessions.allowKindsOf(made.id), [], 'moved to Codex: nothing allowed carries over');
+  await sessions.setAllowKinds(made.id, [{ type: 'edit', key: 'y', label: 'y' }]);
+  await sessions.update(made.id, { engine: { id: 'bunny', rules: 'bunny', from: 'codex', switchedAt: new Date().toISOString() } });
+  assert.deepEqual(await sessions.allowKindsOf(made.id), [], 'and back to Bunny: cleared again');
+});

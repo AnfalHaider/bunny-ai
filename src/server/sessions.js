@@ -298,6 +298,7 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
     if (patch.agentStatus !== undefined) session.agentStatus = patch.agentStatus;
     if (patch.engine !== undefined) { // CLI-ENGINES: the chat's engine, its auth mode and its own session, fixed at the first message (only the server sets it)
       const e = patch.engine;
+      const engineWas = session.engine?.id ?? 'bunny';
       // ENGINE-SWITCH: where the chat came from, when it switched, whether Bunny's engine still owes its first note, and the engines Bunny's check failed for (restrictedFor: only the server sets it; the old
       // `restricted: true` is read as the list of that chat's own engine)
       const ENGINE_IDS = ['bunny', 'claude-code', 'codex'];
@@ -306,6 +307,7 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
       if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny', ...carried }; // the person chose Bunny's own engine for this chat, explicitly
       else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...carried, ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
       else delete session.engine;
+      if ((session.engine?.id ?? 'bunny') !== engineWas) delete session.allowKinds; // F9 (Security): what was allowed for this chat is cleared when it moves to another engine (ENGINE-SWITCH)
     }
     // FOLDER-RULES: the chat's own switch (window-only), and the hash of the frozen set the chat's engine session was last told (server-written). The text itself lives in the folder's trust record, not here.
     if (patch.folderRules !== undefined) { if (typeof patch.folderRules === 'boolean') session.folderRules = patch.folderRules; else delete session.folderRules; }
