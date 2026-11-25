@@ -1,9 +1,9 @@
 ---
 piece: release-0.1.15
 role: librarian
-sha: 7c81da08
+sha: 80626b034a1fab39dc9a43599268e6b7ad1ee0c3
 verdict: PASS
 date: 2026-11-25
 ---
 
-README and pictures.json at 7c81da08 checked: folder-trust alt matches the picture (Run in Auto here); the Auto paragraph matches the card; Settings → Permissions, under Trusted folders matches settings.html:509-511 (permissions section); permission-rules.png (eb2c4f8d) matches its alt. Code unchanged since 2cd562ec, where the other README claims and the five other re-drawn pictures were checked. Notes read from the main checkout working copy (f1c1ef7e content, ancestor of 4205e526). Full gate not run by Librarian.
+Docs-only diff 7c81da08..80626b03 (plan, v0.1.15 notes, evidence, CoS sign-off). Notes match the text fact-checked at f1c1ef7e; no README or picture change in this diff.
