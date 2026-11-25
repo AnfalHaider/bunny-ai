@@ -77,8 +77,8 @@ test('the settings screen saves an allowed-model list', async ({ page }) => {
   await page.goto('/src/ui/settings.html');
 
   await page.locator('#allowlist').fill('offline/bunny-code');
-  await page.locator('#save-models').click();
-  await expect(page.locator('#save-models')).toHaveText('Saved');
+  await page.locator('#allowlist').blur(); // no Save button any more: a text box saves when you leave it
+  await expect.poll(async () => (await (await page.request.get('/api/settings')).json()).allowlist).toEqual(['offline/bunny-code']);
 
   await page.reload();
   await expect(page.locator('#allowlist')).toHaveValue('offline/bunny-code');
@@ -94,8 +94,8 @@ test('the settings screen saves a model alias', async ({ page }) => {
   await page.goto('/src/ui/settings.html');
 
   await page.locator('#aliases').fill('fast = offline/bunny-code');
-  await page.locator('#save-models').click();
-  await expect(page.locator('#save-models')).toHaveText('Saved');
+  await page.locator('#aliases').blur(); // no Save button any more: a text box saves when you leave it
+  await expect.poll(async () => (await (await page.request.get('/api/settings')).json()).aliases).toEqual({ fast: 'offline/bunny-code' });
 
   await page.reload();
   await expect(page.locator('#aliases')).toHaveValue('fast = offline/bunny-code');

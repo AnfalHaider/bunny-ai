@@ -45,7 +45,7 @@ test('Settings offers GitHub sign-in and explains what Google sign-in needs', as
 
   const google = page.locator('#google-row');
   await expect(google.getByRole('button', { name: 'Sign in with Google' })).toBeDisabled();
-  await expect(page.locator('#google-desc')).toContainText('Needs a Google client ID');
+  await expect(page.locator('#google-desc')).toContainText('Google sign-in is switched off because Bunny AI has no Google client ID yet');
   await page.locator('.account-apps summary').click();
   await page.fill('#google-client-id', 'test.apps.googleusercontent.com');
   await page.locator('#google-client-id').dispatchEvent('change');

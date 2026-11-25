@@ -28,7 +28,15 @@ async function begin(page, request, entry) {
     transcriptSize: 'medium', transcriptWidth: 'narrow', language: 'en', codeThemeLight: 'bunny-light', codeThemeDark: 'bunny-dark', autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true,
     // the shipped defaults of what a scene may have changed (resetProfile does not touch settings, so one scene's change would reach the next picture): the Auto check on, instruction files followed and not yet trusted, Bunny's own engine
     autoJudgeEnabled: true, folderRulesEnabled: true, folderRulesTrusted: [], engine: 'bunny', useBunnyEngine: true,
+    // the same for the rest a screen can show (the gate runs this after the other specs, on the same server, and they leave settings behind): explicit, because the e2e server's own default for the confine setting is off
+    // null is "never set", which is what a fresh install has (a chat made without a mode starts in Manual there; Settings draws that row as Smart): not a value the person chose
+    defaultPermissionMode: null, transcriptView: null, statusLabels: null,
+    // the e2e profile shows every model (every spec sets this to 'all'; the committed pictures were drawn that way), and no model, allow-list or alias carried over from a spec
+    modelFilter: 'all', providerId: null, model: null, allowlist: [], aliases: {},
+    confineCommands: 'auto', pcSearchEnabled: true, pcSearchAfter: 'show', pcSearchBarAuto: true, pcSearchExcluded: [], pcSearchNoticeShown: false, autoJudgeModel: '', updateUrl: '',
   } });
+  // the folders an earlier spec trusted for Auto are listed in Settings, Permissions: none on a fresh profile
+  for (const f of (await (await request.get('/api/folder-trust')).json()).folders ?? []) await request.delete('/api/folder-trust', { data: { folder: f.folder } });
   await page.clock.setFixedTime(new Date(FIXED_TIME));
   // the app's own random picks (the working-line words, greetings) come from a fixed sequence: the same screen every run
   await page.addInitScript(() => { let seed = 20260115; Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }; });

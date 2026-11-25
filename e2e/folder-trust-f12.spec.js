@@ -60,7 +60,8 @@ async function useFolder(page, dir) {
   await expect(page.locator('#folder-chip')).toHaveAttribute('title', /Working folder/);
 }
 
-test('the chip starts on Smart and says in words what Smart does', async ({ page }) => {
+test('the chip starts on Smart and says in words what Smart does', async ({ page, request }) => {
+  await request.put('/api/settings', { data: { defaultPermissionMode: 'smart' } }); // an earlier spec may have left another default: this one does not depend on the order
   await open(page);
   await expect(page.locator('#mode-label')).toHaveText('Smart');
   await expect(page.locator('#mode-button')).toHaveAttribute('title', /runs in Auto in a git folder you trusted/);
@@ -86,7 +87,7 @@ test('the first message in a git folder shows the trust card once; yes lists it 
   await expect(page.getByRole('group', { name: 'Trust this folder?' })).toHaveCount(0);
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
 
-  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
   const list = page.locator('#trusted-folders');
   await expect(list).toContainText(repo.split(/[\\/]/).pop());
   await list.getByRole('button', { name: /Stop trusting/ }).first().click();
