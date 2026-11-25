@@ -4,10 +4,11 @@ import { resetProfile } from './helpers.js';
 // AGENT-FLOW F11: the Settings rows for the check on Auto actions: off by default, a switch that saves, a model list with the chat's own model first, and the words that say what it does.
 test.afterEach(async ({ request }) => { await request.put('/api/settings', { data: { autoJudgeEnabled: false, autoJudgeModel: '' } }); });
 
-test('Settings, Code: the check on Auto actions is off by default, says what it does, saves its switch, and keeps it after a reload', async ({ page, request }) => {
+test('Settings, Permissions: the check on Auto actions says what it does, saves its switch (it ships ON; this starts from OFF), and keeps it after a reload', async ({ page, request }) => {
   await resetProfile(request);
   await request.put('/api/settings', { data: { autoJudgeEnabled: false, autoJudgeModel: '' } });
-  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions'); // the row lives under Permissions, next to the default mode
+  await expect(page.locator('section[data-section="permissions"] #auto-judge-row')).toBeVisible();
   const row = page.locator('#auto-judge-row');
   await expect(row).toContainText('Check Auto actions with a second model');
   await expect(row).toContainText('only your own typed words and the action, never file or page text');
