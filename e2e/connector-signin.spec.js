@@ -22,6 +22,9 @@ async function comeBack(baseURL, authUrl, { deny = false } = {}) {
   return fetch(`${baseURL}/api/connectors/oauth/callback?${params}`, { headers: { 'sec-fetch-site': 'cross-site' } });
 }
 
+/** The chip that says what needs the person. A connector the person added at their own private or http address also carries its own-address chip (IA-0: "Added by you · may use a private address"), which is not a status, so it is left out here. */
+const statusChip = (row) => row.locator('.tr-chip').filter({ hasNotText: 'Added by you' });
+
 /** TIGHT-ROWS: Test, Sign out and the like are in the row's menu. */
 async function menu(row, name) {
   await row.getByRole('button', { name: /^More for/ }).click();
@@ -42,10 +45,11 @@ test('Test shows Sign in, signing in shows "Signed in as", and Sign out says whe
   await addFake(request);
   await page.goto('/src/ui/customize.html');
   const row = page.locator('.cz-row', { hasText: 'Fake docs' });
-  await expect(row.locator('.tr-chip')).toHaveCount(0); // nothing needs the person: no status word
+  await expect(statusChip(row)).toHaveCount(0); // nothing needs the person: no status word
+  await expect(row.locator('.tr-chip', { hasText: 'Added by you · may use a private address' })).toHaveCount(1); // IA-0: the person's own connector at a private address says so
 
   await menu(row, 'Test');
-  await expect(row.locator('.tr-chip')).toHaveText('Needs sign-in');
+  await expect(statusChip(row)).toHaveText('Needs sign-in');
   await expect(row.locator('.tr-l2')).toContainText(/Opens 127\.0\.0\.1:\d+ in your browser/);
   await expect(row.getByRole('button', { name: 'Sign in' })).toBeVisible();
   await noMenuItem(row, 'Sign out');
@@ -53,7 +57,7 @@ test('Test shows Sign in, signing in shows "Signed in as", and Sign out says whe
   const popup = page.waitForEvent('popup');
   await row.getByRole('button', { name: 'Sign in' }).click();
   const opened = await popup;
-  await expect(row.locator('.tr-chip')).toHaveText('Waiting for your browser');
+  await expect(statusChip(row)).toHaveText('Waiting for your browser');
   await expect(row.locator('.tr-l2')).toContainText('5 minutes to finish');
   const back = await comeBack(baseURL, opened.url());
   expect(back.status).toBe(200);
@@ -61,7 +65,7 @@ test('Test shows Sign in, signing in shows "Signed in as", and Sign out says whe
   await opened.close();
 
   await expect(row.locator('.tr-l2')).toContainText('Signed in as pat@example.test', { timeout: 10_000 });
-  await expect(row.locator('.tr-chip')).toHaveCount(0);
+  await expect(statusChip(row)).toHaveCount(0);
   await expect(row.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
   mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: `${SHOTS}/connectors-signed-in-desktop.png` });
@@ -99,7 +103,7 @@ test('a sign-in the person cancels says so and can be tried again', async ({ pag
   const opened = await popup;
   await comeBack(baseURL, opened.url(), { deny: true });
   await opened.close();
-  await expect(row.locator('.tr-chip')).toHaveText('Sign-in cancelled', { timeout: 10_000 });
+  await expect(statusChip(row)).toHaveText('Sign-in cancelled', { timeout: 10_000 });
   await expect(row).toContainText('cancelled');
   await expect(row.getByRole('button', { name: 'Try again' })).toBeVisible();
 });
@@ -127,7 +131,7 @@ test('on a phone a connector is one tight row: a chip says what needs you, the s
   await page.goto('/src/ui/customize.html');
   const row = page.locator('.cz-row', { hasText: 'Fake docs' });
   await menu(row, 'Test');
-  await expect(row.locator('.tr-chip')).toHaveText('Needs sign-in');
+  await expect(statusChip(row)).toHaveText('Needs sign-in');
   await expect(row.getByRole('switch')).toBeVisible(); // the switch stays on the row
   await expect(row.getByRole('button', { name: 'Sign in' })).toBeHidden(); // the visible action gives way to the menu on a narrow list
   expect(await row.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(80); // one tight row, not a card
@@ -149,13 +153,13 @@ test('the Automation page shows the same status words and can start the sign-in'
   await addFake(request);
   await page.goto('/src/ui/automation.html');
   const row = page.locator('#mcp-list .tr-row', { hasText: 'Fake docs' });
-  await expect(row.locator('.tr-chip')).toHaveCount(0);
+  await expect(statusChip(row)).toHaveCount(0);
   await menu(row, 'Check tools');
-  await expect(row.locator('.tr-chip')).toHaveText('Needs sign-in');
+  await expect(statusChip(row)).toHaveText('Needs sign-in');
   const popup = page.waitForEvent('popup');
   await row.getByRole('button', { name: 'Sign in' }).click();
   const opened = await popup;
-  await expect(row.locator('.tr-chip')).toHaveText('Waiting for your browser');
+  await expect(statusChip(row)).toHaveText('Waiting for your browser');
   await comeBack(baseURL, opened.url());
   await opened.close();
   await expect(row.locator('.tr-l2')).toContainText('Signed in as pat@example.test', { timeout: 10_000 });

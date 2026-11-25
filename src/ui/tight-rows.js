@@ -78,7 +78,7 @@ export function tightRow(doc, { className = '', role = 'row', checkbox = null, n
   if (checkbox) row.append(checkbox); else if (boxSpace) row.append(make(doc, 'span', { className: 'tr-cb-space', 'aria-hidden': 'true' })); else row.classList.add('tr-nobox');
   row.append(make(doc, 'span', { className: 'tr-tile', 'aria-hidden': 'true', text: initial(tile) }));
   const l1 = make(doc, 'div', { className: 'tr-l1' }, make(doc, 'b', { text: name }),
-    ...chips.map((c) => make(doc, 'span', { className: `tr-chip${c.tone ? ` is-${c.tone}` : ''}`, text: c.text })));
+    ...chips.map((c) => make(doc, 'span', { className: `tr-chip${c.tone ? ` is-${c.tone}` : ''}`, text: c.text, title: c.text })));
   const text = make(doc, 'div', { className: 'tr-name' }, l1, dim ? make(doc, 'div', { className: 'tr-l2', title: dim, text: dim }) : null, extra);
   row.append(text);
   const right = make(doc, 'div', { className: 'tr-right' });

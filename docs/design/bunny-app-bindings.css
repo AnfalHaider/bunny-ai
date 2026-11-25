@@ -1697,3 +1697,6 @@ textarea.bad, input.bad { border-color: var(--bad); }
   .folder-rules-modal button { min-height: 44px; }
   .folder-rules-modal button.lnk { display: inline-flex; align-items: center; padding-inline: var(--sp-4); }
 }
+
+/* IA-0: a long chip ("Added by you · may use a private address") must never push a phone row sideways: below 600 px a chip may shrink and cut its words with an ellipsis (the full words stay in its title) */
+@media (max-width: 600px) { .tr-l1 .tr-chip { flex: 0 1 auto; min-width: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; } }
