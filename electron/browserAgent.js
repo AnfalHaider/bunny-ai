@@ -253,7 +253,8 @@ async function inView(contents, action, args = {}, world = null) {
  */
 export async function controlView(contents, name, action, args = {}, world = null) {
   if (!/^bunny-tab-\d+$/.test(String(name)) || !ACTIONS.has(action)) return { error: 'Not a browser action' };
-  if (action === 'read') return { page: await inView(contents, 'read', {}, world) };
+  // F9 (QA): the address the person is looking at comes from the main process (webContents.getURL()), not from the page and never from the model: a panel's browser kind is made from it
+  if (action === 'read') return { page: await inView(contents, 'read', {}, world), url: String(contents.getURL?.() ?? '') };
   if (action === 'inspect' || action === 'capture') return { inspected: await inView(contents, action, action === 'inspect' ? { what: args.what, selector: args.selector } : {}, world) };
   if (action === 'scroll') {
     await inView(contents, 'scroll', { direction: args.direction }, world);

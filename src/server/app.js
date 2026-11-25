@@ -3806,7 +3806,7 @@ Asked because of your rule ${describeRule(v)}.`)) { said.add(host); approveSite(
           }
           if (needsOk(BROWSER_TOOL_RISK[name], name, parsed)) {
             // F9-3: the host is what the panel reports for its CURRENT page now, never one from the call's arguments
-            const host = kindsActive && ['browser_click', 'browser_type'].includes(name) ? await askBrowser('read', {}).then((a) => { try { return new URL(String(a?.url ?? '')).hostname; } catch { return null; } }, () => null) : null;
+            const host = kindsActive && ['browser_click', 'browser_type'].includes(name) ? await askBrowser('read', {}).then((a) => { try { const u = new URL(String(a?.url || a?.page?.url || '')); return /^https?:$/.test(u.protocol) ? u.hostname : null; } catch { return null; } }, () => null) : null;
             const f9 = await f9Judge({ name, parsed, host });
             if (f9.covered) kindNotes.set(summary, f9.covered);
             const allowed = f9.covered ? true : await askPermission(summary, '', f9.opts);
