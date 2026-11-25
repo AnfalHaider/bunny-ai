@@ -2929,7 +2929,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const root = await realpath(workspace.root).catch(() => workspace.root);
         const has = () => (Array.isArray(settings.confineFolders) ? settings.confineFolders : []).some((e) => String(e?.folder).toLowerCase() === root.toLowerCase());
         if (!has()) {
-          const cardText = `Bunny will run this chat's commands in a low-rights mode that can only write inside this folder:\n${root}\n\nTo do that it changes this folder's security label once, with this Windows command:\nicacls "${root}" /setintegritylevel (OI)(CI)L\n\nOnly this folder and what is inside it change. It is not a system or network setting. "Remove the label" on the Working folder card puts the label back exactly as it was.\n\nNot covered: ${NOT_COVERED.map((t) => t.replace(/\.$/, '')).join('; ')}.\n\nAllow: label the folder and confine commands. Deny: this chat's commands run normally.`;
+          const cardText = `Bunny will run this chat's commands in a low-rights mode that can only write inside this folder:\n${root}\n\nTo do that it changes this folder's security label once, with this Windows command:\nicacls "${root}" /setintegritylevel (OI)(CI)L\n\nOnly this folder and what is inside it change. It is not a system or network setting. "Remove the label" on the Working folder card puts the label back exactly as it was.\n\nNot covered:\n${NOT_COVERED.map((t) => `- ${t}`).join('\n')}\n\nAllow: label the folder and confine commands. Deny: this chat's commands run normally.`;
           if (!(await askPermission('Confine commands to this folder?', cardText))) { confineDeclined.add(id); return null; }
           const done = await confiner.label(root);
           if (!done.ok) {
@@ -3646,7 +3646,7 @@ ${message.slice(0, 600)}${message.length > 600 ? '…' : ''}`,
           result = `The tool failed: ${err.message}`;
         }
         result = clip(String(result), 30_000);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: '', result: clip(shown ?? result, 1200), fullResult: result, attachments, ...(confined?.wrap ? { confined: true } : {}), ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(asked ? { question: asked } : {}) });
         send('tool', { tool: summary, status, result: clip(shown ?? result, 600), attachments, ...(artifact ? { artifact } : {}), ...(linked ? { linked } : {}), ...(confined?.wrap ? { confined: true } : {}) });
         return images.length ? { content: result, images } : result;
       };
@@ -3949,7 +3949,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
         // Brave's terms: no storing of its results. The chat keeps one line (who answered and how many), not the text; the person and the model see the results during this reply only.
         const bravePage = name === 'web_search' && wholeResult.startsWith('(via Brave)\n');
         const keptResult = bravePage ? `web search via Brave: ${wholeResult.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length} results` : clip(result, 1200);
-        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: keptResult, fullResult: bravePage ? '' : wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
+        await logStep({ role: 'assistant', kind: 'tool_call', tool: summary, status, content: command, result: keptResult, ...(confined?.wrap ? { confined: true } : {}), fullResult: bravePage ? '' : wholeResult.slice(0, 2_000_000), saveable: isWorkspace || (Boolean(entry) && !isApp), ...(signIn ?? {}) });
         send('tool', { tool: summary, status, result: clip(result, 1200), ...(signIn ?? {}), ...(confined?.wrap ? { confined: true } : {}) });
         if (signIn) return `${result} Do not call this connector again until the person signs in; carry on without it, or tell them to sign in to it.`;
         return connectorPictures.length ? { content: result, images: connectorPictures } : result;

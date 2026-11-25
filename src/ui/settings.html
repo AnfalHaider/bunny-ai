@@ -514,7 +514,7 @@
       <div class="row" id="confine-row">
         <div class="meta-col">
           <div class="name">Confine commands to the project folder</div>
-          <div class="desc">Windows only. Commands Bunny runs in Code mode run in a low-rights mode that can only write inside the project folder: no admin, nothing installed. Bunny asks once per folder before it changes the folder's security label, and "Remove the label" on the Working folder card puts it back as it was. On in Auto is recommended. <b>Not covered:</b> reading files (a confined command can still read everything you can, Bunny's own data folder included; files encrypted with your Windows account can be decrypted by any program running as you, so this limits writes, not the reading of secrets); the network; file tools (they have their own folder checks); custom tools you made (each runs its own PowerShell script after you approve it), local connectors, other connectors, the browser and computer use; engines (Codex has its own sandbox, Claude Code on Windows has none).</div>
+          <div class="desc">Windows only. Commands Bunny runs in Code mode run in a low-rights mode that can only write inside the project folder: no admin, nothing installed. Bunny asks once per folder before it changes the folder's security label, and "Remove the label" on the Working folder card puts it back as it was. On in Auto is recommended. <b>Not covered:</b> reading files (a confined command can still read everything you can, Bunny's own data folder included; files encrypted with your Windows account can be decrypted by any program running as you, so this limits writes, not the reading of secrets); the network; file tools (they have their own folder checks); custom tools you made (each runs its own PowerShell script after you approve it), local connectors, other connectors, the browser and computer use; engines (Codex has its own sandbox, Claude Code on Windows has none). While the label is on, other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.</div>
         </div>
         <div class="right">
           <select id="confine-commands" aria-label="Confine commands to the project folder">
@@ -1828,7 +1828,7 @@
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
     $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
-    $('confine-commands').value = ['off', 'auto', 'always'].includes(settings.confineCommands) ? settings.confineCommands : 'off';
+    $('confine-commands').value = ['off', 'auto', 'always'].includes(settings.confineCommands) ? settings.confineCommands : 'auto';
     $('confine-row').hidden = !/Windows/i.test(navigator.userAgent); // Windows only
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';

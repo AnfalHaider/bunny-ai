@@ -27,6 +27,7 @@ export const NOT_COVERED = [
   'File tools: they are kept inside the project folder by their own checks, not by this.',
   'Custom tools you made (each runs its own PowerShell script after you approve it), local connectors, other connectors, the browser and computer use.',
   'Engines: Codex has its own sandbox, and Claude Code on Windows has none.',
+  'While the label is on, other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.',
 ];
 
 export const CONFINE_VALUES = ['off', 'auto', 'always'];
@@ -189,5 +190,5 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
 }
 
 /** The setting: 'off', 'auto' (confine while the chat is in Auto) or 'always'. Anything else is 'off'. */
-export const confineMode = (settings) => (CONFINE_VALUES.includes(settings?.confineCommands) ? settings.confineCommands : 'off');
+export const confineMode = (settings) => (CONFINE_VALUES.includes(settings?.confineCommands) ? settings.confineCommands : 'auto'); // not set: on in Auto (the label card still asks first); a person's saved choice is kept
 export const confineApplies = (settings, permissionMode) => { const m = confineMode(settings); return m === 'always' || (m === 'auto' && permissionMode === 'auto'); };

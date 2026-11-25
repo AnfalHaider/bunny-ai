@@ -1489,6 +1489,7 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       tc.append(copy);
     }
     wrap.append(tc);
+    if (m.confined) tc.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13: kept with the step
     if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));

@@ -38,12 +38,20 @@ test('F13-1: the label is refused on a drive root, the home folder, Desktop, Doc
 test('the icacls output is read for the folder\'s current label, and the setting means what the help says', () => {
   assert.deepEqual(parseLabel('x S-1-1-0:(OI)(CI)(M)\n   Mandatory Label\\Low Mandatory Level:(OI)(CI)(NW)\n\nSuccessfully processed 1 files'), { level: 'Low', flags: '(OI)(CI)(NW)' });
   assert.deepEqual(parseLabel('x S-1-1-0:(OI)(CI)(M)\n\nSuccessfully processed 1 files'), { level: null, flags: '' });
-  assert.equal(confineMode({}), 'off'); assert.equal(confineMode({ confineCommands: 'nonsense' }), 'off');
+  assert.equal(confineMode({}), 'auto', 'not set: on in Auto (the label card still asks first)'); assert.equal(confineMode({ confineCommands: 'nonsense' }), 'auto'); assert.equal(confineMode({ confineCommands: 'off' }), 'off', 'a saved choice is kept');
   assert.equal(confineApplies({ confineCommands: 'auto' }, 'auto'), true);
   assert.equal(confineApplies({ confineCommands: 'auto' }, 'manual'), false);
   assert.equal(confineApplies({ confineCommands: 'always' }, 'manual'), true);
   assert.equal(confineApplies({ confineCommands: 'off' }, 'auto'), false);
   assert.ok(NOT_COVERED.some((t) => /Reading files/.test(t) && /data folder/.test(t) && /decrypted/.test(t)) && NOT_COVERED.some((t) => /network/.test(t)) && NOT_COVERED.some((t) => /Claude Code on Windows has none/.test(t)));
+});
+
+test('F13-6: the not-covered list, the label card and the Settings help carry the sentence about other low-rights programs, word for word', async () => {
+  const SENT = 'While the label is on, other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.';
+  assert.ok(NOT_COVERED.includes(SENT));
+  const { readFileSync } = await import('node:fs');
+  assert.ok(readFileSync(new URL('../src/ui/settings.html', import.meta.url), 'utf8').includes(SENT), 'the Settings help');
+  assert.ok(readFileSync(new URL('../src/server/app.js', import.meta.url), 'utf8').includes('NOT_COVERED.map((t) =>'), 'the label card lists NOT_COVERED as it is');
 });
 
 test('a non-Windows server never confines and never claims to', async () => {

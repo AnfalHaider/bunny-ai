@@ -22,9 +22,9 @@ async function world(t, calls, settings = { confineCommands: 'auto' }) {
   const w = await pcWorld(t, { files: {}, settings, calls: typeof calls === 'function' ? calls({ project, outside }) : calls, permissionMode: 'auto' });
   assert.equal((await post(w.base, '/api/folder/check', { folder: project })).status, 200);
   const { body: s } = await post(w.base, '/api/sessions', { title: 'confine', workMode: 'code', folder: project, permissionMode: 'auto' });
-  const cards = [];
-  const say = (content, allow = true) => w.say(content, { sessionId: s.id, extra: { workMode: 'code' }, onEvent: async (event, data, id) => { if (event === 'permission') { cards.push(data.title); await post(w.base, `/api/sessions/${id}/permission/${data.id}`, { allowed: allow }); } } });
-  return { w, project, outside, id: s.id, say, cards };
+  const cards = []; const details = [];
+  const say = (content, allow = true) => w.say(content, { sessionId: s.id, extra: { workMode: 'code' }, onEvent: async (event, data, id) => { if (event === 'permission') { cards.push(data.title); details.push(data.detail); await post(w.base, `/api/sessions/${id}/permission/${data.id}`, { allowed: allow }); } } });
+  return { w, project, outside, id: s.id, say, cards, details };
 }
 
 test('F13 in Auto with "Confine" on: the label card once, the step is marked confined, a write outside the folder is refused, the second command asks nothing, Remove the label puts the folder back', { skip: !windows }, async (t) => {
@@ -32,11 +32,14 @@ test('F13 in Auto with "Confine" on: the label card once, the step is marked con
   const before = icacls(c.project).replace(/\r/g, '');
   const first = await c.say('write two files');
   assert.deepEqual(c.cards.filter((x) => /Confine commands/.test(x)), ['Confine commands to this folder?'], 'the label card, once');
+  assert.ok(c.details[0].includes('While the label is on, other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.'), 'F13-6: the label card carries the sentence about other low-rights programs');
   assert.ok(existsSync(join(c.project, 'in.txt')), 'the write inside the folder worked');
   assert.equal(existsSync(join(c.outside, 'out.txt')), false, 'the write outside the folder was refused');
   const step = first.events.filter((e) => e.event === 'tool' && e.data.status !== 'running' && e.data.confined);
   assert.ok(step.length >= 1, 'the finished step says it was confined');
   assert.match(c.w.toolAnswers().join('\n'), /denied/i);
+  const saved = await (await fetch(`${c.w.base}/api/sessions/${c.id}`)).json();
+  assert.ok(saved.messages.some((m) => m.kind === 'tool_call' && m.confined === true), 'the confined mark is saved with the step');
   assert.equal(parseLabel(icacls(c.project)).level, 'Low');
   const settings = await (await fetch(`${c.w.base}/api/settings`)).json();
   assert.equal(settings.confineFolders.length, 1);
