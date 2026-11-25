@@ -7,9 +7,8 @@
 //   api.seed(chat)     create a chat with messages (and, for helpers, a parent): returns the chat
 //   api.open(url)      go to a page of the app and wait for the fonts
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { heldProvider } from './held-provider.mjs';
 
 export const FIXED_TIME = '2026-01-15T14:12:00';
@@ -41,9 +40,14 @@ async function live(api, steps) {
   return provider;
 }
 
-/** An invented project folder with a fixed name (so the page shows the same words), made again each time. */
+/** The folder every invented project lives under: a fixed place that does not depend on the user name or on TEMP (a picture draws the folder's path), the system drive's root. */
+const PICTURE_ROOT = join(`${process.env.SystemDrive ?? 'C:'}${sep}`, 'bunny-pictures');
+
+/** An invented project folder with a fixed path (so the page shows the same words on every PC), made again each time. */
 function project(name, files) {
-  const root = join(tmpdir(), 'bunny-pictures', name);
+  const root = join(PICTURE_ROOT, name);
+  // a fixed folder at the drive's root could have been made beforehand (or be a link) by someone else on this PC: never write or delete through a link
+  for (const dir of [PICTURE_ROOT, root]) { try { if (lstatSync(dir).isSymbolicLink()) throw new Error(`${dir} is a link: remove it before drawing the pictures`); } catch (err) { if (err?.code !== 'ENOENT') throw err; } }
   rmSync(root, { recursive: true, force: true });
   for (const [rel, text] of Object.entries(files)) { const f = join(root, rel); mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, text); }
   return root;
@@ -58,6 +62,7 @@ async function ask(page, text) {
 /** A Code chat in an invented project, on Auto, ready to send. */
 async function codeChat(page, api, name, files, title, extra = {}) {
   const folder = project(name, files);
+  await api.request.put('/api/settings', { data: { autoJudgeEnabled: false } }); // these pictures show Auto running on its own; the check (on by default) would put a card in the way. begin() resets the profile for the next scene.
   await api.request.post('/api/folder/check', { data: { folder } });
   const made = await api.seed({ title, workMode: 'code', folder, permissionMode: 'auto', ...extra });
   await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'code'); } catch { /* storage blocked */ } });
