@@ -5,7 +5,7 @@
  * network, so nothing here can read or write the real profile.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -36,6 +36,8 @@ export async function startApp(t, overrides = {}) {
   if (options.probe === null) delete options.probe;
   if (options.discover === null) delete options.discover;
 
+  // F11: the Auto check asks a judge model; a suite that runs commands in Auto with a scripted model starts with it off (the suites about the check turn it on themselves)
+  if (overrides.dataDir === undefined) await writeFile(join(dataDir, 'settings.json'), JSON.stringify({ autoJudgeEnabled: false }));
   const app = await createApp(options);
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${app.server.address().port}`;

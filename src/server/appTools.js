@@ -38,7 +38,7 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
     fn('install_plugin', 'Install a plugin from a GitHub repository link, or from an archive (.zip, .tar.gz, .tgz) at a public https address: adds its skills and remote connectors to Bunny AI switched OFF after the person has seen one card listing every part and the fingerprint of the source. Nothing in it runs.',
       { url: { type: 'string' } }, ['url']),
-    fn('install_skill', 'Install a skill from a SKILL.md address, or an archive or GitHub repository that holds skills, at a public https address: the person sees one card with the source, its fingerprint and the skill text before anything is added. It arrives switched OFF.',
+    fn('install_skill', 'Install a skill from the address of its skill file, or an archive or GitHub repository that holds skills, at a public https address: the person sees one card with the source, its fingerprint and the skill text before anything is added. It arrives switched OFF.',
       { url: { type: 'string' } }, ['url']),
     fn('add_skill', 'Add a skill (instructions the model follows) to Bunny AI, switched OFF: the person is shown the whole text (at most about 1,500 characters) and decides whether to switch it on.',
       { name: { type: 'string' }, description: { type: 'string' }, instructions: { type: 'string' } }, ['name', 'instructions']),

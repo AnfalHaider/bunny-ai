@@ -94,6 +94,7 @@ test('Smart in the real app: untrusted or non-git folders ask; a trusted git fol
   const put = (body) => fetch(`${base}/api/folder-trust`, { method: 'PUT', headers: jsonH, body: JSON.stringify(body) });
   assert.equal((await put({ folder: plain, auto: true })).status, 400, 'a folder that is not git cannot be trusted for Auto');
   assert.equal((await put({ folder: repo, auto: 'yes' })).status, 400);
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ autoJudgeEnabled: true }) }); // the suites' app starts with the check off (test/helpers.js); this one is about it
   const asked = await (await fetch(`${base}/api/folder-trust?folder=${encodeURIComponent(repo)}`)).json();
   assert.deepEqual([asked.git, asked.auto, asked.judgeOn], [true, null, true], 'unseen: the judge is on by default, nothing is trusted');
 

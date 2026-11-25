@@ -176,10 +176,11 @@ test('F5: a plugin whose description is too long to show gets a step with Open i
     if (done) break;
     text += new TextDecoder().decode(value);
     const card = /event: (permission|capability)\ndata: (.*)\n/.exec(text);
-    if (card && !text.includes('answered')) { text += 'answered'; await post(w.base, `/api/sessions/${session.id}/${card[1]}/${JSON.parse(card[2]).id}`, card[1] === 'permission' ? { allowed: true } : { granted: true }); }
+    if (card && !text.includes('answered')) { text += 'answered'; await post(w.base, `/api/sessions/${session.id}/${card[1]}/${JSON.parse(card[2]).id}`, card[1] === 'permission' ? { allowed: true, choice: 'off' } : { granted: true }); }
   }
   clearTimeout(stop);
-  assert.match(text, /"result":"Its description is too long to show here\. Open Settings › Customize to read it and switch it on\.","openInCustomize":true/);
+  // F10 (one card) took over from F5's separate step: the card itself says it is too long to show, installs it OFF and points to Customize; nothing is switched on
+  assert.match(text, /Too long to show: it will be installed off\. Switch it on in Customize\./);
   const skills = await (await fetch(`${w.base}/api/skills`)).json();
   assert.equal(skills.length, 30);
   assert.ok(skills.every((x) => x.enabled === false), 'nothing was switched on');
