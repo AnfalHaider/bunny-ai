@@ -73,3 +73,25 @@ test('an Everything device is treated as the window for a project memory write',
   const r = await d.call('POST', `/api/projects/${d.project.id}/memory`, { kind: 'fact', text: 'Kept from the phone.' });
   assert.equal(r.status, 200, r.text);
 });
+
+test('a Chats device reading a followed folder P4: the view answers 200 with titles, sizes and states, and the P4 text is withheld', async (t) => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const d = await seeded(t, 'chats');
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-p4-dev-'));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  await writeFile(join(folder, 'AGENTS.md'), 'Always use British spelling.');
+  const post = (path, body) => fetch(`${d.base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const chat = await (await post('/api/sessions', { title: 'p4', projectId: d.project.id, workMode: 'code', folder })).json();
+  const diff = await (await fetch(`${d.base}/api/sessions/${chat.id}/folder-rules/diff`)).json();
+  const shas = Object.fromEntries((diff.added ?? []).map((f) => [f.name, f.sha256]));
+  assert.equal((await post(`/api/sessions/${chat.id}/folder-rules/follow`, { shas })).status, 200);
+  const view = await d.call('GET', `/api/sessions/${chat.id}/project-context`);
+  assert.equal(view.status, 200);
+  const p4 = view.json().parts[3];
+  assert.equal(p4.n, 4);
+  assert.ok(p4.title && p4.size > 0 && p4.state === '', 'title, size and state are there');
+  assert.ok(!('text' in p4), 'the P4 text is withheld from a Chats device');
+  assert.ok(!view.text.includes('British spelling'));
+});
