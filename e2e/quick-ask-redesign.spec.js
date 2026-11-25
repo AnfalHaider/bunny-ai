@@ -42,7 +42,8 @@ async function openBar(page, { scheme = 'light', config = {}, ask = 'ok' } = {})
       openInBunny: async (target) => { note('open', target ?? null); return { ok: true }; },
       resize: async (h) => { note('resize', h); return { ok: true }; },
       onAnswer: (fn) => { window.__handler = fn; return () => {}; },
-      init: async () => cfg,
+      init: async () => window.__cfg ?? cfg,
+      onRefresh: (fn) => { window.__refresh = fn; return () => {}; },
       close: async () => { note('close'); return { ok: true }; },
       escHandled: async () => { note('escHandled'); return { ok: true }; },
       onEscape: (fn) => { window.__esc = fn; return () => {}; },
@@ -298,7 +299,7 @@ test('8: the keys line says which model will answer, as text, once you type; not
   await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'llama-3-70b' } });
   await expect(page.locator('#modelline')).toBeHidden(); // the empty pill shows none
   await page.locator('#text').fill('x');
-  await expect(page.locator('#modelline')).toHaveText('Answers with llama-3-70b · text only');
+  await expect(page.locator('#modelline')).toHaveText('Answers with llama-3-70b · web search');
 });
 
 test('8: with no model name, no model line is drawn', async ({ page }) => {
@@ -404,3 +405,62 @@ for (const [name, event] of [['model error', { type: 'error', kind: 'other', mes
     expect(m.resizes.at(-1)).toBeGreaterThanOrEqual(Math.ceil(m.top) + 8 + Math.floor(m.bottom - m.top));
   });
 }
+
+// v0.1.14.1, QUICK ASK: what the bar shows for the owner's two refusals
+test('a question about a file that the model sent to the window, while Search this PC is off, gets the "Search this PC is off" card with a way to the switch, not the generic window card', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: false } });
+  await page.locator('#text').fill('last month PLS file DHA-2'); // no "find" or "search": the old check missed it
+  await page.locator('#go').click();
+  await page.evaluate(() => window.__emit({ type: 'needs-window', text: 'I would have to look on this computer.' }));
+  await expect(page.locator('#card')).toContainText('Search this PC is off');
+  await expect(page.locator('#card')).not.toContainText("This needs Bunny's window");
+  await page.locator('#card button', { hasText: 'Open Bunny settings' }).click();
+  expect(await calls(page, 'open')).toEqual([['open', 'search-settings']]);
+});
+
+test('with Search this PC on, a question about a file that still ended in the window card keeps the generic card (the switch is not the reason)', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: true } });
+  await page.locator('#text').fill('last month PLS file DHA-2');
+  await page.locator('#go').click();
+  await page.evaluate(() => window.__emit({ type: 'needs-window', text: '' }));
+  await expect(page.locator('#card')).toContainText("This needs Bunny's window");
+});
+
+test('a restart drops the first reply and shows that Bunny is looking it up; the meta line then says web search, and the keys line says web search too', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'ernie', pcSearch: false } });
+  await page.locator('#text').fill('what is the weather like in islamabad today? search the internet');
+  await page.locator('#go').click();
+  await page.evaluate(() => window.__emit({ type: 'delta', text: 'I cannot browse the internet.' }));
+  await page.evaluate(() => window.__emit({ type: 'restart' }));
+  await expect(page.locator('#ans')).not.toContainText('cannot browse');
+  await expect(page.locator('#busy')).toContainText('Looking it up on the web');
+  await page.evaluate(() => { window.__emit({ type: 'delta', text: 'Islamabad: 24 °C (weather.example).' }); window.__emit({ type: 'done', model: 'ernie', finished: true, lookups: 1 }); });
+  await expect(page.locator('#ans')).toContainText('weather.example');
+  await expect(page.locator('#meta')).toHaveText('Answered by ernie · web search');
+  await expect(page.locator('#card')).toBeHidden();
+});
+
+// v0.1.14.2 (QA's audit at e2ec6ec6)
+test('Bunny\'s own words when Search this PC is off: the answer is Bunny\'s sentence and the card has the way to the switch; no model line, never "open the full app"', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: false } });
+  await page.locator('#text').fill('find my tax returns file');
+  await page.locator('#go').click();
+  await page.evaluate(() => { window.__emit({ type: 'delta', text: 'I cannot see files. Open the full Bunny app.' }); window.__emit({ type: 'restart' }); window.__emit({ type: 'delta', text: 'Search this PC is off. Turn it on in Settings › Capabilities to let Bunny look for files on this computer. Nothing was searched.' }); window.__emit({ type: 'done', model: 'm', finished: true, own: 'pc-off' }); });
+  await expect(page.locator('#ans')).not.toContainText('open the full');
+  await expect(page.locator('#card')).toContainText('Search this PC is off');
+  await expect(page.locator('#meta')).toBeHidden();
+  await page.locator('#card button', { hasText: 'Open Bunny settings' }).click();
+  expect(await calls(page, 'open')).toEqual([['open', 'search-settings']]);
+});
+
+test('a kept bar that is shown again reads Bunny\'s settings again: Search this PC turned on meanwhile appears in the + menu and the model line', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: false } });
+  await page.locator('#text').fill('x');
+  await expect(page.locator('#modelline')).toHaveText('Answers with m · web search');
+  await expect(page.locator('#pc-item')).toBeHidden();
+  await page.evaluate(() => { window.__cfg = { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: true }; window.__refresh(); }); // the main process: "the bar was shown again"
+  await expect(page.locator('#modelline')).toHaveText('Answers with m · web search and files on this PC');
+  await page.locator('#plus').click().catch(() => {});
+  await expect(page.locator('#pc-item')).toBeAttached();
+  expect(await page.locator('#pc-item').evaluate((e) => e.hidden)).toBe(false);
+});

@@ -1,12 +1,23 @@
 /**
- * Projects: named folders of conversations with standing instructions.
+ * Projects: named folders of conversations with standing instructions, an optional folder, and memory of their own.
  *
- * Stored as one small JSON file rather than a directory of files, because a
- * project is a handful of fields and is always read all at once.
+ * Stored as one small JSON file rather than a directory of files, because a project is a handful of fields and is always read all at once.
+ *
+ * PROJECT-CONTEXT: a project may have a folder (new chats there start in Code mode in it), a memory (decisions, conventions, facts and open work
+ * the person kept: never written without their yes, see app.js), and two switches (use the memory, share recent work between chats).
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { looksSecret } from './secretLike.js';
+import { SENSITIVE } from './agentTools.js';
+
+export const MEMORY_KINDS = ['decision', 'convention', 'open', 'fact'];
+export const MAX_PROJECT_MEMORY = 100;
+export const MAX_MEMORY_TEXT = 1000; // what the person may write
+export const MAX_SUGGESTED_TEXT = 400; // PC-6a: what a model's suggestion may be, as shown or as edited before Keep
+
+const refused = (message, code) => Object.assign(new Error(message), { code });
 
 export function createProjectStore({ file }) {
   let projects = [];
@@ -38,14 +49,17 @@ export function createProjectStore({ file }) {
     return projects.find((p) => p.id === id) ?? null;
   }
 
-  async function create({ name, instructions = '' }) {
+  const cleanFolder = (v) => String(v ?? '').trim().slice(0, 500);
+
+  async function create({ name, instructions = '', folder = '' }) {
     await load();
     const clean = String(name ?? '').trim();
-    if (!clean) throw Object.assign(new Error('A project needs a name'), { code: 'project.nameRequired' });
+    if (!clean) throw refused('A project needs a name', 'project.nameRequired');
     const project = {
       id: randomUUID(),
       name: clean.slice(0, 80),
       instructions: String(instructions ?? '').slice(0, 8000),
+      ...(cleanFolder(folder) ? { folder: cleanFolder(folder) } : {}),
       createdAt: new Date().toISOString(),
     };
     projects.push(project);
@@ -56,13 +70,17 @@ export function createProjectStore({ file }) {
   async function update(id, patch) {
     await load();
     const project = projects.find((p) => p.id === id);
-    if (!project) throw Object.assign(new Error('No such project'), { code: 'project.notFound' });
+    if (!project) throw refused('No such project', 'project.notFound');
     if (patch.name !== undefined) {
       const clean = String(patch.name).trim();
-      if (!clean) throw Object.assign(new Error('A project needs a name'), { code: 'project.nameRequired' });
+      if (!clean) throw refused('A project needs a name', 'project.nameRequired');
       project.name = clean.slice(0, 80);
     }
     if (patch.instructions !== undefined) project.instructions = String(patch.instructions).slice(0, 8000);
+    if (patch.folder !== undefined) { if (cleanFolder(patch.folder)) project.folder = cleanFolder(patch.folder); else delete project.folder; }
+    // the two switches are on unless the person turned them off
+    if (patch.useMemory !== undefined) project.useMemory = patch.useMemory !== false;
+    if (patch.shareRecent !== undefined) project.shareRecent = patch.shareRecent !== false;
     await persist();
     return project;
   }
@@ -75,5 +93,73 @@ export function createProjectStore({ file }) {
     return projects.length !== before;
   }
 
-  return { list, get, create, update, remove };
+  // ---- project memory (PROJECT-CONTEXT §3) ----
+  const need = async (id) => {
+    await load();
+    const project = projects.find((p) => p.id === id);
+    if (!project) throw refused('No such project', 'project.notFound');
+    project.memory ??= [];
+    return project;
+  };
+
+  /**
+   * Exactly the text given is stored (PC-6): trimmed, never re-worded. A key-looking item is refused on every path. An item that came from a model's
+   * suggestion (also after the person edited it on the card) is held to the suggestion rules (PC-6a): at most 400 characters, and no sensitive
+   * details unless the person allows them in Settings.
+   */
+  function checkText(text, { suggested = false, allowSensitive = false } = {}) {
+    const clean = String(text ?? '').trim();
+    if (!clean) throw refused('A memory needs something to remember', 'memory.empty');
+    const max = suggested ? MAX_SUGGESTED_TEXT : MAX_MEMORY_TEXT;
+    if (clean.length > max) throw refused(`That is longer than ${max} characters`, 'memory.tooLong');
+    if (looksSecret(clean, '')) throw refused("This looks like a key; Bunny doesn't keep keys in memory", 'memory.secret');
+    if (suggested && !allowSensitive && SENSITIVE.test(clean)) throw refused('This looks like a sensitive detail, so it is not kept (Settings, memory, can allow it)', 'memory.sensitive');
+    return clean;
+  }
+
+  async function memoryList(id) {
+    return [...((await need(id)).memory)];
+  }
+
+  async function memoryAdd(id, { kind = 'fact', text, source = 'person', chatId = null, replaces = null, allowSensitive = false }) {
+    const project = await need(id);
+    if (!MEMORY_KINDS.includes(kind)) throw refused('That kind of item is not known', 'memory.kind');
+    const clean = checkText(text, { suggested: source === 'suggested', allowSensitive });
+    if (replaces) project.memory = project.memory.filter((m) => m.id !== replaces);
+    if (project.memory.length >= MAX_PROJECT_MEMORY) throw refused(`This project already keeps ${MAX_PROJECT_MEMORY} items`, 'memory.full');
+    const entry = { id: randomUUID(), text: clean, kind, source: source === 'suggested' ? 'suggested' : 'person', ...(chatId ? { chatId } : {}), at: new Date().toISOString(), enabled: true };
+    project.memory.push(entry);
+    await persist();
+    return entry;
+  }
+
+  async function memoryUpdate(id, itemId, patch) {
+    const project = await need(id);
+    const entry = project.memory.find((m) => m.id === itemId);
+    if (!entry) throw refused('No such item', 'memory.notFound');
+    if (patch.text !== undefined) entry.text = checkText(patch.text);
+    if (patch.kind !== undefined) { if (!MEMORY_KINDS.includes(patch.kind)) throw refused('That kind of item is not known', 'memory.kind'); entry.kind = patch.kind; }
+    if (patch.enabled !== undefined) entry.enabled = patch.enabled !== false;
+    if (patch.done !== undefined) { if (patch.done) entry.doneAt = new Date().toISOString(); else delete entry.doneAt; }
+    await persist();
+    return entry;
+  }
+
+  async function memoryRemove(id, itemId) {
+    const project = await need(id);
+    const before = project.memory.length;
+    project.memory = project.memory.filter((m) => m.id !== itemId);
+    await persist();
+    return project.memory.length !== before;
+  }
+
+  async function memoryClear(id) {
+    const project = await need(id);
+    const n = project.memory.length;
+    project.memory = [];
+    await persist();
+    return n;
+  }
+
+  return { list, get, create, update, remove, memoryList, memoryAdd, memoryUpdate, memoryRemove, memoryClear };
 }

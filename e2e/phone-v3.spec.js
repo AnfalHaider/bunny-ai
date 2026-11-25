@@ -106,7 +106,8 @@ for (const w of [360, 390, 412]) {
     await expect(page.locator('#settings-search')).toBeVisible();
     await expect(page.locator('.settings-body')).toBeHidden();
     const rows = page.locator('#settings-nav-list [data-section]');
-    expect(await rows.count()).toBe(17); // 16 + "Engines" (the CLI engines page)
+    // SETTINGS-OVERHAUL (approved drawing): its 12 sections (Profile, Appearance, Memory and instructions, Models, Capabilities, Quick ask, Permissions, Code chats, Engines, Desktop app, Usage and data, About) plus the three pages the drawing left as they were (Providers and abilities, Customize, Automation). Language is gone (English only).
+    expect((await rows.allInnerTexts()).map((t) => t.trim())).toEqual(['Profile', 'Appearance', 'Memory and instructions', 'Quick ask', 'Capabilities', 'Providers and abilities', 'Models', 'Customize', 'Automation', 'Permissions', 'Code chats', 'Engines', 'Desktop app', 'Usage and data', 'About']);
     for (const h of await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(45.5);
     for (const b of await rows.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.right]; }))) { expect(b[0]).toBeGreaterThanOrEqual(0); expect(b[1]).toBeLessThanOrEqual(w + 0.5); }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
@@ -154,13 +155,13 @@ test('900 px and up: Settings is the desktop window, unchanged (a 240 px list)',
   await expect(page.locator('#settings-back')).toBeHidden();
 });
 
-test('the account menu Settings row and the gear open the list on a phone; Usage and Language go straight to their section', async ({ page }) => {
+test('the account menu Settings row and the gear open the list on a phone; Usage and data goes straight to its section', async ({ page }) => {
   await load(page, 390, 740);
   await page.locator('#sidebar-toggle').click();
   await page.locator('#account-button').click();
   await page.locator('#account-menu [data-settings="usage"]').click();
   await expect(page.locator('#settings-window')).toHaveAttribute('data-page', 'section');
-  await expect(page.locator('#settings-section-name')).toHaveText('Usage');
+  await expect(page.locator('#settings-section-name')).toHaveText('Usage and data'); // the section was renamed by the overhaul
   await page.locator('#settings-close').click();
   await page.locator('#sidebar-toggle').click();
   await page.locator('#account-button').click();

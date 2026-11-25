@@ -6,16 +6,17 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
-import { spawnEngine, minimalEnv } from './process.js';
+import { spawnEngine } from './process.js';
 import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
+import { commandMatches, editMatches } from '../allowKinds.js';
 import { createBridge, keyFolders } from './bridge.js';
-import { AUTH_COMMANDS, denyRules, startClaude } from './claude-code.js';
+import { rulesWithoutBroadAllow } from '../autoJudge.js';
+import { AUTH_COMMANDS, denyRules, signInUrlFrom, startClaude } from './claude-code.js';
 import { loadSchema, startCodex } from './codex.js';
 import { loadPins } from './pins.js';
 import { createEngineStore } from './store.js';
@@ -142,7 +143,7 @@ export function budgeted(upstream, turn) {
 
 // ---------------------------------------------------------------- the service
 
-export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false } = {}) {
+export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false, openLoginRun = null, loginWaitMs = 12_000 } = {}) {
   const fakeMode = Boolean(fake);
   const fp = fakeMode ? fakePins() : null;
   const pins = pinsOverride ?? (fakeMode ? fp.pins : loadPins());
@@ -184,20 +185,45 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     return hit?.signedIn ?? null;
   }
 
-  /** Start the vendor's own sign-in in a visible window, with only the account folder set. The person finishes it in the vendor's browser page. */
+  /** Start the vendor's own sign-in, with only the account folder set, and say what really happened: { started: true, url } when the program printed its sign-in page (the person opens it with one click),
+   * { started: true, url: null } when it is running but showed no page address (nobody can tell whether a browser page opened), or an error that says why it could not start or stopped.
+   * v0.1.14.1: the program has no console window (a detached one with its output thrown away never opened a page on some PCs), so what it prints is read here: only the page address, and nothing is kept. */
+  const loginRuns = new Map(); // id -> the running sign-in, so a second click replaces it and the end of the session stops it
+  const LOGIN_LIFETIME_MS = 10 * 60_000;
   async function signIn(id) {
     if (id !== 'claude-code') throw Object.assign(new Error('Only Claude Code signs in with an account for now.'), { status: 400 });
     const found = fakeMode ? { ok: true } : await store.locate(id);
     if (!found.ok) throw Object.assign(new Error('Download Claude Code first.'), { status: 409 });
     await mkdir(accountConfig, { recursive: true });
-    if (fakeMode) { setTimeout(() => writeFile(fakeFlag(), '1').catch(() => {}), 200); }
-    else {
-      const child = spawn(found.exe, AUTH_COMMANDS.login, { cwd: accountHome, env: { ...minimalEnv(), ...authEnv() }, detached: true, stdio: 'ignore', windowsHide: false, shell: false });
-      child.on('error', () => {}); child.unref();
-    }
     authCache.delete(id);
     await store.addRecord({ engine: id, action: 'signin', from: null, to: null, sha12: '' });
-    return { started: true };
+    if (fakeMode && !openLoginRun) { setTimeout(() => writeFile(fakeFlag(), '1').catch(() => {}), 200); return { started: true, url: 'https://claude.ai/login?stand-in=1' }; }
+    loginRuns.get(id)?.kill?.();
+    // The program opens the browser itself, and a browser it starts inherits its environment: with the isolated user and app-data folders that was a brand-new first-run Chrome profile, not the person's own browser
+    // (seen with the real program, v0.1.14.1). So the program is told its browser is a file that does nothing (the BROWSER variable it reads), and Bunny's own button opens the page address it printed in the person's normal browser.
+    const noBrowser = join(accountHome, 'no-browser.cmd');
+    await writeFile(noBrowser, '@exit /b 0\r\n').catch(() => {});
+    let run;
+    try { run = (openLoginRun ?? spawnEngine)({ file: found.exe, args: AUTH_COMMANDS.login, cwd: accountHome, extraEnv: { ...authEnv(), BROWSER: noBrowser } }); }
+    catch (err) { throw Object.assign(new Error(`Claude Code's sign-in could not start (${String(err?.message ?? err).slice(0, 120)}).`), { status: 502 }); }
+    loginRuns.set(id, run);
+    let said = '';
+    let exitCode;
+    let url = null;
+    run.exited.then((code) => { exitCode = code; if (loginRuns.get(id) === run) loginRuns.delete(id); authCache.delete(id); }).catch(() => {});
+    (async () => { try { for await (const line of run.lines) { said = (said + line + '\n').slice(-8000); url ??= signInUrlFrom(said); } } catch { /* unreadable: no address */ } })();
+    const stop = setTimeout(() => { try { run.kill?.(); } catch { /* gone */ } }, LOGIN_LIFETIME_MS); stop.unref?.();
+    run.exited.finally(() => clearTimeout(stop)).catch(() => {});
+    const t0 = Date.now();
+    while (url === null && exitCode === undefined && Date.now() - t0 < loginWaitMs) { url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`); if (url) break; await new Promise((r) => setTimeout(r, 100)); }
+    url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`);
+    if (url && exitCode === undefined) await new Promise((r) => setTimeout(r, 300)); // a program that prints an address and stops at once with an error did not sign anyone in
+    if (url && (exitCode === undefined || exitCode === 0)) return { started: true, url }; // a program that already stopped with an error is a failure, whatever address its message holds
+    if (exitCode !== undefined && exitCode !== 0) {
+      throw Object.assign(new Error(`Claude Code's sign-in stopped before it showed a page (exit code ${exitCode}). Press Sign in to try again; if it stops again, Claude Code may need an update (Engines > Claude Code).`), { status: 502 });
+    }
+    if (exitCode === 0) { await refreshAuth(id).catch(() => {}); return { started: true, url: null, finished: true }; }
+    return { started: true, url: null };
   }
 
   /** Sign out: the vendor's own logout in the account folder, then the folder is deleted. */
@@ -258,7 +284,8 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const id = choice.id;
     const label = LABELS[id] ?? id;
     const auth = choice.auth ?? engineSettings(settings).engines[id].auth;
-    let mode = choice.restricted ? 'restricted' : 'full';
+    // ENGINE-SWITCH: Bunny's check failed for an engine earlier in this chat: only that engine runs restricted (the old flag `restricted: true` meant the chat's own engine)
+    let mode = (Array.isArray(choice.restrictedFor) ? choice.restrictedFor.includes(id) : choice.restricted === true) ? 'restricted' : 'full';
     // ENGINE-RULES: with Bunny's engine off the chat follows the engine's own rules, fixed at its first message; restricted mode keeps Bunny's diff review, and an engine whose prompt tool is unproven stays on Bunny's rules
     const ownRules = choice.rules === 'engine' && mode === 'full' && ownRulesOk(id);
     const home = join(dataDir, 'engines', id, auth, 'chat', String(turn.id).replace(/[^\w-]/g, '_'));
@@ -279,7 +306,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
       const script = process.env.BUNNY_FAKE_ENGINE_SCRIPT ?? '{"steps":[{"say":"Done."}]}';
       launcher = [process.execPath, FAKE_ENGINE_PATH, id];
       exe = 'fake';
-      turn.extraEnv = { BUNNY_FAKE_SCRIPT: script };
+      turn.extraEnv = { BUNNY_FAKE_SCRIPT: script, ...(process.env.BUNNY_FAKE_PROMPT_LOG ? { BUNNY_FAKE_PROMPT_LOG: process.env.BUNNY_FAKE_PROMPT_LOG } : {}) }; // (the log is a test aid: what each run was told)
     } else {
       const found = await store.locate(id);
       if (!found.ok) {
@@ -295,7 +322,16 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const root = turn.root;
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
-      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(settings.permissionRules, root)), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(turn.autoCheck && turn.permissionMode === 'auto' && settings.autoJudgeEnabled !== false ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, root)), autoCheck: ownRules ? null : (turn.autoCheck ?? null), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      // F9-7: in Bunny-rules mode an engine's command or edit that the person allowed as a KIND for this chat runs with no card (an engine's own rules mode keeps the engine's own "always")
+      allowed: ownRules ? undefined : async (call) => {
+        const kinds = (await turn.allowKinds?.()) ?? turn.session?.allowKinds ?? [];
+        for (const k of kinds) {
+          if (k.type === 'command' && call.command !== undefined && commandMatches(k, call.command, { cwd: root })) return true;
+          if (k.type === 'edit' && call.path && editMatches(k, resolve(root, String(call.path)), root)) return true;
+        }
+        return false;
+      },
       ask: async (summary, detail, opts = {}) => {
         // "Allow for this chat" is offered on Codex's cards only, and only with Bunny's engine off
         const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true && pins.codex?.sessionAllow === true ? { forSession: true } : {});
@@ -306,17 +342,19 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     };
     const bridge = createBridge(ctx);
     const checked = async (res, paths) => { if (res.allow && res.name !== 'run_command' && res.name !== 'read_file') for (const p of paths) await turn.beforeWrite?.(p).catch(() => {}); return res; };
+    const COMMAND_TOOLS = new Set(['Bash', 'PowerShell', 'run_command', 'shell']);
     const judgeClaude = async (req) => {
+      if (COMMAND_TOOLS.has(req.tool)) turn.onCommand?.(); // REWIND: a command step in this reply (what it changes cannot be put back)
       const p = req.input?.file_path ?? req.input?.path ?? req.input?.notebook_path;
       if (ownRules) { const r = await bridge.claudeFloor(req); if (r.abstain && p && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(req.tool)) await turn.beforeWrite?.(p).catch(() => {}); return r; } // the checkpoint is taken before a write the engine may then do
       const r = await bridge.claude(req); return checked(r, p ? [p] : []);
     };
     const decideClaude = async (req) => { const r = await bridge.claudeAsk(req); const p = req.input?.file_path ?? req.input?.path; return checked(r, p ? [p] : []); };
     const bridgeForCodex = ownRules ? {
-      codexCommand: (params) => bridge.codexCommandRelay(params),
+      codexCommand: (params) => { turn.onCommand?.(); return bridge.codexCommandRelay(params); },
       codexChanges: async (changes) => { const r = await bridge.codexChangesRelay(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     } : {
-      codexCommand: (params) => bridge.codexCommand(params),
+      codexCommand: (params) => { turn.onCommand?.(); return bridge.codexCommand(params); },
       codexChanges: async (changes) => { const r = await bridge.codexChanges(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     };
 
@@ -335,12 +373,12 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     try {
       const deny = denyRules({ rules: ownRules ? [] : rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
       if (id === 'claude-code') {
-        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null, rules: ownRules ? 'engine' : 'bunny', engineRules: ownRules ? cleanRules(engineSettings(settings).engines['claude-code'].rules) : null, decide: ownRules ? decideClaude : null,
+        run = await startClaude({ cwd, prompt: promptOf(turn), home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null, rules: ownRules ? 'engine' : 'bunny', engineRules: ownRules ? cleanRules(engineSettings(settings).engines['claude-code'].rules) : null, decide: ownRules ? decideClaude : null,
           upstream: auth === 'local' ? budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn) : null, onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       } else {
         const sch = await schema();
         if (!fakeMode) await seedHome({ dataDir, root: turn.root, codexHome: join(home, 'codex') }); // the first command of a chat is not a 3-minute sandbox set-up (see sandbox-seed.js)
-        run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
+        run = await startCodex({ cwd, prompt: promptOf(turn), home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
           upstream: budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       }
       const steps = new Map();
@@ -370,7 +408,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     if (staged) {
       try {
         const changes = await diff({ root, dir: staged.dir, manifest: staged.manifest });
-        const collector = createBridge({ ...ctx, ask: async (summary, detail) => { void summary; void detail; return false; } });
+        const collector = createBridge({ ...ctx, autoCheck: null, ask: async (summary, detail) => { void summary; void detail; return false; } });
         const result = await review({ root, dir: staged.dir, changes, mode: turn.permissionMode, judge: (c) => collector.judge(c), ask: (summary, detail) => turn.askPermission(summary, detail), writeReal: (rel, buf) => turn.writeReal(rel, buf) });
         const said = describeReview(result);
         assembled += `${assembled ? '\n\n' : ''}${said}`; turn.send('delta', { text: `${assembled === said ? '' : '\n\n'}${said}` });
@@ -380,6 +418,9 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     if (turn.incognito) await removeTree(home).catch(() => {});
     return { text: assembled, ok, stoppedForCheck };
   }
+
+  /** ENGINE-SWITCH: the handover (when the chat needs one) goes in front of the person's message. It is built fresh, fenced and cleaned (engines/handover.js), and never saved in the chat. */
+  const promptOf = (turn) => (turn.handover ? `${turn.handover}\n\n${turn.content}` : turn.content);
 
   /** Can this engine follow its own rules while Bunny's engine is off? Claude Code only where the prompt-tool spike passed for the pinned version (pins.json: promptTool); Codex always asks. */
   const ownRulesOk = (id) => id === 'codex' || (id === 'claude-code' && pins['claude-code']?.promptTool === true);

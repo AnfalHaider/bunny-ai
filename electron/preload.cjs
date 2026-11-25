@@ -32,6 +32,12 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
     show: (ref) => ipcRenderer.invoke('pcsearch:show', ref),
     copy: (ref) => ipcRenderer.invoke('pcsearch:copy', ref),
   },
+  // OFFICE-MAKE: Open, Save as… and Show in folder for a file made in a chat with no folder, by the chat's id and the file's id (the main process asks the server; no path comes from the page)
+  made: {
+    open: (chat, file) => ipcRenderer.invoke('made:open', chat, file),
+    show: (chat, file) => ipcRenderer.invoke('made:show', chat, file),
+    save: (chat, file) => ipcRenderer.invoke('made:save', chat, file),
+  },
   // THEME-APPLY: the page tells the shell the theme it applied (light, dark or system): window colours, title bar and browser pane follow at once.
   setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
   // Zoom for the whole window (Ctrl++ / Ctrl+- / Ctrl+0 and the account menu).

@@ -79,7 +79,7 @@ const project = () => {
   return d;
 };
 
-test('Changes: a new file and an edited file show with +/- counts, the diff opens, and Undo to here puts it back', async ({ page }) => {
+test('Changes: a new file and an edited file show with +/- counts, the diff opens, and Rewind to before this puts it back', async ({ page }) => {
   const dir = project();
   await open(page); await useFolder(page, dir); await pickMode(page, 'Auto');
   await send(page, 'write note');
@@ -96,7 +96,8 @@ test('Changes: a new file and an edited file show with +/- counts, the diff open
   await expect(newest.locator('.diff-line.add')).not.toHaveCount(0);
   const note = pane.locator('.checkpoint-card').nth(1);
   await expect(note.locator('.change-row .badge')).toHaveText('new');
-  await note.getByRole('button', { name: 'Undo to here' }).click(); // the dialog is accepted by the beforeEach handler
+  await note.getByRole('button', { name: 'Rewind to before this' }).click();
+  await page.locator('.rewind-modal').getByRole('button', { name: 'Go back', exact: true }).click();
   await expect(note.locator('.checkpoint-done')).toHaveText('Undone');
   expect(existsSync(join(dir, 'note.txt'))).toBe(false);
 });
@@ -112,7 +113,8 @@ test('W2-3: a multi_edit of three changes is one checkpoint with one file row, a
   await expect(pane.locator('.checkpoint-card .change-row')).toHaveCount(1);
   await expect(pane.locator('.checkpoint-card .change-row .path')).toHaveText('src/greet.js');
   expect(readFileSync(join(dir, 'src', 'greet.js'), 'utf8')).toContain('hello');
-  await pane.locator('.checkpoint-card').first().getByRole('button', { name: 'Undo to here' }).click();
+  await pane.locator('.checkpoint-card').first().getByRole('button', { name: 'Rewind to before this' }).click();
+  await page.locator('.rewind-modal').getByRole('button', { name: 'Go back', exact: true }).click();
   await expect(pane.locator('.checkpoint-done')).toHaveText('Undone');
   expect(readFileSync(join(dir, 'src', 'greet.js'), 'utf8')).toBe('export const greet = (n) => `hi ${n}`;\n');
 });
@@ -163,7 +165,7 @@ test('Session: folder, branch, model, permissions, effort, tokens and messages a
   await expect(rail.locator('#rail-folder')).toHaveText(/bunny-d2-panes/);
   await expect(rail.locator('#rail-branch')).toHaveText('Not a git folder');
   await expect(rail.locator('#rail-model')).toHaveText(/bunny-code|scripted/);
-  await expect(rail.locator('#rail-mode')).toHaveText(/Manual|Auto|Plan|Accept/);
+  await expect(rail.locator('#rail-mode')).toHaveText(/Smart|Manual|Auto|Plan|Accept/);
   await expect(rail.locator('#rail-effort')).toHaveText(/Medium|Low|High/);
   await expect(rail.locator('#rail-tokens')).toContainText('of');
   await expect(rail.locator('#rail-messages')).not.toHaveText('0');

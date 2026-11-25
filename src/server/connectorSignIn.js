@@ -16,7 +16,7 @@ export const NEEDS_SIGN_IN = 'This connector needs you to sign in.';
 export const SIGN_IN_EXPIRED = 'Your sign-in expired. Sign in again.';
 export const KEY_REFUSED = 'The service refused the key. Check it in Customize.';
 /** A connector given a key of its own (a static Authorization or token header) is not signed in to: a 401 means the key is wrong. */
-export const hasStaticKey = (server) => server?.type !== 'local' && Object.keys(server?.headers ?? {}).some((k) => /authorization|token|api[-_]?key|secret/i.test(k));
+export const hasStaticKey = (server) => server?.type !== 'local' && (server?.hasKey === true || server?.keyed === true || Object.keys(server?.headers ?? {}).some((k) => /authorization|token|api[-_]?key|secret/i.test(k)));
 const UUID = '[a-f0-9-]{36}';
 const escapeHtml = (s) => String(s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c]);
 

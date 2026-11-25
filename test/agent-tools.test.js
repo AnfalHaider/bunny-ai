@@ -153,8 +153,8 @@ test('in Chat mode the model can make an artifact, which opens as a sandboxed pa
   assert.ok(toolNames(provider.seen[0]).includes('create_artifact'));
   assert.ok(toolNames(provider.seen[0]).includes('request_capability'));
   assert.ok(!toolNames(provider.seen[0]).includes('list_files'), 'no file tools in Chat mode');
-  assert.match(JSON.stringify(provider.seen[0].messages[0]), /create_artifact/);
-  assert.match(provider.seen[0].messages[0].content, new RegExp(`Today is .*${new Date().getFullYear()}`), 'the model is told the date');
+  assert.match(JSON.stringify(provider.seen[0].messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n')), /create_artifact/);
+  assert.match(provider.seen[0].messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), new RegExp(`Today is .*${new Date().getFullYear()}`), 'the model is told the date');
 
   const made = events.find((e) => e.event === 'tool' && e.data.artifact);
   assert.ok(made, 'the window hears about the artifact');
@@ -229,6 +229,7 @@ test('building a tool asks in Manual and runs without asking in Auto, and the to
   ]);
   await post(base, '/api/providers/openai/connect', { apiKey: 'sk-test-000000000000', baseUrl: provider.url });
   const { body: session } = await post(base, '/api/sessions', { title: 'Build' });
+  await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ autoJudgeEnabled: false }) }); // F12: the check is on by default; this test is about something else
   await fetch(`${base}/api/sessions/${session.id}/setting/permissionMode`, {
     method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: 'auto' }),
   });

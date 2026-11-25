@@ -5,11 +5,14 @@
  * network, so nothing here can read or write the real profile.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createApp } from '../src/server/app.js';
+
+// F13: Confine commands is on in Auto when a person never chose; the suites that run commands in Auto answer no label card, so they start with it off (the suites about confinement set their own)
+process.env.BUNNY_CONFINE_DEFAULT ??= 'off';
 import { memorySecretStore } from '../src/providers/connections.js';
 
 export const MODELS = [
@@ -33,6 +36,8 @@ export async function startApp(t, overrides = {}) {
   if (options.probe === null) delete options.probe;
   if (options.discover === null) delete options.discover;
 
+  // F11: the Auto check asks a judge model; a suite that runs commands in Auto with a scripted model starts with it off (the suites about the check turn it on themselves)
+  if (overrides.dataDir === undefined) await writeFile(join(dataDir, 'settings.json'), JSON.stringify({ autoJudgeEnabled: false }));
   const app = await createApp(options);
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${app.server.address().port}`;

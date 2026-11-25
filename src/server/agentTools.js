@@ -28,6 +28,10 @@ export const CAPABILITIES = {
   custom_tools: 'Build new tools: write a small script that becomes a tool Bunny AI can use',
   new_tool: 'Something no current tool can do: find a plugin or connector for it, or build it',
   switch_on_added: 'Switch on what was just added? It stays off until you say yes',
+  browser_panel: 'Use the browser beside the chat (only in the desktop window on the PC)',
+  sign_in: 'Sign in to Google or GitHub (give service: google or github); the person signs in themselves in Settings, Profile',
+  connector_sign_in: 'Sign in to a connector that is installed and needs it (give connector: its exact name)',
+  pc_search: 'Search this PC: find files by name and by what is in them (finding only)',
 };
 
 const fn = (name, description, properties = {}, required = []) => ({
@@ -58,6 +62,8 @@ export function capabilityToolDefinition() {
   {
     capability: { type: 'string', enum: Object.keys(CAPABILITIES) },
     reason: { type: 'string', description: 'One sentence, for the person: what you want to do with it' },
+    service: { type: 'string', enum: ['google', 'github'], description: 'For sign_in only' },
+    connector: { type: 'string', description: 'For connector_sign_in only: the connector\'s exact name' },
   }, ['capability', 'reason']);
 }
 
@@ -139,7 +145,7 @@ export function screenLinesText(lines, scale = 1, max = 150) {
 // ---- helpers and other chats ----
 
 export const TEAM_TOOL_RISK = {
-  run_subagent: 'own', start_session: 'own', list_models: 'read', list_sessions: 'read', read_session: 'read', message_session: 'edit',
+  run_subagent: 'own', start_session: 'own', list_models: 'read', list_sessions: 'read', read_session: 'read', message_session: 'send', // PG3-a: a message to another chat speaks for the person, so it asks in every mode and no allow rule skips it
 };
 Object.assign(AGENT_TOOL_RISK, TEAM_TOOL_RISK);
 
@@ -222,6 +228,15 @@ export function chatSearchToolDefinition() {
   { query: { type: 'string', description: 'Words to look for' } }, ['query']);
 }
 
+/** PROJECT-CONTEXT: the model may SUGGEST what to remember for a project. It shows as a card; nothing is stored until the person presses Keep. */
+export const PROJECT_MEMORY_TOOL_RISK = { suggest_project_memory: 'own' };
+Object.assign(AGENT_TOOL_RISK, PROJECT_MEMORY_TOOL_RISK);
+export function projectMemoryToolDefinition() {
+  return fn('suggest_project_memory', 'At the end of a reply in a project chat, suggest at most 5 things worth remembering for this project: decisions made, conventions agreed, facts about the project, '
+    + 'and work left open, in the person\'s terms. Never secrets, keys or personal data. They are shown to the person as a card and stored only if they press Keep.',
+  { items: { type: 'array', description: 'At most 5, each at most 400 characters', items: { type: 'object', properties: { kind: { type: 'string', enum: ['decision', 'convention', 'fact', 'open'] }, text: { type: 'string' }, replaces: { type: 'string', description: 'The id of an item this replaces, when one is listed' } }, required: ['kind', 'text'] } } }, ['items']);
+}
+
 /** Details memory should not keep unless the person allows it (Settings → My Dear Bunny). */
 export const SENSITIVE = /\b(health|ill(ness)?|disease|diagnos\w*|medic\w*|pregnan\w*|therap\w*|depress\w*|anxiety|religio\w*|church|mosque|temple|faith|pray\w*|politic\w*|vot(e|ing)|sexual\w*|gay|lesbian|transgender|salary|debt|income|bank account|password)\b/i;
 
@@ -229,6 +244,7 @@ const describeTeam = describeTeamTool;
 export function describeAnyAgentTool(name, args = {}) {
   const s = (v, n = 60) => String(v ?? '').replace(/\s+/g, ' ').slice(0, n);
   switch (name) {
+    case 'suggest_project_memory': return `Suggested ${Array.isArray(args.items) ? Math.min(args.items.length, 5) : 0} thing(s) to remember for this project`;
     case 'remember': return `Remember: "${s(args.text)}"`;
     case 'schedule_task': return `Schedule "${s(args.name)}" every ${Math.round(Number(args.every_minutes) || 60)} min`;
     case 'list_scheduled_tasks': return 'List scheduled tasks';

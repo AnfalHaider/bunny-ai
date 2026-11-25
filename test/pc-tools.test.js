@@ -6,8 +6,14 @@ import { MARKER_START, MARKER_END } from '../src/server/pcTools.js';
 // SEARCH-PC: the two tools in a chat, with a fake index over an invented computer. SP-1 (off by default), SP-2 (exclusions, secrets), SP-3 (caps, marked data), SP-8 (what is saved).
 const tax = { 'Documents/tax return 2025.txt': 'Income was 104,250 dollars. Refund is 1,200 dollars.', 'Documents/notes.txt': 'nothing about money here' };
 
-test('Search this PC is off by default: the model is not offered the tools, and a call is refused', async (t) => {
-  const w = await pcWorld(t, { files: tax, settings: {}, calls: [['search_pc', { terms: ['tax'] }]] });
+test('Search this PC is ON by default for finding only (no value saved), and a saved false is off: then the model is not offered the tools, and a call is refused', async (t) => {
+  const on = await pcWorld(t, { files: tax, settings: {}, calls: [['search_pc', { terms: ['tax'] }]] });
+  await on.say('find my tax return');
+  assert.ok(on.toolNames(on.requests[0]).includes('search_pc'), 'no value saved: the tools are offered');
+  const told = on.toolAnswers()[0];
+  assert.match(told, /tax return 2025\.txt/, 'it finds');
+  assert.ok(!/DOC-TEXT|snippet/i.test(told), 'and shows what it found: reading defaults to "show", never file text');
+  const w = await pcWorld(t, { files: tax, settings: { pcSearchEnabled: false }, calls: [['search_pc', { terms: ['tax'] }]] });
   await w.say('find my tax return');
   assert.ok(!w.toolNames(w.requests[0]).some((n) => /pc/.test(n)), 'no pc tool offered');
   assert.equal(w.indexSeen.length, 0, 'the index was never asked');

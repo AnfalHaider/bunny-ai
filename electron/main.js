@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/server/app.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
+import { panelAllows } from '../src/server/pgRules.js';
 import { controlFrame } from './browserAgent.js';
 import { createBrowserViews, senderAllowed } from './browserViews.js';
 import { fromOwnFrame } from './own-ipc.js';
@@ -19,6 +20,8 @@ import { DEFAULT_SHORTCUT, applyTrayRule, validateAccelerator } from './quick-as
 import { cleanTrayEvent, trayTooltip } from './tray-words.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
 import { createPcOpen } from './pc-open.js';
+import { createMadeFile, findMadeFile } from './made-file.js';
+import { copyFile } from 'node:fs/promises';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -109,7 +112,7 @@ function contextMenu(contents) {
 // W6-24: the panel's tabs are views with a session of their own; they have their own rules (browserViews.js), not this guard's.
 // A view may only be put in a Bunny window, by the page of that window; and never shows Bunny's own server (its port).
 const windowOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.webContents === sender ? w : null; };
-const browserViews = createBrowserViews({ WebContentsView, session, BrowserWindow, nativeImage, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } } });
+const browserViews = createBrowserViews({ WebContentsView, session, BrowserWindow, nativeImage, getWindow: windowOf, getOwnPort: () => { try { return new URL(origin).port; } catch { return ''; } }, siteAllows: (details) => panelAllows(bunnyApp?.siteRules?.() ?? [], details) });
 
 function guard(contents) {
   if (browserViews.ownsSession(contents.session)) return;
@@ -212,6 +215,15 @@ const pcOpen = createPcOpen({
 ipcMain.handle('pcsearch:open', (event, ref) => pcOpen.open(event, ref));
 ipcMain.handle('pcsearch:show', (event, ref) => pcOpen.show(event, ref));
 ipcMain.handle('pcsearch:copy', (event, ref) => pcOpen.copy(event, ref));
+// OFFICE-MAKE: Open, Save as… and Show in folder for a file made in a chat with no folder: Bunny's window only, two ids, the server finds the file under that chat's own folder
+const madeFile = createMadeFile({
+  shell, dialog, copyFile, windowOf,
+  resolve: (chat, file) => findMadeFile(dataDir, chat, file), // the main process resolves the ids itself, under <data>/made/<chat>/
+  allowedSender: (event) => isOwn(event.senderFrame?.url ?? ''),
+});
+ipcMain.handle('made:open', (event, chat, file) => madeFile.open(event, chat, file));
+ipcMain.handle('made:show', (event, chat, file) => madeFile.show(event, chat, file));
+ipcMain.handle('made:save', (event, chat, file) => madeFile.save(event, chat, file));
 ipcMain.handle('remote:tray-event', (event, raw) => { // window-only, fixed fields only
   if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false };
   trayEvent = cleanTrayEvent(raw);
@@ -246,7 +258,7 @@ function applyQuickAsk(patch = {}) {
   if (!quickAsk) return {};
   if (!prefs.quickAskEnabled) { quickAsk.disable(); return {}; }
   const checked = validateAccelerator(prefs.quickAskShortcut);
-  const result = quickAsk.enable(checked.ok ? checked.accelerator : '');
+  const result = checked.ok ? quickAsk.enable(checked.accelerator) : { ok: false, message: checked.message }; // (a shortcut that is refused says why: "That shortcut is Copy, Paste, Cut...", not only "Choose a shortcut.")
   if (result.ok) {
     if (prefs.quickAskShortcut !== result.accelerator) savePrefs({ quickAskShortcut: result.accelerator });
     return {};

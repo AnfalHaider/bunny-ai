@@ -32,7 +32,7 @@ async function gaps(page) {
 
 for (const scheme of SCHEMES) {
   for (const [width, least] of WIDTHS) {
-    for (const section of ['code', 'privacy', 'appearance', 'capabilities']) {
+    for (const section of ['code', 'usage', 'appearance', 'capabilities']) {
       test(`settings → ${section}: nothing sits on a card border (${width} px, ${scheme})`, async ({ page }) => {
         await page.emulateMedia({ colorScheme: scheme });
         await page.setViewportSize({ width, height: 900 });
@@ -48,7 +48,7 @@ for (const scheme of SCHEMES) {
 
 test('Code → Permission rules: one left edge for the heading, the text, the switch, the lists, the add row and the Try box; a line above the block', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 900 });
-  await page.goto('/src/ui/settings.html?embed=1&section=code');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
   await page.waitForTimeout(600);
   const lefts = await page.evaluate(() => {
     const q = (sel) => { const el = document.querySelector(sel); return el ? Math.round(el.getBoundingClientRect().left) : null; };
@@ -64,7 +64,7 @@ test('Code → Permission rules: one left edge for the heading, the text, the sw
 
 test('Privacy → Storage rows: the labels are 16 px in from the border, like every settings row', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 900 });
-  await page.goto('/src/ui/settings.html?embed=1&section=privacy');
+  await page.goto('/src/ui/settings.html?embed=1&section=usage');
   await page.waitForTimeout(600);
   const pad = await page.evaluate(() => { const kv = document.querySelector('#storage > .kv'); return kv ? getComputedStyle(kv).paddingLeft : null; });
   expect(parseFloat(pad)).toBeGreaterThanOrEqual(16);

@@ -7,6 +7,7 @@
  */
 
 import { readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { checkPublicAddress } from './publicFetch.js';
 import { trustSnapshot } from './mcp.js';
 import { randomUUID } from 'node:crypto';
 import { cleanFolders } from './scope.js';
@@ -19,7 +20,25 @@ import { cleanFolders } from './scope.js';
 const secretKey = (id, name) => `mcp-env.${id}.${name}`;
 const VAR = /^[A-Za-z_][A-Za-z0-9_]{0,60}$/;
 
-export function createMcpStore({ file, secrets = null }) {
+/**
+ * K-1..K-4 (the paste-your-key card): a remote connector's key (one required header the vendor asks for) lives ONLY in the secret store, keyed by connector id, and mcp.json keeps the header NAME,
+ * the origin it was saved for, and a flag. Nothing here ever answers with the value. The key is given back (resolveKey) only for the exact origin it was saved for, and an address change drops it.
+ */
+const keySecret = (id) => `mcp-key.${id}`;
+const HEADER_NAME = /^[A-Za-z0-9-]{1,64}$/;
+const NEVER_HEADERS = /^(host|cookie|set-cookie|content-length|content-type|content-encoding|transfer-encoding|connection|origin|referer|user-agent|accept|accept-encoding|te|upgrade|keep-alive|expect|forwarded|via|date|range|trailer|mcp-session-id|mcp-protocol-version|proxy-.*|sec-.*|x-forwarded-.*|if-.*)$/i;
+/** Why this header name may not carry a key, or '' (K-4). `authorization` only when a TRUSTED source named it (the registry's own entry or a curated entry, passed by Bunny's code as trustedKeyHeaders): never a name the model supplied. */
+export function keyHeaderProblem(name, { allowed = [] } = {}) {
+  const n = String(name ?? '');
+  if (!HEADER_NAME.test(n)) return 'A header name is letters, digits and hyphens, up to 64 characters.';
+  if (NEVER_HEADERS.test(n)) return `${n} is a header Bunny sets itself or one that must not carry a key.`;
+  if (/^authorization$/i.test(n) && !allowed.some((a) => /^authorization$/i.test(a))) return 'Authorization is used only when the service itself asks for it. Use the header name the service tells you.';
+  return '';
+}
+const cleanHeaderNames = (list) => [...new Set((Array.isArray(list) ? list : []).map((h) => String(h ?? '')).filter((h) => HEADER_NAME.test(h) && !NEVER_HEADERS.test(h)))].slice(0, 5);
+const originOf = (url) => { try { return new URL(String(url)).origin; } catch { return null; } };
+
+export function createMcpStore({ file, secrets = null, lookupImpl }) {
   let servers = [];
   let loaded = false;
 
@@ -27,7 +46,8 @@ export function createMcpStore({ file, secrets = null }) {
   const view = (s) => {
     if (!s) return null;
     const { env, ...rest } = s;
-    return s.type === 'local' ? { ...rest, envNames: s.envNames ?? Object.keys(env ?? {}) } : { ...rest };
+    const { keyOrigin: _origin, keySet, ...shown } = rest; // the origin stays inside; the outside learns only the header name and whether a key is set
+    return s.type === 'local' ? { ...shown, envNames: s.envNames ?? Object.keys(env ?? {}) } : { ...shown, hasKey: keySet === true };
   };
 
   // Atomic: a temp file, then a rename, so a crash never leaves half a file; a failed write leaves no temp behind.
@@ -113,14 +133,14 @@ export function createMcpStore({ file, secrets = null }) {
     return { source: { repo, sha, folder } };
   }
 
-  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null }) {
+  async function add({ name, url, command, args = [], env = {}, cwd = null, enabled = true, folders = [], source = null, keyHeaders = [], trustedKeyHeaders = [], addedBy = 'model' }) {
     await load();
     const clean = String(name ?? '').trim();
     const address = String(url ?? '').trim();
     if (!clean) throw Object.assign(new Error('A server needs a name'), { code: 'mcp.nameRequired' });
     if (String(command ?? '').trim()) {
       const local = cleanLocal({ command, args, env, cwd });
-      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), ...cleanSource(source), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
+      const server = { id: randomUUID(), name: clean.slice(0, 60), type: 'local', addedBy: addedBy === 'person' || addedBy === 'device' ? addedBy : 'model', ...local, enabled: Boolean(enabled), folders: cleanFolders(folders), ...cleanSource(source), status: 'unknown', tools: [], lastError: null, createdAt: new Date().toISOString() };
       if (secrets && Object.keys(local.env).length) {
         try {
           for (const [k, v] of Object.entries(local.env)) await putSecret(server.id, k, v);
@@ -138,6 +158,8 @@ export function createMcpStore({ file, secrets = null }) {
     if (!/^https?:\/\//i.test(address)) {
       throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
     }
+    const by = addedBy === 'person' || addedBy === 'device' ? addedBy : 'model'; // IA-0: fail closed: anything but the exact words 'person' (the window's own add) or 'device' is the model's, and must be public https
+    if (by !== 'person') await checkPublicAddress(address, { lookupImpl });
     // W4-11 R-4: the same address twice would offer every tool twice
     const same = servers.find((s) => s.url && String(s.url).trim().toLowerCase().replace(/\/+$/, '') === address.toLowerCase().replace(/\/+$/, ''));
     if (same) throw Object.assign(new Error(`That address is already a connector (${same.name}).`), { code: 'mcp.duplicate', existing: same.id });
@@ -151,6 +173,9 @@ export function createMcpStore({ file, secrets = null }) {
       tools: [],
       lastError: null,
       createdAt: new Date().toISOString(),
+      addedBy: by,
+      ...(cleanHeaderNames(keyHeaders).filter((h) => !/^authorization$/i.test(h)).length ? { keyHeaders: cleanHeaderNames(keyHeaders).filter((h) => !/^authorization$/i.test(h)) } : {}), // names the MODEL passed: suggestions for the key card, and never Authorization (LOW from Security)
+      ...(cleanHeaderNames(trustedKeyHeaders).length ? { trustedKeyHeaders: cleanHeaderNames(trustedKeyHeaders) } : {}), // names from the registry's or a curated entry, given by Bunny's own code only
     };
     servers.push(server);
     await persist();
@@ -167,8 +192,10 @@ export function createMcpStore({ file, secrets = null }) {
       if (!/^https?:\/\//i.test(address)) {
         throw Object.assign(new Error('A server must be reached over http or https'), { code: 'mcp.badUrl' });
       }
+      if (server.addedBy === 'model' || server.addedBy === 'device') await checkPublicAddress(address, { lookupImpl }); // IA-0: a changed address obeys the same rule
       // RO-1: trust was given to the connector at its old address; a different address is a different connector
       if (address.slice(0, 500) !== server.url) { server.trustReadOnly = false; delete server.trustedTools; server.tools = []; server.status = 'unknown'; } // a new address is a new list
+      if (address.slice(0, 500) !== server.url && server.keySet) { await dropKeyOf(server); } // K-3: a key belongs to the address it was saved for
       server.url = address.slice(0, 500);
     }
     if (patch.enabled !== undefined) server.enabled = Boolean(patch.enabled);
@@ -227,9 +254,58 @@ export function createMcpStore({ file, secrets = null }) {
     // L-4: a connector's settings leave the secret store with it
     const leaving = servers.find((s) => s.id === id);
     if (leaving && secrets) for (const name of leaving.envNames ?? []) await dropSecret(id, name);
+    if (leaving?.keySet && secrets) { try { await secrets.delete(keySecret(id)); } catch { /* already gone */ } } // K-6: the key leaves with its connector
     servers = servers.filter((s) => s.id !== id);
     await persist();
     return servers.length !== before;
+  }
+
+  async function dropKeyOf(server) {
+    if (secrets) { try { await secrets.delete(keySecret(server.id)); } catch { /* already gone */ } }
+    delete server.keyHeader; delete server.keyOrigin; server.keySet = false;
+  }
+
+  /** K-1/K-2: save a key for a REMOTE connector. The value is checked, put in the secret store and read back; only the header name, the origin and a flag go in mcp.json. Answers a view (no value). */
+  async function setKey(id, { header, value }) {
+    await load();
+    if (!secrets) throw Object.assign(new Error('Bunny cannot keep a key safely on this computer right now, so it was not saved.'), { code: 'mcp.noSecretStore' });
+    const server = servers.find((s) => s.id === id);
+    if (!server) throw Object.assign(new Error('No such server'), { code: 'mcp.notFound' });
+    if (server.type === 'local') throw Object.assign(new Error('A local connector takes its settings in the settings list, not a key.'), { code: 'mcp.notRemote' });
+    const origin = originOf(server.url);
+    if (!origin || !/^https:$/.test(new URL(server.url).protocol)) throw Object.assign(new Error('A key is sent only over https, so this connector\'s address must be an https address.'), { code: 'mcp.keyNeedsHttps' });
+    const why = keyHeaderProblem(header, { allowed: server.trustedKeyHeaders ?? [] });
+    if (why) throw Object.assign(new Error(why), { code: 'mcp.badHeader' });
+    const v = typeof value === 'string' ? value.trim() : '';
+    if (!v || v.length > 4000 || /[\r\n\0]/.test(v)) throw Object.assign(new Error('The key is one line of text, up to 4,000 characters.'), { code: 'mcp.badKey' });
+    await secrets.set(keySecret(id), v);
+    if ((await secrets.get(keySecret(id))) !== v) { try { await secrets.delete(keySecret(id)); } catch { /* nothing kept */ } throw Object.assign(new Error('The secret store did not keep the key. Nothing was saved.'), { code: 'mcp.secretStore' }); }
+    server.keyHeader = String(header); server.keyOrigin = origin; server.keySet = true;
+    server.status = 'unknown'; server.lastError = null;
+    await persist();
+    return view(server);
+  }
+
+  async function clearKey(id) {
+    await load();
+    const server = servers.find((s) => s.id === id);
+    if (!server) throw Object.assign(new Error('No such server'), { code: 'mcp.notFound' });
+    await dropKeyOf(server);
+    server.status = 'unknown';
+    await persist();
+    return view(server);
+  }
+
+  /** The key for a request, { header, value }, only for the exact origin it was saved for; otherwise null. Never shown, never logged. */
+  async function resolveKey(id) {
+    await load();
+    const server = servers.find((s) => s.id === id);
+    if (!server?.keySet || !secrets || server.type === 'local') return null;
+    const origin = originOf(server.url);
+    if (!origin || origin !== server.keyOrigin || !/^https:/.test(server.url)) return null;
+    let value = null;
+    try { value = await secrets.get(keySecret(id)); } catch { value = null; }
+    return typeof value === 'string' && value ? { header: server.keyHeader, value } : null;
   }
 
   /** Record what happened when the server was last asked for its tools. */
@@ -245,7 +321,7 @@ export function createMcpStore({ file, secrets = null }) {
     return view(server);
   }
 
-  return { list, get, add, update, remove, setStatus, resolveEnv };
+  return { list, get, add, update, remove, setStatus, resolveEnv, setKey, clearKey, resolveKey };
 }
 
 /** A local connector's command, checked: one program, plain arguments, text variables. */

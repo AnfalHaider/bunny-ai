@@ -19,6 +19,8 @@
  *   keyFolders      absolute paths always refused when they lie outside the workspace (the person's ~\.ssh, ~\.claude, %APPDATA% ...)
  *   ask(summary, detail) -> Promise<boolean>
  *   canon(path) -> optional: the workspace's own canon(); when missing the bridge canonicalises itself
+ *   autoCheck(summary, name, args, risk) -> optional (F11): the check on Auto actions, the same one Bunny's own engine uses; { proceed } | { stop: text } | { card: why }. Only in Auto, only for a command or an
+ *                   unknown tool that Auto would run unasked, and never with the engine's own rules; reads and edits inside the folder never reach it
  */
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -51,7 +53,7 @@ export function mapClaudeCall(tool, input) {
   const engineTool = String(tool ?? '');
   const i = input && typeof input === 'object' && !Array.isArray(input) ? input : null;
   const row = CLAUDE_TOOLS[engineTool];
-  if (!row) return { name: 'run_command', unknown: true, engineTool }; // MCP, Agent, WebFetch, a new tool: judged as a command
+  if (!row) return { name: 'run_command', unknown: true, engineTool, input: i }; // MCP, Agent, WebFetch, a new tool: judged as a command; its arguments travel with it (the check must see what runs)
   if (!i) return { bad: 'The request could not be read.', engineTool };
   if (row[0] === 'run_command') {
     if (typeof i.command !== 'string' || !i.command.trim()) return { bad: 'The command could not be read.', engineTool };
@@ -126,6 +128,23 @@ export function createBridge(ctx) {
 
   const needsOk = (risk) => (mode() === 'ask' && (risk === 'edit' || risk === 'run')) || (mode() === 'accept' && risk === 'run');
 
+  /** F11: Auto's check for a call that would run unasked. Returns null to go on, or a decision. A fall-back is a card (no answer means no). */
+  async function checkedInAuto(summary, name, args, risk, base) {
+    if (mode() !== 'auto' || typeof ctx.autoCheck !== 'function') return null;
+    let out;
+    if (args === null || args === undefined) out = { card: 'The arguments of that tool could not be read, so Bunny asks you.' }; // never an allow on what it could not read
+    else try { out = await ctx.autoCheck(summary, name, args, risk); } catch { out = { card: 'The check on Auto actions failed, so Bunny asks you.' }; }
+    if (out?.stop) return { ...base, allow: false, reason: out.stop };
+    if (out?.card) {
+      const ok = await asked(summary, `${args?.command ?? `The engine wants to use "${name}".`}\n\n${out.card}`);
+      return ok ? { ...base, allow: true, reason: 'Allowed by the person.', asked: true } : { ...base, allow: false, reason: 'The person did not allow this.', asked: true };
+    }
+    return null; // the check allowed it
+  }
+
+  /** F9-7: has the person allowed this KIND for this chat? The caller (the app) knows the list and how to match it; an engine call Bunny cannot split gets no kind, so it never matches. */
+  const covered = async (call) => { try { return (await ctx.allowed?.(call)) === true; } catch { return false; } };
+
   async function asked(summary, detail) {
     try { return (await ctx.ask(summary, detail)) === true; } catch { return false; }
   }
@@ -153,10 +172,12 @@ export function createBridge(ctx) {
           if (protect.some((p) => lowText.includes(p))) return { allow: false, reason: 'That command names a folder Bunny keeps private.', name, risk, summary };
           const ruled = checkToolCall(rules(), 'run_command', { command: call.command });
           if (ruled?.effect === 'deny') return { allow: false, reason: `Blocked by your permission rule ${describeRule(ruled)}.`, name, risk, summary };
+          if (ruled?.effect !== 'ask' && ruled?.effect !== 'allow' && needsOk(risk) && await covered(call)) return { allow: true, reason: 'Allowed for this chat.', name, risk, summary, allowedKind: true }; // F9-7
           if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow'))) {
             const ok = await asked(summary, ruled?.effect === 'ask' ? `${call.command}\n\nAsked because of your rule ${describeRule(ruled)}.` : call.command);
             return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };
           }
+          if (ruled?.effect !== 'allow') { const c = await checkedInAuto(summary, 'run_command', { command: call.command }, risk, { name, risk, summary }); if (c) return c; }
           return { allow: true, reason: 'Allowed.', name, risk, summary };
         }
         // an unknown tool: judged as a command with no text; no rule can read it, so only the mode speaks
@@ -164,6 +185,7 @@ export function createBridge(ctx) {
           const ok = await asked(summary, `The engine wants to use "${call.engineTool}". Bunny cannot read what it will do, so it asks as it would for a command.`);
           return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };
         }
+        { const c = await checkedInAuto(summary, String(call.engineTool ?? 'engine_tool'), call.input ?? null, risk, { name, risk, summary }); if (c) return c; }
         return { allow: true, reason: 'Allowed.', name, risk, summary };
       }
       // paths
@@ -180,6 +202,7 @@ export function createBridge(ctx) {
       }
       const ruled = checkToolCall(rules(), name, { path: place.rel }, place.rel);
       if (ruled?.effect === 'deny') return { allow: false, reason: `Blocked by your permission rule ${describeRule(ruled)}.`, name, risk, summary };
+      if (ruled?.effect !== 'ask' && ruled?.effect !== 'allow' && needsOk(risk) && await covered(call)) return { allow: true, reason: 'Allowed for this chat.', name, risk, summary, allowedKind: true }; // F9-7
       if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow'))) {
         const ok = await asked(summary, ruled?.effect === 'ask' ? `${place.rel}\n\nAsked because of your rule ${describeRule(ruled)}.` : place.rel);
         return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };

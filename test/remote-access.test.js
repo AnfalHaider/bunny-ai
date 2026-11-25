@@ -189,7 +189,7 @@ test('off by default: nothing listens; turning it on needs a passcode of 12+ cha
   await put(base, { enabled: false });
 });
 
-test('the passcode is saved only as a hash, and "on" is never read back: a new app starts OFF', async (t) => {
+test('the passcode is saved only as a hash, and the access module never reads "on" from a file: a new one starts OFF (only resumeRemote in app.js turns it on again, REMOTE-STAY)', async (t) => {
   const { base, dataDir } = await startApp(t, { lanAddress: '127.0.0.1' });
   await put(base, { enabled: true, passcode: PASS });
   const file = await readFile(join(dataDir, 'remote-access.json'), 'utf8');
@@ -386,6 +386,7 @@ function lanStream(url, { path, headers, body }, onEvent) {
 /** A model stand-in: scripted by what the person's message says (WRITE: write a file; SKILL: add a skill; CAP: ask for computer use). Records the tools it was offered. */
 async function scriptedProvider(t) {
   const offered = [];
+  const systems = [];
   const provider = createProvider((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
@@ -393,6 +394,7 @@ async function scriptedProvider(t) {
       if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
       const body = JSON.parse(raw);
       offered.push((body.tools ?? []).map((d) => d.function.name));
+      systems.push(body.messages.filter((m) => m.role === 'system').map((m) => String(m.content)).join(' | '));
       const last = [...body.messages].reverse().find((m) => m.role === 'user');
       const said = typeof last?.content === 'string' ? last.content : JSON.stringify(last?.content);
       const told = [...body.messages].reverse().find((m) => m.role === 'tool');
@@ -408,7 +410,7 @@ async function scriptedProvider(t) {
   });
   await new Promise((r) => provider.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
-  return { port: provider.address().port, offered };
+  return { port: provider.address().port, offered, systems };
 }
 
 async function deviceSetup(t) {
@@ -901,4 +903,15 @@ test('DEVICE-FULL: a device is asked about once (the window answers by setting a
   const refused = await lan(d.url, { path: '/api/remote', headers: { host: d.host, cookie: d.cookie } });
   assert.equal(refused.status, 403);
   assert.equal(refused.json().message, "Only Bunny's window can change device access.");
+});
+
+test("AGENT-FLOW F5: a device's chat is told in words what it can't use (and the capability map says the Google and GitHub sign-ins are in Bunny's window), and is never offered those tools", async (t) => {
+  const d = await deviceSetup(t);
+  const made = await (await fetch(d.base + '/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Device words', permissionMode: 'ask' }) })).json();
+  await lanStream(d.url, { path: '/api/sessions/' + made.id + '/messages', headers: d.w, body: modelBody('hello') }, async () => {});
+  const system = d.provider.systems[0];
+  assert.match(system, /On this device you can't use: the browser panel, desktop control, installing plugins or tools, building tools and scheduling/);
+  assert.match(system, /sign in to Google in Settings › Profile \(in Bunny's window\)/);
+  assert.match(system, /sign in to GitHub in Settings › Profile \(in Bunny's window\)/);
+  for (const blocked of ['computer_click', 'create_tool', 'install_plugin', 'schedule_task', 'browser_open']) assert.ok(!d.provider.offered[0].includes(blocked), `${blocked} is not offered to a device`);
 });

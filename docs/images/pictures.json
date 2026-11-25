@@ -74,9 +74,9 @@
     "theme": "light",
     "scale": 1,
     "capture": {
-      "locator": "section[data-section=\"code\"]"
+      "locator": "section[data-section=\"permissions\"]"
     },
-    "alt": "Settings, Code: permission rules with Deny, Ask and Allow lists",
+    "alt": "Settings, Permissions: permission rules with Deny, Ask and Allow lists",
     "usedBy": ["README.md"]
   },
   "plan-undo.png": {
@@ -133,6 +133,50 @@
     "scale": 1,
     "capture": "viewport",
     "alt": "The working line: the hopping bunny, \"Binkying… thinking · 1s\", opened to show the thinking",
+    "usedBy": ["README.md"]
+  },
+  "folder-trust.png": {
+    "scene": "folder-trust",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": {
+      "locator": "#fr-trust-card"
+    },
+    "alt": "The card \"Trust this folder?\" with two separate questions: follow the folder's instruction files, and run in Auto here",
+    "usedBy": ["README.md"]
+  },
+  "engine-switch-menu.png": {
+    "scene": "engine-switch-menu",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": {
+      "locator": "#engine-menu"
+    },
+    "alt": "The engine chip's menu \"Switch this chat to…\" listing Bunny, Claude Code and Codex CLI",
+    "usedBy": ["README.md"]
+  },
+  "engine-switch-confirm.png": {
+    "scene": "engine-switch-confirm",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": {
+      "locator": ".engine-switch-card"
+    },
+    "alt": "The confirm card \"Switch this chat to Codex CLI?\" saying what the new engine gets",
+    "usedBy": ["README.md"]
+  },
+  "project-instructions-changed.png": {
+    "scene": "project-instructions-changed",
+    "viewport": [1424, 861],
+    "theme": "light",
+    "scale": 1,
+    "capture": {
+      "locator": ".modal[aria-label=\"Working folder\"] .fr-block:not(#confine-block)"
+    },
+    "alt": "The Working folder card's Project instructions block, with AGENTS.md marked \"changed since it was read\"",
     "usedBy": ["README.md"]
   }
 }

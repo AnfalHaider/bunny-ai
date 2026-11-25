@@ -6,9 +6,9 @@
 //   api.request        Playwright's request fixture (the e2e server, token already sent)
 //   api.seed(chat)     create a chat with messages (and, for helpers, a parent): returns the chat
 //   api.open(url)      go to a page of the app and wait for the fonts
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { heldProvider } from './held-provider.mjs';
 
 export const FIXED_TIME = '2026-01-15T14:12:00';
@@ -40,9 +40,14 @@ async function live(api, steps) {
   return provider;
 }
 
-/** An invented project folder with a fixed name (so the page shows the same words), made again each time. */
+/** The folder every invented project lives under: a fixed place that does not depend on the user name or on TEMP (a picture draws the folder's path), the system drive's root. */
+const PICTURE_ROOT = join(`${process.env.SystemDrive ?? 'C:'}${sep}`, 'bunny-pictures');
+
+/** An invented project folder with a fixed path (so the page shows the same words on every PC), made again each time. */
 function project(name, files) {
-  const root = join(tmpdir(), 'bunny-pictures', name);
+  const root = join(PICTURE_ROOT, name);
+  // a fixed folder at the drive's root could have been made beforehand (or be a link) by someone else on this PC: never write or delete through a link
+  for (const dir of [PICTURE_ROOT, root]) { try { if (lstatSync(dir).isSymbolicLink()) throw new Error(`${dir} is a link: remove it before drawing the pictures`); } catch (err) { if (err?.code !== 'ENOENT') throw err; } }
   rmSync(root, { recursive: true, force: true });
   for (const [rel, text] of Object.entries(files)) { const f = join(root, rel); mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, text); }
   return root;
@@ -57,6 +62,7 @@ async function ask(page, text) {
 /** A Code chat in an invented project, on Auto, ready to send. */
 async function codeChat(page, api, name, files, title, extra = {}) {
   const folder = project(name, files);
+  await api.request.put('/api/settings', { data: { autoJudgeEnabled: false, confineCommands: 'off' } }); // these pictures show Auto running on its own; the check and the confine label card (both on by default) would put a card in the way. begin() puts both back for the next scene.
   await api.request.post('/api/folder/check', { data: { folder } });
   const made = await api.seed({ title, workMode: 'code', folder, permissionMode: 'auto', ...extra });
   await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'code'); } catch { /* storage blocked */ } });
@@ -73,6 +79,33 @@ const NOTES_APP = {
 
 /** A long invented script, so the same lines fold the same way every time. */
 const script = (lines) => Array.from({ length: lines }, (_, i) => (i === 0 ? '#!/usr/bin/env python3' : i % 20 === 1 ? `# --- part ${Math.ceil(i / 20)} ---` : `step_${i} = backup_notes("notes/folder_${i % 7}", keep=${(i % 5) + 1})`)).join('\n');
+
+/** An invented project that is also a git folder (so Smart may offer Auto there). */
+function gitProject(name, files) {
+  const root = project(name, files);
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root });
+  return root;
+}
+
+const RULES = { 'AGENTS.md': 'Use tabs.\nSay hello.\n', 'CLAUDE.md': 'A different rule.\n', 'src/add.js': 'export const add = (a, b) => a + b;\n' };
+
+/** A Code chat with a few seeded messages in an invented folder, on the chosen mode, opened; nothing sent. */
+async function codeChatWith(page, api, folder, { mode = 'ask', title = 'Instructions' } = {}) {
+  await api.request.post('/api/folder/check', { data: { folder } });
+  const made = await api.seed({ title, workMode: 'code', folder, permissionMode: mode, messages: [user('What does this project do?', 10), assistant('It adds two numbers. The one function is in src/add.js.', 11)] });
+  await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'code'); } catch { /* storage blocked */ } });
+  await api.open(`/?s=${made.id}`);
+  await page.waitForSelector('.msg');
+  return made;
+}
+
+/** The stand-in Codex CLI downloaded, so the engine chip shows; taken away again when the scene is over. */
+async function withEngines(api) {
+  await api.request.put('/api/settings', { data: { engine: 'bunny', useBunnyEngine: true, folderRulesEnabled: true, folderRulesTrusted: [] } });
+  await api.request.post('/api/engines/codex/download', { data: {} });
+  for (let i = 0; i < 60; i += 1) { if ((await (await api.request.get('/api/engines')).json()).engines.find((e) => e.id === 'codex')?.downloaded) break; await new Promise((r) => setTimeout(r, 250)); }
+  api.cleanup(async () => { await api.request.delete('/api/engines/codex').catch(() => {}); await api.request.put('/api/settings', { data: { engine: 'bunny', useBunnyEngine: true, folderRulesTrusted: [] } }).catch(() => {}); });
+}
 
 /** The scenes by name. */
 export const scenes = {
@@ -109,8 +142,8 @@ export const scenes = {
       { id: 'r_allow_test', kind: 'command', pattern: 'npm test*', effect: 'allow' },
       { id: 'r_allow_lint', kind: 'command', pattern: 'npm run lint*', effect: 'allow' },
     ], folders: {} } });
-    await api.open('/src/ui/settings.html?section=code');
-    await page.waitForSelector('#perm-rules');
+    await api.open('/src/ui/settings.html?section=permissions'); // after the Settings overhaul the rules live in Permissions, not Code
+    await page.waitForSelector('section[data-section="permissions"] #perm-rules');
     await page.locator('#perm-rules').scrollIntoViewIfNeeded();
   },
 
@@ -215,5 +248,55 @@ export const scenes = {
     await page.locator('text=Preview server ready >> visible=true').first().waitFor({ timeout: 10_000 });
     await page.waitForTimeout(500); // the three request lines
     void id;
+  },
+
+  // ---- v0.1.15 ----
+  // folder-trust.png: the card "Trust this folder?" above the message box: question 1 (instruction files) and question 2 (Auto). Locator: #fr-trust-card ([aria-label="Trust this folder?"]).
+  'folder-trust': async (page, api) => {
+    await api.request.put('/api/settings', { data: { folderRulesEnabled: true, folderRulesTrusted: [], autoJudgeEnabled: true } });
+    const folder = gitProject('notes-app-trust', RULES);
+    await api.request.delete('/api/folder-trust', { data: { folder } }).catch(() => {});
+    await api.request.post('/api/providers/anthropic/connect', { data: { apiKey: 'sk-test-000000000000' } });
+    await api.request.post('/api/folder/check', { data: { folder } });
+    const made = await api.seed({ title: 'Notes app', workMode: 'code', folder, permissionMode: 'smart', messages: [user('Hello', 10), assistant('Hello! Ask me anything about this project.', 11)] });
+    await page.addInitScript(() => { try { localStorage.setItem('bunny.workMode', 'code'); } catch { /* storage blocked */ } });
+    await api.open(`/?s=${made.id}`);
+    await page.locator('#fr-trust-card').waitFor({ state: 'visible', timeout: 15_000 });
+  },
+
+  // engine-switch-menu.png: the engine chip's menu "Switch this chat to…" with the reasons. Locator: #engine-menu (opened from #engine-chip).
+  'engine-switch-menu': async (page, api) => {
+    await withEngines(api);
+    await api.request.post('/api/providers/anthropic/connect', { data: { apiKey: 'sk-test-000000000000' } });
+    await codeChatWith(page, api, project('notes-app-engines', RULES));
+    await page.locator('#engine-chip').waitFor({ state: 'visible' });
+    await page.locator('#engine-chip').click();
+    await page.locator('#engine-menu').waitFor({ state: 'visible' });
+  },
+
+  // engine-switch-confirm.png: the confirm card "Switch this chat to Codex CLI?". Locator: .engine-switch-card.
+  'engine-switch-confirm': async (page, api) => {
+    await withEngines(api);
+    await api.request.post('/api/providers/anthropic/connect', { data: { apiKey: 'sk-test-000000000000' } });
+    await codeChatWith(page, api, project('notes-app-engines', RULES));
+    await page.locator('#engine-chip').click();
+    await page.locator('#engine-menu .es-row', { hasText: 'Codex CLI' }).getByRole('button', { name: 'Switch' }).click();
+    await page.locator('.engine-switch-card').waitFor({ state: 'visible' });
+  },
+
+  // project-instructions-changed.png: the Working folder card's "Project instructions" block with AGENTS.md "changed since it was read". Locator: .modal[aria-label="Working folder"] .fr-block:not(#confine-block).
+  'project-instructions-changed': async (page, api) => {
+    await api.request.put('/api/settings', { data: { folderRulesEnabled: true, folderRulesTrusted: [] } });
+    const folder = project('notes-app-rules', RULES);
+    await api.request.post('/api/providers/anthropic/connect', { data: { apiKey: 'sk-test-000000000000' } });
+    const made = await codeChatWith(page, api, folder);
+    const diff = await (await api.request.get(`/api/sessions/${made.id}/folder-rules/diff`)).json();
+    const shas = Object.fromEntries(diff.added.filter((f) => f.name === 'AGENTS.md').map((f) => [f.name, f.sha256]));
+    const followed = await api.request.post(`/api/sessions/${made.id}/folder-rules/follow`, { data: { names: ['AGENTS.md'], shas } });
+    if (!followed.ok()) throw new Error(`Follow was refused: ${await followed.text()}`);
+    writeFileSync(join(folder, 'AGENTS.md'), 'Use tabs.\nSay goodbye.\n'); // somebody changed the file after it was followed
+    await page.locator('#folder-chip').click();
+    const card = page.locator('.modal[aria-label="Working folder"]');
+    await card.locator('.fr-row:has(.fr-n:text-is("AGENTS.md"))', { hasText: 'changed since it was read' }).waitFor({ timeout: 10_000 });
   },
 };

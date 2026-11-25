@@ -5,6 +5,7 @@
  * The host is resolved ONCE, every address is validated, and the socket connects to that same validated address
  * (no second lookup, so a DNS rebind cannot swap it); the hostname is kept for Host and TLS SNI.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
@@ -99,6 +100,12 @@ function requestOnce(url, { sig, allowLoopback, lookupImpl }) {
 }
 
 /** Returns { bytes: Buffer, type, url }. Throws a readable error; nothing is written here. */
+/**
+ * PG-1: the person's website rules. app.js runs a tool call inside hopJudge.run(fn, ...); fetchLimited then asks fn(url) for every address it is about to
+ * request, the first one and each redirect, and fn throws to refuse. Nothing set: nothing asked.
+ */
+export const hopJudge = new AsyncLocalStorage();
+
 export async function fetchLimited(url, { signal, allowLoopback = false, lookupImpl = (h, o) => dnsLookup(h, o), maxBytes = MAX_DOWNLOAD_BYTES } = {}) {
   let current;
   try { current = new URL(String(url ?? '').trim()); } catch { throw new Error('download_file needs a full http or https address'); }
@@ -106,6 +113,7 @@ export async function fetchLimited(url, { signal, allowLoopback = false, lookupI
   for (let hop = 0; ; hop += 1) {
     if (current.protocol !== 'http:' && current.protocol !== 'https:') throw new Error(`download_file only fetches http or https addresses, not ${current.protocol}`);
     if (isOwnServer(current)) throw refusedOwn(); // every hop, so a redirect cannot lead there either
+    await hopJudge.getStore()?.(current.href); // PG-1: the person's website rules, at every hop (a private address is still refused below, whatever an allow says)
     let res;
     try {
       // allowLoopback may be a function of the address, asked again on every hop

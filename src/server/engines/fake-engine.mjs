@@ -11,7 +11,7 @@
 //   { exit: 3 }  { hang: true }                      end at once with a code / print nothing and stay alive
 // Options in the script object: { tools: [...] } overrides the init tool list; { noInit: true }.
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 
 const profile = process.argv[2];
@@ -20,6 +20,8 @@ const args = process.argv.slice(3);
 const script = JSON.parse(process.env.BUNNY_FAKE_SCRIPT_FILE ? readFileSync(process.env.BUNNY_FAKE_SCRIPT_FILE, 'utf8') : (process.env.BUNNY_FAKE_SCRIPT || '{"steps":[]}'));
 const out = (o) => process.stdout.write(`${typeof o === 'string' ? o : JSON.stringify(o)}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// ENGINE-SWITCH tests: what each run was started with and told is appended, one JSON line per run, to the file named by BUNNY_FAKE_PROMPT_LOG (nothing when it is not set)
+const logPrompt = (o) => { if (process.env.BUNNY_FAKE_PROMPT_LOG) { try { appendFileSync(process.env.BUNNY_FAKE_PROMPT_LOG, `${JSON.stringify({ profile, ...o })}\n`); } catch { /* a test aid only */ } } };
 
 if (profile === 'claude-code') {
   const restricted = args.includes('--restricted');
@@ -67,8 +69,8 @@ if (profile === 'claude-code') {
 
   let stdin = '';
   process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (c) => { stdin += c; if (stdin.includes('\n') && !started) { started = true; play(); } });
-  process.stdin.on('end', () => { if (!started) { started = true; play(); } });
+  process.stdin.on('data', (c) => { stdin += c; if (stdin.includes('\n') && !started) { started = true; logPrompt({ args, input: stdin }); play(); } });
+  process.stdin.on('end', () => { if (!started) { started = true; logPrompt({ args, input: stdin }); play(); } });
   let started = false;
 
   async function play() {
@@ -121,7 +123,7 @@ else if (profile === 'codex') {
     if (m.method === 'thread/start') { threadId = 'thr-1'; if (script.trustProject && process.env.CODEX_HOME) writeFileSync(`${process.env.CODEX_HOME}/config.toml`, `[projects.'x']
 trust_level = "trusted"
 `); send({ id: m.id, result: { thread: { id: threadId }, approvalPolicy: script.policy ?? m.params.approvalPolicy, sandbox: { type: m.params.sandbox === 'read-only' ? 'readOnly' : 'workspaceWrite' }, model: m.params.model ?? 'm', modelProvider: m.params.modelProvider ?? 'p', cwd: m.params.cwd } }); if (script.dumpParams) writeFileSync(script.dumpParams, JSON.stringify({ init: JSON.parse(process.env.FAKE_INIT_PARAMS ?? 'null'), thread: m.params, env: { CODEX_HOME: process.env.CODEX_HOME, BUNNY_ENGINE_TOKEN: Boolean(process.env.BUNNY_ENGINE_TOKEN) } })); return; }
-    if (m.method === 'turn/start') { send({ id: m.id, result: { turn: { id: turnId, status: 'inProgress' } } }); if (!started) { started = true; play(); } return; }
+    if (m.method === 'turn/start') { send({ id: m.id, result: { turn: { id: turnId, status: 'inProgress' } } }); if (!started) { started = true; logPrompt({ args, input: JSON.stringify(m.params ?? {}) }); play(); } return; }
     if (m.method === 'turn/interrupt') { send({ id: m.id, result: {} }); send({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'interrupted' } } }); return; }
   }
   async function play() {

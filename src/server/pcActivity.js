@@ -13,7 +13,9 @@ export const LABEL_CHARS = 40;
 export function createPcActivity({ file = null, now = () => Date.now() } = {}) {
   let entries = [];
   let loading = null;
-  let saving = Promise.resolve();
+  // One writer at a time, and a burst of entries is ONE write of the latest state (it was one write per entry, queued: 530 writes that could land after a later write of the same file).
+  let writing = null;
+  let again = false;
   const prune = () => {
     const t = now();
     entries = entries.filter((e) => t - Date.parse(e.at) <= ACTIVITY_MAX_AGE_MS).slice(-ACTIVITY_MAX_ENTRIES);
@@ -39,8 +41,21 @@ export function createPcActivity({ file = null, now = () => Date.now() } = {}) {
     } else clean.files = (Array.isArray(entry.files) ? entry.files : []).slice(0, 3).map((f) => ({ name: text(f?.name, 200), folder: text(f?.folder, 260) }));
     entries.push(clean);
     prune();
-    if (file) saving = saving.then(load).then(async () => { prune(); await mkdir(dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(entries)); }).catch(() => {});
+    if (file) persist();
   }
 
-  return { log, async list() { await load(); prune(); return [...entries].reverse(); }, async flush() { await saving; } };
+  function persist() {
+    if (writing) { again = true; return; }
+    writing = (async () => {
+      do {
+        again = false;
+        await load();
+        prune();
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, JSON.stringify(entries));
+      } while (again);
+    })().catch(() => {}).finally(() => { writing = null; });
+  }
+
+  return { log, async list() { await load(); prune(); return [...entries].reverse(); }, async flush() { while (writing) await writing; } };
 }

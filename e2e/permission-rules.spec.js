@@ -103,3 +103,36 @@ test('the screen is readable on a phone: no sideways scroll, and every control r
   expect(wide).toBe(false);
   await expect(page.locator('#rules-add-btn')).toBeVisible();
 });
+
+// PERMISSIONS-GAPS (PG-1, PG-2, PG-3, PG-5): the three new kinds of rule on the same screen.
+test('PG: a website, a tool and a helper rule are added, shown with their kind, saved and survive a reload', async ({ page, request }) => {
+  await open(page);
+  await add(page, 'domain', 'https://Example.com:8443/path', 'ask');
+  await expect(page.locator('#rules-lists .rl.ask .pat')).toHaveText('example.com'); // the address is tidied to the host, port and case gone
+  await add(page, 'domain', '*.paste.io', 'deny');
+  await add(page, 'tool', 'browser_*', 'ask');
+  await add(page, 'agent', 'helper:*', 'deny');
+  await expect(page.locator('#rules-lists .rl.deny .kind')).toHaveText(['Website', 'Helper or chat']);
+  const saved = await (await request.get('/api/permission-rules')).json();
+  expect(saved.global.map((r) => `${r.kind}:${r.effect}:${r.pattern}`).sort()).toEqual(['agent:deny:helper:*', 'domain:ask:example.com', 'domain:deny:*.paste.io', 'tool:ask:browser_*']);
+  await page.reload();
+  await expect(page.locator('#rules-lists .rl.deny .pat')).toHaveText(['*.paste.io', 'helper:*']);
+});
+
+test('PG: a bad website or helper pattern is refused on the line and nothing is saved', async ({ page, request }) => {
+  await open(page);
+  await add(page, 'domain', 'not a site!', 'deny');
+  await expect(page.locator('#rules-line')).toContainText('Type a website');
+  await add(page, 'agent', 'helpers please', 'deny');
+  await expect(page.locator('#rules-line')).toContainText('Choose one of');
+  expect((await (await request.get('/api/permission-rules')).json()).global).toEqual([]);
+});
+
+test('PG2-c: an Allow on a tool that always asks is marked "always asks"; the notes list the read-only commands', async ({ page }) => {
+  await open(page);
+  await add(page, 'agent', 'chat:message', 'allow');
+  await expect(page.locator('#rules-lists .rl.allow .chip')).toHaveText('always asks');
+  await page.locator('#rules-notes summary').click();
+  await expect(page.locator('#rules-readonly')).toContainText('git status');
+  await expect(page.locator('#rules-readonly')).toContainText('node --version');
+});

@@ -41,7 +41,7 @@ test('end to end: a real failing node test run has its failing test named among 
   try {
     const file = join(dir, 'fixture.test.js');
     writeFileSync(file, "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\ntest('the passing one', () => {});\ntest('the named one fails', () => { assert.equal(1, 2); });\n");
-    const r = spawnSync(process.execPath, ['--test', file], { encoding: 'utf8', timeout: 60_000, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
+    const r = spawnSync(process.execPath, ['--test', '--test-reporter=spec', file], { encoding: 'utf8', timeout: 60_000, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
     assert.notEqual(r.status, 0, 'the fixture must fail');
     const kept = `${r.stdout}\n${r.stderr}`.split(/\r?\n/).filter((l) => FAIL_MARKS.test(l));
     assert.ok(kept.some((l) => l.includes('the named one fails')), `the failing test is named in the kept lines:\n${kept.join('\n')}`);

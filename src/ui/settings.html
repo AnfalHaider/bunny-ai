@@ -82,6 +82,16 @@
         </div>
         <div class="right" id="google-actions"></div>
       </div>
+      <details class="row" id="google-howto" open hidden>
+        <summary class="name">How to connect Google</summary>
+        <ol class="desc">
+          <li>Open the Google Cloud console and create a project (free).</li>
+          <li>APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Desktop app.</li>
+          <li>Copy the client ID, and the client secret if Google shows one.</li>
+          <li>Paste them under Sign-in apps below. The Sign in button turns on at once.</li>
+        </ol>
+        <p class="desc">Nothing is sent to Google until you press Sign in. Your chats and keys stay on this computer.</p>
+      </details>
       <details class="row account-apps">
         <summary class="name"><span data-i18n="account.apps">Sign-in apps</span> <span class="opt">(advanced)</span></summary>
         <p class="desc">GitHub's "Sign in with GitHub" and Google sign-in need an OAuth app you register once with them. GitHub: Settings → Developer settings → OAuth Apps, tick "Enable Device Flow". Google: Cloud console → APIs &amp; Services → Credentials → OAuth client ID → Desktop app.</p>
@@ -121,13 +131,13 @@
         </select></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Transcript text size</div></div>
+        <div class="meta-col"><div class="name">Transcript text size</div><div class="desc">How big the text in chats is.</div></div>
         <div class="right"><select class="appearance" data-key="transcriptSize" aria-label="Transcript text size">
           <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="xlarge">Extra large</option>
         </select></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Transcript width</div></div>
+        <div class="meta-col"><div class="name">Transcript width</div><div class="desc">How wide the chat column is on a large screen.</div></div>
         <div class="right"><select class="appearance" data-key="transcriptWidth" aria-label="Transcript width">
           <option value="narrow">Narrow</option><option value="medium">Medium</option><option value="wide">Wide</option><option value="full">Full width</option>
         </select></div>
@@ -150,8 +160,9 @@
       </div>
     </div>
 
-    <h2 id="code-look">Code</h2>
+    <h2 id="code-look">Code blocks</h2>
     <div class="group">
+      <p class="section-note">Code colours: the colours used in code blocks, one choice for the light theme and one for the dark theme.</p>
       <div class="code-theme-pick">
         <div>
           <select class="appearance" data-key="codeThemeLight" id="code-theme-light" aria-label="Code colours in light mode"></select>
@@ -167,36 +178,13 @@
         <div class="right"><input class="appearance" data-key="codeFont" maxlength="60" placeholder="JetBrains Mono" aria-label="Code font" /></div>
       </div>
       <div class="row">
-        <div class="meta-col"><div class="name">Code font size</div></div>
+        <div class="meta-col"><div class="name">Code font size</div><div class="desc">The size of text inside code blocks.</div></div>
         <div class="right"><select class="appearance" data-key="codeFontSize" aria-label="Code font size">
           <option value="">Default (12)</option><option value="11">11</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="18">18</option>
         </select></div>
       </div>
     </div>
-  </section>
-
-  <section data-section="language">
-    <h2>Language</h2>
-    <div class="group">
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Language</div>
-          <div class="desc">The interface language. Everything stays on this machine.</div>
-        </div>
-        <div class="right">
-          <select id="language" aria-label="Language">
-            <option value="en">English</option>
-            <option value="es">Español</option>
-            <option value="fr">Français</option>
-            <option value="ar">العربية</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section data-section="notifications">
-    <h2>Notifications</h2>
+      <h3 class="grp-head">Notifications</h3>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -208,11 +196,13 @@
         </div>
       </div>
     </div>
+
   </section>
+
 
   <section data-section="bunny">
     <h2>Instructions</h2>
-    <p class="section-note">Bunny keeps these in mind in every chat: how you like answers, what you work on, rules to follow.</p>
+    <p class="section-note">Sent to the model at the start of every chat: how you like answers, what you work on, rules to follow. Keep it short. It saves as you type.</p>
     <div class="group instructions-box">
       <textarea id="instructions" rows="10" maxlength="20000" placeholder="For example: Answer briefly. I work in TypeScript and deploy to Vercel. Explain things like I'm new to them." aria-label="Instructions for every chat"></textarea>
       <div class="instructions-foot"><span id="instructions-count">0 / 20000</span><span id="instructions-saved" aria-live="polite"></span></div>
@@ -255,11 +245,6 @@
     </div>
   </section>
 
-  <section data-section="privacy">
-    <h2>Privacy</h2>
-    <h2>Storage</h2>
-    <div class="group" id="storage"></div>
-  </section>
 
   <section data-section="capabilities">
     <h2>Capabilities</h2>
@@ -291,6 +276,13 @@
           <div class="desc">Offer the tools of your switched-on connectors (Customize) to the model. Off keeps every chat offline from them.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" data-cap="connectorsEnabled" aria-label="Connectors" /><span>on</span></label></div>
+      </div>
+      <div class="row" id="brave-row">
+        <div class="meta-col">
+          <div class="name">Brave Search key</div>
+          <div class="desc">Web search tries Brave first when you add a key, then DuckDuckGo. Brave needs a card to sign up (it gives free monthly credits: about 1,000 searches). Bunny sends your searches to Brave when a key is set. The key is kept encrypted on this computer, is sent only to Brave, and is never shown again. <span id="brave-state" role="status"></span></div>
+          <div class="desc"><input type="password" id="brave-key" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Paste your Brave Search key" aria-label="Brave Search key" /> <button type="button" id="brave-save" class="ghost small">Save key</button> <button type="button" id="brave-remove" class="ghost small" hidden>Remove key</button> <span class="err" id="brave-err" role="alert"></span></div>
+        </div>
       </div>
     </div>
 
@@ -328,7 +320,7 @@
       <div class="row">
         <div class="meta-col">
           <div class="name">Search this PC</div>
-          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. Off until you turn it on.</div>
+          <div class="desc">Let Bunny find files on this computer through Windows Search, the index behind the Start menu and File Explorer, and tell you about them. It only reads: it never changes, moves or deletes a file. It sees only what Windows has indexed, and never the folders listed under Excluded folders. It is on for finding files only: Bunny shows what it found (names, folders, dates) and does not open the files unless you choose that below. Turn it off here at any time.</div>
         </div>
         <div class="right"><label class="switch"><input type="checkbox" id="pc-on" aria-label="Search this PC" /><span id="pc-on-state">off</span></label></div>
       </div>
@@ -338,13 +330,6 @@
           <div class="desc" id="pc-after-desc">Read the files, then answer: Bunny opens the best matches (up to 3 files: one or two are read to 20,000 characters each, three to about 14,600 each, because they share one reply), answers from them and names the files it used. Show what was found: a list, and Bunny reads a file only when you press Ask about this file.</div>
         </div>
         <div class="right"><select id="pc-after" aria-label="After a search"><option value="read">Read the files, then answer</option><option value="show">Show what was found</option></select></div>
-      </div>
-      <div class="row" id="pc-bar-row">
-        <div class="meta-col">
-          <div class="name">Quick ask searches by itself</div>
-          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
-        </div>
-        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
       </div>
       <div class="row" id="pc-excl-row">
         <div class="meta-col">
@@ -382,8 +367,27 @@
     </div>
   </section>
 
-  <section data-section="connection">
-    <h2>Connection</h2>
+
+  <section data-section="models">
+    <h2>Models</h2>
+    <h3 class="grp-head">Effort</h3>
+    <div class="group">
+      <div class="row">
+        <div class="meta-col">
+          <div class="name">Default effort</div>
+          <div class="desc">How hard the model thinks in a new chat.</div>
+        </div>
+        <div class="right">
+          <select id="default-effort" aria-label="Default effort">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="max">Max</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <h3 class="grp-head">Right now</h3>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -407,10 +411,6 @@
         <div class="right"><span class="tag" id="fake-mode">unknown</span></div>
       </div>
     </div>
-  </section>
-
-  <section data-section="models">
-    <h2>Models</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
@@ -470,6 +470,7 @@
         </div>
         <div class="right wide-col">
           <textarea id="allowlist" rows="3" aria-label="Allowed models"></textarea>
+          <span class="field-err" id="allowlist-err" role="alert"></span>
         </div>
       </div>
       <div class="row">
@@ -478,29 +479,62 @@
           <div class="desc">One "name = model-id" per line, so a model can be picked by a short name.</div>
         </div>
         <div class="right wide-col">
-          <textarea id="aliases" rows="3" aria-label="Model aliases"></textarea>
+          <textarea id="aliases" rows="3" aria-label="Aliases"></textarea>
+          <span class="field-err" id="aliases-err" role="alert"></span>
         </div>
-      </div>
-      <div class="row">
-        <div class="right"><button id="save-models" class="primary">Save models</button></div>
       </div>
     </div>
   </section>
 
-  <section data-section="code">
-    <h2>Code</h2>
+  <section data-section="permissions">
+    <h2>Permissions</h2>
     <div class="group">
       <div class="row">
         <div class="meta-col">
           <div class="name">Default permission mode</div>
-          <div class="desc">How careful a new chat starts out. You can change it per chat under the message box. In Auto, commands run without asking, and a command can read anything your Windows account can, Bunny's saved keys included.</div>
+          <div class="desc">How careful a new chat starts out. You can change it per chat under the message box. Smart (the recommended start) runs in Auto only in a git folder you trusted, with the second-model check on, and asks everywhere else, including on a phone or another device. In Auto, commands run without asking, and a command can read anything your Windows account can, Bunny's saved keys included.</div>
         </div>
         <div class="right">
           <select id="default-permission" aria-label="Default permission mode">
+            <option value="smart">Smart (recommended)</option>
             <option value="ask">Manual</option>
             <option value="accept">Accept edits</option>
             <option value="plan">Plan</option>
             <option value="auto">Auto</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" id="trusted-folders-row">
+        <div class="meta-col">
+          <div class="name">Trusted folders</div>
+          <div class="desc">Smart runs in Auto only in these git folders. A folder is added when you say yes on its card; remove one to be asked again. A folder that was moved or renamed is new to Bunny and is asked about again. Only this window can change the list.</div>
+          <ul id="trusted-folders" class="plain-list" aria-label="Trusted folders"></ul>
+        </div>
+      </div>
+      <div class="row" id="auto-judge-row">
+        <div class="meta-col">
+          <div class="name">Check Auto actions with a second model</div>
+          <div class="desc">In Auto, a second model checks each risky action before it runs: commands, connector changes, computer and browser clicks, downloads and installs. It sees only your own typed words and the action, never file or page text, and it can only let through what Auto would already run, or stop it. If it stops too many actions, does not answer, or cannot be reached, Bunny asks you instead. While this is on, broad Allow rules (such as node*, powershell* or curl*) are not used in Auto.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" data-cap="autoJudgeEnabled" aria-label="Check Auto actions with a second model" /><span>off</span></label></div>
+      </div>
+      <div class="row" id="auto-judge-model-row">
+        <div class="meta-col">
+          <div class="name">Model that checks Auto actions</div>
+          <div class="desc">By default the model of the chat's own provider. Another provider can be chosen below. Each checked action is sent to that provider. <span id="auto-judge-note" role="status"></span></div>
+        </div>
+        <div class="right"><select id="auto-judge-model" aria-label="Model that checks Auto actions"><option value="">This chat's own model</option></select></div>
+      </div>
+      <div class="row" id="confine-row">
+        <div class="meta-col">
+          <div class="name">Confine commands to the project folder</div>
+          <div class="desc">Windows only. Commands Bunny runs in Code mode run in a low-rights mode that can only write inside the project folder: no admin, nothing installed. Bunny asks once per folder before it changes the folder's security label, and "Remove the label" on the Working folder card puts it back as it was. On in Auto is recommended.</div><ul class="desc" id="confine-notcovered" aria-label="Not covered"></ul>
+        </div>
+        <div class="right">
+          <select id="confine-commands" aria-label="Confine commands to the project folder">
+            <option value="off">Off</option>
+            <option value="auto">On in Auto</option>
+            <option value="always">Always on</option>
           </select>
         </div>
       </div>
@@ -510,29 +544,48 @@
         <p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say. A command pattern like <code>npm test*</code> matches what Bunny is about to run; a path pattern like <code>secrets/**</code> matches the files Bunny's own tools read or edit (not what a command does). Simple wildcards only: <code>*</code> and <code>**</code>.</p>
         <p class="lead"><b>Only from Bunny's window.</b> In the desktop app, the rules, the permission mode, connectors, schedules, hooks, skills, sign-ins, providers, automatic updates, "use another model when busy" and the other settings that decide what Bunny may do change only from this window. Anything else on this computer that tries gets "Change this in Bunny's window.", which means the request was refused and nothing was changed.</p>
         <p class="lead"><b>A guard rail, not a sandbox.</b> Command rules read the command Bunny is about to run; they do not cover custom tools, MCP or local connectors, computer-use typing, the browser tools or schedules, and a wrapper such as <code>cmd /c</code> or <code>powershell -Command</code> can hide what it runs (Bunny asks about those when you have a Deny or Ask rule).</p>
+        <p class="lead"><b>Allow for this chat.</b> When Bunny asks, the card can offer to allow that kind of action for this chat only: the same program and sub-command (such as <code>npm run</code>), edits in one folder, one connector tool, or the actions on one website. It never covers a command with more than one part, the project's top folder, files that run later, or anything that sends or buys. The list is in the Working folder card, with Forget, and it is cleared when you change folder, turn on Plan mode or switch engine. Ticking "Also save as a rule" adds one Allow rule here, and shows its exact text first.</p>
+        <p class="lead"><b>Installing.</b> Anything the AI installs (a plugin, a skill, a connector, a tool) asks on one card in every mode, listing every part and where it came from. "Install and switch on" switches on exactly what the card listed; "Install, keep off" leaves it off. Nothing in a source runs while it is installed.</p>
         <div class="tabs2" role="tablist" aria-label="Where the rules apply">
           <button type="button" class="tab" role="tab" id="rules-tab-all" aria-selected="true">All folders</button>
           <button type="button" class="tab" role="tab" id="rules-tab-folder" aria-selected="false">One folder</button>
         </div>
         <label class="rules-folder" id="rules-folder-wrap" hidden>Folder
-          <select id="rules-folder" aria-label="Folder the rules apply to"></select>
+          <select id="rules-folder" aria-label="Folder the rules apply to" aria-describedby="rules-help-folder"></select>
         </label>
         <div id="rules-lists"></div>
         <div class="addr" id="rules-add">
-          <select id="rules-kind" aria-label="What the rule matches">
+          <select id="rules-kind" aria-label="What the rule matches" aria-describedby="rules-help-kind">
             <option value="command">Command</option>
             <option value="path:edits">Path · edits</option>
             <option value="path:reads">Path · reads</option>
+            <option value="domain">Website</option>
+            <option value="tool">Tool</option>
+            <option value="agent">Helper or chat</option>
           </select>
-          <input id="rules-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
-          <select id="rules-effect" aria-label="What happens">
+          <select id="rules-connector" hidden aria-label="Which connector this tool rule is for"><option value="">Any tool</option></select>
+          <input id="rules-pattern" aria-describedby="rules-help-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
+          <select id="rules-effect" aria-label="What happens" aria-describedby="rules-help-effect">
             <option value="allow">Allow</option>
             <option value="ask">Ask</option>
             <option value="deny">Deny</option>
           </select>
           <button type="button" class="btn primary" id="rules-add-btn">Add rule</button>
         </div>
+        <ul class="rules-form-help">
+          <li id="rules-help-folder"><b>Folder</b> Where the rule applies: every folder, or just one.</li>
+          <li id="rules-help-kind"><b>What it matches</b> A command, a file path, a website, a tool, or helpers and other chats.</li>
+          <li id="rules-help-pattern"><b>Pattern</b> Use * as a wildcard, for example npm test*.</li>
+          <li id="rules-help-effect"><b>What happens</b> Allow runs with no question. Ask shows a card. Deny always stops it.</li>
+        </ul>
         <div class="rules-line" id="rules-line" role="status" aria-live="polite"></div>
+        <details class="rules-notes" id="rules-notes">
+          <summary>What each kind of rule covers</summary>
+          <p><b>Website</b>, like <code>example.com</code> (that site only) or <code>*.example.com</code> (its subdomains, not the bare name). Bunny judges the address of every page it reads, every download, and every address it is sent on to by a redirect. In the browser panel, a Deny or Ask also stops every picture, script and frame a page loads from that site, and an Ask on one of those counts as a Deny because a page cannot wait for a question. Website rules for All folders apply in the panel. Not covered: what a command does on the network, because Bunny cannot see inside a command.</p>
+          <p><b>Tool</b>, by name, like <code>browser_*</code> or <code>computer_*</code>, or one connector's tools (choose the connector). An Allow never switches a tool on, and it never removes a question that always comes first: sending, building a tool, installing code, running a local connector.</p>
+          <p><b>Helper or chat</b>: <code>helper:*</code> (or <code>helper:code</code>, <code>research</code>, <code>see</code>, <code>chat</code>), <code>chat:start</code> and <code>chat:message</code>. A message to another chat speaks for you, so it always asks, whatever the rule says.</p>
+          <p><b>Commands that never ask in Ask mode</b> (your own rules still come first, and a file from this PC that was just read still asks): <span id="rules-readonly"></span>. Only these forms, with a short list of options each, inside your folder; anything chained, redirected or with another option asks.</p>
+        </details>
         <div class="addr" id="rules-starters"><span class="rules-dim">Start from:</span></div>
         <div class="try" id="rules-try-box">
           <label for="rules-try">Try a command</label>
@@ -540,20 +593,13 @@
           <div id="rules-try-out" role="status" aria-live="polite"></div>
         </div>
       </div>
-      <div class="row">
-        <div class="meta-col">
-          <div class="name">Default effort</div>
-          <div class="desc">How hard the model thinks in a new chat.</div>
-        </div>
-        <div class="right">
-          <select id="default-effort" aria-label="Default effort">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="max">Max</option>
-          </select>
-        </div>
-      </div>
+    </div>
+  </section>
+
+  <section data-section="code">
+    <h2>Code chats</h2>
+    <div class="group">
+      <h3 class="grp-head">Branches</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Branch prefix</div><div class="desc">Added to the start of every git branch name Bunny creates.</div></div>
         <div class="right"><input class="pref" data-key="branchPrefix" data-default="bunny" maxlength="30" aria-label="Branch prefix" /></div>
@@ -563,6 +609,7 @@
           <div id="wt-leftovers"></div></div>
         <div class="right"></div>
       </div>
+      <h3 class="grp-head">Long jobs</h3>
       <div class="row">
         <div class="meta-col">
           <div class="name">Keep going on long jobs</div>
@@ -581,10 +628,12 @@
         <div class="meta-col"><div class="name">Code theme and font</div><div class="desc">Change how code looks in replies, files, diffs and the terminal.</div></div>
         <div class="right"><button type="button" class="btn" id="open-appearance">Open Appearance</button></div>
       </div>
+      <h3 class="grp-head">Helpers</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Helpers (dynamic workflows)</div><div class="desc">Let Bunny run several helper agents at once on big jobs. Uses your limits faster.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="helpersEnabled" data-default="true" aria-label="Helpers" /><span class="pref-state"></span></label></div>
       </div>
+      <h3 class="grp-head">After a reply</h3>
       <div class="row">
         <div class="meta-col"><div class="name">Prompt suggestions</div><div class="desc">Suggest next messages after Bunny replies. Each suggestion asks the model once more, so it adds a little to your usage.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="promptSuggestions" data-default="false" aria-label="Prompt suggestions" /><span class="pref-state"></span></label></div>
@@ -593,8 +642,9 @@
         <div class="meta-col"><div class="name">Summary and next steps</div><div class="desc">Bunny ends its work with what it did, what is left and what it needs from you.</div></div>
         <div class="right"><label class="switch"><input type="checkbox" class="pref" data-key="summaryNextSteps" data-default="true" aria-label="Summary and next steps" /><span class="pref-state"></span></label></div>
       </div>
+      <h3 class="grp-head">New tasks</h3>
       <div class="row">
-        <div class="meta-col"><div class="name">When you ask for an unrelated task</div><div class="desc">What happens when you ask for something the chat isn't working on.</div></div>
+        <div class="meta-col"><div class="name">When you ask for an unrelated task</div><div class="desc">Ask shows a choice. Start a new chat picks that choice for you. Do it here never offers it.</div></div>
         <div class="right"><select class="pref" data-key="unrelatedTask" data-default="ask" aria-label="When you ask for an unrelated task">
           <option value="ask">Ask me</option><option value="new">Start a new chat</option><option value="here">Do it in this chat</option>
         </select></div>
@@ -619,15 +669,19 @@
   </section>
 
   <section data-section="usage">
-    <h2>Usage</h2>
+    <h2>Usage and data</h2>
     <div class="group" id="usage">
       <div class="row"><div class="desc">Nothing has been used yet.</div></div>
     </div>
+      <h3 class="grp-head">Where your data is</h3>
+    <div class="group" id="storage"></div>
+
   </section>
 
-  <section data-section="desktop" id="desktop-section" hidden>
-    <h2>Desktop app</h2>
+  <section data-section="quickask">
+    <h2>Quick ask</h2>
     <div class="group">
+      <div id="quickask-desktop" hidden>
       <div class="row">
         <div class="meta-col">
           <div class="name">Quick ask</div>
@@ -639,6 +693,26 @@
           <label class="switch"><input type="checkbox" id="quick-ask" aria-label="Quick ask" /><span id="quick-state">off</span></label>
         </div>
       </div>
+      </div>
+      <div class="row" id="quickask-browser-note">
+        <div class="meta-col"><div class="name">Quick ask</div><div class="desc">Quick ask is a small bar of Bunny's desktop app. Its on/off switch and its shortcut are in Bunny's own window.</div></div>
+      </div>
+      <div class="row" id="pc-bar-row">
+        <div class="meta-col">
+          <div class="name">Quick ask searches by itself</div>
+          <div class="desc">When a question in the Quick ask bar is about a file, Bunny searches without being told to. Off: the bar searches only when you choose Search this PC in its plus menu.</div>
+        </div>
+        <div class="right"><label class="switch"><input type="checkbox" id="pc-bar-auto" aria-label="Quick ask searches by itself" /><span id="pc-bar-state">on</span></label></div>
+      </div>
+      <div class="row">
+        <div class="meta-col"><div class="name">Searching this PC from the bar</div><div class="desc" id="pc-bar-why">It uses the same Search this PC switch and excluded folders as chats, set in Capabilities.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="desktop" id="desktop-section" hidden>
+    <h2>Desktop app</h2>
+    <div class="group">
       <div class="row">
         <div class="meta-col">
           <div class="name">Start when I sign in</div>
@@ -781,7 +855,7 @@
   import { installContext, installRowState, installRowText, runInstall } from './install-app.js';
   import { describeAction, activityView, chooseLevel, levelPill, paintStatus, warningBox, everythingDevices, IDLE_SHORT, DEVICE_ACCESS_SENTENCE } from './device-access.js';
   import { deviceLevel } from './browser-mode.js';
-  import { LANGUAGES, applyLanguage, t, fill } from './i18n.js';
+  import { applyLanguage, t, fill } from './i18n.js';
   // Words in the page's language, for text the script writes.
   const tt = (key, vars) => fill(t(key, document.documentElement.lang || 'en'), vars);
   import { applyEmbed } from './embed.js';
@@ -792,30 +866,30 @@
   const theme = $('theme');
   const allowlist = $('allowlist');
   const aliases = $('aliases');
-  const language = $('language');
   const notifications = $('notifications');
   // The window that shows this page waits for the saves in flight before it closes it (closeSettings in chat.js), so a change made just before closing is never lost.
   const pendingSaves = (window.bunnyPendingSaves = new Set());
+  // The "Saved" mark: the same small word beside whatever the person just changed.
+  const markSaved = (control) => {
+    const slot = control?.closest('.right') ?? control?.parentElement;
+    if (!slot) return;
+    let mark = slot.querySelector(':scope > .sv');
+    if (!mark) { mark = document.createElement('span'); mark.className = 'sv'; mark.setAttribute('role', 'status'); slot.append(mark); }
+    mark.textContent = 'Saved';
+    clearTimeout(mark.timer);
+    mark.timer = setTimeout(() => { mark.textContent = ''; }, 1800);
+  };
+  let lastChanged = null;
+  document.addEventListener('change', (e) => { lastChanged = e.target; }, true);
   const save = (patch) => {
     const p = sendJSON('/api/settings', 'PUT', patch);
+    const control = lastChanged;
+    p.then(() => { if (control && control.id !== 'aliases' && control.id !== 'allowlist') markSaved(control); }, () => {});
     pendingSaves.add(p);
     const done = () => pendingSaves.delete(p);
     p.then(done, done);
     return p;
   };
-
-  // The list of languages comes from one place, so the page and the app agree.
-  language.replaceChildren(...LANGUAGES.map((l) => {
-    const option = document.createElement('option');
-    option.value = l.code;
-    option.textContent = l.name;
-    return option;
-  }));
-
-  language.addEventListener('change', async () => {
-    applyLanguage(language.value);
-    await save({ language: language.value });
-  });
 
   notifications.addEventListener('change', async () => {
     const wanted = notifications.checked;
@@ -950,6 +1024,17 @@
       window.parent?.postMessage?.({ type: 'bunny:profile' }, location.origin);
     } catch (err) { $('photo-error').textContent = err.message ?? 'That picture could not be saved.'; }
   });
+  // F6: the Brave Search key. Only whether one is set comes back; the key itself is never shown.
+  const paintBrave = (set) => { $('brave-state').textContent = set ? 'A key is saved.' : 'No key: DuckDuckGo only.'; $('brave-remove').hidden = !set; };
+  getJSON('/api/web-search').then((r) => paintBrave(r.braveKey)).catch(() => { $('brave-row').hidden = true; });
+  $('brave-save').addEventListener('click', async () => {
+    $('brave-err').textContent = '';
+    try { const r = await sendJSON('/api/web-search/key', 'PUT', { key: $('brave-key').value.trim() }); $('brave-key').value = ''; paintBrave(r.braveKey); } catch (err) { $('brave-err').textContent = err.message ?? 'The key could not be saved.'; }
+  });
+  $('brave-remove').addEventListener('click', async () => {
+    $('brave-err').textContent = '';
+    try { paintBrave((await sendJSON('/api/web-search/key', 'DELETE')).braveKey); } catch (err) { $('brave-err').textContent = err.message ?? 'The key could not be removed.'; }
+  });
   $('photo-remove').addEventListener('click', async () => {
     showPhoto(await sendJSON('/api/profile/photo', 'DELETE'));
     window.parent?.postMessage?.({ type: 'bunny:profile' }, location.origin);
@@ -1061,6 +1146,7 @@
         throw new Error('The Google sign-in was not finished.');
       }));
       b.disabled = !a.googleReady;
+      $('google-howto').hidden = Boolean(a.googleReady); // the honest note: why the button is off, and the steps that turn it on
       go.append(b);
     }
   }
@@ -1124,13 +1210,14 @@
     const on = $('pc-on'), after = $('pc-after'), barAuto = $('pc-bar-auto');
     if (!on) return;
     const paint = (s) => {
-      on.checked = s.pcSearchEnabled === true;
+      on.checked = s.pcSearchEnabled !== false;
       $('pc-on-state').textContent = on.checked ? 'on' : 'off';
-      after.value = s.pcSearchAfter === 'show' ? 'show' : 'read';
+      after.value = s.pcSearchAfter === 'read' ? 'read' : 'show';
       barAuto.checked = s.pcSearchBarAuto !== false;
       $('pc-bar-state').textContent = barAuto.checked ? 'on' : 'off';
       for (const id of ['pc-after-row', 'pc-bar-row']) $(id).classList.toggle('is-off', !on.checked);
       after.disabled = !on.checked; barAuto.disabled = !on.checked;
+      $('pc-bar-why').textContent = on.checked ? 'It uses the same Search this PC switch and excluded folders as chats, set in Capabilities.' : 'Search this PC is off, so "Quick ask searches by itself" does nothing yet. Turn Search this PC on in Capabilities.';
       $('pc-excl-count').textContent = String((s.pcSearchExcluded ?? []).length);
       mine(s.pcSearchExcluded ?? []);
     };
@@ -1289,6 +1376,16 @@
     const lists = $('rules-lists');
     const line = $('rules-line');
     const state = { rules: { global: [], folders: {} }, tab: 'all', folder: null, folders: [] };
+    const FIXED_ASKS = ['gmail_send', 'create_tool', 'install_from_github', 'add_connector', 'message_session', 'chat:message']; // PG2-c: an Allow never removes these questions
+    const wild = (pat, text) => { // * is the only wildcard; every other character is literal
+      const parts = pat.toLowerCase().split('*'); const t = text.toLowerCase();
+      if (parts.length === 1) return t === parts[0];
+      if (!t.startsWith(parts[0]) || !t.endsWith(parts[parts.length - 1]) || t.length < parts[0].length + parts[parts.length - 1].length) return false;
+      let at = parts[0].length;
+      for (const mid of parts.slice(1, -1)) { const i = t.indexOf(mid, at); if (i < 0) return false; at = i + mid.length; }
+      return true;
+    };
+    const connectorNames = new Map();
     const EFFECTS = [['deny', 'Deny', 'Bunny is told no'], ['ask', 'Ask', 'Bunny always asks first'], ['allow', 'Allow', 'Bunny goes ahead']];
     const STARTERS = [
       { label: 'Ask before git push*', rule: { kind: 'command', effect: 'ask', pattern: 'git push*' } },
@@ -1311,7 +1408,10 @@
 
     function row(rule, scopeLabel) {
       const r = el('div', 'rr');
-      r.append(el('span', 'kind', rule.kind === 'command' ? 'Command' : `Path · ${rule.ops === 'reads' ? 'reads' : 'edits'}`), el('span', 'pat', rule.pattern));
+      const KIND = { command: 'Command', domain: 'Website', tool: 'Tool', agent: 'Helper or chat' };
+      const shown = rule.kind === 'tool' ? rule.pattern.replace(/^([0-9a-f-]{36}):/, (m, id) => (connectorNames.has(id) ? `${connectorNames.get(id)}:` : m)) : rule.pattern; // PG2-a: the rule keeps the connector's id; the person sees its name
+      r.append(el('span', 'kind', KIND[rule.kind] ?? `Path · ${rule.ops === 'reads' ? 'reads' : 'edits'}`), el('span', 'pat', shown));
+      if (rule.effect === 'allow' && (rule.kind === 'tool' || rule.kind === 'agent') && FIXED_ASKS.some((t) => wild(rule.pattern, t))) r.append(el('span', 'chip', 'always asks'));
       if (scopeLabel) r.append(el('span', 'chip', scopeLabel));
       else {
         const rm = el('button', 'rm', 'Remove');
@@ -1355,14 +1455,16 @@
 
     $('rules-add-btn').addEventListener('click', async () => {
       const [kind, ops] = $('rules-kind').value.split(':');
-      const pattern = $('rules-pattern').value;
+      let pattern = $('rules-pattern').value;
+      if (kind === 'tool' && $('rules-connector').value) pattern = `${$('rules-connector').value}:${pattern.trim() || '*'}`;
       const effect = $('rules-effect').value;
       $('rules-pattern').value = '';
       await queued(() => add({ kind, pattern, effect, ...(ops ? { ops } : {}) }));
       if (line.classList.contains('is-bad') && !$('rules-pattern').value) $('rules-pattern').value = pattern; // keep what was typed so it can be fixed
     });
     $('rules-pattern').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('rules-add-btn').click(); } });
-    $('rules-kind').addEventListener('change', () => { $('rules-pattern').placeholder = $('rules-kind').value === 'command' ? 'npm run lint*' : 'secrets/**'; });
+    const PLACEHOLDER = { command: 'npm run lint*', 'path:edits': 'secrets/**', 'path:reads': 'secrets/**', domain: '*.example.com', tool: 'browser_*', agent: 'helper:*' };
+    $('rules-kind').addEventListener('change', () => { $('rules-pattern').placeholder = PLACEHOLDER[$('rules-kind').value] ?? ''; $('rules-connector').hidden = $('rules-kind').value !== 'tool'; });
     for (const s of STARTERS) {
       const b = el('button', 'chip', s.label);
       b.type = 'button';
@@ -1396,6 +1498,12 @@
         for (const f of [...sessions.map((s) => s.folder), ...Object.keys(state.rules.folders)]) if (f && !seen.some((x) => x.toLowerCase() === f.toLowerCase())) seen.push(f);
         state.folders = seen;
         state.folder = seen[0] ?? null;
+        try { // the connectors a Tool rule can be for: the rule keeps the id, the screen shows the name
+          const connectors = await getJSON('/api/mcp');
+          for (const c of connectors) connectorNames.set(c.id, c.name);
+          $('rules-connector').replaceChildren(Object.assign(el('option', '', 'Any tool'), { value: '' }), ...connectors.map((c) => { const o = el('option', '', c.name); o.value = c.id; return o; }));
+        } catch { /* a Tool rule by plain name still works */ }
+        try { $('rules-readonly').textContent = (await getJSON('/api/permission-rules/read-only')).commands.join(', '); } catch { /* the notes still read without the list */ }
         const pick = $('rules-folder');
         pick.replaceChildren(...seen.map((f) => { const o = el('option', '', f.split(/[\\/]/).filter(Boolean).pop() ?? f); o.value = f; o.title = f; return o; }));
         paint();
@@ -1405,6 +1513,37 @@
 
   // ---- code defaults ----
   $('default-permission').addEventListener('change', (e) => save({ defaultPermissionMode: e.target.value }));
+  // F12: the folders trusted for Auto (window-only), with a Remove for each
+  async function bindTrustedFolders() {
+    const list = $('trusted-folders');
+    const paint = (folders) => {
+      list.replaceChildren();
+      const trusted = folders.filter((f) => f.auto === true);
+      if (!trusted.length) { const li = document.createElement('li'); li.textContent = 'None yet. Smart asks in every folder.'; list.append(li); return; }
+      for (const f of trusted) {
+        const li = document.createElement('li');
+        const name = document.createElement('span'); name.textContent = f.folder;
+        const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn btn-ghost'; rm.textContent = 'Remove'; rm.setAttribute('aria-label', `Stop trusting ${f.folder}`);
+        rm.addEventListener('click', async () => { try { paint((await sendJSON('/api/folder-trust', 'DELETE', { folder: f.folder })).folders ?? []); } catch { /* stays as it was */ } });
+        li.append(name, ' ', rm); list.append(li);
+      }
+    };
+    try { paint((await getJSON('/api/folder-trust')).folders ?? []); } catch { list.textContent = 'The list could not be read.'; }
+  }
+  // F11: the model that checks Auto actions (window-only): the chat's own by default; another provider's model is named, because the checked actions are sent there
+  async function bindJudgeModel(settings) {
+    const sel = $('auto-judge-model');
+    const note = () => { const v = sel.value; $('auto-judge-note').textContent = v ? `Each checked action is sent to ${v.split('/')[0]}.` : ''; };
+    try {
+      const models = await getJSON('/api/models');
+      const seen = new Set();
+      for (const m of models) { const v = `${m.providerId}/${m.id}`; if (seen.has(v) || !/^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(v)) continue; seen.add(v); const o = document.createElement('option'); o.value = v; o.textContent = `${m.providerName ?? m.providerId}: ${m.name ?? m.id}`; sel.append(o); }
+    } catch { /* no model list: the default stays */ }
+    sel.value = [...sel.options].some((o) => o.value === settings.autoJudgeModel) ? settings.autoJudgeModel : '';
+    note();
+    sel.addEventListener('change', async () => { note(); await save({ autoJudgeModel: sel.value }); });
+  }
+  $('confine-commands').addEventListener('change', (e) => save({ confineCommands: e.target.value }));
   $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
 
   // ---- models ----
@@ -1484,14 +1623,44 @@
   });
   $('restart-update')?.addEventListener('click', () => updates?.install());
 
-  $('save-models').addEventListener('click', async () => {
+  // One way of saving: a change is saved when the box is left; a wrong entry saves nothing and says why, under the box.
+  const closest = (word, options) => {
+    const score = (a, b) => { // how many characters two ids share in order, a cheap "did you mean"
+      let i = 0; for (const c of a) { const at = b.indexOf(c, i); if (at >= 0) i = at + 1; } return i / Math.max(a.length, b.length);
+    };
+    return options.map((o) => [o, score(word.toLowerCase(), o.toLowerCase())]).sort((x, y) => y[1] - x[1])[0];
+  };
+  const saveAliases = async () => {
+    const lines = aliases.value.split('\n');
+    const bad = lines.findIndex((l) => l.trim() && !/^\s*[^=\s]+\s*=\s*\S.*$/.test(l));
+    $('aliases-err').textContent = bad < 0 ? '' : `Not saved: line ${bad + 1} has no " = ". Write it as name = model.`;
+    aliases.classList.toggle('bad', bad >= 0);
+    if (bad >= 0) return;
+    await save({ aliases: parseAliases(aliases.value) });
+    markSaved(aliases);
+  };
+  const saveAllowlist = async () => {
     const list = allowlist.value.split('\n').map((l) => l.trim()).filter(Boolean);
-    const map = parseAliases(aliases.value);
-    await save({ allowlist: list, aliases: map });
-    const button = $('save-models');
-    button.textContent = 'Saved';
-    setTimeout(() => { button.textContent = 'Save models'; }, 1200);
-  });
+    let message = '';
+    if (list.length) {
+      let known = [];
+      try { known = (await getJSON('/api/models')).map((m) => m.id); } catch { /* without the list nothing can be checked */ }
+      const aliasNames = Object.keys(parseAliases(aliases.value));
+      const ok = (id) => known.includes(id) || aliasNames.includes(id);
+      if (known.length && !list.some(ok)) {
+        const missing = list.find((id) => !ok(id));
+        const [guess, closeness] = closest(missing, known);
+        message = `Not saved: "${missing}" is not a model I know. Nothing would be left to choose from.${closeness > 0.7 ? ` Did you mean ${guess}?` : ''}`;
+      }
+    }
+    $('allowlist-err').textContent = message;
+    allowlist.classList.toggle('bad', Boolean(message));
+    if (message) return;
+    await save({ allowlist: list });
+    markSaved(allowlist);
+  };
+  aliases.addEventListener('change', saveAliases);
+  allowlist.addEventListener('change', saveAllowlist);
 
   // ---- desktop app (only inside the Electron shell, which exposes window.bunnyDesktop) ----
   // BROWSER step 2: open to other devices on the local network (window only). Off until turned on; then on after every restart until turned off (REMOTE-STAY), on the same network only.
@@ -1629,9 +1798,10 @@
   // the Desktop app tab only (or to the whole page when no tab is named): a page that is not showing it must not show it, nor start it.
   const embedParams = new URLSearchParams(location.search);
   const namedTab = embedParams.get('embed') === '1' ? embedParams.get('section') : null;
-  const showsDesktop = !namedTab || namedTab === 'desktop';
+  const showsDesktop = !namedTab || namedTab === 'desktop' || namedTab === 'quickask';
+  const showsInstall = !namedTab || namedTab === 'desktop'; // the install row and the desktop section belong to the Desktop app tab only
   function bootInstall(desk) {
-    if (!showsDesktop) return;
+    if (!showsInstall) return;
     $('desktop-section').hidden = false;
     $('browser-section').hidden = false;
     const ctx = installContext(window);
@@ -1674,7 +1844,9 @@
     const desk = desktopBridge();
     bootInstall(desk);
     if (!desk) return;
-    $('desktop-section').hidden = false;
+    if (showsInstall) $('desktop-section').hidden = false;
+    $('quickask-desktop').hidden = false;
+    $('quickask-browser-note').hidden = true;
     const prefs = await desk.getPrefs();
     const bind = (id, stateId, key) => {
       const box = $(id);
@@ -1787,13 +1959,17 @@
     $('auto-steps').value = settings.autoContinueSteps ?? 500;
     $('auto-minutes').value = settings.autoContinueMinutes ?? 120;
     $('auto-tokens').value = settings.autoContinueTokens ?? 5000000;
-    language.value = settings.language ?? 'en';
-    applyLanguage(language.value);
+    applyLanguage('en'); // English only for now
     notifications.checked = Boolean(settings.notifications);
     $('notifications-state').textContent = settings.notifications ? 'on' : 'off';
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
-    $('default-permission').value = settings.defaultPermissionMode ?? 'ask';
+    $('default-permission').value = settings.defaultPermissionMode ?? 'smart';
+    $('confine-commands').value = ['off', 'auto', 'always'].includes(settings.confineCommands) ? settings.confineCommands : 'auto';
+    $('confine-row').hidden = !/Windows/i.test(navigator.userAgent); // Windows only
+    getJSON('/api/confine').then((c) => { const ul = $('confine-notcovered'); ul.replaceChildren(); const h = document.createElement('li'); h.innerHTML = ''; const b = document.createElement('b'); b.textContent = 'Not covered:'; h.append(b); ul.append(h); for (const t of c.notCovered ?? []) { const li = document.createElement('li'); li.textContent = t; ul.append(li); } }).catch(() => {}); // F13-4: the same list the label card shows, from the server, word for word
+    bindJudgeModel(settings).catch(() => {});
+    bindTrustedFolders().catch(() => {});
     rulesUi.load().catch(() => {});
     $('default-effort').value = settings.defaultEffort ?? 'medium';
     bindCapabilities(settings);

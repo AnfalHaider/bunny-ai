@@ -7,6 +7,8 @@
  */
 
 import { loadEngines, paintEngineChip } from './engine-chip.js';
+import { openNoFolderCard, openSwitchCard, switchDivider } from './engine-switch.js';
+import { confineBlock, loadView as loadFolderRules, projectInstructions, trustCard } from './folder-rules-ui.js';
 import {
   getJSON, sendJSON, streamMessage, streamComplete, applyTheme, applyAppearance,
   computerScreenshot, computerClick, computerType, computerKey, computerWait, computerReset,
@@ -14,6 +16,8 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { confirmRewind, openRewindPanel } from './rewind.js';
+import { PROVIDER_SENTENCE, contextPartCount, engineLine, memoryPanel, openContextView, suggestionCard, askRememberWhere } from './project-context.js';
 import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
@@ -269,16 +273,31 @@ function renderComposerHeader() {
   const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
   const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
-  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
+  const frUsed = state.sessionId ? frCounts.get(state.sessionId) ?? 0 : 0; // FOLDER-RULES: the instruction files this chat's folder has, counted when the trust card or the folder card loaded them
+  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}${frUsed ? ` · ${frUsed} instruction file${frUsed === 1 ? '' : 's'}` : ''}` : 'Choose a folder to work in');
   // W2-9: a chat with its own copy shows the copy's branch in the accent colour, with "own copy"
   const copyBranch = state.sessionId ? state.session?.worktree?.branch ?? null : null;
   if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
   $('branch-chip')?.classList.toggle('on', Boolean(copyBranch));
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
-  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   syncModeMenu();
-  paintEngineChip({ chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
+  const canSwitch = Boolean(state.sessionId && state.session?.messages?.length && !state.incognito && !isDevicePage());
+  paintEngineChip({ canSwitch, busy: Boolean(state.streaming), onSwitch: (row) => switchEngineTo(row.id), onFix: (row, what) => fixEngine(row, what), deviceNote: isDevicePage() ? 'The engine can be changed only on the PC.' : '', chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
+  showTrustCard().catch(() => {}); // FOLDER-RULES: the card for a folder with instruction files (once per chat and folder)
   if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
+  // PROJECT-CONTEXT: the one quiet sign in a project chat; it opens "What this chat was given"
+  let ctxChip = $('project-context-chip');
+  if (!state.sessionId || !state.session?.projectId) ctxChip?.remove();
+  else {
+    if (!ctxChip && indicator) {
+      ctxChip = button('', { id: 'project-context-chip', className: 'ghost small', title: 'What this chat was given' });
+      ctxChip.addEventListener('click', () => openContextView({ sessionId: state.sessionId, onChange: () => renderComposerHeader() }));
+      indicator.after(ctxChip);
+    }
+    const sid = state.sessionId;
+    contextPartCount(sid).then((n) => { if (ctxChip && state.sessionId === sid && n !== null) ctxChip.textContent = `Project context: ${n} part${n === 1 ? '' : 's'} ▾`; });
+  }
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
     const modelAbilities = ab ? ab.abilities : [];
@@ -807,6 +826,7 @@ async function loadSessions() {
   announceFinishedChats(rows);
   state.sessions = rows;
   renderSidebar();
+  refreshPalette(); // the chat list can arrive after the palette opened: its chat matches follow it
   watchWorkingChats();
 }
 
@@ -939,6 +959,10 @@ function newChatInProject(projectId) {
   startNewChat({ incognito: false });
   renderSidebar();
   const name = state.projects.find((p) => p.id === projectId)?.name ?? 'the project';
+  const folder = state.projects.find((p) => p.id === projectId)?.folder;
+  if (folder) { // the project's folder: new chats here start in Code mode in it
+    sendJSON('/api/folder/check', 'POST', { folder }).then(({ folder: real, branch }) => { state.pendingFolder = { folder: real, branch }; applyWorkMode('code'); renderComposerHeader(); }).catch((err) => { $('error').textContent = err.message; });
+  }
   flashStatus(`New chat in ${name}: it is saved there when you send the first message`, 5000);
   const empty = $('empty-text');
   if (empty) empty.textContent = `This chat will be saved in ${name} and follow its instructions.`;
@@ -1136,7 +1160,27 @@ function renderProjects() {
     instructions.value = current.instructions ?? '';
     const err = element('div', { className: 'err', role: 'alert' });
     const close = () => { state.projectEdit = null; renderProjects(); };
-    form.append(name, instructions, element('div', { className: 'actions' },
+    // PROJECT-CONTEXT: the project's folder, the two switches, its memory, and where its text goes
+    let folderValue = current.folder ?? '';
+    const folderText = element('span', { className: 'pm-folder', textContent: folderValue || 'No folder: new chats here start in Chat mode' });
+    const pick = button('Change', { className: 'ghost small', onclick: async () => {
+      let picked = null;
+      if (window.bunnyDesktop?.pickFolder) picked = await window.bunnyDesktop.pickFolder();
+      else picked = await askForPath(folderValue);
+      if (!picked) return;
+      try { const r = await sendJSON('/api/folder/check', 'POST', { folder: picked }); folderValue = r.folder; folderText.textContent = folderValue; } catch (ex) { err.textContent = ex.message; }
+    } });
+    const noFolder = button('Remove', { className: 'ghost small', onclick: () => { folderValue = ''; folderText.textContent = 'No folder: new chats here start in Chat mode'; } });
+    const useMem = element('input', { type: 'checkbox', id: 'project-use-memory' });
+    useMem.checked = current.useMemory !== false;
+    const shareRecent = element('input', { type: 'checkbox', id: 'project-share-recent' });
+    shareRecent.checked = current.shareRecent !== false;
+    form.append(name, element('div', { className: 'pm-folder-row' }, element('b', { textContent: 'Folder (optional)' }), folderText, pick, noFolder),
+      element('p', { className: 'modal-sub', textContent: 'New chats here start in Code mode in this folder.' }));
+    form.append(instructions, element('label', { className: 'pm-tick' }, useMem, ' Use project memory'), element('label', { className: 'pm-tick' }, shareRecent, ' Share recent work between chats'),
+      memoryPanel(current, { onChange: () => {} }),
+      element('p', { className: 'modal-sub', textContent: PROVIDER_SENTENCE }), element('p', { className: 'modal-sub', textContent: engineLine(state.sessions, current.id) }));
+    form.append(element('div', { className: 'actions' },
       button('Save', { type: 'submit', className: 'primary' }),
       button('Cancel', { className: 'ghost', onclick: close }),
       button('Delete project', {
@@ -1158,7 +1202,7 @@ function renderProjects() {
       e.preventDefault();
       if (!name.value.trim()) { name.focus(); return; }
       try {
-        await sendJSON(`/api/projects/${current.id}`, 'PATCH', { name: name.value, instructions: instructions.value });
+        await sendJSON(`/api/projects/${current.id}`, 'PATCH', { name: name.value, instructions: instructions.value, folder: folderValue, useMemory: useMem.checked, shareRecent: shareRecent.checked });
         state.projectEdit = null;
         await loadProjects();
         renderSidebar();
@@ -1211,7 +1255,7 @@ function paintMessages() {
   // D-2: consecutive tool steps between two pieces of narration are ONE group line, collapsed once finished.
   let run = [];
   const flushRun = () => { if (run.length) host.append(...buildToolGroup(run)); run = []; };
-  const groupable = (m) => m.kind === 'tool_call' && !m.needsSignIn && !m.question && !m.artifact && !m.linked && !(m.attachments ?? []).length;
+  const groupable = (m) => m.kind === 'tool_call' && !m.needsSignIn && !m.question && !m.artifact && !m.madeFile && !m.linked && !(m.attachments ?? []).length;
   // W4-5c: a reply saves ONE thinking text; when steps came before its answer, its "Thought for" row goes before the first of them
   // (thinking, then the step it led to), the same order the live line settles in.
   const thoughtAt = new Map();
@@ -1399,8 +1443,13 @@ function renderTitle() {
  * W3-6: a connector that needs the person to sign in. The step says "Needs sign-in" and offers Sign in (the person's own browser opens,
  * and the chat carries on by itself once they are back) and Skip it (just dismisses; a later message works as usual once signed in).
  */
+/** Is a Sign in step for this connector already on screen? (a chat shows one step per connector, not one per place that noticed) */
+function openSignInFor(serverId) {
+  return [...document.querySelectorAll('.signin-step')].some((b) => b.dataset.server === String(serverId) && [...b.querySelectorAll('button')].some((x) => x.textContent === 'Sign in')); // one still waiting for the person
+}
 function signInStep(info) {
   const box = element('div', { className: 'signin-step' });
+  box.dataset.server = String(info.serverId ?? '');
   const note = element('span', { className: 'hint' });
   const clientBox = element('input', { className: 'input', placeholder: 'Client ID', hidden: true });
   clientBox.setAttribute('aria-label', 'Client ID');
@@ -1439,6 +1488,9 @@ function signInStep(info) {
 function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
+  // ENGINE-SWITCH: the divider "Now on Codex CLI" stays in the transcript
+  if (m.kind === 'engine-switch') { wrap.className = 'msg engine-switch'; wrap.append(switchDivider(m)); return wrap; }
+
   // Tool call block: collapsible, shows the tool name, args and result
   if (m.kind === 'tool_call') {
     // A question the model asked is shown as its card, with the answer, not as a step line.
@@ -1452,6 +1504,7 @@ function renderMessage(m, { skipThinking = false } = {}) {
     else if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
     else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
+    if (m.allowedKind) header.append(element('span', { className: 'tag is-allowed', textContent: `allowed for this chat: ${m.allowedKind}` })); // F9: why nothing asked (a small chip, no banner)
     // A read step opens that file in the Files pane.
     const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
     if (readPath && state.session?.folder && !failedStep) {
@@ -1478,9 +1531,11 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       tc.append(copy);
     }
     wrap.append(tc);
-    if (m.needsSignIn && m.serverId) wrap.append(signInStep(m));
+    if (m.confined) tc.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13: kept with the step
+    if (m.needsSignIn && m.serverId && !openSignInFor(m.serverId)) wrap.append(signInStep(m));
     if ((m.attachments ?? []).length) wrap.append(renderAttachments(m.attachments));
     if (m.artifact) wrap.append(artifactCard(m.artifact));
+    if (m.madeFile) wrap.append(madeFileCard(m.madeFile));
     if (m.linked) wrap.append(linkedChatCard(m.linked));
     if (m.question) wrap.append(answeredQuestionCard(m.question));
     return wrap;
@@ -1506,6 +1561,12 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     group.append(line, rows);
     wrap.append(group);
     return wrap;
+  }
+
+  // PROJECT-CONTEXT: "Remember for <project>?": Keep, Edit, Discard. Nothing is stored until Keep.
+  if (m.kind === 'memory_suggestion' && m.suggestion) {
+    return element('div', { className: 'msg assistant pm-suggestion', dataset: { id: m.id } },
+      suggestionCard(m, { sessionId: state.sessionId, projectName: projectName(m.suggestion.projectId) || 'this project', onChange: () => {} }));
   }
 
   // Permission prompt: ask/deny a tool call
@@ -1574,6 +1635,9 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
       if (report) wrap.append(report);
     }
   }
+
+  // ENGINE-SWITCH: the reply that followed a handover says how big it was (the handover text itself is never saved in the chat)
+  if (m.role === 'assistant' && m.handover) wrap.append(element('div', { className: 'sub es-handover', textContent: `Handover: ${m.handover.messages} message${m.handover.messages === 1 ? '' : 's'}, ${m.handover.files} file${m.handover.files === 1 ? '' : 's'}, ${Math.max(1, Math.round((m.handover.bytes ?? 0) / 1024))} KB` }));
 
   // The files this reply changed can be put back.
   if (m.role === 'assistant' && m.checkpoint?.files) wrap.append(undoBar(m));
@@ -1684,6 +1748,10 @@ function renderActions(m, stored) {
     });
   }
 
+  if (state.messages.some((x, i) => i > state.messages.findIndex((y) => y.id === m.id) && x.checkpoint?.files && !x.checkpoint.restored)) {
+    act(say('rewind.here'), 'retry', async () => confirmRewind(rewindCtx(), { to: m.id }, `before the reply after this message`));
+  }
+
   act(say('chat.branch'), 'branch', async () => {
     const branch = await sendJSON(`/api/sessions/${state.sessionId}/fork`, 'POST', { at: m.id });
     await loadSessions();
@@ -1701,13 +1769,20 @@ function startEditing(m) {
   const save = button('Save and resend', { className: 'primary' });
   const cancel = button('Cancel', { className: 'ghost' });
 
-  body.replaceChildren(editor, element('div', { className: 'actions' }, save, cancel));
+  // REWIND: when replies after this message changed files, the person may put those files back too
+  const later = state.messages.slice(state.messages.findIndex((x) => x.id === m.id) + 1).some((x) => x.checkpoint?.files && !x.checkpoint.restored);
+  const alsoFiles = later ? element('input', { type: 'checkbox', id: 'edit-files' }) : null;
+  body.replaceChildren(editor, ...(alsoFiles ? [element('label', { className: 'rewind-tick' }, alsoFiles, ' ', say('rewind.alsoFiles'))] : []), element('div', { className: 'actions' }, save, cancel));
   editor.focus();
 
   cancel.addEventListener('click', () => paintMessages());
   save.addEventListener('click', async () => {
     const text = editor.value.trim();
     if (!text) { editor.focus(); return; }
+    if (alsoFiles?.checked) { // the same preview and card as a rewind; if the person backs out, nothing is edited
+      const went = await confirmRewind(rewindCtx(), { to: m.id }, 'before this message');
+      if (!went) return;
+    }
     const updated = await sendJSON(`/api/sessions/${state.sessionId}/messages/${m.id}`, 'PATCH', { content: text });
     state.messages = updated.messages;
     paintMessages();
@@ -1846,8 +1921,8 @@ function renderRailDetails() {
   const autoPick = state.modelAuto && state.autoPick;
   const why = $('rail-why-row');
   if (why) { why.hidden = !autoPick; if (autoPick) put('rail-why', `Auto picked this for ${JOBS[state.lastJob]?.label?.toLowerCase() ?? 'this job'}${whyPicked(autoPick, state.lastJob) ? `: ${whyPicked(autoPick, state.lastJob)}` : ''}`); }
-  const modes = { ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
-  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'ask';
+  const modes = { smart: 'Smart', ask: 'Manual', accept: 'Accept edits', plan: 'Plan', auto: 'Auto' };
+  const mode = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   put('rail-mode', modes[mode] ?? mode);
   put('rail-effort', ((state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium').replace(/^./, (c) => c.toUpperCase()));
   const ctx = state.session?.context;
@@ -2056,14 +2131,20 @@ function showLiveTool(bodyEl, info) {
   if (!line) {
     line = element('div', { className: 'msg assistant live-tool' });
     line.dataset.tool = info.tool;
-    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '' }).firstChild);
+    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '', ...(info.allowedKind ? { allowedKind: info.allowedKind } : {}) }).firstChild);
     msg.before(line);
   }
   line.dataset.status = info.status;
   line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
-  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
+  if (info.confined && !line.querySelector('.confined-mark')) line.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13
+  // one Sign in step per connector in this reply: the connector found at the start and the one the person just allowed are the same connector
+  if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step') && !openSignInFor(info.serverId)) {
     line.querySelector('.tag')?.classList.add('is-blocked');
     line.append(signInStep(info));
+  }
+  if (info.openInCustomize && !line.querySelector('.open-customize')) { // F5: an installed plugin that is off, too long to show: the button goes to Customize (nothing is switched on from here)
+    const open = button(say('step.openCustomize'), { className: 'ghost small open-customize', onclick: () => openSettings('customize') });
+    line.append(open);
   }
   if (info.result) {
     let res = line.querySelector('.tool-call-result');
@@ -2076,6 +2157,7 @@ function showLiveTool(bodyEl, info) {
     line.append(linkedChatCard(info.linked));
     loadSessions().catch(() => {});
   }
+  if (info.madeFile && info.status === 'done' && !line.querySelector('.made-card')) line.append(madeFileCard(info.madeFile)); // OFFICE-MAKE
   if (info.artifact && info.status === 'done') {
     line.querySelector('.artifact-card')?.remove();
     line.append(artifactCard(info.artifact));
@@ -2300,6 +2382,7 @@ function undoBar(m) {
   }
   bar.append(
     element('span', { className: 'hint', textContent: say('undo.changed', { n }) }),
+    button(say('rewind.further'), { className: 'ghost sm link-btn', onclick: () => openRewindPanel(rewindCtx()) }),
     button(say('undo.button'), {
       className: 'ghost sm',
       onclick: async (e) => {
@@ -2314,11 +2397,28 @@ function undoBar(m) {
           state.browser?.refresh?.();
         } catch (err) {
           b.disabled = false;
+          // a file changed since this reply: ask in words, through the same preview as a rewind (REWIND G1)
+          if (err.code === 'rewind.changed' || /changed since this reply/i.test(err.message ?? '')) { confirmRewind(rewindCtx(), { cp: m.checkpoint.id }, 'before this reply'); return; }
           $('error').textContent = err.message;
         }
       },
     }));
   return bar;
+}
+
+/** REWIND: what the Rewind panel and its confirm card need from the chat. */
+function rewindCtx() {
+  return {
+    sessionId: state.sessionId,
+    messages: () => state.messages,
+    running: () => Boolean(state.streaming),
+    openChat: (id) => { loadSessions().then(() => goToChat(id)); },
+    onDone: async () => {
+      try { state.session = await getJSON(`/api/sessions/${state.sessionId}`); state.messages = state.session.messages ?? state.messages; paintMessages(); } catch { /* the pane refresh below still runs */ }
+      state.browser?.refresh?.();
+      state.workPanes?.refresh?.();
+    },
+  };
 }
 
 /** A card for another chat a step started or talked to: a helper, a background chat. */
@@ -2334,6 +2434,28 @@ function linkedChatCard(c) {
     // Leaving now would stop the reply that is still coming in.
     onclick: () => (state.streaming ? flashStatus(say('card.wait')) : goToChat(c.id)),
   }));
+  return card;
+}
+
+/** OFFICE-MAKE: a Word, Excel or PowerPoint file made in a chat with no folder: its name, kind and size, and Open, Save as… and Show in folder. In a plain browser, Open and Save as are a download. */
+function madeFileCard(f) {
+  const chat = state.sessionId;
+  const url = `/api/sessions/${chat}/made/${f.id}`;
+  const desk = window.bunnyDesktop?.made ?? null;
+  const size = f.size >= 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`;
+  const said = element('span', { className: 'hint made-said', role: 'status' });
+  const run = (job) => job().then((r) => { said.textContent = r && r.ok === false ? (r.message ?? 'That did not work.') : r?.saved ? 'Saved.' : ''; }).catch(() => { said.textContent = 'That did not work.'; });
+  const download = () => { const a = document.createElement('a'); a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove(); };
+  const card = element('div', { className: 'artifact-card made-card' },
+    element('span', { className: `artifact-thumb thumb-made thumb-${String(f.kind).toLowerCase()}`, 'aria-hidden': 'true' }, icon('artifact')),
+    element('span', { className: 'artifact-card-info' },
+      element('span', { className: 'artifact-card-title', textContent: f.name }),
+      element('span', { className: 'artifact-card-kind', textContent: `${f.kind} · ${size}` })));
+  const actions = element('span', { className: 'made-actions' });
+  actions.append(button('Open', { className: 'ghost sm', 'aria-label': `Open ${f.name}`, onclick: () => (desk ? run(() => desk.open(chat, f.id)) : download()) }));
+  actions.append(button('Save as…', { className: 'ghost sm', 'aria-label': `Save ${f.name} as`, onclick: () => (desk ? run(() => desk.save(chat, f.id)) : download()) }));
+  if (desk) actions.append(button('Show in folder', { className: 'ghost sm', 'aria-label': `Show ${f.name} in its folder`, onclick: () => run(() => desk.show(chat, f.id)) }));
+  card.append(actions, said);
   return card;
 }
 
@@ -2388,6 +2510,9 @@ function showLiveCapability(bodyEl, info) {
     custom_tools: say('cap.build'),
     new_tool: say('cap.newTool'),
     switch_on_added: 'Switch on',
+    sign_in: say('cap.signIn'),
+    connector_sign_in: say('cap.connectorSignIn'),
+    pc_search: say('cap.pcSearch'),
   }[info.capability] ?? 'Allow';
   const card = element('div', { className: 'permission-prompt live-permission capability-card' });
   card.append(
@@ -2397,9 +2522,13 @@ function showLiveCapability(bodyEl, info) {
   if (info.reason) card.append(element('p', { className: 'capability-reason', textContent: info.reason }));
   if (info.capability === 'computer_use') card.append(element('p', { className: 'hint', textContent: say('cap.computerHint') }));
   if (info.capability === 'custom_tools') card.append(element('p', { className: 'hint', textContent: say('cap.buildHint') }));
+  if (info.capability === 'sign_in') card.append(element('p', { className: 'hint', textContent: say('cap.signInHint') }));
+  if (info.capability === 'connector_sign_in') card.append(element('p', { className: 'hint', textContent: say('cap.connectorSignInHint') }));
+  if (info.capability === 'pc_search') card.append(element('p', { className: 'hint', textContent: say('cap.pcSearchHint') }));
   const actions = element('div', { className: 'permission-actions' });
   const answer = async (granted) => {
     try {
+      if (granted && info.capability === 'sign_in') openSettings('profile'); // F5-4: the sign-in is in Settings › Profile
       if (granted && info.capability === 'code_mode') {
         if (!info.hasFolder) await chooseFolder();
         applyWorkMode('code', { save: true });
@@ -2444,23 +2573,38 @@ function showLivePermission(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const card = element('div', { className: 'permission-prompt live-permission' });
-  card.append(element('h4', { textContent: `Allow: ${info.title}?` }));
+  card.append(element('h4', { textContent: info.choices ? info.title : `Allow: ${info.title}?` }));
   if (info.detail) card.append(element('pre', { className: 'code' }, element('code', { textContent: info.detail })));
   const actions = element('div', { className: 'permission-actions' });
-  const answer = async (allowed, forSession = false) => {
-    actions.replaceChildren(element('span', { className: 'hint', textContent: allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
+  const answer = async (allowed, forSession = false, choice = null) => {
+    actions.replaceChildren(element('span', { className: 'hint', textContent: choice ? (info.choices.find((c) => c.id === choice)?.label ?? 'Answered') : allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
     try {
-      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', forSession ? { allowed, forSession: true } : { allowed });
+      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', choice ? { allowed, choice } : forSession ? { allowed, forSession: true } : { allowed });
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
     }
   };
-  actions.append(
-    button('Allow', { className: 'primary', onclick: () => answer(true) }),
+  // F9: the kind button, the tick that shows the exact rule, and the one fixed line that says why a kind is not offered. The words come from the server (fixed strings and the call's own arguments).
+  let tick = null;
+  const answerKind = async () => {
+    const saveRule = Boolean(tick?.checked);
+    actions.replaceChildren(element('span', { className: 'hint', textContent: info.kind.replyOnly ? 'Allowed for this task' : 'Allowed for this chat' }));
+    try { await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', saveRule ? { allowed: true, kind: true, saveRule: true } : { allowed: true, kind: true }); } catch (err) { actions.replaceChildren(element('span', { className: 'err', textContent: err.message })); }
+  };
+  if (info.choices) actions.append(...info.choices.map((c) => button(c.label, { className: c.primary ? 'primary' : 'ghost', onclick: () => answer(c.id !== 'no', false, c.id) })));
+  else actions.append(
+    button(info.kind ? 'Allow once' : 'Allow', { className: 'primary', onclick: () => answer(true) }),
+    ...(info.kind ? [button(info.kind.button.replace(/`([^`]*)`/g, '$1'), { className: 'ghost', onclick: answerKind })] : []),
     ...(info.forSession ? [button('Allow for this chat', { className: 'ghost', onclick: () => answer(true, true) })] : []),
-    button('Deny', { className: 'ghost', onclick: () => answer(false) }),
+    button(info.kind ? "Don't allow" : 'Deny', { className: 'ghost', onclick: () => answer(false) }),
   );
   card.append(actions);
+  if (info.kind?.rule) {
+    tick = element('input', { type: 'checkbox', id: `kind-save-${info.id}` });
+    card.append(element('label', { className: 'kind-tick', htmlFor: tick.id }, tick, element('span', {}, 'Also save as a rule for this folder', element('span', { className: 'hint', textContent: ` Saves exactly: ${String(info.kind.rule).replace(/`/g, '')}` }))));
+  }
+  if (info.reason) card.append(element('div', { className: 'hint kind-reason', textContent: info.reason }));
+  if (!info.kind && !info.reason && document.querySelector('meta[name="bunny-csrf"]')) card.append(element('div', { className: 'hint kind-reason', textContent: '"For this chat" can be given only on the PC.' }));
   msg.before(card);
   card.scrollIntoView({ block: 'end' });
 }
@@ -2572,6 +2716,7 @@ async function refreshSession({ expectAssistant = false } = {}) {
   paintMessages();
   renderContext(state.session.context);
   if (state.sidePaneOpen) state.workPanes?.refresh();
+  showTrustCard().catch(() => {}); // F12: a chat made by the first message has its folder now; the card asks once
 }
 
 // ---------------------------------------------------------------------------
@@ -3235,6 +3380,7 @@ const COMMANDS = [
   { name: '/clear', hint: 'Start a new chat, keeping this one' },
   { name: '/export', hint: 'Download this chat as Markdown' },
   { name: '/new', hint: 'Start a new chat' },
+  { name: '/remember', hint: 'Remember something (for this project or everywhere)' },
   { name: '/help', hint: 'Show what commands exist' },
 ];
 
@@ -3292,6 +3438,17 @@ function renderSlashMenu() {
 async function runCommand(text) {
   const [name] = text.split(/\s+/);
   switch (name) {
+    case '/remember': {
+      const what = text.slice(name.length).trim();
+      if (!what) { flashStatus('Say what to remember: /remember <text>'); return true; }
+      try {
+        const projectId = state.session?.projectId;
+        const where = projectId ? await askRememberWhere(what, projectName(projectId) || 'this project') : 'everywhere';
+        if (where === 'project') { await sendJSON(`/api/projects/${projectId}/memory`, 'POST', { kind: 'fact', text: what }); flashStatus('Kept for this project'); }
+        else if (where === 'everywhere') { await sendJSON('/api/memory', 'POST', { text: what }); flashStatus('Remembered everywhere'); }
+      } catch (err) { $('error').textContent = err.message; }
+      return true;
+    }
     case '/help':
       state.messages.push({
         id: `local-h-${Date.now()}`,
@@ -3667,8 +3824,9 @@ function bindPushToTalk() {
 // ---------------------------------------------------------------------------
 // Chat / Cowork / Code switch and the permission-mode menu
 
-const MODE_LABELS = { auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
-
+const MODE_LABELS = { smart: 'Smart', auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
+// F12: what Smart does here, in words (the chip's tooltip). Smart is Auto only in a trusted git folder with the check on; otherwise it asks.
+const SMART_TIP = "Smart: runs in Auto in a git folder you trusted, with a second model checking each risky action. Everywhere else it asks. Smart starts in Ask while Bunny's check is off or can't be reached.";
 const WORK_MODES = ['chat', 'code'];
 const MODE_HINTS = {
   chat: { placeholder: 'Send a message…', empty: 'Type below to start.' }, // a model is always in effect (Auto or the one chosen), so the empty chat does not ask for one
@@ -3706,9 +3864,10 @@ function bindModeSwitch() {
 }
 
 function syncModeMenu() {
-  const value = $('permission-mode')?.value ?? 'ask';
+  const value = $('permission-mode')?.value ?? 'smart';
   const label = $('mode-label');
   if (label) label.textContent = MODE_LABELS[value] ?? value;
+  $('mode-button')?.setAttribute('title', value === 'smart' ? SMART_TIP : 'Permission mode');
   document.querySelectorAll('#mode-menu [data-mode]').forEach((item) => {
     const on = item.dataset.mode === value;
     item.classList.toggle('is-selected', on);
@@ -3746,7 +3905,7 @@ function bindModeMenu() {
     item.addEventListener('click', () => chooseMode(item.dataset.mode));
   });
   menu.addEventListener('keydown', (e) => {
-    const map = { 1: 'auto', 2: 'ask', 3: 'accept', 4: 'plan' };
+    const map = { 1: 'smart', 2: 'auto', 3: 'ask', 4: 'accept', 5: 'plan' };
     if (map[e.key]) { e.preventDefault(); chooseMode(map[e.key]); }
     if (e.key === 'Escape') { closeModeMenu(); buttonEl.focus(); }
   });
@@ -3857,6 +4016,70 @@ async function useFolder(path) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// ENGINE-SWITCH (Design's drawing v2) and the trust card of FOLDER-RULES v4
+
+/** "Switch this chat to <engine>": the card says what the new engine gets, then the window asks the server (a window-only route), then the chat is read again so the divider shows. */
+async function switchEngineTo(to) {
+  const sid = state.sessionId;
+  if (!sid || state.streaming) return;
+  const session = state.session;
+  const useBunnyEngine = state.settings?.useBunnyEngine !== false;
+  if (to !== 'bunny' && (session?.workMode !== 'code' || !session?.folder)) {
+    const pick = await openNoFolderCard();
+    if (pick === 'bunny') return switchEngineTo('bunny');
+    if (pick === 'folder') await chooseFolder();
+    return;
+  }
+  let view = null;
+  try { if (to !== 'bunny') view = await loadFolderRules(sid); } catch { view = null; }
+  const restrictedAgain = Array.isArray(session?.engine?.restrictedFor) && session.engine.restrictedFor.includes(to);
+  if (!(await openSwitchCard({ to, session, folder: session?.folder ?? '', view, useBunnyEngine, restrictedAgain }))) return;
+  try {
+    await sendJSON(`/api/sessions/${sid}/engine`, 'POST', { to });
+    await refreshSession();
+    renderComposerHeader();
+  } catch (err) { flashStatus(err.message, 8000); }
+}
+
+/** An engine that is not ready: Download starts the download here; Sign in and a switched-off engine lead to Settings → Engines, where those are done. */
+async function fixEngine(row, what) {
+  if (what === 'download') {
+    try { await sendJSON(`/api/engines/${row.id}/download`, 'POST', {}); flashStatus(`${row.label} is downloading. Choose Switch again when it is ready.`, 8000); } catch (err) { flashStatus(err.message, 8000); }
+    return;
+  }
+  openSettings('engines');
+}
+
+let trustSeen = '';
+const trustDismissed = new Set();
+/** The card above the composer: a Code chat in a folder with instruction files nobody has answered for. Not now closes it for this chat for now; a new chat on that folder asks again. */
+const frCounts = new Map(); // session id -> how many instruction files its folder has (for the folder chip's tooltip)
+async function showTrustCard(force = false) {
+  const session = state.session;
+  const host = document.querySelector('.dock');
+  if (!state.sessionId || !session || state.incognito || session.workMode !== 'code' || !session.folder || !host || trustDismissed.has(state.sessionId)) { document.getElementById('fr-trust-card')?.remove(); return; }
+  const key = `${state.sessionId}|${session.folder}`;
+  if (!force && trustSeen === key) return; // the card (if one is up) stays: a re-render of the header must not take it away before it is answered
+  document.getElementById('fr-trust-card')?.remove();
+  trustSeen = key;
+  let view;
+  try { view = await loadFolderRules(state.sessionId); } catch { trustSeen = ''; return; } // not ready yet (the folder is saved just after the chat): look again at the next render
+  const nFiles = view.enabled && view.chatSwitch !== false ? view.files.filter((f) => f.state !== 'off').length : 0;
+  if (frCounts.get(state.sessionId) !== nFiles) { frCounts.set(state.sessionId, nFiles); renderComposerHeader(); }
+  const needFollow = view.enabled && view.chatSwitch !== false && !view.trusted && view.files.some((f) => f.state === 'waiting');
+  // F12 question 2: Smart in a git folder nobody has answered for, with the check on (the PC's window only: a device never sees or answers it)
+  let auto = null;
+  if (($('permission-mode')?.value ?? '') === 'smart' && !isDevicePage()) {
+    try { const t = await getJSON(`/api/folder-trust?folder=${encodeURIComponent(session.folder)}`); if (t.git && t.judgeOn && t.auto === null) auto = { folder: t.folder ?? session.folder }; } catch { /* no answer: Smart asks, the safe side */ }
+  }
+  if (!needFollow && !auto) return;
+  const card = trustCard({ sid: state.sessionId, view: needFollow ? view : { ...view, files: [] }, auto, device: isDevicePage(), onAnswered: (followed) => { if (!followed) trustDismissed.add(state.sessionId); showTrustCard(true); renderComposerHeader(); } });
+  card.id = 'fr-trust-card';
+  host.insertBefore(card, $('composer'));
+}
+
 /**
  * W2-9: the Working folder card: the folder, a switch "Give this chat its own copy of the project", and once on, the branch, the base and Finish.
  * The server makes and removes the copy; this only asks.
@@ -3886,6 +4109,21 @@ async function openWorkingFolder() {
       status.textContent = info.gone ? (info.message ?? 'The copy is gone.') : `Branch ${info.branch} (new, from ${info.base ?? 'the current commit'} at ${String(info.baseSha ?? '').slice(0, 7)}). ${info.dirty ?? 0} file${info.dirty === 1 ? '' : 's'} changed, ${info.ahead ?? 0} commit${info.ahead === 1 ? '' : 's'} so far.`;
       foot.append(button('Finish…', { className: 'btn btn-primary', onclick: () => finishCard(info) }));
     }
+    // F9: what is allowed for this chat: each kind in words, with Forget; hidden on a device
+    if (!document.querySelector('meta[name="bunny-csrf"]')) {
+      let allowed = { kinds: [], replyOnly: [] };
+      try { allowed = await getJSON(`/api/sessions/${sid}/allow-kinds`); } catch { /* the list is not there: shown as empty */ }
+      const total = (allowed.kinds?.length ?? 0) + (allowed.replyOnly?.length ?? 0);
+      const block = element('div', { className: 'allowed-kinds', id: 'allowed-kinds' });
+      const head = element('div', { className: 'allowed-head' }, element('b', { textContent: 'Allowed in this chat' }), element('span', { className: 'hint', textContent: ` · ${total} ${total === 1 ? 'kind' : 'kinds'}` }));
+      if (allowed.kinds?.length) head.append(button('Forget allowed actions', { className: 'link', onclick: async () => { await sendJSON(`/api/sessions/${sid}/allow-kinds/all`, 'DELETE'); await paint(); } }));
+      block.append(head);
+      if (!total) block.append(element('div', { className: 'hint', textContent: 'Nothing is allowed for this chat.' }));
+      for (const k of allowed.kinds ?? []) block.append(element('div', { className: 'allowed-row', title: k.title ?? '' }, element('span', { textContent: k.label }), button('Forget', { className: 'link', 'aria-label': `Forget ${k.label}`, onclick: async () => { await sendJSON(`/api/sessions/${sid}/allow-kinds/${k.i}`, 'DELETE'); await paint(); } })));
+      for (const k of allowed.replyOnly ?? []) block.append(element('div', { className: 'allowed-row' }, element('span', {}, k.label, element('small', { textContent: ` (${k.note})` })), element('span', { className: 'hint', textContent: 'ends with this reply' })));
+      block.append(element('div', { className: 'hint', textContent: 'Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode. Rules saved for this folder are in Settings, Code.' }));
+      body.append(block);
+    }
     foot.append(button('Change folder', { className: 'btn btn-ghost', onclick: async () => { close(); await chooseFolder(); } }), button('Close', { className: 'btn btn-ghost', onclick: close }));
     sw.addEventListener('change', async () => {
       if (!sw.checked) { sw.checked = true; finishCard(info); return; } // turning it off is Finish: nothing is lost silently
@@ -3899,6 +4137,9 @@ async function openWorkingFolder() {
       } catch (err) { status.textContent = err.message; sw.checked = false; sw.disabled = false; return; }
       await paint();
     });
+    // FOLDER-RULES v4: the project's instruction files, one set for every engine
+    try { if (state.session?.workMode === 'code' && state.session?.folder) body.append(projectInstructions({ sid, view: await loadFolderRules(sid), engineId: state.session?.engine?.id ?? 'bunny', device: isDevicePage(), onChanged: () => { paint(); showTrustCard(true); } })); } catch { /* the block is a convenience: the card works without it */ }
+    try { if (state.session?.workMode === 'code' && state.session?.folder) { const cb = await confineBlock({ sid, device: isDevicePage(), onChanged: () => paint() }); if (cb) body.append(cb); } } catch { /* a convenience */ }
     box.replaceChildren(element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Working folder' })), body, foot);
   };
   const finishCard = (info) => {
@@ -4123,7 +4364,7 @@ async function closeSettings() {
     applyProfile(settings);
     applyCapabilities(settings);
     applyAppearanceNow(settings);
-    state.language = settings.language ?? 'en';
+    state.language = 'en'; // English only for now
     applyLanguage(state.language);
     state.providers = await getJSON('/api/providers');
     state.models = visibleModels(await getJSON('/api/models'));
@@ -4221,6 +4462,17 @@ function openPalette() {
   $('palette-input').value = '';
   renderPalette('');
   $('palette-input').focus();
+}
+
+/** Redraw an open palette from its own query (chats are matched from the list, which may load late). Does nothing while it is closed. */
+function refreshPalette() {
+  const backdrop = $('palette-backdrop');
+  const input = $('palette-input');
+  if (!backdrop || backdrop.hidden || !input) return;
+  const active = [...$('palette-list').querySelectorAll('.palette-item')].findIndex((el) => el.classList.contains('is-active'));
+  renderPalette(input.value);
+  const items = [...$('palette-list').querySelectorAll('.palette-item')];
+  if (active > 0 && items[active]) { items[0]?.classList.remove('is-active'); items[active].classList.add('is-active'); }
 }
 
 function closePalette() {
@@ -4383,6 +4635,7 @@ async function boot() {
     getPendingFolder: () => state.pendingFolder?.folder ?? null,
     onChanged: () => refreshSession(),
     copy: async (text) => { flashStatus((await copyText(text)) ? 'Path copied' : 'Could not copy'); },
+    rewindCtx,
   });
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -4608,7 +4861,7 @@ async function boot() {
     applyProfile(settings);
     applyCapabilities(settings);
     applyAppearance(settings);
-    state.language = settings.language ?? 'en';
+    state.language = 'en'; // English only for now
     applyLanguage(state.language);
 
     // The saved choice counts only while its provider is still connected; a removed or

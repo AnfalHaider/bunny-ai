@@ -84,7 +84,8 @@ test('Settings: every section in the window opens its page, and the search narro
   await open(page);
   await page.locator('#settings-open').click();
   const sections = await page.locator('#settings-nav-list button.nav-row[data-section]:visible').evaluateAll((e) => e.map((x) => x.dataset.section));
-  expect(sections.length).toBe(17); // 15 + "Desktop app", which a browser tab now shows too (it holds Install as an app), + "Engines" (the CLI engines page)
+  // SETTINGS-OVERHAUL: the drawing's 12 sections plus Providers and abilities, Customize and Automation, which stay their own pages; no Language (English only)
+  expect(sections).toEqual(['profile', 'appearance', 'bunny', 'quickask', 'capabilities', 'providers', 'models', 'customize', 'automation', 'permissions', 'code', 'engines', 'desktop', 'usage', 'about']);
   for (const s of sections) {
     await page.locator(`#settings-nav-list button.nav-row[data-section="${s}"]`).click();
     await expect(page.locator('#settings-frame')).toHaveAttribute('src', /settings\.html|providers\.html|customize\.html|automation\.html/);
@@ -234,10 +235,10 @@ test('Q2-5: the Files pane lists the working folder', async ({ page }) => {
 
 test('Q2-6: the Session pane shows the folder, the branch, the model and the permission mode', async ({ page }) => {
   const dir = gitRepo();
-  await open(page, 'code'); await useFolder(page, dir); await send(page, 'hello');
+  await open(page, 'code'); await useFolder(page, dir); await pickMode(page, 'Manual'); await send(page, 'hello');
   await page.locator('#rail-toggle').click();
   const text = await page.locator('#rail').innerText();
-  expect(text).toMatch(/bunny-q2-e2e-git/); expect(text).toMatch(/main/); expect(text).toMatch(/bunny-code|Scripted/i); expect(text).toMatch(/Manual|Auto|Plan|Accept/);
+  expect(text).toMatch(/bunny-q2-e2e-git/); expect(text).toMatch(/main/); expect(text).toMatch(/bunny-code|Scripted/i); expect(text).toMatch(/Smart|Manual|Auto|Plan|Accept/);
 });
 
 test('Q2-9: opening a page whose server is not running says so in the pane', async ({ page }) => {

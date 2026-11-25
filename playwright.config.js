@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { PORT, dataDir, E2E_TOKEN } from './e2e/setup.js';
+import { PORT, dataDir, E2E_TOKEN, STANDIN_MCP_PORT, STANDIN_MCP_HOST } from './e2e/setup.js';
 
 // The e2e run is self-contained: Playwright starts its own Bunny AI instance in
 // fake-upstream mode on a its own port (BUNNY_E2E_PORT, else a free one) with a throwaway profile, so a run never
@@ -33,11 +33,14 @@ export default defineConfig({
     env: {
       PORT: String(PORT),
       BUNNY_FAKE_UPSTREAM: '1',
+      BUNNY_CONFINE_DEFAULT: 'off', // F13: the e2e walks answer no label card; the confinement specs set the setting themselves
       BUNNY_FAKE_ENGINE: '1', // the engines page and chats use a scripted stand-in engine and a fake download, never a real CLI
       BUNNY_PCSEARCH_FAKE: '1', // SEARCH-PC: a stand-in index over invented files
       BUNNY_RESET_PROFILE: '1',
       BUNNY_DATA_DIR: dataDir,
       BUNNY_API_TOKEN: E2E_TOKEN,
+      BUNNY_TEST_TRANSPORT: '1', // IA-0: the test transport (ignored in a packaged build) lets a public-looking stand-in host reach a local stand-in connector
+      BUNNY_TEST_HOSTMAP: JSON.stringify({ [STANDIN_MCP_HOST]: `http://127.0.0.1:${STANDIN_MCP_PORT}` }),
     },
   },
 });

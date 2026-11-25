@@ -92,7 +92,7 @@ export function senderAllowed(event, isOwn, windowOf) {
  * @param {(sender: object) => object | null} o.getWindow  the Bunny window of a page (has contentView, getContentBounds)
  * @param {() => string | number | null} o.getOwnPort  the port of Bunny's own server
  */
-export function createBrowserViews({ WebContentsView, session, getWindow, getOwnPort = () => null, BrowserWindow = null, nativeImage = null, resolveName = (host) => lookup(host, { all: true }) }) {
+export function createBrowserViews({ WebContentsView, session, getWindow, getOwnPort = () => null, siteAllows = () => true, BrowserWindow = null, nativeImage = null, resolveName = (host) => lookup(host, { all: true }) }) {
   const views = new Map(); // tab name -> { view, owner, window, visible }
   const watched = new WeakSet(); // pages already watched for leaving
   let partitionReady = false;
@@ -108,7 +108,8 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
       ses.on?.(picker, (event, _details, callback) => { event.preventDefault?.(); callback?.(''); });
     }
     // Every request of a panel page: only what a page may fetch, and never Bunny's own server.
-    ses.webRequest?.onBeforeRequest((details, callback) => callback({ cancel: !requestAllowed(details, ownPort()) }));
+    // PG1-c: and the person's website rules, for EVERY request (frames, scripts, fetch and XHR, images), not only the address the tab was sent to.
+    ses.webRequest?.onBeforeRequest((details, callback) => callback({ cancel: !requestAllowed(details, ownPort()) || !siteAllows(details) }));
     // No silent downloads: stopped, and the panel says so (the model can use download_file).
     ses.on?.('will-download', (event, item, contents) => {
       event.preventDefault?.();
@@ -282,7 +283,7 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     ses.webRequest?.onBeforeRequest(async (details, callback) => {
       let host = '';
       try { host = new URL(details.url).host.toLowerCase(); } catch { /* refused below */ }
-      if (!requestAllowed(details, ownPort())) { callback({ cancel: true }); return; }
+      if (!requestAllowed(details, ownPort()) || !siteAllows(details)) { callback({ cancel: true }); return; }
       const lan = isLanAddress(details.url) || (/^https?:/i.test(details.url) && (await isLanAddressResolved(details.url, resolveName)));
       callback({ cancel: lan && !openHosts.has(host) });
     });

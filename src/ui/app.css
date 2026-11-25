@@ -951,8 +951,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 }
 
 
-/* ==========================================================================
-   Bunny AI — app bindings  v1.0  (2026-11-15)
+/* ===================================================================   Bunny AI — app bindings  v1.0  (2026-11-15)
    Maps the class names that src/ui/*.js and the settings-style pages
    generate onto the design system. Tokens only: no raw colours here.
    Loaded after bunny-design-system.css (both are concatenated into
@@ -1300,8 +1299,7 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
 .palette-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); }
 .modal-foot.actions { align-items: center; }
 
-/* ==========================================================================
-   SETTINGS-STYLE PAGES  (providers.html, settings.html, automation.html)
+/* ===================================================================   SETTINGS-STYLE PAGES  (providers.html, settings.html, automation.html)
    Their markup: main.page > h1, p.sub, h2, .group > .row > (.glyph) .meta-col(.name .desc) .right
    ========================================================================== */
 main.page > h1 { font-size: var(--fs-xl); font-weight: var(--fw-semibold); letter-spacing: -.01em; }
@@ -1395,8 +1393,7 @@ main.page h2 + p.sub { margin-bottom: var(--sp-6); }
 .switch input:checked::after { left: 14px; }
 
 
-/* ==========================================================================
-   ACCOUNT MENU (sidebar footer) and SETTINGS WINDOW
+/* ===================================================================   ACCOUNT MENU (sidebar footer) and SETTINGS WINDOW
    ========================================================================== */
 .brand-mark { width: 20px; height: 20px; }
 .account-wrap { position: relative; display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
@@ -1445,8 +1442,7 @@ html.embedded main.page > h2:first-of-type { margin-top: 0 !important; }
 html.embedded .group { border-radius: var(--r-lg); }
 
 
-/* ==========================================================================
-   CUSTOMIZE (connectors, skills, plugins)
+/* ===================================================================   CUSTOMIZE (connectors, skills, plugins)
    ========================================================================== */
 .cz-bar { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; margin: var(--sp-10) 0 var(--sp-6); }
 html.embedded .cz-bar { margin-top: 0; }
@@ -1533,8 +1529,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .brand .mode-switch { margin-left: auto; }
 .brand .mode-switch button { height: 24px; padding: 0 var(--sp-5); font-size: var(--fs-xs); font-weight: var(--fw-medium); }
 
-/* ==========================================================================
-   BROWSER PANEL (browser-pane.js)
+/* ===================================================================   BROWSER PANEL (browser-pane.js)
    ========================================================================== */
 .browser-pane { flex-direction: column; }
 .browser-tabbar { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4) 0; overflow-x: auto; scrollbar-width: none; }
@@ -1566,8 +1561,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 /* pre.code code is white-space: pre with its own horizontal scroll: in a permission prompt the long rule line wraps instead (390 phone) */
 .live-permission pre.code code { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
 
-/* ==========================================================================
-   PANEL LAYOUT: resize, dock left / right / bottom, fill, sidebar toggle
+/* ===================================================================   PANEL LAYOUT: resize, dock left / right / bottom, fill, sidebar toggle
    ========================================================================== */
 /* The toolbar icons choose the panel, so the panel shows one title, not a second row of tabs. */
 .side-pane-tabs .side-pane-tab:not(.active) { display: none; }
@@ -1619,8 +1613,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .app.sidebar-collapsed > .sidebar { padding: 0; overflow: hidden; border: 0; }
 @media (max-width: 760px) { .desktop-sidebar-toggle { display: none; } }
 
-/* ==========================================================================
-   ARTIFACTS PANEL v2: a list, then one artifact at a time
+/* ===================================================================   ARTIFACTS PANEL v2: a list, then one artifact at a time
    ========================================================================== */
 .artifacts { flex-direction: column; }
 .artifacts .artifact-list { flex: 1; max-height: none; border-bottom: 0; overflow-y: auto; padding: var(--sp-5) var(--sp-6) var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -1679,8 +1672,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .cz-add-menu .menu-item:hover { background: var(--hover); }
 .menu.down.cz-add-menu { left: auto; right: 0; }
 
-/* ==========================================================================
-   AUTO: job picker, model picker Auto, generated images
+/* ===================================================================   AUTO: job picker, model picker Auto, generated images
    ========================================================================== */
 .job-wrap { position: relative; }
 .job-menu { left: 0; min-width: 300px; }
@@ -2126,6 +2118,9 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 .rules .addr { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; padding: 10px 12px; border: 1px dashed var(--line-strong, var(--line)); border-radius: var(--r-md); margin: var(--sp-3) 0; }
 .rules .addr input { flex: 1; min-width: 150px; }
 .rules .rules-dim { font-size: var(--fs-sm); color: var(--text-dim); }
+.rules .rules-notes { margin-top: var(--sp-3, 12px); font-size: var(--fs-sm); color: var(--text-dim); }
+.rules .rules-notes summary { cursor: pointer; color: var(--text); }
+.rules .rules-notes p { margin: 8px 0 0; line-height: 1.5; }
 .rules .rules-line { font-size: 12.5px; color: var(--warn); min-height: 1em; }
 .rules .rules-line.is-bad { color: var(--bad); }
 .rules .try { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar); padding: 10px 12px; font-size: var(--fs-sm); }
@@ -2239,39 +2234,39 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 #engine-chip[aria-disabled="true"] { cursor: default; }
 #engine-menu { min-width: 220px; padding: 5px; }
 #engine-menu button { display: flex; justify-content: space-between; gap: 18px; width: 100%; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font: inherit; cursor: pointer; text-align: left; color: inherit; }
-#engine-menu button:hover, #engine-menu button.on { background: var(--soft, #f3f1ec); }
-#engine-menu small { color: var(--muted, #62656c); }
+#engine-menu button:hover, #engine-menu button.on { background: var(--bg-sidebar); }
+#engine-menu small { color: var(--text-dim); }
 
 /* CLI-ENGINES: Settings -> Engines (the owner's approved drawing v12): one compact row per engine */
 #engines-section .er { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto 28px; gap: 10px; align-items: center; padding: 7px 12px; min-height: 53px; box-sizing: border-box; border-top: 1px solid var(--line); }
 #engines-section .er:first-child { border-top: 0; }
-#engines-section .ti { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-soft, #eceafb); color: var(--accent, #5b4bd5); display: grid; place-items: center; font: 700 12px ui-monospace, Consolas, monospace; }
+#engines-section .ti { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font: 700 12px ui-monospace, Consolas, monospace; }
 #engines-section .l1 b { font-weight: 600; line-height: 1.25; }
-#engines-section .l2 { font-size: 12px; line-height: 1.3; color: var(--muted, #62656c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#engines-section .l2 { font-size: 12px; line-height: 1.3; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #engines-section .act2 { display: contents; }
 #engines-section .cc, #engines-section .bt { min-width: 0; }
 #engines-section .bt { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 #engines-section .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; font-size: 13px; }
-#engines-section .seg button { border: 0; background: transparent; padding: 2px 13px; line-height: 1.4; color: var(--muted, #62656c); cursor: pointer; font: inherit; }
-#engines-section .seg button.on { background: var(--text, #1c1d20); color: var(--bg, #fff); font-weight: 700; }
+#engines-section .seg button { border: 0; background: transparent; padding: 2px 13px; line-height: 1.4; color: var(--text-dim); cursor: pointer; font: inherit; }
+#engines-section .seg button.on { background: var(--text); color: var(--bg); font-weight: 700; }
 #engines-section .seg button:disabled { opacity: .5; cursor: not-allowed; }
 #engines-section .rc { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #1f7a4a; margin-left: 5px; vertical-align: middle; }
-#engines-section .btn2 { border: 1px solid var(--line); border-radius: 9px; padding: 3px 11px; line-height: 1.4; font: inherit; font-size: 13px; background: transparent; color: var(--text, #1c1d20); cursor: pointer; white-space: nowrap; }
-#engines-section .btn2.pri { background: var(--text, #1c1d20); color: var(--bg, #fff); border-color: var(--text, #1c1d20); }
+#engines-section .btn2 { border: 1px solid var(--line); border-radius: 9px; padding: 3px 11px; line-height: 1.4; font: inherit; font-size: 13px; background: transparent; color: var(--text); cursor: pointer; white-space: nowrap; }
+#engines-section .btn2.pri { background: var(--text); color: var(--bg); border-color: var(--text); }
 #engines-section .bar { display: block; height: 5px; width: 90px; border-radius: 99px; background: var(--line); overflow: hidden; }
-#engines-section .bar i { display: block; height: 100%; background: var(--accent, #5b4bd5); }
+#engines-section .bar i { display: block; height: 100%; background: var(--accent); }
 #engines-section .mnw { position: relative; }
-#engines-section .mn { width: 28px; height: 28px; border: 0; background: transparent; cursor: pointer; color: var(--muted, #62656c); font-weight: 700; letter-spacing: 1px; }
+#engines-section .mn { width: 28px; height: 28px; border: 0; background: transparent; cursor: pointer; color: var(--text-dim); font-weight: 700; letter-spacing: 1px; }
 #engines-section .mn.none { visibility: hidden; }
-#engines-section .menu2 { position: absolute; right: 0; top: 30px; z-index: 5; min-width: 210px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel, #fff); padding: 5px; box-shadow: 0 10px 28px rgba(20, 22, 40, .2); }
-#engines-section .menu2 button { display: flex; justify-content: space-between; gap: 18px; width: 100%; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font: inherit; color: var(--text, #1c1d20); cursor: pointer; text-align: left; }
-#engines-section .menu2 button:hover { background: var(--soft, #f3f1ec); }
+#engines-section .menu2 { position: absolute; right: 0; top: 30px; z-index: 5; min-width: 210px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 5px; box-shadow: 0 10px 28px rgba(20, 22, 40, .2); }
+#engines-section .menu2 button { display: flex; justify-content: space-between; gap: 18px; width: 100%; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font: inherit; color: var(--text); cursor: pointer; text-align: left; }
+#engines-section .menu2 button:hover { background: var(--bg-sidebar); }
 #engines-section .menu2 button[data-act="remove"] { color: #a3243b; }
 :root[data-theme="dark"] #engines-section .menu2 button[data-act="remove"] { color: var(--bad); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #engines-section .menu2 button[data-act="remove"] { color: var(--bad); } }
-#engines-section .menu2 small { color: var(--muted, #62656c); }
+#engines-section .menu2 small { color: var(--text-dim); }
 #engines-section .rec-row { display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: baseline; font-size: 12.5px; padding: 3px 0; }
-#engines-section .rec-row .when { color: var(--muted, #62656c); }
+#engines-section .rec-row .when { color: var(--text-dim); }
 #engines-section .rec-row code { white-space: nowrap; font-size: 11.5px; }
 #engines-section .window-only { margin: 10px 12px; }
 .engine-confirm .modal-body { line-height: 1.45; }
@@ -2287,13 +2282,10 @@ details.thinking[open] summary::before { transform: rotate(90deg); }
 #engines-section .lead.warn { border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--text); }
 #engines-section .lead.warn b { color: var(--text); }
 #engines-section #engine-rules .row.stack { align-items: stretch; text-align: left; }
-#engines-section #engine-rules .rl { width: 100%; justify-items: stretch; text-align: left; }
-#engines-section #engine-rules .floor { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; background: var(--soft, transparent); }
+#engines-section #engine-rules .floor { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; background: var(--bg-sidebar); }
 #engines-section #engine-rules .floor-h { font-size: 13px; font-weight: 600; }
 #engines-section #engine-rules .floor ul { margin: 6px 0; padding-left: 18px; list-style: disc; font-size: 13px; color: var(--text-dim); }
 #engines-section #engine-rules .floor .d { font-size: 13px; color: var(--text-dim); }
-#engines-section #engine-rules .rl { display: grid; gap: 4px; font-size: 13px; font-weight: 600; margin: 8px 0; }
-#engines-section #engine-rules textarea { width: 100%; box-sizing: border-box; font: 12.5px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; background: transparent; color: var(--text, #1c1d20); resize: vertical; }
 
 /* ---------- SEARCH-PC: the result list, the Settings rows and the one-time dialog (tokens only) ---------- */
 .linklike { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
@@ -2468,3 +2460,197 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .rp-actions { display: flex; gap: 8px; margin-top: 2px; }
 .rp-btn { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--bg-sidebar); color: var(--text); border-radius: 99px; padding: 3px 14px; min-height: 32px; cursor: pointer; }
 .rp-btn.rp-quiet { background: none; border-color: transparent; color: var(--text-dim); }
+
+/* ENGINE-RULES editor as drawn (v12): Deny / Ask / Allow lists, one row per rule with Remove, an add line per list, then the locked floor */
+#engines-section #engine-rules .rg { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 8px 0; width: 100%; text-align: left; }
+#engines-section #engine-rules .gh2 { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 7px 12px; font-size: 13px; font-weight: 600; background: var(--bg-sidebar); }
+#engines-section #engine-rules .gh2 span { font-weight: 400; font-size: 12px; color: var(--text-dim); }
+#engines-section #engine-rules .rr { display: flex; gap: 8px; align-items: center; padding: 7px 12px; border-top: 1px solid var(--line); font-size: 13px; min-width: 0; }
+#engines-section #engine-rules .rr.none { color: var(--text-dim); }
+#engines-section #engine-rules .rr .k { font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--text-dim); flex: none; }
+#engines-section #engine-rules .rr code { flex: 1; min-width: 0; overflow-wrap: anywhere; font: 12.5px ui-monospace, Consolas, monospace; }
+#engines-section #engine-rules .rm { margin-left: auto; border: 0; background: transparent; color: var(--text-dim); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 2px 4px; flex: none; }
+#engines-section #engine-rules .rm:hover { color: var(--text); }
+#engines-section #engine-rules .ra { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 7px 12px; border-top: 1px solid var(--line); }
+#engines-section #engine-rules .ra input { flex: 1; min-width: 12ch; box-sizing: border-box; font: 12.5px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 9px; padding: 4px 8px; background: transparent; color: var(--text); }
+#engines-section #engine-rules .rg > .err { padding: 0 12px 7px; font-size: 12.5px; color: #a3243b; }
+:root[data-theme="dark"] #engines-section #engine-rules .rg > .err { color: var(--bad); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #engines-section #engine-rules .rg > .err { color: var(--bad); } }
+
+/* OFFICE-MAKE: the card for a Word, Excel or PowerPoint file made in a chat with no folder: name, kind and size, then Open, Save as… and Show in folder */
+.made-card { flex-wrap: wrap; max-width: 520px; }
+.made-card .thumb-made { display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.made-card .thumb-excel { background: var(--ok-soft); color: var(--ok); }
+.made-card .thumb-powerpoint { background: var(--warn-soft); color: var(--warn); }
+.made-card .made-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-left: auto; }
+.made-card .made-said { flex-basis: 100%; font-size: var(--fs-sm); color: var(--text-dim); }
+.made-card .made-said:empty { display: none; }
+@media (max-width: 520px) { .made-card .made-actions { margin-left: 0; flex-basis: 100%; } }
+
+/* PROJECT-CONTEXT: the project's memory panel, the suggestion card, and "What this chat was given" (Design's drawing "Bunny project context") */
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent, var(--text)); text-decoration: underline; cursor: pointer; font-size: var(--fs-xs); }
+.pm-modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.pm-panel { border: 1px solid var(--line); border-radius: var(--r-lg); margin: var(--sp-4) 0; }
+.pm-head { padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); }
+.pm-empty { padding: var(--sp-4) var(--sp-5); color: var(--text-dim); font-size: var(--fs-xs); }
+.pm-group { padding: var(--sp-2) var(--sp-5); background: var(--bg-sidebar); color: var(--text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; }
+.pm-row, .pm-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--sp-4); align-items: center; padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+.pm-row.is-off .pm-text { opacity: .55; }
+.pm-text small { display: block; color: var(--text-dim); font-size: var(--fs-xs); }
+.pm-acts { display: inline-flex; gap: var(--sp-4); align-items: center; }
+.pm-add, .pm-clear, .pm-folder-row { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); }
+.pm-folder-row { border-top: 0; padding-left: 0; padding-right: 0; }
+.pm-folder { font-family: var(--font-mono); font-size: var(--fs-xs); overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.pm-input { flex: 1; min-width: 120px; }
+.pm-tick { display: flex; gap: var(--sp-3); align-items: center; font-size: var(--fs-sm); margin: var(--sp-2) 0; }
+.pm-card { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-sidebar); padding: var(--sp-4) var(--sp-5); max-width: 640px; }
+.pm-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-2); }
+.pm-item { grid-template-columns: minmax(0, 1fr) auto; }
+.pm-kind { color: var(--text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; }
+.pm-part { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: var(--sp-4); align-items: center; padding: var(--sp-3) 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+.pm-part small { display: block; color: var(--text-dim); font-size: var(--fs-xs); }
+.pm-no { font-weight: var(--fw-medium); font-size: var(--fs-xs); text-align: center; border-radius: var(--r-sm); background: var(--hover); padding: 2px 0; }
+.pm-text-view { grid-column: 1 / -1; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-xs); max-height: 230px; overflow: auto; background: var(--bg-sidebar); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-4); margin: 0; }
+.pm-count { color: var(--text-dim); font-size: var(--fs-xs); white-space: nowrap; }
+.pm-modal .btn-danger { background: var(--bad); color: var(--on-ink, #fff); }
+@media (max-width: 480px) { .pm-row, .pm-item { grid-template-columns: auto minmax(0, 1fr); } .pm-acts { grid-column: 1 / -1; } }
+
+/* IA-9: the Pin this version card in Customize */
+dialog.cz-pin-card { max-width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-panel, var(--bg)); color: var(--text); padding: var(--sp-5); }
+dialog.cz-pin-card pre.code { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow: auto; font-size: var(--fs-sm); }
+.cz-pin-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-top: var(--sp-4); }
+@media (max-width: 600px) { .cz-pin-actions .btn { min-height: 44px; flex: 1 1 100%; } }
+/* SETTINGS-OVERHAUL: sub-headings inside a long group, the "Saved" mark and the red line under a refused entry */
+.grp-head { margin: 18px 0 6px; font-size: var(--fs-sm); letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+.sv { font-size: 12px; color: var(--ok, #2f8f5b); white-space: nowrap; }
+.sv:not(:empty)::before { content: "\2713  "; }
+.field-err { display: block; margin-top: 4px; font-size: 12px; color: var(--bad); }
+.field-err:empty { display: none; }
+textarea.bad, input.bad { border-color: var(--bad); }
+/* ENGINE-SWITCH (v0.1.15, Design's drawing v2) and FOLDER-RULES v4: the switch menu on the engine chip, its confirm card, the divider and handover line in the transcript, the trust card, the Project instructions block */
+#engine-menu .es-head { padding: 7px 12px; font-size: var(--fs-sm); color: var(--text-dim); border-bottom: 1px solid var(--line); }
+#engine-menu .es-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+#engine-menu .es-row:last-child { border-bottom: 0; }
+#engine-menu .es-row.is-idle .es-text { opacity: .65; }
+#engine-menu .es-text { display: grid; min-width: 0; }
+#engine-menu .es-text b { font-weight: var(--fw-medium, 600); }
+#engine-menu .es-text small { color: var(--text-dim); font-size: var(--fs-xs); }
+#engine-menu .es-now { font-size: var(--fs-xs); border: 1px solid var(--ok); color: var(--ok); border-radius: 99px; padding: 0 var(--sp-3); }
+#engine-menu .es-act { font: inherit; font-size: var(--fs-sm); color: var(--accent); border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--r-md); padding: 1px var(--sp-4); cursor: pointer; }
+.engine-switch-card .es-p { margin: 0 0 var(--sp-4); }
+.msg.engine-switch { background: none; border: 0; padding: 0; margin: var(--sp-5) 0; }
+.es-divider { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--fs-sm); color: var(--text-dim); }
+.es-divider::before, .es-divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.es-handover { margin-top: var(--sp-2); }
+#fr-trust-card, .fr-card { border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--r-lg); background: var(--surface); padding: var(--sp-5) var(--sp-6); margin: 0 0 var(--sp-4); display: grid; gap: var(--sp-3); }
+.fr-card .fr-p { margin: 0; color: var(--text-dim); font-size: var(--fs-md); overflow-wrap: anywhere; }
+.fr-acts { display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center; }
+.fr-block { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar, var(--surface)); margin-top: var(--sp-4); display: grid; }
+.fr-hd { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); }
+.fr-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+.fr-row .fr-n { font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: var(--fs-sm); min-width: 0; overflow-wrap: anywhere; }
+.fr-row small, .fr-why { color: var(--text-dim); font-size: var(--fs-xs); }
+.fr-chip { font-size: var(--fs-xs); border: 1px solid var(--line); border-radius: 99px; padding: 0 var(--sp-3); color: var(--text-dim); white-space: nowrap; }
+.fr-chip.ok { color: var(--ok); border-color: var(--ok); }
+.fr-chip.warn { color: var(--warn-text, var(--warn)); border-color: var(--warn); background: var(--warn-soft); }
+.fr-note { padding: var(--sp-3) var(--sp-5); font-size: var(--fs-sm); color: var(--text-dim); }
+.fr-links { display: flex; gap: var(--sp-5); flex-wrap: wrap; padding: 0 var(--sp-5) var(--sp-4); }
+.fr-block .lnk, .fr-row .lnk, .fr-links .lnk { font: inherit; font-size: var(--fs-sm); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.fr-tabs { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.fr-tab { font: inherit; font-size: var(--fs-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: var(--r-md); padding: 2px var(--sp-4); cursor: pointer; }
+.fr-tab[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.fr-view, .fr-diff { margin: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar, var(--surface)); font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: var(--fs-sm); line-height: 1.5; padding: var(--sp-4) var(--sp-5); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.fr-l { white-space: pre-wrap; }
+.fr-l.fr-add { background: var(--ok-soft, rgba(83, 207, 155, .14)); }
+.fr-l.fr-del { background: var(--bad-soft, rgba(240, 122, 140, .14)); }
+.fr-dh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin: var(--sp-4) 0 var(--sp-2); }
+.fr-files { border: 1px solid var(--line); border-radius: var(--r-md); margin: var(--sp-3) 0; }
+.fr-files .fr-row:last-child { border-bottom: 0; }
+/* REWIND: go back further than one reply (Design's drawing "Bunny rewind") */
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent, var(--text)); text-decoration: underline; cursor: pointer; font-size: var(--fs-xs); }
+.rewind-modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.rewind-list { border: 1px solid var(--line); border-radius: var(--r-lg); overflow-y: auto; max-height: 300px; }
+.rewind-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: var(--sp-4); align-items: center; padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line); cursor: pointer; }
+.rewind-row:last-child { border-bottom: 0; }
+.rewind-row[aria-checked="true"] { background: var(--hover); }
+.rewind-dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--text-dim); display: inline-block; }
+.rewind-row[aria-checked="true"] .rewind-dot { border-color: var(--text); background: var(--text); box-shadow: inset 0 0 0 3px var(--bg); }
+.rewind-what { min-width: 0; display: grid; }
+.rewind-what b { font-weight: var(--fw-medium); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rewind-what span { color: var(--text-dim); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rewind-row.is-undone .rewind-what b { color: var(--text-dim); }
+.rewind-count { color: var(--text-dim); font-size: var(--fs-xs); white-space: nowrap; border: 1px solid var(--line); border-radius: 99px; padding: 0 var(--sp-3); }
+.rewind-empty, .rewind-note { color: var(--text-dim); font-size: var(--fs-xs); padding: var(--sp-4) var(--sp-5); }
+.rewind-preview { margin-top: var(--sp-4); }
+.rewind-result { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-sidebar); margin: var(--sp-3) 0; }
+.rewind-result-head { padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.rewind-file { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-4); padding: var(--sp-2) var(--sp-5); border-bottom: 1px solid var(--line); font-size: var(--fs-xs); align-items: center; }
+.rewind-file:last-of-type { border-bottom: 0; }
+.rewind-name { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rewind-how { color: var(--text-dim); white-space: nowrap; }
+.rewind-delete .rewind-how { color: var(--bad); }
+.rewind-changed .rewind-how, .rewind-big .rewind-how, .rewind-refused .rewind-how { color: var(--warn, var(--text-dim)); }
+.rewind-tick { display: inline-flex; gap: var(--sp-2); align-items: center; font-size: var(--fs-xs); }
+.rewind-conv { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-sm); }
+.rewind-modal .btn-danger { background: var(--bad); color: var(--on-ink, #fff); }
+.rewind-modal .btn-danger:hover { background: var(--bad); opacity: .88; }
+@media (max-width: 480px) { .rewind-count { display: none; } .rewind-row { grid-template-columns: 18px minmax(0, 1fr); } }
+
+/* AGENT-FLOW F9: Allow for this chat. The mark on a step is a small chip (no banner); the tick shows the exact rule; the Working folder card lists what is allowed, with Forget */
+.tool-call-header .tag.is-allowed { color: var(--ok-text, var(--ok)); border-color: var(--ok); background: transparent; }
+.kind-tick { display: flex; gap: var(--sp-3); align-items: flex-start; font-size: var(--fs-sm); margin-top: var(--sp-3); }
+.kind-tick input { margin-top: 3px; }
+.kind-tick .hint { display: block; }
+.kind-reason { margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--text-dim); }
+.permission-actions { flex-wrap: wrap; }
+.allowed-kinds { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar); margin-top: var(--sp-5); overflow: hidden; }
+.allowed-kinds > * { padding: var(--sp-3) var(--sp-5); }
+.allowed-kinds .allowed-head { display: flex; gap: var(--sp-3); align-items: center; border-bottom: 1px solid var(--line); }
+.allowed-kinds .allowed-head .link { margin-left: auto; }
+.allowed-kinds .allowed-row { display: flex; gap: var(--sp-3); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+.allowed-kinds .allowed-row span { min-width: 0; overflow-wrap: anywhere; }
+.allowed-kinds .link { background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; font-size: var(--fs-sm); padding: 0; }
+.allowed-kinds .hint { font-size: var(--fs-sm); color: var(--text-dim); }
+@media (max-width: 520px) { .permission-actions .btn, .permission-actions button { flex: 1 1 100%; text-align: left; } }
+
+/* F9/F10 (QA): the permission card's buttons are touch targets on a phone, and the secondary ones have a visible border so they do not read as plain text */
+@media (max-width: 600px) {
+  .permission-actions button, .permission-actions .btn { min-height: 44px; padding-inline: var(--sp-5); }
+  .permission-actions button:not(.primary), .permission-actions .btn:not(.primary) { border: 1px solid var(--line-strong, var(--line)); background: transparent; border-radius: var(--r-md); }
+  .permission-actions { gap: var(--sp-3); }
+}
+
+/* F13 + FOLDER-RULES: the Working folder card grows with its blocks (own copy, Project instructions, Confine commands): it scrolls inside the window instead of pushing Close out of reach */
+.modal[aria-label="Working folder"] { max-height: calc(100vh - 9rem); overflow-y: auto; }
+
+/* PROJECT-CONTEXT on a phone: Keep, Edit and Discard are 44 px buttons, and the panels fit the screen */
+@media (max-width: 480px) {
+  .pm-item .link-btn, .pm-row .link-btn, .pm-card .link-btn, .pm-part .link-btn { min-height: 44px; min-width: 44px; padding: 0 var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-lg); text-decoration: none; font-size: var(--fs-sm); display: inline-flex; align-items: center; justify-content: center; }
+  .pm-acts { flex-wrap: wrap; gap: var(--sp-3); }
+  .pm-modal .modal-foot .btn, .pm-card-head .btn { min-height: 44px; }
+  .pm-backdrop { padding-top: 8px; }
+  .modal.pm-modal { max-height: calc(100dvh - 16px); width: calc(100vw - 16px); overflow-y: auto; }
+}
+
+/* IA-9 (QA): the Pin card's buttons are touch targets on a phone, with a visible border on the secondary one, like the permission card */
+@media (max-width: 600px) {
+  dialog.cz-pin-card .cz-pin-actions .btn, dialog.cz-pin-card .cz-pin-actions button { min-height: 44px; }
+  dialog.cz-pin-card .cz-pin-actions .btn-ghost { border: 1px solid var(--line-strong, var(--line)); background: transparent; }
+}
+.group .grp-head { padding: 0 16px; margin: 16px 0 4px; }
+.group > .section-note { padding: 8px 16px 0; margin: 0; }
+.rules .rules-form-help { list-style: none; margin: 0 0 8px; padding: 0 12px; font-size: 12px; color: var(--text-dim); display: grid; gap: 2px; }
+.rules .rules-form-help b { color: var(--text); font-weight: 600; margin-right: 6px; }
+/* Sign-in apps: the three inputs fit a phone (360 to 390 px) */
+.account-apps .field { min-width: 0; }
+.account-apps .field input { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
+/* F12 (QA): the trust card's buttons are touch targets on a phone, like the other cards */
+@media (max-width: 600px) {
+  .fr-card .btn, .fr-card button { min-height: 44px; padding-inline: var(--sp-5); }
+  /* the instruction-files card (a modal, not inside .fr-card): its Read link and its buttons are touch targets too */
+  .folder-rules-modal button { min-height: 44px; }
+  .folder-rules-modal button.lnk { display: inline-flex; align-items: center; padding-inline: var(--sp-4); }
+}
+
+/* IA-0: a long chip ("Added by you · may use a private address") must never push a phone row sideways: below 600 px a chip may shrink and cut its words with an ellipsis (the full words stay in its title) */
+@media (max-width: 600px) { .tr-l1 .tr-chip { flex: 0 1 auto; min-width: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; } }

@@ -98,8 +98,8 @@ test('on the next message the model is told what it already did, and to carry on
   const remembered = later.find((m) => m.role === 'assistant' && /Steps taken for this reply/.test(m.content));
   assert.ok(remembered, 'the earlier step is in what the model reads');
   assert.match(remembered.content, /Read notes\.txt \(done\) → hello/);
-  assert.doesNotMatch(later[0].content, /cut off/, 'a finished turn is not called cut off');
-  assert.match(later[0].content, /\.bunny\/progress\.md/, 'Code mode keeps a progress file for long jobs');
+  assert.doesNotMatch(later.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), /cut off/, 'a finished turn is not called cut off');
+  assert.match(later.filter((m) => m.role === 'system').map((m) => m.content).join('\n'), /\.bunny\/progress\.md/, 'Code mode keeps a progress file for long jobs');
 });
 
 test('when another model takes over mid-work, the steps go in as a note, never as a last assistant turn', () => {

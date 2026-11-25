@@ -9,6 +9,7 @@
  * Hooks and scripts are built for other apps and run commands: they are listed as not imported, never run.
  * What is imported is kept as written; it is said in Bunny's words when it is read (bunnyText.js).
  */
+import { curatedLines, searchCurated } from './curatedPlugins.js';
 import { fetchLimited } from './download.js';
 import { bunnyText } from './bunnyText.js';
 
@@ -58,10 +59,23 @@ export function firstSentence(body) {
   return '';
 }
 
-export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {}) {
+/** F10 (Security LOW): the commit a link points at now, so the card and the install read the SAME commit. null when GitHub does not say (the read then goes unpinned, as before). */
+export async function resolveCommit(url, { fetchImpl = globalThis.fetch } = {}) {
+  const loc = parseGithubUrl(url);
+  if (!loc) return null;
+  try {
+    const res = await fetchImpl(`https://api.github.com/repos/${loc.owner}/${loc.repo}/commits/${encodeURIComponent(loc.ref)}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai' } });
+    if (!res.ok) return null;
+    const sha = String((await res.json())?.sha ?? '');
+    return /^[0-9a-f]{40}$/i.test(sha) ? sha.toLowerCase() : null;
+  } catch { return null; }
+}
+
+export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch, pin = null } = {}) {
   const loc = parseGithubUrl(url);
   if (!loc) throw new Error('That is not a GitHub repository link (github.com/owner/repo).');
-  const { owner, repo, ref, base } = loc;
+  const { owner, repo, base } = loc;
+  const ref = pin && /^[0-9a-f]{40}$/i.test(String(pin)) ? String(pin).toLowerCase() : loc.ref; // a pinned commit is read exactly
   const api = `https://api.github.com/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`;
   const treeRes = await fetchImpl(api, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai' } });
   if (treeRes.status === 404) throw new Error('GitHub could not find that repository (it may be private).');
@@ -75,6 +89,11 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     return res.text();
   };
 
+  return buildPlugin({ files, raw, repo, source: `https://github.com/${owner}/${repo}` });
+}
+
+/** The importer's reading of a plugin's files, wherever they came from: GitHub's API or an unpacked folder. `files` are relative paths; `raw(path)` gives a file's text. */
+export async function buildPlugin({ files, raw, repo, source }) {
   // name and description
   let meta = {};
   for (const p of ['plugin.json', '.claude-plugin/plugin.json', 'package.json']) {
@@ -163,34 +182,42 @@ export async function readGithubPlugin(url, { fetchImpl = globalThis.fetch } = {
     name: String(meta.name ?? repo).slice(0, 60),
     description: String(meta.description ?? '').slice(0, 200),
     version: meta.version ?? null,
-    source: `https://github.com/${owner}/${repo}`,
+    source,
     skills, connectors, skipped,
   };
 }
 
-/** Search GitHub for plugins / skills and the MCP registry for connectors (no sign-in needed). */
-export async function searchPlugins(query, { fetchImpl = globalThis.fetch } = {}) {
+/**
+ * Search for plugins, skills and connectors. First the short curated list shipped with Bunny (curatedPlugins.js), then GitHub, then the MCP registry.
+ * `githubToken` (the person's GitHub sign-in, when there is one) lifts the anonymous limit of about 60 searches an hour: it is sent ONLY to api.github.com, in the one search request, never to the registry
+ * or any other host, never put in a result line or an error, and never logged. If GitHub refuses it, the search is repeated without it and says so.
+ */
+export async function searchPlugins(query, { fetchImpl = globalThis.fetch, githubToken = null } = {}) {
   const q = String(query ?? '').trim();
   if (!q) throw new Error('search_plugins needs a query');
-  const lines = [];
+  const lines = curatedLines(searchCurated(q));
+  const githubUrl = `https://api.github.com/search/repositories?q=${encodeURIComponent(`${q} skill OR plugin OR mcp`)}&sort=stars&per_page=8`;
+  const token = typeof githubToken === 'string' && githubToken.trim() ? githubToken.trim() : null;
+  const askGithub = (withToken) => fetchImpl(githubUrl, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai', ...(withToken && new URL(githubUrl).hostname === 'api.github.com' ? { authorization: `Bearer ${withToken}` } : {}) }, ...(withToken ? { redirect: 'error' } : {}) }); // F4-1: the request that carries the token never follows a redirect (it could lead to another host)
   try {
-    const res = await fetchImpl(`https://api.github.com/search/repositories?q=${encodeURIComponent(`${q} skill OR plugin OR mcp`)}&sort=stars&per_page=8`,
-      { headers: { accept: 'application/vnd.github+json', 'user-agent': 'bunny-ai' } });
+    let res = await askGithub(token);
+    let note = '';
+    if (token && (res.status === 401 || res.status === 403)) { res = await askGithub(null); note = " (the GitHub sign-in was not accepted for this search, so it ran without it)"; }
     const data = await res.json();
-    lines.push("GitHub repositories with skills, plugins or connectors for Bunny (install with install_plugin and the url; a repository's name may mention another app, its skills still work in Bunny):");
+    lines.push(`GitHub repositories with skills, plugins or connectors for Bunny${note} (install with install_plugin and the url; a repository's name may mention another app, its skills still work in Bunny):`);
     for (const r of data.items ?? []) lines.push(`- ${r.full_name} (★${r.stargazers_count}) https://github.com/${r.full_name} — ${bunnyText(String(r.description ?? '')).slice(0, 140)}`);
-    if (!(data.items ?? []).length) lines.push('- none found');
-  } catch (err) { lines.push(`GitHub search failed: ${err.message}`); }
+    if (!(data.items ?? []).length) lines.push(data.message && /rate limit/i.test(String(data.message)) ? '- GitHub is limiting searches for now: sign in to GitHub in Settings to search more, or try again later' : '- none found');
+  } catch (err) { lines.push(`GitHub search failed: ${String(err.message).replaceAll(token ?? '\u0000', '***')}`); }
   try {
-    const res = await fetchImpl(`https://registry.modelcontextprotocol.io/v0/servers?search=${encodeURIComponent(q)}&limit=8`);
+    const res = await fetchImpl(`https://registry.modelcontextprotocol.io/v0/servers?search=${encodeURIComponent(q)}&limit=8`); // no token here: the registry is a different host
     const data = await res.json();
     lines.push('', 'MCP registry connectors (add with add_connector and the url):');
     let n = 0;
     for (const { server } of data.servers ?? []) {
       for (const remote of server.remotes ?? []) {
         if (!remote.url) continue;
-        const signIn = (remote.headers ?? []).some((h) => h.isRequired);
-        lines.push(`- ${server.name}: ${remote.url}${signIn ? ' (needs sign-in, Bunny cannot connect it yet)' : ''} — ${String(server.description ?? '').slice(0, 120)}`);
+        const keys = (remote.headers ?? []).filter((h) => h.isRequired).map((h) => String(h.name ?? '').slice(0, 40)).filter(Boolean);
+        lines.push(`- ${server.name}: ${remote.url}${keys.length ? ` (needs a key: ${keys.join(', ')}. ${KEY_CARD})` : ''} — ${String(server.description ?? '').slice(0, 120)}`);
         n += 1;
         break;
       }
@@ -199,6 +226,9 @@ export async function searchPlugins(query, { fetchImpl = globalThis.fetch } = {}
   } catch (err) { lines.push(`MCP registry search failed: ${err.message}`); }
   return lines.join('\n');
 }
+
+/** What to tell the person about a connector that needs a key (a header value): where it comes from and where it goes. Keys are never taken through the chat. */
+export const KEY_CARD = "Do not ask for the key in chat. Tell the person: the key is made in their account on the vendor's own site (name the page if you know it). Add the connector with add_connector and pass the header name as key_headers (it arrives switched OFF), then say that the key goes in Settings, Customize, on that connector, under Add key: Bunny keeps it on this computer and sends it only to that connector"
 
 /** Read a web page as text (README-friendly), for the model to check before installing. */
 export async function readUrl(url, { fetchImpl = null } = {}) {

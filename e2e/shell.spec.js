@@ -10,32 +10,27 @@ test.beforeEach(async ({ request }) => {
   await resetProfile(request);
 });
 
-test('the interface can speak another language', async ({ page }) => {
+// ENGLISH ONLY (owner, 2026-11-24): there is no Language picker, and an old saved language other than English shows English.
+test('Settings has no Language section or picker', async ({ page }) => {
   await page.goto('/src/ui/settings.html');
-  await page.locator('#language').selectOption('es');
-  await expect(page.locator('#language')).toHaveValue('es');
-
-  await page.goto('/');
-  await expect(page.locator('#new-chat')).toHaveText('Nuevo chat');
-  await expect(page.locator('#send')).toHaveText('Enviar');
-  await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+  await expect(page.locator('#language')).toHaveCount(0);
+  await expect(page.locator('[data-section="language"]')).toHaveCount(0);
 });
 
-test('a language that is written right to left is marked as such', async ({ page }) => {
-  await page.goto('/src/ui/settings.html');
-  await page.locator('#language').selectOption('ar');
-  await page.goto('/');
-  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-  await expect(page.locator('#new-chat')).toHaveText('محادثة جديدة');
-});
-
-test('the language choice survives a reload', async ({ page }) => {
-  await page.goto('/src/ui/settings.html');
-  await page.locator('#language').selectOption('fr');
-  await page.goto('/');
-  await page.reload();
-  await expect(page.locator('#new-chat')).toHaveText('Nouvelle conversation');
-});
+for (const old of ['es', 'fr', 'ar']) {
+  test(`an old saved language (${old}) shows no non-English text and no right-to-left layout`, async ({ page, request }) => {
+    const put = await request.put('/api/settings', { data: { language: old } });
+    expect((await put.json()).language).toBe('en'); // the server turns it back to English
+    await page.goto('/');
+    await expect(page.locator('#new-chat')).toHaveText('New chat');
+    await expect(page.locator('#send')).toHaveText('Send');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+    await page.goto('/src/ui/settings.html');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    expect(await page.locator('body').innerText()).not.toMatch(/Nuevo chat|Enviar|Nouvelle conversation|محادثة/);
+  });
+}
 
 test('notifications can be switched on', async ({ page }) => {
   await page.context().grantPermissions(['notifications']);
@@ -89,4 +84,13 @@ test('an artifact shows a thumbnail and can be printed', async ({ page, context 
   await expect(printFrame).toHaveAttribute('srcdoc', /This is a local test reply/);
   expect(await printFrame.getAttribute('sandbox')).not.toMatch(/same-origin/);
   expect(context.pages().length).toBe(pagesBefore); // no popup opened
+});
+
+// Google, the honest note (owner, 2026-11-24): with no Google client ID the button is off, the reason is said plainly, and the steps to turn it on are on the page.
+test('Google sign-in without a client ID: the button is off, the reason is plain, and "How to connect Google" shows the steps', async ({ page }) => {
+  await page.goto('/src/ui/settings.html');
+  await expect(page.locator('#google-desc')).toContainText('no Google client ID yet');
+  await expect(page.locator('#google-actions button')).toBeDisabled();
+  await expect(page.locator('#google-howto')).toBeVisible();
+  await expect(page.locator('#google-howto li')).toHaveCount(4);
 });

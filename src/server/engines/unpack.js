@@ -8,13 +8,14 @@
  *  - more than MAX_TOTAL_BYTES in all (an archive bomb), or an entry larger than the size it declares.
  */
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, open, writeFile } from 'node:fs/promises';
+import { mkdir, open, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { createGunzip, createInflateRaw } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB in all
+export const MAX_RATIO = 100; // IA-4: no entry (zip) and no archive (tgz) may expand more than 100:1 once it is over a few MB
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 
 export class UnpackError extends Error {
@@ -122,6 +123,7 @@ export async function unpackZip(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
       const out = target(dest, rel);
       if (e.isDir) { await mkdir(out, { recursive: true }); continue; }
       if (e.method !== 0 && e.method !== 8) throw new UnpackError('The zip file uses a compression this check does not accept.');
+      if (e.size > 1024 * 1024 && e.compressed > 0 && e.size / e.compressed > MAX_RATIO) throw new UnpackError(`The archive entry "${e.name.slice(0, 60)}" expands more than ${MAX_RATIO} times (a compression bomb).`); // IA-4: a ratio over 100:1 per entry
       await mkdir(dirname(out), { recursive: true });
       const head = Buffer.alloc(30);
       await handle.read(head, 0, 30, e.offset);
@@ -144,14 +146,37 @@ function octal(buf, from, len) {
 }
 
 /** Unpack a .tgz (an npm tarball) into `dest`. Returns the relative paths written. */
+/** The records of a PAX extended header ("<length> <key>=<value>\n" repeated): only path and size are taken, the rest is ignored. A record that does not add up is an error. */
+export function parsePax(buffer) {
+  const out = {};
+  let at = 0;
+  while (at < buffer.length) {
+    const space = buffer.indexOf(0x20, at);
+    if (space < 0) break;
+    const len = Number(buffer.toString('utf8', at, space));
+    if (!Number.isInteger(len) || len <= space - at + 1 || at + len > buffer.length) throw new UnpackError('The archive has an extended header that cannot be read.');
+    const record = buffer.toString('utf8', space + 1, at + len - 1); // without the trailing newline
+    const eq = record.indexOf('=');
+    if (eq > 0) {
+      const key = record.slice(0, eq); const value = record.slice(eq + 1);
+      if (key === 'path') out.path = value;
+      else if (key === 'size') { const n = Number(value); if (!Number.isSafeInteger(n) || n < 0) throw new UnpackError('The archive has an extended header with a size that cannot be read.'); out.size = n; }
+    }
+    at += len;
+  }
+  return out;
+}
+
 export async function unpackTgz(file, dest, { max = MAX_TOTAL_BYTES, strip = '' } = {}) {
   const state = { total: 0, max };
   const written = [];
+  const packedSize = Math.max(1, (await stat(file)).size);
   const gunzip = createGunzip();
   const source = createReadStream(file).pipe(gunzip);
   let buf = Buffer.alloc(0);
   let current = null; // { out, remaining, pad, stream }
   let longName = null;
+  let pax = null; // IA4-a: the records of a PAX 'x' header ({ path, size }) apply to the NEXT entry
   let zeroBlocks = 0;
   const finishEntry = async () => { if (current) { await new Promise((r) => current.stream.end(r)); current = null; } };
   try {
@@ -164,6 +189,7 @@ export async function unpackTgz(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
             const take = Math.min(current.remaining, buf.length);
             state.total += take;
             if (state.total > state.max) throw new UnpackError(`The archive is bigger than ${Math.round(state.max / 1048576)} MB unpacked: stopped.`);
+            if (state.total > 4 * 1048576 && state.total > packedSize * MAX_RATIO) throw new UnpackError(`The archive expands more than ${MAX_RATIO} times (a compression bomb).`);
             const piece = buf.subarray(0, take);
             if (current.stream) { if (!current.stream.write(piece)) await new Promise((r) => current.stream.once('drain', r)); } else current.collected.push(Buffer.from(piece));
             buf = buf.subarray(take); current.remaining -= take;
@@ -173,7 +199,7 @@ export async function unpackTgz(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
             if (buf.length < current.pad) break;
             buf = buf.subarray(current.pad); current.pad = 0;
           }
-          if (current.stream) { await finishEntry(); } else { longName = Buffer.concat(current.collected).toString('utf8').replace(/\0.*$/s, ''); current = null; }
+          if (current.stream) { await finishEntry(); } else if (current.pax) { pax = parsePax(Buffer.concat(current.collected)); current = null; } else { longName = Buffer.concat(current.collected).toString('utf8').replace(/\0.*$/s, ''); current = null; }
           continue;
         }
         if (buf.length < 512) break;
@@ -184,12 +210,17 @@ export async function unpackTgz(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
         let name = header.toString('utf8', 0, 100).replace(/\0.*$/s, '');
         const prefix = header.toString('utf8', 345, 500).replace(/\0.*$/s, '');
         const type = String.fromCharCode(header[156] || 48);
-        const size = octal(header, 124, 12);
+        let size = octal(header, 124, 12);
         if (prefix) name = `${prefix}/${name}`;
         if (longName) { name = longName; longName = null; }
+        if (pax && type !== 'x' && type !== 'g' && type !== 'L') { // the PAX path and size are the entry's real ones, checked like any other name
+          if (pax.path) name = pax.path;
+          if (pax.size !== undefined) size = pax.size;
+          pax = null;
+        }
         const pad = (512 - (size % 512)) % 512;
         if (type === 'L') { current = { remaining: size, pad, collected: [], stream: null }; continue; }
-        if (type === 'x' || type === 'g') { current = { remaining: size, pad, collected: [], stream: null }; continue; } // pax headers: read and ignored
+        if (type === 'x' || type === 'g') { current = { remaining: size, pad, collected: [], stream: null, pax: type === 'x' }; continue; } // pax: an 'x' header's path and size are read for the next entry (IA4-a); a global 'g' one is ignored
         if (type === '1' || type === '2') throw new UnpackError(`The archive has a ${type === '2' ? 'symbolic' : 'hard'} link ("${name.slice(0, 60)}").`);
         const rel = safeEntryPath(name, strip);
         if (type === '5') { if (rel) await mkdir(target(dest, rel), { recursive: true }); continue; }

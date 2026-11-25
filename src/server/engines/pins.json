@@ -1,5 +1,21 @@
 {
   "schema": 1,
+  "canaries": {
+    "ran": "2026-11-24",
+    "how": "the pinned binaries (sha256 and size checked first) run offline against a local stub endpoint with a dummy token, an empty account folder and no sign-in; the stub records the request each CLI sends and the fixture files carry unique marker text",
+    "claude-code": {
+      "version": "2.1.311",
+      "E1_E2_user_sources_only": "with --setting-sources user and an empty CLAUDE_CONFIG_DIR, neither a subfolder CLAUDE.md, nor .claude/CLAUDE.md, nor the root CLAUDE.md reached the model, with cwd at the root and with cwd in the subfolder",
+      "control": "with the default setting sources the same fixture sends the root, .claude/ and subfolder CLAUDE.md, so the check can see them",
+      "result": "PASS: Claude Code reads no folder instruction file of its own under Bunny's flags; Bunny's frozen text is the only copy"
+    },
+    "codex": {
+      "version": "0.170.0",
+      "OI1_project_doc_max_bytes_0": "with project_doc_max_bytes = 0 no AGENTS.md (root or nested) reached the model, with cwd at the root and with cwd in the subfolder",
+      "control": "with the default setting the subfolder AGENTS.md was sent (cwd in the subfolder)",
+      "result": "PASS: Codex reads no AGENTS.md of its own under Bunny's config"
+    }
+  },
   "engines": {
     "claude-code": {
       "version": "2.1.311",

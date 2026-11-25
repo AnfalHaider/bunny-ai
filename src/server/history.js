@@ -43,7 +43,7 @@ function stepsText(steps) {
  */
 export function buildHistory(allMessages, toModel) {
   // Errors are kept in the chat for the person; the model never reads them.
-  const messages = allMessages.filter((m) => m.kind !== 'error');
+  const messages = allMessages.filter((m) => m.kind !== 'error' && m.kind !== 'engine-switch'); // (the engine-switch divider is for the person)
   const start = sinceSummary(messages);
   const history = [];
   let steps = [];
@@ -54,7 +54,7 @@ export function buildHistory(allMessages, toModel) {
   };
 
   for (const m of messages.slice(start)) {
-    if (m.kind === 'permission_prompt') continue;
+    if (m.kind === 'permission_prompt' || m.kind === 'memory_suggestion') continue; // cards for the person, never read by the model
     if (m.kind === 'tool_call') { steps.push(m); continue; }
     if (m.kind === 'summary') {
       history.push({ role: 'system', content: `Summary of the earlier conversation (the older messages are not repeated here):\n${String(m.content ?? '')}` });

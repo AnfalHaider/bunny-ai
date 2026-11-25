@@ -82,9 +82,6 @@
           <button class="menu-item" role="menuitem" data-settings="usage">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v4.5l2.5 2.5"/></svg>
             <span class="label">Usage</span></button>
-          <button class="menu-item" role="menuitem" data-settings="language">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5z"/></svg>
-            <span class="label">Language</span></button>
           <button class="menu-item" role="menuitem" data-action="palette">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h1M11 10h2M16 10h1M8 14h8"/></svg>
             <span class="label">Command palette</span><span class="kbd">Ctrl+K</span></button>
@@ -229,6 +226,7 @@
         </button>
         <!-- the real control chat.js reads and saves; the menu drives it -->
         <select id="permission-mode" class="sr" tabindex="-1" aria-hidden="true" data-i18n-label="composer.permissionMode">
+          <option value="smart">Smart</option>
           <option value="ask">Ask each time</option>
           <option value="accept">Accept edits</option>
           <option value="plan">Plan mode</option>
@@ -236,10 +234,11 @@
         </select>
         <div class="menu up" id="mode-menu" role="menu" hidden>
           <div class="menu-title">Mode</div>
-          <button class="menu-item" role="menuitemradio" data-mode="auto"><span class="label">Auto<small>Runs what you allowed without asking; sending an email still asks</small></span><span class="check">✓</span><span class="key">1</span></button>
-          <button class="menu-item" role="menuitemradio" data-mode="ask"><span class="label">Manual<small>Always ask before making changes</small></span><span class="check">✓</span><span class="key">2</span></button>
-          <button class="menu-item" role="menuitemradio" data-mode="accept"><span class="label">Accept edits<small>File edits go through, commands still ask</small></span><span class="check">✓</span><span class="key">3</span></button>
-          <button class="menu-item" role="menuitemradio" data-mode="plan"><span class="label">Plan<small>Agree a plan before any change</small></span><span class="check">✓</span><span class="key">4</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="smart"><span class="label">Smart<small>Runs on its own in a git folder you trusted, with a check on each risky action; asks elsewhere</small></span><span class="check">✓</span><span class="key">1</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="auto"><span class="label">Auto<small>Runs what you allowed without asking; sending an email still asks</small></span><span class="check">✓</span><span class="key">2</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="ask"><span class="label">Manual<small>Always ask before making changes</small></span><span class="check">✓</span><span class="key">3</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="accept"><span class="label">Accept edits<small>File edits go through, commands still ask</small></span><span class="check">✓</span><span class="key">4</span></button>
+          <button class="menu-item" role="menuitemradio" data-mode="plan"><span class="label">Plan<small>Agree a plan before any change</small></span><span class="check">✓</span><span class="key">5</span></button>
         </div>
 
         <span class="under-sep">|</span>
@@ -439,24 +438,22 @@
       <input class="input sm settings-search" id="settings-search" type="search" placeholder="Search" aria-label="Search settings" />
       <div class="settings-nav-list" id="settings-nav-list">
         <button class="nav-row" data-section="profile" data-keywords="account name local">Profile</button>
-        <button class="nav-row" data-section="usage" data-keywords="tokens cost messages">Usage</button>
         <div class="settings-sep"></div>
         <button class="nav-row" data-section="appearance" data-keywords="theme dark light font size width motion code colours transcript view status labels thinking verbose">Appearance</button>
-        <button class="nav-row" data-section="bunny" data-keywords="instructions memory remember search chats import">My Dear Bunny</button>
-        <button class="nav-row" data-section="language" data-keywords="translate locale">Language</button>
-        <button class="nav-row" data-section="notifications" data-keywords="alerts reply ready">Notifications</button>
-        <button class="nav-row" data-section="privacy" data-keywords="memory storage data secrets">Privacy</button>
+        <button class="nav-row" data-section="bunny" data-keywords="instructions memory remember search chats import">Memory and instructions</button>
+        <button class="nav-row" data-section="quickask" data-keywords="quick ask bar shortcut search pc tray floating">Quick ask</button>
         <button class="nav-row" data-section="capabilities" data-keywords="artifacts charts skills connectors computer use">Capabilities</button>
         <div class="settings-sep"></div>
         <button class="nav-row" data-section="providers" data-keywords="keys api connect ollama openrouter abilities">Providers and abilities</button>
         <button class="nav-row" data-section="models" data-keywords="allowlist aliases tokens reply fallback busy another model wait first reply">Models</button>
-        <button class="nav-row" data-section="connection" data-keywords="default provider model test mode">Connection</button>
         <button class="nav-row" data-section="customize" data-keywords="connectors mcp skills plugins discover">Customize</button>
         <button class="nav-row" data-section="automation" data-keywords="memory mcp schedules hooks skills">Automation</button>
         <div class="settings-sep"></div>
-        <button class="nav-row" data-section="code" data-keywords="permission mode effort defaults branch prefix long jobs keep going steps minutes helpers suggestions unrelated">Code</button>
+        <button class="nav-row" data-section="permissions" data-keywords="permission mode rules ask deny allow auto manual plan websites tools helpers commands">Permissions</button>
+        <button class="nav-row" data-section="code" data-keywords="permission mode effort defaults branch prefix long jobs keep going steps minutes helpers suggestions unrelated">Code chats</button>
         <button class="nav-row" data-section="engines" data-keywords="claude code codex cli engine account local download update">Engines</button>
         <button class="nav-row" data-section="desktop" data-keywords="startup login tray install app browser">Desktop app</button>
+        <button class="nav-row" data-section="usage" data-keywords="tokens cost messages">Usage and data</button>
         <button class="nav-row" data-section="about" data-keywords="version updates">About</button>
       </div>
     </nav>

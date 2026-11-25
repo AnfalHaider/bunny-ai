@@ -43,20 +43,21 @@ async function run(t, mode, args, answer) {
     for (const m of part.matchAll(/event: permission\ndata: (.*)/g)) {
       const data = JSON.parse(m[1]);
       asked.push(data);
-      await post(base, `/api/sessions/${s.id}/permission/${data.id}`, { allowed: answer });
+      await post(base, `/api/sessions/${s.id}/permission/${data.id}`, { allowed: answer, ...(data.choices ? { choice: answer ? 'on' : 'no' } : {}) });
     }
   }
   const servers = await (await fetch(`${base}/api/mcp`)).json();
   return { asked, text, servers };
 }
 
-const files = { name: 'Notes', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', 'C:\\my notes'] };
+// a stand-in that exits at once: a real `npx -y ...` is given up to 5 minutes for its first start (FIRST_START_MS), and with the suites running side by side that held this file's process for minutes (the gate's HUNG report)
+const files = { name: 'Notes', command: 'node', args: ['-e', 'process.exit(0)', 'C:\\my notes'] };
 
 for (const mode of ['ask', 'accept', 'auto']) {
   test(`${mode}: a local connector shows the exact command line and is added only after the person allows it`, async (t) => {
     const { asked, servers } = await run(t, mode, files, true);
     assert.equal(asked.length, 1, 'the card was shown, even in Auto');
-    assert.equal(asked[0].detail, 'This runs on your computer:\nnpx -y @modelcontextprotocol/server-filesystem "C:\\\\my notes"', 'the exact command line, the argument with a space quoted');
+    assert.equal(asked[0].detail, 'This runs on your computer:\nnode -e process.exit(0) "C:\\\\my notes"', 'the exact command line, the argument with a space quoted');
     assert.equal(servers.length, 1);
     assert.equal(servers[0].type, 'local');
   });

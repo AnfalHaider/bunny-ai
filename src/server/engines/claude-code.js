@@ -113,6 +113,20 @@ export function buildArgs({ mode = 'full', planMode = false, settingsPath, resum
 /** The vendor's own sign-in commands, run in the account config folder only (spec 7.1). Bunny reads only the answer 'signed in or not', never the credential. */
 export const AUTH_COMMANDS = Object.freeze({ status: ['auth', 'status', '--json'], login: ['auth', 'login'], logout: ['auth', 'logout'] });
 
+/** v0.1.14.1: the sign-in page address the vendor's own `auth login` prints, when it does. Only an https address on the vendor's own sites (claude.ai, claude.com, anthropic.com and their sub-sites) is returned, never anything else
+ * the program printed; the person opens it in the browser with one click. Returns the address or null. */
+const SIGNIN_HOSTS = /(^|\.)(claude\.ai|claude\.com|anthropic\.com)$/i;
+export function signInUrlFrom(text) {
+  for (const m of String(text ?? '').matchAll(/https:\/\/[^\s"'<>`\\]+/g)) {
+    const raw = m[0].replace(/[.,;:!?)\]]+$/, '');
+    try {
+      const u = new URL(raw);
+      if (u.protocol === 'https:' && !u.username && !u.password && SIGNIN_HOSTS.test(u.hostname) && raw.length <= 4000) return u.href;
+    } catch { /* not an address */ }
+  }
+  return null;
+}
+
 /**
  * Everything one run needs: { file, args, env, settings, expectedTools }. `home` is the isolated folder for this engine, mode and chat (CLAUDE_CONFIG_DIR, and HOME/USERPROFILE/APPDATA so the person's own
  * ~\.claude is never found). Local mode carries the endpoint's address and the run's token and nothing of a vendor; account mode carries no endpoint token (§7.3).

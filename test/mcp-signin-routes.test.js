@@ -259,6 +259,7 @@ test('in a chat, a tool on a connector that needs a sign-in fails with the exact
 
   await s.withToken('/api/providers/openai/connect', { method: 'POST', body: JSON.stringify({ apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${model.address().port}/v1` }) });
   const session = (await s.withToken('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 't', providerId: 'openai', model: 'm1' }) })).body;
+  await s.withToken('/api/settings', { method: 'PUT', body: JSON.stringify({ autoJudgeEnabled: false }) }); // F11: the scripted model is not an Auto-check judge
   await s.withToken(`/api/sessions/${session.id}/setting/permissionMode`, { method: 'PATCH', body: JSON.stringify({ value: 'auto' }) });
   const res = await fetch(`${s.base}/api/sessions/${session.id}/messages`, {
     method: 'POST', headers: { ...j, 'x-bunny-token': TOKEN }, body: JSON.stringify({ content: 'ping it', providerId: 'openai', model: 'm1', workMode: 'chat' }),

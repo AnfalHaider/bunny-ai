@@ -49,7 +49,7 @@ test('a plugin the model installs is added switched OFF (P-6), and recorded', as
   assert.match(result, /add it with add_connector/);
   assert.match(result, /switched OFF/);
   assert.equal(added.skills[0].enabled, false);
-  assert.deepEqual(added.connectors[0], { name: 'weather', url: 'https://weather.example.com/mcp', enabled: false });
+  assert.deepEqual(added.connectors[0], { name: 'weather', addedBy: 'model', url: 'https://weather.example.com/mcp', enabled: false });
   assert.equal(settings.plugins[0].name, 'carrot-helper');
   assert.deepEqual(settings.plugins[0].skills, ['s1']);
 });
