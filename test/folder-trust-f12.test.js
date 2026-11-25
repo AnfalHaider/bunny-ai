@@ -157,3 +157,11 @@ test('F12: a chat a device starts is Ask even when the default is an explicit au
   assert.match(smartMode({ ...ok, judgeDown: true }).why, /Smart starts in Ask while Bunny's check is off or can't be reached/);
   assert.match(src, /judgeDown: Date\.now\(\) < judgeDownUntil/);
 });
+
+test('F12: every place that refuses a device uses a message that exists (a device\'s folder-trust or judge write is a clean 403, never a 500)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
+  assert.match(src, /import \{[^}]*\bDEVICE_ACCESS_MESSAGE\b[^}]*\} from '\.\/remoteAccess\.js'/, 'the constant the refusals use is imported');
+  const { DEVICE_ACCESS_MESSAGE } = await import('../src/server/remoteAccess.js');
+  assert.ok(typeof DEVICE_ACCESS_MESSAGE === 'string' && DEVICE_ACCESS_MESSAGE.length > 5);
+});

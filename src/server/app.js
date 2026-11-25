@@ -103,7 +103,7 @@ import { buildHistory, CONTINUE_NOTE } from './history.js';
 import { readScreenLines } from './ocr.js';
 import { freeKindOf } from '../providers/freeAllowance.js';
 import { createRequestGuard, makeToken } from './requestGuard.js';
-import { NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, deviceRefusal, ENGINE_REFUSED_MESSAGE, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
+import { DEVICE_ACCESS_MESSAGE, NOT_OPENED_NO_PASSCODE, NOT_OPENED_UNKNOWN_NETWORK, canReopen, checkPasscodeChoice, createRemoteAccess, deviceRefusal, ENGINE_REFUSED_MESSAGE, findLanAddress, networkProfileOf, generatePasscode, readCookie, remoteBody, remoteException, remotePatch, remotePolicy, remoteSettings, remoteToolBlocked, REMOTE_CAPABILITIES, LEVELS, COOKIE as REMOTE_COOKIE } from './remoteAccess.js';
 import { probeNetwork } from './network.js';
 import { listFolder, readTextFile, changesFor, neverBrowse } from './panes.js';
 
