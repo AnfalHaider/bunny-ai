@@ -169,7 +169,7 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
   }
 
   /** Install at exactly the commit the person was shown. */
-  async function install({ repo, expectSha }) {
+  async function install({ repo, expectSha, enabled = true }) {
     if (!/^[0-9a-f]{40}$/.test(String(expectSha ?? ''))) throw new Error('A tool is only installed after the person has seen its card.');
     const plan = await inspect(repo);
     if (plan.sha !== expectSha) throw new Error('The repository changed after the card was shown (a newer commit), so nothing was installed. Ask again to see the new card.');
@@ -187,8 +187,8 @@ export function createToolInstaller({ dataDir, mcp, fetchImpl = globalThis.fetch
       const entryPath = resolve(target, plan.entry);
       const inside = relative(target, entryPath);
       if (inside.startsWith('..') || isAbsolute(inside) || !(await stat(entryPath).then((s) => s.isFile(), () => false))) throw new Error(`The program ${plan.entry} is not in the repository, so the tool cannot be started.`);
-      const added = await mcp.add({ name: plan.name, command: 'node', args: [entryPath], enabled: true, source: { repo: plan.repo, sha: plan.sha, folder: plan.folder } });
-      return `Installed ${plan.repo} (commit ${plan.sha.slice(0, 7)}) as the connector ${added.name}. Its install scripts were not run. It is switched on; its tools are offered from the next message. Removing the connector removes its files.`;
+      const added = await mcp.add({ name: plan.name, command: 'node', args: [entryPath], enabled: enabled !== false, source: { repo: plan.repo, sha: plan.sha, folder: plan.folder } });
+      return `Installed ${plan.repo} (commit ${plan.sha.slice(0, 7)}) as the connector ${added.name}. Its install scripts were not run. ${enabled !== false ? 'It is switched on; its tools are offered from the next message.' : 'It is switched OFF, as the person chose; they can switch it on in Settings, Customize.'} Removing the connector removes its files.`;
     } catch (err) {
       await removeTreeImpl(target).catch(() => {}); // a half install is not kept (and a link in it is never followed: one rule)
       throw err;

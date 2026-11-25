@@ -38,7 +38,7 @@ export function sinceSummary(messages = []) {
 }
 
 /** @param {string} dir */
-export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
+export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed = null, onRemoved = null } = {}) {
   const fileFor = (id) => join(dir, `${id}.json`);
 
   async function ensureDir() {
@@ -224,7 +224,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       at: new Date().toISOString(),
     };
     // Optional details: tool steps (tool, status, result) and which model answered (Auto).
-    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries', 'needsSignIn', 'serverId', 'fellBackKind', 'fellBackProvider', 'noAutoLoad', 'pcResults', 'pcSources']) {
+    for (const key of ['tool', 'status', 'result', 'note', 'model', 'providerId', 'job', 'auto', 'fellBackFrom', 'fellBackReason', 'fellBackTries', 'needsSignIn', 'serverId', 'fellBackKind', 'fellBackProvider', 'noAutoLoad', 'pcResults', 'pcSources', 'from', 'to', 'handover']) {
       if (message[key] !== undefined && message[key] !== null) entry[key] = typeof message[key] === 'string' ? message[key].slice(0, 2000) : message[key];
     }
     // W6-18: the model's own, longer copy of a step's result, and where the whole of it was saved.
@@ -255,6 +255,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (message.linked && typeof message.linked === 'object' && /^[a-f0-9-]{36}$/.test(String(message.linked.id))) {
       entry.linked = { id: message.linked.id, title: String(message.linked.title ?? 'Chat').slice(0, 120), status: String(message.linked.status ?? '').slice(0, 20), ...(message.linked.model ? { model: String(message.linked.model).slice(0, 120) } : {}) };
     }
+    // F9: a step that ran with no card because the person had allowed its kind for this chat keeps the small mark that says so (a fixed-length label made by the server)
+    if (typeof message.allowedKind === 'string' && message.allowedKind.trim()) entry.allowedKind = message.allowedKind.trim().slice(0, 120);
     // An artifact a tool step made: kept so the chat can show its card again later.
     if (message.artifact && typeof message.artifact === 'object' && /^[a-f0-9-]{36}$/.test(String(message.artifact.id))) {
       const { id: artifactId, title, kind } = message.artifact;
@@ -271,6 +273,8 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
       session.title = String(message.content).trim().slice(0, 60) || 'New chat';
     }
     await save(session);
+    // REWIND: the reply that holds a checkpoint is saved, so the checkpoint can record which message it belongs to and what its files look like now
+    if (entry.checkpoint) await onCheckpointed?.(session.id, entry.checkpoint.id, entry.id);
     return session;
   }
 
@@ -284,19 +288,29 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     if (patch.pinned !== undefined) session.pinned = Boolean(patch.pinned);
     if (patch.archived !== undefined) session.archived = Boolean(patch.archived);
     if (patch.projectId !== undefined) session.projectId = patch.projectId ?? null;
-    if (patch.folder !== undefined) session.folder = String(patch.folder ?? '').trim() || null;
+    if (patch.folder !== undefined) { const next = String(patch.folder ?? '').trim() || null; if (next !== (session.folder ?? null)) delete session.allowKinds; session.folder = next; } // F9: a change of folder ends what was allowed for this chat
     if (patch.branch !== undefined) session.branch = String(patch.branch ?? '').trim() || null;
-    if (patch.permissionMode !== undefined) session.permissionMode = patch.permissionMode;
+    if (patch.permissionMode !== undefined) { if (patch.permissionMode === 'plan') delete session.allowKinds; session.permissionMode = patch.permissionMode; } // F9: so does Plan mode
     if (patch.effort !== undefined) session.effort = patch.effort ?? null;
     if (patch.incognito !== undefined) session.incognito = Boolean(patch.incognito);
     if (patch.remoteAuto !== undefined) { if (patch.remoteAuto) session.remoteAuto = String(patch.remoteAuto); else delete session.remoteAuto; } // R6: set to Auto by another device (its id)
     if (patch.agentStatus !== undefined) session.agentStatus = patch.agentStatus;
     if (patch.engine !== undefined) { // CLI-ENGINES: the chat's engine, its auth mode and its own session, fixed at the first message (only the server sets it)
       const e = patch.engine;
-      if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny' }; // the person chose Bunny's own engine for this chat, explicitly
-      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...(e.restricted ? { restricted: true } : {}), ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
+      // ENGINE-SWITCH: where the chat came from, when it switched, whether Bunny's engine still owes its first note, and the engines Bunny's check failed for (restrictedFor: only the server sets it; the old
+      // `restricted: true` is read as the list of that chat's own engine)
+      const ENGINE_IDS = ['bunny', 'claude-code', 'codex'];
+      const restrictedFor = (e && typeof e === 'object') ? [...new Set((Array.isArray(e.restrictedFor) ? e.restrictedFor : (e.restricted ? [e.id] : [])).filter((x) => ['claude-code', 'codex'].includes(x)))] : [];
+      const carried = (e && typeof e === 'object') ? { ...(ENGINE_IDS.includes(e.from) ? { from: e.from } : {}), ...(typeof e.switchedAt === 'string' ? { switchedAt: e.switchedAt.slice(0, 40) } : {}), ...(e.handoverPending === true ? { handoverPending: true } : {}), ...(restrictedFor.length ? { restrictedFor } : {}) } : {};
+      if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny', ...carried }; // the person chose Bunny's own engine for this chat, explicitly
+      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...carried, ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
       else delete session.engine;
     }
+    // FOLDER-RULES: the chat's own switch (window-only), and the hash of the frozen set the chat's engine session was last told (server-written). The text itself lives in the folder's trust record, not here.
+    if (patch.folderRules !== undefined) { if (typeof patch.folderRules === 'boolean') session.folderRules = patch.folderRules; else delete session.folderRules; }
+    if (patch.folderRulesSent !== undefined) { if (typeof patch.folderRulesSent === 'string' && /^[a-f0-9]{64}$/.test(patch.folderRulesSent)) session.folderRulesSent = patch.folderRulesSent; else delete session.folderRulesSent; }
+    delete session.folderRulesRead; delete session.folderRulesNext; // (the earlier per-chat copy, if an old chat has one)
+    if (patch.rewindNote !== undefined) { if (patch.rewindNote) session.rewindNote = String(patch.rewindNote).slice(0, 300); else delete session.rewindNote; } // REWIND: fixed text for the next message
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;
@@ -314,6 +328,7 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
 
   async function remove(id) {
     await rm(fileFor(requireId(id)), { force: true });
+    await onRemoved?.(id); // its checkpoints (copies of the person's files) go with it
   }
 
   /** Drop one message and everything after it. Used by edit-and-resend. */
@@ -339,6 +354,22 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     const dropped = session.messages.length - keep;
     if (dropped) { session.messages = session.messages.slice(0, keep); await save(session); }
     return dropped;
+  }
+
+  /** v0.1.14.3 (Quick ask): when Bunny shows its own words or results after a model's refusal, they are what the chat keeps as the reply. Only a quick-ask chat, only the last reply (an assistant message with no step
+   * after the last user message), only text. Returns true when a reply was replaced. */
+  async function replaceLastReply(id, content) {
+    const session = await get(requireId(id));
+    if (!session) throw new Error('Session not found');
+    if (session.origin !== 'quick-ask') return false;
+    const text = String(content ?? '').slice(0, 8000);
+    if (!text.trim()) return false;
+    const last = session.messages.at(-1);
+    if (!last || last.role !== 'assistant' || (last.kind && last.kind !== 'text')) return false;
+    last.content = text;
+    delete last.pcSources;
+    await save(session);
+    return true;
   }
 
   /** v0.1.14.1 (Quick ask retry): cut everything after the last user message (the first reply, which is being replaced). The question itself stays, once. Returns how many were cut. */
@@ -481,11 +512,12 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     };
   }
 
-  /** Note that a reply's file changes were undone, so its button goes away. */
-  async function markCheckpointRestored(id, checkpointId) {
+  /** Note that a reply's file changes were undone, so its button goes away (one id, or a list for a rewind). */
+  async function markCheckpointRestored(id, checkpointId, value = true) {
     const session = await get(requireId(id));
     if (!session) throw new Error('Session not found');
-    for (const m of session.messages) if (m.checkpoint?.id === checkpointId) m.checkpoint.restored = true;
+    const ids = new Set([].concat(checkpointId));
+    for (const m of session.messages) if (m.checkpoint && ids.has(m.checkpoint.id)) m.checkpoint.restored = value;
     await save(session);
     return session;
   }
@@ -502,9 +534,14 @@ export function createSessionStore({ dir, contextLimit = 200_000 } = {}) {
     return run;
   };
 
+  // F9-5: the list of allowed kinds is written ONLY by these three, called by the server (a window answer to a card, or Forget from the window): update() never takes it from a patch
+  async function setAllowKinds(id, next) { const session = await get(requireId(id)); if (!session) throw new Error('Session not found'); if (next && next.length) session.allowKinds = next; else delete session.allowKinds; await save(session); return session.allowKinds ?? []; }
+  async function allowKindsOf(id) { return (await get(requireId(id)))?.allowKinds ?? []; }
+  async function forgetAllowKind(id, index) { const session = await get(requireId(id)); if (!session) throw new Error('Session not found'); const list = [...(session.allowKinds ?? [])]; if (index === 'all') list.length = 0; else if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 1); if (list.length) session.allowKinds = list; else delete session.allowKinds; await save(session); return list; }
   return {
+    allowKindsOf, setAllowKinds: locked(setAllowKinds), forgetAllowKind: locked(forgetAllowKind),
     list, get, create, remove, fork, children, exportSession, context, summary,
-    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser),
+    append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser), replaceLastReply: locked(replaceLastReply),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
     markCheckpointRestored: locked(markCheckpointRestored), setWorktree: locked(setWorktree),
   };

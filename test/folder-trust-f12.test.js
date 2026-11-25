@@ -31,11 +31,10 @@ test('the store: by real path, the two answers kept apart, forgotten on request,
   const folder = join(dir, 'proj'); await mkdir(folder);
   const file = join(dir, 'folder-trust.json');
   const trust = createFolderTrust({ file });
-  assert.deepEqual(await trust.get(folder), { folder: (await trust.get(folder)).folder, auto: null, instructions: null });
+  assert.deepEqual(await trust.get(folder), { folder: (await trust.get(folder)).folder, auto: null });
   await trust.set(folder, { auto: true });
   assert.equal((await trust.get(folder)).auto, true);
-  assert.equal((await trust.get(folder)).instructions, null, 'trusting Auto never trusts the folder\'s instruction files');
-  await trust.set(folder, { instructions: false });
+  assert.equal('instructions' in (await trust.get(folder)), false, 'no instructions answer lives here: that is the folder rules record');
   assert.equal((await trust.get(folder)).auto, true, 'the other answer is untouched');
   assert.equal((await trust.get(folder.toUpperCase())).auto, true, 'a different spelling of the same folder (Windows is case-blind)');
   await trust.flush();
@@ -147,4 +146,14 @@ test('F12 gap: a new chat starts in the default mode from Settings; a device\'s 
   await fetch(`${base}/api/settings`, { method: 'PUT', headers: jsonH, body: JSON.stringify({ defaultPermissionMode: 'smart' }) });
   assert.equal(await mode(), 'smart');
   assert.equal((await post(base, '/api/sessions', { title: 'm', permissionMode: 'plan' })).body.permissionMode, 'plan', 'an explicit mode wins');
+});
+
+test('F12: a chat a device starts is Ask even when the default is an explicit auto or smart; Smart starts in Ask while the check is off or was down', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/server/app.js', import.meta.url), 'utf8');
+  assert.match(src, /body\.permissionMode === undefined && !req\.bunnyRemote && !req\.bunnyDevice && \['smart', 'ask', 'accept', 'plan', 'auto'\]\.includes\(settings\.defaultPermissionMode\)/);
+  assert.equal(smartMode({ ...ok, judgeOn: false }).mode, 'ask');
+  assert.equal(smartMode({ ...ok, judgeDown: true }).mode, 'ask');
+  assert.match(smartMode({ ...ok, judgeDown: true }).why, /Smart starts in Ask while Bunny's check is off or can't be reached/);
+  assert.match(src, /judgeDown: Date\.now\(\) < judgeDownUntil/);
 });

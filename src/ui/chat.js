@@ -7,6 +7,8 @@
  */
 
 import { loadEngines, paintEngineChip } from './engine-chip.js';
+import { openNoFolderCard, openSwitchCard, switchDivider } from './engine-switch.js';
+import { confineBlock, loadView as loadFolderRules, projectInstructions, trustCard } from './folder-rules-ui.js';
 import {
   getJSON, sendJSON, streamMessage, streamComplete, applyTheme, applyAppearance,
   computerScreenshot, computerClick, computerType, computerKey, computerWait, computerReset,
@@ -14,6 +16,7 @@ import {
   sessionSetting, fetchAbilities,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { confirmRewind, openRewindPanel } from './rewind.js';
 import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
@@ -269,7 +272,8 @@ function renderComposerHeader() {
   const folder = (state.sessionId ? state.session?.folder : null) ?? state.pendingFolder?.folder ?? null;
   const branch = (state.sessionId ? state.session?.branch : null) ?? state.pendingFolder?.branch ?? null;
   if (folderText) folderText.textContent = folder ? folder.split(/[\\/]/).filter(Boolean).pop() : say('composer.noFolder');
-  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}` : 'Choose a folder to work in');
+  const frUsed = state.sessionId ? frCounts.get(state.sessionId) ?? 0 : 0; // FOLDER-RULES: the instruction files this chat's folder has, counted when the trust card or the folder card loaded them
+  $('folder-chip')?.setAttribute('title', folder ? `Working folder: ${folder}${frUsed ? ` · ${frUsed} instruction file${frUsed === 1 ? '' : 's'}` : ''}` : 'Choose a folder to work in');
   // W2-9: a chat with its own copy shows the copy's branch in the accent colour, with "own copy"
   const copyBranch = state.sessionId ? state.session?.worktree?.branch ?? null : null;
   if (branchText) branchText.textContent = copyBranch ? `${copyBranch} · own copy` : (branch ?? say('composer.noBranch'));
@@ -277,7 +281,9 @@ function renderComposerHeader() {
   // Before the first message there is no session yet: what the person chose is held in pendingMode, not forgotten.
   if (permMode) permMode.value = (state.sessionId ? state.session?.permissionMode : state.pendingMode) ?? state.settings?.defaultPermissionMode ?? 'smart';
   syncModeMenu();
-  paintEngineChip({ chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
+  const canSwitch = Boolean(state.sessionId && state.session?.messages?.length && !state.incognito && !isDevicePage());
+  paintEngineChip({ canSwitch, busy: Boolean(state.streaming), onSwitch: (row) => switchEngineTo(row.id), onFix: (row, what) => fixEngine(row, what), deviceNote: isDevicePage() ? 'The engine can be changed only on the PC.' : '', chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
+  showTrustCard().catch(() => {}); // FOLDER-RULES: the card for a folder with instruction files (once per chat and folder)
   if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
@@ -1440,6 +1446,9 @@ function signInStep(info) {
 function renderMessage(m, { skipThinking = false } = {}) {
   const wrap = element('div', { className: `msg ${m.role}`, dataset: { role: m.role, id: m.id ?? '' } });
 
+  // ENGINE-SWITCH: the divider "Now on Codex CLI" stays in the transcript
+  if (m.kind === 'engine-switch') { wrap.className = 'msg engine-switch'; wrap.append(switchDivider(m)); return wrap; }
+
   // Tool call block: collapsible, shows the tool name, args and result
   if (m.kind === 'tool_call') {
     // A question the model asked is shown as its card, with the answer, not as a step line.
@@ -1453,6 +1462,7 @@ function renderMessage(m, { skipThinking = false } = {}) {
     else if (m.status === 'denied') header.append(element('span', { className: 'tag is-blocked', textContent: 'Blocked' }));
     else if (failedStep) header.append(element('span', { className: 'tag is-failed', textContent: 'Failed' }));
     else if (m.status && m.status !== 'done') header.append(element('span', { className: 'tag', textContent: m.status }));
+    if (m.allowedKind) header.append(element('span', { className: 'tag is-allowed', textContent: `allowed for this chat: ${m.allowedKind}` })); // F9: why nothing asked (a small chip, no banner)
     // A read step opens that file in the Files pane.
     const readPath = stepKind(m.tool) === 'read' ? /^(?:.* › )?Read (.+)$/.exec(String(m.tool ?? ''))?.[1] : null;
     if (readPath && state.session?.folder && !failedStep) {
@@ -1577,6 +1587,9 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     }
   }
 
+  // ENGINE-SWITCH: the reply that followed a handover says how big it was (the handover text itself is never saved in the chat)
+  if (m.role === 'assistant' && m.handover) wrap.append(element('div', { className: 'sub es-handover', textContent: `Handover: ${m.handover.messages} message${m.handover.messages === 1 ? '' : 's'}, ${m.handover.files} file${m.handover.files === 1 ? '' : 's'}, ${Math.max(1, Math.round((m.handover.bytes ?? 0) / 1024))} KB` }));
+
   // The files this reply changed can be put back.
   if (m.role === 'assistant' && m.checkpoint?.files) wrap.append(undoBar(m));
 
@@ -1686,6 +1699,10 @@ function renderActions(m, stored) {
     });
   }
 
+  if (state.messages.some((x, i) => i > state.messages.findIndex((y) => y.id === m.id) && x.checkpoint?.files && !x.checkpoint.restored)) {
+    act(say('rewind.here'), 'retry', async () => confirmRewind(rewindCtx(), { to: m.id }, `before the reply after this message`));
+  }
+
   act(say('chat.branch'), 'branch', async () => {
     const branch = await sendJSON(`/api/sessions/${state.sessionId}/fork`, 'POST', { at: m.id });
     await loadSessions();
@@ -1703,13 +1720,20 @@ function startEditing(m) {
   const save = button('Save and resend', { className: 'primary' });
   const cancel = button('Cancel', { className: 'ghost' });
 
-  body.replaceChildren(editor, element('div', { className: 'actions' }, save, cancel));
+  // REWIND: when replies after this message changed files, the person may put those files back too
+  const later = state.messages.slice(state.messages.findIndex((x) => x.id === m.id) + 1).some((x) => x.checkpoint?.files && !x.checkpoint.restored);
+  const alsoFiles = later ? element('input', { type: 'checkbox', id: 'edit-files' }) : null;
+  body.replaceChildren(editor, ...(alsoFiles ? [element('label', { className: 'rewind-tick' }, alsoFiles, ' ', say('rewind.alsoFiles'))] : []), element('div', { className: 'actions' }, save, cancel));
   editor.focus();
 
   cancel.addEventListener('click', () => paintMessages());
   save.addEventListener('click', async () => {
     const text = editor.value.trim();
     if (!text) { editor.focus(); return; }
+    if (alsoFiles?.checked) { // the same preview and card as a rewind; if the person backs out, nothing is edited
+      const went = await confirmRewind(rewindCtx(), { to: m.id }, 'before this message');
+      if (!went) return;
+    }
     const updated = await sendJSON(`/api/sessions/${state.sessionId}/messages/${m.id}`, 'PATCH', { content: text });
     state.messages = updated.messages;
     paintMessages();
@@ -2058,11 +2082,12 @@ function showLiveTool(bodyEl, info) {
   if (!line) {
     line = element('div', { className: 'msg assistant live-tool' });
     line.dataset.tool = info.tool;
-    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '' }).firstChild);
+    line.append(renderMessage({ kind: 'tool_call', role: 'assistant', tool: info.tool, status: info.status, content: '', ...(info.allowedKind ? { allowedKind: info.allowedKind } : {}) }).firstChild);
     msg.before(line);
   }
   line.dataset.status = info.status;
   line.querySelector('.tag')?.replaceChildren(info.needsSignIn ? 'Needs sign-in' : info.status);
+  if (info.confined && !line.querySelector('.confined-mark')) line.querySelector('.tag')?.after(element('span', { className: 'confined-mark fr-chip ok', textContent: 'confined', title: 'This command ran in a low-rights mode that can only write inside the project folder.' })); // F13
   if (info.needsSignIn && info.serverId && !line.querySelector('.signin-step')) {
     line.querySelector('.tag')?.classList.add('is-blocked');
     line.append(signInStep(info));
@@ -2307,6 +2332,7 @@ function undoBar(m) {
   }
   bar.append(
     element('span', { className: 'hint', textContent: say('undo.changed', { n }) }),
+    button(say('rewind.further'), { className: 'ghost sm link-btn', onclick: () => openRewindPanel(rewindCtx()) }),
     button(say('undo.button'), {
       className: 'ghost sm',
       onclick: async (e) => {
@@ -2321,11 +2347,28 @@ function undoBar(m) {
           state.browser?.refresh?.();
         } catch (err) {
           b.disabled = false;
+          // a file changed since this reply: ask in words, through the same preview as a rewind (REWIND G1)
+          if (err.code === 'rewind.changed' || /changed since this reply/i.test(err.message ?? '')) { confirmRewind(rewindCtx(), { cp: m.checkpoint.id }, 'before this reply'); return; }
           $('error').textContent = err.message;
         }
       },
     }));
   return bar;
+}
+
+/** REWIND: what the Rewind panel and its confirm card need from the chat. */
+function rewindCtx() {
+  return {
+    sessionId: state.sessionId,
+    messages: () => state.messages,
+    running: () => Boolean(state.streaming),
+    openChat: (id) => { loadSessions().then(() => goToChat(id)); },
+    onDone: async () => {
+      try { state.session = await getJSON(`/api/sessions/${state.sessionId}`); state.messages = state.session.messages ?? state.messages; paintMessages(); } catch { /* the pane refresh below still runs */ }
+      state.browser?.refresh?.();
+      state.workPanes?.refresh?.();
+    },
+  };
 }
 
 /** A card for another chat a step started or talked to: a helper, a background chat. */
@@ -2480,23 +2523,38 @@ function showLivePermission(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
   if (!msg) return;
   const card = element('div', { className: 'permission-prompt live-permission' });
-  card.append(element('h4', { textContent: `Allow: ${info.title}?` }));
+  card.append(element('h4', { textContent: info.choices ? info.title : `Allow: ${info.title}?` }));
   if (info.detail) card.append(element('pre', { className: 'code' }, element('code', { textContent: info.detail })));
   const actions = element('div', { className: 'permission-actions' });
-  const answer = async (allowed, forSession = false) => {
-    actions.replaceChildren(element('span', { className: 'hint', textContent: allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
+  const answer = async (allowed, forSession = false, choice = null) => {
+    actions.replaceChildren(element('span', { className: 'hint', textContent: choice ? (info.choices.find((c) => c.id === choice)?.label ?? 'Answered') : allowed ? (forSession ? 'Allowed for this chat' : 'Allowed') : 'Denied' }));
     try {
-      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', forSession ? { allowed, forSession: true } : { allowed });
+      await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', choice ? { allowed, choice } : forSession ? { allowed, forSession: true } : { allowed });
     } catch (err) {
       actions.replaceChildren(element('span', { className: 'err', textContent: err.message }));
     }
   };
-  actions.append(
-    button('Allow', { className: 'primary', onclick: () => answer(true) }),
+  // F9: the kind button, the tick that shows the exact rule, and the one fixed line that says why a kind is not offered. The words come from the server (fixed strings and the call's own arguments).
+  let tick = null;
+  const answerKind = async () => {
+    const saveRule = Boolean(tick?.checked);
+    actions.replaceChildren(element('span', { className: 'hint', textContent: info.kind.replyOnly ? 'Allowed for this task' : 'Allowed for this chat' }));
+    try { await sendJSON(`/api/sessions/${state.sessionId}/permission/${info.id}`, 'POST', saveRule ? { allowed: true, kind: true, saveRule: true } : { allowed: true, kind: true }); } catch (err) { actions.replaceChildren(element('span', { className: 'err', textContent: err.message })); }
+  };
+  if (info.choices) actions.append(...info.choices.map((c) => button(c.label, { className: c.primary ? 'primary' : 'ghost', onclick: () => answer(c.id !== 'no', false, c.id) })));
+  else actions.append(
+    button(info.kind ? 'Allow once' : 'Allow', { className: 'primary', onclick: () => answer(true) }),
+    ...(info.kind ? [button(info.kind.button.replace(/`([^`]*)`/g, '$1'), { className: 'ghost', onclick: answerKind })] : []),
     ...(info.forSession ? [button('Allow for this chat', { className: 'ghost', onclick: () => answer(true, true) })] : []),
-    button('Deny', { className: 'ghost', onclick: () => answer(false) }),
+    button(info.kind ? "Don't allow" : 'Deny', { className: 'ghost', onclick: () => answer(false) }),
   );
   card.append(actions);
+  if (info.kind?.rule) {
+    tick = element('input', { type: 'checkbox', id: `kind-save-${info.id}` });
+    card.append(element('label', { className: 'kind-tick', htmlFor: tick.id }, tick, element('span', {}, 'Also save as a rule for this folder', element('span', { className: 'hint', textContent: ` Saves exactly: ${String(info.kind.rule).replace(/`/g, '')}` }))));
+  }
+  if (info.reason) card.append(element('div', { className: 'hint kind-reason', textContent: info.reason }));
+  if (!info.kind && !info.reason && document.querySelector('meta[name="bunny-csrf"]')) card.append(element('div', { className: 'hint kind-reason', textContent: '"For this chat" can be given only on the PC.' }));
   msg.before(card);
   card.scrollIntoView({ block: 'end' });
 }
@@ -2608,6 +2666,7 @@ async function refreshSession({ expectAssistant = false } = {}) {
   paintMessages();
   renderContext(state.session.context);
   if (state.sidePaneOpen) state.workPanes?.refresh();
+  showTrustCard().catch(() => {}); // F12: a chat made by the first message has its folder now; the card asks once
 }
 
 // ---------------------------------------------------------------------------
@@ -2996,7 +3055,6 @@ async function send() {
     return;
   }
 
-  await maybeAskFolderTrust(); // F12: Smart in a git folder not yet answered asks once, before anything runs
   if (!state.sessionId) {
     const session = await sendJSON('/api/sessions', 'POST', {
       title: 'New chat',
@@ -3706,40 +3764,7 @@ function bindPushToTalk() {
 
 const MODE_LABELS = { smart: 'Smart', auto: 'Auto', ask: 'Manual', accept: 'Accept edits', plan: 'Plan' };
 // F12: what Smart does here, in words (the chip's tooltip). Smart is Auto only in a trusted git folder with the check on; otherwise it asks.
-const SMART_TIP = 'Smart: runs in Auto in a git folder you trusted, with a second model checking each risky action. Everywhere else it asks.';
-/** F12: the trust card. Asked once per folder, only when Smart would use it: a git folder, the check on, and no answer yet. Resolves to true (trust it), false (not now) or null (closed). */
-function askFolderTrust(folder) {
-  return new Promise((resolve) => {
-    const no = element('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Not now, ask me each time' });
-    const yes = element('button', { className: 'btn btn-primary', type: 'button', textContent: 'Trust this folder for Auto' });
-    const card = element('div', { className: 'palette modal ask-text', role: 'dialog', 'aria-label': 'Trust this folder for Auto?' },
-      element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Trust this folder for Auto?' })),
-      element('div', { className: 'modal-body' },
-        element('p', { textContent: folder }),
-        element('p', { className: 'modal-sub', textContent: 'In a trusted git folder, Smart runs in Auto: a second model checks each risky action before it runs, and Bunny asks you when it cannot. You can change this any time in Settings, under Trusted folders.' })),
-      element('div', { className: 'modal-foot actions' }, element('span', { className: 'spacer' }), no, yes));
-    const backdrop = element('div', { className: 'palette-backdrop modal-backdrop', id: 'folder-trust-backdrop' }, card);
-    const done = (result) => { backdrop.remove(); resolve(result); };
-    no.addEventListener('click', () => done(false));
-    yes.addEventListener('click', () => done(true));
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
-    backdrop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); done(null); } });
-    document.body.append(backdrop);
-    yes.focus();
-  });
-}
-async function maybeAskFolderTrust() {
-  try {
-    if (($('permission-mode')?.value ?? '') !== 'smart' || (state.workMode ?? 'chat') === 'chat') return;
-    const folder = state.sessionId ? state.session?.folder : state.pendingFolder?.folder;
-    if (!folder) return;
-    const t = await getJSON(`/api/folder-trust?folder=${encodeURIComponent(folder)}`);
-    if (!t.git || !t.judgeOn || t.auto !== null) return;
-    const answer = await askFolderTrust(t.folder ?? folder);
-    if (answer !== null) await sendJSON('/api/folder-trust', 'PUT', { folder, auto: answer });
-  } catch { /* a failed lookup leaves Smart asking, which is the safe side */ }
-}
-
+const SMART_TIP = "Smart: runs in Auto in a git folder you trusted, with a second model checking each risky action. Everywhere else it asks. Smart starts in Ask while Bunny's check is off or can't be reached.";
 const WORK_MODES = ['chat', 'code'];
 const MODE_HINTS = {
   chat: { placeholder: 'Send a message…', empty: 'Type below to start.' }, // a model is always in effect (Auto or the one chosen), so the empty chat does not ask for one
@@ -3929,6 +3954,70 @@ async function useFolder(path) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// ENGINE-SWITCH (Design's drawing v2) and the trust card of FOLDER-RULES v4
+
+/** "Switch this chat to <engine>": the card says what the new engine gets, then the window asks the server (a window-only route), then the chat is read again so the divider shows. */
+async function switchEngineTo(to) {
+  const sid = state.sessionId;
+  if (!sid || state.streaming) return;
+  const session = state.session;
+  const useBunnyEngine = state.settings?.useBunnyEngine !== false;
+  if (to !== 'bunny' && (session?.workMode !== 'code' || !session?.folder)) {
+    const pick = await openNoFolderCard();
+    if (pick === 'bunny') return switchEngineTo('bunny');
+    if (pick === 'folder') await chooseFolder();
+    return;
+  }
+  let view = null;
+  try { if (to !== 'bunny') view = await loadFolderRules(sid); } catch { view = null; }
+  const restrictedAgain = Array.isArray(session?.engine?.restrictedFor) && session.engine.restrictedFor.includes(to);
+  if (!(await openSwitchCard({ to, session, folder: session?.folder ?? '', view, useBunnyEngine, restrictedAgain }))) return;
+  try {
+    await sendJSON(`/api/sessions/${sid}/engine`, 'POST', { to });
+    await refreshSession();
+    renderComposerHeader();
+  } catch (err) { flashStatus(err.message, 8000); }
+}
+
+/** An engine that is not ready: Download starts the download here; Sign in and a switched-off engine lead to Settings → Engines, where those are done. */
+async function fixEngine(row, what) {
+  if (what === 'download') {
+    try { await sendJSON(`/api/engines/${row.id}/download`, 'POST', {}); flashStatus(`${row.label} is downloading. Choose Switch again when it is ready.`, 8000); } catch (err) { flashStatus(err.message, 8000); }
+    return;
+  }
+  openSettings('engines');
+}
+
+let trustSeen = '';
+const trustDismissed = new Set();
+/** The card above the composer: a Code chat in a folder with instruction files nobody has answered for. Not now closes it for this chat for now; a new chat on that folder asks again. */
+const frCounts = new Map(); // session id -> how many instruction files its folder has (for the folder chip's tooltip)
+async function showTrustCard(force = false) {
+  const session = state.session;
+  const host = document.querySelector('.dock');
+  if (!state.sessionId || !session || state.incognito || session.workMode !== 'code' || !session.folder || !host || trustDismissed.has(state.sessionId)) { document.getElementById('fr-trust-card')?.remove(); return; }
+  const key = `${state.sessionId}|${session.folder}`;
+  if (!force && trustSeen === key) return; // the card (if one is up) stays: a re-render of the header must not take it away before it is answered
+  document.getElementById('fr-trust-card')?.remove();
+  trustSeen = key;
+  let view;
+  try { view = await loadFolderRules(state.sessionId); } catch { trustSeen = ''; return; } // not ready yet (the folder is saved just after the chat): look again at the next render
+  const nFiles = view.enabled && view.chatSwitch !== false ? view.files.filter((f) => f.state !== 'off').length : 0;
+  if (frCounts.get(state.sessionId) !== nFiles) { frCounts.set(state.sessionId, nFiles); renderComposerHeader(); }
+  const needFollow = view.enabled && view.chatSwitch !== false && !view.trusted && view.files.some((f) => f.state === 'waiting');
+  // F12 question 2: Smart in a git folder nobody has answered for, with the check on (the PC's window only: a device never sees or answers it)
+  let auto = null;
+  if (($('permission-mode')?.value ?? '') === 'smart' && !isDevicePage()) {
+    try { const t = await getJSON(`/api/folder-trust?folder=${encodeURIComponent(session.folder)}`); if (t.git && t.judgeOn && t.auto === null) auto = { folder: t.folder ?? session.folder }; } catch { /* no answer: Smart asks, the safe side */ }
+  }
+  if (!needFollow && !auto) return;
+  const card = trustCard({ sid: state.sessionId, view: needFollow ? view : { ...view, files: [] }, auto, device: isDevicePage(), onAnswered: (followed) => { if (!followed) trustDismissed.add(state.sessionId); showTrustCard(true); renderComposerHeader(); } });
+  card.id = 'fr-trust-card';
+  host.insertBefore(card, $('composer'));
+}
+
 /**
  * W2-9: the Working folder card: the folder, a switch "Give this chat its own copy of the project", and once on, the branch, the base and Finish.
  * The server makes and removes the copy; this only asks.
@@ -3958,6 +4047,21 @@ async function openWorkingFolder() {
       status.textContent = info.gone ? (info.message ?? 'The copy is gone.') : `Branch ${info.branch} (new, from ${info.base ?? 'the current commit'} at ${String(info.baseSha ?? '').slice(0, 7)}). ${info.dirty ?? 0} file${info.dirty === 1 ? '' : 's'} changed, ${info.ahead ?? 0} commit${info.ahead === 1 ? '' : 's'} so far.`;
       foot.append(button('Finish…', { className: 'btn btn-primary', onclick: () => finishCard(info) }));
     }
+    // F9: what is allowed for this chat: each kind in words, with Forget; hidden on a device
+    if (!document.querySelector('meta[name="bunny-csrf"]')) {
+      let allowed = { kinds: [], replyOnly: [] };
+      try { allowed = await getJSON(`/api/sessions/${sid}/allow-kinds`); } catch { /* the list is not there: shown as empty */ }
+      const total = (allowed.kinds?.length ?? 0) + (allowed.replyOnly?.length ?? 0);
+      const block = element('div', { className: 'allowed-kinds', id: 'allowed-kinds' });
+      const head = element('div', { className: 'allowed-head' }, element('b', { textContent: 'Allowed in this chat' }), element('span', { className: 'hint', textContent: ` · ${total} ${total === 1 ? 'kind' : 'kinds'}` }));
+      if (allowed.kinds?.length) head.append(button('Forget allowed actions', { className: 'link', onclick: async () => { await sendJSON(`/api/sessions/${sid}/allow-kinds/all`, 'DELETE'); await paint(); } }));
+      block.append(head);
+      if (!total) block.append(element('div', { className: 'hint', textContent: 'Nothing is allowed for this chat.' }));
+      for (const k of allowed.kinds ?? []) block.append(element('div', { className: 'allowed-row', title: k.title ?? '' }, element('span', { textContent: k.label }), button('Forget', { className: 'link', 'aria-label': `Forget ${k.label}`, onclick: async () => { await sendJSON(`/api/sessions/${sid}/allow-kinds/${k.i}`, 'DELETE'); await paint(); } })));
+      for (const k of allowed.replyOnly ?? []) block.append(element('div', { className: 'allowed-row' }, element('span', {}, k.label, element('small', { textContent: ` (${k.note})` })), element('span', { className: 'hint', textContent: 'ends with this reply' })));
+      block.append(element('div', { className: 'hint', textContent: 'Only for this chat. They are cleared when you change folder, switch engine or turn on Plan mode. Rules saved for this folder are in Settings, Code.' }));
+      body.append(block);
+    }
     foot.append(button('Change folder', { className: 'btn btn-ghost', onclick: async () => { close(); await chooseFolder(); } }), button('Close', { className: 'btn btn-ghost', onclick: close }));
     sw.addEventListener('change', async () => {
       if (!sw.checked) { sw.checked = true; finishCard(info); return; } // turning it off is Finish: nothing is lost silently
@@ -3971,6 +4075,9 @@ async function openWorkingFolder() {
       } catch (err) { status.textContent = err.message; sw.checked = false; sw.disabled = false; return; }
       await paint();
     });
+    // FOLDER-RULES v4: the project's instruction files, one set for every engine
+    try { if (state.session?.workMode === 'code' && state.session?.folder) body.append(projectInstructions({ sid, view: await loadFolderRules(sid), engineId: state.session?.engine?.id ?? 'bunny', device: isDevicePage(), onChanged: () => { paint(); showTrustCard(true); } })); } catch { /* the block is a convenience: the card works without it */ }
+    try { if (state.session?.workMode === 'code' && state.session?.folder) { const cb = await confineBlock({ sid, device: isDevicePage(), onChanged: () => paint() }); if (cb) body.append(cb); } } catch { /* a convenience */ }
     box.replaceChildren(element('div', { className: 'modal-head' }, element('h3', { className: 'modal-title', textContent: 'Working folder' })), body, foot);
   };
   const finishCard = (info) => {
@@ -4466,6 +4573,7 @@ async function boot() {
     getPendingFolder: () => state.pendingFolder?.folder ?? null,
     onChanged: () => refreshSession(),
     copy: async (text) => { flashStatus((await copyText(text)) ? 'Path copied' : 'Could not copy'); },
+    rewindCtx,
   });
   $('sidebar-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation();

@@ -161,7 +161,7 @@ export async function changesFor(root, checkpointList) {
   let removed = 0;
   let budget = DIFF_BUDGET_LINES;
   for (const cp of all) {
-    const entry = { id: cp.id, at: cp.at, restored: Boolean(cp.restored), files: [] };
+    const entry = { id: cp.id, at: cp.at, restored: Boolean(cp.restored), kind: cp.kind === 'rewind' ? 'rewind' : 'reply', files: [] };
     for (const f of (cp.files ?? []).slice(0, MAX_FILES_PER_CHECKPOINT)) {
       let rel = relative(base, resolve(f.path));
       if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) continue;

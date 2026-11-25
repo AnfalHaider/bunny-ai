@@ -142,6 +142,9 @@ export function createBridge(ctx) {
     return null; // the check allowed it
   }
 
+  /** F9-7: has the person allowed this KIND for this chat? The caller (the app) knows the list and how to match it; an engine call Bunny cannot split gets no kind, so it never matches. */
+  const covered = async (call) => { try { return (await ctx.allowed?.(call)) === true; } catch { return false; } };
+
   async function asked(summary, detail) {
     try { return (await ctx.ask(summary, detail)) === true; } catch { return false; }
   }
@@ -169,6 +172,7 @@ export function createBridge(ctx) {
           if (protect.some((p) => lowText.includes(p))) return { allow: false, reason: 'That command names a folder Bunny keeps private.', name, risk, summary };
           const ruled = checkToolCall(rules(), 'run_command', { command: call.command });
           if (ruled?.effect === 'deny') return { allow: false, reason: `Blocked by your permission rule ${describeRule(ruled)}.`, name, risk, summary };
+          if (ruled?.effect !== 'ask' && ruled?.effect !== 'allow' && needsOk(risk) && await covered(call)) return { allow: true, reason: 'Allowed for this chat.', name, risk, summary, allowedKind: true }; // F9-7
           if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow'))) {
             const ok = await asked(summary, ruled?.effect === 'ask' ? `${call.command}\n\nAsked because of your rule ${describeRule(ruled)}.` : call.command);
             return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };
@@ -198,6 +202,7 @@ export function createBridge(ctx) {
       }
       const ruled = checkToolCall(rules(), name, { path: place.rel }, place.rel);
       if (ruled?.effect === 'deny') return { allow: false, reason: `Blocked by your permission rule ${describeRule(ruled)}.`, name, risk, summary };
+      if (ruled?.effect !== 'ask' && ruled?.effect !== 'allow' && needsOk(risk) && await covered(call)) return { allow: true, reason: 'Allowed for this chat.', name, risk, summary, allowedKind: true }; // F9-7
       if (ruled?.effect === 'ask' || (needsOk(risk) && !(ruled?.effect === 'allow'))) {
         const ok = await asked(summary, ruled?.effect === 'ask' ? `${place.rel}\n\nAsked because of your rule ${describeRule(ruled)}.` : place.rel);
         return ok ? { allow: true, reason: 'Allowed by the person.', name, risk, summary, asked: true } : { allow: false, reason: 'The person did not allow this.', name, risk, summary, asked: true };

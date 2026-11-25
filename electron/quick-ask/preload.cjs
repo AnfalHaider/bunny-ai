@@ -19,5 +19,6 @@ contextBridge.exposeInMainWorld('quickAsk', {
   init: () => ipcRenderer.invoke('quickask:init'), // QUICK-UI 8 and 9: how Bunny looks and which model answers, as plain words
   close: () => ipcRenderer.invoke('quickask:close'),
   escHandled: () => ipcRenderer.invoke('quickask:escHandled'),
+  onRefresh: (fn) => { const h = () => fn(); ipcRenderer.on('quickask:refresh', h); return () => ipcRenderer.removeListener('quickask:refresh', h); }, // the bar was shown again: read Bunny's settings again
   onEscape: (fn) => { const h = () => fn(); ipcRenderer.on('quickask:esc', h); return () => ipcRenderer.removeListener('quickask:esc', h); },
 });

@@ -104,14 +104,14 @@ test('3: only the bar\'s own page can say "handled" or "close"; anything else ch
   assert.equal(win.destroyed, true, 'a stranger could not stop the bar from closing');
 });
 
-test('3: the bridge lists exactly the functions the redesign needs, and the page listens to the answer and to Esc only', async () => {
+test('3: the bridge lists exactly the functions the redesign needs, and the page listens to the answer, to Esc and to "shown again" only', async () => {
   const src = await readFile(new URL('../electron/quick-ask/preload.cjs', import.meta.url), 'utf8');
   const bridge = /exposeInMainWorld\('quickAsk', \{([\s\S]*?)\}\);/.exec(src)[1];
   const names = [...bridge.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
   assert.ok(names.includes('close') && names.includes('escHandled') && names.includes('onEscape'));
   assert.doesNotMatch(src, /ipcRenderer\.(send|once)\b|require\((?!'electron')/);
   const listened = [...src.matchAll(/ipcRenderer\.on\('([^']+)'/g)].map((m) => m[1]);
-  assert.ok(listened.every((l) => ['quickask:answer', 'quickask:esc'].includes(l)), listened.join(','));
+  assert.ok(listened.every((l) => ['quickask:answer', 'quickask:esc', 'quickask:refresh'].includes(l)), listened.join(','));
 });
 
 test('8 and 9: what the bar is told about Bunny\'s looks is cleaned to fixed keys: a theme name, a font key from the list, reduced motion, and a plain model name', async () => {

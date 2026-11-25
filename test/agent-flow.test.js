@@ -76,7 +76,7 @@ async function say(base, sessionId, content, answers = {}) {
     text += new TextDecoder().decode(value);
     for (const kind of ['permission', 'capability']) {
       const m = !done[kind] && new RegExp(`event: ${kind}\\ndata: (.*)\\n`).exec(text);
-      if (m) { done[kind] = JSON.parse(m[1]); await post(base, `/api/sessions/${sessionId}/${kind}/${done[kind].id}`, kind === 'permission' ? { allowed: true } : { granted: answers.grant ?? true }); }
+      if (m) { done[kind] = JSON.parse(m[1]); await post(base, `/api/sessions/${sessionId}/${kind}/${done[kind].id}`, kind === 'permission' ? (done[kind].choices ? { allowed: true, choice: (answers.grant ?? true) === false ? 'off' : 'on' } : { allowed: true }) : { granted: answers.grant ?? true }); }
     }
   }
   return text;

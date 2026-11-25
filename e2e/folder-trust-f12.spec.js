@@ -73,16 +73,17 @@ test('the first message in a git folder shows the trust card once; yes lists it 
   await open(page);
   await useFolder(page, repo);
   await page.locator('#input').fill('hello'); await page.locator('#send').click();
-  const card = page.getByRole('dialog', { name: 'Trust this folder for Auto?' });
+  const card = page.getByRole('group', { name: 'Trust this folder?' });
   await expect(card).toBeVisible();
   await expect(card).toContainText(repo.split(/[\\/]/).pop());
+  await expect(card).toContainText("Commands and changes run without asking you, unless Bunny's check stops them or a rule asks.");
   await card.getByRole('button', { name: 'Trust this folder for Auto' }).click();
   await expect(card).toHaveCount(0);
   await expect.poll(async () => (await (await request.get(`/api/folder-trust?folder=${encodeURIComponent(repo)}`)).json()).auto).toBe(true);
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
   // answered: the next message does not ask again
   await page.locator('#input').fill('again'); await page.locator('#send').click();
-  await expect(page.getByRole('dialog', { name: 'Trust this folder for Auto?' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Trust this folder?' })).toHaveCount(0);
   await expect(page.locator('#stop')).toBeHidden({ timeout: 20_000 });
 
   await page.goto('/src/ui/settings.html?embed=1&section=code');
@@ -95,7 +96,7 @@ test('the first message in a git folder shows the trust card once; yes lists it 
   const plain = mkdtempSync(join(tmpdir(), 'bunny-f12-e2e-plain-'));
   await open(page); await useFolder(page, plain);
   await page.locator('#input').fill('hello'); await page.locator('#send').click();
-  await expect(page.getByRole('dialog', { name: 'Trust this folder for Auto?' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Trust this folder?' })).toHaveCount(0);
 });
 
 test('Settings: Smart is the recommended default, the check is on, and the Trusted folders row explains itself', async ({ page }) => {

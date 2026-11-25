@@ -4,7 +4,7 @@
  *   edit  - install_plugin, add_skill, add_connector   (follow the permission mode)
  */
 import { searchWeb } from './webSearch.js';
-import { parseGithubUrl, readGithubPlugin, readUrl, searchPlugins } from './pluginImport.js';
+import { parseGithubUrl, readGithubPlugin, readUrl, resolveCommit, searchPlugins } from './pluginImport.js';
 import { bunnyText } from './bunnyText.js';
 import { checkProposedCommand, LOCAL_COMMANDS } from './mcpLocal.js';
 import { inScope } from './scope.js';
@@ -25,7 +25,7 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { query: { type: 'string' } }, ['query']),
     fn('read_url', 'Read a web page as text. A github.com/owner/repo link reads its README.',
       { url: { type: 'string' } }, ['url']),
-    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: on GitHub, and in the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
+    fn('search_plugins', "Find skills, plugins and connectors (MCP servers) for Bunny: a short list of known connectors first, then GitHub, then the official MCP registry. A repository's name may mention another app; its skills, commands and connectors still work in Bunny.",
       { query: { type: 'string', description: 'What the plugin, skill or connector should do' } }, ['query']),
     fn('read_skill', 'Load the instructions of a switched-on skill by name (Bunny\'s own skills, whichever app they were first written for). A long skill comes in parts of about 8,000 characters: the answer says "part 1 of 5"; ask again with part 2, 3 ... until you have read all of it.',
       { name: { type: 'string' }, part: { type: 'integer', description: 'Which part of a long skill (starts at 1)' } }, ['name']),
@@ -39,7 +39,8 @@ export function appToolDefinitions(risks = ['read', 'edit']) {
       { name: { type: 'string' }, url: { type: 'string', description: 'For a remote connector' },
         command: { type: 'string', description: 'For a local connector: the program to run' },
         args: { type: 'array', items: { type: 'string' }, description: 'Its arguments' },
-        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' } }, ['name']),
+        env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Not for secrets: keys and passwords are never taken through the chat. Tell the person to add them in Settings, Customize.' },
+        key_headers: { type: 'array', items: { type: 'string' }, description: 'For a remote connector that needs a key: the header NAMES its listing asks for (never a value). The person pastes the key themselves, in Settings, Customize, on that connector: never ask for it in the chat.' } }, ['name']),
     fn('install_from_github', 'Install a tool from a PUBLIC GitHub repository: an MCP server written in Node.js. The person sees a card first with the repository, the exact commit, the install command and "This runs code from the internet on this computer", and must say yes. It is installed into Bunny AI\'s own tools folder at that commit, npm install scripts are NOT run, and it is added as a connector. Use add_connector instead for a server that npx can run, and install_plugin for skills.',
       { repo: { type: 'string', description: 'owner/name or a github.com link' } }, ['repo']),
   ].filter((d) => risks.includes(APP_TOOL_RISK[d.function.name]));
@@ -62,7 +63,7 @@ export function describeAppTool(name, args = {}) {
 /**
  * @param {{ skills: any, mcp: any, getSettings: () => any, saveSettings: (patch: object) => Promise<any> }} deps
  */
-export function createAppTools({ toolInstaller = null, getSearchKey = async () => null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, fetchImpl = globalThis.fetch }) {
+export function createAppTools({ toolInstaller = null, getSearchKey = async () => null, skills, mcp, getSettings, saveSettings, stopConnector = async () => {}, signOutConnector = async () => {}, getGithubToken = async () => null, fetchImpl = globalThis.fetch }) {
   // W4-10: install and uninstall run one at a time on the server, from the server's own list. Two quick clicks (or a click
   // and the model) can no longer both read the same list and overwrite each other, which left parts nobody owned.
   const startFetch = globalThis.fetch; // web_search reads globalThis.fetch at call time unless a test passed its own
@@ -113,8 +114,8 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
     });
   }
 
-  async function installFromGithub(url, { off = false } = {}) {
-    const plugin = await readGithubPlugin(url, { fetchImpl });
+  async function installFromGithub(url, { off = false, pin = null } = {}) {
+    const plugin = await readGithubPlugin(url, { fetchImpl, pin });
     const record = await installParts(plugin, plugin.source, { off });
     return { record, plugin };
   }
@@ -127,9 +128,49 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
   const pendingByChat = new Map(); // P6-2: one chat's card is never shown in another chat
   const keep = (ctx, p) => { pendingByChat.set(String(ctx?.chatId ?? ''), p); };
   const takePending = (chatId = '') => { const key = String(chatId ?? ''); const p = pendingByChat.get(key) ?? null; pendingByChat.delete(key); return p; };
-  async function switchOn(p) {
-    for (const id of p?.skillIds ?? []) await skills.update(id, { enabled: true }).catch(() => {});
-    for (const id of p?.connectorIds ?? []) await mcp.update(id, { enabled: true }).catch(() => {});
+  const normUrl = (u) => String(u ?? '').trim().toLowerCase().replace(/\/+$/, '');
+  /**
+   * F10-2: with `listed` ({ skills: [names], connectors: [addresses] }, the card's own list) only a part that was ON the card is switched on; one that was not stays off.
+   * Without `listed` (the older card) every part just added is switched on, as before.
+   */
+  async function switchOn(p, listed = null) {
+    const allSkills = listed && typeof skills.list === 'function' ? await skills.list() : [];
+    const names = new Set((listed?.skills ?? []).map((n) => String(n).trim().toLowerCase()));
+    const urls = new Set((listed?.connectors ?? []).map(normUrl));
+    const left = [];
+    for (const id of p?.skillIds ?? []) {
+      const skill = allSkills.find((x) => x.id === id);
+      if (listed && !(skill && names.has(String(skill.name).trim().toLowerCase()))) { left.push(skill?.name ?? id); continue; }
+      await skills.update(id, { enabled: true }).catch(() => {});
+    }
+    for (const id of p?.connectorIds ?? []) {
+      const server = listed ? await mcp.get(id) : null;
+      if (listed && !(server && (urls.has(normUrl(server.url)) || urls.has(normUrl(server.name))))) { left.push(server?.name ?? id); continue; }
+      await mcp.update(id, { enabled: true }).catch(() => {});
+    }
+    return { left };
+  }
+
+  /**
+   * F10: the one card for a plugin. `text` lists EVERY part by name (each skill, each connector with its address, and what is not imported); `listed` is the same list as data, kept by the server:
+   * "Install and switch on" switches on exactly those parts and no other (F10-2). Over 1,800 characters the card cannot show it all: tooLong, no switch-on button, and it installs off.
+   */
+  async function previewPluginCard(url) {
+    try {
+      const commit = await resolveCommit(url, { fetchImpl }); // the card and the install read this one commit
+      const plugin = await readGithubPlugin(url, { fetchImpl, pin: commit });
+      const lines = [
+        `Plugin ${plugin.name}${plugin.description ? `: ${bunnyText(plugin.description)}` : ''}${commit ? ` (commit ${commit.slice(0, 7)})` : ''}`,
+        ...(plugin.skills ?? []).map((s) => `Skill ${s.name} (${String(s.instructions ?? '').length} characters of instructions): ${bunnyText(s.description) || '(no description)'}`),
+        ...(plugin.connectors ?? []).map((c) => `Connector ${c.name}: ${c.url}`),
+        ...(plugin.skipped?.length ? [`Not imported: ${plugin.skipped.join('; ')}`] : []),
+      ];
+      const full = lines.join('\n');
+      const tooLong = full.length > 1800;
+      return { ok: true, name: plugin.name, commit, text: tooLong ? `${full.slice(0, 1800)}\n…` : full, tooLong, listed: { skills: (plugin.skills ?? []).map((s) => String(s.name)), connectors: (plugin.connectors ?? []).map((c) => String(c.url)) } };
+    } catch (err) {
+      return { ok: false, message: `Could not read that repository yet: ${String(err.message).slice(0, 200)}` };
+    }
   }
 
   /** What install_plugin would add, in plain words, for the card shown before installing in Ask and Manual. */
@@ -266,7 +307,7 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
   const run = {
     web_search: async ({ query }, ctx) => searchWeb(query, { fetchImpl: (u, i) => (fetchImpl === startFetch ? globalThis.fetch : fetchImpl)(u, i), braveKey: await Promise.resolve().then(getSearchKey).catch(() => null), browser: ctx?.browser === true }), // F6: Brave (with the person's key), then DuckDuckGo
     read_url: ({ url }) => readUrl(url),
-    search_plugins: ({ query }) => searchPlugins(query),
+    search_plugins: async ({ query }) => searchPlugins(query, { fetchImpl, githubToken: await getGithubToken().catch(() => null) }),
     read_skill: async ({ name, part }, ctx) => {
       const skill = await skills.find(name);
       // S-6: a skill that is switched off, or all skills switched off, cannot be read either
@@ -281,7 +322,9 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
       return `[Skill ${skill.name}, part ${at} of ${total}]\n${slice}\n[${at < total ? `Call read_skill again with part ${at + 1} to carry on.` : 'That was the last part.'}]`;
     },
     install_plugin: async ({ url }, ctx) => {
-      const { plugin, record } = await installFromGithub(url, { off: true });
+      // F10-5: something already installed is never read or imported again from here (an update goes through Customize's own update path)
+      if (findInstalled(null, url)) return 'It is already installed, so nothing was changed. Updating a plugin is done by the person in Settings, Customize.';
+      const { plugin, record } = await installFromGithub(url, { off: true, pin: ctx?.expectCommit });
       keep(ctx, { title: plugin.name, text: describePlugin(plugin), skillIds: record.skills, connectorIds: record.connectors });
       return `Installed ${plugin.name}: ${plugin.skills.length} skill(s) [${plugin.skills.map((s) => s.name).join(', ')}], `
         + `${plugin.connectors.length} connector(s). They are switched OFF until the person says to switch them on (they were just asked); they appear in Settings, Customize.`
@@ -302,7 +345,7 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
     // W6-6: only with the commit the person was shown on the card (the route puts it in ctx); never without it
     install_from_github: async (args, ctx) => {
       if (!toolInstaller) throw new Error('Installing tools is not available.');
-      return toolInstaller.install({ repo: args.repo, expectSha: ctx?.expectSha });
+      return toolInstaller.install({ repo: args.repo, expectSha: ctx?.expectSha, enabled: ctx?.switchOn !== 'off' });
     },
     add_connector: async (args, ctx) => {
       if (String(args.command ?? '').trim()) {
@@ -315,12 +358,14 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
       }
       // P-6: a remote address the model proposes is added switched OFF; the person is asked, and only the window can switch it on
       const remote = !String(args.command ?? '').trim();
-      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: !remote });
+      if (remote && String(args.url ?? '').trim() && (await mcp.list()).some((x) => x.url && normUrl(x.url) === normUrl(args.url))) return 'A connector at that address is already installed, so nothing was added (F10-5). Changing it is done by the person in Settings, Customize.';
+      const added = await mcp.add({ name: args.name, url: args.url, command: args.command, args: args.args, env: args.env, enabled: remote ? false : ctx?.switchOn !== 'off', ...(remote && args.key_headers ? { keyHeaders: args.key_headers } : {}) });
       if (remote) {
         keep(ctx, { title: added.name, text: `Connector ${added.name}: ${added.url}\nIt is added switched OFF. Its tools reach the model only after you switch it on.`, skillIds: [], connectorIds: [added.id] });
-        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).`;
+        return `Added the remote connector ${added.name} (${added.url}). It is switched OFF until the person says to switch it on (they were just asked).${added.keyHeaders?.length ? ` It needs a key (${added.keyHeaders.join(', ')}): tell the person to open Settings, Customize, this connector, Add key, and paste it there. Never ask for the key in the chat.` : ''}`;
       }
-      return `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
+      if (ctx?.oneCard) keep(ctx, { title: added.name, text: `Connector ${added.name} (runs on this computer)`, skillIds: [], connectorIds: [added.id] });
+      return added.enabled === false ? `Added the local connector ${added.name}. It is switched OFF, as the person chose; they can switch it on in Settings, Customize.` : `Added the local connector ${added.name}. It is switched on; its tools are offered from the next message.`;
     },
   };
 
@@ -336,5 +381,8 @@ export function createAppTools({ toolInstaller = null, getSearchKey = async () =
     setFolders,
     updatePlugin,
     previewPlugin,
+    previewPluginCard,
+    /** F10: is this plugin already installed? (then there is nothing to ask: the install itself says so) */
+    isPluginInstalled: (url) => Boolean(findInstalled(null, url)),
   };
 }

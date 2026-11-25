@@ -6,13 +6,14 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { spawnEngine } from './process.js';
 import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
+import { commandMatches, editMatches } from '../allowKinds.js';
 import { createBridge, keyFolders } from './bridge.js';
 import { rulesWithoutBroadAllow } from '../autoJudge.js';
 import { AUTH_COMMANDS, denyRules, signInUrlFrom, startClaude } from './claude-code.js';
@@ -283,7 +284,8 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const id = choice.id;
     const label = LABELS[id] ?? id;
     const auth = choice.auth ?? engineSettings(settings).engines[id].auth;
-    let mode = choice.restricted ? 'restricted' : 'full';
+    // ENGINE-SWITCH: Bunny's check failed for an engine earlier in this chat: only that engine runs restricted (the old flag `restricted: true` meant the chat's own engine)
+    let mode = (Array.isArray(choice.restrictedFor) ? choice.restrictedFor.includes(id) : choice.restricted === true) ? 'restricted' : 'full';
     // ENGINE-RULES: with Bunny's engine off the chat follows the engine's own rules, fixed at its first message; restricted mode keeps Bunny's diff review, and an engine whose prompt tool is unproven stays on Bunny's rules
     const ownRules = choice.rules === 'engine' && mode === 'full' && ownRulesOk(id);
     const home = join(dataDir, 'engines', id, auth, 'chat', String(turn.id).replace(/[^\w-]/g, '_'));
@@ -304,7 +306,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
       const script = process.env.BUNNY_FAKE_ENGINE_SCRIPT ?? '{"steps":[{"say":"Done."}]}';
       launcher = [process.execPath, FAKE_ENGINE_PATH, id];
       exe = 'fake';
-      turn.extraEnv = { BUNNY_FAKE_SCRIPT: script };
+      turn.extraEnv = { BUNNY_FAKE_SCRIPT: script, ...(process.env.BUNNY_FAKE_PROMPT_LOG ? { BUNNY_FAKE_PROMPT_LOG: process.env.BUNNY_FAKE_PROMPT_LOG } : {}) }; // (the log is a test aid: what each run was told)
     } else {
       const found = await store.locate(id);
       if (!found.ok) {
@@ -320,7 +322,16 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     const root = turn.root;
     const planMode = turn.permissionMode === 'plan';
     const ctx = {
-      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(turn.autoCheck && turn.permissionMode === 'auto' && settings.autoJudgeEnabled !== false ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, root)), autoCheck: ownRules ? null : (turn.autoCheck ?? null), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }), // F11-6: with the check on in Auto, broad Allow rules are not used in the rules above either
+      mode: () => turn.permissionMode, rules: () => (ownRules ? [] : rulesFor(turn.autoCheck && turn.permissionMode === 'auto' && settings.autoJudgeEnabled !== false ? rulesWithoutBroadAllow(settings.permissionRules ?? {}) : settings.permissionRules, root)), autoCheck: ownRules ? null : (turn.autoCheck ?? null), root, protect: [dataDir], keyFolders: keyFolders({ home: homedir() }),
+      // F9-7: in Bunny-rules mode an engine's command or edit that the person allowed as a KIND for this chat runs with no card (an engine's own rules mode keeps the engine's own "always")
+      allowed: ownRules ? undefined : async (call) => {
+        const kinds = (await turn.allowKinds?.()) ?? turn.session?.allowKinds ?? [];
+        for (const k of kinds) {
+          if (k.type === 'command' && call.command !== undefined && commandMatches(k, call.command, { cwd: root })) return true;
+          if (k.type === 'edit' && call.path && editMatches(k, resolve(root, String(call.path)), root)) return true;
+        }
+        return false;
+      },
       ask: async (summary, detail, opts = {}) => {
         // "Allow for this chat" is offered on Codex's cards only, and only with Bunny's engine off
         const answer = await turn.askPermission(`${label} asks: ${summary}`, detail, ownRules && id === 'codex' && opts.forSession === true && pins.codex?.sessionAllow === true ? { forSession: true } : {});
@@ -331,17 +342,19 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     };
     const bridge = createBridge(ctx);
     const checked = async (res, paths) => { if (res.allow && res.name !== 'run_command' && res.name !== 'read_file') for (const p of paths) await turn.beforeWrite?.(p).catch(() => {}); return res; };
+    const COMMAND_TOOLS = new Set(['Bash', 'PowerShell', 'run_command', 'shell']);
     const judgeClaude = async (req) => {
+      if (COMMAND_TOOLS.has(req.tool)) turn.onCommand?.(); // REWIND: a command step in this reply (what it changes cannot be put back)
       const p = req.input?.file_path ?? req.input?.path ?? req.input?.notebook_path;
       if (ownRules) { const r = await bridge.claudeFloor(req); if (r.abstain && p && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(req.tool)) await turn.beforeWrite?.(p).catch(() => {}); return r; } // the checkpoint is taken before a write the engine may then do
       const r = await bridge.claude(req); return checked(r, p ? [p] : []);
     };
     const decideClaude = async (req) => { const r = await bridge.claudeAsk(req); const p = req.input?.file_path ?? req.input?.path; return checked(r, p ? [p] : []); };
     const bridgeForCodex = ownRules ? {
-      codexCommand: (params) => bridge.codexCommandRelay(params),
+      codexCommand: (params) => { turn.onCommand?.(); return bridge.codexCommandRelay(params); },
       codexChanges: async (changes) => { const r = await bridge.codexChangesRelay(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     } : {
-      codexCommand: (params) => bridge.codexCommand(params),
+      codexCommand: (params) => { turn.onCommand?.(); return bridge.codexCommand(params); },
       codexChanges: async (changes) => { const r = await bridge.codexChanges(changes); return checked(r, (changes ?? []).map((c) => c?.path).filter(Boolean)); },
     };
 
@@ -360,12 +373,12 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     try {
       const deny = denyRules({ rules: ownRules ? [] : rulesFor(settings.permissionRules, root), root, protect: [dataDir, join(dataDir, 'engines')], keyFolders: keyFolders({ home: homedir() }) });
       if (id === 'claude-code') {
-        run = await startClaude({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null, rules: ownRules ? 'engine' : 'bunny', engineRules: ownRules ? cleanRules(engineSettings(settings).engines['claude-code'].rules) : null, decide: ownRules ? decideClaude : null,
+        run = await startClaude({ cwd, prompt: promptOf(turn), home, exe, auth, mode, planMode, resumeId: choice.sessionId ?? null, deny, judge: judgeClaude, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, silenceMs: 10 * 60_000, configDir: auth === 'account' ? accountConfig : null, rules: ownRules ? 'engine' : 'bunny', engineRules: ownRules ? cleanRules(engineSettings(settings).engines['claude-code'].rules) : null, decide: ownRules ? decideClaude : null,
           upstream: auth === 'local' ? budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn) : null, onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       } else {
         const sch = await schema();
         if (!fakeMode) await seedHome({ dataDir, root: turn.root, codexHome: join(home, 'codex') }); // the first command of a chat is not a 3-minute sandbox set-up (see sandbox-seed.js)
-        run = await startCodex({ cwd, prompt: turn.content, home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
+        run = await startCodex({ cwd, prompt: promptOf(turn), home, exe, auth, mode, planMode, model: pins.codex.model, bridge: bridgeForCodex, signal: control.signal, launcher, extraEnv: turn.extraEnv ?? {}, schema: fakeMode ? null : sch, silenceMs: 10 * 60_000,
           upstream: budgeted(makeUpstream({ provider: turn.provider, apiKey: turn.apiKey, model: turn.model, fake: turn.fake }), turn), onEndpointUsage: (u) => { turn.noteUsage?.(u); } });
       }
       const steps = new Map();
@@ -405,6 +418,9 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     if (turn.incognito) await removeTree(home).catch(() => {});
     return { text: assembled, ok, stoppedForCheck };
   }
+
+  /** ENGINE-SWITCH: the handover (when the chat needs one) goes in front of the person's message. It is built fresh, fenced and cleaned (engines/handover.js), and never saved in the chat. */
+  const promptOf = (turn) => (turn.handover ? `${turn.handover}\n\n${turn.content}` : turn.content);
 
   /** Can this engine follow its own rules while Bunny's engine is off? Claude Code only where the prompt-tool spike passed for the pinned version (pins.json: promptTool); Codex always asks. */
   const ownRulesOk = (id) => id === 'codex' || (id === 'claude-code' && pins['claude-code']?.promptTool === true);

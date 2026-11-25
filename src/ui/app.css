@@ -951,8 +951,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 }
 
 
-/* ==========================================================================
-   Bunny AI — app bindings  v1.0  (2026-11-15)
+/* ===================================================================   Bunny AI — app bindings  v1.0  (2026-11-15)
    Maps the class names that src/ui/*.js and the settings-style pages
    generate onto the design system. Tokens only: no raw colours here.
    Loaded after bunny-design-system.css (both are concatenated into
@@ -1300,8 +1299,7 @@ pre.code code, .terminal, .file-view, .diff-code { font-size: var(--fs-code, var
 .palette-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); }
 .modal-foot.actions { align-items: center; }
 
-/* ==========================================================================
-   SETTINGS-STYLE PAGES  (providers.html, settings.html, automation.html)
+/* ===================================================================   SETTINGS-STYLE PAGES  (providers.html, settings.html, automation.html)
    Their markup: main.page > h1, p.sub, h2, .group > .row > (.glyph) .meta-col(.name .desc) .right
    ========================================================================== */
 main.page > h1 { font-size: var(--fs-xl); font-weight: var(--fw-semibold); letter-spacing: -.01em; }
@@ -1395,8 +1393,7 @@ main.page h2 + p.sub { margin-bottom: var(--sp-6); }
 .switch input:checked::after { left: 14px; }
 
 
-/* ==========================================================================
-   ACCOUNT MENU (sidebar footer) and SETTINGS WINDOW
+/* ===================================================================   ACCOUNT MENU (sidebar footer) and SETTINGS WINDOW
    ========================================================================== */
 .brand-mark { width: 20px; height: 20px; }
 .account-wrap { position: relative; display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
@@ -1445,8 +1442,7 @@ html.embedded main.page > h2:first-of-type { margin-top: 0 !important; }
 html.embedded .group { border-radius: var(--r-lg); }
 
 
-/* ==========================================================================
-   CUSTOMIZE (connectors, skills, plugins)
+/* ===================================================================   CUSTOMIZE (connectors, skills, plugins)
    ========================================================================== */
 .cz-bar { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; margin: var(--sp-10) 0 var(--sp-6); }
 html.embedded .cz-bar { margin-top: 0; }
@@ -1533,8 +1529,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .brand .mode-switch { margin-left: auto; }
 .brand .mode-switch button { height: 24px; padding: 0 var(--sp-5); font-size: var(--fs-xs); font-weight: var(--fw-medium); }
 
-/* ==========================================================================
-   BROWSER PANEL (browser-pane.js)
+/* ===================================================================   BROWSER PANEL (browser-pane.js)
    ========================================================================== */
 .browser-pane { flex-direction: column; }
 .browser-tabbar { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4) 0; overflow-x: auto; scrollbar-width: none; }
@@ -1566,8 +1561,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 /* pre.code code is white-space: pre with its own horizontal scroll: in a permission prompt the long rule line wraps instead (390 phone) */
 .live-permission pre.code code { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
 
-/* ==========================================================================
-   PANEL LAYOUT: resize, dock left / right / bottom, fill, sidebar toggle
+/* ===================================================================   PANEL LAYOUT: resize, dock left / right / bottom, fill, sidebar toggle
    ========================================================================== */
 /* The toolbar icons choose the panel, so the panel shows one title, not a second row of tabs. */
 .side-pane-tabs .side-pane-tab:not(.active) { display: none; }
@@ -1619,8 +1613,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .app.sidebar-collapsed > .sidebar { padding: 0; overflow: hidden; border: 0; }
 @media (max-width: 760px) { .desktop-sidebar-toggle { display: none; } }
 
-/* ==========================================================================
-   ARTIFACTS PANEL v2: a list, then one artifact at a time
+/* ===================================================================   ARTIFACTS PANEL v2: a list, then one artifact at a time
    ========================================================================== */
 .artifacts { flex-direction: column; }
 .artifacts .artifact-list { flex: 1; max-height: none; border-bottom: 0; overflow-y: auto; padding: var(--sp-5) var(--sp-6) var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -1679,8 +1672,7 @@ main.page.cz-page { max-width: 920px; } /* five columns need more than the 760px
 .cz-add-menu .menu-item:hover { background: var(--hover); }
 .menu.down.cz-add-menu { left: auto; right: 0; }
 
-/* ==========================================================================
-   AUTO: job picker, model picker Auto, generated images
+/* ===================================================================   AUTO: job picker, model picker Auto, generated images
    ========================================================================== */
 .job-wrap { position: relative; }
 .job-menu { left: 0; min-width: 300px; }
@@ -2491,3 +2483,96 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .made-card .made-said { flex-basis: 100%; font-size: var(--fs-sm); color: var(--text-dim); }
 .made-card .made-said:empty { display: none; }
 @media (max-width: 520px) { .made-card .made-actions { margin-left: 0; flex-basis: 100%; } }
+
+/* ENGINE-SWITCH (v0.1.15, Design's drawing v2) and FOLDER-RULES v4: the switch menu on the engine chip, its confirm card, the divider and handover line in the transcript, the trust card, the Project instructions block */
+#engine-menu .es-head { padding: 7px 12px; font-size: var(--fs-sm); color: var(--text-dim); border-bottom: 1px solid var(--line); }
+#engine-menu .es-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+#engine-menu .es-row:last-child { border-bottom: 0; }
+#engine-menu .es-row.is-idle .es-text { opacity: .65; }
+#engine-menu .es-text { display: grid; min-width: 0; }
+#engine-menu .es-text b { font-weight: var(--fw-medium, 600); }
+#engine-menu .es-text small { color: var(--text-dim); font-size: var(--fs-xs); }
+#engine-menu .es-now { font-size: var(--fs-xs); border: 1px solid var(--ok); color: var(--ok); border-radius: 99px; padding: 0 var(--sp-3); }
+#engine-menu .es-act { font: inherit; font-size: var(--fs-sm); color: var(--accent); border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--r-md); padding: 1px var(--sp-4); cursor: pointer; }
+.engine-switch-card .es-p { margin: 0 0 var(--sp-4); }
+.msg.engine-switch { background: none; border: 0; padding: 0; margin: var(--sp-5) 0; }
+.es-divider { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--fs-sm); color: var(--text-dim); }
+.es-divider::before, .es-divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.es-handover { margin-top: var(--sp-2); }
+#fr-trust-card, .fr-card { border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--r-lg); background: var(--surface); padding: var(--sp-5) var(--sp-6); margin: 0 0 var(--sp-4); display: grid; gap: var(--sp-3); }
+.fr-card .fr-p { margin: 0; color: var(--text-dim); font-size: var(--fs-md); overflow-wrap: anywhere; }
+.fr-acts { display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center; }
+.fr-block { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar, var(--surface)); margin-top: var(--sp-4); display: grid; }
+.fr-hd { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); }
+.fr-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+.fr-row .fr-n { font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: var(--fs-sm); min-width: 0; overflow-wrap: anywhere; }
+.fr-row small, .fr-why { color: var(--text-dim); font-size: var(--fs-xs); }
+.fr-chip { font-size: var(--fs-xs); border: 1px solid var(--line); border-radius: 99px; padding: 0 var(--sp-3); color: var(--text-dim); white-space: nowrap; }
+.fr-chip.ok { color: var(--ok); border-color: var(--ok); }
+.fr-chip.warn { color: var(--warn-text, var(--warn)); border-color: var(--warn); background: var(--warn-soft); }
+.fr-note { padding: var(--sp-3) var(--sp-5); font-size: var(--fs-sm); color: var(--text-dim); }
+.fr-links { display: flex; gap: var(--sp-5); flex-wrap: wrap; padding: 0 var(--sp-5) var(--sp-4); }
+.fr-block .lnk, .fr-row .lnk, .fr-links .lnk { font: inherit; font-size: var(--fs-sm); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.fr-tabs { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.fr-tab { font: inherit; font-size: var(--fs-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: var(--r-md); padding: 2px var(--sp-4); cursor: pointer; }
+.fr-tab[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.fr-view, .fr-diff { margin: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar, var(--surface)); font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: var(--fs-sm); line-height: 1.5; padding: var(--sp-4) var(--sp-5); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.fr-l { white-space: pre-wrap; }
+.fr-l.fr-add { background: var(--ok-soft, rgba(83, 207, 155, .14)); }
+.fr-l.fr-del { background: var(--bad-soft, rgba(240, 122, 140, .14)); }
+.fr-dh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin: var(--sp-4) 0 var(--sp-2); }
+.fr-files { border: 1px solid var(--line); border-radius: var(--r-md); margin: var(--sp-3) 0; }
+.fr-files .fr-row:last-child { border-bottom: 0; }
+/* REWIND: go back further than one reply (Design's drawing "Bunny rewind") */
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent, var(--text)); text-decoration: underline; cursor: pointer; font-size: var(--fs-xs); }
+.rewind-modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.rewind-list { border: 1px solid var(--line); border-radius: var(--r-lg); overflow-y: auto; max-height: 300px; }
+.rewind-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: var(--sp-4); align-items: center; padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line); cursor: pointer; }
+.rewind-row:last-child { border-bottom: 0; }
+.rewind-row[aria-checked="true"] { background: var(--hover); }
+.rewind-dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--text-dim); display: inline-block; }
+.rewind-row[aria-checked="true"] .rewind-dot { border-color: var(--text); background: var(--text); box-shadow: inset 0 0 0 3px var(--bg); }
+.rewind-what { min-width: 0; display: grid; }
+.rewind-what b { font-weight: var(--fw-medium); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rewind-what span { color: var(--text-dim); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rewind-row.is-undone .rewind-what b { color: var(--text-dim); }
+.rewind-count { color: var(--text-dim); font-size: var(--fs-xs); white-space: nowrap; border: 1px solid var(--line); border-radius: 99px; padding: 0 var(--sp-3); }
+.rewind-empty, .rewind-note { color: var(--text-dim); font-size: var(--fs-xs); padding: var(--sp-4) var(--sp-5); }
+.rewind-preview { margin-top: var(--sp-4); }
+.rewind-result { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-sidebar); margin: var(--sp-3) 0; }
+.rewind-result-head { padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.rewind-file { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-4); padding: var(--sp-2) var(--sp-5); border-bottom: 1px solid var(--line); font-size: var(--fs-xs); align-items: center; }
+.rewind-file:last-of-type { border-bottom: 0; }
+.rewind-name { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rewind-how { color: var(--text-dim); white-space: nowrap; }
+.rewind-delete .rewind-how { color: var(--bad); }
+.rewind-changed .rewind-how, .rewind-big .rewind-how, .rewind-refused .rewind-how { color: var(--warn, var(--text-dim)); }
+.rewind-tick { display: inline-flex; gap: var(--sp-2); align-items: center; font-size: var(--fs-xs); }
+.rewind-conv { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-sm); }
+.rewind-modal .btn-danger { background: var(--bad); color: var(--on-ink, #fff); }
+.rewind-modal .btn-danger:hover { background: var(--bad); opacity: .88; }
+@media (max-width: 480px) { .rewind-count { display: none; } .rewind-row { grid-template-columns: 18px minmax(0, 1fr); } }
+
+/* AGENT-FLOW F9: Allow for this chat. The mark on a step is a small chip (no banner); the tick shows the exact rule; the Working folder card lists what is allowed, with Forget */
+.tool-call-header .tag.is-allowed { color: var(--ok-text, var(--ok)); border-color: var(--ok); background: transparent; }
+.kind-tick { display: flex; gap: var(--sp-3); align-items: flex-start; font-size: var(--fs-sm); margin-top: var(--sp-3); }
+.kind-tick input { margin-top: 3px; }
+.kind-tick .hint { display: block; }
+.kind-reason { margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--text-dim); }
+.permission-actions { flex-wrap: wrap; }
+.allowed-kinds { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-sidebar); margin-top: var(--sp-5); overflow: hidden; }
+.allowed-kinds > * { padding: var(--sp-3) var(--sp-5); }
+.allowed-kinds .allowed-head { display: flex; gap: var(--sp-3); align-items: center; border-bottom: 1px solid var(--line); }
+.allowed-kinds .allowed-head .link { margin-left: auto; }
+.allowed-kinds .allowed-row { display: flex; gap: var(--sp-3); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+.allowed-kinds .allowed-row span { min-width: 0; overflow-wrap: anywhere; }
+.allowed-kinds .link { background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; font-size: var(--fs-sm); padding: 0; }
+.allowed-kinds .hint { font-size: var(--fs-sm); color: var(--text-dim); }
+@media (max-width: 520px) { .permission-actions .btn, .permission-actions button { flex: 1 1 100%; text-align: left; } }
+
+/* F9/F10 (QA): the permission card's buttons are touch targets on a phone, and the secondary ones have a visible border so they do not read as plain text */
+@media (max-width: 600px) {
+  .permission-actions button, .permission-actions .btn { min-height: 44px; padding-inline: var(--sp-5); }
+  .permission-actions button:not(.primary), .permission-actions .btn:not(.primary) { border: 1px solid var(--line-strong, var(--line)); background: transparent; border-radius: var(--r-md); }
+  .permission-actions { gap: var(--sp-3); }
+}

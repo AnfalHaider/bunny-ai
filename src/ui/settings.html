@@ -515,7 +515,7 @@
       <div class="row" id="trusted-folders-row">
         <div class="meta-col">
           <div class="name">Trusted folders</div>
-          <div class="desc">Smart runs in Auto only in these git folders. A folder is added when you say yes on its card; remove one to be asked again. Only this window can change the list.</div>
+          <div class="desc">Smart runs in Auto only in these git folders. A folder is added when you say yes on its card; remove one to be asked again. A folder that was moved or renamed is new to Bunny and is asked about again. Only this window can change the list.</div>
           <ul id="trusted-folders" class="plain-list" aria-label="Trusted folders"></ul>
         </div>
       </div>
@@ -533,12 +533,27 @@
         </div>
         <div class="right"><select id="auto-judge-model" aria-label="Model that checks Auto actions"><option value="">This chat's own model</option></select></div>
       </div>
+      <div class="row" id="confine-row">
+        <div class="meta-col">
+          <div class="name">Confine commands to the project folder</div>
+          <div class="desc">Windows only. Commands Bunny runs in Code mode run in a low-rights mode that can only write inside the project folder: no admin, nothing installed. Bunny asks once per folder before it changes the folder's security label, and "Remove the label" on the Working folder card puts it back as it was. On in Auto is recommended. <b>Not covered:</b> reading files (a confined command can still read everything you can, Bunny's own data folder included; files encrypted with your Windows account can be decrypted by any program running as you, so this limits writes, not the reading of secrets); the network; file tools (they have their own folder checks); custom tools you made (each runs its own PowerShell script after you approve it), local connectors, other connectors, the browser and computer use; engines (Codex has its own sandbox, Claude Code on Windows has none).</div>
+        </div>
+        <div class="right">
+          <select id="confine-commands" aria-label="Confine commands to the project folder">
+            <option value="off">Off</option>
+            <option value="auto">On in Auto</option>
+            <option value="always">Always on</option>
+          </select>
+        </div>
+      </div>
       <div class="rules" id="perm-rules">
         <h3>Permission rules</h3>
         <p class="lead" id="rules-engine-off" hidden></p>
         <p class="lead">Rules are checked before the permission mode. Deny always wins, then Ask, then Allow. Plan mode still refuses edits whatever the rules say. A command pattern like <code>npm test*</code> matches what Bunny is about to run; a path pattern like <code>secrets/**</code> matches the files Bunny's own tools read or edit (not what a command does). Simple wildcards only: <code>*</code> and <code>**</code>.</p>
         <p class="lead"><b>Only from Bunny's window.</b> In the desktop app, the rules, the permission mode, connectors, schedules, hooks, skills, sign-ins, providers, automatic updates, "use another model when busy" and the other settings that decide what Bunny may do change only from this window. Anything else on this computer that tries gets "Change this in Bunny's window.", which means the request was refused and nothing was changed.</p>
         <p class="lead"><b>A guard rail, not a sandbox.</b> Command rules read the command Bunny is about to run; they do not cover custom tools, MCP or local connectors, computer-use typing, the browser tools or schedules, and a wrapper such as <code>cmd /c</code> or <code>powershell -Command</code> can hide what it runs (Bunny asks about those when you have a Deny or Ask rule).</p>
+        <p class="lead"><b>Allow for this chat.</b> When Bunny asks, the card can offer to allow that kind of action for this chat only: the same program and sub-command (such as <code>npm run</code>), edits in one folder, one connector tool, or the actions on one website. It never covers a command with more than one part, the project's top folder, files that run later, or anything that sends or buys. The list is in the Working folder card, with Forget, and it is cleared when you change folder, turn on Plan mode or switch engine. Ticking "Also save as a rule" adds one Allow rule here, and shows its exact text first.</p>
+        <p class="lead"><b>Installing.</b> Anything the AI installs (a plugin, a skill, a connector, a tool) asks on one card in every mode, listing every part and where it came from. "Install and switch on" switches on exactly what the card listed; "Install, keep off" leaves it off. Nothing in a source runs while it is installed.</p>
         <div class="tabs2" role="tablist" aria-label="Where the rules apply">
           <button type="button" class="tab" role="tab" id="rules-tab-all" aria-selected="true">All folders</button>
           <button type="button" class="tab" role="tab" id="rules-tab-folder" aria-selected="false">One folder</button>
@@ -1475,6 +1490,7 @@
     note();
     sel.addEventListener('change', async () => { note(); await save({ autoJudgeModel: sel.value }); });
   }
+  $('confine-commands').addEventListener('change', (e) => save({ confineCommands: e.target.value }));
   $('default-effort').addEventListener('change', (e) => save({ defaultEffort: e.target.value }));
 
   // ---- models ----
@@ -1864,6 +1880,8 @@
     $('instructions').value = settings.instructions ?? '';
     $('instructions-count').textContent = `${$('instructions').value.length} / 20000`;
     $('default-permission').value = settings.defaultPermissionMode ?? 'smart';
+    $('confine-commands').value = ['off', 'auto', 'always'].includes(settings.confineCommands) ? settings.confineCommands : 'off';
+    $('confine-row').hidden = !/Windows/i.test(navigator.userAgent); // Windows only
     bindJudgeModel(settings).catch(() => {});
     bindTrustedFolders().catch(() => {});
     rulesUi.load().catch(() => {});

@@ -64,6 +64,7 @@ export function configToml({ root, model, auth = 'local', mode = 'full', baseUrl
     lines.push(`model_provider = ${toml('bunny')}`, `model = ${toml(model)}`);
   }
   lines.push('check_for_update_on_startup = false', `web_search = ${toml('disabled')}`);
+  lines.push('project_doc_max_bytes = 0'); // ONE-INSTRUCTIONS: Codex reads no AGENTS.md of its own (its "project doc"); Bunny gives the folder's one set in the prompt, so the engines cannot disagree
   if (auth === 'account') lines.push(`cli_auth_credentials_store = ${toml('file')}`); // the sign-in stays in a file inside the isolated CODEX_HOME, never the system credential store
   lines.push('');
   lines.push('[analytics]', 'enabled = false', '');

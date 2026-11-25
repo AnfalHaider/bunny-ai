@@ -42,7 +42,8 @@ async function openBar(page, { scheme = 'light', config = {}, ask = 'ok' } = {})
       openInBunny: async (target) => { note('open', target ?? null); return { ok: true }; },
       resize: async (h) => { note('resize', h); return { ok: true }; },
       onAnswer: (fn) => { window.__handler = fn; return () => {}; },
-      init: async () => cfg,
+      init: async () => window.__cfg ?? cfg,
+      onRefresh: (fn) => { window.__refresh = fn; return () => {}; },
       close: async () => { note('close'); return { ok: true }; },
       escHandled: async () => { note('escHandled'); return { ok: true }; },
       onEscape: (fn) => { window.__esc = fn; return () => {}; },
@@ -437,4 +438,29 @@ test('a restart drops the first reply and shows that Bunny is looking it up; the
   await expect(page.locator('#ans')).toContainText('weather.example');
   await expect(page.locator('#meta')).toHaveText('Answered by ernie · web search');
   await expect(page.locator('#card')).toBeHidden();
+});
+
+// v0.1.14.2 (QA's audit at e2ec6ec6)
+test('Bunny\'s own words when Search this PC is off: the answer is Bunny\'s sentence and the card has the way to the switch; no model line, never "open the full app"', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: false } });
+  await page.locator('#text').fill('find my tax returns file');
+  await page.locator('#go').click();
+  await page.evaluate(() => { window.__emit({ type: 'delta', text: 'I cannot see files. Open the full Bunny app.' }); window.__emit({ type: 'restart' }); window.__emit({ type: 'delta', text: 'Search this PC is off. Turn it on in Settings › Capabilities to let Bunny look for files on this computer. Nothing was searched.' }); window.__emit({ type: 'done', model: 'm', finished: true, own: 'pc-off' }); });
+  await expect(page.locator('#ans')).not.toContainText('open the full');
+  await expect(page.locator('#card')).toContainText('Search this PC is off');
+  await expect(page.locator('#meta')).toBeHidden();
+  await page.locator('#card button', { hasText: 'Open Bunny settings' }).click();
+  expect(await calls(page, 'open')).toEqual([['open', 'search-settings']]);
+});
+
+test('a kept bar that is shown again reads Bunny\'s settings again: Search this PC turned on meanwhile appears in the + menu and the model line', async ({ page }) => {
+  await openBar(page, { config: { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: false } });
+  await page.locator('#text').fill('x');
+  await expect(page.locator('#modelline')).toHaveText('Answers with m · web search');
+  await expect(page.locator('#pc-item')).toBeHidden();
+  await page.evaluate(() => { window.__cfg = { theme: 'system', font: 'system', motion: '', model: 'm', pcSearch: true }; window.__refresh(); }); // the main process: "the bar was shown again"
+  await expect(page.locator('#modelline')).toHaveText('Answers with m · web search and files on this PC');
+  await page.locator('#plus').click().catch(() => {});
+  await expect(page.locator('#pc-item')).toBeAttached();
+  expect(await page.locator('#pc-item').evaluate((e) => e.hidden)).toBe(false);
 });

@@ -127,7 +127,7 @@ for (const [kind, git] of [['git', true], ['plain', false]]) {
       await pane.locator('.checkpoint-card').first().locator('.change-row').click(); ok((await pane.locator('.diff-line.add').count()) > 0, 'no added lines in the diff'); ok((await pane.locator('.diff-line.del, .diff-line.remove').count()) >= 0, '');
       const edited = await pane.locator('.checkpoint-card').first().locator('.change-row .path').innerText(); eq(edited.trim(), 'src/greet.js', 'newest card path');
       ok((await over(page)) <= 1, 'horizontal overflow ' + (await over(page)));
-      await pane.locator('.checkpoint-card').nth(1).getByRole('button', { name: 'Undo to here' }).click(); await page.waitForTimeout(1200);
+      await pane.locator('.checkpoint-card').nth(1).getByRole('button', { name: 'Rewind to before this' }).click(); await page.locator('.rewind-modal').getByRole('button', { name: 'Go back', exact: true }).click(); await page.waitForTimeout(1200);
       ok(!existsSync(join(dir, 'note.txt')), 'note.txt still on disk after Undo'); return flat.join(' | ').slice(0, 160);
     });
     await row(`FI-${tag}`, `Files (${tag}): tree, a file opens read-only with line numbers, Bunny's edit is marked`, async () => {

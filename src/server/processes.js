@@ -19,7 +19,8 @@ export function createProcessStore() {
   const procs = new Map();
   let counter = 0;
 
-  function start({ command, cwd, owner }) {
+  /** F13: `launch` ({ file, args, env } from confine.js) starts the program through the low-integrity helper instead of PowerShell. */
+  function start({ command, cwd, owner, launch = null }) {
     const running = [...procs.values()].filter((p) => p.owner === owner && p.exitCode === null);
     if (running.length >= MAX_RUNNING) {
       throw new Error(`${MAX_RUNNING} programs are already running in this chat. Stop one first.`);
@@ -28,12 +29,12 @@ export function createProcessStore() {
     const id = `p${counter}`;
     // W4-1d: run it under procGuard, which stops the program's whole tree if this server ever disappears. It is detached so Windows does not end it together with the server (a job object would, before it could clean up).
     const win = process.platform === 'win32';
-    const inner = win
+    const inner = launch ? [launch.file, ...launch.args] : win
       ? ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', `${POWERSHELL_PRELUDE}
 ${translateChains(command)}`]
       : ['sh', '-c', command];
     const child = spawn(process.execPath, [GUARD, String(process.pid), JSON.stringify(inner)],
-      { cwd, windowsHide: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(win ? NON_INTERACTIVE : {}), ELECTRON_RUN_AS_NODE: '1' } });
+      { cwd, windowsHide: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...(launch ? launch.env : { ...process.env, ...(win ? NON_INTERACTIVE : {}) }), ELECTRON_RUN_AS_NODE: '1' } });
     child.stdin?.on('error', () => {}); // held open on purpose: its end tells the guard this server is gone
     const p = { id, command, cwd, owner, child, out: '', read: 0, exitCode: null, started: Date.now() };
     const add = (chunk) => {
