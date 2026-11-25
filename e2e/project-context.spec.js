@@ -131,10 +131,12 @@ test('/remember in a project chat asks "for this project, or everywhere?" and st
   const project = await (await request.post('/api/projects', { data: { name: 'Carrot shop' } })).json();
   const chat = await (await request.post('/api/sessions', { data: { title: 'Chat', projectId: project.id } })).json();
   await page.goto(`/?s=${chat.id}`);
+  await page.setViewportSize({ width: 360, height: 740 });
   await page.locator('#input').fill('/remember Prices are in cents.');
   await page.locator('#send').click();
   const dialog = page.locator('.pm-modal');
   await expect(dialog).toContainText('Remember for this project, or everywhere?');
+  for (const btn of await dialog.getByRole('button').all()) expect((await btn.boundingBox()).height).toBeGreaterThanOrEqual(43.5); // 44 px buttons on a phone
   await dialog.getByRole('button', { name: 'For Carrot shop' }).click();
   await expect.poll(async () => (await (await request.get(`/api/projects/${project.id}/memory`)).json()).items.map((m) => m.text)).toEqual(['Prices are in cents.']);
   await expect(page.locator('#input')).toHaveValue('');

@@ -120,3 +120,25 @@ test('project memory routes: add, edit, delete and clear; a secret-looking item 
   assert.equal(isWindowOnlyRoute('PATCH', `/api/projects/${id}`, { useMemory: false }), true);
   assert.equal(isWindowOnlyRoute('PATCH', `/api/sessions/${id}/setting/projectContext`), true);
 });
+
+test('P4 in "What this chat was given" is truthful: "not followed yet" before Follow, then the frozen copy with its size and exact text', async (t) => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { base, project } = await setup(t);
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-p4-'));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  await writeFile(join(folder, 'AGENTS.md'), 'Always use British spelling.');
+  const chat = (await post(base, '/api/sessions', { title: 'p4', projectId: project.id, workMode: 'code', folder })).body;
+  const p4 = async () => (await json(base, `/api/sessions/${chat.id}/project-context`)).body.parts[3];
+  const before = await p4();
+  assert.equal(before.state, 'not followed yet');
+  assert.equal(before.size, 0);
+  const diff = (await json(base, `/api/sessions/${chat.id}/folder-rules/diff`)).body;
+  const shas = Object.fromEntries((diff.added ?? []).map((f) => [f.name, f.sha256]));
+  assert.equal((await post(base, `/api/sessions/${chat.id}/folder-rules/follow`, { shas })).status, 200);
+  const after = await p4();
+  assert.equal(after.state, '');
+  assert.ok(after.size > 0, 'the frozen copy has a size');
+  assert.match(after.text, /Always use British spelling\./);
+});

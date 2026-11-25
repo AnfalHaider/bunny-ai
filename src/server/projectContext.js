@@ -115,7 +115,7 @@ export function assemble({ standing = '', project = null, recent = '', folderTex
   const mem = p3on ? memoryPart(project, now) : { text: '', count: 0, left: 0 };
   add(3, 'What you keep for this project', mem.text, !project ? 'empty' : !chatOn ? 'off (this chat)' : !memoryOn || project.useMemory === false ? 'off' : mem.text ? '' : 'empty', { items: mem.count, leftOut: mem.left });
   const p4on = Boolean(project) && chatOn;
-  add(4, "The folder's instruction files", p4on ? String(folderText ?? '') : '', !p4on ? (project ? 'off (this chat)' : 'empty') : folderText ? '' : 'sent with the Working folder card (FOLDER-RULES)');
+  add(4, "The folder's instruction files", p4on ? String(folderText ?? '') : '', !p4on ? (project ? 'off (this chat)' : 'empty') : folderText ? '' : 'not followed yet');
   const p5on = Boolean(project) && chatOn && !incognito && project.shareRecent !== false;
   add(5, 'Recent work in this project', p5on ? String(recent ?? '') : '', incognito ? 'never in an incognito chat' : !chatOn ? 'off (this chat)' : project?.shareRecent === false ? 'off' : recent ? '' : 'empty');
 

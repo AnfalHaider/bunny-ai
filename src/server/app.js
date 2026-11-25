@@ -372,7 +372,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
    * PROJECT-CONTEXT: what a chat in a project is given (P1 to P5). P5 is built once, at the start of a chat, and kept with it; `freeze` builds it when the chat has none yet.
    * @returns {Promise<{project: object|null, built: object}>}
    */
-  const projectContextFor = async (session, { freeze = false } = {}) => {
+  const projectContextFor = async (session, { freeze = false, folderText = '' } = {}) => {
     const project = session.projectId ? await projects.get(session.projectId) : null;
     let recent = typeof session.projectRecent === 'string' ? session.projectRecent : null;
     if (project && recent === null) {
@@ -390,7 +390,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
       if (freeze) await sessions.update(session.id, { projectRecent: recent });
     }
-    const built = assembleProjectContext({ standing: settings.instructions, project, recent: recent ?? '', folderText: '', chatOn: session.projectContext !== false, memoryOn: settings.memoryEnabled !== false, incognito: Boolean(session.incognito) });
+    const built = assembleProjectContext({ standing: settings.instructions, project, recent: recent ?? '', folderText, chatOn: session.projectContext !== false, memoryOn: settings.memoryEnabled !== false, incognito: Boolean(session.incognito) });
     return { project, built };
   };
   // FOLDER-RULES + ONE-INSTRUCTIONS (v0.1.15): the folder's instructions files, ONE set for every engine (see folderRules.js). FROZEN BY CONTENT (Security's replacement for PG-4's instructions part): at Follow them the exact
@@ -1211,7 +1211,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (ctxMatch && method === 'GET') {
       const session = await sessions.get(ctxMatch[1]);
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
-      const { project, built } = await projectContextFor(session);
+      // P4 as it really is: the followed folder's FROZEN copy (the text FOLDER-RULES sends), or nothing before Follow. Shown here only; it is sent by FOLDER-RULES, not twice.
+      let folderText = '';
+      try { const set = session.folder || session.worktree ? await followedFolderRules(session, {}, await effectiveRoot(session)) : null; if (set) folderText = bunnyNote(set.files); } catch { folderText = ''; }
+      const { project, built } = await projectContextFor(session, { folderText });
       const device = req.bunnyRemote ?? req.bunnyDevice;
       return sendJson(res, 200, { project: project ? { id: project.id, name: project.name } : null, enabled: session.projectContext !== false, cut: built.cut, size: built.size, parts: built.parts.map((p) => ({ n: p.n, title: p.title, size: p.size, state: p.state, ...(device && req.bunnyRemote ? {} : { text: p.text }) })) });
     }
