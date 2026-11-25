@@ -1,6 +1,6 @@
 // The unit tests, in two steps (agreed with the Chief of Staff, 2026-11-17):
 //   1. every test file except the guard and kit files, in parallel, exactly as `node --test test/` ran them;
-//   2. the guard and kit files (test/guard-*.test.js, test/kit-next-*.test.js), one at a time and with CLAUDE_PROJECT_DIR unset.
+//   2. the guard and kit files (test/guard-*.test.js, test/kit-next-*.test.js) and the two heavy ones (install-anywhere, confine), one at a time and with CLAUDE_PROJECT_DIR unset.
 // Why: those files start the real guard, whose own 6 second deadline refuses commands when the PC is busy with the other test files,
 // and with CLAUDE_PROJECT_DIR set to a worktree the guard judges the tests' throwaway repositories by that worktree.
 // Nothing is skipped and no assertion or deadline is changed: the same files run, in the same way as before, apart from the order.
@@ -36,7 +36,7 @@ function files(dir) {
 }
 
 const all = files(testDir).map((f) => (f.startsWith(root) ? relative(root, f).replace(/\\/g, '/') : f));
-const isGuardFile = (f) => /^test\/(guard-[^/]*|kit-next-[^/]*)\.test\.js$/.test(f);
+const isGuardFile = (f) => /^test\/(guard-[^/]*|kit-next-[^/]*|install-anywhere|confine|confine-run)\.test\.js$/.test(f); // (install-anywhere builds a 5,000-file archive and the confine files compile and run a Windows helper: both ran out of time next to the whole parallel group)
 const guard = all.filter(isGuardFile);
 const others = all.filter((f) => !isGuardFile(f));
 

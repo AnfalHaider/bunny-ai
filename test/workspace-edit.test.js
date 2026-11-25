@@ -61,7 +61,7 @@ test('multi_edit is all or nothing: a failing second edit leaves the file untouc
   assert.equal(read(), 'keep this\nand this');
 });
 
-test('multi_edit: one checkpoint covers the file, and one Undo restores it', async (t) => {
+test('multi_edit: one checkpoint covers the file, however many edits', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'bunny-edit-'));
   const store = mkdtempSync(join(tmpdir(), 'bunny-cp-'));
   t.after(() => { rmSync(root, { recursive: true, force: true }); rmSync(store, { recursive: true, force: true }); });
@@ -76,8 +76,7 @@ test('multi_edit: one checkpoint covers the file, and one Undo restores it', asy
   assert.equal(readFileSync(join(root, 'f.txt'), 'utf8'), 'A B C');
   const listed = await cps.list(sessionId);
   assert.equal(listed.length, 1, 'one checkpoint');
-  await cps.restore(sessionId, listed[0].id);
-  assert.equal(readFileSync(join(root, 'f.txt'), 'utf8'), 'a b c');
+  // (putting the file back is the rewind's job now: test/rewind.test.js covers restoring a checkpoint)
 });
 
 test('multi_edit: nothing is captured when it fails', async (t) => {

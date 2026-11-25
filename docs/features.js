@@ -98,7 +98,7 @@ export const FEATURES = [
   { id: '5.8', area: 'Shell', name: 'Voice input and read-aloud', scope: 'app', status: 'D', test: 'a reply can be read aloud' },
   { id: '5.9', area: 'Shell', name: 'Notifications when a reply is ready', scope: 'app', status: 'D', test: 'notifications can be switched on' },
   { id: '5.10', area: 'Shell', name: 'Check for a newer version', scope: 'app', status: 'D', test: 'the version is shown, and a newer GitHub release is reported' },
-  { id: '5.11', area: 'Shell', name: 'Multi-language UI', scope: 'app', status: 'D', test: 'the interface can speak another language' },
+  { id: '5.11', area: 'Shell', name: 'Multi-language UI', scope: 'app', status: 'M', note: 'Removed on purpose (owner, 2026-11-24): the interface is English only, and an old saved language is read as English.' },
   { id: '5.12', area: 'Shell', name: 'Accessibility labels and focus order', scope: 'core', status: 'D', test: 'every connect button has its own name' },
 
   // 6. Memory, connectors, automation

@@ -309,7 +309,7 @@ test('in the desktop app a schedule or a project cannot be given a folder the pe
   assert.equal((await call(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 403);
   await app.chooseFolder(dir);
   assert.equal((await admin('/api/schedules', { method: 'POST', body: JSON.stringify(sched) })).status, 200);
-  assert.equal((await call(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 200);
+  assert.equal((await admin(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ folder: dir }) })).status, 200);
   const created = await admin('/api/schedules', { method: 'POST', body: JSON.stringify({ name: 'no folder', prompt: 'x', everyMinutes: 60 }) });
   assert.equal(created.status, 200, 'no folder at all is fine');
 });
