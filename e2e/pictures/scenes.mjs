@@ -7,7 +7,7 @@
 //   api.seed(chat)     create a chat with messages (and, for helpers, a parent): returns the chat
 //   api.open(url)      go to a page of the app and wait for the fonts
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { heldProvider } from './held-provider.mjs';
 
@@ -46,6 +46,8 @@ const PICTURE_ROOT = join(`${process.env.SystemDrive ?? 'C:'}${sep}`, 'bunny-pic
 /** An invented project folder with a fixed path (so the page shows the same words on every PC), made again each time. */
 function project(name, files) {
   const root = join(PICTURE_ROOT, name);
+  // a fixed folder at the drive's root could have been made beforehand (or be a link) by someone else on this PC: never write or delete through a link
+  for (const dir of [PICTURE_ROOT, root]) { try { if (lstatSync(dir).isSymbolicLink()) throw new Error(`${dir} is a link: remove it before drawing the pictures`); } catch (err) { if (err?.code !== 'ENOENT') throw err; } }
   rmSync(root, { recursive: true, force: true });
   for (const [rel, text] of Object.entries(files)) { const f = join(root, rel); mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, text); }
   return root;
