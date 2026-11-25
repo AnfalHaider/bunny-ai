@@ -10,6 +10,7 @@
  * Nothing here decides what the model may DO: P3 and P5 are text for the model to read, never a permission, a rule or a setting (§6, PC-3). P5 never goes to F11's judge.
  */
 import { holdsPcFileText } from './pcTools.js';
+import { holdsPcText } from './engines/handover.js';
 import { looksSecret } from './secretLike.js';
 
 export const CAPS = Object.freeze({
@@ -39,7 +40,7 @@ const safePiece = (text, max) => { const t = cleanPiece(text, max); return t && 
 /** PC-1: a chat that ever touched files from this PC. */
 export function usedPcFiles(session) {
   const msgs = Array.isArray(session?.messages) ? session.messages : [];
-  return holdsPcFileText(msgs) || msgs.some((m) => m?.pcSources || m?.pcResults || m?.noAutoLoad || /search_pc|read_pc_file/.test(String(m?.tool ?? '')));
+  return holdsPcFileText(msgs) || msgs.some(holdsPcText); // one rule for every PC case (engines/handover.js): sources, results, taint, noAutoLoad, the "Searched this PC" and "Read N files" steps, the file-text marker
 }
 
 /** P3: the project's memory as one system message. Entries done more than 7 days ago have left; the newest come first when it has to be cut. */
