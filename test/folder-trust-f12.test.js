@@ -246,3 +246,45 @@ test('F12-6 live: with the default set to auto, a message from a device in a cha
   });
   assert.equal(sawCard, true, 'a command from a device shows a card even though the default is auto');
 });
+
+test('F12-6 live: with the default set to auto, a message from a device in a chat with NO stored mode (cleared by the window) runs as Ask: run_command shows a card', async (t) => {
+  const sse = (delta) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`;
+  const provider = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.url.endsWith('/models')) { res.writeHead(200, jsonH); res.end('{"data":[{"id":"gpt-4o"}]}'); return; }
+      const body = JSON.parse(raw);
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const told = body.messages.filter((m) => m.role === 'tool');
+      res.end(sse(told.length ? { content: 'done' } : { tool_calls: [{ index: 0, id: 'c1', function: { name: 'run_command', arguments: JSON.stringify({ command: 'echo hi' }) } }] }));
+    });
+  });
+  await new Promise((r) => provider.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => { provider.closeAllConnections?.(); provider.close(r); }));
+  const d = await device(t, 'everything', { fake: false });
+  const win = (path, method, body) => fetch(`${d.base}${path}`, { method, headers: jsonH, body: JSON.stringify(body) });
+  await win('/api/providers/openai/connect', 'POST', { apiKey: 'sk-test-000000000000', baseUrl: `http://127.0.0.1:${provider.address().port}/v1` });
+  assert.equal((await win('/api/settings', 'PUT', { defaultPermissionMode: 'auto', autoJudgeEnabled: false })).status, 200);
+  const folder = await mkdtemp(join(tmpdir(), 'bunny-f12-dev-run-'));
+  const made = await (await win('/api/sessions', 'POST', { title: 'a window chat with its mode cleared' })).json();
+  assert.equal((await fetch(`${d.base}/api/sessions/${made.id}/setting/permissionMode`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: null }) })).status, 200);
+  // NOTE: the session store fills a missing or cleared mode with 'ask' when it reads a chat, so through the API the route's own fallback line is not reachable; this test proves the outcome (Ask), the source line is the second lock.
+  for (const [k, v] of [['folder', folder], ['workMode', 'code']]) await fetch(`${d.base}/api/sessions/${made.id}/setting/${k}`, { method: 'PATCH', headers: jsonH, body: JSON.stringify({ value: v }) });
+  const url = new URL(d.url);
+  const sawCard = await new Promise((resolve, reject) => {
+    const body = JSON.stringify({ content: 'run echo hi', providerId: 'openai', model: 'gpt-4o', workMode: 'code' });
+    const req = http.request({ host: url.hostname, port: url.port, path: `/api/sessions/${made.id}/messages`, method: 'POST', headers: { ...d.w, 'content-type': 'application/json' } }, (res) => {
+      let text = ''; let done = false;
+      res.on('data', async (c) => {
+        text += c;
+        const m = !done && /event: permission\ndata: (.*)\n/.exec(text);
+        if (m) { done = true; const card = JSON.parse(m[1]); await win(`/api/sessions/${made.id}/permission/${card.id}`, 'POST', { allowed: false }); }
+      });
+      res.on('end', () => resolve(done));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+  assert.equal(sawCard, true, 'a command from a device shows a card even though the default is auto');
+});
