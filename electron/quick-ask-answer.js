@@ -183,7 +183,7 @@ export function createAnswerer({ adminFetch, emit, onFinishedDetached = () => {}
       if (round === 0 && refused && !realLocalAction(text)) {
         if (isFileQuestion(text)) {
           // about files on this PC: the person is told in Bunny's own words, or Bunny searches itself; the model's "open the full app" is never the answer
-          if (settingsNow.pcSearchEnabled !== true) { held = ''; own('pc-off', PC_OFF_TEXT); return { ok: true }; }
+          if (settingsNow.pcSearchEnabled === false) { held = ''; own('pc-off', PC_OFF_TEXT); return { ok: true }; }
           if (!pc && settingsNow.pcSearchBarAuto === false) { held = ''; own('pc-menu', PC_MENU_TEXT); return { ok: true }; }
           if (searchTermsOf(text).length) { retryKind = 'pc'; out({ type: 'restart' }); continue; }
         } else if (webCanAnswer(text)) { retryKind = 'web'; out({ type: 'restart' }); continue; }
