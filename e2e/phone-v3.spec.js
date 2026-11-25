@@ -107,7 +107,7 @@ for (const w of [360, 390, 412]) {
     await expect(page.locator('.settings-body')).toBeHidden();
     const rows = page.locator('#settings-nav-list [data-section]');
     // SETTINGS-OVERHAUL (approved drawing): its 12 sections (Profile, Appearance, Memory and instructions, Models, Capabilities, Quick ask, Permissions, Code chats, Engines, Desktop app, Usage and data, About) plus the three pages the drawing left as they were (Providers and abilities, Customize, Automation). Language is gone (English only).
-    expect((await rows.allInnerTexts()).map((t) => t.trim())).toEqual(['Profile', 'Usage and data', 'Appearance', 'Memory and instructions', 'Quick ask', 'Capabilities', 'Providers and abilities', 'Models', 'Customize', 'Automation', 'Permissions', 'Code chats', 'Engines', 'Desktop app', 'About']);
+    expect((await rows.allInnerTexts()).map((t) => t.trim())).toEqual(['Profile', 'Appearance', 'Memory and instructions', 'Quick ask', 'Capabilities', 'Providers and abilities', 'Models', 'Customize', 'Automation', 'Permissions', 'Code chats', 'Engines', 'Desktop app', 'Usage and data', 'About']);
     for (const h of await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(45.5);
     for (const b of await rows.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.right]; }))) { expect(b[0]).toBeGreaterThanOrEqual(0); expect(b[1]).toBeLessThanOrEqual(w + 0.5); }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
