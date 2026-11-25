@@ -26,6 +26,8 @@ async function begin(page, request, entry) {
   await request.put('/api/settings', { data: {
     displayName: 'Sam', callName: 'Sam', theme: entry.theme, interfaceFont: 'inter', responseFont: 'inter', codeFont: 'Bunny JetBrains Mono', motion: 'reduced',
     transcriptSize: 'medium', transcriptWidth: 'narrow', language: 'en', codeThemeLight: 'bunny-light', codeThemeDark: 'bunny-dark', autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true,
+    // the shipped defaults of what a scene may have changed (resetProfile does not touch settings, so one scene's change would reach the next picture): the Auto check on, instruction files followed and not yet trusted, Bunny's own engine
+    autoJudgeEnabled: true, folderRulesEnabled: true, folderRulesTrusted: [], engine: 'bunny', useBunnyEngine: true,
   } });
   await page.clock.setFixedTime(new Date(FIXED_TIME));
   // the app's own random picks (the working-line words, greetings) come from a fixed sequence: the same screen every run
