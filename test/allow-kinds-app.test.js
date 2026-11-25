@@ -114,11 +114,11 @@ test('a folder change clears what was allowed; PATCH cannot write the list', asy
   void folder;
 });
 
-test('a command: the first "node -v" asks and offers its exact kind; the same command again does not ask, a different one does; a moved npm form is exact only', async (t) => {
+test('a command: the first "node -e 1" asks and offers its exact kind; the same command again does not ask, a different one does; a moved npm form is exact only', async (t) => {
   const { base, session } = await setup(t, [
-    { name: 'run_command', args: { command: 'node -v' } },
-    { name: 'run_command', args: { command: 'node -v' } },
-    { name: 'run_command', args: { command: 'node -p 1' } },
+    { name: 'run_command', args: { command: 'node -e 1' } },
+    { name: 'run_command', args: { command: 'node -e 1' } },
+    { name: 'run_command', args: { command: 'node -e 2' } },
   ]);
   const cards = [];
   await chat(base, session.id, 'run three commands', async (event, data) => {
@@ -127,14 +127,14 @@ test('a command: the first "node -v" asks and offers its exact kind; the same co
     await post(base, `/api/sessions/${session.id}/permission/${data.id}`, data.kind && cards.length === 1 ? { allowed: true, kind: true } : { allowed: true });
   });
   assert.equal(cards.length, 2, 'the repeat did not ask; the different command did');
-  assert.match(cards[0].kind.button, /node -v/); assert.match(cards[0].kind.button, /exact command/);
-  assert.match(cards[1].kind.button, /node -p 1/);
+  assert.match(cards[0].kind.button, /node -e 1/); assert.match(cards[0].kind.button, /exact command/);
+  assert.match(cards[1].kind.button, /node -e 2/);
   const { body: list } = await json(base, `/api/sessions/${session.id}/allow-kinds`);
   assert.equal(list.kinds.length, 1);
 });
 
 test('a compound command gets no kind and the fixed reason; a device-style kind answer is not accepted without an offered kind', async (t) => {
-  const { base, session } = await setup(t, [{ name: 'run_command', args: { command: 'node -v && node -v' } }]);
+  const { base, session } = await setup(t, [{ name: 'run_command', args: { command: 'node -e 1 && node -e 1' } }]);
   const cards = [];
   await chat(base, session.id, 'run it', async (event, data) => {
     if (event !== 'permission') return;

@@ -53,6 +53,7 @@ export const REASONS = Object.freeze({
   pcText: 'this chat has read text from your PC files, so it asks every time',
   scheduled: 'a scheduled run has nobody to ask',
   noHost: "Bunny could not tell which site this page is on",
+  moved: 'the page moved to another site since it was read',
 });
 export const reasonLine = (key) => (REASONS[key] ? `Asked every time: ${REASONS[key]}` : '');
 export const DEVICE_LINE = '"For this chat" can be given only on the PC.';
@@ -186,7 +187,7 @@ export const computerKind = () => ({ kind: { type: 'computer', key: 'computer', 
 export function browserKind(host, { name, parsed } = {}) {
   if (name === 'browser_capture' || (name === 'browser_type' && parsed?.submit === true)) return { kind: null, reason: 'sends' };
   const h = String(host ?? '').toLowerCase();
-  if (!/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(h)) return { kind: null, reason: 'noHost' };
+  if (!/^([a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?|\[[0-9a-f:]{2,45}\])$/.test(h)) return { kind: null, reason: 'noHost' }; // a name, an IPv4 literal, localhost, or a bracketed IPv6 literal: the exact host only
   return { kind: { type: 'browser', key: h, label: `Actions on ${h}`, button: `Allow actions on ${h} in this chat` }, reason: null };
 }
 export const browserMatches = (kind, host) => kind?.type === 'browser' && kind.key === String(host ?? '').toLowerCase();

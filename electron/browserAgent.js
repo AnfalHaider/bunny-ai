@@ -253,7 +253,8 @@ async function inView(contents, action, args = {}, world = null) {
  */
 export async function controlView(contents, name, action, args = {}, world = null) {
   if (!/^bunny-tab-\d+$/.test(String(name)) || !ACTIONS.has(action)) return { error: 'Not a browser action' };
-  if (action === 'read') return { page: await inView(contents, 'read', {}, world) };
+  // F9 (QA): the address the person is looking at comes from the main process (webContents.getURL()), not from the page and never from the model: a panel's browser kind is made from it
+  if (action === 'read') return { page: await inView(contents, 'read', {}, world), url: String(contents.getURL?.() ?? '') };
   if (action === 'inspect' || action === 'capture') return { inspected: await inView(contents, action, action === 'inspect' ? { what: args.what, selector: args.selector } : {}, world) };
   if (action === 'scroll') {
     await inView(contents, 'scroll', { direction: args.direction }, world);
@@ -261,6 +262,12 @@ export async function controlView(contents, name, action, args = {}, world = nul
     return { page: await inView(contents, 'read', {}, world) };
   }
   if (action === 'click' || action === 'type') {
+    // F9-10: the page may have moved on since Bunny last looked: the host is compared with the view's own address right before acting, and a different one means nothing is done
+    if (args.expectHost) {
+      let now = '';
+      try { now = new URL(String(contents.getURL?.() ?? '')).hostname.toLowerCase(); } catch { now = ''; }
+      if (now !== String(args.expectHost).toLowerCase()) return { moved: true, host: now, error: `The page is now on ${now || 'another page'}, not ${String(args.expectHost).slice(0, 100)}, so nothing was done.` };
+    }
     const pageArgs = action === 'click' ? { ref: args.ref } : { ref: args.ref, text: String(args.text ?? '').slice(0, 5000), submit: Boolean(args.submit) };
     const done = await inView(contents, action, pageArgs, world);
     if (done?.error) return done;

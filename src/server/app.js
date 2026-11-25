@@ -3193,7 +3193,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         res.once('close', () => pendingBrowser.get(rid)?.resolve({ error: 'The chat was closed.' }));
         send('browser', { id: rid, action, args: parsed });
       });
-      const runBrowserTool = async (name, parsed) => {
+      const runBrowserTool = async (name, parsed, expectHost = null) => {
         // W6-10: a saved copy of the page goes into the chat's folder, through the workspace (the person's rules and checkpoints apply)
         if (name === 'browser_capture') {
           if (!workspace) throw new Error('Choose a folder for this chat first.');
@@ -3207,7 +3207,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           const saved = await capturePage({ info, workspace, authorize, fetchLimited: (url, o) => fetchLimited(url, { ...o, signal: controller.signal }), signal: controller.signal });
           return { text: saved.text, attachments: [], images: [] };
         }
-        const answer = await askBrowser(name.replace(/^browser_/, ''), parsed);
+        let answer = await askBrowser(name.replace(/^browser_/, ''), { ...parsed, ...(expectHost ? { expectHost } : {}) });
+        if (answer?.moved) { // F9-10: the page is on another site than the one that was allowed: nothing was done
+          const shown = String(answer.host ?? '').slice(0, 100);
+          if (!shown) return { text: 'The page is not on a website now, so nothing was done.', attachments: [], images: [] }; // about:blank, file: and the like: no retry is offered
+          const again = await askPermission(describeBrowserTool(name, parsed), `The page moved to ${shown} since it was read, so nothing was done. Do it there?`, { reason: reasonLine('moved') });
+          if (!again) return { text: 'The page moved to another site, and the person did not allow it there. Read the page again, and ask them before going on.', attachments: [], images: [] };
+          // the retry carries the host the person was shown: if the page moves again, it stops there and does not ask a second time
+          answer = await askBrowser(name.replace(/^browser_/, ''), { ...parsed, expectHost: shown });
+          if (answer?.moved) return { text: 'The page moved again, so nothing was done. Read the page again before going on.', attachments: [], images: [] };
+        }
         let attachments = [];
         // one picture (a screenshot), or several (W6-11: one comparison picture per width)
         const pictures = (Array.isArray(answer?.images) && answer.images.length ? answer.images : [answer?.image]).filter((p) => typeof p === 'string' && p.startsWith('data:image/png;base64,')).slice(0, 3);
@@ -4032,12 +4041,14 @@ Asked because of your rule ${describeRule(v)}.`)) { said.add(host); approveSite(
             send('tool', { tool: summary, status: 'denied' });
             return planRefusal(name);
           }
+          let expectHost = null; // F9-10: the host the person was asked about (or that a kind covers): checked again by the main process right before the action
           let browserAsk = needsOk(BROWSER_TOOL_RISK[name], name, parsed);
           let browserWhy = '';
           if (!browserAsk) { const judged = await autoCheck(summary, name, parsed, BROWSER_TOOL_RISK[name]); if (judged.stop) return judged.stop; if (judged.card) { browserAsk = true; browserWhy = judged.card; } }
           if (browserAsk) {
             // F9-3: the host is what the panel reports for its CURRENT page now, never one from the call's arguments
-            const host = kindsActive && ['browser_click', 'browser_type'].includes(name) ? await askBrowser('read', {}).then((a) => { try { return new URL(String(a?.url ?? '')).hostname; } catch { return null; } }, () => null) : null;
+            const host = kindsActive && ['browser_click', 'browser_type'].includes(name) ? await askBrowser('read', {}).then((a) => { try { const u = new URL(String(a?.url ?? '')); return /^https?:$/.test(u.protocol) ? u.hostname : null; } catch { return null; } }, () => null) : null;
+            expectHost = host;
             const f9 = await f9Judge({ name, parsed, host });
             if (f9.covered) kindNotes.set(summary, f9.covered);
             const allowed = f9.covered ? true : await askPermission(summary, browserWhy, f9.opts);
@@ -4054,7 +4065,7 @@ Asked because of your rule ${describeRule(v)}.`)) { said.add(host); approveSite(
           let attachments = [];
           let seenImages = [];
           try {
-            ({ text: result, attachments, images: seenImages } = await runBrowserTool(name, parsed));
+            ({ text: result, attachments, images: seenImages } = await runBrowserTool(name, parsed, expectHost));
           } catch (err) {
             status = 'failed';
             result = `The browser action failed: ${err.message}`;
