@@ -2,6 +2,132 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-26 - Published v0.1.15
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-25 22:07) "update the release and push when done"; the question as asked ("Release v0.1.15 without asking again, once the final gate passes, QA's walk passes and all six sign-offs are in? ... If anything fails or a real bug turns up, I stop and ask you."); the answer "Yes, release v0.1.15 when all pass (Recommended)". Shas: 80626b03 (merges gated 7c81da08), main 2fe1803a = that plus docs only. Gate 12/12 at 80626b03 with its results listed; six sign-offs at 80626b03. Accepted because the answer names v0.1.15 and the release.
+
+**Commands (PST)**
+
+- Fresh worktree (scratchpad `release-0.1.15`) detached at 2fe1803a = origin/main; version 0.1.15, tag absent; I created it, the Chief set the role there.
+- `npm ci`, `npm run dist` -> build-sha 2fe1803a, tree clean, `latest.yml` 0.1.15 with sha512 (built before the role was set; the build needs no role).
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.15-notes.md` at 01:24, clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.15-notes.md` ran 01:24:53 to 01:25:24 (GitHub publishedAt 2026-11-25T20:25:24Z); no retry needed -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.15
+- Checks: not draft, not prerelease; .exe 125043766, .blockmap 131634, latest.yml 348; tag v0.1.15 -> 2fe1803a; feed serves 0.1.15. Downloaded the uploaded .exe: sha256 7c9e3742d1147e325feb6ab2b25b5a36f233409fc1f017ec44f4fdf35c9f5a15 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.16) with 0.1.14's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
+## 2026-11-20 - Published v0.1.14
+
+**Word:** the Chief of Staff's 7E relay: the owner's words, typed in the Chief's chat. 2026-11-19, answering "Should v0.1.14 ship now without internet sign-in, or wait for it?": "Ship 0.1.14 as soon as it can be without the internet sign-in."; 2026-11-20: "check all sessions, and continue, then release and publish 0.1.14 manage everything yourself. i am going to sleep. give me a report of gaps and features vs claude app and cursor vs Bunny AI when done." The relay listed the gate (12/12 at a579d7e9, run alone) with each result, the shas (code a579d7e9, main f20f1640 = code plus docs only) and all six sign-offs PASS at a579d7e9. The gate was listed result by result, with the full output in a file I cannot read, so I took the listing as the pasted check.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at f20f164 = origin/main; version 0.1.14, tag absent.
+- `npm ci`, `npm run dist` -> build-sha f20f164, tree clean, `latest.yml` 0.1.14 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.14-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.14-notes.md` ran 11:50 to 12:07 (GitHub publishedAt 2026-11-20T07:07:37Z); no retry needed -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.14
+- Checks: not draft, not prerelease; .exe 123051037, .blockmap 129570, latest.yml 348; tag v0.1.14 -> f20f164; feed serves 0.1.14. Downloaded the uploaded .exe: sha256 bf4bb4c4c4aeb892d6a5f8e103e09ac80af6aed278ff2b61e8d8121b7b685c0d equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.15) with 0.1.13's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
+## 2026-11-19 - Published v0.1.13
+
+**Word:** the Chief of Staff's 7E relay: the owner's words, typed in the Chief's chat. 2026-11-18, answering "Release v0.1.13 as soon as every check passes?": "Yes, release when ready"; later "push and release when ready"; 2026-11-19, for the last fix: "just run the test for cut part, then release and push, no need for all the tests and sign offs again". The relay had the shas, the pasted gate (9/9 at 07d6d2f) and the sign-off row (Design at 371b4b4, the rest at 07d6d2f; the Chief explained the one fix after Design's sign-off). The owner also asked to be pinged on his phone when it's live; that is the Chief's to do.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at 03c5a06 = origin/main.
+- `npm ci`, `npm run dist` -> build-sha 03c5a06, tree clean, `latest.yml` 0.1.13 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.13-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.13-notes.md` ran 01:04 to 01:07 (GitHub publishedAt 2026-11-18T20:07:35Z); no retry needed -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.13
+- Checks: not draft, not prerelease; .exe 122952268, .blockmap 129614, latest.yml 348; tag v0.1.13 -> 03c5a06; feed serves 0.1.13. Downloaded the uploaded .exe: sha256 48ce61c56d622a3bfb45e009e40e1dc50fc981a3815a0fb877f8c1ff96a7cd6e equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.14) with 0.1.12's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
+## 2026-11-18 - Published v0.1.12
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-18) "Then push 0.1.12 immediately after.", after the Chief had told the owner the web app was built and waiting for v0.1.12; the web-app drawing was approved with "Approved". The words name 0.1.12 and "push", not the word "release"; I took "push 0.1.12" as the release word because it names the version and the Chief relayed it as the release. Shas, pasted gate (9/9 at eba5478) and the sign-off row were in the relay.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at a29a5db = origin/main.
+- `npm ci`, `npm run dist` -> build-sha a29a5db, tree clean, `latest.yml` 0.1.12 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.12-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.12-notes.md` ran 09:04 to 09:13 (GitHub publishedAt 2026-11-18T04:13:41Z) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.12
+- Checks: not draft, not prerelease; .exe 122431635, .blockmap 128894, latest.yml 348; tag v0.1.12 -> a29a5db; feed serves 0.1.12. Downloaded the uploaded .exe: sha256 7b2318dd35bd93fa2e9b693b93f2fc70b9218521902435681a087133848ef9d0 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.13) with 0.1.11's code; pulling the release is owner-only.
+
+**Lesson:** no lesson.
+
+## 2026-11-18 - Published v0.1.11
+
+**Word:** the Chief of Staff's 7E relay: the owner answered "Yes, release v0.1.11" to "Release v0.1.11 (the row fix, the chip fix and the web app) once it passes every check?", then "i am driving , push and release." and "push and release when ready". The web app moved to v0.1.12. The relay had the shas, the pasted gate (9/9 at 28812e1) and the sign-off row; I accepted it at once.
+
+**Commands (PST)**
+
+- Fresh worktree prepared by the Chief of Staff (role set), detached at 4cebedc = origin/main.
+- `npm ci`, `npm run dist` -> build-sha 4cebedc, tree clean, `latest.yml` 0.1.11 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.11-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.11-notes.md` ran 08:11 to 08:17 (GitHub publishedAt 2026-11-18T03:17:03Z) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.11
+- Checks: not draft, not prerelease; .exe 122362916, .blockmap 128707, latest.yml 348; tag v0.1.11 -> 4cebedc; feed serves 0.1.11. Downloaded the uploaded .exe: sha256 db6124dd6e9f718e202742d96fabac761ebbf92fcbb06c6ee9059c531a1283f0 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.12) with 0.1.10's code; pulling the release is owner-only.
+
+**Lesson:** no lesson; a complete relay plus a prepared folder made this the fastest release.
+
+## 2026-11-18 - Published v0.1.10
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-18) "Both artifacts approved, now fix all issues discussed and pending gaps. Then push the update and release. Ensure all issue are fixed in this build." and "Browser option tonight everything in the same build"; the question as asked, shas, sign-offs. The first relay only pointed at the gate file, so I held until the Chief pasted the gate (9/9 at 975970a). Then accepted.
+
+**Commands (PST)**
+
+- Fresh worktree (scratchpad `release-0.1.10`), detached at db4ab9a (= origin/main); role set by the Chief of Staff.
+- `npm ci`, `npm run dist` -> build-sha db4ab9a, tree clean, `latest.yml` 0.1.10 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.10-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.10-notes.md` ran 06:12 to 06:18 (published 2026-11-18T01:18:36Z by GitHub's clock, as shown) -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.10
+- Checks: not draft, not prerelease; .exe 122362712, .blockmap 128727, latest.yml 348; tag v0.1.10 -> db4ab9a (the built commit); feed serves 0.1.10. I downloaded the uploaded .exe: sha256 82153b85a7ed2d5fe5b9d1f98bafd8830c49c8e84809738e0ca42aefc05cd766 equals my built file; sha512 equals latest.yml.
+
+**Not checked:** an update on an invented profile; the sign-off files, record and notes (hook bars me).
+
+**Rollback:** a higher version (0.1.11) with 0.1.9's code; pulling the release is owner-only.
+
+**Lesson:** a relay that points at the gate file instead of pasting it costs a round trip; 7E needs it pasted.
+
+## 2026-11-18 - Published v0.1.9
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-17) "add the fix for this and other similar layout issues to 0.1.9 ... ensure all remaining gaps and fixes are built and pushed to main with the release ... 0.1.9 will be completely built and pushed, including the installer and release", and (2026-11-18) "Sign the exception"; the question as asked, shas, pasted gate 9/9 at b9bdd7a, all five sign-offs PASS. Accepted because the words name 0.1.9 and the release.
+
+**Commands (PST)**
+
+- Fresh worktree outside the project (scratchpad `release-0.1.9`), detached at 8b49c55 (= origin/main); role set by the Chief of Staff.
+- `npm ci`, `npm run dist` -> build-sha 8b49c55, tree clean, `latest.yml` version 0.1.9 with sha512.
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.9-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.9-notes.md` ran 01:12 to 01:20 -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.9
+- Checks: not draft, not prerelease; .exe 122320093, .blockmap 128637, latest.yml 345; tag v0.1.9 -> 8b49c55 (the built commit); latest feed serves `version: 0.1.9` with the sha512.
+
+**Not checked:** an update on an invented profile; the sign-off files (hook bars me); the record and notes contents (hook bars me; `release.mjs` accepted them).
+
+**Rollback:** a higher version (0.1.10) with the last good code (0.1.8's); pulling the release is owner-only.
+
+**Lesson:** no lesson; the fresh-worktree recipe ran clean first time.
+
 ## 2026-11-17 - Published v0.1.8
 
 **Word:** the Chief of Staff's 7E relay: the owner's words "I am thinking we push the update done ao far, including the release and installer. as 0.1.8 and the rest we will do in 0.1.9" (2026-11-17), the question as asked, shas, pasted gate 8/8 at 685b93d, all five sign-offs PASS at a6afcf5. I accepted it because the words name 0.1.8 and the release. Then held at the Chief's request while Security ruled on an OAuth finding (verdict SHIP; a 0.1.9 fix row; P-6, L-4 and RO-1 ship open as in 0.1.7). The Chief then sent "publish".
