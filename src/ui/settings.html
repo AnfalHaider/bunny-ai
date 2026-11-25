@@ -514,11 +514,11 @@
           <button type="button" class="tab" role="tab" id="rules-tab-folder" aria-selected="false">One folder</button>
         </div>
         <label class="rules-folder" id="rules-folder-wrap" hidden>Folder
-          <select id="rules-folder" aria-label="Folder the rules apply to"></select>
+          <select id="rules-folder" aria-label="Folder the rules apply to" aria-describedby="rules-help-folder"></select>
         </label>
         <div id="rules-lists"></div>
         <div class="addr" id="rules-add">
-          <select id="rules-kind" aria-label="What the rule matches">
+          <select id="rules-kind" aria-label="What the rule matches" aria-describedby="rules-help-kind">
             <option value="command">Command</option>
             <option value="path:edits">Path · edits</option>
             <option value="path:reads">Path · reads</option>
@@ -527,14 +527,20 @@
             <option value="agent">Helper or chat</option>
           </select>
           <select id="rules-connector" hidden aria-label="Which connector this tool rule is for"><option value="">Any tool</option></select>
-          <input id="rules-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
-          <select id="rules-effect" aria-label="What happens">
+          <input id="rules-pattern" aria-describedby="rules-help-pattern" type="text" maxlength="200" placeholder="npm run lint*" aria-label="Pattern" autocomplete="off" spellcheck="false" />
+          <select id="rules-effect" aria-label="What happens" aria-describedby="rules-help-effect">
             <option value="allow">Allow</option>
             <option value="ask">Ask</option>
             <option value="deny">Deny</option>
           </select>
           <button type="button" class="btn primary" id="rules-add-btn">Add rule</button>
         </div>
+        <ul class="rules-form-help">
+          <li id="rules-help-folder"><b>Folder</b> Where the rule applies: every folder, or just one.</li>
+          <li id="rules-help-kind"><b>What it matches</b> A command, a file path, a website, a tool, or helpers and other chats.</li>
+          <li id="rules-help-pattern"><b>Pattern</b> Use * as a wildcard, for example npm test*.</li>
+          <li id="rules-help-effect"><b>What happens</b> Allow runs with no question. Ask shows a card. Deny always stops it.</li>
+        </ul>
         <div class="rules-line" id="rules-line" role="status" aria-live="polite"></div>
         <details class="rules-notes" id="rules-notes">
           <summary>What each kind of rule covers</summary>

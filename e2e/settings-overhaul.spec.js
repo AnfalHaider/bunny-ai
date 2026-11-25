@@ -77,3 +77,24 @@ test('Appearance: "Code" is no longer a heading here; the group is "Code blocks"
   await page.goto('/src/ui/settings.html?embed=1&section=appearance');
   await expect(page.locator('#code-look')).toHaveText('Code blocks');
 });
+
+test('the rule form: each of its four fields has its own help line, and every control that has a name has help', async ({ page }) => {
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
+  for (const [id, help] of [['rules-folder', 'rules-help-folder'], ['rules-kind', 'rules-help-kind'], ['rules-pattern', 'rules-help-pattern'], ['rules-effect', 'rules-help-effect']]) {
+    await expect(page.locator('#' + id)).toHaveAttribute('aria-describedby', help);
+    await expect(page.locator('#' + help)).toBeVisible();
+  }
+  await expect(page.locator('#rules-notes')).toHaveCount(1);
+});
+
+for (const [scheme, width] of [['light', 360], ['dark', 390]]) {
+  test(`Sign-in apps inputs fit a phone (${width} px, ${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/src/ui/settings.html?embed=1&section=profile');
+    await page.locator('.account-apps summary').click();
+    const over = await page.evaluate((w) => ['github-client-id', 'google-client-id', 'google-client-secret'].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.right > w || r.left < 0 ? id : null; }).filter(Boolean), width);
+    expect(over).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}
