@@ -10,6 +10,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createApp } from '../src/server/app.js';
+
+// F13: Confine commands is on in Auto when a person never chose; the suites that run commands in Auto answer no label card, so they start with it off (the suites about confinement set their own)
+process.env.BUNNY_CONFINE_DEFAULT ??= 'off';
 import { memorySecretStore } from '../src/providers/connections.js';
 
 export const MODELS = [

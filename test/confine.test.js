@@ -50,7 +50,8 @@ test('F13-6: the not-covered list, the label card and the Settings help carry th
   const SENT = 'While the label is on, other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.';
   assert.ok(NOT_COVERED.includes(SENT));
   const { readFileSync } = await import('node:fs');
-  assert.ok(readFileSync(new URL('../src/ui/settings.html', import.meta.url), 'utf8').includes(SENT), 'the Settings help');
+  const html = readFileSync(new URL('../src/ui/settings.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('id="confine-notcovered"') && html.includes("getJSON('/api/confine')") && !html.includes('<b>Not covered:</b>'), 'the Settings help shows the list the server sends, not a copy of its own');
   assert.ok(readFileSync(new URL('../src/server/app.js', import.meta.url), 'utf8').includes('NOT_COVERED.map((t) =>'), 'the label card lists NOT_COVERED as it is');
 });
 

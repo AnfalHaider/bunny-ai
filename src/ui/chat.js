@@ -17,6 +17,7 @@ import {
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
 import { confirmRewind, openRewindPanel } from './rewind.js';
+import { PROVIDER_SENTENCE, contextPartCount, engineLine, memoryPanel, openContextView, suggestionCard, askRememberWhere } from './project-context.js';
 import { orderProviders } from './provider-order.js';
 import { thinkingLevels } from './thinking.js';
 import { createWorking, fmtDuration } from './bunny-working.js';
@@ -285,6 +286,18 @@ function renderComposerHeader() {
   paintEngineChip({ canSwitch, busy: Boolean(state.streaming), onSwitch: (row) => switchEngineTo(row.id), onFix: (row, what) => fixEngine(row, what), deviceNote: isDevicePage() ? 'The engine can be changed only on the PC.' : '', chip: $('engine-chip'), menu: $('engine-menu'), session: state.sessionId ? state.session : null, settings: state.settings, chosen: state.pendingEngine ?? null, onPick: async (choice) => { if (state.sessionId) { try { state.session = await sendJSON(`/api/sessions/${state.sessionId}`, 'PATCH', { engine: choice }); } catch (err) { $('error').textContent = err.message; } } else state.pendingEngine = choice.id === 'bunny' ? { id: 'bunny' } : choice; renderComposerHeader(); } });
   showTrustCard().catch(() => {}); // FOLDER-RULES: the card for a folder with instruction files (once per chat and folder)
   if (effortLevel) effortLevel.value = (state.sessionId ? state.session?.effort : state.pendingEffort) ?? state.settings?.defaultEffort ?? 'medium';
+  // PROJECT-CONTEXT: the one quiet sign in a project chat; it opens "What this chat was given"
+  let ctxChip = $('project-context-chip');
+  if (!state.sessionId || !state.session?.projectId) ctxChip?.remove();
+  else {
+    if (!ctxChip && indicator) {
+      ctxChip = button('', { id: 'project-context-chip', className: 'ghost small', title: 'What this chat was given' });
+      ctxChip.addEventListener('click', () => openContextView({ sessionId: state.sessionId, onChange: () => renderComposerHeader() }));
+      indicator.after(ctxChip);
+    }
+    const sid = state.sessionId;
+    contextPartCount(sid).then((n) => { if (ctxChip && state.sessionId === sid && n !== null) ctxChip.textContent = `Project context: ${n} part${n === 1 ? '' : 's'} ▾`; });
+  }
   if (indicator && state.selected) {
     const ab = state.abilities.find((a) => a.id === state.selected.providerId);
     const modelAbilities = ab ? ab.abilities : [];
@@ -946,6 +959,10 @@ function newChatInProject(projectId) {
   startNewChat({ incognito: false });
   renderSidebar();
   const name = state.projects.find((p) => p.id === projectId)?.name ?? 'the project';
+  const folder = state.projects.find((p) => p.id === projectId)?.folder;
+  if (folder) { // the project's folder: new chats here start in Code mode in it
+    sendJSON('/api/folder/check', 'POST', { folder }).then(({ folder: real, branch }) => { state.pendingFolder = { folder: real, branch }; applyWorkMode('code'); renderComposerHeader(); }).catch((err) => { $('error').textContent = err.message; });
+  }
   flashStatus(`New chat in ${name}: it is saved there when you send the first message`, 5000);
   const empty = $('empty-text');
   if (empty) empty.textContent = `This chat will be saved in ${name} and follow its instructions.`;
@@ -1143,7 +1160,27 @@ function renderProjects() {
     instructions.value = current.instructions ?? '';
     const err = element('div', { className: 'err', role: 'alert' });
     const close = () => { state.projectEdit = null; renderProjects(); };
-    form.append(name, instructions, element('div', { className: 'actions' },
+    // PROJECT-CONTEXT: the project's folder, the two switches, its memory, and where its text goes
+    let folderValue = current.folder ?? '';
+    const folderText = element('span', { className: 'pm-folder', textContent: folderValue || 'No folder: new chats here start in Chat mode' });
+    const pick = button('Change', { className: 'ghost small', onclick: async () => {
+      let picked = null;
+      if (window.bunnyDesktop?.pickFolder) picked = await window.bunnyDesktop.pickFolder();
+      else picked = await askForPath(folderValue);
+      if (!picked) return;
+      try { const r = await sendJSON('/api/folder/check', 'POST', { folder: picked }); folderValue = r.folder; folderText.textContent = folderValue; } catch (ex) { err.textContent = ex.message; }
+    } });
+    const noFolder = button('Remove', { className: 'ghost small', onclick: () => { folderValue = ''; folderText.textContent = 'No folder: new chats here start in Chat mode'; } });
+    const useMem = element('input', { type: 'checkbox', id: 'project-use-memory' });
+    useMem.checked = current.useMemory !== false;
+    const shareRecent = element('input', { type: 'checkbox', id: 'project-share-recent' });
+    shareRecent.checked = current.shareRecent !== false;
+    form.append(name, element('div', { className: 'pm-folder-row' }, element('b', { textContent: 'Folder (optional)' }), folderText, pick, noFolder),
+      element('p', { className: 'modal-sub', textContent: 'New chats here start in Code mode in this folder.' }));
+    form.append(instructions, element('label', { className: 'pm-tick' }, useMem, ' Use project memory'), element('label', { className: 'pm-tick' }, shareRecent, ' Share recent work between chats'),
+      memoryPanel(current, { onChange: () => {} }),
+      element('p', { className: 'modal-sub', textContent: PROVIDER_SENTENCE }), element('p', { className: 'modal-sub', textContent: engineLine(state.sessions, current.id) }));
+    form.append(element('div', { className: 'actions' },
       button('Save', { type: 'submit', className: 'primary' }),
       button('Cancel', { className: 'ghost', onclick: close }),
       button('Delete project', {
@@ -1165,7 +1202,7 @@ function renderProjects() {
       e.preventDefault();
       if (!name.value.trim()) { name.focus(); return; }
       try {
-        await sendJSON(`/api/projects/${current.id}`, 'PATCH', { name: name.value, instructions: instructions.value });
+        await sendJSON(`/api/projects/${current.id}`, 'PATCH', { name: name.value, instructions: instructions.value, folder: folderValue, useMemory: useMem.checked, shareRecent: shareRecent.checked });
         state.projectEdit = null;
         await loadProjects();
         renderSidebar();
@@ -1519,6 +1556,12 @@ ${m.result ?? ''}`.trim())) ? 'Copied' : 'Copy failed'); });
     group.append(line, rows);
     wrap.append(group);
     return wrap;
+  }
+
+  // PROJECT-CONTEXT: "Remember for <project>?": Keep, Edit, Discard. Nothing is stored until Keep.
+  if (m.kind === 'memory_suggestion' && m.suggestion) {
+    return element('div', { className: 'msg assistant pm-suggestion', dataset: { id: m.id } },
+      suggestionCard(m, { sessionId: state.sessionId, projectName: projectName(m.suggestion.projectId) || 'this project', onChange: () => {} }));
   }
 
   // Permission prompt: ask/deny a tool call
@@ -3330,6 +3373,7 @@ const COMMANDS = [
   { name: '/clear', hint: 'Start a new chat, keeping this one' },
   { name: '/export', hint: 'Download this chat as Markdown' },
   { name: '/new', hint: 'Start a new chat' },
+  { name: '/remember', hint: 'Remember something (for this project or everywhere)' },
   { name: '/help', hint: 'Show what commands exist' },
 ];
 
@@ -3387,6 +3431,17 @@ function renderSlashMenu() {
 async function runCommand(text) {
   const [name] = text.split(/\s+/);
   switch (name) {
+    case '/remember': {
+      const what = text.slice(name.length).trim();
+      if (!what) { flashStatus('Say what to remember: /remember <text>'); return true; }
+      try {
+        const projectId = state.session?.projectId;
+        const where = projectId ? await askRememberWhere(what, projectName(projectId) || 'this project') : 'everywhere';
+        if (where === 'project') { await sendJSON(`/api/projects/${projectId}/memory`, 'POST', { kind: 'fact', text: what }); flashStatus('Kept for this project'); }
+        else if (where === 'everywhere') { await sendJSON('/api/memory', 'POST', { text: what }); flashStatus('Remembered everywhere'); }
+      } catch (err) { $('error').textContent = err.message; }
+      return true;
+    }
     case '/help':
       state.messages.push({
         id: `local-h-${Date.now()}`,

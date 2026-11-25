@@ -28,6 +28,7 @@ import { ConnectError } from '../providers/errors.js';
 import { offlineProbe, offlineDiscover } from '../providers/offline.js';
 import { createSessionStore } from './sessions.js';
 import { createProjectStore } from './projects.js';
+import { assemble as assembleProjectContext, engineBlock as projectEngineBlock, recentWorkPart } from './projectContext.js';
 import { createArtifactStore } from './artifacts.js';
 import { normaliseAttachments, prepareAttachments, safeName, toModelMessage } from './attachments.js';
 import { parseImport } from './import.js';
@@ -74,7 +75,7 @@ import { createWorktrees } from './worktrees.js';
 import {
   AGENT_TOOL_RISK, CAPABILITIES, artifactToolDefinitions, capabilityToolDefinition, processToolDefinitions,
   computerToolDefinitions, buildToolDefinition, isAgentTool, screenLinesText,
-  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, SENSITIVE, cleanQuestion, asksToRunCommands, describeAnyAgentTool as describeAgentTool,
+  teamToolDefinitions, memoryToolDefinitions, planToolDefinition, cleanTasks, askToolDefinition, newChatToolDefinition, chatSearchToolDefinition, projectMemoryToolDefinition, SENSITIVE, cleanQuestion, asksToRunCommands, describeAnyAgentTool as describeAgentTool,
 } from './agentTools.js';
 
 import { createAccounts } from './accounts.js';
@@ -388,6 +389,31 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       return real ? { ok: true, folder: real, copy: true } : { ok: false, copy: true, gone: true, reason: `This chat's copy is gone; the branch ${session.worktree.branch} still has the work.` };
     }
     return session?.folder ? checkFolder(session.folder) : null;
+  };
+  /**
+   * PROJECT-CONTEXT: what a chat in a project is given (P1 to P5). P5 is built once, at the start of a chat, and kept with it; `freeze` builds it when the chat has none yet.
+   * @returns {Promise<{project: object|null, built: object}>}
+   */
+  const projectContextFor = async (session, { freeze = false, folderText = '' } = {}) => {
+    const project = session.projectId ? await projects.get(session.projectId) : null;
+    let recent = typeof session.projectRecent === 'string' ? session.projectRecent : null;
+    if (project && recent === null) {
+      recent = '';
+      const firstTurn = (session.messages ?? []).filter((m) => m.role === 'user').length <= 1;
+      if (freeze && firstTurn && !session.incognito && project.shareRecent !== false && session.projectContext !== false) {
+        const mates = (await sessions.list({ includeArchived: false })).filter((s) => s.projectId === project.id && s.id !== session.id && !s.incognito).slice(0, 12);
+        const full = (await Promise.all(mates.map((s) => sessions.get(s.id)))).filter(Boolean);
+        const filesOf = async (c) => {
+          const names = new Set();
+          for (const cp of await checkpoints.list(c.id)) for (const f of cp.files ?? []) names.add(cp.root && String(f.path).startsWith(cp.root) ? String(f.path).slice(String(cp.root).length).replace(/^[\\/]+/, '').replace(/\\/g, '/') : basename(String(f.path)));
+          return [...names];
+        };
+        recent = (await recentWorkPart({ chats: full, selfId: session.id, filesOf })).text;
+      }
+      if (freeze) await sessions.update(session.id, { projectRecent: recent });
+    }
+    const built = assembleProjectContext({ standing: settings.instructions, project, recent: recent ?? '', folderText, chatOn: session.projectContext !== false, memoryOn: settings.memoryEnabled !== false, incognito: Boolean(session.incognito) });
+    return { project, built };
   };
   // FOLDER-RULES + ONE-INSTRUCTIONS (v0.1.15): the folder's instructions files, ONE set for every engine (see folderRules.js). FROZEN BY CONTENT (Security's replacement for PG-4's instructions part): at Follow them the exact
   // text the person was shown is kept in the folder's trust record (settings.folderRulesTrusted[].frozen, per folder, not per chat) with its sha256. Every reply of Bunny's engine, every engine prompt and every handover
@@ -1167,6 +1193,62 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (s.projectId === projectMatch[1]) { await sessions.update(s.id, { projectId: null }); moved += 1; }
       }
       return sendJson(res, 200, { ok, moved });
+    }
+
+    // ---- PROJECT-CONTEXT: what a project keeps, written only from Bunny's window (window-only routes) ----
+    const memListMatch = path.match(/^\/api\/projects\/([a-f0-9-]{36})\/memory$/);
+    const memItemMatch = path.match(/^\/api\/projects\/([a-f0-9-]{36})\/memory\/([a-f0-9-]{36})$/);
+    if ((memListMatch || memItemMatch) && ['GET', 'POST', 'PATCH', 'DELETE'].includes(method)) {
+      if (method !== 'GET' && !(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
+      try {
+        const pid = (memListMatch ?? memItemMatch)[1];
+        if (method === 'GET' && memListMatch) return sendJson(res, 200, { items: await projects.memoryList(pid) });
+        if (method === 'POST' && memListMatch) {
+          const b = await readBody(req);
+          return sendJson(res, 200, await projects.memoryAdd(pid, { kind: b.kind, text: b.text, source: 'person' }));
+        }
+        if (method === 'DELETE' && memListMatch) return sendJson(res, 200, { cleared: await projects.memoryClear(pid) });
+        if (memItemMatch && method === 'PATCH') return sendJson(res, 200, await projects.memoryUpdate(pid, memItemMatch[2], await readBody(req)));
+        if (memItemMatch && method === 'DELETE') return sendJson(res, 200, { ok: await projects.memoryRemove(pid, memItemMatch[2]) });
+        return sendJson(res, 405, { code: 'method.notAllowed', message: 'Not allowed' });
+      } catch (err) {
+        return sendJson(res, err.code === 'project.notFound' || err.code === 'memory.notFound' ? 404 : 400, { code: err.code ?? 'memory.failed', message: err.message });
+      }
+    }
+    // Keep / Discard on a suggestion card (window-only). Keep stores exactly the text shown, or the person's edit of it, byte for byte (PC-6).
+    const keepMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/project-memory$/);
+    if (keepMatch && method === 'POST') {
+      if (!(req.bunnyRemote && remoteException(method, path)) && windowOnly(req, res)) return;
+      try {
+        const b = await readBody(req);
+        const session = await sessions.get(keepMatch[1]);
+        const card = session?.messages?.find((m) => m.id === b.messageId && m.suggestion);
+        if (!card) return sendJson(res, 404, { code: 'suggestion.notFound', message: 'That suggestion is gone.' });
+        const todo = b.action === 'keepAll' ? card.suggestion.items.filter((i) => i.state === 'open') : card.suggestion.items.filter((i) => i.id === b.itemId && i.state === 'open');
+        if (!todo.length) return sendJson(res, 409, { code: 'suggestion.done', message: 'That one is already decided.' });
+        const kept = [];
+        for (const item of todo) {
+          if (b.action === 'discard') { await sessions.setSuggestionState(session.id, card.id, item.id, 'discarded'); continue; }
+          const text = b.action === 'keep' && typeof b.text === 'string' ? b.text : item.text; // exactly what was shown, or exactly the edit
+          kept.push(await projects.memoryAdd(card.suggestion.projectId, { kind: item.kind, text, source: 'suggested', chatId: session.id, replaces: item.replaces ?? null, allowSensitive: settings.memorySensitive === true }));
+          await sessions.setSuggestionState(session.id, card.id, item.id, 'kept');
+        }
+        return sendJson(res, 200, { kept: kept.length });
+      } catch (err) {
+        return sendJson(res, err.code === 'project.notFound' ? 404 : 400, { code: err.code ?? 'suggestion.failed', message: err.message });
+      }
+    }
+    // "What this chat was given": the five parts with their sizes and the exact text (PROJECT-CONTEXT §6)
+    const ctxMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/project-context$/);
+    if (ctxMatch && method === 'GET') {
+      const session = await sessions.get(ctxMatch[1]);
+      if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such chat' });
+      // P4 as it really is: the followed folder's FROZEN copy (the text FOLDER-RULES sends), or nothing before Follow. Shown here only; it is sent by FOLDER-RULES, not twice.
+      let folderText = '';
+      try { const set = session.folder || session.worktree ? await followedFolderRules(session, {}, await effectiveRoot(session)) : null; if (set) folderText = bunnyNote(set.files); } catch { folderText = ''; }
+      const { project, built } = await projectContextFor(session, { folderText });
+      const device = req.bunnyRemote ?? req.bunnyDevice;
+      return sendJson(res, 200, { project: project ? { id: project.id, name: project.name } : null, enabled: session.projectContext !== false, cut: built.cut, size: built.size, parts: built.parts.map((p) => ({ n: p.n, title: p.title, size: p.size, state: p.state, ...(device && req.bunnyRemote ? {} : { text: p.text }) })) });
     }
 
     // ---- artifacts ----
@@ -2097,6 +2179,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       return sendJson(res, 200, { ok: true, changed: true, view: await folderRulesView(after, folderInfo, workspace, rules) });
     }
 
+    if (path === '/api/confine' && method === 'GET') return sendJson(res, 200, { supported: process.platform === 'win32', mode: confineMode(settings), notCovered: NOT_COVERED }); // F13-4: the one list the Settings help and the label card show
     // F13: the Working folder card's "Confine commands" row: what is set, and "Remove the label" (window only: the route is on the window-only list and refused to a device)
     const confineMatch = path.match(/^\/api\/sessions\/([a-f0-9-]{36})\/confine(?:\/(remove))?$/);
     if (confineMatch && (method === 'GET' || (method === 'POST' && confineMatch[2] === 'remove'))) {
@@ -2407,7 +2490,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       session = await sessions.get(id);
 
       // Project instructions ride in front of the transcript, never into it.
-      const project = session.projectId ? await projects.get(session.projectId) : null;
+      const { project, built: projectCtx } = await projectContextFor(session, { freeze: true });
       // What the model reads: the chat since the latest summary, with the steps it took,
       // so it remembers what it already did (vision: whether this model can see pictures).
       const { history, interrupted, pictures } = buildHistory(session.messages, (m) => toModelMessage(m, { vision: body.vision !== false }));
@@ -2421,12 +2504,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         }
         if (urls.length) history.push({ role: 'user', content: [{ type: 'text', text: '[The latest screenshots from the work so far:]' }, ...urls.map((url) => ({ type: 'image_url', image_url: { url } }))] });
       }
-      if (project?.instructions) {
-        history.unshift({ role: 'system', content: `Project instructions for ${project.name}:\n${project.instructions}` });
-      }
-      // Settings → My Dear Bunny → Instructions: kept in mind in every chat.
-      const standing = String(settings.instructions ?? '').trim();
-      if (standing) history.unshift({ role: 'system', content: `The person's instructions for every chat:\n${standing.slice(0, 20_000)}` });
+      // PROJECT-CONTEXT: the person's own parts (P3, P2, P1) go in front of the transcript as system text; P4 and P5 follow as quoted data (see projectNotes below).
+      for (const text of [...projectCtx.system].reverse()) history.unshift({ role: 'system', content: text });
+      const standing = String(settings.instructions ?? '').trim(); // (the helpers below still use it)
       // Memory and skills are standing context, and are never stored as turns.
       const memoryText = settings.memoryEnabled === false ? null : await memory.context();
       if (memoryText) history.unshift({ role: 'system', content: memoryText });
@@ -2684,6 +2764,10 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // A text-only answer (Quick ask bar) gets a short system text of its own: the usual one talks about tools, request_capability, helpers and plugins that are not there.
       const textOnlyBase = today + (callName ? `The person you are talking to likes to be called ${callName}. ` : '') + 'You are Bunny AI. Never claim you did something you did not do.';
       history.unshift({ role: 'system', content: (textOnly ? [textOnlyBase, textOnlyText] : [honesty, modeText, folderText, taskText, rewindText, scheduledText, textOnlyText, interrupted ? CONTINUE_NOTE : '', folderRulesSet ? folderSystemLine(folderRulesSet.files.map((f) => f.name)) : '']).filter(Boolean).join('\n') });
+      for (const text of projectCtx.notes) { // P4 and P5: quoted data after every system message, never instructions
+        const noteAt = history.findIndex((m) => m.role !== 'system');
+        history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: text });
+      }
       if (taskNote) { // a user-role note after the app's own system text, before the conversation (the same way as a connector's own words)
         const noteAt = history.findIndex((m) => m.role !== 'system');
         history.splice(noteAt < 0 ? history.length : noteAt, 0, { role: 'user', content: taskNote });
@@ -2718,6 +2802,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (workMode === 'code' && !workspace) send('notice', { text: 'No folder is chosen (or it is no longer there), so Bunny cannot run commands yet. Choose a folder to work in.', folderPicker: true });
       // SEARCH-PC: the chat gets the two tools when the switch is on; the bar only for a request from the main process (the admin secret) that asks for them; a Chats device never (REMOTE_TOOLS_DENIED)
       const pcWho = (req.bunnyRemote ?? req.bunnyDevice)?.label ?? (textOnly ? 'bar' : 'window');
+      // PROJECT-CONTEXT 3.2: a suggestion card is never shown in an incognito chat, a scheduled run, a helper's chat, from a device, or once PC file text is in the chat
+      const suggestOk = () => Boolean(project) && settings.memoryEnabled !== false && project.useMemory !== false && session.projectContext !== false && !session.incognito && !scheduledTask && !session.agent && !session.origin && !req.bunnyRemote && !req.bunnyDevice && !pcTurn.tainted;
       const chatPc = !textOnly && pc.enabled() && !scheduledTask && !req.bunnyRemote;
       const pcTurn = createPcTurn();
       pcTurn.tainted = holdsPcFileText(history); // file text from this PC still in what the model holds: the chat acts only with the person's click
@@ -2735,6 +2821,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         ...(buildOn && permissionMode !== 'plan' ? [buildToolDefinition(), ...customTools.definitions(builtTools)] : []),
         ...teamToolDefinitions({ canDelegate: helpersOn }),
         ...(settings.searchChats === false ? [] : [chatSearchToolDefinition()]),
+        ...(project && suggestOk() ? [projectMemoryToolDefinition()] : []),
         ...(scheduledTask || unrelatedTask === 'here' || permissionMode === 'plan' ? [] : [newChatToolDefinition()]),
         planToolDefinition(),
         ...(permissionMode === 'plan' ? [] : memoryToolDefinitions({ memory: settings.memoryEnabled !== false })),
@@ -3523,6 +3610,18 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             case 'list_models':
               result = await listHelperModels();
               break;
+            case 'suggest_project_memory': {
+              if (!suggestOk()) { result = 'No suggestion card is shown in this chat, so nothing was suggested.'; break; }
+              const known = new Map((await projects.memoryList(project.id)).map((m) => [m.id, m.text]));
+              const items = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 20).map((i) => ({
+                id: randomUUID(), kind: ['decision', 'convention', 'fact', 'open'].includes(i?.kind) ? i.kind : 'fact', text: String(i?.text ?? '').trim().slice(0, 400),
+                ...(known.has(String(i?.replaces ?? '')) ? { replaces: String(i.replaces), replacesText: known.get(String(i.replaces)) } : {}),
+              })).filter((i) => i.text && !looksSecret(i.text, '') && (settings.memorySensitive === true || !SENSITIVE.test(i.text))).slice(0, 5); // at most 5 are shown, after the refused ones are out
+              if (!items.length) { result = 'Nothing to suggest (empty, secret-looking or sensitive items are not shown).'; break; }
+              await sessions.append(id, { role: 'assistant', kind: 'memory_suggestion', content: '', suggestion: { projectId: project.id, items } });
+              result = 'Shown to the person as a card. Nothing is stored unless they press Keep.';
+              break;
+            }
             case 'remember': {
               const saved = await memory.add({ text: parsed.text, source: 'assistant', chatId: id });
               result = `Saved to memory: "${saved.text}". Every new chat will know it; the person can edit or remove it in Automation, Memory.`;
@@ -3541,7 +3640,10 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
             case 'search_chats': {
               const q = String(parsed.query ?? '').trim();
               if (!q) throw new Error('search_chats needs words to look for');
-              const rows = (await sessions.list({ q })).filter((r) => r.id !== id).slice(0, 8);
+              // PROJECT-CONTEXT (PC-4): in a project chat this project's chats come first, and say so; incognito chats are never searched
+              const found = (await sessions.list({ q })).filter((r) => r.id !== id && !r.incognito);
+              const mine = session.projectId ? found.filter((r) => r.projectId === session.projectId) : [];
+              const rows = [...mine, ...found.filter((r) => !mine.includes(r))].slice(0, 8);
               if (!rows.length) { result = `No past chats mention "${q}".`; break; }
               const words = q.toLowerCase().split(/\s+/).filter(Boolean);
               const lines = [];
@@ -3550,7 +3652,7 @@ ${parsed.prompt ?? ''}`; // W33-1: the prompt it will run is on the card
                 const hit = full?.messages?.find((m) => words.some((w) => String(m.content ?? '').toLowerCase().includes(w)));
                 const text = String(hit?.content ?? '').replace(/\s+/g, ' ');
                 const at = Math.max(0, text.toLowerCase().indexOf(words[0]) - 80);
-                lines.push(`- "${r.title}" (id ${r.id}, ${String(r.updatedAt ?? '').slice(0, 10)})${text ? `: …${text.slice(at, at + 240)}…` : ''}`);
+                lines.push(`- "${r.title}"${mine.includes(r) ? ' [this project]' : ''} (id ${r.id}, ${String(r.updatedAt ?? '').slice(0, 10)})${text ? `: …${text.slice(at, at + 240)}…` : ''}`);
               }
               result = `Past chats that mention "${q}":\n${lines.join('\n')}\nRead more of one with read_session.`;
               break;
@@ -4144,10 +4246,16 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
             if (!handover && folderBlock) handover = folderBlock; // no handover this turn: the folder's set goes alone in front of the person's message
           }
           const writeReal = async (rel, buf) => { const abs = resolve(workspace.root, ...String(rel).split('/')); if (!abs.startsWith(resolve(workspace.root) + sep)) throw new Error('That path is outside the workspace folder.'); await beforeWrite(abs); if (buf === null) await rm(abs, { force: true }); else { await mkdir(dirname(abs), { recursive: true }); await writeFile(abs, buf); } };
+          // PROJECT-CONTEXT §5: the same parts for the engines, in one block: Codex every turn (its threads are ephemeral), Claude Code in the first prompt of a session and when a part changes
+          const ctxBlock = projectEngineBlock(projectCtx);
+          const ctxHash = ctxBlock ? createHash('sha256').update(ctxBlock).digest('hex').slice(0, 32) : '';
+          const ctxChanged = (session.engine?.ctxHash ?? '') !== ctxHash;
+          const engineCtxPrefix = ctxBlock && (wanted === 'codex' || !session.engine?.sessionId || ctxChanged) ? projectEngineBlock(projectCtx, { replaces: ctxChanged && Boolean(session.engine?.ctxHash) }) : '';
+          if (ctxHash !== (session.engine?.ctxHash ?? '')) session = await sessions.update(id, { engine: { ...session.engine, ctxHash } }).catch(() => session);
           const outcome = await engines.runTurn({
-            id, session, settings, content: rewindText ? `(${rewindText})
+            id, session, settings, content: (engineCtxPrefix ? engineCtxPrefix + String.fromCharCode(10, 10) + String.fromCharCode(45, 45, 45) + String.fromCharCode(10, 10) : '') + (rewindText ? `(${rewindText})
 
-${content}` : content, handover, root: workspace.root, permissionMode, send, logStep, askPermission, allowKinds: () => sessions.allowKindsOf(id), signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
+${content}` : content), handover, root: workspace.root, permissionMode, send, logStep, askPermission, allowKinds: () => sessions.allowKindsOf(id), signal: controller.signal, provider, apiKey, model, fake: fake && !provider.custom,
             incognito: session.incognito, beforeWrite, onCommand: markCommand, hidden: (rel) => readDenied(activeRules(), rel), writeReal,
             onSession: async (sid, version) => { session = await sessions.update(id, { engine: { ...session.engine, sessionId: sid, version } }).catch(() => session); },
             noteUsage: () => {}, // local mode counts tokens at the endpoint against the budget (EN-6); the engine's own counts are not priced

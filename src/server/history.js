@@ -54,7 +54,7 @@ export function buildHistory(allMessages, toModel) {
   };
 
   for (const m of messages.slice(start)) {
-    if (m.kind === 'permission_prompt') continue;
+    if (m.kind === 'permission_prompt' || m.kind === 'memory_suggestion') continue; // cards for the person, never read by the model
     if (m.kind === 'tool_call') { steps.push(m); continue; }
     if (m.kind === 'summary') {
       history.push({ role: 'system', content: `Summary of the earlier conversation (the older messages are not repeated here):\n${String(m.content ?? '')}` });

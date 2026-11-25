@@ -81,3 +81,11 @@ test('F13-2 in the app: a tampered helper gives the "Couldn\'t confine this comm
   assert.deepEqual(c.cards.slice(cardsBefore), ["Couldn't confine this command"]);
   assert.equal(existsSync(join(c.outside, 'x.txt')), false, 'No: nothing was run, confined or not');
 });
+
+test('F13-4: GET /api/confine returns the one not-covered list that the label card and the Settings help show, with the F13-6 sentence last', async (t) => {
+  const { NOT_COVERED } = await import('../src/server/confine.js');
+  const w = await pcWorld(t, { files: {}, settings: {}, calls: [], permissionMode: 'auto' });
+  const got = await (await fetch(`${w.base}/api/confine`)).json();
+  assert.deepEqual(got.notCovered, NOT_COVERED);
+  assert.equal(got.notCovered.at(-1), 'While the label is on, other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.');
+});

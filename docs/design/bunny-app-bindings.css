@@ -1534,6 +1534,33 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 .made-card .made-said:empty { display: none; }
 @media (max-width: 520px) { .made-card .made-actions { margin-left: 0; flex-basis: 100%; } }
 
+/* PROJECT-CONTEXT: the project's memory panel, the suggestion card, and "What this chat was given" (Design's drawing "Bunny project context") */
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent, var(--text)); text-decoration: underline; cursor: pointer; font-size: var(--fs-xs); }
+.pm-modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.pm-panel { border: 1px solid var(--line); border-radius: var(--r-lg); margin: var(--sp-4) 0; }
+.pm-head { padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); }
+.pm-empty { padding: var(--sp-4) var(--sp-5); color: var(--text-dim); font-size: var(--fs-xs); }
+.pm-group { padding: var(--sp-2) var(--sp-5); background: var(--bg-sidebar); color: var(--text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; }
+.pm-row, .pm-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--sp-4); align-items: center; padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+.pm-row.is-off .pm-text { opacity: .55; }
+.pm-text small { display: block; color: var(--text-dim); font-size: var(--fs-xs); }
+.pm-acts { display: inline-flex; gap: var(--sp-4); align-items: center; }
+.pm-add, .pm-clear, .pm-folder-row { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); }
+.pm-folder-row { border-top: 0; padding-left: 0; padding-right: 0; }
+.pm-folder { font-family: var(--font-mono); font-size: var(--fs-xs); overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.pm-input { flex: 1; min-width: 120px; }
+.pm-tick { display: flex; gap: var(--sp-3); align-items: center; font-size: var(--fs-sm); margin: var(--sp-2) 0; }
+.pm-card { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-sidebar); padding: var(--sp-4) var(--sp-5); max-width: 640px; }
+.pm-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-2); }
+.pm-item { grid-template-columns: minmax(0, 1fr) auto; }
+.pm-kind { color: var(--text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; }
+.pm-part { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: var(--sp-4); align-items: center; padding: var(--sp-3) 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+.pm-part small { display: block; color: var(--text-dim); font-size: var(--fs-xs); }
+.pm-no { font-weight: var(--fw-medium); font-size: var(--fs-xs); text-align: center; border-radius: var(--r-sm); background: var(--hover); padding: 2px 0; }
+.pm-text-view { grid-column: 1 / -1; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-xs); max-height: 230px; overflow: auto; background: var(--bg-sidebar); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-4); margin: 0; }
+.pm-count { color: var(--text-dim); font-size: var(--fs-xs); white-space: nowrap; }
+.pm-modal .btn-danger { background: var(--bad); color: var(--on-ink, #fff); }
+@media (max-width: 480px) { .pm-row, .pm-item { grid-template-columns: auto minmax(0, 1fr); } .pm-acts { grid-column: 1 / -1; } }
 /* ENGINE-SWITCH (v0.1.15, Design's drawing v2) and FOLDER-RULES v4: the switch menu on the engine chip, its confirm card, the divider and handover line in the transcript, the trust card, the Project instructions block */
 #engine-menu .es-head { padding: 7px 12px; font-size: var(--fs-sm); color: var(--text-dim); border-bottom: 1px solid var(--line); }
 #engine-menu .es-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); }
@@ -1629,3 +1656,12 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
 
 /* F13 + FOLDER-RULES: the Working folder card grows with its blocks (own copy, Project instructions, Confine commands): it scrolls inside the window instead of pushing Close out of reach */
 .modal[aria-label="Working folder"] { max-height: calc(100vh - 9rem); overflow-y: auto; }
+
+/* PROJECT-CONTEXT on a phone: Keep, Edit and Discard are 44 px buttons, and the panels fit the screen */
+@media (max-width: 480px) {
+  .pm-item .link-btn, .pm-row .link-btn, .pm-card .link-btn, .pm-part .link-btn { min-height: 44px; min-width: 44px; padding: 0 var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-lg); text-decoration: none; font-size: var(--fs-sm); display: inline-flex; align-items: center; justify-content: center; }
+  .pm-acts { flex-wrap: wrap; gap: var(--sp-3); }
+  .pm-modal .modal-foot .btn { min-height: 44px; }
+  .pm-backdrop { padding-top: 8px; }
+  .modal.pm-modal { max-height: calc(100dvh - 16px); width: calc(100vw - 16px); overflow-y: auto; }
+}

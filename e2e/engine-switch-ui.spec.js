@@ -120,6 +120,9 @@ test('F13: the Working folder card has a "Confine commands" block when the setti
     await expect(block.getByRole('button', { name: 'Remove the label' })).toHaveCount(0); // nothing labelled yet
     await page.goto('/src/ui/settings.html?embed=1&section=code');
     await expect(page.locator('#confine-commands')).toHaveValue('auto');
-    await expect(page.locator('#confine-row')).toContainText('Not covered:');
+    const list = (await (await request.get('/api/confine')).json()).notCovered;
+    expect(list.length).toBeGreaterThan(4);
+    await expect(page.locator('#confine-notcovered li')).toHaveText(['Not covered:', ...list]); // F13-4: the help shows the server's list word for word
+    await expect(page.locator('#confine-notcovered')).toContainText('other low-rights programs on this PC can also write in this folder. Remove the label when you no longer need it.');
   } finally { await request.put('/api/settings', { data: { confineCommands: 'off' } }); rmSync(folder, { recursive: true, force: true }); }
 });

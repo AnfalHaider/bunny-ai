@@ -141,6 +141,7 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
       pinned: Boolean(session.pinned),
       archived: Boolean(session.archived),
       incognito: Boolean(session.incognito),
+      engine: session.engine?.id ?? null, // PROJECT-CONTEXT: which engine a chat uses, for the project page's "where this text goes" line
       // A chat a helper agent or another chat started: who made it, and how its work is going.
       agent: session.agent ?? null,
       agentStatus: session.agentStatus ?? null,
@@ -268,6 +269,13 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
       const { id: fileId, name, kind, size } = message.madeFile;
       entry.madeFile = { id: fileId, name: String(name ?? 'File').slice(0, 120), kind: ['Word', 'Excel', 'PowerPoint'].includes(kind) ? kind : 'Word', size: Math.max(0, Number(size) || 0) };
     }
+    // PROJECT-CONTEXT: a card under a reply, "Remember for <project>?": the items as shown (nothing is stored until the person presses Keep)
+    if (message.suggestion && typeof message.suggestion === 'object' && Array.isArray(message.suggestion.items)) {
+      entry.suggestion = {
+        projectId: String(message.suggestion.projectId ?? '').slice(0, 64),
+        items: message.suggestion.items.slice(0, 5).map((i) => ({ id: String(i.id), kind: String(i.kind), text: String(i.text).slice(0, 400), ...(i.replaces ? { replaces: String(i.replaces), replacesText: String(i.replacesText ?? '').slice(0, 400) } : {}), state: 'open' })),
+      };
+    }
     session.messages.push(entry);
     // First user line becomes the title, so the sidebar is useful immediately.
     if (session.title === 'New chat' && message.role === 'user') {
@@ -305,7 +313,7 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
       const restrictedFor = (e && typeof e === 'object') ? [...new Set((Array.isArray(e.restrictedFor) ? e.restrictedFor : (e.restricted ? [e.id] : [])).filter((x) => ['claude-code', 'codex'].includes(x)))] : [];
       const carried = (e && typeof e === 'object') ? { ...(ENGINE_IDS.includes(e.from) ? { from: e.from } : {}), ...(typeof e.switchedAt === 'string' ? { switchedAt: e.switchedAt.slice(0, 40) } : {}), ...(e.handoverPending === true ? { handoverPending: true } : {}), ...(restrictedFor.length ? { restrictedFor } : {}) } : {};
       if (e && typeof e === 'object' && e.id === 'bunny') session.engine = { id: 'bunny', rules: 'bunny', ...carried }; // the person chose Bunny's own engine for this chat, explicitly
-      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...carried, ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}) };
+      else if (e && typeof e === 'object' && ['claude-code', 'codex'].includes(e.id)) session.engine = { id: e.id, auth: e.auth === 'local' ? 'local' : 'account', rules: e.rules === 'engine' ? 'engine' : 'bunny', ...(e.rulesFixed ? { rulesFixed: true } : {}), ...carried, ...(typeof e.sessionId === 'string' ? { sessionId: e.sessionId.slice(0, 200) } : {}), ...(typeof e.version === 'string' ? { version: e.version.slice(0, 40) } : {}), ...(typeof e.ctxHash === 'string' ? { ctxHash: e.ctxHash.slice(0, 64) } : {}) };
       else delete session.engine;
       if ((session.engine?.id ?? 'bunny') !== engineWas) delete session.allowKinds; // F9 (Security): what was allowed for this chat is cleared when it moves to another engine (ENGINE-SWITCH)
     }
@@ -314,6 +322,8 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
     if (patch.folderRulesSent !== undefined) { if (typeof patch.folderRulesSent === 'string' && /^[a-f0-9]{64}$/.test(patch.folderRulesSent)) session.folderRulesSent = patch.folderRulesSent; else delete session.folderRulesSent; }
     delete session.folderRulesRead; delete session.folderRulesNext; // (the earlier per-chat copy, if an old chat has one)
     if (patch.rewindNote !== undefined) { if (patch.rewindNote) session.rewindNote = String(patch.rewindNote).slice(0, 300); else delete session.rewindNote; } // REWIND: fixed text for the next message
+    if (patch.projectContext !== undefined) { if (patch.projectContext === false) session.projectContext = false; else delete session.projectContext; } // PROJECT-CONTEXT: off for this chat only when false
+    if (patch.projectRecent !== undefined) { if (typeof patch.projectRecent === 'string') session.projectRecent = patch.projectRecent.slice(0, 8000); else delete session.projectRecent; } // P5, built once at the start of a chat and kept
     if (patch.workMode !== undefined) session.workMode = patch.workMode === 'code' || patch.workMode === 'delegate' || patch.workMode === 'cowork' ? 'code' : 'chat';
     await save(session);
     return session;
@@ -515,6 +525,16 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
     };
   }
 
+  /** Change one suggestion item of a card (open, kept or discarded). Returns the item, or null. */
+  async function setSuggestionState(id, messageId, itemId, state) {
+    const session = await get(requireId(id));
+    const item = session?.messages?.find((m) => m.id === messageId && m.suggestion)?.suggestion.items.find((i) => i.id === itemId);
+    if (!item) return null;
+    item.state = state;
+    await save(session);
+    return item;
+  }
+
   /** Note that a reply's file changes were undone, so its button goes away (one id, or a list for a rewind). */
   async function markCheckpointRestored(id, checkpointId, value = true) {
     const session = await get(requireId(id));
@@ -546,6 +566,6 @@ export function createSessionStore({ dir, contextLimit = 200_000, onCheckpointed
     list, get, create, remove, fork, children, exportSession, context, summary,
     append: locked(append), update: locked(update), truncateFrom: locked(truncateFrom), dropTrailingErrors: locked(dropTrailingErrors), dropAfterLastUser: locked(dropAfterLastUser), replaceLastReply: locked(replaceLastReply),
     editMessage: locked(editMessage), compact: locked(compact), compactIfFull: locked(compactIfFull),
-    markCheckpointRestored: locked(markCheckpointRestored), setWorktree: locked(setWorktree),
+    markCheckpointRestored: locked(markCheckpointRestored), setSuggestionState: locked(setSuggestionState), setWorktree: locked(setWorktree),
   };
 }

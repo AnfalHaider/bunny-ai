@@ -190,5 +190,5 @@ export function createConfiner({ dataDir, windows = process.platform === 'win32'
 }
 
 /** The setting: 'off', 'auto' (confine while the chat is in Auto) or 'always'. Anything else is 'off'. */
-export const confineMode = (settings) => (CONFINE_VALUES.includes(settings?.confineCommands) ? settings.confineCommands : 'auto'); // not set: on in Auto (the label card still asks first); a person's saved choice is kept
+export const confineMode = (settings) => (CONFINE_VALUES.includes(settings?.confineCommands) ? settings.confineCommands : (CONFINE_VALUES.includes(process.env.BUNNY_CONFINE_DEFAULT) ? process.env.BUNNY_CONFINE_DEFAULT : 'auto')); // not set: on in Auto (the label card still asks first); a person's saved choice is kept
 export const confineApplies = (settings, permissionMode) => { const m = confineMode(settings); return m === 'always' || (m === 'auto' && permissionMode === 'auto'); };

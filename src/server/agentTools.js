@@ -228,6 +228,15 @@ export function chatSearchToolDefinition() {
   { query: { type: 'string', description: 'Words to look for' } }, ['query']);
 }
 
+/** PROJECT-CONTEXT: the model may SUGGEST what to remember for a project. It shows as a card; nothing is stored until the person presses Keep. */
+export const PROJECT_MEMORY_TOOL_RISK = { suggest_project_memory: 'own' };
+Object.assign(AGENT_TOOL_RISK, PROJECT_MEMORY_TOOL_RISK);
+export function projectMemoryToolDefinition() {
+  return fn('suggest_project_memory', 'At the end of a reply in a project chat, suggest at most 5 things worth remembering for this project: decisions made, conventions agreed, facts about the project, '
+    + 'and work left open, in the person\'s terms. Never secrets, keys or personal data. They are shown to the person as a card and stored only if they press Keep.',
+  { items: { type: 'array', description: 'At most 5, each at most 400 characters', items: { type: 'object', properties: { kind: { type: 'string', enum: ['decision', 'convention', 'fact', 'open'] }, text: { type: 'string' }, replaces: { type: 'string', description: 'The id of an item this replaces, when one is listed' } }, required: ['kind', 'text'] } } }, ['items']);
+}
+
 /** Details memory should not keep unless the person allows it (Settings → My Dear Bunny). */
 export const SENSITIVE = /\b(health|ill(ness)?|disease|diagnos\w*|medic\w*|pregnan\w*|therap\w*|depress\w*|anxiety|religio\w*|church|mosque|temple|faith|pray\w*|politic\w*|vot(e|ing)|sexual\w*|gay|lesbian|transgender|salary|debt|income|bank account|password)\b/i;
 
@@ -235,6 +244,7 @@ const describeTeam = describeTeamTool;
 export function describeAnyAgentTool(name, args = {}) {
   const s = (v, n = 60) => String(v ?? '').replace(/\s+/g, ' ').slice(0, n);
   switch (name) {
+    case 'suggest_project_memory': return `Suggested ${Array.isArray(args.items) ? Math.min(args.items.length, 5) : 0} thing(s) to remember for this project`;
     case 'remember': return `Remember: "${s(args.text)}"`;
     case 'schedule_task': return `Schedule "${s(args.name)}" every ${Math.round(Number(args.every_minutes) || 60)} min`;
     case 'list_scheduled_tasks': return 'List scheduled tasks';
