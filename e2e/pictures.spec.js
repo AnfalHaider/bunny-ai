@@ -28,6 +28,9 @@ async function begin(page, request, entry) {
     transcriptSize: 'medium', transcriptWidth: 'narrow', language: 'en', codeThemeLight: 'bunny-light', codeThemeDark: 'bunny-dark', autoContinueSteps: 500, autoContinueMinutes: 120, firstReplyWaitSeconds: 30, fallbackWhenBusy: true,
     // the shipped defaults of what a scene may have changed (resetProfile does not touch settings, so one scene's change would reach the next picture): the Auto check on, instruction files followed and not yet trusted, Bunny's own engine
     autoJudgeEnabled: true, folderRulesEnabled: true, folderRulesTrusted: [], engine: 'bunny', useBunnyEngine: true,
+    // the same for the rest a screen can show (the gate runs this after the other specs, on the same server, and they leave settings behind): explicit, because the e2e server's own default for the confine setting is off
+    defaultPermissionMode: 'smart', confineCommands: 'auto', pcSearchEnabled: true, pcSearchAfter: 'show', pcSearchBarAuto: true, pcSearchExcluded: [], pcSearchNoticeShown: false,
+    modelFilter: 'free-nvidia', transcriptView: 'normal', statusLabels: true, autoJudgeModel: '', updateUrl: '',
   } });
   await page.clock.setFixedTime(new Date(FIXED_TIME));
   // the app's own random picks (the working-line words, greetings) come from a fixed sequence: the same screen every run
