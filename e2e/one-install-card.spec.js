@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { STANDIN_MCP_PORT, STANDIN_MCP_HOST } from './setup.js';
 import { createServer } from 'node:http';
 import { resetProfile } from './helpers.js';
 
@@ -21,8 +22,8 @@ test.beforeAll(async () => {
       res.end(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }));
     });
   });
-  await new Promise((r) => mcp.listen(0, '127.0.0.1', r));
-  mcpUrl = `http://127.0.0.1:${mcp.address().port}/mcp`;
+  await new Promise((r) => mcp.listen(STANDIN_MCP_PORT, '127.0.0.1', r));
+  mcpUrl = `https://${STANDIN_MCP_HOST}/mcp`; // public-looking (IA-0); the server's test transport sends it to the stand-in above
   model = createServer((req, res) => {
     let raw = ''; req.on('data', (c) => { raw += c; });
     req.on('end', () => {
@@ -69,8 +70,7 @@ async function ask(page) {
 }
 
 for (const [scheme, width] of [['light', 1100], ['dark', 390]]) {
-  // INSTALL-ANYWHERE (IA-0) refuses a connector the MODEL adds at a local address, and this stand-in connector is local: needs a public-looking stand-in (a test host with the test transport) before it can run again. The same flow is covered by test/one-install-card.test.js.
-  test.fixme(`one card (${scheme}, ${width}px): Install and switch on, and the same reply uses the connector's tool`, async ({ page, request }) => {
+  test(`one card (${scheme}, ${width}px): Install and switch on, and the same reply uses the connector's tool`, async ({ page, request }) => {
     await page.emulateMedia({ colorScheme: scheme }); await page.setViewportSize({ width, height: 900 });
     await ask(page);
     const card = page.locator('.live-permission');
@@ -94,7 +94,7 @@ for (const [scheme, width] of [['light', 1100], ['dark', 390]]) {
   });
 }
 
-test.fixme('Install, keep off: one card, the connector is added but off, and its tool is not used', async ({ page, request }) => {
+test('Install, keep off: one card, the connector is added but off, and its tool is not used', async ({ page, request }) => {
   await ask(page);
   await page.locator('.live-permission').getByRole('button', { name: 'Install, keep off' }).click({ timeout: 20_000 });
   await expect(page.locator('#stop')).toBeHidden({ timeout: 30_000 });

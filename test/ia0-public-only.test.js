@@ -119,3 +119,15 @@ test('IA-0 LOW: the test transport is ignored in a packaged build, whatever the 
   assert.equal(reached, false);
   assert.equal((await publicFetch('https://127.0.0.1/mcp', {}, { packaged: false })).status, 200, 'unpackaged tests may stand in');
 });
+
+test('the e2e host map: only with BUNNY_TEST_TRANSPORT=1 and never in a packaged build, only the exact mapped host goes to the stand-in, every other address keeps every check', async (t) => {
+  const stand = createServer((req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ path: req.url })); });
+  await new Promise((r) => stand.listen(0, '127.0.0.1', r)); t.after(() => new Promise((r) => { stand.closeAllConnections?.(); stand.close(r); }));
+  process.env.BUNNY_TEST_TRANSPORT = '1'; process.env.BUNNY_TEST_HOSTMAP = JSON.stringify({ 'mcp.stand-in.test': `http://127.0.0.1:${stand.address().port}` });
+  t.after(() => { delete process.env.BUNNY_TEST_TRANSPORT; delete process.env.BUNNY_TEST_HOSTMAP; });
+  const ok = await publicFetch('https://mcp.stand-in.test/mcp?x=1', { method: 'POST', body: '{}' }, { packaged: false });
+  assert.deepEqual(await ok.json(), { path: '/mcp?x=1' });
+  await assert.rejects(publicFetch('https://127.0.0.1/mcp', {}, { packaged: false }), /public https address/, 'another address keeps every check');
+  await assert.rejects(publicFetch('https://other.stand-in.test/mcp', {}, { packaged: false, lookupImpl: async () => [{ address: '10.0.0.1', family: 4 }] }), /public https address/);
+  await assert.rejects(publicFetch('https://mcp.stand-in.test/mcp', {}, { packaged: true, lookupImpl: async () => [{ address: '10.0.0.1', family: 4 }] }), /public https address/, 'a packaged build ignores the map');
+});

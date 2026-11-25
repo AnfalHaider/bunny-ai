@@ -54,6 +54,13 @@ export const testTransportAllowed = ({ env = process.env, packaged = isPackagedB
 export function publicFetch(url, init = {}, { lookupImpl = (h, o) => dnsLookup(h, o), allowHttp = false, allowPrivate = false, packaged = isPackagedBuild() } = {}) {
   // a test may stand in for the network, and only when it says so in the environment (the app never sets this); anything else always goes through the checks below
   if (testTransportAllowed({ packaged }) && typeof globalThis.__bunnyTestFetch === 'function') return globalThis.__bunnyTestFetch(url, init);
+  // a test run (never a packaged build, never without BUNNY_TEST_TRANSPORT=1) may name a stand-in for a public-looking host: { "mcp.stand-in.test": "http://127.0.0.1:PORT" }. Only that exact host is sent to the stand-in; every other address goes through every check below.
+  if (testTransportAllowed({ packaged }) && process.env.BUNNY_TEST_HOSTMAP) {
+    try {
+      const map = JSON.parse(process.env.BUNNY_TEST_HOSTMAP); const u = new URL(String(url));
+      if (typeof map[u.hostname] === 'string') return globalThis.fetch(new URL(`${u.pathname}${u.search}`, map[u.hostname]).href, { ...init, redirect: 'error' });
+    } catch { /* not a test mapping: the checks below decide */ }
+  }
   return new Promise((resolve, reject) => {
     let u;
     try { u = new URL(String(url)); } catch { reject(refused()); return; }
