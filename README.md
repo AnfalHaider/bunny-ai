@@ -106,7 +106,7 @@ These are things you can type today. What I do is described from how I really be
 
 ### 6. "Find my tax return" (from the Quick ask bar)
 **You say (in the floating bar):** *Find the file called tax return from last year.*
-**I do:** I search the files Windows has indexed: names, folders, dates and snippets. Folders such as Windows, Program Files, AppData and the ones that hold keys are always left out, and you can add your own under **Excluded folders**. As things stand in v0.1.14 it is off until you turn it on in **Settings → Capabilities**, and then I open up to three of the best matches, read up to three of them, and answer from them with links.
+**I do:** I search the files Windows has indexed: names, folders, dates and snippets. Folders such as Windows, Program Files, AppData and the ones that hold keys are always left out, and you can add your own under **Excluded folders**. In v0.1.14 it is off until you turn it on in **Settings → Capabilities** (v0.1.15 turns it on, for finding only: see below). When it reads, I open up to three of the best matches, read up to three of them, and answer from them with links.
 
 <!-- V0115:begin search-pc-default -->
 > **🆕 v0.1.15 (not released yet):** Search this PC is on for finding only. I show what I found (names, folders, dates), the first search says so and where to turn it off, and in **Settings** you can turn it off or choose **Read the files, then answer** instead.
@@ -316,7 +316,7 @@ flowchart TD
 <!-- V0115:end quick-ask-dependable -->
 <!-- V0115:begin project-instructions -->
 ### Your project's instruction files
-A folder can carry `AGENTS.md` or `CLAUDE.md` (and `.cursorrules` or `.cursor/rules`). The first time you open such a folder in a chat, I show them in a card instead of quietly obeying them: **Read** shows the text, **Follow them** uses it, and **Not now** asks again later.
+A folder can carry `AGENTS.md` or `CLAUDE.md` (and Cursor's `.cursorrules` or `.cursor/rules` files marked always-apply, which I add after the main file). The first time you open such a folder in a chat, I show them in a card instead of quietly obeying them: **Read** shows the text, **Follow them** uses it, and **Not now** asks again later.
 
 Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same text, the text you were shown**, and none of them reads the files by itself. If somebody edits a file afterwards, the Working folder card says **changed since it was read** and keeps using the old text until you choose **Read again**, which shows the difference first; **Use the new text** or **Keep the old text** then decides. A file that isn't used is listed as such, and **Ask me again for this folder** forgets your answer. Only my own window can answer, not a phone.
 
@@ -329,7 +329,7 @@ Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same te
 <!-- V0115:end rewind -->
 <!-- V0115:begin engine-switch -->
 ### Switch a chat to another engine
-Open the engine chip in a Code chat and pick **Switch this chat to…**. Bunny, Claude Code and Codex CLI are listed. An engine that can't take the chat says why on its row, with the button that fixes it (**Download**, **Turn on**, **Sign in**), and a chat needs a working folder first.
+Open the engine chip in a Code chat and pick **Switch this chat to…**. Bunny, Claude Code and Codex CLI are listed. An engine that can't take the chat says why on its row, with the button that fixes it (**Switch**, **Download**, **Sign in** or **Open Engines**), and a chat needs a working folder first.
 
 Before it happens, I say what the new engine gets: this chat's folder, the folder's instruction files you chose to follow, a summary of the conversation and the list of files this chat changed. Answers that used files from your PC are left out. Your files and **Undo** stay as they are, and a line in the chat shows where the engine changed. A switch waits until the current reply has finished, and only my own window can do it, not a phone.
 
@@ -362,7 +362,7 @@ This writes the installer to `dist/`.
 
 **Updates**
 
-I check GitHub Releases a few seconds after I start and every few hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, I install it then. Switch this off, or check at once, in **Settings → About**.
+I check GitHub Releases a few seconds after I start and then every six hours. A newer version downloads in the background and is checked against the fingerprint published with it; a bar then offers **Restart to update**, and if you just quit, I install it then. Switch this off, or check at once, in **Settings → About**.
 
 **Run me in your browser instead**
 
