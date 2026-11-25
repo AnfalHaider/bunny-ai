@@ -1141,7 +1141,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         body.folder = stored;
       }
       // F12: a new chat starts in the person's default mode (set in Settings); a chat a device starts is always Ask
-      if (body.permissionMode === undefined && !req.bunnyRemote && !req.bunnyDevice && ['smart', 'ask', 'accept', 'plan', 'auto'].includes(settings.defaultPermissionMode)) body.permissionMode = settings.defaultPermissionMode;
+      if (body.permissionMode === undefined) body.permissionMode = req.bunnyRemote || req.bunnyDevice ? 'ask' : (['smart', 'ask', 'accept', 'plan', 'auto'].includes(settings.defaultPermissionMode) ? settings.defaultPermissionMode : 'ask'); // F12-6: a device's chat stores Ask itself
       const session = await noteRemoteMode(req, await sessions.create(body));
       await runHooks('chat.created', { sessionId: session.id, title: session.title });
       return sendJson(res, 200, session);
@@ -2560,7 +2560,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       // ---- the work mode decides what the model may do ----
       //   chat      conversation only, no tools
       //   code      works inside the chosen folder with file and command tools, plus connectors
-      const storedMode = session.permissionMode ?? settings.defaultPermissionMode ?? 'ask';
+      const storedMode = session.permissionMode ?? (req.bunnyRemote || req.bunnyDevice ? 'ask' : settings.defaultPermissionMode) ?? 'ask'; // F12-6: from a device a missing mode is Ask, never the default
       const folder = await effectiveRoot(session);
       // F12: Smart is Auto only in a trusted git folder with the check on, on this computer's window; in every other case it is Ask (never looser)
       const smart = storedMode === 'smart'

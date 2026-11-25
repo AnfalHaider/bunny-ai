@@ -200,6 +200,7 @@ for (const level of ['everything', 'chats']) {
       const made = await d.call('POST', '/api/sessions', { title: 'from a device' });
       assert.equal(made.status, 200, made.text.slice(0, 120));
       assert.equal(made.json().permissionMode, 'ask', `a device's new chat is Ask when the default is ${mode}`);
+      assert.equal((await (await win(`/api/sessions/${made.json().id}`, 'GET')).json()).permissionMode, 'ask', 'and it is stored as Ask, not left to the default');
       const own = await (await win('/api/sessions', 'POST', { title: 'from the window' })).json();
       assert.equal(own.permissionMode, mode, 'the window own new chat takes the default');
     }
