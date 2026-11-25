@@ -1,0 +1,9 @@
+---
+piece: release-0.1.15
+role: design
+sha: 80626b034a1fab39dc9a43599268e6b7ad1ee0c3
+verdict: PASS
+date: 2026-11-25
+---
+
+PASS at 80626b03 (merge of integration into main; git diff --name-only 7c81da08 80626b03 shows only docs: the v0.1.15 plan, the release notes, one gate evidence file and the Chief of Staff sign-off; no code, no pictures, so nothing I checked has changed). What I checked, on 7c81da08 and QA's walk at bfd051a9: the nine README and help pictures, each opened and read on an invented profile (Sam; folders drawn as C:/bunny-pictures), matching ENGINE-SWITCH, the F12 trust card, FOLDER-RULES v4 and the permission-rules screen (Smart, Auto check on, On in Auto, laid-out legend); pictures-check passes and the pictures project matched 18 of 18 on two different TEMP folders; alts equal the manifest and the README; Settings nav has 12 sections with Usage and data after Desktop app, as drawn; QA walk shots opened one by one for REWIND (phone dark panel, preview, confirm, done; desktop light panel), PROJECT-CONTEXT (phone dark card and panel; desktop light panel), the trust card (phone dark) and Permissions at 375 dark, all matching the drawings. NOT opened one by one: the other walk variants (phone light, desktop dark, chips, slink, 1280 chat). I did not read the release notes text. Findings, none blocks: (1) QA's trust-phone-dark.png shows the real Windows user name in its folder path; keep it out of README, help and release notes. (2) LOW v0.1.16: at 1280 px desktop the Project context: 4 parts chip wraps under the composer row and cuts the hint. (3) LOW v0.1.16: middle nav order is Quick ask, Capabilities, Models where the drawing lists Models, Capabilities, Quick ask; the Providers, Customize and Automation rows sit beside the 12 and the drawing does not show them. Earlier sign-off commits: 2082c2b8 and 1e0580fb on design-signoff-0115 (named 7c81da08).
