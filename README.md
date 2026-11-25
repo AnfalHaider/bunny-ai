@@ -106,7 +106,11 @@ These are things you can type today. What I do is described from how I really be
 
 ### 6. "Find my tax return" (from the Quick ask bar)
 **You say (in the floating bar):** *Find the file called tax return from last year.*
-**I do:** With **Search this PC** switched on (it's off until you turn it on in **Settings → Capabilities**), I search the files Windows has indexed: names, folders, dates and snippets. By default I open up to three of the best matches, read up to three of them, and answer from them with links. Folders such as Windows, Program Files, AppData and the ones that hold keys are always left out, and you can add your own exclusions.
+**I do:** I search the files Windows has indexed: names, folders, dates and snippets. Folders such as Windows, Program Files, AppData and the ones that hold keys are always left out, and you can add your own under **Excluded folders**. As things stand in v0.1.14 it is off until you turn it on in **Settings → Capabilities**, and then I open up to three of the best matches, read up to three of them, and answer from them with links.
+
+<!-- V0115:begin search-pc-default -->
+> **🆕 v0.1.15 (not released yet):** Search this PC is on for finding only. I show what I found (names, folders, dates), the first search says so and where to turn it off, and in **Settings** you can turn it off or choose **Read the files, then answer** instead.
+<!-- V0115:end search-pc-default -->
 **You see:** the answer, **Sources** chips under it and [1], [2] marks showing which files I used.
 
 <!-- V0115:begin quick-ask-note -->
@@ -273,7 +277,7 @@ You decide what I may do. I'll grumble, but I'll obey.
 **Permission rules** go further: in **Settings → Code** you can tell me "always allow `npm test*`", "always ask before `git push*`" or "never touch `secrets/**`", for every folder or just one. Deny always wins, Plan mode still means look-only, and **Try a command** shows what I'd do without running anything. The rules are a guard rail against my mistakes, not a sandbox.
 
 <p align="center">
-  <img src="docs/images/permission-rules.png" alt="Settings, Code: permission rules with Deny, Ask and Allow lists" width="440" />
+  <img src="docs/images/permission-rules.png" alt="Settings, Permissions: permission rules with Deny, Ask and Allow lists" width="440" />
   <img src="docs/images/blocked-asked.png" alt="A step denied by a rule, tagged in amber, then a card Asked because of your rule git push" width="440" />
 </p>
 
@@ -315,6 +319,10 @@ flowchart TD
 A folder can carry `AGENTS.md` or `CLAUDE.md` (and `.cursorrules` or `.cursor/rules`). The first time you open such a folder in a chat, I show them in a card instead of quietly obeying them: **Read** shows the text, **Follow them** uses it, and **Not now** asks again later.
 
 Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same text, the text you were shown**, and none of them reads the files by itself. If somebody edits a file afterwards, the Working folder card says **changed since it was read** and keeps using the old text until you choose **Read again**, which shows the difference first; **Use the new text** or **Keep the old text** then decides. A file that isn't used is listed as such, and **Ask me again for this folder** forgets your answer. Only my own window can answer, not a phone.
+
+<p align="center"><img src="docs/images/folder-trust.png" alt="The card &quot;Trust this folder?&quot; with two separate questions: follow the folder's instruction files, and start new chats here in Auto" width="700" /></p>
+
+<p align="center"><img src="docs/images/project-instructions-changed.png" alt="The Working folder card's Project instructions block, with AGENTS.md marked &quot;changed since it was read&quot;" width="700" /></p>
 <!-- V0115:end project-instructions -->
 <!-- V0115:begin rewind -->
 - **Rewind.** A list of a chat's checkpoints, one per reply that changed files, so you can go back further than one reply and see what each step restores before you confirm.
@@ -324,6 +332,10 @@ Once you follow a folder, **Bunny, Claude Code and Codex CLI all get the same te
 Open the engine chip in a Code chat and pick **Switch this chat to…**. Bunny, Claude Code and Codex CLI are listed. An engine that can't take the chat says why on its row, with the button that fixes it (**Download**, **Turn on**, **Sign in**), and a chat needs a working folder first.
 
 Before it happens, I say what the new engine gets: this chat's folder, the folder's instruction files you chose to follow, a summary of the conversation and the list of files this chat changed. Answers that used files from your PC are left out. Your files and **Undo** stay as they are, and a line in the chat shows where the engine changed. A switch waits until the current reply has finished, and only my own window can do it, not a phone.
+
+<p align="center"><img src="docs/images/engine-switch-menu.png" alt="The engine chip's menu &quot;Switch this chat to…&quot; listing Bunny, Claude Code and Codex CLI" width="520" /></p>
+
+<p align="center"><img src="docs/images/engine-switch-confirm.png" alt="The confirm card &quot;Switch this chat to Codex CLI?&quot; saying what the new engine gets" width="700" /></p>
 <!-- V0115:end engine-switch -->
 <!-- V0115:begin settings-overhaul -->
 - **A clearer Settings,** after every setting has been checked to work, stick and read clearly.
