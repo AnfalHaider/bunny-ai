@@ -119,6 +119,7 @@ test('Follow them stays disabled until every instruction file has been read, and
   await card.getByRole('button', { name: 'Follow them' }).click();
   const follow = page.getByRole('dialog').getByRole('button', { name: 'Follow them' });
   await expect(follow).toBeDisabled();
+  for (const b of await page.getByRole('dialog').getByRole('button').all()) { const box = await b.boundingBox(); if (box) expect(box.height, await b.textContent()).toBeGreaterThanOrEqual(43.5); } // the instruction-files card (Read, Not now, Follow them) too
   await expect(page.getByRole('dialog')).toContainText('Read the file before you follow it.');
   await page.getByRole('dialog').getByRole('button', { name: 'Read', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Invented rules: be kind.');

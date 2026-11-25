@@ -1624,4 +1624,9 @@ html.no-dvh .app { height: var(--vv-h, 100vh); }
   .permission-actions { gap: var(--sp-3); }
 }
 /* F12 (QA): the trust card's buttons are touch targets on a phone, like the other cards */
-@media (max-width: 600px) { .fr-card .btn, .fr-card button { min-height: 44px; padding-inline: var(--sp-5); } }
+@media (max-width: 600px) {
+  .fr-card .btn, .fr-card button { min-height: 44px; padding-inline: var(--sp-5); }
+  /* the instruction-files card (a modal, not inside .fr-card): its Read link and its buttons are touch targets too */
+  .folder-rules-modal button { min-height: 44px; }
+  .folder-rules-modal button.lnk { display: inline-flex; align-items: center; padding-inline: var(--sp-4); }
+}
