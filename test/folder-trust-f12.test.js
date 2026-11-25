@@ -288,3 +288,13 @@ test('F12-6 live: with the default set to auto, a message from a device in a cha
   });
   assert.equal(sawCard, true, 'a command from a device shows a card even though the default is auto');
 });
+
+test('F12-6 store: a session file with no permissionMode loads as ask (the first lock; the route\'s own fallback is the second)', async () => {
+  const { createSessionStore } = await import('../src/server/sessions.js');
+  const dir = await mkdtemp(join(tmpdir(), 'bunny-sess-'));
+  const id = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+  await writeFile(join(dir, `${id}.json`), JSON.stringify({ id, title: 'older chat', messages: [] }));
+  const store = createSessionStore({ dir });
+  assert.equal((await store.get(id)).permissionMode, 'ask');
+  assert.equal((await store.list()).find((s) => s.id === id)?.permissionMode, 'ask');
+});
