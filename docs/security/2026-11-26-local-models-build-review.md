@@ -266,3 +266,108 @@ Builder E couldn't confirm LM Studio's settings file from its docs or a fresh in
 - **F-1 blocks:** the app doesn't start.
 - **The Vulkan part holds.** Once F-1 is fixed and the full suite and the gate pass, I sign `v0116-local-models` again on that sha, covering CPU and Vulkan.
 - **The 60d7ef2c sign-off stays valid for that sha only (CPU).** A push of 58281a46 or later needs the new sign-off.
+
+## Review of the whole build at db4ee101: F-1 fixed, plus own files and folders (LF-1 to LF-26), 2026-11-27
+
+Asked by Builder E and the Chief of Staff. Builder E's commits since 58281a46:
+- 49d055c3: `folderRules.js` restored;
+- d23005c8: places and own files;
+- af461762: the download folder, records, Move and Remove;
+- fa344a0a: the service wiring;
+- 382854f2: routes and dialogs;
+- d687a111: the UI, plus the LF-8 and mapped-drive records;
+- 627046e4: QA fixes, and Vulkan for NVIDIA only;
+- 2297398e and db4ee101: UI and pictures.
+
+I read these files: `localFolderRules.js`, `localPlaces.js`, `localStore.js`, `ggufHeader.js`, and the changes to `localRuntime.js`, `localDownload.js`, `localModelsReal.js`, `app.js`, `windowOnly.js`, `remoteAccess.js`, `electron/main.js`, `preload.cjs`, `quick-ask-answer.js` and `src/ui/local-places.js`.
+
+### F-1: fixed
+
+- `git diff --quiet 60d7ef2c db4ee101 -- src/server/folderRules.js` reports the file identical to 60d7ef2c.
+- The model-folder rules now live in `localFolderRules.js`.
+- `import('./src/server/app.js')` loads.
+
+### What holds
+
+- **Window-only (LF-1, LF-13).**
+  - `/api/local-models/places*` is on `WINDOW_ONLY_ROUTES` for GET as well as writes, and on `deviceRefusal`.
+  - Folders and files come only from `dialog.showOpenDialog` in the main process, through `isOwn`-checked IPC. The routes take entry ids and tokens, never a path.
+  - The shared `/api/local-models` status carries no path.
+  - The quick-ask change sends Bunny's own fixed words ("Starting your local model…"), never text from the answer.
+- **Path rules (LF-2, LF-14, LF-15, LF-19, LF-22, LF-23).**
+  - Every check runs on the real path. Anything starting with `\\` is refused, and a `Network` drive type is refused.
+  - Refused: the download folder as a link; a file that is a link.
+  - The never-allowed list is complete: data, install, drive root, the profile and anything containing it, system and AppData folders, `$Recycle.Bin`, `System Volume Information`, `.git`, and `isProtected`.
+  - The download folder must not overlap a model folder or LM Studio's folder.
+  - For the download folder only: removable drives, Downloads and Desktop (known folders and defaults) and project folders are refused.
+- **The walk (LF-16, LF-25).** It goes 3 levels deep (`<folder>\a\b\file.gguf`) and at most 5,000 entries, uses `lstat`, never follows links, and lists a file two folders reach once (`dev:ino`).
+- **The header parser (LF-3, LF-4).** It uses BigInt and checks every length against what is left before reading. The caps are as ruled; nested arrays, unknown value types, bad alignment, split and projector files, and unknown tensor types are refused. A tensor's end is checked against the file size. Templates are capped at 128 KiB, must be UTF-8 with no NUL, and get a sha256 each. Strings from the file are shown with `textContent`, after `cleanLabel` removes control and bidi characters.
+- **The runner (LF-7, LF-9).**
+  - The working folder is the runtime folder for every start.
+  - `--chat-template chatml` is the only template flag ever passed, and `checkArgv` refuses any other value.
+  - `--chat-template-file`, `--mmproj`, `-md` and `--slot-save-path` are now on `FORBIDDEN_FLAGS`.
+  - Own files start with `-m <real path>`, and tools are off by default.
+- **Records and fingerprints (LF-17, LF-18, LF-21, LF-24).**
+  - Records are kept only in the data folder: `stat` with `bigint`, and dev, ino, size, mtime and ctime.
+  - Any difference triggers a full re-hash against the pin before the start.
+  - `.part` and final files are created with `wx`, through `link` then `rm`, and a stranger file is adopted only on a matching sha.
+  - Move hashes the new copy against the pin, writes the new record, then deletes the old file only if it still matches.
+  - Remove deletes only recorded files that match, and prunes only empty folders, never a tree.
+  - The download folder's `Bunny models\` is on `protect` for every workspace, so `write_file` and the `make_*` tools refuse it.
+  - The ctime in the record is stricter than I asked: it catches an in-place edit with the mtime set back.
+- **Layout.** The revision folder under `<owner>__<repo>` (LM-5's layout) is accepted in place of LF-17's shorter one.
+- **Mapped drive (LF-14).** It is not proven on this PC: no share could be made. The DriveInfo check is added and tested with an injected type. That is what LF-14 asks for when the resolve is unproven, with M-3 below.
+- **Vulkan for NVIDIA only:** narrower than 58281a46; fine.
+
+### MEDIUM: must be fixed before I sign
+
+**M-1: the folder lock leaves other accounts' access on a `Bunny models` folder that already existed.**
+- `setDownloadFolder` reuses an existing `<chosen>\Bunny models\` and runs `icacls /inheritance:r /grant:r` on it. That removes inherited entries only.
+- Reproduced in the scratchpad on a throwaway folder (since deleted): I gave it `BUILTIN\Users:(OI)(CI)(M)`, then ran the exact `lockFolder` command. It still lists `BUILTIN\Users:(OI)(CI)(M)` beside the three grants.
+- So the LF-17 promise fails exactly when the folder was made by someone else, or by an earlier tool. That promise is that only the person, SYSTEM and Administrators can change a model, and it is what LF-18's accepted check-then-open gap rests on.
+- **Fix.** After locking, read the ACL back. Require exactly the three grants on the folder, protected from inheritance, with an owner of the person, SYSTEM or Administrators. The same must hold for anything already inside it, for example a reset of the children followed by the read-back. Otherwise refuse with the existing `perms` message.
+- **Tests:** a pre-existing folder with an extra explicit ACE ends with only the three, or is refused; a child with its own ACE is reset or refused.
+
+**M-2: LM Studio's pointer file can make Bunny open a network path, outside the profile folder.**
+- `lmStudioCandidate` accepts a pointer line starting with `\\`. It then reads `<pointer>\settings.json` before any rule runs.
+- Opening `\\server\share\settings.json` sends the person's Windows sign-in hash to that server: the reason LF-2 refuses network paths.
+- It also breaks the LF-8 ruling: "only those two files, under `os.homedir()`".
+- And `downloadsFolder` isn't required to be absolute. The sources file says it is taken as an absolute path only; the code doesn't check that.
+- **Fix:**
+  - the pointer line must match `^[A-Za-z]:\\`;
+  - pass it through `rules.checkFolder` (real path, local drive type) before reading anything inside it;
+  - require `downloadsFolder` to match `^[A-Za-z]:\\`.
+- **Tests:** a pointer to `\\host\share` reads nothing there; a pointer on a Network-type drive reads nothing there; a relative `downloadsFolder` falls back to the defaults.
+
+**M-3: the drive-type check fails open.**
+- `windowsDriveType` returns `''` when PowerShell is missing, errors or times out after 15 s. `local()` then accepts the drive.
+- Because the mapped-drive resolve is unproven, that check is the only thing that stops a mapped network drive.
+- **Fix:** accept only `Fixed`, plus `Removable` where removable drives are allowed. Refuse anything else, `''` included, with "Bunny couldn't check this drive. Try again."
+- **Tests:** an injected `''` and an injected `Unknown` are refused, for a folder and for a file.
+
+### LOW: can come with the fix or follow in v0.1.17
+
+- **L-a.** The "Show the template" view is cut to 4,000 characters with no notice (`cleanLabel(..., 4000)`), while a template may be up to 128 KiB. Show the whole text (it is capped already), or say "Showing the first 4,000 of N characters". Hidden text after the cut is what the view exists to reveal.
+- **L-b.** `formatOf` compares only the default template with the curated shas. A file with a known default template plus an unknown named variant (for example `tool_use`, which the runner may use once tools are on) is labelled "Same chat format as". Say "Unknown chat format" unless every template sha is known.
+- **L-c.** `projectFolders` holds only the folders chosen in this launch (`chosenFolders`). Folders of earlier chats and the folder-trust list aren't counted, so LF-23's choose-time check is weaker after a restart. The write-tool protection covers the main risk. Add saved session folders and trusted folders.
+- **L-d.** `finalize` falls back to `rename` where hard links fail, and `rename` replaces a file created in the gap. Use a copy with `wx` instead, or re-check right before. This is inside the locked folder.
+- **L-e.** `.part.json` is written with `writeFile`, which follows a link. Use `wx`, or `lstat` first. This is inside the locked folder.
+
+### Tests
+
+`npm test` at db4ee101, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`:
+
+| Batch | Tests | Pass | Fail | Skipped |
+|---|---|---|---|---|
+| Parallel | 2,115 | 2,082 | 16 | 13 |
+| Serial | 232 | 232 | 0 | 0 |
+
+- **15 of the 16 failures** are the Office-file tests (OM-4 to OM-7, items 1 to 8, the three `make_*` checks). They fail on "Cannot find package 'docx'" and "'write-excel-file'": this worktree's `node_modules` doesn't have those packages. `package.json` lists them, and this build doesn't change `package.json`. That is my environment, not the build; Builder E's run had them passing.
+- **The 16th** is WA-2, the known web-search failure, fixed in tests at b03cd5a3.
+- I didn't run the e2e suite or the gate. The Chief runs the gate on the integration branch.
+
+### Verdict at db4ee101: NOT YET
+
+- **F-1 is fixed, B3 holds, and LF-1 to LF-26 are built as ruled**, except M-1 to M-3.
+- **M-1 to M-3 block the sign-off.** Each is a small change with its tests.
+- **On the fix sha**, I sign `v0116-local-models` for CPU, Vulkan (NVIDIA), own files and folders.
