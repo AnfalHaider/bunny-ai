@@ -229,3 +229,93 @@ Keep LM-10, which is Sec LM-3, and change LM-5d to read "Bunny never uses `-hf`;
    - A test sends that device request and proves the runtime does not start.
 2. **Only a question the person typed starts it.** A start from the bar comes only from a question typed there, never from a retry loop, a scheduled task or a helper.
 3. **Scheduled runs and helpers.** The spec does not say whether these may start the runtime, and it must. Security accepts either answer. My recommendation is the cautious one: they get `local.notRunning` unless the runtime is already running.
+
+## Rulings after the spikes (Builder D's records: de9c2451 and 8b390825 on `claude/v0116-local-models-spikes`, `docs/spikes/local-models/`), 2026-11-26
+
+Read from the spike records. I also re-read these public sources myself on 2026-11-26, metadata only, with nothing downloaded:
+- the GitHub release API for b12760;
+- llama.cpp's published advisory list;
+- the Hugging Face tree and revision APIs at both pinned commits.
+
+### SP-1: the runtime pin is b12760
+
+| Backend | Asset | Size | sha256 |
+|---|---|---|---|
+| cpu | `llama-b12760-bin-win-cpu-x64.zip` | 25,273,382 | `c82a83190be4f0506778d458db685b6ba5d1b06372b7f7083e6e76605c84cb97` |
+| vulkan | `llama-b12760-bin-win-vulkan-x64.zip` | 39,145,779 | `c7764958827c03353da4d4543e6b44a99ac984fed9b098052e320b02089fb6e9` |
+
+- **The asset address.** URL: `https://github.com/ggml-org/llama.cpp/releases/download/b12760/<asset>`. GitHub publishes the release as b12760, a pre-release, on 2026-11-26.
+- **Advisories (Sec LM-1.8).** The published list holds no advisory that affects b12760:
+  - the newest are GHSA-j8rj-fmpv-wcxw (RPC, up to b7991), GHSA-3p4r-fq3f-q74v (up to b8145) and GHSA-96jg-mvhq-q7q7 (patched b7824);
+  - everything older is fixed long before b12760.
+  - Advisories not yet published are by definition unknown, so this is re-read at each release (Sec LM-13).
+- **Not signed.** All 101 exe and DLL files are NotSigned. The set-up card's "not signed by its publisher" sentence is required, and the sha256 pin plus the per-file manifest re-checked before every start are the only integrity control.
+
+### SP-2: the RPC files stay in the zip and are never extracted
+
+`ggml-rpc-server.exe` is in both zips, and `ggml-rpc.dll` is in the CPU zip (and in the Vulkan zip, if Builder E finds it there).
+
+- **Per-backend lists.** The unpack rule becomes two exact name lists per backend:
+  - `allow`: extracted, and hashed into the manifest;
+  - `skip`: exactly `ggml-rpc-server.exe` and `ggml-rpc.dll`, left in the zip and never written to disk.
+- **Anything else fails.** Any entry on neither list fails the whole unpack (unchanged).
+- **Tests:**
+  - neither skipped file exists in the runtime folder after set-up;
+  - a start refuses if either file appears there later (the manifest check treats an unknown file in the folder as a change).
+- **The Vulkan build without `ggml-rpc.dll`.** The CPU build was proven to start without it. If the Vulkan zip holds `ggml-rpc.dll`, Builder E's first real Vulkan start (owner's yes for the download, invented profile) confirms it starts without it, before the Vulkan pin ships.
+
+### SP-3: `POST /lora-adapters` is acceptable, under conditions
+
+It needs the key. It can only change the scale of adapters already loaded with `--lora`, and Bunny never passes `--lora` (LM-10), so there is nothing for it to change. No flag turns the endpoint off.
+
+**Required:**
+- the argv test keeps refusing `--lora` and `--lora-scaled`;
+- Bunny's code never calls `/lora-adapters`, and a grep test checks it;
+- the key stays the only way in (SP-5).
+
+`GET /props` with the key is read-only and acceptable. `POST /props` is 501.
+
+### SP-4: the host constants
+
+**Runtime.** `github.com`, then `release-assets.githubusercontent.com` (as recorded). Also allow `objects.githubusercontent.com`, GitHub's other asset host, because the sha256 pin decides integrity and both are GitHub's own.
+
+**Models.** `huggingface.co`, then `us.aws.cdn.hf.co` (as recorded).
+- The CDN host is regional: a PC in another region may be sent to another `*.cdn.hf.co` name.
+- So allow `huggingface.co` plus any host matching `^[a-z0-9-]+(\.[a-z0-9-]+)*\.cdn\.hf\.co$`. That is Hugging Face's own domain, checked again with the `fetchLimited` public-address rules at every hop.
+- The pinned sha256 (with the size and `X-Linked-ETag` agreement of LM-5d) remains the integrity control.
+- Nothing wider: not `*.hf.co`, not `*.amazonaws.com`.
+
+### SP-5: the key file is deleted once `/health` answers
+
+The spike shows the server reads the key file once, at start. So the file is deleted as soon as `/health` returns 200, not at stop, and the key stays only in the main process's memory.
+- **Every start:** a new key and a new file.
+- **Tests:**
+  - the file is gone after a successful start;
+  - a failed start deletes it too.
+
+### SP-6: test the job object and the Low helper together, before ship
+
+These were not run in the spikes.
+
+**Required in the build's tests** (fake runtime, invented profile):
+- the Low helper is itself assigned to the kill-on-close job, and the server it starts is a child inside that job;
+- killing Bunny's process hard (a crash, not a normal exit) ends the server.
+
+If the helper cannot be placed in the job, the job wraps the helper's child some other way. Either way the test proves "Bunny gone ⇒ server gone".
+
+**Vulkan under Low.** It is slower (11.3 s to start, 18.2 tokens/s, against 6.4 s and 28.8 at Medium). Low stays required (Sec LM-3) for both builds, with no Medium fallback offered in v0.1.16.
+
+### SP-7: the curated list for v0.1.16 is the two proven models
+
+These are the only entries I have checked (Sec LM-6). I re-read both from the Hugging Face APIs at the pinned commits. Each is not gated, tagged `license:apache-2.0`, and published by the model's own organisation.
+
+| id | repo | revision | file | size | sha256 |
+|---|---|---|---|---|---|
+| qwen3-4b | `Qwen/Qwen3-4B-GGUF` | `bc640142c66e1fdd12af0bd68f40445458f3869b` | `Qwen3-4B-Q4_K_M.gguf` | 2,497,280,256 | `7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5` |
+| granite-4.1-3b | `ibm-granite/granite-4.1-3b-GGUF` | `ab4701481089b58a082ef63cc1cee738887293ff` | `granite-4.1-3b-Q4_K_M.gguf` | 2,099,501,664 | `662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29` |
+
+**Each entry's chat template.**
+- Sec LM-6 says each entry's chat template was read, and the spikes did not record it.
+- Before I sign the build, `localModels.sources.md` must carry, per entry, the template text (or its sha256 and where it was read), taken from the GGUF header at the pinned commit with a range read of the header only.
+
+**Other models.** They are not refused on security grounds, but none has been checked. A model with tools not proven (`tools: false`, chat only) may join in a later release, once its entry is sent to me with the same five values and template, and I have checked it. The memory fit is also unmeasured for those (S-LM5 covered only these two).
