@@ -25,6 +25,8 @@ const PROVIDER_ID = 'bunny-local';
 export const VULKAN_PROVEN = ['nvidia', 'intel'];
 /** Security B3: the Vulkan build without ggml-rpc.dll has not been run (only the CPU build was). Until a run is recorded (through the Low helper, the LM-2 argv, one chat, the Vulkan device in the log) every PC gets the CPU build. */
 export const VULKAN_RECORDED = false;
+/** The smallest graphics card in a --list-devices answer (it runs out of room first), or null. */
+export const smallestCard = (devices) => [...devices].filter((d) => d.totalBytes > 0).sort((a, b) => a.totalBytes - b.totalBytes)[0] ?? null;
 export const chooseBackend = ({ vendor = null, useGpu = true, vulkanRecorded = VULKAN_RECORDED } = {}) => (vulkanRecorded && useGpu && VULKAN_PROVEN.includes(String(vendor ?? '').toLowerCase()) ? 'vulkan' : 'cpu');
 
 export function createRealLocalModels({
@@ -56,7 +58,7 @@ export function createRealLocalModels({
     // the free graphics memory is asked of the program at most every 30 s, and not while a model runs (the number would only be the model's own)
     if (useCard && typeof tryProgram.devices === 'function' && !runner.running() && clock() - freeVramAt > 30_000) {
       freeVramAt = clock();
-      const d = (await tryProgram.devices(join(runtimeDir(), pin.entry)).catch(() => []))[0];
+      const d = smallestCard(await tryProgram.devices(join(runtimeDir(), pin.entry)).catch(() => []));
       if (d?.freeBytes != null) freeVramNow = d.freeBytes;
     }
     return { totalRam: totalmem(), freeRam: freemem(), vram: useCard ? card.vram : null, freeVram: useCard ? (freeVramNow ?? card.vram) : null, gpu: useCard, freeDisk, gpuName: card?.name ?? null };
@@ -149,7 +151,7 @@ export function createRealLocalModels({
         setup.step = 4;
         const t = await tryProgram(join(dir, pin.entry), backend);
         if (!(t === true || t?.ok)) throw new RuntimeError('runtime.trial', "The program didn't start on this PC.");
-        const vram = Math.max(0, ...((t?.devices ?? []).map((d) => d.totalBytes ?? 0)));
+        const vram = smallestCard(t?.devices ?? [])?.totalBytes ?? 0; // the smallest card: the program may spread a model over every card, and the smallest is the one that runs out first
         state = { ...state, installed: true, backend, gpu: found?.name ? { vendor: found.vendor, name: found.name, vram: vram || null } : null }; await save();
         freeVramAt = 0; freeVramNow = null;
       } catch (err) {
@@ -221,7 +223,8 @@ export function createRealLocalModels({
     const fit = chooseContext(e, { freeRam: hw.freeRam, freeVram: hw.freeVram ?? null, gpu: Boolean(hw.gpu && state.useGpu) });
     if (fit.fit.result === 'too-big') throw new LocalError('local.memory', `Not enough memory to load ${e.name}. This PC has about ${(hw.freeRam / GB).toFixed(1)} GB free and the model needs about ${(fit.fit.need / GB).toFixed(1)} GB. Close other apps or choose a smaller model.`, 409);
     try {
-      return await runner.ensure({ runtimeDir: runtimeDir(), modelFile: modelFile(e), modelId: id, ctx: fit.ctx, gpu: state.backend === 'vulkan' && state.useGpu });
+      // layers go to the graphics card only when the whole model and its cache fit there; otherwise the program decides what it can offload
+      return await runner.ensure({ runtimeDir: runtimeDir(), modelFile: modelFile(e), modelId: id, ctx: fit.ctx, gpu: state.backend === 'vulkan' && state.useGpu && fit.fit.result === 'fits-gpu' });
     } catch (err) {
       if (err instanceof RuntimeStartError) throw new LocalError(err.code, err.code === 'local.missing' ? "Bunny local isn't set up on this PC. The program that runs models isn't installed (it may have been removed)." : err.code === 'local.changed' ? "Bunny local's program changed on disk. Bunny won't start it, in case something else altered it. Set it up again to get a fresh, checked copy." : err.message, 409);
       throw err;
