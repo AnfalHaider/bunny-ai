@@ -133,13 +133,14 @@ export function createRealLocalModels({
       : [{ kind: 'changed', title: "Bunny local's program changed on disk", body: "Bunny won't start it, in case something else altered it. Set it up again to get a fresh, checked copy. Your downloaded models are kept.", action: 'Set up again' }];
   }
 
-  async function status() {
+  async function status(tries = 0) {
     await load();
+    const snap = state; // set-up, Remove and a reload replace `state`; a read that straddles one is made again (at most 3 reads), so the PC line and `installed` come from the same moment
     const hw = await hardware();
     const running = runner.running();
     const program = checkRuntimePins(pins, { forShip: true }).length === 0 || allowIncompletePins;
     const models = await Promise.all(list.map((e) => view(e, hw, program)));
-    return {
+    const out = {
       fake: false,
       program: { ...PROGRAM, sizeMB: Math.round(pin.files[chooseBackend({ vendor: null })].size / 1e6), licence: pin.licence, signed: pin.signed === true, tag: pin.tag, available: program },
       installed: state.installed, setup: setup ? { step: setup.step } : null,
@@ -150,6 +151,7 @@ export function createRealLocalModels({
       usedBytes: models.reduce((n, m) => n + (m.state === 'ready' ? m.size : 0), 0),
       error: lastError, alerts: await alerts(), raised: [], removal: lastRemoval ? { removed: lastRemoval.removed, left: lastRemoval.left.length, missing: lastRemoval.missing.length } : null,
     };
+    return snap === state || tries >= 2 ? out : status(tries + 1);
   }
 
   async function setUp() {
