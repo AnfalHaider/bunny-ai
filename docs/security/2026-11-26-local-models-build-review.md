@@ -190,3 +190,79 @@ B1 to B3 and L1, L2 and L4 are settled. These are left for later, not blockers:
 - L3: narrow the allow lists to the files the runner loads;
 - the Vulkan run and its review;
 - the own-files and folders build, LF-1 to LF-26: a separate piece, reviewed on its own sha.
+
+## Review at 58281a46: the Vulkan run (B3), plus the start of the folder work, 2026-11-26
+
+**Commits since 60d7ef2c:**
+- b97f8ab3: the GGUF header parser;
+- 03ab6472: the folder rules, and the smallest-card memory;
+- 58281a46: `VULKAN_RECORDED = true`, with the run record `docs/spikes/local-models/vulkan-run-2026-11-26.md`.
+
+### B3: the Vulkan run holds
+
+- **Done under the owner's yes**: "Yes, test the GPU version now" (9ea63f82). It ran in an invented data folder, and everything was deleted afterwards.
+- **The pinned Vulkan zip**, checked against its sha while streaming: 52 files written, with `ggml-rpc.dll` and `ggml-rpc-server.exe` absent. That matches SP-2's 51-entry allow list plus the program itself.
+- **The trial and the start** both went through the real Low helper and job, with the LM-2 argv exactly as listed. The key file was deleted at `/health`.
+- **The Vulkan device did real work without the DLL.** The server allocated on `Vulkan1`, the NVIDIA card, and that allocation failed at `-c 32768`. Bunny reported it in plain words. Then:
+  - `-c 4096 -ngl 99` answered one chat;
+  - the app's own choice (no `-ngl`) answered too.
+- **The device line.** The server's own device line isn't kept at verbosity 1, so it was shown by `--list-devices` and by the allocation error instead. I accept that in place of the log line.
+- **The two code changes are acceptable:**
+  - `smallestCard`: Bunny counts the smallest card's memory, not the processor's 17 GB of shared memory;
+  - `-ngl 99` is passed only on `fits-gpu`.
+- **Not a security point, for QA.** `VULKAN_PROVEN` includes Intel, but the run used the NVIDIA card. The security question was whether the Vulkan build runs without `ggml-rpc.dll`, which doesn't depend on the card maker; that is answered. Whether a PC with only Intel graphics runs well is a working question for QA.
+
+### BLOCKER F-1: `src/server/folderRules.js` was overwritten, and the app doesn't start
+
+03ab6472 replaced the whole of `src/server/folderRules.js` (v0.1.15's FOLDER-RULES and ONE-INSTRUCTIONS: the instructions-file reader with FR-1 fencing and cleaning) with the new model-folder rules. Its exports were the security control for instructions files:
+- `bunnyNote`, `cleanName`, `cleanText`, `collectFolderRules`, `engineBlock`, `listDir`, `systemLine`, `FENCE_*`.
+
+They are gone, but `app.js:105` still imports them.
+
+Evidence, at 58281a46, in an invented profile (`BUNNY_DATA_DIR` set to a temp folder, `BUNNY_FAKE_UPSTREAM=1`):
+
+```
+node -e "import('./src/server/app.js')"
+APP FAILS: The requested module './folderRules.js' does not provide an export named 'bunnyNote'
+
+node --test test/folder-rules.test.js test/one-instructions.test.js
+SyntaxError: The requested module './folderRules.js' does not provide an export named 'bunnyNote'
+tests 2, pass 0, fail 2
+
+node --test test/local*.test.js
+tests 90, pass 85, fail 4, skipped 1
+failing: local-mcp, local-models-fake, local-models-smart, local-models (each imports app.js)
+```
+
+**Fix.**
+- Restore `src/server/folderRules.js` exactly as at 60d7ef2c.
+- Put the model-folder rules in a new file, for example `src/server/modelFolders.js`, and point `test/local-folder-rules.test.js` at it.
+- Then run the full unit suite and the gate, not only `local*`.
+
+The gate (O2) would have caught this. Please send the gate output with the fix sha.
+
+### The folder rules and the header parser: not reviewed yet
+
+They have no routes yet, so this sha doesn't expose them. I review them against LF-1 to LF-26 when the routes and the UI arrive, on their own sha.
+
+### LF-8: LM Studio's settings, when they can't be verified
+
+Builder E couldn't confirm LM Studio's settings file from its docs or a fresh install. What there is:
+- the key `downloadsFolder` in `~\.lmstudio\settings.json` (from a public issue);
+- a `~\.lmstudio-home-pointer` file (from a community plugin).
+
+**Ruling: acceptable, read as a hint only.** Record both in `localModels.sources.md` as unverified, with their sources. Rules for reading them:
+- Read only those two files, and only under `os.homedir()`. Each is read with a 1 MiB cap, never followed if it is a link, and never written.
+- `settings.json` is parsed as JSON, and only the string at `downloadsFolder` is taken.
+- The pointer file is read as UTF-8 text. Only its first line is taken, trimmed, and it must be an absolute path.
+- Each path found is checked with LF-14 and LF-15 like any model folder:
+  - the models folder is `<pointer>\models` when the pointer names LM Studio's home, or the `downloadsFolder` value itself;
+  - a network path is not listed.
+- Anything missing, malformed, oversized or refused falls back to the two defaults, with no error dialog.
+- Tests: a pointer to a UNC path, to the data folder, to a link, a 2 MiB file, a non-JSON settings file, and a `downloadsFolder` that isn't a string.
+
+### Verdict at 58281a46: NOT YET
+
+- **F-1 blocks:** the app doesn't start.
+- **The Vulkan part holds.** Once F-1 is fixed and the full suite and the gate pass, I sign `v0116-local-models` again on that sha, covering CPU and Vulkan.
+- **The 60d7ef2c sign-off stays valid for that sha only (CPU).** A push of 58281a46 or later needs the new sign-off.
