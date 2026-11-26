@@ -8,13 +8,25 @@
  * Security (F6): api.search.brave.com is reached only with the person's own key and only from here (web_search). The key goes in the X-Subscription-Token header and nowhere else: it is not in
  * a URL, a log line, a step result or an error text. Every outcome text below is fixed wording or a status number, never the provider's own answer.
  */
+import { isIP } from 'node:net';
+import { isPrivateAddress } from './download.js';
 export const BRAVE_SECRET = 'search:brave';
 export const BRAVE_HOST = 'api.search.brave.com';
 const LIMIT_MS = 15_000;
 const MAX_HITS = 8;
 const STRIP = (t) => String(t ?? '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim(); // one line each: a title or snippet with a line break cannot pass for a link line
-const okLink = (link) => /^https?:\/\//i.test(link) && !/[\s\u0000-\u001f\u007f]/.test(link);
-const block = (title, link, snippet) => `- ${STRIP(title)}\n  ${link}\n  ${STRIP(snippet).slice(0, 220)}`;
+const okLink = (link) => {
+  if (!/^https?:\/\//i.test(link) || /[\s\u0000-\u001f\u007f]/.test(link)) return false;
+  // WS-2: never offer the model a link into the search engine itself, or to a private, loopback, link-local or name-less host: the model could be led to read_url them
+  let host;
+  try { host = new URL(link).hostname.toLowerCase().replace(/^\[|\]$/g, ''); } catch { return false; }
+  if (/(^|\.)bing\.com$/.test(host)) return false;
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || (!host.includes('.') && !host.includes(':'))) return false;
+  if (isIP(host) && isPrivateAddress(host)) return false;
+  return true;
+};
+// WS-3: a snippet that is itself an address must not look like a link line (the quick bar lists only the link lines the search gave it): it gets a leading mark
+const block = (title, link, snippet) => { const sn = STRIP(snippet).slice(0, 220); return `- ${STRIP(title)}\n  ${link}\n  ${/^["'(\[<]*https?:\/\//i.test(sn) ? '· ' : ''}${sn}`; };
 const timedOut = (err) => err?.name === 'TimeoutError' || err?.name === 'AbortError';
 export const BING_HOST = 'www.bing.com';
 export const WIKI_HOST = 'en.wikipedia.org';
@@ -41,6 +53,15 @@ const REST_MS = 5 * 60_000;
 const CACHE_MS = 2 * 60_000;
 const resting = new Map(); // provider id -> time it may be asked again
 const remembered = new Map(); // question -> { at, text }
+const CACHE_MAX = 50;
+/** WS-4: the memory holds only what is fresh and at most CACHE_MAX questions: old entries go on every write, then the oldest. */
+function remember(key, text, at) {
+  for (const [k, v] of remembered) if (at - v.at >= CACHE_MS) remembered.delete(k);
+  remembered.delete(key);
+  remembered.set(key, { at, text });
+  while (remembered.size > CACHE_MAX) remembered.delete(remembered.keys().next().value);
+}
+export const rememberedCount = () => remembered.size;
 export function resetWebSearch() { resting.clear(); remembered.clear(); }
 
 /** One provider = how to ask, and how to read the answer. { hits } on success (maybe empty), { reason } on failure. A second keyed provider is one more entry. */
@@ -161,7 +182,7 @@ export async function searchWeb(query, { fetchImpl = globalThis.fetch, braveKey 
     if (out.rest) resting.set(p.id, now() + REST_MS);
     if (out.hits?.length && relevant(q, out.hits)) {
       const text = `(via ${p.label})\n${out.hits.join('\n')}`.split(key0 || '\u0000').join('[key]');
-      if (!p.needsKey) remembered.set(q.toLowerCase(), { at: now(), text });
+      if (!p.needsKey) remember(q.toLowerCase(), text, now());
       return text;
     }
     if (out.hits?.length) { reasons.push(`${p.label} answered a different question`); continue; }

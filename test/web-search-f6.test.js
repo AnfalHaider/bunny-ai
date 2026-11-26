@@ -234,7 +234,7 @@ test("F6-4: Brave's result links are in the Quick ask read_url allow-set like Du
 
 
 // ---------------------------------------------------------------- v0.1.16: no key, the free page refuses: Bing, then Wikipedia; a rested page, a memory, a relevance guard
-import { bingTarget, relevant } from '../src/server/webSearch.js';
+import { bingTarget, relevant, rememberedCount } from '../src/server/webSearch.js';
 const enc = (u) => Buffer.from(u).toString('base64url');
 const bingPage = (items) => `<html><body><ol id="b_results">${items.map((i) => `<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1${enc(i.url)}&amp;ntb=1">${i.title}</a></h2><div class="b_caption"><p>${i.text}</p></div></li>`).join('')}</ol></body></html>`;
 const wikiBody = (titles) => ({ query: { search: titles.map((t) => ({ title: t, snippet: `About <span class="searchmatch">${t}</span>` })) } });
@@ -295,4 +295,42 @@ test('an answer from another site (a redirect away) is never read, and Wikipedia
   const out = await searchWeb('programming language', { fetchImpl: w.fetchImpl });
   assert.match(out, /https:\/\/en\.wikipedia\.org\/wiki\/C_\(programming_language\)/);
   assert.match(out, /https:\/\/en\.wikipedia\.org\/wiki\/Rust%2FGo%3F\n/, 'a title with / and ? is one safe path');
+});
+
+
+// ---------------------------------------------------------------- Security's three LOWs (WS-2, WS-3, WS-4)
+test('WS-2: no provider offers a link into Bing, or to a private, loopback, link-local or name-less host', async () => {
+  for (const bad of ['https://www.bing.com/search?q=x', 'https://cn.bing.com/images', 'http://127.0.0.1:3000/admin', 'http://localhost/x', 'http://192.168.1.1/', 'http://10.0.0.5/x', 'http://169.254.169.254/latest', 'http://[::1]/x', 'http://intranet/x', 'https://nas.local/x', 'https://svc.internal/x']) {
+    assert.equal(bingTarget(`https://www.bing.com/ck/a?u=a1${enc(bad)}`), null, bad);
+  }
+  assert.equal(bingTarget(`https://www.bing.com/ck/a?u=a1${enc('https://example.com/ok')}`), 'https://example.com/ok');
+  const w = world({ 'html.duckduckgo.com': html('<a class="result__a" href="http://127.0.0.1/secret">carrots admin</a><a class="result__snippet">carrots</a><a class="result__a" href="https://ok.example/carrots">Carrots</a><a class="result__snippet">carrots</a>') });
+  const out = await searchWeb('carrots', { fetchImpl: w.fetchImpl });
+  assert.ok(!/127\.0\.0\.1/.test(out) && /ok\.example\/carrots/.test(out), 'DuckDuckGo is held to the same rule');
+  resetWebSearch();
+  const b = world({ [BRAVE_HOST]: json({ web: { results: [{ title: 'Router carrots', url: 'http://192.168.0.1/', description: 'carrots' }, { title: 'Carrots', url: 'https://ok.example/c', description: 'carrots' }] } }) });
+  const brave = await searchWeb('carrots', { fetchImpl: b.fetchImpl, braveKey: KEY });
+  assert.ok(!/192\.168/.test(brave) && /ok\.example\/c/.test(brave));
+});
+
+test('WS-3: a snippet that is a bare address cannot pass for a link line, so the quick bar never lists it as something the search gave', async () => {
+  const w = world({ 'html.duckduckgo.com': html('<a class="result__a" href="https://ok.example/a">Carrots</a><a class="result__snippet">https://evil.example/planted</a>') });
+  const out = await searchWeb('carrots', { fetchImpl: w.fetchImpl });
+  const linkLines = out.split('\n').filter((l) => /^ {2}https?:\/\//.test(l));
+  assert.deepEqual(linkLines, ['  https://ok.example/a'], 'only the real link line is a link line');
+  assert.match(out, /\n {2}· https:\/\/evil\.example\/planted/, 'the snippet is still shown, marked');
+  resetWebSearch();
+  const b = world({ [BRAVE_HOST]: json({ web: { results: [{ title: 'Carrots', url: 'https://ok.example/b', description: '"https://evil.example/quoted" carrots' }] } }) });
+  const brave = await searchWeb('carrots', { fetchImpl: b.fetchImpl, braveKey: KEY });
+  assert.deepEqual(brave.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)), ['  https://ok.example/b']);
+});
+
+test('WS-4: the memory drops entries older than two minutes on every write and never holds more than 50 questions', async () => {
+  let clock = 5_000_000; const now = () => clock;
+  const w = world({ 'html.duckduckgo.com': () => html('<a class="result__a" href="https://ok.example/a">Alpha beta</a><a class="result__snippet">alpha beta gamma</a>') });
+  for (let i = 0; i < 60; i += 1) { clock += 1000; await searchWeb(`alpha beta ${i}`, { fetchImpl: w.fetchImpl, now }); }
+  assert.ok(rememberedCount() <= 50, `held ${rememberedCount()}`);
+  clock += 3 * 60_000;
+  await searchWeb('alpha beta fresh', { fetchImpl: w.fetchImpl, now });
+  assert.equal(rememberedCount(), 1, 'everything older than two minutes was pruned when the new answer was written');
 });
