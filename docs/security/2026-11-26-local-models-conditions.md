@@ -319,3 +319,189 @@ These are the only entries I have checked (Sec LM-6). I re-read both from the Hu
 - Before I sign the build, `localModels.sources.md` must carry, per entry, the template text (or its sha256 and where it was read), taken from the GGUF header at the pinned commit with a range read of the header only.
 
 **Other models.** They are not refused on security grounds, but none has been checked. A model with tools not proven (`tools: false`, chat only) may join in a later release, once its entry is sent to me with the same five values and template, and I have checked it. The memory fit is also unmeasured for those (S-LM5 covered only these two).
+
+## Model files Bunny didn't download: the owner's own files and LM Studio's folder (LF-1 to LF-12), 2026-11-26
+
+Asked by the Chief of Staff (the owner's request and answer are in 28d7a432, `docs/plans/2026-11-26-v0.1.16-live-fixes.md`, last section). Scope: an "Add a model from this PC" button, and a list of LM Studio's models folder. Bunny's own pinned runner runs the file. Ollama is out of scope. Ruled from the spec and conditions above; nothing was run for this note.
+
+The threat is the same as LM-7, with one thing missing: Bunny can't check where the file came from. Folder names such as `lmstudio-community/...` are just names. So everything rests on the checks below, the Low-integrity runner (LM-3), and the runner having no network (LM-9).
+
+### LF-1: who can add or list (LM-0)
+
+- Adding a file, listing LM Studio's folder, and removing an added entry are window-only. They go on `WINDOW_ONLY_ROUTES` and `deviceRefusal` for both device levels.
+- The AI gets no tool that adds, lists or picks model files.
+- The file is chosen in the main process with the system file dialog (`.gguf` filter). The route takes the dialog's result, or an entry id from Bunny's own LM Studio list. It never takes a free path typed into a request body.
+- A device can chat with an added model once it is running, like any local model. The file's path is never sent to a device, a model, a connector, a helper or an engine; they see Bunny's label only. The path holds the Windows user name.
+
+### LF-2: the path
+
+Decide everything on the real path, `fs.realpathSync.native`, taken once at add:
+- **The file itself must not be a link.** `lstat` it first and refuse a symbolic link, junction or other reparse point: "This file is a link. Pick the file it points to."
+- **Links and junctions in the parent folders are allowed.** Bunny stores, shows and runs the real path, and every later check uses that.
+- **Local drives only.** Refuse a real path that starts with `\\`. That covers UNC paths, `\\?\` and `\\.\` device paths, and mapped network drives, which resolve to `\\server\share`. The real path must match `^[A-Za-z]:\\`. Opening a network path can send the person's Windows sign-in hash to that server, and the file can change under Bunny.
+- **Never inside Bunny's own folders.** Apply `isProtected`, the data folder and the install folder to the real path.
+- **On every start, check again.** `lstat` and realpath again, and compare to what was stored: real path, NTFS file id (`ino`), size and mtime. If anything differs, run LF-3 again; if the template changed (LF-4), show the card again (LF-6). Never start on a mismatch with no check.
+- A whole-file sha256 is not required for own files. It is slow for large files, and the change check above covers a swap.
+
+### LF-3: header and size checks before anything starts
+
+Bunny reads the GGUF header itself, in JavaScript, read-only, with hard limits. The runner is never started on a file that fails. Required:
+- magic `GGUF`; version 2 or 3 only;
+- the header is read with a byte cap (128 MiB), plus:
+  - a cap on each string (1 MiB; chat templates have their own cap in LF-4);
+  - a cap on each array's length (2,097,152 elements);
+  - a cap on the count of keys (8,192) and of tensors (65,536);
+  - every length is checked against the bytes left in the file before it is read, with no 64-bit overflow (use `BigInt` for the counts and offsets);
+- `general.alignment`, if present, is a power of two of at most 1 MiB;
+- every tensor:
+  - has 1 to 4 dimensions;
+  - has a type id the pinned runner knows;
+  - starts and ends inside the file. A truncated file is refused ("the file is incomplete");
+- `general.architecture` is present, matches `^[a-z0-9_.-]{1,64}$`, and is shown on the card;
+- **split files** (`split.count` > 1, or a name like `-00001-of-00003.gguf`) are refused in v0.1.16: "Bunny can't run split model files yet." The runner would load sibling files that Bunny never checked;
+- **vision projector files** (`mmproj-*.gguf`, `general.type` = `mmproj`, or architecture `clip`) are skipped in the list and refused when picked. Bunny never passes `--mmproj`;
+- **size:** the card shows the file size beside the free memory (RAM, and the graphics card's memory for Vulkan). Above that, it says "This may not fit in memory and can make the PC slow." It warns but does not refuse, as LM-12 says.
+
+These checks narrow the attack on the loader; they don't remove it. llama.cpp has had GGUF parsing advisories. The containment is still the Low-integrity runner with no network.
+
+### LF-4: the chat template
+
+The GGUF's `tokenizer.chat_template`, and every named variant `tokenizer.chat_template.<name>`, which llama.cpp uses (for example `tool_use`), are untrusted text that the runner renders. A template can't reach files or the network. It can add hidden text to every prompt, and a parser bug in it is a loader bug (contained by LF-3 and LM-3).
+
+**Ruling: show it and ask, on the one add card (LF-6). No silent built-in fallback.** A built-in format applied to a model it doesn't fit gives broken answers, and the person can't tell why.
+- Each template must be valid UTF-8 with no NUL, and at most 128 KiB. Over the cap, refuse.
+- Bunny takes the sha256 of each template.
+  - If it equals the template recorded for a curated entry in `localModels.sources.md` (SP-7), the card says "Same chat format as <entry>".
+  - Otherwise it says "Unknown chat format", with a "Show the template" view in plain monospaced text. That view is filled with `textContent`, never `innerHTML`.
+- **No template in the file.** Bunny starts with the runner's built-in `chatml` (`--chat-template chatml`) and tools off, and the card says so: "This file has no chat format; Bunny will use a plain one."
+- **A template the runner fails to load.** The start fails with the runner's message. Bunny never retries on its own with another format.
+- Bunny never passes `--chat-template-file` with a path outside its own models folder.
+
+### LF-5: tools are off until the person turns them on
+
+- An added file is **chat only** by default. Its tools were never proven (SP-7), and tool calls depend on the template.
+- The person can turn on tools for that model in the window, with the line "Tools with a model Bunny hasn't checked may be called wrongly. Your permission mode still applies."
+- Everything in LM-8 still applies. That includes Auto with a local model giving Ask unless a judge model is picked.
+
+### LF-6: the add card
+
+It is the same pattern as LM-7. It shows:
+- the file name and its real folder;
+- the size, and the memory line from LF-3;
+- the architecture, and the quantisation type (`general.file_type`);
+- the chat format line from LF-4;
+- the licence as "The file says: <general.license>", or "The file names no licence";
+- the sentence: "Bunny didn't download this file and can't check where it came from. A model file can carry an attack on the program that loads it, and its chat format is run as given. Add it only if you trust where you got it."
+
+For an entry from LM Studio's list, the card begins "From LM Studio's models folder".
+
+The main button is **"Don't add"**; adding is the second button.
+
+Every string taken from the file or from folder names:
+- is shown with `textContent`;
+- has its control characters and bidi overrides removed (U+202A to U+202E, U+2066 to U+2069);
+- is cut to 200 characters for names. Templates are cut only for display.
+
+### LF-7: read in place, never written
+
+- **Bunny reads the file where it is.** It does not copy it: copies of several GB double the disk use and gain nothing, given LF-2.
+- **Bunny opens it read-only and never writes, renames, moves or deletes it, or changes its time.** It writes nothing next to it: no sidecar, cache, settings or slot file.
+  - `LLAMA_CACHE` stays inside Bunny's models folder (LM-10).
+  - `--slot-save-path` is never passed.
+- **"Remove" from Bunny removes Bunny's entry only.** `removeTree` (LM-10) is never called with a path outside Bunny's models folder. The card says "The file stays where it is."
+- **The runner runs at Low integrity (LM-3).** Windows lets a Low process read ordinary user files and stops it writing to them, so the runner can't write to the person's folders or to LM Studio's either. If the file's permissions stop the Low runner from reading it, Bunny says so and doesn't fall back to Medium.
+- **The runner's working folder is Bunny's runtime folder, never the model's folder.** A model folder can hold DLLs.
+
+### LF-8: finding LM Studio's folder
+
+- **Read only these, under the person's own profile folder (`os.homedir()`):**
+  - LM Studio's own setting for its models folder;
+  - the defaults: `.lmstudio\models`, and the older `.cache\lm-studio\models`.
+- **The setting.** The exact file and key, and LM Studio's home-pointer file if it uses one, are not in any record yet.
+  - Builder E records them in `localModels.sources.md`, from LM Studio's documentation or a fresh install in an invented profile, never the owner's real one. I check that before signing.
+  - Each file is read with a 1 MiB cap and parsed as JSON. Exactly one string value is taken. A missing, oversized or malformed file means "use the default", with no error dialog.
+- **The folder found must pass LF-2** (local drive, real path, not protected). If it points to a network path, it is not listed, and the list says "LM Studio's models folder is on a network drive; Bunny only runs files from this PC."
+- **The walk:**
+  - at most 4 levels deep (LM Studio uses `<publisher>\<model>\<file>.gguf`);
+  - at most 5,000 entries;
+  - never follows a link or junction while walking (`lstat` each entry);
+  - lists only `.gguf` files, minus split parts and projector files (LF-3).
+  - At listing time it reads only the fixed start of each header (magic, version, architecture and template sha), with the LF-3 caps. The full checks run when the person picks an entry.
+- **When it runs:** only when the person opens the screen or presses Refresh. There is no background watcher.
+- **No wider search:** no other drives, no registry, no environment variables other than the profile folder, and no Ollama.
+- **Bunny never touches LM Studio itself:**
+  - it does not call its local server (port 1234) or its `lms` program;
+  - it never runs LM Studio's bundled runtimes (`.lmstudio\extensions\backends`). Only Bunny's own pinned runner (SP-1) runs a model.
+
+### LF-9: the runner rules are unchanged
+
+Everything for curated models applies as written:
+- LM-2 flags: `--host 127.0.0.1` and the rest;
+- the api key by file, deleted after `/health` (SP-5);
+- the LM-3 environment, job object and Low helper (SP-6);
+- LM-4, LM-9 and R2-2.
+
+Also:
+- The model is passed as `-m <real path>` in an argument array, with no shell.
+- No flag is ever taken from the file's metadata. The context size is Bunny's own choice, capped by the model's `context_length`.
+- `--lora`, `--mmproj`, `-md`/`--model-draft` and `--slot-save-path` are never passed for an added file.
+- At most one runtime process (LM-3), the same as for curated models.
+
+### LF-10: privacy wording
+
+- Settings says: "Bunny reads model files where they are and never changes them."
+- Settings says that Bunny lists only LM Studio's models folder.
+- The LM-11 lines apply unchanged.
+
+### LF-11: release note
+
+"You can now run a model file you already have, or one from LM Studio's models folder. Bunny didn't download these and can't check them, so add only files you trust. Tools are off for them until you turn them on."
+
+### LF-12: tests the build must carry
+
+All tests:
+- use an invented profile (`BUNNY_DATA_DIR`, `BUNNY_FAKE_UPSTREAM=1`);
+- point the profile folder at an invented folder (an injectable home for LF-8), never the owner's real `.lmstudio`;
+- use small GGUF files the test writes itself (a header plus one tiny tensor) and a stand-in runner.
+
+1. A valid tiny GGUF is accepted. The spawn arguments are exactly the LM-2 set plus `-m <real path>`, with none of the LF-9 never-flags, and the working folder is Bunny's runtime folder.
+2. **Refused before any spawn** (assert the spawn was never called):
+   - bad magic;
+   - version 1 and version 4;
+   - a truncated file;
+   - a tensor past the end;
+   - a string length past the end;
+   - an array count of 2^63;
+   - a key count over the cap;
+   - an alignment that isn't a power of two;
+   - a split file;
+   - a projector file.
+3. **Templates:**
+   - one over 128 KiB is refused;
+   - an unknown one shows "Unknown chat format", and the view escapes `<img onerror>`;
+   - a known sha shows "Same chat format as";
+   - no template gives `--chat-template chatml` with tools off;
+   - a runner start failure is not retried.
+4. **Paths:**
+   - the file as a link is refused (skipped with a reason when the test machine can't make links);
+   - through a junction parent, the real path is stored;
+   - `\\localhost\c$\...` is refused, and so are `\\?\C:\...` and `\\.\...`;
+   - a file inside the data folder is refused.
+5. **The file is changed after add** (size, mtime or file id): the checks run again, and a changed template shows the card again.
+6. **The folder is left untouched:** names, sizes and mtimes of the file's folder are the same before and after add, run, stop and remove, and remove leaves the file.
+7. **LM Studio discovery:**
+   - the setting points to a local folder: listed;
+   - the setting points to a UNC path: not listed, with the message;
+   - the setting is missing: the default is used;
+   - the setting is malformed, or over 1 MiB: the default is used, with no crash;
+   - a junction inside the folder is not followed;
+   - the depth cap and the entry cap hold;
+   - a folder name with a bidi override is shown cleaned.
+8. **Window-only:**
+   - a device at both levels is refused add, list and remove;
+   - there is no AI tool for them;
+   - a device can chat with a running added model;
+   - the real path appears in no device response, system prompt or engine call.
+9. Tools are off by default for an added model, and the per-model switch is window-only.
+
+**Sign-off.** This is HIGH under LM-0 and LM-7. I review the build sha against LF-1 to LF-12, together with the LM and SP items and the LF-8 record.
