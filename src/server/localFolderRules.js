@@ -50,10 +50,14 @@ export async function windowsDriveType(letter) {
   return (await psRun(`[System.IO.DriveInfo]::new('${letter}').DriveType`)).trim();
 }
 /** Where Windows keeps Desktop and Downloads for this person (they may have moved them). */
+let knownCache = null;
 export async function windowsKnownFolders() {
+  if (knownCache && Date.now() - knownCache.at < 10 * 60_000) return knownCache.value; // the shell question takes seconds and the answer rarely changes
   const out = await psRun("[Environment]::GetFolderPath('Desktop'); (New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path");
   const [desktop, downloads] = out.split(/\r?\n/).map((s) => s.trim());
-  return { desktop: desktop || null, downloads: downloads || null };
+  const value = { desktop: desktop || null, downloads: downloads || null };
+  if (value.desktop || value.downloads) knownCache = { at: Date.now(), value };
+  return value;
 }
 const realNative = (p) => new Promise((resolve, reject) => realpathCb.native(p, (e, r) => (e ? reject(e) : resolve(r))));
 

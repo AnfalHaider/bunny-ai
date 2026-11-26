@@ -24,7 +24,7 @@ const inside = (child, parent) => { const c = String(child).replace(/\//g, '\\')
  */
 export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], onLoaded = () => {} }) {
   const host = el('div', { class: 'lm-places' });
-  let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null; let leftKey = null;
+  let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null; let leftKey = null; let busy = false;
   const KEY = 'bunny.local.leave';
   try { leftKey = localStorage.getItem(KEY); } catch { /* no storage: the card simply asks again */ }
 
@@ -43,8 +43,9 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
   }
   async function dialog(run, after) {
     if (!bridge) { say("This is chosen in Bunny's window on this PC."); return; }
-    const r = await run();
-    if (r?.canceled) return;
+    busy = true; paint();
+    let r; try { r = await run(); } finally { busy = false; }
+    if (r?.canceled) { paint(); return; }
     if (!r?.ok) { say(r?.message ?? 'That did not work.'); return; }
     say(''); if (r.places) view = r.places; after?.(r);
     paint(); schedule();
@@ -145,6 +146,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
     host.replaceChildren();
     if (!view) return;
     host.append(downloadRow(view));
+    if (busy) host.append(el('div', { class: 'desc lm-busy', role: 'status', textContent: 'Choosing and checking the folder…' }));
     host.append(el('div', { class: 'lm-sub', textContent: 'From this PC' }), ownGroup(view));
     if (card) host.append(addCard());
     host.append(el('div', { class: 'lm-sub', textContent: 'Model folders' }), foldersGroup(view));
