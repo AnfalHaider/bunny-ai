@@ -355,7 +355,7 @@ app.on('before-quit', (event) => {
   if (programsStopped || !bunnyApp) return;
   event.preventDefault();
   programsStopped = true;
-  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(async () => {
+  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll(), bunnyApp.localModels?.stopAll?.()]).catch(() => {}).finally(async () => {
     // A downloaded update installs as the app closes (and reopens it after Restart to update). S-7: it is checked against its published fingerprint once more first.
     if (updater?.hasUpdate()) await updater.install({ relaunch: installOnQuit === 'relaunch' }).catch(() => {});
     app.quit();

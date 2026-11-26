@@ -24,6 +24,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
 import { createLocalModels, LocalError, QUICK_ASK_STARTING } from './localModels.js';
+import { createRealLocalModels } from './localModelsReal.js';
 import { findProvider } from '../providers/catalog.js';
 import { startDeviceFlow, waitForToken } from '../providers/oauth.js';
 import { dpapiSecretStore } from '../providers/secretStore.js';
@@ -320,8 +321,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     : {};
 
   // LOCAL-MODELS (fake mode for now): what Bunny local has downloaded, and the window's buttons for it
-  const localModels = createLocalModels({ dataDir, fake: fake || process.env.BUNNY_FAKE_LOCAL === '1' });
+  const localFake = fake || process.env.BUNNY_FAKE_LOCAL === '1';
+  const localModels = localFake ? createLocalModels({ dataDir, fake: true }) : createRealLocalModels({ dataDir });
   await localModels.load();
+  await localModels.refreshReady?.();
+  /** The key for a provider's requests: Bunny local's is the running server's own, looked up per request and never stored (LM-2). */
+  const providerKey = (id) => (id === 'bunny-local' ? (localModels.apiKey?.() ?? undefined) : secrets.get(`provider:${id}`));
   const registry = createProviderRegistry({
     secrets,
     managed: { status: () => (localModels.hasReady() ? 'connected' : 'disconnected'), models: () => localModels.pickerModels(), baseUrl: () => localModels.baseUrl() },
@@ -622,7 +627,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     return async (session) => {
       const provider = registry.list().find((p) => p.id === providerId && p.status === 'connected');
       if (!provider || !model || fake) return '';
-      const apiKey = await secrets.get(`provider:${providerId}`);
+      const apiKey = await providerKey(providerId);
       const transcript = session.messages
         .filter((m) => m.kind !== 'tool_call' && m.kind !== 'permission_prompt')
         .map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 4000)}`)
@@ -685,7 +690,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           { role: 'system', content: `Today is ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. This is the scheduled task "${schedule.name}", running on its own in Bunny AI.` },
           { role: 'user', content: schedule.prompt },
         ];
-        const apiKey = await secrets.get(`provider:${providerId}`);
+        const apiKey = await providerKey(providerId);
         let assembled = '';
         for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           // auth: providers that want the key in their own header (Anthropic, some custom ones).
@@ -705,6 +710,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
   /** All models across connected providers, for the picker. */
   async function allModels({ refresh = false } = {}) {
+    await localModels.refreshReady?.(); // Bunny local counts as connected only while a model is on disk
     const connected = registry.list().filter((p) => p.status === 'connected');
     const out = [];
     for (const provider of connected) {
@@ -775,7 +781,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     if (path === '/api/health') return sendJson(res, 200, { ok: true, fake, windowOnlyLock: Boolean(folderPickerOnly) }); // BROWSER: a page in a browser can say "Change this in Bunny's window." early
 
     // ---- LOCAL-MODELS: the card's state and the window's buttons. Writes are the window's alone (LM-13); a device may only read what runs. ----
-    if (path === '/api/local-models' && method === 'GET') return sendJson(res, 200, await localModels.status());
+    if (path === '/api/local-models' && method === 'GET') { const st = await localModels.status(); await localModels.refreshReady?.(); return sendJson(res, 200, st); }
     const lmMatch = path.match(/^\/api\/local-models(?:\/([a-z0-9-]+))?$/);
     if (lmMatch && method !== 'GET') {
       if (windowOnly(req, res)) return;
@@ -2459,7 +2465,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (fake) return sendJson(res, 200, { suggestions: ['Explain that in simpler words', 'What should I do next?', 'Show me an example'] });
       const provider = registry.list().find((p) => p.id === body.providerId && p.status === 'connected');
       if (!provider || !body.model) return sendJson(res, 200, { suggestions: [] });
-      const apiKey = await secrets.get(`provider:${provider.id}`);
+      const apiKey = await providerKey(provider.id);
       const recent = session.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.kind?.match(/tool_call|permission_prompt|error|summary/))
         .slice(-6).map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 2500)}`).join('\n\n');
       let out = '';
@@ -2835,7 +2841,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (chosen) {
           const [pid, ...rest] = chosen.split('/');
           const other = registry.find(pid);
-          const otherKey = other ? await secrets.get(`provider:${other.id}`) : null;
+          const otherKey = other ? await providerKey(other.id) : null;
           if (!other || !otherKey) throw new Error('the chosen check model has no key');
           if (Array.isArray(settings.allowlist) && settings.allowlist.length && !settings.allowlist.includes(rest.join('/'))) throw new Error('the chosen check model is not on the allowlist');
           p = other; key = otherKey; judgeModel = rest.join('/');
@@ -3564,7 +3570,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (!chosen || (chosen.id === model && chosen.providerId === providerId)) return parentModel();
         const p = registry.list().find((x) => x.id === chosen.providerId && x.status === 'connected');
         if (!p) return parentModel();
-        return { providerId: p.id, model: chosen.id, provider: p, apiKey: await secrets.get(`provider:${p.id}`), why };
+        return { providerId: p.id, model: chosen.id, provider: p, apiKey: await providerKey(p.id), why };
       };
       const listHelperModels = async () => {
         const list = await helperModels();
@@ -3628,7 +3634,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const theirProvider = registry.list().find((p) => p.id === target.providerId && p.status === 'connected');
         const useProvider = theirProvider ?? provider;
         const useModel = theirProvider ? target.model : model;
-        const useKey = theirProvider ? await secrets.get(`provider:${theirProvider.id}`) : apiKey;
+        const useKey = theirProvider ? await providerKey(theirProvider.id) : apiKey;
         const incoming = `Message from the chat "${session.title}": ${text}`;
         const history = [
           { role: 'system', content: `${today}You are Bunny AI in the chat "${target.title}". Another chat is sending you a message. Answer it from what this conversation knows, briefly.` },
@@ -4446,7 +4452,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let thinkingSince = 0;
       const closeThinking = () => { if (thinkingSince) { thinkingMs += Date.now() - thinkingSince; thinkingSince = 0; } };
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
-      const apiKey = await secrets.get(`provider:${providerId}`);
+      const apiKey = await providerKey(providerId);
 
       // CLI-ENGINES: a Code chat with a folder may run on an engine (Claude Code or Codex). The engine and its auth mode are fixed at the chat's first message.
       // A device at the Chats level never runs one (req.bunnyRemote); schedules, Quick ask and Chat mode stay on Bunny's own engine.
@@ -4818,7 +4824,7 @@ ${content}` : content), handover, root: workspace.root, permissionMode, send, lo
       const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       let assembled = '';
       try {
-        const apiKey = await secrets.get(`provider:${providerId}`);
+        const apiKey = await providerKey(providerId);
         for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages, fake, auth: provider.auth ?? null,
         })) {
@@ -5110,7 +5116,7 @@ ${content}` : content), handover, root: workspace.root, permissionMode, send, lo
   server.on('close', () => { processes.stopAll().catch(() => {}); localMcp.stopAll().catch(() => {}); });
 
   return {
-    server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
+    server, registry, localModels, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
     computer, terminals, remote, resumeRemote,
     getSettings: () => settings,
     siteRules: () => rulesFor(settings.permissionRules, null).filter((r) => r.kind === 'domain'), // PG1-c: the browser panel (electron/main.js) judges every request with these
