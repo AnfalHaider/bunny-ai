@@ -536,7 +536,7 @@ function openPicker(host, trigger) {
   // The focus stays in the search box so typing keeps working.
   let active = 0;
 
-  const items = () => [...list.querySelectorAll('.picker-item')];
+  const items = () => [...list.querySelectorAll('.picker-item:not(.picker-get-more)')];
 
   const highlight = () => {
     const all = items();
@@ -565,7 +565,7 @@ function openPicker(host, trigger) {
 
   // LOCAL-MODELS: the menu always offers a way to the Bunny local card (downloaded models are listed above under their own provider name)
   const addGetMore = () => {
-    const more = button('Get more…', { className: 'picker-item picker-get-more', role: 'option', 'aria-selected': 'false' });
+    const more = button('Get more…', { className: 'picker-item picker-get-more' });
     more.id = 'model-get-more';
     more.append(element('span', { className: 'model-desc', textContent: 'Opens Bunny local in Settings' }));
     more.addEventListener('click', () => { closePicker(); openSettings('providers'); });

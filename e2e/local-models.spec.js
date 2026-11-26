@@ -209,4 +209,21 @@ test('the chat\'s memory error is a card with two buttons; a missing program sho
   await request.post('/api/local-models/fake', { data: { raise: 'none' } });
 });
 
+test('the chat shows "Starting your local model…" while a slow start is held open, and the line goes when the first words arrive', async ({ page, request }) => {
+  await request.post('/api/local-models/setup');
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).installed).toBe(true);
+  await request.post('/api/local-models/download', { data: { id: 'qwen3-4b' } });
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).models.find((m) => m.id === 'qwen3-4b').state, { timeout: 10000 }).toBe('ready');
+  await request.post('/api/local-models/stop');
+  await request.post('/api/local-models/fake', { data: { raise: 'slow-start' } });
+  await page.goto('/');
+  await page.locator('#picker-button').click();
+  await page.locator('.picker-item', { hasText: 'Qwen3 4B' }).first().click();
+  await page.locator('#input').fill('hello');
+  await page.locator('#send').click();
+  await expect(page.locator('.bunny-word')).toHaveText('Starting your local model…', { timeout: 3000 });
+  await expect(page.locator('.bunny-word', { hasText: 'Starting your local model…' })).toHaveCount(0, { timeout: 15000 }); // the first words (or the end of the reply) took it away
+  await request.post('/api/local-models/fake', { data: { raise: 'none' } });
+});
+
 test.afterAll(async ({ request }) => { await request.post('/api/local-models/fake', { data: { raise: 'none' } }); await request.delete('/api/local-models'); }); // leave no local models behind for the other specs

@@ -2701,7 +2701,7 @@ export async function createApp({ localModels: localModelsOption = null, pcOptio
         if (helper && event === 'permission') out = { ...data, title: `${helper} › ${data.title}` };
         res.write(`event: ${event}\ndata: ${JSON.stringify(out)}\n\n`);
       };
-      if (localStarting) send('notice', { text: body.textOnly === true ? QUICK_ASK_STARTING : `Starting ${localStarting}… (first message after a start takes longer)` }); // LM-9: the Starting line
+      if (localStarting) send('notice', body.textOnly === true ? { text: QUICK_ASK_STARTING, localStarting: true } : { text: `Starting ${localStarting}… (first message after a start takes longer)` }); // LM-9: the Starting line
       // A helper's own steps are kept in its own chat; the main chat keeps its own.
       // What the model said since its last step ("Checking the server log.") is kept with the
       // next step, so the chat reads as a running account of the work, also after a reload.

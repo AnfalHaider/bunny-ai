@@ -114,6 +114,7 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
       return;
     }
     if (!s.installed) {
+      for (const line of places.removalLines()) host.append(el('div', { class: 'lm-warn lm-removal', role: 'status', textContent: line }));
       host.append(el('div', { class: 'lm-card' },
         el('b', { textContent: 'Set up Bunny local' }),
         el('div', { class: 'desc', textContent: `Bunny downloads a ${s.program.sizeMB} MB program (${s.program.name}) from its ${s.program.from}, checks its fingerprint, and keeps it in its own folder. Chats with a local model stay on this PC, and downloads talk only to GitHub (the program) and Hugging Face (models).` }),
@@ -140,7 +141,7 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
     if (!places.loaded()) { // no places view (test mode, or a page that is not the window): the one plain row, with no path
       const dl = typeof window !== 'undefined' ? (window.bunnyDesktop ?? window.parent?.bunnyDesktop) : null;
       host.append(el('div', { class: 'group lm-group' }, row('Where models are kept', "Bunny's own folder", el('span', { class: 'tag', textContent: s.usedBytes ? `${gb(s.usedBytes)} used` : 'Nothing downloaded yet' }),
-        dl?.localModels ? button('Show in folder', async () => { const r = await dl.localModels.showFolder(); if (r && !r.ok) { notice = r.message; paint(); } }, 'btn') : el('small', { class: 'desc', textContent: "Show in folder: Bunny's window only" }))));
+        dl?.localModels ? button('Show in folder', async () => { try { const r = await dl.localModels.showFolder(); if (r && !r.ok) { notice = r.message; paint(); } } catch { notice = 'The folder could not be opened.'; paint(); } }, 'btn') : el('small', { class: 'desc', textContent: "Show in folder: Bunny's window only" }))));
     }
     host.append(places.el);
     host.append(el('div', { class: 'desc lm-foot', textContent: 'Chats with a local model stay on this PC. Downloads talk only to Hugging Face and GitHub. Only this window can set up, download, add, start, stop or delete: not a phone, not another PC, and not Bunny itself.' }));

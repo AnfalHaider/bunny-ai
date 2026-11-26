@@ -14,7 +14,7 @@ import { GB, chooseContext, needBytes } from './localFit.js';
 export const IDLE_CHOICES = [5, 10, 30, 60, 0]; // minutes; 0 = only when Bunny closes
 export const PROGRAM = { name: 'llama.cpp', sizeMB: 39, from: 'GitHub releases', licence: 'MIT', host: 'github.com', signed: false }; // signed: S-LM1 decides; until it says otherwise the card says the program is not signed (LM-1)
 export const QUICK_ASK_STARTING = 'Starting your local model…';
-export const RAISABLE = ['memory', 'missing', 'changed', 'fingerprint', 'hfchanged', 'disk', 'device'];
+export const RAISABLE = ['memory', 'missing', 'changed', 'fingerprint', 'hfchanged', 'disk', 'device', 'slow-start'];
 const PROVIDER_ID = 'bunny-local';
 
 /** The invented list (fake mode only). Real entries come from localModels.json once the spikes and Security have settled them. */
@@ -164,6 +164,7 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
     if (raised.memory) throw new LocalError('local.memory', `Not enough memory to load ${entry(id)?.name ?? id}. This PC has about ${(pc().freeRam / GB).toFixed(1)} GB free and the model needs about ${(Math.max(needBytes(entry(id), 32768), pc().freeRam + 0.1 * GB) / GB).toFixed(1)} GB. Close other apps or choose a smaller model.`, 409);
     if (who !== 'window' && state.running?.id !== id) throw new LocalError('local.notRunning', 'Bunny local is stopped. Start it from Bunny\'s window on your PC.', 409);
     if (state.models[id]?.state !== 'ready') throw new LocalError('local.notReady', 'That model is not downloaded.', 409);
+    if (raised['slow-start'] && state.running?.id !== id) await new Promise((r) => setTimeout(r, 4000)); // test mode: a start that takes a few seconds, so the Starting line can be seen
     state.running = { id, usedBytes: Math.round(entry(id).size * 1.25), lastUsed: clock() };
     return state.running;
   }

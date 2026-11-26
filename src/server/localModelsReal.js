@@ -26,8 +26,8 @@ import { loadLocalList } from '../providers/localList.js';
 import { LocalError, PROGRAM, IDLE_CHOICES, QUICK_ASK_STARTING } from './localModels.js';
 
 const PROVIDER_ID = 'bunny-local';
-/** Vendors whose graphics cards the Vulkan build was proven on (S-LM1: NVIDIA and Intel on one PC). Others get the CPU build until someone runs it there. */
-export const VULKAN_PROVEN = ['nvidia', 'intel'];
+/** Vendors whose graphics cards the Vulkan build was proven on (the B3 run: an NVIDIA card). Others get the CPU build until someone runs it there. */
+export const VULKAN_PROVEN = ['nvidia']; // the one card actually run (2026-11-26); Intel stays on the CPU build until an Intel run is recorded
 /** Security B3: the Vulkan build without ggml-rpc.dll was run on one PC (Low helper, LM-2 argv, one chat, the Vulkan device); with this false every PC gets the CPU build. */
 export const VULKAN_RECORDED = true; // run 2026-11-26: docs/spikes/local-models/vulkan-run-2026-11-26.md
 /** The smallest graphics card in a --list-devices answer (it runs out of room first), or null. */

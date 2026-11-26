@@ -102,3 +102,18 @@ test('the bar\'s own first look-up (pcLookupFirst, round 2) shows the same notic
   const shown = await pcWorld(t, { files, settings: { pcSearchNoticeShown: true }, calls: [] });
   assert.equal(noticeIn(await ask(shown)).length, 0, 'a flag already set sends none');
 });
+
+test('LM-9: the bar shows "Starting your local model…" for the one flagged notice, in fixed words; a notice with the same words but no flag, or other text with the flag, is not passed through as given', async () => {
+  const sse = (...frames) => frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
+  const run = async (frames) => {
+    const events = [];
+    const adminFetch = async (path) => (path === '/api/sessions' ? new Response(JSON.stringify({ id: 'aaaaaaaa-1111-4111-8111-111111111111' }), { status: 200 }) : new Response(sse(...frames), { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+    const a = createAnswerer({ adminFetch, emit: (e) => events.push(e), getSettings: () => ({}) });
+    await a.ask({ text: 'hello' });
+    return events;
+  };
+  const flagged = await run([['notice', { text: 'anything', localStarting: true }], ['delta', { text: 'ok' }], ['done', { model: 'm1' }]]);
+  assert.equal(flagged.find((e) => e.type === 'pc-notice').text, 'Starting your local model…');
+  const plain = await run([['notice', { text: 'Starting your local model…' }], ['delta', { text: 'ok' }], ['done', { model: 'm1' }]]);
+  assert.ok(!plain.some((e) => e.type === 'pc-notice'), 'only the flagged notice is drawn');
+});

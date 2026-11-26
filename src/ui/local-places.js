@@ -56,7 +56,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [] })
     const rows = [row('Where Bunny saves models', where, el('span', { class: 'tag', textContent: used ? `${gb(used)} used` : 'Nothing downloaded yet' }),
       bridge ? button('Change…', () => dialog(() => bridge.chooseDownloadFolder()), 'btn') : el('small', { class: 'desc', textContent: "Change: Bunny's window only" }),
       d.custom ? button("Use Bunny's folder", () => call('download-default'), 'btn') : null,
-      bridge ? button('Show in folder', async () => { const r = await bridge.showFolder(); if (r && !r.ok) say(r.message); }, 'btn') : null)];
+      bridge ? button('Show in folder', async () => { try { const r = await bridge.showFolder(); if (r && !r.ok) say(r.message); } catch { say('The folder could not be opened.'); } }, 'btn') : null)];
     if (d.custom) rows.push(el('div', { class: 'row lm-row' }, el('small', { class: 'desc', textContent: d.cloud ? 'This folder syncs to the cloud; several GB will upload. Bunny saves into a folder it makes inside it, named Bunny models.' : 'Bunny saves into a folder it makes inside your pick, named Bunny models. Each model keeps the place it was saved in.' })));
     if (!d.available) rows.push(el('div', { class: 'lm-err', role: 'alert', textContent: d.message }));
     const notFound = (models() ?? []).filter((m) => m.notFound);
@@ -156,5 +156,14 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [] })
     return [...by].map(([folder, bytes]) => ({ folder, bytes }));
   };
 
-  return { el: host, refresh, whereDownloads, paint, loaded: () => view !== null };
+  /** What Remove Bunny local left behind or could not reach, named by folder (LF-24). */
+  const removalLines = () => {
+    const r = view?.removal; if (!r) return [];
+    const by = (list) => { const m = new Map(); for (const x of list) m.set(x.folder, (m.get(x.folder) ?? 0) + 1); return [...m]; };
+    return [
+      ...by(r.left ?? []).map(([folder, n]) => `${n} model${n === 1 ? ' was' : 's were'} left in ${folder} because ${n === 1 ? 'it' : 'they'} changed after Bunny downloaded ${n === 1 ? 'it' : 'them'}.`),
+      ...by(r.missing ?? []).map(([folder, n]) => `${n} model${n === 1 ? '' : 's'} on ${folder} ${n === 1 ? "wasn't" : "weren't"} removed because the drive isn't connected.`),
+    ];
+  };
+  return { el: host, refresh, whereDownloads, paint, loaded: () => view !== null, removalLines };
 }

@@ -21,7 +21,7 @@ import { cleanTrayEvent, trayTooltip } from './tray-words.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
 import { createPcOpen } from './pc-open.js';
 import { createMadeFile, findMadeFile } from './made-file.js';
-import { copyFile } from 'node:fs/promises';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));

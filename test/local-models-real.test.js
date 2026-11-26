@@ -55,7 +55,7 @@ test('the backend: Vulkan only for the vendors it was proven on, and only with t
   assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: true }), 'vulkan', 'the Vulkan run without ggml-rpc.dll is recorded');
   assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: true, vulkanRecorded: false }), 'cpu', 'Security B3: the switch that keeps every PC on the CPU build');
   assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: true, vulkanRecorded: true }), 'vulkan');
-  assert.equal(chooseBackend({ vendor: 'Intel', useGpu: true, vulkanRecorded: true }), 'vulkan');
+  assert.equal(chooseBackend({ vendor: 'Intel', useGpu: true, vulkanRecorded: true }), 'cpu', 'Intel stays on the CPU build until an Intel run is recorded');
   assert.equal(chooseBackend({ vendor: 'AMD', useGpu: true, vulkanRecorded: true }), 'cpu');
   assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: false, vulkanRecorded: true }), 'cpu');
   assert.equal(chooseBackend({ vendor: null }), 'cpu');
