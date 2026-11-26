@@ -407,3 +407,21 @@ Left for later:
 - L3 (narrowing the allow lists) and L-c to L-e, for v0.1.17;
 - the mapped-drive resolve, to be confirmed on a PC with a share. The drive-type check covers it until then;
 - whether Intel graphics runs well, for QA.
+
+## Re-check at 74d40382: QA's F1 (the places read goes through the bridge), 2026-11-27
+
+One commit on top of 612f2a3f. It touches `electron/main.js`, `src/ui/api.js`, `src/ui/local-models.js`, `src/ui/local-places.js`, `src/server/localPlaces.js`, and tests.
+
+- **`secure:write` (`main.js:313`).** A GET or HEAD is now sent with no body; everything else is unchanged.
+  - The `isOwn` sender check and `isWindowOnlyRoute(method, path, body)` still run first.
+  - So the bridge reaches only the window-only GET routes: `/api/local-models/places*` and `/api/remote/log`. It is still only for Bunny's own page.
+  - Nothing new is reachable, and the paths still reach only the window.
+- **`sendJSON` (`api.js`).** The same rule applies: no body on a GET or HEAD. The places card now reads with `sendJSON(..., 'GET')`, so in the desktop app the read goes through the main process. Over plain HTTP it is still refused by the window-only lock. The new test checks both sides with `folderPickerOnly: true`.
+- **`removeModelFolder('lmstudio')`** now also drops the files added from LM Studio's folder. That matches the other folders, and it only removes Bunny's entries (LF-7).
+- **The Move card's "Leave them" and the set-up card's removal lines** are display-only.
+
+**Tests.** At 74d40382, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`: the app loads, and the same set as at 612f2a3f gives 192 tests, 191 pass, 0 fail, 1 skipped (the link test). I didn't run the e2e suite or the gate.
+
+### Verdict at 74d40382: PASS
+
+The 612f2a3f scope is unchanged.
