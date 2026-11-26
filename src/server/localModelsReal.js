@@ -23,8 +23,8 @@ import { LocalError, PROGRAM, IDLE_CHOICES, QUICK_ASK_STARTING } from './localMo
 const PROVIDER_ID = 'bunny-local';
 /** Vendors whose graphics cards the Vulkan build was proven on (S-LM1: NVIDIA and Intel on one PC). Others get the CPU build until someone runs it there. */
 export const VULKAN_PROVEN = ['nvidia', 'intel'];
-/** Security B3: the Vulkan build without ggml-rpc.dll has not been run (only the CPU build was). Until a run is recorded (through the Low helper, the LM-2 argv, one chat, the Vulkan device in the log) every PC gets the CPU build. */
-export const VULKAN_RECORDED = false;
+/** Security B3: the Vulkan build without ggml-rpc.dll was run on one PC (Low helper, LM-2 argv, one chat, the Vulkan device); with this false every PC gets the CPU build. */
+export const VULKAN_RECORDED = true; // run 2026-11-26: docs/spikes/local-models/vulkan-run-2026-11-26.md
 /** The smallest graphics card in a --list-devices answer (it runs out of room first), or null. */
 export const smallestCard = (devices) => [...devices].filter((d) => d.totalBytes > 0).sort((a, b) => a.totalBytes - b.totalBytes)[0] ?? null;
 export const chooseBackend = ({ vendor = null, useGpu = true, vulkanRecorded = VULKAN_RECORDED } = {}) => (vulkanRecorded && useGpu && VULKAN_PROVEN.includes(String(vendor ?? '').toLowerCase()) ? 'vulkan' : 'cpu');
