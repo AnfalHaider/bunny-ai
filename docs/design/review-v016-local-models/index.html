@@ -1,0 +1,275 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bunny local models</title>
+<style>
+:root{--bg:#f6f4ef;--panel:#fff;--fg:#1f2023;--dim:#6b6b73;--line:#e6e2da;--soft:#faf9f6;--accent:#6a4fd8;--accent-soft:rgba(106,79,216,.09);--warn:#b4690a;--warn-soft:rgba(192,122,18,.12);--bad:#cf3f55;--bad-soft:rgba(207,63,85,.1);--ok:#2f8f5b;--ok-soft:rgba(47,143,91,.11);--slow:#2a6fb0;--slow-soft:rgba(42,111,176,.11);--on:#6a4fd8;--off:#cfcbc2;--btn:#1f2023;--btnfg:#fff;--shadow:0 12px 34px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--bad-soft:rgba(240,122,140,.13);--ok:#58c58a;--ok-soft:rgba(88,197,138,.13);--slow:#6fb0ec;--slow-soft:rgba(111,176,236,.14);--on:#8f7bf0;--off:#4a4b53;--btn:#ececee;--btnfg:#17181b;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181b;--panel:#1f2025;--fg:#ececee;--dim:#9a9aa4;--line:#33343b;--soft:#25262c;--accent:#a592ff;--accent-soft:rgba(165,146,255,.13);--warn:#e0a23c;--warn-soft:rgba(224,162,60,.14);--bad:#f07a8c;--bad-soft:rgba(240,122,140,.13);--ok:#58c58a;--ok-soft:rgba(88,197,138,.13);--slow:#6fb0ec;--slow-soft:rgba(111,176,236,.14);--on:#8f7bf0;--off:#4a4b53;--btn:#ececee;--btnfg:#17181b;--shadow:0 12px 34px rgba(0,0,0,.55);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding-block:20px 70px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1080px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:24px;margin:0;text-wrap:balance}h2{font-size:18px;margin:0 0 4px;text-wrap:balance}h3{font-size:12px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+p{margin:0}.dim{color:var(--dim)}code{font:12px ui-monospace,Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:0 4px}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 10px;font-size:12px;background:var(--panel)}
+.pill.draft{color:var(--warn);border-color:var(--warn)}
+.tg,.seg button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
+.seg{display:inline-flex;flex-wrap:wrap}.seg button{border-radius:0;margin-left:-1px;padding:3px 12px}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);position:relative;z-index:1}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.cell{display:grid;gap:8px;min-width:0;align-content:start}
+.cap{font-size:12px;color:var(--dim)}.cap b{color:var(--fg)}
+.note{border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:10px 12px;font-size:13px}
+.note.warn{border-color:var(--warn);background:var(--warn-soft)}
+ul.tight{margin:0;padding-left:18px;display:grid;gap:3px}
+/* the app being drawn */
+.app{container-type:inline-size;border:1px solid var(--line);border-radius:14px;background:var(--bg);padding:14px;display:grid;gap:12px;min-width:0}
+.phone{max-width:390px;width:100%;margin:0 auto}
+.appttl{font-size:16px;font-weight:600}.sub{font-size:12px;color:var(--dim);margin-top:-8px}
+.grp{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.grp>.row,.grp>.rows>.row{border-top:1px solid var(--line)}.grp>.row:first-child,.grp>.rows>.row:first-child{border-top:0}
+.grph{font-size:12px;color:var(--dim);padding:8px 14px 0;text-transform:uppercase;letter-spacing:.05em}
+.row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:11px 14px;min-width:0}
+.row .l{min-width:0;display:grid;gap:1px}.row .l b{font-weight:600}.row .l small{color:var(--dim);font-size:12.5px;line-height:1.4}
+.row .r{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:11.5px;border:1px solid var(--line);border-radius:99px;padding:0 8px;color:var(--dim);background:var(--soft);white-space:nowrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:5px 12px;cursor:pointer;min-height:32px}
+.btn.primary{background:var(--btn);color:var(--btnfg);border-color:var(--btn)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.link{border:0;background:none;color:var(--accent);padding:5px 4px}
+.btn[disabled]{opacity:.45;cursor:default}
+.sw{width:38px;height:22px;border-radius:99px;background:var(--off);position:relative;border:0;padding:0;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+.sw.on{background:var(--on)}.sw.on::after{left:19px}
+.sel{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:4px 10px;min-height:32px}
+.fit{font-size:11.5px;font-weight:600;border-radius:99px;padding:0 8px;white-space:nowrap;border:1px solid transparent}
+.fit.ok{color:var(--ok);background:var(--ok-soft)}.fit.tight{color:var(--warn);background:var(--warn-soft)}.fit.slow{color:var(--slow);background:var(--slow-soft)}.fit.big{color:var(--bad);background:var(--bad-soft)}
+.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:3px}
+.prog{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:6px}.prog i{display:block;height:100%;background:var(--accent)}
+.mrow{display:grid;gap:6px;padding:11px 14px;border-top:1px solid var(--line)}.mrow:first-child{border-top:0}
+.mrow .head{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.mrow .head .l{min-width:0;flex:1 1 220px}
+.mrow.dis{opacity:.62}.mrow small{display:block}
+.steps{display:grid;gap:6px;padding:12px 14px}
+.step{display:flex;gap:10px;align-items:center;font-size:13px}.step .d{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:11px;flex:none}
+.step.done .d{background:var(--ok);border-color:var(--ok);color:#fff}.step.now .d{border-color:var(--accent);color:var(--accent)}.step.wait{color:var(--dim)}
+.alert{border:1px solid var(--line);border-left:4px solid var(--bad);background:var(--panel);border-radius:10px;padding:11px 14px;display:grid;gap:6px}
+.alert.warn{border-left-color:var(--warn)}.alert b{font-weight:600}.alert .acts{display:flex;gap:8px;flex-wrap:wrap}
+.mono{font:12px ui-monospace,Consolas,monospace;color:var(--dim);word-break:break-all}
+.menu{border:1px solid var(--line);background:var(--panel);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;max-width:360px}
+.menu .mi{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);font-size:13.5px}.menu .mi:first-child{border-top:0}
+.menu .mi small{color:var(--dim);display:block;font-size:12px}.menu .mh{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);padding:8px 12px 2px;background:var(--soft)}
+.menu .mi.cur{background:var(--accent-soft)}
+.chat{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px;display:grid;gap:10px}
+.me{justify-self:end;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:6px 12px;max-width:80%}
+.status{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:13px}.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp 1s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.comp{border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:grid;gap:6px;background:var(--soft)}
+.comp .hint{font-size:12px;color:var(--dim)}
+.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:2px 10px;font-size:12.5px;background:var(--panel)}
+@container (max-width:460px){.row{flex-wrap:wrap}.row .r{justify-content:flex-start}}
+table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th{border-top:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.t th{font-size:12px;color:var(--dim);font-weight:600}
+.tw{overflow-x:auto}
+</style>
+<div class="wrap">
+<div class="top"><div><h1>Bunny local: run models on this PC</h1>
+<p class="dim">v0.1.16 · LOCAL-MODELS · from Tech Lead's spec (7898df8e) and Researcher's report (aace115b) · invented profile and PC only</p></div>
+<div class="bar" style="display:flex;gap:8px;align-items:center"><span class="pill draft">For approval</span><span class="seg"><button class="tg" data-t="light">Light</button><button class="tg" data-t="dark">Dark</button></span></div></div>
+
+<section>
+<h2>In short</h2>
+<p>Today Bunny can talk to Ollama only if you install and run Ollama yourself and type its address. Proposed: one more provider, <b>Bunny local</b>, that needs <b>no address, no key and no other program</b>. You press one button to download a small program, pick a model from a short checked list, and chat. Bunny starts it when you ask and stops it when you stop asking.</p>
+<ul class="tight">
+<li><b>Same pattern as the rest of Settings.</b> A provider row, a card with rows and switches, and the engine rows' states (Not set up, Ready, Running). Nothing new to learn.</li>
+<li><b>Every download says what it is</b> (name, size, where from), checks a fingerprint, and can be paused, resumed, cancelled and deleted.</li>
+<li><b>The fit badge is honest.</b> Fits, Tight, Slow or Too big, worked out from this PC's memory before you download. Too big rows can't be downloaded.</li>
+<li><b>Only the window manages it.</b> A phone or another PC can chat with a model that's already downloaded; it cannot set up, download, delete or stop anything.</li>
+</ul>
+<div class="note"><b>Drawn with invented data.</b> The PC is made up: 16 GB memory with 7.1 GB free, and a graphics card with 4 GB (3.6 GB free). Sizes are rounded and the model list is the spec's candidate list, which Security and the spikes may change. Folder names use the invented user Sam.</div>
+</section>
+
+<section>
+<h2>1 · Settings → Providers: today beside proposed</h2>
+<p class="dim">Today the Local group has Ollama, and connecting it asks for a server address. Proposed: Bunny local sits first in that group and has no form at all: the button opens the card in section 2.</p>
+<div class="cols">
+<div class="cell"><h3>Today</h3><div class="app" id="p-today"></div></div>
+<div class="cell"><h3>Proposed</h3><div class="app" id="p-new"></div></div>
+</div>
+</section>
+
+<section>
+<h2>2 · The Bunny local card</h2>
+<p class="dim">Opens from the Connect button, in the same place the provider's form opens today. Pick a state. Desktop on the left, a phone (390 px) on the right: same content, stacked.</p>
+<div class="bar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="seg" id="st"></span></div>
+<div class="cols">
+<div class="cell"><h3>Desktop</h3><div class="app" id="c-d"></div></div>
+<div class="cell"><h3>Phone, in the app's own window</h3><div class="app phone" id="c-p"></div></div>
+</div>
+<div id="stnote" class="note"></div>
+</section>
+
+<section>
+<h2>3 · The model list close up</h2>
+<p class="dim">Every state a row can be in, on this invented PC. Rows keep one shape: a name and a line of facts on the left, the one thing you can do on the right.</p>
+<div class="cols">
+<div class="cell"><h3>Rows</h3><div class="app" id="m-list"></div></div>
+<div class="cell"><h3>What each badge means</h3>
+<div class="app"><div class="tw"><table class="t">
+<tr><th>Badge</th><th>When</th><th>What the row says</th></tr>
+<tr><td><span class="fit ok">Fits</span></td><td>Needs less than 75% of free memory</td><td>Fits on this PC. With a graphics card: Runs on your graphics card</td></tr>
+<tr><td><span class="fit tight">Tight</span></td><td>Needs 75% to 95%</td><td>Fits, but close other apps first</td></tr>
+<tr><td><span class="fit slow">Slow</span></td><td>Fits in memory only, while a graphics card is used</td><td>Partly on your graphics card: slower</td></tr>
+<tr><td><span class="fit big">Too big</span></td><td>Anything more</td><td>Too big for this PC. Download is off and there is no override</td></tr>
+</table></div>
+<p class="cap" style="padding:2px 4px">Memory needed = file size + room for the conversation + 1.5 GB. The check runs again before each start, so a PC with less free memory today can turn a Fits into a Tight. A model also says "Uses tools" or "Chat only"; below 16k of room it is chat only on this PC, and the row says why.</p></div>
+<div class="app"><div class="bar" style="display:flex;gap:8px;flex-wrap:wrap"><b>Download checks, in order</b></div>
+<ol class="tight" style="margin:0;padding-left:20px;display:grid;gap:3px;font-size:13px">
+<li>Enough room: file size + 2 GB free on the data folder's drive, or nothing starts.</li>
+<li>Hugging Face still offers the exact file Bunny was updated for (size and fingerprint). If not: "This model changed on Hugging Face".</li>
+<li>While downloading, the fingerprint is computed. At the end it must match. If not, the file is deleted.</li>
+<li>Before every start Bunny checks the files again.</li>
+</ol></div>
+</div>
+</div>
+</section>
+
+<section>
+<h2>4 · Choosing a local model in the chat</h2>
+<p class="dim">The model menu gets one more group, listing downloaded models only. Never in Auto, never the Auto check's model, never an engine's model: a local model is always your own pick.</p>
+<div class="cols">
+<div class="cell"><h3>Today</h3><div class="menu" id="mn-today"></div></div>
+<div class="cell"><h3>Proposed</h3><div class="menu" id="mn-new"></div></div>
+</div>
+<div class="cols">
+<div class="cell"><h3>A chat-only model: one line under the message box</h3><div class="app" id="cp-chat"></div></div>
+<div class="cell"><h3>Nothing downloaded yet</h3><div class="menu" id="mn-empty"></div><p class="cap">Get more… opens the card from section 2. On a phone the same menu shows downloaded models, and Get more… is left out (the window does the downloading).</p></div>
+</div>
+</section>
+
+<section>
+<h2>5 · Loading, running and stopping</h2>
+<div class="cols">
+<div class="cell"><h3>First message after a start</h3><div class="app" id="ld"></div>
+<p class="cap">Starting can take up to two minutes on a slow PC. The line stays until the first words arrive, then goes away. Quick ask shows the same text in its bar: "Starting your local model…".</p></div>
+<div class="cell"><h3>Settings: the idle stop and Stop now</h3><div class="app" id="idle"></div>
+<p class="cap">Default is 10 minutes with no request. Stopping waits for a reply that is still arriving. Quitting Bunny always stops it.</p></div>
+</div>
+</section>
+
+<section>
+<h2>6 · When something goes wrong</h2>
+<p class="dim">Plain words, one next step each, never raw program output. The first three show in the chat; the rest in the card.</p>
+<div class="cols">
+<div class="cell"><h3>Not enough memory (in the chat)</h3><div class="app" id="e1"></div></div>
+<div class="cell"><h3>The program is missing (in the chat)</h3><div class="app" id="e2"></div></div>
+<div class="cell"><h3>The program changed on disk (in the chat and the card)</h3><div class="app" id="e3"></div></div>
+<div class="cell"><h3>A download didn't match its fingerprint (in the card)</h3><div class="app" id="e4"></div></div>
+<div class="cell"><h3>The model changed on Hugging Face (in the card)</h3><div class="app" id="e5"></div></div>
+<div class="cell"><h3>Not enough disk space (in the card)</h3><div class="app" id="e6"></div></div>
+</div>
+</section>
+
+<section>
+<h2>7 · Removing Bunny local</h2>
+<div class="cols">
+<div class="cell"><div class="app" id="rm"></div></div>
+<div class="cell"><div class="note"><b>Two clicks, and the second names the size.</b> Remove Bunny local deletes the program. Because the models are the big part, a second confirmation says how much disk comes back and that models are removed too. Delete on one model asks nothing: it is only a download and can be fetched again.</div>
+<div class="note"><b>On a phone or another PC</b> there is no Set up, Download, Delete, Stop now or graphics switch. The Bunny local card isn't drawn there at all; the model menu and the loading line are the only parts a device sees.</div></div>
+</div>
+</section>
+
+<section>
+<h2>For the Chief of Staff, Tech Lead and Security</h2>
+<ul class="tight">
+<li><b>Words I chose that the spec doesn't fix:</b> "Set up" (the program), "Download" (a model), "Stop after idle", "Use graphics card", "Runs on: graphics card / CPU". The CPU/Vulkan choice is not asked: Bunny picks, and the person only has the Use graphics card switch (spec LM-5b).</li>
+<li><b>Fingerprint on screen:</b> the card says "Checked" with a short fingerprint (first 12 characters) in a details line, so a person can compare it with Hugging Face. The full value stays in the program's own list.</li>
+<li><b>Disk location:</b> shown as a path with a Show in folder button, window only. It is inside Bunny's data folder, which Bunny's own tools can't write to.</li>
+<li><b>Honest limits stated on the card:</b> "Runs on this PC. Nothing you type is sent anywhere." Security should confirm the spike results before that sentence ships.</li>
+<li><b>Questions for the owner or Security, not decided here:</b> (1) whether Remove Bunny local should keep models by default; drawn as deleting both, with the size named. (2) whether "Slow" should allow Download (drawn: allowed) while Too big does not.</li>
+</ul>
+</section>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const H=(s)=>s;
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('lm-theme',t)}catch(e){}document.querySelectorAll('.tg').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===t))}
+document.querySelectorAll('.tg').forEach(b=>b.addEventListener('click',()=>setTheme(b.dataset.t)));
+let t0=null;try{t0=localStorage.getItem('lm-theme')}catch(e){}
+if(t0)setTheme(t0);else document.querySelectorAll('.tg').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.t===(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))));
+
+const row=(name,sub,right,extra='')=>`<div class="row"><div class="l"><b>${name}</b><small>${sub}</small>${extra}</div><div class="r">${right}</div></div>`;
+const tag=t=>`<span class="tag">${t}</span>`;
+const btn=(t,c='')=>`<button class="btn ${c}">${t}</button>`;
+const sw=on=>`<span class="sw ${on?'on':''}" role="img" aria-label="${on?'on':'off'}"></span>`;
+const fit=(k,t)=>`<span class="fit ${k}">${t}</span>`;
+
+/* 1 providers */
+$('p-today').innerHTML=H(`<div class="appttl">Providers and abilities</div><div class="sub">Connect and manage model providers</div>
+<div class="grph">Connected providers</div><div class="grp">${row('OpenRouter','Many models, one key',tag('API key')+btn('Manage'))}</div>
+<div class="grph">Available: local</div><div class="grp">${row('Ollama','Run open models on your own machine, no key needed',tag('Local')+btn('＋ Connect'))}</div>
+<div class="note" style="font-size:12.5px">Connecting Ollama asks for a server address and needs Ollama installed and running.</div>`);
+$('p-new').innerHTML=H(`<div class="appttl">Providers and abilities</div><div class="sub">Connect and manage model providers</div>
+<div class="grph">Connected providers</div><div class="grp">${row('OpenRouter','Many models, one key',tag('API key')+btn('Manage'))}</div>
+<div class="grph">Available: on this PC</div><div class="grp">${row('Bunny local <span class="tag" style="margin-left:6px">New</span>','Models Bunny downloads and runs on this PC. No key, no account',tag('Managed')+btn('Set up','primary'))}${row('Ollama','Run open models on your own machine, no key needed',tag('Local')+btn('＋ Connect'))}</div>`);
+
+/* 2 card states */
+const models=(mode)=>{
+ const r=(n,fact,fk,ft,right,extra='',dis=false)=>`<div class="mrow ${dis?'dis':''}"><div class="head"><div class="l"><b>${n}</b><div class="meta">${fit(fk,ft)}${fact}</div>${extra}</div><div class="r" style="display:flex;gap:8px;flex-wrap:wrap">${right}</div></div></div>`;
+ const f=(s,l,p,u)=>`${tag(s)}${tag(l)}${tag(p)}${tag(u)}`;
+ return r('Qwen3 4B',f('2.5 GB','Apache-2.0','Qwen','Uses tools'),'ok','Fits','<span class="tag" style="color:var(--ok)">Ready</span>'+btn('Delete'),'<small class="dim">Checked · fingerprint 9f3a1c0e4b72</small>')
+  +r('Qwen3 8B',f('5.0 GB','Apache-2.0','Qwen','Uses tools'),'tight','Tight',btn('Pause')+btn('Cancel'),'<div class="prog"><i style="width:41%"></i></div><small class="dim">2.0 of 5.0 GB · 18 MB/s · about 3 min left</small>')
+  +r('Ministral 3 3B',f('2.1 GB','Apache-2.0','Mistral AI','Chat only'),'ok','Fits',btn('Resume','primary')+btn('Cancel'),'<div class="prog"><i style="width:63%"></i></div><small class="dim">Paused at 1.3 of 2.1 GB. Picks up where it stopped, even after Bunny restarts</small>')
+  +r('Granite 4.1 8B',f('5.0 GB','Apache-2.0','IBM','Uses tools'),'slow','Slow',btn('Download','primary'),'<small class="dim">Partly on your graphics card: slower</small>')
+  +r('Gemma 4 12B',f('7.5 GB','Gemma terms','Google','Chat only'),'tight','Tight',btn('Download','primary'),'<small class="dim">Fits, but close other apps first. Needs 9.5 GB free on this drive</small>')
+  +r('gpt-oss 20B',f('12 GB','Apache-2.0','OpenAI','Chat only'),'big','Too big',btn('Download','').replace('class="btn "','class="btn" disabled'),'<small class="dim">Too big for this PC: needs about 14 GB free, 10.7 GB is available</small>',true);
+};
+$('m-list').innerHTML=`<div class="grp">${models()}</div>`;
+const pcline=`<div class="note" style="font-size:12.5px">This PC: 16 GB memory (7.1 GB free) · graphics card, 4 GB (3.6 GB free) · 41 GB free on the data drive</div>`;
+const foot=`<div class="grp">${row('Where models are kept','C:\\Users\\Sam\\AppData\\Local\\BunnyAI\\models','<span class="tag">2.5 GB used</span>'+btn('Show in folder'))}</div>`;
+const ST={
+ none:{n:'Not set up. One button. The size and the place it comes from are on the card, because Bunny is about to download a program. Nothing is downloaded until the button is pressed.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Models Bunny downloads and runs on this PC. No key, no account</div>
+<div class="grp"><div class="steps"><b>Set up Bunny local</b><div class="dim" style="font-size:13px">Bunny downloads a 39 MB program (llama.cpp) from its GitHub releases, checks its fingerprint, and keeps it in its own folder. It runs only on this PC, and nothing you type is sent anywhere.</div><div class="meta">${tag('39 MB')}${tag('MIT licence')}${tag('github.com')}</div><div style="margin-top:6px">${btn('Set up Bunny local','primary')}</div></div></div>`},
+ setup:{n:'Setting up: four plain steps with the real checks named. Cancel is always there; a cancelled set-up leaves nothing behind.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Setting up</div>
+<div class="grp"><div class="steps"><div class="step done"><span class="d">✓</span>Downloaded 39 MB from github.com</div><div class="step done"><span class="d">✓</span>Fingerprint checked: matches the one Bunny shipped with (a41c…7e09)</div><div class="step now"><span class="d">3</span>Unpacking: only the expected files are allowed</div><div class="step wait"><span class="d">4</span>Trying it on this PC</div><div class="prog"><i style="width:68%"></i></div><div>${btn('Cancel')}</div></div></div>`},
+ ready:{n:'Ready. The rows are the model list from section 3. The graphics switch and idle choice sit above it, like the other cards. Remove Bunny local is at the bottom, away from the everyday buttons.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Ready · Runs on: graphics card (Vulkan)</div>${pcline}
+<div class="grp">${row('Use graphics card','Off uses only the processor: slower, but works on every PC',sw(true))}${row('Stop after idle','Frees memory when you stop chatting','<select class="sel"><option>10 minutes</option></select>')}</div>
+<div class="grph">Models</div><div class="grp">${models()}</div>${foot}<div class="grp">${row('Remove Bunny local','Deletes the program and every downloaded model',btn('Remove…','danger'))}</div>`},
+ run:{n:'Running. One extra row at the top while a model is loaded. Stop now is the same as the idle stop, only sooner.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Running Qwen3 4B, using about 3.1 GB</div>
+<div class="grp">${row('Qwen3 4B is loaded','Last used 2 minutes ago. Stops by itself after 10 idle minutes',btn('Stop now'))}${row('Runs on','Graphics card (Vulkan), 4 GB',tag('Graphics card'))}</div>
+<div class="grph">Models</div><div class="grp">${models().split('</div></div></div>').slice(0,2).join('</div></div></div>')}</div></div>`}
+};
+let cur='ready';
+function paint(){
+ $('st').innerHTML=[['none','Not set up'],['setup','Setting up'],['ready','Ready'],['run','Running']].map(([k,l])=>`<button aria-pressed="${k===cur}" data-k="${k}">${l}</button>`).join('');
+ $('st').querySelectorAll('button').forEach(b=>b.onclick=()=>{cur=b.dataset.k;paint()});
+ $('c-d').innerHTML=ST[cur].h();$('c-p').innerHTML=ST[cur].h();$('stnote').textContent=ST[cur].n;
+}
+paint();
+
+/* 4 menus */
+const mh=t=>`<div class="mh">${t}</div>`;
+const mi=(a,b,cur,r='')=>`<div class="mi ${cur?'cur':''}"><div>${a}${b?`<small>${b}</small>`:''}</div>${r}</div>`;
+$('mn-today').innerHTML=mh('Auto')+mi('Auto','Bunny picks for each message',true)+mh('OpenRouter')+mi('Claude Sonnet','',false)+mi('Llama 3.3 70B','',false)+mi('Show all models','',false);
+$('mn-new').innerHTML=mh('Auto')+mi('Auto','Bunny picks for each message',false)+mh('OpenRouter')+mi('Claude Sonnet','',false)+mh('Bunny local · on this PC')+mi('Qwen3 4B','2.5 GB · uses tools',true,fit('ok','Fits'))+mi('Ministral 3 3B','2.1 GB · chat only',false,fit('ok','Fits'))+mi('Get more…','Opens Bunny local in Settings',false);
+$('mn-empty').innerHTML=mh('Bunny local · on this PC')+mi('No models downloaded yet','',false)+mi('Get more…','Opens Bunny local in Settings',false);
+$('cp-chat').innerHTML=`<div class="chat"><div class="me">Summarise this page for me.</div><div class="status"><b>Ministral 3 3B</b> · Bunny local</div></div><div class="comp"><span class="dim">Send a message…</span><span class="hint">This model answers only; it can't use tools.</span><div><span class="chip">Ministral 3 3B ▾</span></div></div>`;
+
+/* 5 loading and idle */
+$('ld').innerHTML=`<div class="chat"><div class="me">Plan a two-day trip to Lisbon.</div><div class="status"><span class="spin"></span>Starting Qwen3 4B… (first message after a start takes longer)</div></div><div class="comp"><span class="dim">Send a message…</span><div><span class="chip">Qwen3 4B · Bunny local ▾</span></div></div>`;
+$('idle').innerHTML=`<div class="grp">${row('Stop after idle','Frees memory when you stop chatting','<select class="sel"><option>10 minutes</option></select>')}${row('Qwen3 4B is loaded','Using about 3.1 GB',btn('Stop now'))}</div><div class="note" style="font-size:12.5px"><b>Choices:</b> 5, 10 (default), 30 or 60 minutes, or Only when Bunny closes.</div>`;
+
+/* 6 errors */
+const al=(t,b,acts,cls='')=>`<div class="alert ${cls}"><b>${t}</b><div>${b}</div><div class="acts">${acts}</div></div>`;
+$('e1').innerHTML=al('Not enough memory to load Qwen3 8B','This PC has about 7 GB free and the model needs about 7.2 GB. Close other apps or choose a smaller model.',btn('Choose a smaller model','primary')+btn('Try again'),'warn');
+$('e2').innerHTML=al('Bunny local isn\'t set up on this PC','The program that runs models isn\'t installed (it may have been removed).',btn('Set up Bunny local','primary')+btn('Not now'));
+$('e3').innerHTML=al('Bunny local\'s program changed on disk','Bunny won\'t start it, in case something else altered it. Set it up again to get a fresh, checked copy. Your downloaded models are kept.',btn('Set up again','primary')+btn('Not now'));
+$('e4').innerHTML=`<div class="grp">${models().split('<div class="mrow')[1]?'<div class="mrow"><div class="head"><div class="l"><b>Qwen3 8B</b><div class="meta">'+fit('tight','Tight')+tag('5.0 GB')+'</div><small style="color:var(--bad)">The download didn\'t match its fingerprint and was deleted. Nothing was kept.</small><small class="dim">Expected 5c0e…b81d, got 77af…02c4</small></div><div class="r">'+btn('Download again','primary')+'</div></div></div>':''}</div>`;
+$('e5').innerHTML=`<div class="grp"><div class="mrow"><div class="head"><div class="l"><b>Granite 4.1 8B</b><div class="meta">${fit('slow','Slow')}${tag('5.0 GB')}</div><small style="color:var(--warn)">This model changed on Hugging Face. Bunny will offer it again after an update.</small></div><div class="r">${btn('Download').replace('class="btn "','class="btn" disabled')}</div></div></div></div>`;
+$('e6').innerHTML=`<div class="grp"><div class="mrow"><div class="head"><div class="l"><b>Gemma 4 12B</b><div class="meta">${fit('tight','Tight')}${tag('7.5 GB')}</div><small style="color:var(--warn)">Needs 9.5 GB free on this drive; 6.1 GB is free. Free some space, then try again.</small></div><div class="r">${btn('Try again')}</div></div></div></div>`;
+
+/* 7 remove */
+$('rm').innerHTML=`<div class="alert warn"><b>Remove Bunny local?</b><div>This deletes the program and <b>2 downloaded models (7.6 GB)</b>. You can set it up and download them again later.</div><div class="acts">${btn('Remove everything','danger')}${btn('Keep it')}</div></div>`;
+</script>
