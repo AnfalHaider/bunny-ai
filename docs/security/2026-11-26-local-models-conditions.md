@@ -505,3 +505,165 @@ All tests:
 9. Tools are off by default for an added model, and the per-model switch is window-only.
 
 **Sign-off.** This is HIGH under LM-0 and LM-7. I review the build sha against LF-1 to LF-12, together with the LM and SP items and the LF-8 record.
+
+## Folders the person chooses: the download folder and model folders (LF-13 to LF-20), 2026-11-26
+
+Asked by the Chief of Staff (the owner's request is in a3cc9fa5, `docs/plans/2026-11-26-v0.1.16-live-fixes.md`, last section). Two additions:
+- **The download folder.** Bunny saves curated models (and models typed in under LM-7) there instead of `<data>/models`. The default stays `<data>/models`.
+- **Model folders.** The person adds folders, and Bunny lists the `.gguf` files in each. LM Studio's folder (LF-8) becomes one entry in that list.
+
+Ruled from the conditions above; nothing was run for this note. LF-1 to LF-12 still apply to every file found in a model folder. The new risk is that Bunny now **writes** into a folder it doesn't own (the download folder) and **walks** folders the person names (model folders).
+
+### LF-13: who can choose, and how
+
+- Setting or clearing the download folder, adding or removing a model folder, and Refresh are window-only. They go on `WINDOW_ONLY_ROUTES` and `deviceRefusal` for both device levels. The AI gets no tool for any of them.
+- The folder comes from the system folder dialog (`openDirectory`) in the main process. The route never takes a path typed into a request body.
+- The paths are stored only in Bunny's settings in the data folder. Like LF-1, they are never sent to a device, a model, a connector, a helper or an engine. They hold the Windows user name.
+- At most 20 model folders.
+
+### LF-14: what counts as an allowed folder (both kinds)
+
+Every check below runs on the real path (`fs.realpathSync.native`), when the folder is chosen and again before each use.
+
+- **The chosen folder may be reached through a link or junction.**
+  - Bunny stores and shows the real path, and every later check uses that.
+  - If the link later points somewhere else, the real path no longer matches the stored one. Bunny stops using the folder and shows "This folder has moved. Choose it again."
+  - **Exception: the download folder itself must not be a link or junction.** Bunny writes there, and a link someone re-points would carry the writes with it. Message: "This folder is a link. Choose the folder it points to." Links in its parent folders are allowed (the real path is stored).
+- **Local drives only.** The real path must match `^[A-Za-z]:\\`. Anything starting with `\\` is refused, as in LF-2: UNC, `\\?\`, `\\.\`, and mapped network drives. The build must prove that a mapped drive resolves to `\\server\share`. If it does not, the build adds a drive-type check in the main process (`[System.IO.DriveInfo]` DriveType `Network` is refused) and tests it. Message: "Bunny only uses folders on this PC's own drives."
+- **Removable drives (USB, SD card) are allowed**, with the checks in LF-18. The same drive letter can later belong to another stick, so every file record also holds the volume serial number (`stat.dev` on Windows) beside the file id.
+- **Cloud-synced folders (OneDrive and the like) are allowed.** They are local folders. For the download folder, the card adds: "This folder syncs to the cloud; several GB will upload." That line is shown when the real path is under the `OneDrive` environment folder; it is not a security control.
+
+### LF-15: folders that are never allowed (both kinds)
+
+Refused when chosen, and again if the real path later lands in one of them. This applies to the folder itself, to anything inside these folders, and, where it says so, to any folder that contains them.
+
+| Folder | Inside it | Any folder that contains it |
+|---|---|---|
+| Bunny's data folder (`BUNNY_DATA_DIR`, else `%LOCALAPPDATA%\BunnyAI`). Bunny's own `<data>/models` stays the built-in default, but cannot be added as a model folder | refused | refused |
+| Bunny's install folder (`process.resourcesPath` and the app folder) | refused | refused |
+| A drive root (`C:\`, `D:\`, ...) | (the root itself) | — |
+| The profile folder itself (`os.homedir()`), and `C:\Users` | (the folder itself) | refused |
+| `%SystemRoot%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%` | refused | refused |
+| `%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%\AppData\LocalLow` (this covers the Startup folder) | refused | refused |
+| `$Recycle.Bin`, `System Volume Information`, and any `.git` folder | refused | — |
+| Anything `isProtected` refuses | refused | — |
+
+- Why "contains": a model folder that contains the data folder would walk Bunny's own files. A download folder that contains it would put Bunny's writes next to them.
+- Folders such as Downloads, Documents and Desktop are allowed for both kinds. Bunny writes only into its own subfolder (LF-17).
+- The message names the reason in plain words, for example "Bunny can't use a system folder" or "Bunny can't use its own data folder."
+
+### LF-16: listing a model folder
+
+- The LF-8 walk rules apply to every model folder:
+  - at most 4 levels deep;
+  - at most 5,000 entries per folder;
+  - `lstat` on each entry, and **links and junctions inside the folder are never followed**;
+  - `.gguf` only, minus split parts and projector files;
+  - only the fixed start of each header is read at listing time, with the LF-3 caps. The full LF-2 to LF-4 checks run when the person picks a file.
+- The walk runs only when the person opens the screen or presses Refresh. There is no watcher and no background scan.
+- **Duplicates.** A file that two folders both reach (same volume serial and file id) is listed once.
+- **A missing folder** (drive removed, folder deleted or renamed) shows "Folder not found" on its entry. It is not an error dialog, it is never retried in a loop, and nothing is re-downloaded.
+- **Read-only.** Everything in LF-7 holds for every model folder: nothing is written, renamed, moved or deleted, and "Remove" removes Bunny's entry only.
+- **LM Studio's entry** is found as LF-8 says, and is shown as "LM Studio's models folder". The person can remove it from the list. Bunny then doesn't look for it again until the person adds it back.
+
+### LF-17: writing into the download folder
+
+- **Bunny writes only into one subfolder it creates:** `<chosen>\Bunny models\`. Inside it, the LM-5 layout is unchanged: `<owner>__<repo>\<file>`, each part checked against `^[A-Za-z0-9._-]{1,128}$`. Bunny never writes directly into the chosen folder, and never into a subfolder it didn't create.
+- **Permissions on that subfolder.** When Bunny creates it, it sets the same `icacls` rule as the runtime folder: the person, SYSTEM and Administrators only, with inheritance off. Folders on a second drive often inherit "Authenticated Users: Modify", which would let another account on the PC replace a model. If `icacls` fails, the folder is not used and the person is told.
+- **Creating each file.**
+  - The `.part` file and the final file are created with exclusive create (`wx`). A file or link that is already there is never followed or overwritten.
+  - Real-path check inside `<chosen>\Bunny models\` before each write, with links refused (the S-LINK-1 rules).
+  - **A file with the same name already there**, not in Bunny's records: Bunny doesn't overwrite it and doesn't trust it. It may offer "Use the file that's there". That hashes the whole file and adopts it only if the sha256 equals the pinned one. Otherwise: "A different file with this name is already there."
+- **Free space** is checked on the chosen folder's drive, as LM-5 says.
+- **Bunny's record of each download lives only in the data folder:** entry, real path, volume serial, file id, size, mtime, pinned sha256. Nothing in the download folder is trusted as a record. A `.gguf` file in `Bunny models\` that isn't in the records is never run as a curated model. It isn't listed at all, unless that folder is also a model folder, which LF-19 forbids.
+- **Deleting a downloaded model** removes only the file Bunny recorded. It first checks that the real path, volume serial and file id match the record. It then removes `<owner>__<repo>` only if it is empty. `removeTree` is never called on any folder in the download folder, and never on the chosen folder or `Bunny models\`.
+- **The download folder is unavailable** when a download starts: refuse with "The download folder isn't available. Plug in the drive or choose another folder." Bunny never falls back to `<data>/models` on its own.
+- The runner's working folder stays Bunny's runtime folder (LF-7), never the download folder.
+
+### LF-18: checking the fingerprint when the file is outside Bunny's folder
+
+- **At download:** exactly as LM-5. The hash is computed while streaming. The `.part` file is renamed to the final name only after the sha256 equals the pinned one; any mismatch deletes the `.part`. A resumed `.part` is hashed again in full.
+- **Before every start:**
+  - `lstat` (the file must not be a link) and the real path;
+  - compare the real path, volume serial, file id, size and mtime to the record.
+  - **If all match:** start.
+  - **If any differs:** hash the whole file again against the pinned sha256 before starting. A match updates the record. A mismatch refuses the start, and the entry shows "This file changed after Bunny downloaded it." Bunny offers Delete (LF-17 rules) or Download again; it does neither on its own.
+  - A missing file or drive shows "Not found". It is never re-downloaded on its own.
+- This is stricter than LF-2 for own files, because a curated file has a pinned sha to check against.
+- **Remaining risk, accepted.** The file can still be swapped between the check and the runner opening it. The containment is the same as LF: the Low-integrity runner, no network, and the `icacls` rule in LF-17, which leaves only an administrator able to do it.
+
+### LF-19: the download folder and model folders don't overlap
+
+**Ruling: refused both ways.**
+- The download folder may not be inside a model folder (LM Studio's included) or contain one.
+- A model folder may not be inside the download folder or contain it.
+- `<data>/models` counts as the download folder while it is the default.
+
+Why:
+- It keeps "Bunny never writes in your model folders" true with no exception.
+- It keeps every file in one trust class. A file planted in the download folder can never be listed as an own file under a curated name. A downloaded file never shows the "Bunny didn't download this" card.
+
+Message: "This folder overlaps your download folder. Choose a separate folder."
+
+### LF-20: changing the download folder
+
+- **Models already downloaded stay where they are and keep working.**
+  - Each record holds its own real path, so new downloads go to the new folder and old ones still run.
+  - Bunny deletes and moves nothing when the setting changes.
+  - The screen shows each model's folder in the window only.
+- **The change is refused while a download is running:** "Wait for the download to finish or cancel it." Cancelling deletes its `.part` under LF-17.
+- **The old folder later goes missing:** its models show "Not found" (LF-18). They are never re-downloaded on their own.
+- **An optional "Move my models" button is allowed in v0.1.16, but not required.** If it is built:
+  1. copy each file to the new folder as a `.part`, with the LF-17 rules;
+  2. hash the copy in full against the pinned sha256;
+  3. rename it to the final name;
+  4. update the record;
+  5. only then delete the old file, after checking its real path, volume serial and file id against the old record.
+
+  Any failure leaves the old file and the old record as they were. Free space is checked first.
+- **Going back to the default** follows the same rules: nothing moves unless the person presses Move.
+
+### Tests the build must carry, added to LF-12
+
+All tests:
+- use an invented profile (`BUNNY_DATA_DIR`, `BUNNY_FAKE_UPSTREAM=1`);
+- use injectable home and system-folder paths that point at invented folders;
+- use test-written tiny GGUF files, the fake upstream and a stand-in runner.
+
+Never the owner's real drives, model folders or `.lmstudio`.
+
+1. **Window-only:**
+   - a device at both levels is refused setting the download folder, and adding, removing and refreshing model folders;
+   - there is no AI tool for any of them;
+   - no folder path appears in any device response, system prompt or engine call.
+2. **Allowed and refused:**
+   - every LF-15 row is refused, including a folder that contains the invented data folder;
+   - `\\localhost\c$\...`, `\\?\C:\...` and `\\.\...` are refused;
+   - a download folder that is itself a junction is refused;
+   - a model folder reached through a junction stores the real path;
+   - a junction re-pointed after it was chosen gives "This folder has moved".
+3. **Overlap (LF-19):** both directions are refused, LM Studio's folder and the default `<data>/models` included.
+4. **Listing:**
+   - a junction inside a model folder is not followed;
+   - the depth and entry caps hold;
+   - a file reached from two folders is listed once;
+   - a missing folder gives "Folder not found", with no crash and no retry loop;
+   - names, sizes and mtimes in a model folder are unchanged after list, add, run, stop and remove.
+5. **Writing:**
+   - files land only under `<chosen>\Bunny models\<owner>__<repo>\`;
+   - a planted link at the `.part` or the final name is not followed (`wx`);
+   - a same-name file with the wrong sha is not adopted, and one with the right sha is;
+   - the `icacls` rule is set on `Bunny models\`;
+   - delete removes only the recorded file and leaves a stranger file in the same folder;
+   - an unavailable download folder gives the message, and there is no fallback.
+6. **Fingerprint (LF-18):**
+   - a file changed after download (same size, a byte flipped, the mtime set back) is caught by the file id or mtime check, hashed again, and refused;
+   - a file swapped for another file with a different file id is caught the same way;
+   - a matching re-hash updates the record;
+   - a missing file gives "Not found" with no re-download.
+7. **Changing the folder (LF-20):**
+   - old models still start from the old folder;
+   - the change is refused during a download;
+   - if Move is built: a hash failure mid-move leaves the old file and the old record.
+
+**Sign-off.** This is HIGH: Bunny writes outside its own folder, and the folder rules are a security control. I review the build sha against LF-13 to LF-20 together with LF-1 to LF-12, including the mapped-drive record in LF-14.
