@@ -10,7 +10,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
-import { isOwnServer, isLoopbackAddress, ownPorts } from './ownAddress.js';
+import { isOwnServer, isReservedAddress, isLoopbackAddress, ownPorts } from './ownAddress.js';
 
 export const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
 export const DOWNLOAD_TIMEOUT_MS = 60_000;
@@ -112,7 +112,7 @@ export async function fetchLimited(url, { signal, allowLoopback = false, lookupI
   const sig = AbortSignal.any([AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS), ...(signal ? [signal] : [])]);
   for (let hop = 0; ; hop += 1) {
     if (current.protocol !== 'http:' && current.protocol !== 'https:') throw new Error(`download_file only fetches http or https addresses, not ${current.protocol}`);
-    if (isOwnServer(current)) throw refusedOwn(); // every hop, so a redirect cannot lead there either
+    if (isOwnServer(current) || isReservedAddress(current)) throw refusedOwn(); // Bunny's server and the model runtime (LM-17) // every hop, so a redirect cannot lead there either
     await hopJudge.getStore()?.(current.href); // PG-1: the person's website rules, at every hop (a private address is still refused below, whatever an allow says)
     let res;
     try {

@@ -13,7 +13,7 @@
 //  - only Bunny's own page, in a Bunny window, may command a view, and only the views that page opened.
 import { controlView } from './browserAgent.js';
 import { pixelDifference, fitBitmap, sideBySide, describeScore } from './pageCompare.js';
-import { isBunnyOwn } from '../src/server/ownAddress.js';
+import { isBunnyOwn, isRuntimeAddress, isReservedAddressResolved } from '../src/server/ownAddress.js';
 import { isLocalHost } from '../src/server/capture.js';
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
@@ -55,7 +55,7 @@ export function allowedUrl(value) {
 export { isBunnyOwn };
 
 /** A page of the panel may be loaded as a page: http(s), and not Bunny itself. */
-export const loadable = (url, ownPort) => allowedUrl(url) && !isBunnyOwn(url, ownPort);
+export const loadable = (url, ownPort) => allowedUrl(url) && !isBunnyOwn(url, ownPort) && !isRuntimeAddress(url); // and never the model runtime's port (LM-17)
 
 /**
  * May this request leave a panel page? Pages need http(s) and websockets, and small inline things (data: and blob: images, fonts...);
@@ -64,7 +64,7 @@ export const loadable = (url, ownPort) => allowedUrl(url) && !isBunnyOwn(url, ow
 export function requestAllowed({ url, resourceType }, ownPort) {
   let u;
   try { u = new URL(String(url)); } catch { return false; }
-  if (isBunnyOwn(url, ownPort)) return false;
+  if (isBunnyOwn(url, ownPort) || isRuntimeAddress(url)) return false;
   const isPage = resourceType === 'mainFrame' || resourceType === 'subFrame';
   if (isPage) return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password;
   return ['http:', 'https:', 'ws:', 'wss:', 'data:', 'blob:'].includes(u.protocol);
@@ -109,7 +109,10 @@ export function createBrowserViews({ WebContentsView, session, getWindow, getOwn
     }
     // Every request of a panel page: only what a page may fetch, and never Bunny's own server.
     // PG1-c: and the person's website rules, for EVERY request (frames, scripts, fetch and XHR, images), not only the address the tab was sent to.
-    ses.webRequest?.onBeforeRequest((details, callback) => callback({ cancel: !requestAllowed(details, ownPort()) || !siteAllows(details) }));
+    ses.webRequest?.onBeforeRequest(async (details, callback) => {
+      if (!requestAllowed(details, ownPort()) || !siteAllows(details)) { callback({ cancel: true }); return; }
+      callback({ cancel: await isReservedAddressResolved(details.url) }); // LM-17: a name that resolves to this PC's loopback, at Bunny's or the runtime's port, is refused too
+    });
     // No silent downloads: stopped, and the panel says so (the model can use download_file).
     ses.on?.('will-download', (event, item, contents) => {
       event.preventDefault?.();
