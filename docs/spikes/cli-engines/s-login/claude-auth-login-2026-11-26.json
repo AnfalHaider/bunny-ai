@@ -1,0 +1,12 @@
+{
+ "seconds": 4.4,
+ "stdout": "Opening browser to sign in\u2026\nIf the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload+user%3Aplugins&code_challenge=<redacted>&code_challenge_method=S256&state=<state>\nPaste code here if prompted > ",
+ "stderr": "",
+ "browserArg": "\"https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A60075%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload+user%3Aplugins&code_challenge=<redacted>&code_challenge_method=S256&state=<state>\"",
+ "stdinWasOpen": true,
+ "note": "Pinned Claude Code 2.1.311 (sha256 32a33376...9ee6), `claude auth login` started in EMPTY account folders on 2026-11-26 with the owner's word (\"Yes, download once\"); stopped at the printed address, never opened, never signed in; the files were deleted. code_challenge and state are redacted. browserArg is what the program passes to its BROWSER; stdout is what it prints.",
+ "reading": {
+  "printed_address": "redirect_uri = https://platform.claude.com/oauth/code/callback: the page shows a code to copy back, and the program waits on stdin (\"Paste code here if prompted >\", printed without a newline)",
+  "browser_address": "redirect_uri = http://localhost:<port>/callback: the program listens on that port; no code is needed"
+ }
+}

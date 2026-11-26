@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnEngine } from './process.js';
 import { removeTree } from '../toolInstall.js';
 import { rulesFor } from '../permissionRules.js';
@@ -143,7 +143,7 @@ export function budgeted(upstream, turn) {
 
 // ---------------------------------------------------------------- the service
 
-export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false, openLoginRun = null, loginWaitMs = 12_000 } = {}) {
+export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false, openLoginRun = null, loginWaitMs = 12_000 , codeWaitMs = 15_000} = {}) {
   const fakeMode = Boolean(fake);
   const fp = fakeMode ? fakePins() : null;
   const pins = pinsOverride ?? (fakeMode ? fp.pins : loadPins());
@@ -201,8 +201,13 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     loginRuns.get(id)?.kill?.();
     // The program opens the browser itself, and a browser it starts inherits its environment: with the isolated user and app-data folders that was a brand-new first-run Chrome profile, not the person's own browser
     // (seen with the real program, v0.1.14.1). So the program is told its browser is a file that does nothing (the BROWSER variable it reads), and Bunny's own button opens the page address it printed in the person's normal browser.
-    const noBrowser = join(accountHome, 'no-browser.cmd');
-    await writeFile(noBrowser, '@exit /b 0\r\n').catch(() => {});
+    // v0.1.16: the program hands its browser the address that calls back to a port it listens on (seen with the real program, 2.1.311: docs/spikes/cli-engines/s-login). Its PRINTED address is a different one, whose page shows
+    // a code to copy back. So the "browser" is a script that only WRITES the address it is given to a file (never runs it, never opens it), and Bunny opens that address in the person's browser: the program's own listener
+    // finishes the sign-in and no code is needed. The printed address stays as the second choice, with the "Paste the code" box.
+    const noBrowser = join(accountHome, 'record-browser.cmd');
+    const browserArgFile = join(accountHome, 'browser-address.txt');
+    await rm(browserArgFile, { force: true }).catch(() => {});
+    await writeFile(noBrowser, `@echo %*> "${browserArgFile}"\r\n@exit /b 0\r\n`).catch(() => {});
     let run;
     try { run = (openLoginRun ?? spawnEngine)({ file: found.exe, args: AUTH_COMMANDS.login, cwd: accountHome, extraEnv: { ...authEnv(), BROWSER: noBrowser } }); }
     catch (err) { throw Object.assign(new Error(`Claude Code's sign-in could not start (${String(err?.message ?? err).slice(0, 120)}).`), { status: 502 }); }
@@ -214,16 +219,45 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     (async () => { try { for await (const line of run.lines) { said = (said + line + '\n').slice(-8000); url ??= signInUrlFrom(said); } } catch { /* unreadable: no address */ } })();
     const stop = setTimeout(() => { try { run.kill?.(); } catch { /* gone */ } }, LOGIN_LIFETIME_MS); stop.unref?.();
     run.exited.finally(() => clearTimeout(stop)).catch(() => {});
+    // v0.1.16: the address the program gave its browser (the one that calls back to the program's own listener), written by record-browser.cmd; only a vendor address is taken
+    let browserUrl = null;
+    const readBrowserUrl = async () => { if (browserUrl) return browserUrl; try { browserUrl = signInUrlFrom((await readFile(browserArgFile, 'utf8')).trim()); } catch { /* not written yet */ } return browserUrl; };
     const t0 = Date.now();
     while (url === null && exitCode === undefined && Date.now() - t0 < loginWaitMs) { url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`); if (url) break; await new Promise((r) => setTimeout(r, 100)); }
     url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`);
     if (url && exitCode === undefined) await new Promise((r) => setTimeout(r, 300)); // a program that prints an address and stops at once with an error did not sign anyone in
-    if (url && (exitCode === undefined || exitCode === 0)) return { started: true, url }; // a program that already stopped with an error is a failure, whatever address its message holds
+    const tb = Date.now(); while (url && !(await readBrowserUrl()) && exitCode === undefined && Date.now() - tb < Math.min(3000, loginWaitMs)) await new Promise((r) => setTimeout(r, 100)); // the program calls its browser a moment after it prints
+    await readBrowserUrl();
+    // browserUrl: opens, and the program's own listener finishes the sign-in (no code). manualUrl: the printed address, whose page shows a code to paste into the box.
+    if (url && (exitCode === undefined || exitCode === 0)) return { started: true, url: browserUrl ?? url, manualUrl: browserUrl && browserUrl !== url ? url : null, canPaste: exitCode === undefined }; // a program that already stopped with an error is a failure, whatever address its message holds
     if (exitCode !== undefined && exitCode !== 0) {
       throw Object.assign(new Error(`Claude Code's sign-in stopped before it showed a page (exit code ${exitCode}). Press Sign in to try again; if it stops again, Claude Code may need an update (Engines > Claude Code).`), { status: 502 });
     }
     if (exitCode === 0) { await refreshAuth(id).catch(() => {}); return { started: true, url: null, finished: true }; }
     return { started: true, url: null };
+  }
+
+  /**
+   * v0.1.16: "Paste the code". The vendor's sign-in waits on its stdin for the code the sign-in page shows (when the page cannot call back to the program). The code is written to that waiting run and nowhere else:
+   * it is not logged, not stored, not recorded, not returned, and not kept in what the run printed. Only the window may ask (the route is on the window-only list and refused to a device).
+   * Returns { ok, signedIn }: signedIn true when the program accepted it and finished, null when it is still waiting (a wrong code: the program asks again).
+   */
+  const codeTries = new WeakMap();
+  async function submitCode(id, code) {
+    if (id !== 'claude-code') throw Object.assign(new Error('Only Claude Code signs in with an account for now.'), { status: 400 });
+    const run = loginRuns.get(id);
+    if (!run) throw Object.assign(new Error('No sign-in is waiting. Press Sign in first.'), { status: 409, code: 'engine.noSignin' });
+    const text = typeof code === 'string' ? code.trim() : '';
+    if (!/^[A-Za-z0-9._~#%+=\/-]{8,512}$/.test(text)) throw Object.assign(new Error('That does not look like the code from the sign-in page. Copy all of it.'), { status: 400, code: 'engine.badCode' });
+    const tries = (codeTries.get(run) ?? 0) + 1;
+    if (tries > 5) throw Object.assign(new Error('Too many tries. Press Sign in again to get a new page.'), { status: 429, code: 'engine.tooMany' });
+    codeTries.set(run, tries);
+    run.write(text + String.fromCharCode(10)); // the code and the Enter the program waits for
+    const t0 = Date.now();
+    while (loginRuns.get(id) === run && Date.now() - t0 < codeWaitMs) await new Promise((r) => setTimeout(r, 150));
+    const finished = loginRuns.get(id) !== run;
+    const signedIn = finished ? await refreshAuth(id).catch(() => null) : null;
+    return { ok: true, signedIn: signedIn === true, waiting: !finished };
   }
 
   /** Sign out: the vendor's own logout in the account folder, then the folder is deleted. */
@@ -427,5 +461,5 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
   const pinVersion = (id) => pins[id]?.version ?? null;
 
   const busy = (id) => running.has(id);
-  return { store, pins, status, startDownload, signIn, signOut, refreshAuth, runTurn, busy, progress, ids: ENGINE_IDS, fake: fakeMode, randomId: randomUUID };
+  return { store, pins, status, startDownload, signIn, submitCode, signOut, refreshAuth, runTurn, busy, progress, ids: ENGINE_IDS, fake: fakeMode, randomId: randomUUID };
 }

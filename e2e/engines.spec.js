@@ -100,6 +100,14 @@ test('Claude Code in Account mode: Sign in appears when signed out, opens the ve
   const dialog = page.locator('.engine-confirm');
   await expect(dialog).toContainText('Open the sign-in page in your browser');
   await expect(dialog).not.toContainText('A window opened');
+  // v0.1.16: if the page shows a code, there is a box to paste it into (hidden characters, emptied when sent); here no program is waiting in the stand-in, so Bunny says so, and any code gets that answer
+  const box = dialog.getByLabel('Code from the sign-in page');
+  await expect(box).toBeVisible();
+  await expect(box).toHaveAttribute('type', 'password');
+  await box.fill('short');
+  await dialog.getByRole('button', { name: 'Send the code' }).click();
+  await expect(dialog).toContainText('No sign-in is waiting');
+  await expect(box).toHaveValue('');
   const popup = page.waitForEvent('popup');
   await dialog.getByRole('button', { name: 'Open the sign-in page' }).click();
   expect(new URL((await popup).url()).hostname).toBe('claude.ai');

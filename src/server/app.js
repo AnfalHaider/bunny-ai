@@ -913,7 +913,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     // ---- CLI-ENGINES: what is downloaded, and the window's buttons (device access is refused for all of these: remoteRoute, route's belt and windowOnly) ----
     if (path === '/api/engines' && method === 'GET') return sendJson(res, 200, await engines.status(settings));
     if (path === '/api/engines/record' && method === 'GET') return sendJson(res, 200, { record: await engines.store.record() });
-    const engineMatch = path.match(/^\/api\/engines\/(claude-code|codex)(?:\/(download|cancel|rollback|signin|signout))?$/);
+    const engineMatch = path.match(/^\/api\/engines\/(claude-code|codex)(?:\/(download|cancel|rollback|signin|signin\/code|signout))?$/);
     if (engineMatch && ['POST', 'DELETE'].includes(method)) {
       if (windowOnly(req, res)) return;
       const [, engineId, action] = engineMatch;
@@ -923,6 +923,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (method === 'POST' && action === 'cancel') return sendJson(res, 200, { cancelled: engines.store.cancel(engineId) });
         if (method === 'POST' && action === 'rollback') return sendJson(res, 200, await engines.store.rollback(engineId));
         if (method === 'POST' && action === 'signin') return sendJson(res, 202, await engines.signIn(engineId));
+        if (method === 'POST' && action === 'signin/code') { const { code } = (await readBody(req)) ?? {}; return sendJson(res, 200, await engines.submitCode(engineId, code)); } // v0.1.16: the code goes to the waiting sign-in and nowhere else (not logged, not stored, not answered)
         if (method === 'POST' && action === 'signout') return sendJson(res, 200, await engines.signOut(engineId));
       } catch (err) { return sendJson(res, err.status ?? 409, { code: err.code ?? 'engine.failed', message: err.message }); }
       return sendJson(res, 404, { code: 'engine.route', message: 'No such engine action.' });
