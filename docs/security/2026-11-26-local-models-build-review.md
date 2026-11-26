@@ -472,3 +472,16 @@ The 612f2a3f scope is unchanged.
 ### Verdict at f7c917cc: PASS
 
 The 612f2a3f scope is unchanged. The release sign-off waits for the new integration sha and its gate.
+
+## Re-check at 434eab71 (status() race)
+
+**What changed.** One commit on f7c917cc, on `claude/v0116-local-models-t2`. It touches only `status()` in `src/server/localModelsReal.js`, plus `test/local-status-race.test.js`.
+
+- **The fix.** `status()` snapshots `state`. If set-up, Remove or a reload replaced `state` during the read, it reads again, at most 3 reads in total. It never loops without limit.
+- **What a client sees.** The answer has the same fields as before, so nothing new reaches a client.
+- **The new argument.** `status()` now takes a `tries` count. No caller in `src` or `electron` passes it an argument, so a request can't set it.
+- **Unchanged.** No route, window-only rule, allow list or start rule changed.
+
+**Tests.** At 434eab71, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`, I ran the same set as at f7c917cc plus the race test: 204 tests, 203 pass, 0 fail, 1 skipped. I didn't run the e2e suite or the gate.
+
+### Verdict at 434eab71: PASS
