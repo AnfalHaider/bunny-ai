@@ -2609,7 +2609,7 @@ export async function createApp({ localModels: localModelsOption = null, pcOptio
         return sendJson(res, 400, { code: 'model.notSelected', message: 'Choose a provider and model first' });
       }
 
-      const provider = registry.list().find((p) => p.id === providerId);
+      let provider = registry.list().find((p) => p.id === providerId);
       if (!provider || provider.status !== 'connected') {
         return sendJson(res, 400, { code: 'provider.notConnected', message: 'That provider is not connected' });
       }
@@ -2623,6 +2623,7 @@ export async function createApp({ localModels: localModelsOption = null, pcOptio
           const who = (req.bunnyRemote ?? req.bunnyDevice) ? 'device' : body.scheduledTask ? 'scheduled' : (body.textOnly === true && !adminOk(req)) ? 'textOnly' : 'window';
           await localModels.ensure(model, { who, quick: body.textOnly === true });
           if (before?.id !== model) localStarting = (await localModels.status()).models.find((m) => m.id === model)?.name ?? model;
+          provider = registry.list().find((p) => p.id === providerId) ?? provider; // the address is looked up per request: it was '' while the model was stopped and is the new server's now (a cold start, an idle stop, a switch)
         } catch (err) {
           if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
           throw err;
