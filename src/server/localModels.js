@@ -12,7 +12,9 @@ import { join } from 'node:path';
 import { GB, chooseContext } from './localFit.js';
 
 export const IDLE_CHOICES = [5, 10, 30, 60, 0]; // minutes; 0 = only when Bunny closes
-export const PROGRAM = { name: 'llama.cpp', sizeMB: 39, from: 'GitHub releases' };
+export const PROGRAM = { name: 'llama.cpp', sizeMB: 39, from: 'GitHub releases', licence: 'MIT', host: 'github.com', signed: false }; // signed: S-LM1 decides; until it says otherwise the card says the program is not signed (LM-1)
+export const QUICK_ASK_STARTING = 'Starting your local model…';
+export const RAISABLE = ['memory', 'missing', 'changed', 'fingerprint', 'hfchanged', 'disk', 'device'];
 const PROVIDER_ID = 'bunny-local';
 
 /** The invented list (fake mode only). Real entries come from localModels.json once the spikes and Security have settled them. */
@@ -38,6 +40,8 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
   let loaded = false;
   let setup = null; // { step } while setting up
   let lastError = null;
+  /** Fake mode only: which of the plain error states to show, so Design and QA can look at each one. Never saved. */
+  let raised = {};
   const timers = new Map();
 
   async function load() {
@@ -58,7 +62,11 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
       id: e.id, name: e.name, publisher: e.publisher, licence: e.licence, size: e.size,
       fit: fit.fit.result, fitText: fit.fit.text, canDownload: fit.fit.canDownload, ctx: fit.ctx,
       tools: fit.tools, toolsNote: fit.toolsNote,
-      state: mine.state, done: mine.done ?? 0, error: mine.error ?? null,
+      state: mine.state, done: mine.done ?? 0,
+      error: raised.fingerprint === e.id ? "The download didn't match its fingerprint and was deleted. Nothing was kept. Expected 5c0e…b81d, got 77af…02c4"
+        : raised.disk === e.id ? `Needs ${((e.size + 2 * GB) / GB).toFixed(1)} GB free on this drive; 6.1 GB is free. Free some space, then try again.`
+          : (mine.error ?? null),
+      changedOnHub: raised.hfchanged === e.id, // LM-5d: this model changed on Hugging Face: offered again after an update, Download off
       needFreeDisk: e.size + 2 * GB,
       needBytes: fit.fit.need, availBytes: pc().freeRam + (gpu ? pc().freeVram : 0),
       speedBps: mine.state === 'downloading' ? (fake ? 18 * 1024 * 1024 : null) : null,
@@ -66,6 +74,13 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
     };
   }
 
+  /** The program-level states of the drawing (section 6): the card and the chat show these; Set up again starts over. */
+  function programAlerts() {
+    const out = [];
+    if (raised.missing) out.push({ kind: 'missing', title: "Bunny local isn't set up on this PC", body: "The program that runs models isn't installed (it may have been removed).", action: 'Set up Bunny local' });
+    if (raised.changed) out.push({ kind: 'changed', title: "Bunny local's program changed on disk", body: "Bunny won't start it, in case something else altered it. Set it up again to get a fresh, checked copy. Your downloaded models are kept.", action: 'Set up again' });
+    return out;
+  }
   async function status() {
     await load();
     const p = pc();
@@ -81,6 +96,8 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
       modelsDir: join(dataDir, 'models'),
       usedBytes: list.reduce((n, e) => n + (state.models[e.id]?.state === 'ready' ? e.size : 0), 0),
       error: lastError,
+      alerts: programAlerts(),
+      raised: fake ? Object.keys(raised) : [],
     };
   }
 
@@ -139,14 +156,28 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
   }
   async function stopNow() { await load(); state.running = null; return status(); }
   /** The window picked a model or sent a message: in fake mode "start" is instant and marks it running. */
-  async function ensure(id, { who = 'window' } = {}) {
+  async function ensure(id, { who = 'window', quick = false } = {}) {
     await load();
+    if (fake && raised.device && state.running?.id !== id) who = 'device'; // the device refusal, raised on purpose
+    if (raised.missing) throw new LocalError('local.missing', "Bunny local isn't set up on this PC. The program that runs models isn't installed (it may have been removed).", 409);
+    if (raised.changed) throw new LocalError('local.changed', "Bunny local's program changed on disk. Bunny won't start it, in case something else altered it. Set it up again to get a fresh, checked copy.", 409);
+    if (raised.memory) throw new LocalError('local.memory', `Not enough memory to load ${entry(id)?.name ?? id}. This PC has about ${(pc().freeRam / GB).toFixed(0)} GB free and the model needs about ${(view(entry(id)).needBytes / GB).toFixed(1)} GB. Close other apps or choose a smaller model.`, 409);
     if (who !== 'window' && state.running?.id !== id) throw new LocalError('local.notRunning', 'Bunny local is stopped. Start it from Bunny\'s window on your PC.', 409);
     if (state.models[id]?.state !== 'ready') throw new LocalError('local.notReady', 'That model is not downloaded.', 409);
     state.running = { id, usedBytes: Math.round(entry(id).size * 1.25), lastUsed: clock() };
     return state.running;
   }
   async function cancelSetup() { setup = null; return status(); }
+  /** Fake mode: raise (or with kind 'none', clear) one of the plain error states. */
+  async function raise(kind, id = null) {
+    if (!fake) throw new LocalError('local.notAvailable', 'Only in test mode.', 404);
+    if (kind === 'none') { raised = {}; return status(); }
+    if (!RAISABLE.includes(kind)) throw new LocalError('local.bad', `Raise one of: ${RAISABLE.join(', ')}.`);
+    raised[kind] = ['fingerprint', 'hfchanged', 'disk'].includes(kind) ? (id ?? list[1].id) : true;
+    if (kind === 'changed') delete raised.missing;
+    if (kind === 'missing') delete raised.changed;
+    return status();
+  }
   async function removeAll() {
     await load();
     for (const id of [...timers.keys()]) stopTimer(id);
@@ -164,7 +195,9 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
       return { id: e.id, displayName: e.name, ownedBy: e.publisher, contextLength: v.ctx, providerId: PROVIDER_ID, providerName: 'Bunny local', sizeBytes: e.size, toolsOk: v.tools, fit: v.fit, fitText: v.fitText, note: v.tools ? 'uses tools' : 'chat only' };
     });
   }
+  /** The address of the running server, looked up per request (LM-2). Fake mode may point at a stand-in server (BUNNY_FAKE_LOCAL_URL); the real runtime is not built yet. */
+  const baseUrl = () => (fake && process.env.BUNNY_FAKE_LOCAL_URL ? process.env.BUNNY_FAKE_LOCAL_URL : '');
   const hasReady = () => loaded && state.installed && readyModels().length > 0;
 
-  return { status, setUp, download, pause, resume, cancel, remove, settings, stopNow, ensure, removeAll, cancelSetup, pickerModels, hasReady, load, view };
+  return { status, setUp, download, pause, resume, cancel, remove, settings, stopNow, ensure, removeAll, cancelSetup, raise, pickerModels, hasReady, baseUrl, load, view };
 }

@@ -2661,7 +2661,8 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .engine-confirm .modal-body > button { margin: var(--sp-3) var(--sp-3) 0 0; }
 
 /* LOCAL-MODELS (design-local-models @ 4ee59efc): the Bunny local card, its model rows, fit badges and the plain error lines */
-.lm-card-host { padding: 14px 16px; display: grid; gap: 10px; }
+.lm-card-host { display: grid; gap: 0; }
+.lm-body { padding: 0 16px 14px; display: grid; gap: 10px; min-width: 0; }
 .lm-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; }
 .lm-new { border-color: var(--accent); color: var(--accent); }
 .lm-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 8px; background: var(--panel); min-width: 0; }
@@ -2691,3 +2692,6 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .local-hint { display: block; }
 .lm-remove-row { margin-top: 4px; }
 .lm-state { font-size: 13px; }
+.lm-unsigned { color: var(--warn); border-color: var(--warn); }
+.lm-unsigned-note { font-size: 12.5px; }
+.lm-warn { color: var(--warn); font-size: 12.5px; }

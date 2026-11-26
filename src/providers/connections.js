@@ -201,7 +201,7 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog:
         auth: provider.auth ?? null,
         // LOCAL-MODELS: Bunny local is 'connected' when it has a downloaded model, and has no address or key stored anywhere
         status: provider.kind === 'managed' ? (managed?.status?.(provider.id) ?? 'disconnected') : s.status,
-        baseUrl: provider.kind === 'managed' ? '' : s.baseUrl,
+        baseUrl: provider.kind === 'managed' ? (managed?.baseUrl?.(provider.id) ?? '') : s.baseUrl, // LM-2: looked up when asked, never stored; empty while the runtime is stopped
         maskedKey: s.status === 'connected' ? s.maskedKey : '',
         lastError: s.lastError,
         connectedAt: s.connectedAt,

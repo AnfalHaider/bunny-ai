@@ -17,11 +17,13 @@ function el(tag, props = {}, ...kids) {
   return n;
 }
 
-export function mountLocalModels(host, { getJSON, sendJSON }) {
+export function mountLocalModels(root, { getJSON, sendJSON }) {
+  let host = root;
   let status = null;
   let removing = false;
   let adding = false;
   let notice = '';
+  let open = false;
   let timer = null;
 
   const act = async (path, method = 'POST', body = {}) => {
@@ -57,13 +59,14 @@ export function mountLocalModels(host, { getJSON, sendJSON }) {
     if (m.state === 'downloading') acts.append(button('Pause', () => act('/pause', 'POST', id), 'btn'), button('Cancel', () => act('/cancel', 'POST', id), 'btn'));
     else if (m.state === 'paused') acts.append(button('Resume', () => act('/resume', 'POST', id), 'btn btn-primary'), button('Cancel', () => act('/cancel', 'POST', id), 'btn'));
     else if (m.state === 'ready') acts.append(el('span', { class: 'tag lm-ready', textContent: 'Ready' }), button('Delete', () => act(`/${m.id}`, 'DELETE'), 'btn', { 'aria-label': `Delete ${m.name}` }));
-    else acts.append(button('Download', () => act('/download', 'POST', id), 'btn btn-primary', { disabled: !m.canDownload, 'aria-label': `Download ${m.name}` }));
+    else acts.append(button('Download', () => act('/download', 'POST', id), 'btn btn-primary', { disabled: !m.canDownload || m.changedOnHub, 'aria-label': `Download ${m.name}` }));
     const lines = [];
     if (m.state === 'downloading' || m.state === 'paused') {
       lines.push(el('div', { class: 'lm-prog', role: 'progressbar', 'aria-valuenow': Math.round((m.done / m.size) * 100), 'aria-valuemin': 0, 'aria-valuemax': 100 }, el('i', { style: `width:${Math.round((m.done / m.size) * 100)}%` })));
       const speed = m.state === 'downloading' && m.speedBps ? ` · ${Math.round(m.speedBps / 1048576)} MB/s · about ${mins((m.size - m.done) / m.speedBps)} left` : '';
       lines.push(el('small', { class: 'desc', textContent: `${m.state === 'paused' ? 'Paused at ' : ''}${gb(m.done)} of ${gb(m.size)}${speed}${m.state === 'paused' ? '. Picks up where it stopped, even after Bunny restarts' : ''}` }));
-    } else if (m.error) lines.push(el('small', { class: 'lm-err', textContent: m.error }));
+    } else if (m.changedOnHub) lines.push(el('small', { class: 'lm-warn', textContent: 'This model changed on Hugging Face. Bunny will offer it again after an update.' }));
+    else if (m.error) lines.push(el('small', { class: 'lm-err', textContent: m.error }));
     else if (m.state === 'ready') lines.push(el('small', { class: 'desc', textContent: `Checked · fingerprint ${m.fingerprint}` }));
     else if (m.fit === 'too-big') lines.push(el('small', { class: 'desc', textContent: `Too big for this PC: needs about ${gb(m.needBytes)} free, ${gb(m.availBytes)} is available` }));
     else if (m.fit === 'slow' || m.fit === 'tight' || m.fit === 'fits-gpu') lines.push(el('small', { class: 'desc', textContent: m.fitText }));
@@ -75,8 +78,22 @@ export function mountLocalModels(host, { getJSON, sendJSON }) {
     host.replaceChildren();
     if (!status) return;
     const s = status;
-    host.append(el('div', { class: 'lm-title' }, el('b', { textContent: 'Bunny local' }), el('span', { class: 'tag', textContent: 'Managed' }), el('span', { class: 'tag lm-new', textContent: 'New' })));
-    host.append(el('div', { class: 'desc', textContent: 'Models Bunny downloads and runs on this PC. No key, no account.' }));
+    const label = s.installed ? (open ? 'Close' : 'Manage') : (open ? 'Close' : 'Set up');
+    host.append(el('div', { class: 'row lm-provider-row' },
+      el('div', { class: 'meta-col' }, el('div', { class: 'name' }, document.createTextNode('Bunny local '), el('span', { class: 'tag lm-new', textContent: 'New' })), el('div', { class: 'desc', textContent: 'Models Bunny downloads and runs on this PC. No key, no account' })),
+      el('div', { class: 'right' }, el('span', { class: 'tag', textContent: 'Managed' }), el('button', { type: 'button', class: 'btn btn-primary', textContent: label, 'aria-expanded': String(open), 'aria-controls': 'lm-body', onclick: () => { open = !open; paint(); } }))));
+    if (!open) return;
+    const body = el('div', { class: 'lm-body', id: 'lm-body' });
+    const real = host;
+    host = body; // everything below is the card under the row
+    try { card(s); } finally { host = real; real.append(body); }
+  }
+
+  function card(s) {
+    for (const a of s.alerts ?? []) {
+      host.append(el('div', { class: 'lm-card warn', 'data-alert': a.kind, role: 'alert' }, el('b', { textContent: a.title }), el('div', { class: 'desc', textContent: a.body }),
+        el('div', { class: 'lm-acts' }, button(a.action, async () => { await act('/fake', 'POST', { raise: 'none' }); await act('/setup'); }, 'btn btn-primary'), button('Not now', () => { notice = ''; paint(); }, 'btn'))));
+    }
     if (s.installed && !s.setup) host.append(el('div', { class: 'desc lm-state', textContent: s.running ? `Running ${s.running.name}, using about ${gb(s.running.usedBytes)}` : `Ready · Runs on: ${s.runtime.backend === 'vulkan' && s.runtime.useGpu ? 'graphics card (Vulkan)' : 'CPU'}` }));
     if (notice) host.append(el('div', { class: 'lm-err', role: 'alert', textContent: notice }));
     if (removing) { host.append(removeCard()); return; }
@@ -91,6 +108,8 @@ export function mountLocalModels(host, { getJSON, sendJSON }) {
       host.append(el('div', { class: 'lm-card' },
         el('b', { textContent: 'Set up Bunny local' }),
         el('div', { class: 'desc', textContent: `Bunny downloads a ${s.program.sizeMB} MB program (${s.program.name}) from its ${s.program.from}, checks its fingerprint, and keeps it in its own folder. Chats with a local model stay on this PC, and downloads talk only to GitHub (the program) and Hugging Face (models).` }),
+        el('div', { class: 'lm-meta' }, el('span', { class: 'tag', textContent: `${s.program.sizeMB} MB` }), el('span', { class: 'tag', textContent: `${s.program.licence} licence` }), el('span', { class: 'tag', textContent: s.program.host }), s.program.signed ? null : el('span', { class: 'tag lm-unsigned', textContent: 'Not signed' })),
+        s.program.signed ? null : el('div', { class: 'lm-card warn lm-unsigned-note', textContent: "This program from llama.cpp isn't signed by its publisher. Bunny checks every file against a fixed fingerprint instead." }),
         s.fake ? el('div', { class: 'lm-note', textContent: 'Test mode: nothing is really downloaded. The models below are invented.' }) : null,
         button('Set up Bunny local', () => act('/setup'), 'btn btn-primary')));
       return;

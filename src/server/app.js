@@ -23,7 +23,7 @@ import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRou
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
-import { createLocalModels, LocalError } from './localModels.js';
+import { createLocalModels, LocalError, QUICK_ASK_STARTING } from './localModels.js';
 import { findProvider } from '../providers/catalog.js';
 import { startDeviceFlow, waitForToken } from '../providers/oauth.js';
 import { dpapiSecretStore } from '../providers/secretStore.js';
@@ -324,7 +324,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
   await localModels.load();
   const registry = createProviderRegistry({
     secrets,
-    managed: { status: () => (localModels.hasReady() ? 'connected' : 'disconnected'), models: () => localModels.pickerModels() },
+    managed: { status: () => (localModels.hasReady() ? 'connected' : 'disconnected'), models: () => localModels.pickerModels(), baseUrl: () => localModels.baseUrl() },
     ...offline,
     ...(probe ? { probe } : {}),
     ...(discover ? { discover } : {}),
@@ -791,6 +791,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (method === 'POST' && part === 'resume') return sendJson(res, 200, await localModels.resume(modelId));
         if (method === 'POST' && part === 'cancel') return sendJson(res, 200, await localModels.cancel(modelId));
         if (method === 'POST' && part === 'stop') return sendJson(res, 200, await localModels.stopNow());
+        if (method === 'POST' && part === 'fake') return sendJson(res, 200, await localModels.raise(String(body.raise ?? ''), typeof body.id === 'string' ? body.id : null)); // test mode only: shows each plain error state
         if ((method === 'POST' || method === 'PUT') && part === 'settings') return sendJson(res, 200, await localModels.settings(body));
       } catch (err) {
         if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
@@ -2561,7 +2562,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (providerId === 'bunny-local') {
         try {
           const before = (await localModels.status()).running;
-          await localModels.ensure(model, { who: req.bunnyRemote ?? req.bunnyDevice ? 'device' : 'window' });
+          await localModels.ensure(model, { who: req.bunnyRemote ?? req.bunnyDevice ? 'device' : 'window', quick: body.textOnly === true });
           if (before?.id !== model) localStarting = (await localModels.status()).models.find((m) => m.id === model)?.name ?? model;
         } catch (err) {
           if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
@@ -2643,7 +2644,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (helper && event === 'permission') out = { ...data, title: `${helper} › ${data.title}` };
         res.write(`event: ${event}\ndata: ${JSON.stringify(out)}\n\n`);
       };
-      if (localStarting) send('notice', { text: `Starting ${localStarting}… (first message after a start takes longer)` }); // LM-9: the Starting line
+      if (localStarting) send('notice', { text: body.textOnly === true ? QUICK_ASK_STARTING : `Starting ${localStarting}… (first message after a start takes longer)` }); // LM-9: the Starting line
       // A helper's own steps are kept in its own chat; the main chat keeps its own.
       // What the model said since its last step ("Checking the server log.") is kept with the
       // next step, so the chat reads as a running account of the work, also after a reload.
@@ -2833,6 +2834,11 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       /** @returns {Promise<{ proceed: true } | { stop: string } | { card: string }>} */
       const autoCheck = async (summary, name, parsed, risk) => {
         if (!judgeOn() || !goesToJudge(name, risk)) return { proceed: true };
+        // LM-8: a small local model is a weak judge. With a local chat model and no checking model chosen, Smart asks instead of letting it decide.
+        if (providerId === 'bunny-local' && !String(settings.autoJudgeModel ?? '')) {
+          if (!judgeNoticeShown) { judgeNoticeShown = true; }
+          return { card: "Asked because Smart can't check this with a local model. Choose a checking model in Settings to let Smart decide." };
+        }
         replyJudge ??= createReplyJudge({ ask: askJudgeModel, model: judgeModelLabel() });
         const out = await replyJudge.judge({ tool: name, args: parsed, folder: workspace?.root ?? folder?.folder ?? '' }, { userTurns: await typedTurns(), scheduled: Boolean(scheduledTask) });
         const stats = replyJudge.stats;

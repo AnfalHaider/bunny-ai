@@ -387,7 +387,7 @@ function renderPicker() {
   } else if (state.selected) {
     const row = state.models.find((m) => m.id === state.selected.model && m.providerId === state.selected.providerId) ?? state.models.find((m) => m.id === state.selected.model);
     const name = row?.displayName ?? state.selected.model;
-    trigger.append(chipDot(state.selected.providerName), element('span', { className: 'label', textContent: name }));
+    trigger.append(chipDot(state.selected.providerName), element('span', { className: 'label', textContent: state.selected.providerId === 'bunny-local' ? `${name} · Bunny local` : name }));
     if (row?.freeKind) trigger.append(element('span', { className: 'chip-free', textContent: row.freeKind === 'daily' ? 'Free daily' : 'Free' }));
     trigger.title = `${name} (${state.selected.providerName})`; trigger.setAttribute('aria-label', `Model: ${name}, ${state.selected.providerName}`);
   } else {
@@ -565,7 +565,7 @@ function openPicker(host, trigger) {
 
   // LOCAL-MODELS: the menu always offers a way to the Bunny local card (downloaded models are listed above under their own provider name)
   const addGetMore = () => {
-    const more = button('Get more local models…', { className: 'picker-item picker-get-more', role: 'option', 'aria-selected': 'false' });
+    const more = button('Get more…', { className: 'picker-item picker-get-more', role: 'option', 'aria-selected': 'false' });
     more.id = 'model-get-more';
     more.append(element('span', { className: 'model-desc', textContent: 'Opens Bunny local in Settings' }));
     more.addEventListener('click', () => { closePicker(); openSettings('providers'); });
@@ -632,9 +632,17 @@ function openPicker(host, trigger) {
     const nameOf = (g) => String(g[0].displayName ?? g[0].id);
     if (sort === 'name') groups.sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' }));
     else if (sort === 'context') groups.sort((a, b) => top(b) - top(a) || nameOf(a).localeCompare(nameOf(b)));
-    for (const group of groups) list.append(modelItem(group));
+    // LM-4: a local model is the person's own pick: it has its own group, never under Best for and never mixed into All models
+    const isLocal = (g) => g[0].providerId === 'bunny-local';
+    for (const group of groups.filter((g) => !isLocal(g))) list.append(modelItem(group));
     addShowAll();
-    if (!q && !filterCount()) addGetMore();
+    const mine = groups.filter(isLocal);
+    if (mine.length || (!q && !filtered)) {
+      list.append(element('div', { className: 'picker-group picker-group-local', textContent: 'Bunny local · on this PC' }));
+      if (mine.length) for (const group of mine) list.append(modelItem(group));
+      else list.append(element('div', { className: 'picker-empty', textContent: 'No models downloaded yet' }));
+      if (!q && !filtered) addGetMore();
+    }
     active = 0;
     highlight();
   };

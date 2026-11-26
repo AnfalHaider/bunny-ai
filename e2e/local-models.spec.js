@@ -8,15 +8,23 @@ test.beforeEach(async ({ request }) => {
 });
 
 const card = (page) => page.locator('#bunny-local');
+const openRow = async (page) => { await card(page).getByRole('button', { name: 'Set up', exact: true }).click(); };
 const ready = async (page) => {
   await page.goto('/src/ui/providers.html?embed=1');
+  await openRow(page);
   await card(page).getByRole('button', { name: 'Set up Bunny local', exact: true }).click();
   await expect(card(page).locator('.lm-model').first()).toBeVisible({ timeout: 10000 });
 };
 
 test('Not set up: one button, the size and place on the card, nothing downloaded yet', async ({ page }) => {
   await page.goto('/src/ui/providers.html?embed=1');
+  await expect(card(page).locator('.lm-provider-row')).toContainText('Bunny local');
+  await expect(card(page).locator('.lm-provider-row')).toContainText('Managed');
+  await expect(card(page).locator('#lm-body')).toHaveCount(0); // a row first; the card opens from it
+  await openRow(page);
   await expect(card(page).locator('b', { hasText: 'Set up Bunny local' })).toBeVisible();
+  await expect(card(page)).toContainText('Not signed');
+  await expect(card(page)).toContainText("isn't signed by its publisher");
   await expect(card(page)).toContainText('39 MB program');
   await expect(card(page)).toContainText('GitHub');
   await expect(card(page)).toContainText('stay on this PC');
@@ -120,4 +128,54 @@ test('LM-4: a local model is never in Best for or Auto; it is the person\'s own 
   await page.locator('.picker-item', { hasText: 'Ministral 3 3B' }).first().click();
   await expect(page.locator('#local-hint')).toBeVisible();
   await expect(page.locator('#local-hint')).toHaveText("This model answers only; it can't use tools.");
+});
+
+test('each plain error state can be raised in test mode and shows its words on the card', async ({ page, request }) => {
+  await ready(page);
+  const raise = (raise, id) => request.post('/api/local-models/fake', { data: { raise, id } });
+  const show = async () => { await page.reload(); await card(page).getByRole('button', { name: 'Manage' }).click(); };
+  await raise('missing'); await show();
+  await expect(card(page).locator('[data-alert="missing"]')).toContainText("Bunny local isn't set up on this PC");
+  await expect(card(page).locator('[data-alert="missing"]').getByRole('button', { name: 'Set up Bunny local' })).toBeVisible();
+  await raise('changed'); await show();
+  await expect(card(page).locator('[data-alert="changed"]')).toContainText("Bunny local's program changed on disk");
+  await expect(card(page).locator('[data-alert="changed"]').getByRole('button', { name: 'Set up again' })).toBeVisible();
+  await raise('none');
+  await raise('fingerprint', 'qwen3-8b'); await show();
+  await expect(card(page).locator('.lm-model[data-model="qwen3-8b"]')).toContainText("didn't match its fingerprint and was deleted");
+  await raise('none'); await raise('hfchanged', 'qwen3-8b'); await show();
+  await expect(card(page).locator('.lm-model[data-model="qwen3-8b"]')).toContainText('changed on Hugging Face');
+  await expect(card(page).getByRole('button', { name: 'Download Qwen3 8B' })).toBeDisabled();
+  await raise('none'); await raise('disk', 'qwen3-8b'); await show();
+  await expect(card(page).locator('.lm-model[data-model="qwen3-8b"]')).toContainText('GB free on this drive');
+  await raise('none');
+});
+
+test('the model menu has its own "Bunny local · on this PC" group with Get more…, and the composer chip names the provider', async ({ page, request }) => {
+  await request.post('/api/local-models/setup');
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).installed).toBe(true);
+  await request.post('/api/local-models/download', { data: { id: 'qwen3-4b' } });
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).models.find((m) => m.id === 'qwen3-4b').state, { timeout: 10000 }).toBe('ready');
+  await page.goto('/');
+  await page.locator('#picker-button').click();
+  const group = page.locator('.picker-group-local');
+  await expect(group).toHaveText('Bunny local · on this PC');
+  const all = await page.locator('.picker-list').innerText();
+  expect(all.indexOf('All models')).toBeLessThan(all.indexOf('Bunny local · on this PC'));
+  expect(all.slice(0, all.indexOf('Bunny local · on this PC'))).not.toContain('Qwen3 4B');
+  await expect(page.locator('#model-get-more')).toContainText('Get more…');
+  await page.locator('.picker-item', { hasText: 'Qwen3 4B' }).first().click();
+  await expect(page.locator('#picker-button')).toContainText('Qwen3 4B · Bunny local');
+});
+
+test('Settings: the checking-model row says what a local chat model means for Smart, and its menu lists no local model', async ({ page, request }) => {
+  await request.post('/api/local-models/setup');
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).installed).toBe(true);
+  await request.post('/api/local-models/download', { data: { id: 'qwen3-4b' } });
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).models.find((m) => m.id === 'qwen3-4b').state, { timeout: 10000 }).toBe('ready');
+  await page.goto('/src/ui/settings.html?embed=1&section=permissions');
+  await expect(page.locator('#auto-judge-model-row')).toContainText('a small local model is a weaker check');
+  const options = await page.locator('#auto-judge-model option').allInnerTexts();
+  expect(options.join(' ')).not.toContain('bunny-local');
+  expect(options.join(' ')).not.toContain('Qwen3 4B');
 });
