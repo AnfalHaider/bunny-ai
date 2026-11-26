@@ -18,6 +18,7 @@ import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeF
 import { createReadStream } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { fetchHop } from './download.js';
+import { finalize } from './localStore.js';
 
 /** Hosts a model download may touch. S-LM3 records the real CDN hosts from a live redirect; until then only the origin is listed. */
 /** SP-4 (Security): huggingface.co, and Hugging Face's own regional CDN names (us.aws.cdn.hf.co was recorded; another region may send another *.cdn.hf.co name). Nothing wider: not *.hf.co, not *.amazonaws.com. */
@@ -35,13 +36,15 @@ export class DownloadError extends Error {
 }
 
 /** The folder a model's file lives in, built by Bunny: <dataDir>/models/<owner>__<repo>/<revision>. Throws on any part that is not plain. */
-export function modelDir(dataDir, entry) {
+export function modelDir(dataDir, entry) { return modelDirIn(join(dataDir, 'models'), entry); }
+/** The same layout under any models root: the default <data>/models, or the person's `<chosen>Bunny models`. */
+export function modelDirIn(root, entry) {
   const [owner, repo, ...extra] = String(entry.repo ?? '').split('/');
   if (!owner || !repo || extra.length) throw new DownloadError('local.badName', 'That model has no usable repository name.');
   for (const part of [owner, repo, entry.revision, entry.file]) {
     if (!PART.test(String(part)) || part === '.' || part === '..') throw new DownloadError('local.badName', 'That model has a name Bunny will not use as a file name.');
   }
-  return join(dataDir, 'models', `${owner}__${repo}`, entry.revision);
+  return join(root, `${owner}__${repo}`, entry.revision);
 }
 
 /** Checks a curated entry before anything is fetched. */
@@ -84,14 +87,15 @@ async function assertPlainTarget(root, path) {
  * @param {string[]} [o.hosts]
  * @returns {Promise<{path:string, manifest:object}>}
  */
-export async function downloadModel({ dataDir, entry, fetchImpl = fetchHop, freeBytes = async () => Infinity, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onProgress = () => {}, signal, hosts = MODEL_HOSTS }) {
+export async function downloadModel({ dataDir, root = join(dataDir, 'models'), writeManifest = true, entry, fetchImpl = fetchHop, freeBytes = async () => Infinity, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onProgress = () => {}, signal, hosts = MODEL_HOSTS }) {
   checkEntry(entry);
-  const dir = modelDir(dataDir, entry);
+  const dir = modelDirIn(root, entry);
   const finalPath = join(dir, entry.file);
   const partPath = `${finalPath}.part`;
   const sidePath = `${finalPath}.part.json`;
   await mkdir(dir, { recursive: true });
-  await assertPlainTarget(join(dataDir, 'models'), finalPath);
+  await assertPlainTarget(root, finalPath);
+  await assertPlainTarget(root, partPath);
   if ((await freeBytes()) < Number(entry.size) + FREE_SPACE_MARGIN) throw new DownloadError('local.noSpace', 'There is not enough free space on this drive for that model.');
 
   const cancelled = () => signal?.aborted;
@@ -130,7 +134,8 @@ export async function downloadModel({ dataDir, entry, fetchImpl = fetchHop, free
     if (res.status !== 200 && res.status !== 206) throw new DownloadError('local.http', `Hugging Face answered ${res.status}.`);
     if (have && res.status !== 206) { await rm(partPath, { force: true }); await rm(sidePath, { force: true }); throw new DownloadError('local.resume', 'The download could not be resumed. Start it again.'); }
 
-    const out = await open(partPath, have ? 'a' : 'w');
+    await assertPlainTarget(root, partPath);
+    const out = await open(partPath, have ? 'a' : 'wx'); // exclusive create: a file or link already there is never followed or overwritten
     let done = have;
     try {
       for await (const chunk of res.body) {
@@ -147,12 +152,12 @@ export async function downloadModel({ dataDir, entry, fetchImpl = fetchHop, free
     if (done !== Number(entry.size)) { await writeFile(sidePath, JSON.stringify({ bytes: done })); throw new DownloadError('local.short', 'The download stopped early. Start it again to carry on.'); }
     const sum = hash.digest('hex');
     if (sum !== entry.sha256) { await rm(partPath, { force: true }); await rm(sidePath, { force: true }); throw new DownloadError('local.hash', 'The downloaded file does not match its fingerprint, so it was deleted.'); }
-    await assertPlainTarget(join(dataDir, 'models'), finalPath);
-    await rename(partPath, finalPath);
+    await assertPlainTarget(root, finalPath);
+    await finalize(partPath, finalPath, entry); // never overwrites; a same-name file is adopted only if its sha256 equals the pin
     await rm(sidePath, { force: true });
     await chmod(finalPath, 0o444); // read-only: the runtime reads it and never writes it
     const manifest = { sha256: sum, size: done, verifiedAt: new Date().toISOString(), repo: entry.repo, revision: entry.revision, file: entry.file };
-    await writeFile(`${finalPath}.manifest.json`, JSON.stringify(manifest, null, 2));
+    if (writeManifest) await writeFile(`${finalPath}.manifest.json`, JSON.stringify(manifest, null, 2));
     return { path: finalPath, manifest };
   }
 }

@@ -43,7 +43,7 @@ export function createPlaces({
   }
   const save = async () => { await mkdir(dataDir, { recursive: true }); await writeFile(file, JSON.stringify(st, null, 1), 'utf8'); };
 
-  const statKey = async (real) => { const s = await stat(real, { bigint: true }); return { dev: asText(s.dev), ino: asText(s.ino), size: Number(s.size), mtimeMs: Number(s.mtimeMs) }; };
+  const statKey = async (real) => { const s = await stat(real, { bigint: true }); return { dev: asText(s.dev), ino: asText(s.ino), size: Number(s.size), mtimeMs: Number(s.mtimeMs), ctimeMs: Number(s.ctimeMs) }; }; // ctime is the change time: a write moves it and no program can set it back
 
   // ---------------------------------------------------------------- LM Studio (LF-8)
   async function readSmallJson(path) {
@@ -248,7 +248,7 @@ export function createPlaces({
       throw e;
     }
     const key = await statKey(ok.real);
-    const same = ok.real.toLowerCase() === o.real.toLowerCase() && key.dev === o.dev && key.ino === o.ino && key.size === o.size && key.mtimeMs === o.mtimeMs;
+    const same = ok.real.toLowerCase() === o.real.toLowerCase() && key.dev === o.dev && key.ino === o.ino && key.size === o.size && key.mtimeMs === o.mtimeMs && key.ctimeMs === o.ctimeMs;
     if (!same) {
       let facts; try { facts = await readHeader(ok.real, { mode: 'full', name: o.name }); } catch (e) { throw new PlaceError('place.changed', `${o.name} changed since you added it and Bunny can't run it any more. ${e.message ?? ''}`.trim()); }
       const now = Object.fromEntries(Object.entries(facts.templates).map(([k, v]) => [k, v.sha256]));
