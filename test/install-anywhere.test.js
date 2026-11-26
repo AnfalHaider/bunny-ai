@@ -5,6 +5,7 @@ import { mkdtemp, readdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAppTools } from '../src/server/appTools.js';
+import { resetWebSearch } from '../src/server/webSearch.js';
 import { prepareSource, sourceKind, stillTheSame, treeHash, CHANGED, LIMITS } from '../src/server/installSource.js';
 import { checkPublicAddress } from '../src/server/publicFetch.js';
 import { REMOTE_TOOLS_DENIED } from '../src/server/remoteAccess.js';
@@ -254,8 +255,9 @@ test('IA-4: more than 5,000 files stops the install', async () => {
 });
 
 test('open-web candidates: search_plugins lists web results last, marked as candidates; an address from them is still "found on the open web" and installs nothing by itself', async () => {
+  resetWebSearch();
   const work = await tmp(); const m = memory();
-  const html = (n) => `<a class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(`https://files.example.com/pack${n}.zip`)}">Pack ${n}</a><a class="result__snippet">A pack</a>`;
+  const html = (n) => `<a class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(`https://files.example.com/pack${n}.zip`)}">Notes pack ${n}</a><a class="result__snippet">A notes pack</a>`;
   const tools = createAppTools({ ...m.deps, workDir: work, checkAddress, fetchSource: standIn(ZIP()), fetchImpl: async (url) => (/duckduckgo/.test(String(url)) ? { ok: true, status: 200, text: async () => html(String(url).length % 5) } : { ok: true, status: 200, json: async () => ({ items: [], servers: [] }), text: async () => '' }) });
   const found = await tools.run('search_plugins', { query: 'notes' }, { chatId: 'w1' });
   assert.match(found, /From the open web \(candidates only: not a known catalogue/);
@@ -288,11 +290,12 @@ test('Security LOW: a GitHub link is "known" only when this chat\'s own catalogu
 });
 
 test('F6 at the merge: the open-web candidates use searchWeb (Brave with the person\'s key, then DuckDuckGo); when Brave answered the part is marked via Brave, and the key never appears in the text', async () => {
+  resetWebSearch();
   const m = memory(); const KEY = 'BSA-secret-key-1234567890';
   const seen = [];
   const fetchImpl = async (url, init) => {
     const u = String(url); seen.push({ u, init });
-    if (/api\.search\.brave\.com/.test(u)) return { ok: true, status: 200, json: async () => ({ web: { results: [{ title: 'Pack', url: 'https://files.example.com/pack.zip', description: 'A pack' }] } }) };
+    if (/api\.search\.brave\.com/.test(u)) return { ok: true, status: 200, json: async () => ({ web: { results: [{ title: 'Notes pack', url: 'https://files.example.com/pack.zip', description: 'A notes pack' }] } }) };
     return { ok: true, status: 200, json: async () => ({ items: [], servers: [] }), text: async () => '' };
   };
   const tools = createAppTools({ ...m.deps, fetchImpl, getSearchKey: async () => KEY });

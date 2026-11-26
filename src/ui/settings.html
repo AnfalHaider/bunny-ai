@@ -280,7 +280,7 @@
       <div class="row" id="brave-row">
         <div class="meta-col">
           <div class="name">Brave Search key</div>
-          <div class="desc">Web search tries Brave first when you add a key, then DuckDuckGo. Brave needs a card to sign up (it gives free monthly credits: about 1,000 searches). Bunny sends your searches to Brave when a key is set. The key is kept encrypted on this computer, is sent only to Brave, and is never shown again. <span id="brave-state" role="status"></span></div>
+          <div class="desc">Web search tries Brave first when you add a key, then DuckDuckGo, then Bing, then Wikipedia (for facts), so it works with no key. A page that shows a check page is rested for a few minutes. Every answer says which site gave it. Your search words are sent to these sites one after another until one answers, so a site that refused (or answered nothing useful) has still seen them: Brave only when you added a key, then DuckDuckGo, Bing and Wikipedia. Brave needs a card to sign up (it gives free monthly credits: about 1,000 searches). Bunny sends your searches to Brave when a key is set. The key is kept encrypted on this computer, is sent only to Brave, and is never shown again. <span id="brave-state" role="status"></span></div>
           <div class="desc"><input type="password" id="brave-key" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Paste your Brave Search key" aria-label="Brave Search key" /> <button type="button" id="brave-save" class="ghost small">Save key</button> <button type="button" id="brave-remove" class="ghost small" hidden>Remove key</button> <span class="err" id="brave-err" role="alert"></span></div>
         </div>
       </div>
@@ -1025,7 +1025,7 @@
     } catch (err) { $('photo-error').textContent = err.message ?? 'That picture could not be saved.'; }
   });
   // F6: the Brave Search key. Only whether one is set comes back; the key itself is never shown.
-  const paintBrave = (set) => { $('brave-state').textContent = set ? 'A key is saved.' : 'No key: DuckDuckGo only.'; $('brave-remove').hidden = !set; };
+  const paintBrave = (set) => { $('brave-state').textContent = set ? 'A key is saved.' : 'No key: DuckDuckGo, then Bing and Wikipedia.'; $('brave-remove').hidden = !set; };
   getJSON('/api/web-search').then((r) => paintBrave(r.braveKey)).catch(() => { $('brave-row').hidden = true; });
   $('brave-save').addEventListener('click', async () => {
     $('brave-err').textContent = '';

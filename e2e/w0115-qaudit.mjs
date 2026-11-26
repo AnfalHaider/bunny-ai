@@ -57,7 +57,7 @@ let searches = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
   const u = String(url?.url ?? url);
-  if (/html\.duckduckgo\.com/.test(u)) { searches.push(u); return new Response('<div class="result"><a class="result__a" href="https://weather.example.test/islamabad">Islamabad weather today</a><a class="result__snippet">Islamabad: 24 degrees, clear skies.</a></div>', { status: 200, headers: { 'content-type': 'text/html' } }); }
+  if (/html\.duckduckgo\.com/.test(u)) { searches.push(u); return new Response(`<div class="result"><a class="result__a" href="https://weather.example.test/islamabad">Islamabad weather today</a><a class="result__snippet">Islamabad: 24 degrees, clear skies. (stand-in answer to: ${decodeURIComponent(/[?&]q=([^&]+)/.exec(u)?.[1] ?? '')})</a></div>`, { status: 200, headers: { 'content-type': 'text/html' } }); }
   return realFetch(url, init);
 };
 
@@ -76,9 +76,10 @@ const plist = (await api('/api/providers')).json; const custom = (Array.isArray(
 await api('/api/settings', 'PUT', { providerId: pid, model: 'qa-model', callName: 'Pat' });
 
 // ---- one bar: ask, then follow-ups, as the bar does (the same session) ----
+const { resetWebSearch } = await imp('src/server/webSearch.js');
 const newBar = () => {
   const events = []; const a = createAnswerer({ adminFetch: (p, i) => bunny.adminFetch(p, i), emit: (e) => events.push(e), getSettings: () => bunny.getSettings() });
-  return { a, events, ask: async (text, pc = false) => { events.length = 0; searches = []; seen.length = 0; await a.ask({ text, pc }); return summarize([...events]); } };
+  return { a, events, ask: async (text, pc = false) => { resetWebSearch(); /* v0.1.16: a repeated question is answered from memory for two minutes, and each flow here is its own person asking */ events.length = 0; searches = []; seen.length = 0; await a.ask({ text, pc }); return summarize([...events]); } };
 };
 const summarize = (ev) => {
   let ans = ''; for (const e of ev) { if (e.type === 'restart') ans = ''; else if (e.type === 'delta') ans += e.text; } // a restart drops what came before it (as the bar does)
