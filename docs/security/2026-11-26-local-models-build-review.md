@@ -116,3 +116,44 @@ From Builder D's records on `claude/v0116-local-models-spikes`:
 4. The trial-run and Starting-spinner shas, so I can check L4.
 
 L1 and L2 are welcome in the same sha. Then I sign `v0116-local-models` on the new sha.
+
+## Re-review at 00963961 (fixes 56d6fded and 00963961), 2026-11-26
+
+I read the diff from f7971a3d to 00963961, then ran in a new invented profile (`BUNNY_DATA_DIR` set to a temp folder, `BUNNY_FAKE_UPSTREAM=1`):
+
+```
+node --test test/local-*.test.js test/canary-pins.test.js
+tests 89 · pass 88 · fail 0 · skipped 1 (the same link test: this account cannot make links)
+```
+
+| Item | Status |
+|---|---|
+| B1 CDN pattern | **Fixed.** It is now `/^[a-z0-9-]+(\.[a-z0-9-]+)*\.cdn\.hf\.co$/`, and the four look-alike names are refused in the test. |
+| B2 templates | **Open.** Still waiting on the owner's yes to read the headers. |
+| B3 Vulkan | **Fixed for v0.1.16.** `VULKAN_RECORDED = false`, so `chooseBackend` returns `cpu` on every PC. Vulkan is reached only when a test forces the flag. Turning it on needs the recorded run first, and my review of that sha. |
+| L1 key lock | **Fixed.** A failed `icacls`, or no `USERNAME` on Windows, refuses the start with `local.keyLock` and deletes the key file. |
+| L2 provider address | **Fixed.** `GET /api/providers` sends `baseUrl: ''` for `bunny-local` to everyone. |
+| L4 trial | **Fixed as a security matter.** It goes through the same Low helper, job and `runtimeEnv`, and only `--version` or `--list-devices` (one argument, checked) may run. Neither takes a key, port or model, so leaving out `checkArgv` is right. The output is captured only for these two and is not logged. |
+| GPU detection | **Acceptable.** `Get-CimInstance Win32_VideoController` is read-only. While Vulkan is off it only sets the card's name. |
+
+### New: the trial's working folder is the program file itself (functional, not security; must fix)
+
+`localHardware.js` works out the trial's working folder with `exe.replace(/[\/][^\/]+$/, '')`. That pattern only matches forward slashes, and a Windows path built with `join` has backslashes, so nothing is replaced. Checked with node on an invented path:
+
+```
+"C:\...\BunnyAI-invented\runtimes\llama.cpp\b12760-cpu\llama-server.exe" => the same text, unchanged
+```
+
+So on a real PC the helper is handed a file as its working folder, `CreateProcessAsUser` fails, and every set-up ends with "The program didn't start on this PC." It fails closed, so it isn't a security hole. The tests miss it because they pass paths with forward slashes (`${process.cwd()}/llama-server.exe`).
+
+- **Fix:** use `path.dirname(exe)`.
+- **Test:** add one with a `join`-built (backslash) path.
+- `trial.devices` has the same pattern.
+
+### Verdict at 00963961: still NOT YET
+
+Only two things remain:
+1. B2, the two template records;
+2. the working-folder fix with its test.
+
+When a sha has both, I sign `v0116-local-models` on it. Vulkan stays off until its run is recorded and reviewed.
