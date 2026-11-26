@@ -30,9 +30,16 @@ test('the checks fail a wrong licence, a gated model, a branch name, a missing h
   assert.ok(bad((m) => { m.kvBytesPerToken = 0; }).some((p) => /cache size/.test(p)));
 });
 
-test('SP-7: the chat template of each entry is still PENDING, so Security cannot sign the build yet; the sources file says so', () => {
-  const problems = checkLocalList(loadLocalList(), { forSigning: true });
-  assert.equal(problems.length, 2);
-  assert.ok(problems.every((p) => /chat template has not been read/.test(p)));
-  assert.match(sources, /PENDING/);
+test('SP-7: both chat templates were read from the pinned headers; each sha256 is in the sources file, and signing needs it', () => {
+  const list = loadLocalList();
+  assert.deepEqual(list.map((m) => [m.id, m.template.status, m.template.sha256]), [
+    ['qwen3-4b', 'read', '57f1fd00f0013a2be96aa79b857391f27e23df5b5f847072b524c897e24d0361'],
+    ['granite-4.1-3b', 'read', 'fed2756d2d24e127b951dcf139d0b03ab7db8ef23a456128ebc9c2db4901d476'],
+  ]);
+  assert.deepEqual(checkLocalList(list, { forSigning: true, sourcesText: sources }), []);
+  assert.doesNotMatch(sources, /PENDING/);
+  const pending = JSON.parse(JSON.stringify(list)); pending[0].template = { status: 'pending', sha256: null };
+  assert.ok(checkLocalList(pending, { forSigning: true }).some((p) => /chat template has not been read/.test(p)));
+  const wrong = JSON.parse(JSON.stringify(list)); wrong[1].template.sha256 = 'b'.repeat(64);
+  assert.ok(checkLocalList(wrong, { sourcesText: sources }).some((p) => /template sha256 is not in/.test(p)));
 });

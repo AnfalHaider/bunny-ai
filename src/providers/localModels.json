@@ -19,7 +19,7 @@
       "kvBytesPerToken": 147456,
       "nativeCtx": 40960,
       "minRamGB": 8,
-      "template": { "status": "pending", "sha256": null, "note": "from the GGUF header at the pinned commit, a header-only range read; waits for the owner's yes to read it" }
+      "template": { "status": "read", "sha256": "57f1fd00f0013a2be96aa79b857391f27e23df5b5f847072b524c897e24d0361", "note": "tokenizer.chat_template read from the GGUF header at the pinned commit (first 24 MiB by range read, 2026-11-26, owner's yes relayed in docs/plans/2026-11-26-v0.1.16-live-fixes.md); sha256 of its UTF-8 text" }
     },
     {
       "id": "granite-4.1-3b",
@@ -38,7 +38,7 @@
       "kvBytesPerToken": 81920,
       "nativeCtx": 32768,
       "minRamGB": 8,
-      "template": { "status": "pending", "sha256": null, "note": "from the GGUF header at the pinned commit, a header-only range read; waits for the owner's yes to read it" }
+      "template": { "status": "read", "sha256": "fed2756d2d24e127b951dcf139d0b03ab7db8ef23a456128ebc9c2db4901d476", "note": "tokenizer.chat_template read from the GGUF header at the pinned commit (first 24 MiB by range read, 2026-11-26, owner's yes relayed in docs/plans/2026-11-26-v0.1.16-live-fixes.md); sha256 of its UTF-8 text" }
     }
   ]
 }

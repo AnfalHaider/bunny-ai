@@ -26,6 +26,8 @@ export function checkLocalList(list, { sourcesText = null, forSigning = false } 
     if (!(Number(m.kvBytesPerToken) > 0) || !(Number(m.nativeCtx) > 0)) say('no cache size per token or native context (read from the model, never guessed)');
     if (m.tools === true && !/S-LM2/.test(String(m.toolsProof ?? ''))) say('tools is true without a recorded S-LM2 result');
     if (sourcesText !== null && !(String(sourcesText).includes(m.sha256) && String(sourcesText).includes(m.revision))) say('is not in localModels.sources.md');
+    if (m.template?.status === 'read' && !/^[0-9a-f]{64}$/.test(String(m.template.sha256))) say('its chat template is marked read but has no sha256');
+    if (sourcesText !== null && m.template?.status === 'read' && !String(sourcesText).includes(m.template.sha256)) say('its chat template sha256 is not in localModels.sources.md');
     if (forSigning && m.template?.status !== 'read') say('its chat template has not been read (PENDING in localModels.sources.md)');
   }
   return problems;
