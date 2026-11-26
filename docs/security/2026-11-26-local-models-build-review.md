@@ -157,3 +157,36 @@ Only two things remain:
 2. the working-folder fix with its test.
 
 When a sha has both, I sign `v0116-local-models` on it. Vulkan stays off until its run is recorded and reviewed.
+
+## Re-review at 60d7ef2c (d120fbd4 plus B2), 2026-11-26
+
+**The working folder (d120fbd4).** `createTrial` and `trial.devices` now use `path.dirname(exe)`. A new test builds the path with `join`, so it has backslashes, and it passes. Fixed.
+
+**B2, the templates (60d7ef2c).** The owner's yes to the header reads is in the live-fixes record, 9ea63f82: "Yes, read the headers (Recommended)". The diff changes four files: `localList.js`, `localModels.json`, `localModels.sources.md`, `test/local-list.test.js`.
+
+| Entry | Pinned commit | Length | Template sha256 |
+|---|---|---|---|
+| qwen3-4b | `Qwen/Qwen3-4B-GGUF@bc640142…` | 4,100 chars | `57f1fd00…d0361` |
+| granite-4.1-3b | `ibm-granite/granite-4.1-3b-GGUF@ab470148…` | 6,099 chars | `fed2756d…d476` |
+
+- Both are recorded with `status: read`, in the list and in the sources file. The "looked through" notes say: no URL, and no fixed text beyond the publisher's own tools and documents lines.
+- **New checks in `checkLocalList`:**
+  - a template marked read must have a 64-hex sha;
+  - that sha must appear in the sources file;
+  - signing still needs `status: read`.
+  - The test covers all three, plus a pending entry and a wrong sha.
+- **What I didn't do.** I did not read the headers again myself; that would mean another download from Hugging Face. This is acceptable:
+  - each curated file is pinned by its whole-file sha256 (LM-5), which fixes the template inside it;
+  - the template sha is a record for reviewers, and for LF-4's "Same chat format as" line.
+  - A wrong template sha could only mislabel an own file's format; it can't change what a curated download runs.
+
+**Tests.** `node --test test/local*.test.js` with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`: 87 tests, 86 pass, 0 fail, 1 skipped (the link test; this account can't make links). The e2e suite and the gate were not run for this review; the gate runs before push.
+
+**Vulkan.** `VULKAN_RECORDED = false` in `localModelsReal.js` at 60d7ef2c, so `chooseBackend` returns `cpu` always. This sign-off covers the CPU build only. Turning Vulkan on is a new sha and a new review, against the recorded run (B3 / SP-2).
+
+### Verdict at 60d7ef2c: PASS (CPU only)
+
+B1 to B3 and L1, L2 and L4 are settled. These are left for later, not blockers:
+- L3: narrow the allow lists to the files the runner loads;
+- the Vulkan run and its review;
+- the own-files and folders build, LF-1 to LF-26: a separate piece, reviewed on its own sha.
