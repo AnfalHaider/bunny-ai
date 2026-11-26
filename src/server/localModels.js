@@ -60,6 +60,9 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
       tools: fit.tools, toolsNote: fit.toolsNote,
       state: mine.state, done: mine.done ?? 0, error: mine.error ?? null,
       needFreeDisk: e.size + 2 * GB,
+      needBytes: fit.fit.need, availBytes: pc().freeRam + (gpu ? pc().freeVram : 0),
+      speedBps: mine.state === 'downloading' ? (fake ? 18 * 1024 * 1024 : null) : null,
+      fingerprint: mine.state === 'ready' ? `${e.id.replace(/[^a-z0-9]/g, '').padEnd(12, '0').slice(0, 12)}` : null, // fake mode: the real one is the first 12 hex of the checked sha256
     };
   }
 
@@ -75,6 +78,7 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
       running: state.running ? { id: state.running.id, name: entry(state.running.id)?.name, usedBytes: state.running.usedBytes, lastUsed: state.running.lastUsed } : null,
       pc: { totalRam: p.totalRam, freeRam: p.freeRam, vram: p.vram, freeVram: p.freeVram, freeDisk: p.freeDisk, gpuName: p.gpuName },
       models: fake ? list.map(view) : [],
+      modelsDir: join(dataDir, 'models'),
       usedBytes: list.reduce((n, e) => n + (state.models[e.id]?.state === 'ready' ? e.size : 0), 0),
       error: lastError,
     };

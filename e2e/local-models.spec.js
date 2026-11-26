@@ -10,13 +10,13 @@ test.beforeEach(async ({ request }) => {
 const card = (page) => page.locator('#bunny-local');
 const ready = async (page) => {
   await page.goto('/src/ui/providers.html?embed=1');
-  await card(page).getByRole('button', { name: 'Set up', exact: true }).click();
+  await card(page).getByRole('button', { name: 'Set up Bunny local', exact: true }).click();
   await expect(card(page).locator('.lm-model').first()).toBeVisible({ timeout: 10000 });
 };
 
 test('Not set up: one button, the size and place on the card, nothing downloaded yet', async ({ page }) => {
   await page.goto('/src/ui/providers.html?embed=1');
-  await expect(card(page).getByText('Set up Bunny local')).toBeVisible();
+  await expect(card(page).locator('b', { hasText: 'Set up Bunny local' })).toBeVisible();
   await expect(card(page)).toContainText('39 MB program');
   await expect(card(page)).toContainText('GitHub');
   await expect(card(page)).toContainText('stay on this PC');
@@ -30,7 +30,11 @@ test('Ready: the PC line, the graphics switch, the idle choice and a row with a 
   await expect(card(page).getByLabel('Use graphics card')).toBeChecked();
   await expect(card(page).getByLabel('Stop after idle')).toHaveValue('10');
   await expect(card(page).locator('.lm-model')).toHaveCount(5);
-  await expect(card(page).locator('.lm-fit.big')).toHaveText('Too big for this PC');
+  await expect(card(page).locator('.lm-fit.big')).toHaveText('Too big');
+  await expect(card(page).locator('.lm-model[data-model="gpt-oss-20b"]')).toContainText('is available');
+  await expect(card(page).locator('.lm-state')).toContainText('Ready · Runs on:');
+  await expect(card(page)).toContainText('not a phone, not another PC, and not Bunny itself');
+  await expect(card(page)).toContainText('Nothing downloaded yet');
   await expect(card(page).getByRole('button', { name: 'Download gpt-oss 20B' })).toBeDisabled();
   await expect(card(page).locator('.lm-model[data-model="qwen3-4b"]')).toContainText('Uses tools');
   await expect(card(page).locator('.lm-model[data-model="ministral-3-3b"]')).toContainText('Chat only');
@@ -58,13 +62,13 @@ test('the warning card for a model not on the list puts Don\'t add first; Remove
   await expect(warn).toHaveCount(0);
   await card(page).getByRole('button', { name: 'Download Qwen3 4B' }).click();
   await expect(card(page).locator('.lm-model[data-model="qwen3-4b"] .lm-ready')).toBeVisible({ timeout: 10000 });
-  await card(page).getByRole('button', { name: 'Remove Bunny local' }).click();
+  await card(page).getByRole('button', { name: 'Remove…' }).click();
   await expect(card(page).locator('[data-card="remove"]')).toContainText('1 downloaded model');
   await card(page).getByRole('button', { name: 'Keep it' }).click();
   await expect(card(page).locator('[data-card="remove"]')).toHaveCount(0);
-  await card(page).getByRole('button', { name: 'Remove Bunny local' }).click();
+  await card(page).getByRole('button', { name: 'Remove…' }).click();
   await card(page).getByRole('button', { name: 'Remove everything' }).click();
-  await expect(card(page).getByText('Set up Bunny local')).toBeVisible();
+  await expect(card(page).locator('b', { hasText: 'Set up Bunny local' })).toBeVisible();
 });
 
 test('the chat menu lists a downloaded model under Bunny local, with what it can do, and always offers a way to get more', async ({ page, request }) => {
@@ -91,3 +95,29 @@ for (const scheme of ['light', 'dark']) {
     });
   }
 }
+
+test('the drawing\'s details: a short badge with the sentence once, speed and time left, the fingerprint on a ready model, Remove as a row naming the cache', async ({ page }) => {
+  await ready(page);
+  await card(page).getByRole('button', { name: 'Download Qwen3 8B' }).click();
+  await expect(card(page).locator('.lm-model[data-model="qwen3-8b"] .desc').first()).toContainText('MB/s');
+  await expect(card(page).locator('.lm-model[data-model="qwen3-8b"] .lm-acts button').first()).toHaveClass(/btn/);
+  await card(page).getByRole('button', { name: 'Download Ministral 3 3B' }).click();
+  await expect(card(page).locator('.lm-model[data-model="ministral-3-3b"] .lm-ready')).toBeVisible({ timeout: 10000 });
+  await expect(card(page).locator('.lm-model[data-model="ministral-3-3b"]')).toContainText('Checked · fingerprint');
+  await expect(card(page).locator('.lm-remove-row')).toContainText('Deletes the program, every downloaded model and the cache');
+  await expect(card(page).locator('.lm-fit').first()).toHaveText(/^(Fits|Tight|Slow|Too big)$/);
+});
+
+test('LM-4: a local model is never in Best for or Auto; it is the person\'s own pick, and a chat-only one shows its line under the message box', async ({ page, request }) => {
+  await request.post('/api/local-models/setup');
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).installed).toBe(true);
+  await request.post('/api/local-models/download', { data: { id: 'ministral-3-3b' } });
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).models.find((m) => m.id === 'ministral-3-3b').state, { timeout: 10000 }).toBe('ready');
+  await page.goto('/');
+  await page.locator('#picker-button').click();
+  const best = page.locator('.picker-group', { hasText: /^Best for/ });
+  if (await best.count()) await expect(page.locator('.picker-list')).not.toContainText(/Best for[\s\S]*Ministral[\s\S]*All models/);
+  await page.locator('.picker-item', { hasText: 'Ministral 3 3B' }).first().click();
+  await expect(page.locator('#local-hint')).toBeVisible();
+  await expect(page.locator('#local-hint')).toHaveText("This model answers only; it can't use tools.");
+});
