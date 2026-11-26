@@ -425,3 +425,20 @@ One commit on top of 612f2a3f. It touches `electron/main.js`, `src/ui/api.js`, `
 ### Verdict at 74d40382: PASS
 
 The 612f2a3f scope is unchanged.
+
+## Re-check at 9f1472d0: QA's F2, F4 and OBS-1, 2026-11-27
+
+One commit on top of 74d40382, touching the UI only: `src/ui/local-models.js`, `src/ui/local-places.js`, two CSS files and one e2e test.
+
+- **OBS-1.** The tools tick-box row gets a minimum height of 28 px. CSS only.
+- **F4.** When the places view isn't loaded, the set-up card shows Remove's result from the shared status. That status carries counts only (`removal: { removed, left, missing }`, as reviewed at db4ee101), so it shows no folder names. Strings go in with `textContent`.
+- **F2.** The answer to "Leave them" is kept in the window's `localStorage` under `bunny.local.leave`. The value includes the download folder's path, kept in Bunny's own window profile on this PC.
+  - That is acceptable: it is never sent anywhere.
+  - A device page loads Bunny from a different address, so it has its own storage and can't read it.
+  - Note for v0.1.17: a hash of the folder would do the same job without keeping the path.
+
+**Tests.** At 9f1472d0, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`: the app loads, and the same set as before gives 192 tests, 191 pass, 0 fail, 1 skipped. I didn't run the e2e suite or the gate.
+
+### Verdict at 9f1472d0: PASS
+
+The 612f2a3f scope is unchanged.
