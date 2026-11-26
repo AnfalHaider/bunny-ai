@@ -88,6 +88,7 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 <li><b>The fit badge is honest.</b> Fits, Tight, Slow or Too big, worked out from this PC's memory before you download. Too big rows can't be downloaded.</li>
 <li><b>Only the window manages it</b> (Security LM-0). A phone or another PC, even one set to Everything, can chat with a model that's already downloaded; it cannot set up, download, add, start, stop or delete anything. Bunny itself has no tool for it either: it can suggest a model in words, and only you press Download.</li>
 <li><b>Honest about trust</b> (Security LM-1, 6, 7, 8, 11): the program is shown as unsigned, a model that isn't on Bunny's list gets a warning card whose main button is Don't add, and with a local chat model the Smart mode asks you instead of judging, unless you choose a checking model.</li>
+<li><b>Models you already have</b> (section 3c, added 2026-11-26): an "Add a model from this PC…" button for a .gguf file, and a "Found in LM Studio" list read from LM Studio's folder. Used in place, never copied or changed, with the same "Not on Bunny's list" warning and the same window-only rule.</li>
 </ul>
 <div class="note"><b>Drawn with invented data.</b> The PC is made up: 16 GB memory with 7.1 GB free, and a graphics card with 4 GB (3.6 GB free). Sizes are rounded and the model list is the spec's candidate list, which Security and the spikes may change. Folder names use the invented user Sam.</div>
 </section>
@@ -144,6 +145,33 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 <div class="cell"><h3>The warning card</h3><div class="app" id="nl"></div></div>
 <div class="cell"><h3>Two ways it stops</h3><div class="app" id="nl2"></div>
 <p class="cap">There is no Hugging Face login in Bunny. A gated model is refused in one sentence. Only .gguf model files are ever downloaded: nothing else from the repository.</p></div>
+</div>
+</section>
+
+<section>
+<h2>3c · Models already on this PC</h2>
+<p class="dim">Added after the owner's word (plan 28d7a432): "Add a model from this PC" picks a .gguf file, and "Found in LM Studio" lists what is in LM Studio's models folder. Same card, same row shape, below Bunny's own list. Nothing else on the PC is searched, and Ollama is not in this release. <b>Draft: Security's ruling on files Bunny didn't download isn't written yet.</b> The warning and the template sentence reuse LM-7 and will be changed to its wording.</p>
+<div class="cols">
+<div class="cell"><h3>The card, below the list (Ready)</h3><div class="app" id="pc-card"></div>
+<p class="cap">Two groups under the models Bunny downloads. Your own files are used where they are: <b>Bunny never copies, moves, edits or deletes them.</b> The only thing "Remove from list" does is forget the entry.</p></div>
+<div class="cell"><h3>Phone, same card</h3><div class="app phone" id="pc-card-p"></div></div>
+</div>
+<div class="cols">
+<div class="cell"><h3>Adding one: the warning card</h3><div class="app" id="pc-add"></div>
+<p class="cap">Opens after you pick a file (Windows' own file picker, .gguf only) or press Add on an LM Studio row. Bunny reads the file's header and reads its whole fingerprint first, so the card has real facts. The main button is <b>Don't add</b>, as in LM-7.</p></div>
+<div class="cell"><h3>Three ways a file is refused</h3><div class="app" id="pc-refuse"></div>
+<p class="cap">All three stop before anything is added. The file isn't touched. The chat-template sentence is a placeholder for Security's wording.</p></div>
+</div>
+<div class="cols">
+<div class="cell"><h3>A file that was there and now isn't</h3><div class="app" id="pc-gone"></div>
+<p class="cap">Checked when the card opens and again before every start. The entry stays so you can point it at the new place; nothing is deleted. A file that is there but different from when you added it is refused the same way the program is (section 6).</p></div>
+<div class="cell"><h3>LM Studio isn't installed</h3><div class="app" id="pc-nolm"></div>
+<p class="cap">Not an error: one calm row, and the way out. Bunny only <b>reads</b> LM Studio's folder to list model files. It doesn't start LM Studio, read its settings or chats, or look anywhere else.</p></div>
+</div>
+<div class="cols">
+<div class="cell"><h3>In the chat's model menu</h3><div class="menu" id="pc-menu"></div>
+<p class="cap">A file you added sits in the same group, tagged Your file, so it is never mistaken for one Bunny checked.</p></div>
+<div class="cell"><h3>Words and decisions</h3><div class="note"><b>Names:</b> the button is "Add a model from this PC…". The group is "Found in LM Studio". LM Studio's folder is shown by path so you can see what is read. Files that aren't chat models (vision helper parts, split pieces) are counted in one line, not listed.<br><b>Questions for Security, not decided here:</b> (1) is the file read in place, or copied into Bunny's folder first? Drawn in place. (2) what Bunny shows when the chat template is unknown: drawn as refusing, with no "add anyway". (3) the path shown on the card is the real path; Security may want only the folder name.</div></div>
 </div>
 </section>
 
@@ -281,6 +309,23 @@ const al=(t,b,acts,cls='')=>`<div class="alert ${cls}"><b>${t}</b><div>${b}</div
 /* 3b not on list */
 $('nl').innerHTML=`<div class="alert warn"><b>Add a model that isn't on Bunny's list?</b><div class="mono">Repository: someone-else/Tiny-Chat-7B-GGUF<br>Revision: 3f9c2e7a81b04d6c5e9f0a1b2c3d4e5f60718293<br>File: tiny-chat-7b.Q4_K_M.gguf · 4.1 GB<br>Fingerprint (sha256): 7be1…c90a<br>Licence tag: none</div><div>Not on Bunny's list. A model file can carry an attack on the program that loads it, and its chat template is run as given. Add it only from a publisher you trust.</div><label class="step" style="gap:8px"><span role="img" aria-label="ticked" style="width:18px;height:18px;border-radius:4px;background:var(--accent);color:var(--btnfg);display:grid;place-items:center;font-size:12px;flex:none">✓</span><span style="font-size:13px">It has no licence tag. I've checked I may use it.</span></label><div class="acts">${btn("Don't add",'primary')}${btn('Add this model')}</div></div>`;
 $('nl2').innerHTML=al('This model needs a Hugging Face login','Bunny doesn\'t use a Hugging Face account, so it can\'t download this one.',btn('OK'),'warn')+`<div style="height:8px"></div>`+al('Bunny can only download .gguf model files','This repository has no .gguf file with that name.',btn('OK'),'warn');
+/* 3c models already on this PC */
+const orow=(n,facts,right,extra='',dis=false)=>`<div class="mrow ${dis?'dis':''}"><div class="head"><div class="l"><b>${n}</b><div class="meta">${facts}</div>${extra}</div><div class="r" style="display:flex;gap:8px;flex-wrap:wrap">${right}</div></div></div>`;
+const LMP='C:\\Users\\Sam\\.lmstudio\\models';
+const mine=orow('Tiny Chat 3B',fit('ok','Fits')+tag('2.0 GB')+tag('Your file')+tag('Not on Bunny\'s list')+tag('Uses tools'),btn('Remove from list'),'<small class="dim">C:\\Users\\Sam\\Models\\tiny-chat-3b.Q4_K_M.gguf</small><small class="dim">Checked when added · fingerprint 41be08d2a7c3</small>');
+const addown=row('A model file on this PC','Pick a .gguf file. Bunny uses it where it is and never changes it',btn('Add a model from this PC…'));
+const lmRows=orow('Harbor 3B Instruct',fit('ok','Fits')+tag('1.9 GB')+tag('Q4_K_M'),btn('Add…'),'<small class="dim">invented-lab / Harbor-3B-Instruct-GGUF</small>')
+ +orow('Pebble 1B',fit('ok','Fits')+tag('0.8 GB')+tag('Q8_0'),'<span class="tag" style="color:var(--ok)">Added</span>'+btn('Remove from list'),'<small class="dim">invented-lab / Pebble-1B-GGUF</small>')
+ +orow('Quill 14B Chat',fit('big','Too big')+tag('8.9 GB')+tag('Q4_K_M'),btn('Add…').replace('class="btn "','class="btn" disabled'),'<small class="dim">Too big for this PC: needs about 12.4 GB free, 7.1 GB is available</small>',true);
+const lmGroup=`<div class="grph">Found in LM Studio</div><div class="grp">${row('LM Studio\'s models folder',LMP,'<span class="tag">3 models</span>'+btn('Refresh'))}${lmRows}<div class="row"><div class="l"><small>Skipped 4 files that aren't chat models (vision helper files and pieces of split models). Bunny only reads this folder.</small></div></div></div>`;
+$('pc-card').innerHTML=`<div class="appttl">Bunny local</div><div class="sub">Ready · Runs on: graphics card (Vulkan)</div><div class="grph">Models</div><div class="grp"><div class="mrow"><div class="head"><div class="l"><b>Qwen3 4B</b><div class="meta">${fit('ok','Fits')}${tag('2.5 GB')}${tag('Apache-2.0')}</div></div><div class="r"><span class="tag" style="color:var(--ok)">Ready</span>${btn('Delete')}</div></div></div></div><div class="grph">From this PC</div><div class="grp">${mine}${addown}</div>${lmGroup}`;
+$('pc-card-p').innerHTML=$('pc-card').innerHTML;
+const addCard=(extra)=>`<div class="alert warn"><b>Add a model that isn't on Bunny's list?</b><div class="mono">File: harbor-3b-instruct.Q4_K_M.gguf · 1.9 GB<br>In: ${LMP}\\invented-lab\\Harbor-3B-Instruct-GGUF<br>Format: GGUF · Q4_K_M · chat template Bunny knows (ChatML)<br>Fingerprint (sha256): 7be1…c90a<br>Licence: not known (a file on this PC doesn't say)</div><div>Not on Bunny's list. A model file can carry an attack on the program that loads it, and its chat template is run as given. Add it only from a publisher you trust.</div><label class="step" style="gap:8px"><span role="img" aria-label="ticked" style="width:18px;height:18px;border-radius:4px;background:var(--accent);color:var(--btnfg);display:grid;place-items:center;font-size:12px;flex:none">✓</span><span style="font-size:13px">I got this file from a publisher I trust, and I may use it.</span></label><div class="acts">${btn("Don't add",'primary')}${btn('Add this model')}</div></div>`;
+$('pc-add').innerHTML=addCard();
+$('pc-refuse').innerHTML=al('This isn\'t a model Bunny can run','notes-export.gguf doesn\'t start like a real GGUF model file. Nothing was added, and the file wasn\'t changed.',btn('OK'),'warn')+`<div style="height:8px"></div>`+al('Quill 14B Chat is too big for this PC','It needs about 12.4 GB free and 7.1 GB is available. Bunny can\'t run it here, and there is no way to override that.',btn('OK'),'warn')+`<div style="height:8px"></div>`+al('Bunny doesn\'t recognise this model\'s chat template','A chat template is run as given, so Bunny only adds models whose template it knows. Nothing was added. (Wording waits for Security.)',btn('OK'),'warn');
+$('pc-gone').innerHTML=`<div class="grph">From this PC</div><div class="grp">${orow('Tiny Chat 3B',tag('Your file')+tag('Not on Bunny\'s list'),btn('Find it…','primary')+btn('Remove from list'),'<small style="color:var(--warn)">The file isn\'t there any more: C:\\Users\\Sam\\Models\\tiny-chat-3b.Q4_K_M.gguf. It may have been moved or deleted.</small>')}</div><div style="height:2px"></div><div class="chat"><div class="me">Plan a two-day trip to Lisbon.</div></div>${al('Tiny Chat 3B can\'t start','Its file isn\'t where it was. Find it again, or choose another model.',btn('Open Bunny local','primary')+btn('Choose another model'),'warn')}`;
+$('pc-nolm').innerHTML=`<div class="grph">Found in LM Studio</div><div class="grp">${row('LM Studio isn\'t installed here','Bunny looked in '+LMP+' and found nothing. If your models are somewhere else, use Add a model from this PC.',btn('Check again'))}</div><div class="grph">…or LM Studio is there but empty</div><div class="grp">${row('No models in LM Studio\'s folder','Download one in LM Studio, then press Refresh.',btn('Refresh'))}</div>`;
+$('pc-menu').innerHTML=mh('Bunny local · on this PC')+mi('Qwen3 4B','2.5 GB · uses tools',true,fit('ok','Fits'))+mi('Tiny Chat 3B','2.0 GB · your file',false,tag('Your file')+fit('ok','Fits'))+mi('Pebble 1B','0.8 GB · your file',false,tag('Your file')+fit('ok','Fits'))+mi('Get more…','Opens Bunny local in Settings',false);
 /* 4 smart asks */
 $('sm').innerHTML=`<div class="chat"><div class="me">Run the tests and fix what fails.</div><div class="alert warn"><b>Allow: Run npm test?</b><div class="mono">npm test</div><div class="acts">${btn('Allow','primary')}${btn('Deny')}</div><small class="dim">Asked because Smart can't check this with a local model. Choose a checking model in Settings to let Smart decide.</small></div></div><div class="comp"><span class="dim">Ask about or change the code in your folder…</span><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">Qwen3 4B · Bunny local ▾</span><span class="chip">Smart · asks ▾</span></div></div>`;
 $('sm2').innerHTML=`<div class="grp">${row('Check Auto actions with a second model','In Auto, a second model checks each risky action before it runs.',sw(true))}${row('Model that checks Auto actions','This chat\'s own model. With a local model that means Smart asks you: a small local model is a weaker check.','<select class="sel"><option>This chat\'s own model</option></select>')}</div>`;
