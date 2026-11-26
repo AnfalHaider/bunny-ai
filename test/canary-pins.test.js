@@ -27,3 +27,11 @@ test('the raw canary JSON is the committed evidence: every run saw a request, an
   const sha = createHash('sha256').update(readFileSync(new URL('../docs/security/canary-2026-11-24.json', import.meta.url))).digest('hex');
   assert.ok(sum.includes(sha), 'the summary names the raw JSON by its sha256');
 });
+
+test('SB-2: the sign-in capture (the address the program gives its browser arrives whole) is for the pinned Claude Code version; a new pin repeats it', () => {
+  const cap = read('docs/spikes/cli-engines/s-login/claude-auth-login-2026-11-26.json');
+  assert.equal(cap.claudeCodeVersion, pins.engines['claude-code'].version, 'the pin moved: repeat the sign-in capture (docs/spikes/cli-engines/s-login), confirm the address arrives whole and quoted, and say so in the pin sign-off');
+  assert.equal(cap.claudeCodeSha256, pins.engines['claude-code'].files[0].sha256);
+  assert.equal(cap.addressArrivedWhole, true);
+});
+

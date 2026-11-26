@@ -8,5 +8,9 @@
  "reading": {
   "printed_address": "redirect_uri = https://platform.claude.com/oauth/code/callback: the page shows a code to copy back, and the program waits on stdin (\"Paste code here if prompted >\", printed without a newline)",
   "browser_address": "redirect_uri = http://localhost:<port>/callback: the program listens on that port; no code is needed"
- }
+ },
+ "claudeCodeVersion": "2.1.311",
+ "claudeCodeSha256": "32a333769981c72843b990f944cdcac53595ec5a98ca73ff75f0f5c417c79ee6",
+ "addressArrivedWhole": true,
+ "checklist": "SB-2: every new Claude Code pin repeats this capture, confirms the address given to the browser arrives WHOLE and quoted (client_id, state, code_challenge, redirect_uri http://localhost:<port>/callback), and says so in the pin's Security sign-off request. test/canary-pins.test.js fails when this file is for another version than pins.json."
 }
