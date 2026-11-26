@@ -23,6 +23,7 @@ import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRou
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
+import { createLocalModels, LocalError } from './localModels.js';
 import { findProvider } from '../providers/catalog.js';
 import { startDeviceFlow, waitForToken } from '../providers/oauth.js';
 import { dpapiSecretStore } from '../providers/secretStore.js';
@@ -318,8 +319,12 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     ? { probe: offlineProbe, discover: offlineDiscover }
     : {};
 
+  // LOCAL-MODELS (fake mode for now): what Bunny local has downloaded, and the window's buttons for it
+  const localModels = createLocalModels({ dataDir, fake: fake || process.env.BUNNY_FAKE_LOCAL === '1' });
+  await localModels.load();
   const registry = createProviderRegistry({
     secrets,
+    managed: { status: () => (localModels.hasReady() ? 'connected' : 'disconnected'), models: () => localModels.pickerModels() },
     ...offline,
     ...(probe ? { probe } : {}),
     ...(discover ? { discover } : {}),
@@ -769,6 +774,28 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
     if (path === '/api/health') return sendJson(res, 200, { ok: true, fake, windowOnlyLock: Boolean(folderPickerOnly) }); // BROWSER: a page in a browser can say "Change this in Bunny's window." early
 
+    // ---- LOCAL-MODELS: the card's state and the window's buttons. Writes are the window's alone (LM-13); a device may only read what runs. ----
+    if (path === '/api/local-models' && method === 'GET') return sendJson(res, 200, await localModels.status());
+    const lmMatch = path.match(/^\/api\/local-models(?:\/([a-z0-9-]+))?$/);
+    if (lmMatch && method !== 'GET') {
+      if (windowOnly(req, res)) return;
+      try {
+        const body = method === 'POST' || method === 'PUT' ? await readBody(req) : {};
+        const [, part] = lmMatch;
+        if (method === 'DELETE') return sendJson(res, 200, part ? await localModels.remove(part) : await localModels.removeAll());
+        const modelId = typeof body.id === 'string' ? body.id : '';
+        if (method === 'POST' && part === 'setup') return sendJson(res, 200, await localModels.setUp());
+        if (method === 'POST' && part === 'download') return sendJson(res, 200, await localModels.download(modelId));
+        if (method === 'POST' && part === 'pause') return sendJson(res, 200, await localModels.pause(modelId));
+        if (method === 'POST' && part === 'resume') return sendJson(res, 200, await localModels.resume(modelId));
+        if (method === 'POST' && part === 'cancel') return sendJson(res, 200, await localModels.cancel(modelId));
+        if (method === 'POST' && part === 'stop') return sendJson(res, 200, await localModels.stopNow());
+        if ((method === 'POST' || method === 'PUT') && part === 'settings') return sendJson(res, 200, await localModels.settings(body));
+      } catch (err) {
+        if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
+        throw err;
+      }
+    }
     if (path === '/api/providers' && method === 'GET') {
       return sendJson(res, 200, registry.list());
     }

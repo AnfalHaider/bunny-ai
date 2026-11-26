@@ -167,7 +167,7 @@ async function defaultProbe({ baseUrl, apiKey, local = false, auth = null }, fet
  *   catalog?: ReadonlyArray<any>
  * }} deps
  */
-export function createProviderRegistry({ secrets, probe = defaultProbe, catalog: builtIn = PROVIDERS, discover = discoverModels, modelTtlMs = 5 * 60_000 }) {
+export function createProviderRegistry({ secrets, probe = defaultProbe, catalog: builtIn = PROVIDERS, discover = discoverModels, modelTtlMs = 5 * 60_000, managed = null }) {
   // The built-in providers, then any the person added (custom: true).
   const catalog = [...builtIn];
   /** @type {Map<string, { status: Status, baseUrl: string, maskedKey: string, lastError: string|null, connectedAt: string|null }>} */
@@ -199,8 +199,9 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog:
         defaultBaseUrl: provider.defaultBaseUrl ?? '',
         // Which header the key belongs in. Names only, never the key itself.
         auth: provider.auth ?? null,
-        status: s.status,
-        baseUrl: s.baseUrl,
+        // LOCAL-MODELS: Bunny local is 'connected' when it has a downloaded model, and has no address or key stored anywhere
+        status: provider.kind === 'managed' ? (managed?.status?.(provider.id) ?? 'disconnected') : s.status,
+        baseUrl: provider.kind === 'managed' ? '' : s.baseUrl,
         maskedKey: s.status === 'connected' ? s.maskedKey : '',
         lastError: s.lastError,
         connectedAt: s.connectedAt,
@@ -295,6 +296,10 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog:
    */
   async function models(id, { refresh = false } = {}) {
     const provider = requireProvider(id);
+    if (provider.kind === 'managed') { // the list is what is on disk (LM-3), never a running server's answer
+      if (managed?.status?.(id) !== 'connected') throw new ConnectError('models.notConnected', `${provider.name} is not connected`);
+      return managed.models(id);
+    }
     const current = state.get(id);
 
     if (!current || current.status !== 'connected') {
