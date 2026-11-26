@@ -222,6 +222,19 @@ ModelScope, SiliconFlow, Gitee AI, DeepSeek, Moonshot (Kimi), Zhipu (GLM), Aliba
   <img src="docs/images/custom-provider.png" alt="The form to add a custom OpenAI-compatible provider" width="440" />
 </p>
 
+### Models that run on this PC
+**Bunny local** runs models on your own PC, with no other app and no key. On the Providers page, under **Available: on this PC**, choose **Set up Bunny local**. I download my runner program (llama.cpp, from GitHub) and check it against a fixed fingerprint. Then I offer two models to start with, Qwen3 4B and Granite 4.1 3B, from Hugging Face. Each one says whether it fits your PC's memory before you download it. Downloads are checked by fingerprint too, and they can pause and pick up where they stopped.
+
+On NVIDIA graphics cards I use the card. Other PCs run on the processor, which is slower but works everywhere. Your first message starts the model ("Starting your local model…"), and it stops by itself after the idle time you choose, or when you press **Stop now**. The runner only listens on this PC and needs a key only I hold. Phones and other devices can chat with it while it runs, but only my own window can set it up, start it or change it.
+
+**Your own model files.** **Add a model from this PC…** takes any `.gguf` file, for example one from LM Studio. I use it where it is and never copy, change or delete it. The add card shows the file's facts, whether it may not fit in memory, and its chat format. A format I don't know is shown as **Unknown chat format**, with **Show the template** so you can read it. **Don't add** is the main button. Tools are off for files you add until you switch them on for that model. I refuse files I can't run safely: anything that isn't a GGUF file, incomplete or split files, vision helper files, links, and files on network drives.
+
+**Model folders and the download place.** Add folders and I list the model files in them, three folders deep counting the one you add. LM Studio's models folder is found automatically and listed first. Each folder has **Refresh** and **Remove**, and I only ever read them. **Change…** picks where I save the models I download. I save into a **Bunny models** folder there, locked to your account. When you change the place, I offer to move your models, checking each copy before I delete the old one, or to leave them where they are. A model folder can't be a network drive, a whole drive, a system folder, your profile folder or my own data. The download place also can't be a USB drive, Downloads, Desktop, a project folder, or a folder that overlaps your model folders.
+
+**Remove…**, then **Remove everything**, deletes the runner and the models I downloaded, wherever they are, and tells you about any I left behind. It never touches files or folders you added.
+
+When a chat's model is a Bunny local model and you haven't chosen a checking model, Smart asks you before risky steps, because a small local model is a weak check. Choose a checking model in **Settings → Permissions** to let Smart decide.
+
 ### Sign in with GitHub or Google
 Link your GitHub or Google account if you want. There's still no cloud account: your chats and keys stay on this computer.
 
@@ -298,9 +311,9 @@ flowchart TD
 
 ---
 
-## Coming in v0.1.15
+## New in v0.1.15
 
-> **🆕 v0.1.15 (not released yet).** Nothing in this section is in v0.1.14. Each item is a block that can be cut if it doesn't make it.
+> **🆕 v0.1.15.** These came in v0.1.15.
 
 <!-- V0115:begin office-files -->
 - **Office files.** Ask me for a Word, Excel or PowerPoint file and I make it.
