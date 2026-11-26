@@ -6,6 +6,7 @@
  * Everything that touches the PC is passed in, so the tests use stand-ins.
  */
 import { execFile } from 'node:child_process';
+import { dirname } from 'node:path';
 import { powershellPath } from './safeExec.js';
 import { runtimeEnv } from './localRuntime.js';
 
@@ -67,12 +68,12 @@ export function createTrial({ launch, dataDir = null, env = () => runtimeEnv({ d
     return { ok: code === 0, text: child.output?.() ?? '' };
   }
   const trial = async (exe, backend = 'cpu') => {
-    const cwd = exe.replace(/[\/][^\/]+$/, '');
+    const cwd = dirname(exe);
     const v = await one(exe, ['--version'], cwd);
     if (!v.ok) return { ok: false, devices: [] };
     const devices = backend === 'vulkan' ? parseListDevices((await one(exe, ['--list-devices'], cwd)).text) : [];
     return { ok: true, devices };
   };
-  trial.devices = async (exe) => parseListDevices((await one(exe, ['--list-devices'], exe.replace(/[\/][^\/]+$/, ''))).text);
+  trial.devices = async (exe) => parseListDevices((await one(exe, ['--list-devices'], dirname(exe))).text);
   return trial;
 }

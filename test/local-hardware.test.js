@@ -68,3 +68,15 @@ test('Security L4: the trial can only run --version or --list-devices, with the 
   assert.match(seen[0].env.LLAMA_CACHE, /models/);
   assert.equal(Object.keys(seen[0].env).some((k) => /^BUNNY_|KEY|TOKEN/i.test(k)), false);
 });
+
+test('the trial runs in the program\'s folder, for a path built with join (backslashes on Windows) as well, and for --list-devices', async () => {
+  const { join, dirname } = await import('node:path');
+  const exe = join('D:', 'invented', 'runtimes', 'llama.cpp', 'b12760-cpu', 'llama-server.exe');
+  const seen = [];
+  const launchSpy = async (o) => { seen.push(o.cwd); return { pid: 1, exited: Promise.resolve(0), output: () => '' }; };
+  const trial = createTrial({ launch: launchSpy, dataDir: 'D:/invented' });
+  await trial(exe, 'vulkan');
+  await trial.devices(exe);
+  assert.deepEqual(seen, [dirname(exe), dirname(exe), dirname(exe)]);
+  assert.notEqual(seen[0], exe, 'the working folder is never the exe itself');
+});
