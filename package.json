@@ -1,7 +1,7 @@
 {
   "name": "bunny-ai",
   "private": true,
-  "version": "0.1.15",
+  "version": "0.1.16",
   "type": "module",
   "description": "Provider-agnostic AI workspace: your own keys, your own machine.",
   "author": "Anfal Haider",
