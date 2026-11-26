@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
 const flag = (name) => { const i = argv.indexOf(name); return i < 0 ? null : argv[i + 1]; };
+if (argv[0] === '--version') { console.log('version: b12760 (stand-in)'); process.exit(0); }
+if (argv[0] === '--list-devices') { console.log(['Available devices:', '  Vulkan0: Stand-in GPU (8192 MiB, 6000 MiB free)'].join('\n')); process.exit(0); }
 const modelFile = flag('-m');
 const keyFile = flag('--api-key-file');
 const port = Number(flag('--port'));

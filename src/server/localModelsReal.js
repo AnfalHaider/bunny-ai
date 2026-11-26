@@ -14,6 +14,8 @@ import { fetchHop } from './download.js';
 import { downloadModel, deleteModel, modelDir, MODEL_HOSTS, DownloadError } from './localDownload.js';
 import { checkRuntimePins, downloadRuntimeZip, installFromZip, loadRuntimePins, verifyRuntime, RuntimeError } from './localRuntimeInstall.js';
 import { createLocalRuntime, helperLaunch, RuntimeStartError } from './localRuntime.js';
+import { createTrial, detectGpu } from './localHardware.js';
+import { killTree } from './engines/process.js';
 import { createRunnerHelper } from './localRunnerHelper.js';
 import { loadLocalList } from '../providers/localList.js';
 import { LocalError, PROGRAM, IDLE_CHOICES, QUICK_ASK_STARTING } from './localModels.js';
@@ -25,7 +27,7 @@ export const chooseBackend = ({ vendor = null, useGpu = true } = {}) => (useGpu 
 
 export function createRealLocalModels({
   dataDir, list = loadLocalList(), pins = loadRuntimePins(), fetchImpl = fetchHop, launch = null, helper = null, runtime = null,
-  trial = async () => true, gpuVendor = async () => null, pc = null, allowIncompletePins = false, clock = Date.now,
+  trial = null, gpuInfo = detectGpu, gpuVendor = null, pc = null, allowIncompletePins = false, clock = Date.now,
 } = {}) {
   const file = join(dataDir, 'local-models.json');
   const pin = pins['llama-server'];
@@ -35,7 +37,11 @@ export function createRealLocalModels({
   let setup = null; // { step, ctl }
   let lastError = null;
   const downloads = new Map(); // id -> { ctl, done, startedAt, error, paused }
-  const runner = runtime ?? createLocalRuntime({ dataDir, launch: launch ?? helperLaunch(helper ?? createRunnerHelper({ dataDir })) });
+  const launcher = launch ?? helperLaunch(helper ?? createRunnerHelper({ dataDir }));
+  const runner = runtime ?? createLocalRuntime({ dataDir, launch: launcher });
+  /** `--version` must end with 0 (and on Vulkan `--list-devices` gives the card's memory): the same Low, job-bound launch as a model run. */
+  const tryProgram = trial ?? createTrial({ launch: launcher, kill: killTree });
+  let freeVramAt = 0; let freeVramNow = null;
 
   const entry = (id) => list.find((m) => m.id === id) ?? null;
   const need = (id) => { const e = entry(id); if (!e) throw new LocalError('local.unknownModel', "That model is not on Bunny's list.", 404); return e; };
@@ -43,7 +49,15 @@ export function createRealLocalModels({
   const modelFile = (e) => join(modelDir(dataDir, e), e.file);
   const hardware = pc ?? (async () => {
     let freeDisk = 0; try { const s = await statfs(dataDir); freeDisk = Number(s.bavail) * Number(s.bsize); } catch { /* unknown: none */ }
-    return { totalRam: totalmem(), freeRam: freemem(), vram: null, freeVram: null, gpu: false, freeDisk, gpuName: null };
+    const card = state.gpu ?? null;
+    const useCard = Boolean(state.installed && state.backend === 'vulkan' && card?.vram > 0);
+    // the free graphics memory is asked of the program at most every 30 s, and not while a model runs (the number would only be the model's own)
+    if (useCard && typeof tryProgram.devices === 'function' && !runner.running() && clock() - freeVramAt > 30_000) {
+      freeVramAt = clock();
+      const d = (await tryProgram.devices(join(runtimeDir(), pin.entry)).catch(() => []))[0];
+      if (d?.freeBytes != null) freeVramNow = d.freeBytes;
+    }
+    return { totalRam: totalmem(), freeRam: freemem(), vram: useCard ? card.vram : null, freeVram: useCard ? (freeVramNow ?? card.vram) : null, gpu: useCard, freeDisk, gpuName: card?.name ?? null };
   });
 
   async function load() {
@@ -121,7 +135,8 @@ export function createRealLocalModels({
     setup = { step: 1, ctl };
     (async () => {
       try {
-        const backend = chooseBackend({ vendor: await gpuVendor(), useGpu: state.useGpu });
+        const found = gpuVendor ? { vendor: await gpuVendor(), name: null } : (await gpuInfo().catch(() => null));
+        const backend = chooseBackend({ vendor: found?.vendor ?? null, useGpu: state.useGpu });
         const zip = join(dataDir, 'runtimes', 'llama.cpp', '.download', pin.files[backend].name);
         await downloadRuntimeZip({ pins, backend, dest: zip, fetchImpl, signal: ctl.signal });
         setup.step = 2; // the fingerprint was checked while it streamed
@@ -130,8 +145,11 @@ export function createRealLocalModels({
         await installFromZip({ zip, dir, pins, backend });
         await rm(zip, { force: true });
         setup.step = 4;
-        if (!(await trial(join(dir, pin.entry)))) throw new RuntimeError('runtime.trial', "The program didn't start on this PC.");
-        state = { ...state, installed: true, backend }; await save();
+        const t = await tryProgram(join(dir, pin.entry), backend);
+        if (!(t === true || t?.ok)) throw new RuntimeError('runtime.trial', "The program didn't start on this PC.");
+        const vram = Math.max(0, ...((t?.devices ?? []).map((d) => d.totalBytes ?? 0)));
+        state = { ...state, installed: true, backend, gpu: found?.name ? { vendor: found.vendor, name: found.name, vram: vram || null } : null }; await save();
+        freeVramAt = 0; freeVramNow = null;
       } catch (err) {
         lastError = ctl.signal.aborted ? null : (err.message ?? 'The set-up did not finish.');
         await rm(join(dataDir, 'runtimes', 'llama.cpp', '.download'), { recursive: true, force: true }).catch(() => {});

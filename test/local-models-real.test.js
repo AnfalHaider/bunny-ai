@@ -40,7 +40,7 @@ const hub = async (url, { headers = {} } = {}) => {
 async function service(t, extra = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'bunny-real-'));
   const lm = createRealLocalModels({
-    dataDir: dir, list: LIST, pins: PINS, fetchImpl: hub, trial: async () => true,
+    dataDir: dir, list: LIST, pins: PINS, fetchImpl: hub, trial: async () => true, gpuInfo: async () => null,
     pc: async () => ({ totalRam: 16 * GB, freeRam: 12 * GB, vram: null, freeVram: null, gpu: false, freeDisk: 100 * GB, gpuName: null }),
     launch: async ({ args, cwd, env }) => spawnTracked(process.execPath, [FAKE, ...args], { cwd, env: { ...env, PATH: process.env.PATH } }),
     ...extra,
@@ -151,4 +151,25 @@ test('the saved settings never hold an address or a key', async (t) => {
   const saved = await readFile(join(dir, 'local-models.json'), 'utf8');
   assert.equal(saved.includes(key), false);
   assert.doesNotMatch(saved, /127\.0\.0\.1|baseUrl|apiKey|http/);
+});
+
+test('a PC with an NVIDIA card gets the Vulkan build, the trial must pass, and the card and its memory come into the status', async (t) => {
+  const asked = [];
+  const trial = async (exe, backend) => { asked.push(backend); return { ok: true, devices: [{ name: 'NVIDIA GeForce RTX 3060', totalBytes: 12 * GB, freeBytes: 11 * GB }] }; };
+  const { lm } = await service(t, { gpuInfo: async () => ({ vendor: 'NVIDIA', name: 'NVIDIA GeForce RTX 3060' }), trial, pc: null });
+  await lm.setUp();
+  const s = await until(async () => { const x = await lm.status(); return x.installed ? x : null; });
+  assert.deepEqual(asked, ['vulkan']);
+  assert.equal(s.runtime.backend, 'vulkan');
+  assert.equal(s.pc.gpuName, 'NVIDIA GeForce RTX 3060');
+  assert.equal(s.pc.vram, 12 * GB);
+  assert.equal(s.pc.freeVram, 12 * GB, 'with no way to ask again, the total is the best known');
+});
+
+test('a program that fails its trial is not kept as installed, and the person is told in plain words', async (t) => {
+  const { lm } = await service(t, { trial: async () => ({ ok: false, devices: [] }) });
+  await lm.setUp();
+  const s = await until(async () => { const x = await lm.status(); return x.error ? x : null; });
+  assert.equal(s.installed, false);
+  assert.match(s.error, /didn't start on this PC/);
 });

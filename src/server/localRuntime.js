@@ -79,22 +79,25 @@ const icacls = (file) => new Promise((resolve) => {
 
 /** The default launch: through the model runner helper (Low, in the job), by absolute path, hidden, no shell. */
 export function helperLaunch(helper) {
-  return async ({ file, args, cwd, env }) => {
+  return async ({ file, args, cwd, env, capture = false }) => {
     const quote = (a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
     const wrapped = await helper.wrap({ cwd, commandLine: [file, ...args].map(quote).join(' ') });
     if (!wrapped.ok) throw Object.assign(new Error(`The model runner helper is not available: ${wrapped.why}`), { code: 'local.helper' });
-    return spawnTracked(wrapped.file, wrapped.args, { cwd, env });
+    return spawnTracked(wrapped.file, wrapped.args, { cwd, env, capture });
   };
 }
 
 /** Spawn and keep what Bunny needs to watch: the pid, the last stderr, and when it ends. */
-export function spawnTracked(file, args, { cwd, env }) {
+export function spawnTracked(file, args, { cwd, env, capture = false }) {
   const child = spawn(file, args, { cwd, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false });
   let stderr = '';
-  child.stdout.on('data', () => {}); // read and dropped: nothing the server prints is kept (LM-9)
+  let stdout = '';
+  // read and dropped: nothing the server prints is kept (LM-9). Only a short trial (`--version`, `--list-devices`) asks to keep its words (capture), and they are never logged.
+  child.stdout.on('data', (c) => { if (capture) stdout = (stdout + c).slice(-8000); });
   child.stderr.on('data', (c) => { stderr = (stderr + c).slice(-4000); });
   const exited = new Promise((resolve) => { child.on('close', (code) => resolve(code)); child.on('error', () => resolve(-1)); });
-  return { pid: child.pid, exited, stderr: () => stderr };
+  return { pid: child.pid, exited, stderr: () => stderr, output: () => `${stdout}
+${stderr}` };
 }
 
 export class RuntimeStartError extends Error {

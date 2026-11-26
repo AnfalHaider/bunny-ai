@@ -20,6 +20,7 @@ export const WORDS = {
   asking: ['Waiting… (arms crossed)'],
   retry: ['Asking nicely, one more time'],
   fallback: ['Not speaking to that model'],
+  starting: ['Starting your local model…'],
 };
 
 const pick = (list, not) => {
@@ -182,7 +183,7 @@ export function createWorking(start = 'waiting', { model = '', openThinking = fa
       say();
     },
     /** Words arrived: the model is alive again. */
-    alive() { lastEvent = Date.now(); if (kind === 'slow') { kind = 'waiting'; say(); } },
+    alive() { lastEvent = Date.now(); if (kind === 'slow' || kind === 'starting') { kind = 'waiting'; about = ''; say(); } },
     /** The model named, for "waiting for <model>" when it is slow. */
     setModel(name) { modelName = name; paintTail(); },
     /** A piece of the model's thinking: it streams under the line, which opens to show it. */

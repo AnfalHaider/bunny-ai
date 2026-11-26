@@ -2044,6 +2044,10 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
   // The hopping bunny under the reply, with a word that matches what is happening.
   const working = createWorking(mood, { model: state.selected?.model ?? '', openThinking: ['thinking', 'verbose'].includes(state.settings?.transcriptView) });
   bodyEl.closest('.msg')?.after(working.el);
+  // LOCAL-MODELS: a local model that is not running yet is being started; the line says so until the first words arrive (it ends on the first delta, a step or an error)
+  if (state.selected?.providerId === 'bunny-local' && !state.modelAuto) {
+    getJSON('/api/local-models').then((st) => { if (!st?.running && assembled === '' && !working.isThinking() && !controller.signal.aborted) working.set('starting'); }).catch(() => {});
+  }
   // The thinking the line was showing settles into a quiet "Thought for 21s" row above the reply, where it can be opened any time.
   const settleThinking = () => {
     if (!working.isThinking()) return;
