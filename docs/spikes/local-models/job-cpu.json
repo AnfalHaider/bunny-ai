@@ -1,0 +1,26 @@
+{
+  "build": "cpu",
+  "runs": [
+    {
+      "useJob": true,
+      "script": [
+        "assigned to job: True",
+        "server pid: 17604",
+        "parent ending now"
+      ],
+      "stderr": "",
+      "serverPid": 17604,
+      "aliveAfterParentEnded": false
+    },
+    {
+      "useJob": false,
+      "script": [
+        "server pid: 13596",
+        "parent ending now"
+      ],
+      "stderr": "",
+      "serverPid": 13596,
+      "aliveAfterParentEnded": true
+    }
+  ]
+}

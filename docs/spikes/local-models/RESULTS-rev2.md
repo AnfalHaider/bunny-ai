@@ -1,0 +1,18 @@
+# LOCAL-MODELS spikes, rev 2 additions (Tech Lead's spec 4d311ce8)
+
+Run 2026-11-26 by Builder D, same PC and rules as RESULTS.md. The owner's yes was asked again for the re-download (the first run's files had been deleted): the same two pinned zips (b12760, both sha256 equal to the GitHub API) and the same one model (Qwen3-4B Q4_K_M at commit bc640142, sha256 equal to `X-Linked-ETag`). No token, no sign-in, 127.0.0.1 only. No system setting was changed: no folder label was set, no firewall or Defender setting touched. Everything downloaded was deleted afterwards; only these text files are kept. Raw results: `dll-*.json`, `job-cpu.json`, `low-*.json`, `authenticode-*.txt`; scripts: `extras.mjs`, `probe.ps1`, `jobtest.ps1`, `authenticode.ps1`.
+
+## Verdicts
+
+| Check | Verdict |
+|---|---|
+| **DLLs: which load, from where** | **Pass: nothing loads from outside the runtime folder or Windows.** CPU build: 28 modules, 10 from the runtime folder, 18 from the Windows folder, **0 elsewhere**. Vulkan build: 84 modules, 11 from the runtime folder, 73 from the Windows folder (System32 and the GPU drivers in `DriverStore\FileRepository`), **0 elsewhere**. `SetDefaultDllDirectories` was therefore not needed on this PC for these builds. (Not a proof against a planted DLL: a start check on the files' hashes is still the control.) |
+| **Low integrity through the F13 helper** | **Pass.** The F13 helper (`confine.js`, compiled by the app's own code) started `llama-server.exe` with the exact LM-2 argv. The listening process was verified at integrity **0x1000 (Low)**. `/health` answered 200 and a chat answered with the same text as at Medium. CPU build: started in 2.5 s, 15.0 tokens/s. Vulkan build: started in 11.3 s, 18.2 tokens/s (at Medium it was 6.4 s and 28.8 tokens/s): it works but was **slower to start and to generate under Low**; which GPU it used was not recorded (the log was at verbosity 1). No error or "denied" line in either log. No folder label was needed: the server only reads the model and binds loopback, and the model file was read at its normal integrity label. |
+| **Kill-on-close job object** | **Pass.** A parent put the server in a job object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; when the parent ended, the server was **gone** 2.5 s later. The control (same start, no job object) left the server **still running** (then killed by the test). Not tested: the job object together with the Low helper (the helper starts the server as its own child; assigning the helper to the job should cover it, but that was not run), and a crash of the parent instead of a normal exit. |
+| **Authenticode of the exe and DLLs** | **Not signed.** Every `.exe` and `.dll` in both zips reports `NotSigned` with no signer (CPU zip: 50 files; Vulkan zip: 51 files). The set-up card's "not signed by its publisher" sentence applies; the sha256 check is the only integrity control. SmartScreen was not exercised (the files came through `curl` and a Python unzip, so they carry no Mark-of-the-Web). |
+| **Endpoint probe, no key and wrong key** | **Pass** (recorded in RESULTS.md, S-LM4): with no key and with a wrong key every endpoint tried answered 401, 403, 404 or 501; only `GET /health` answered 200. `GET /` is 404 with `--no-ui`. With the right key, `POST /lora-adapters` and `GET /props` answer 200 (see Security's note in RESULTS.md). |
+| **Port on the LAN address** | **Pass** (RESULTS.md, S-LM4): the PC's LAN IPv4 address refused the connection; the listener showed `127.0.0.1` only. |
+
+## Not covered
+
+The job object together with the Low helper; a crash of the parent; which GPU the Vulkan build chose under Low; Windows' own check (SmartScreen / Mark-of-the-Web) on a file saved by Bunny's downloader; Defender's detection history.

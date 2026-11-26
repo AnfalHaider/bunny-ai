@@ -1,0 +1,16 @@
+{
+  "build": "vulkan",
+  "helperReady": true,
+  "helperWhy": null,
+  "startedMs": 11344,
+  "ready": true,
+  "helperExit": null,
+  "listenerPid": 892,
+  "integrity": "integrity RID: 0x1000  (0x1000 Low, 0x2000 Medium, 0x3000 High)",
+  "chat": {
+    "status": 200,
+    "text": "Rabbits are social animals known for their agility, keen senses, and ability to adapt to a wide range of habitats.",
+    "predictedPerSecond": 18.231793184372293
+  },
+  "logErrors": []
+}

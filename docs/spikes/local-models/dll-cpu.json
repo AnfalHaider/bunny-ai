@@ -1,0 +1,41 @@
+{
+  "build": "cpu",
+  "totalModules": 28,
+  "runtimeFolderCount": 10,
+  "windowsSystemCount": 18,
+  "otherCount": 0,
+  "other": [],
+  "runtimeFolder": [
+    "llama-server.exe",
+    "llama-server-impl.dll",
+    "llama-common.dll",
+    "mtmd.dll",
+    "llama.dll",
+    "ggml-base.dll",
+    "ggml.dll",
+    "libomp.dll",
+    "ggml-rpc.dll",
+    "ggml-cpu-alderlake.dll"
+  ],
+  "windowsSystemSample": [
+    "SYSTEM32/ntdll.dll",
+    "System32/KERNEL32.DLL",
+    "System32/KERNELBASE.dll",
+    "System32/ucrtbase.dll",
+    "SYSTEM32/VCRUNTIME140.dll",
+    "System32/WS2_32.dll",
+    "System32/RPCRT4.dll",
+    "System32/CRYPT32.dll",
+    "SYSTEM32/MSVCP140.dll",
+    "SYSTEM32/VCRUNTIME140_1.dll",
+    "System32/PSAPI.DLL",
+    "SYSTEM32/kernel.appcore.dll",
+    "System32/msvcrt.dll",
+    "System32/ADVAPI32.dll",
+    "System32/sechost.dll",
+    "system32/mswsock.dll",
+    "SYSTEM32/CRYPTBASE.DLL",
+    "System32/bcryptPrimitives.dll"
+  ],
+  "stderr": ""
+}
