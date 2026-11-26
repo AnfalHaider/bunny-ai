@@ -25,7 +25,7 @@ async function setup(t) {
       const done = body.messages.some((m) => m.role === 'tool');
       const user = String([...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      if (/^run it/.test(user) && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'run_command', arguments: '{"command":"echo hi"}' } }] }) + 'data: [DONE]\n\n');
+      if (/run it/.test(user) && !done) res.end(sse({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'run_command', arguments: '{"command":"echo hi"}' } }] }) + 'data: [DONE]\n\n');
       else res.end(sse({ content: 'done' }) + 'data: [DONE]\n\n');
     });
   });
@@ -105,4 +105,39 @@ test('Quick ask says "Starting your local model…" the first time; a window cha
   await post(base, '/api/local-models/stop', {});
   const win = await chat(base, 'hello', { mode: 'ask' });
   assert.match(win.stream, /Starting Qwen3 4B… \(first message after a start takes longer\)/);
+});
+
+test('QA scenarios: smart-asks, quick-ask and device each build their chat and return the one message to send, with what to expect', async (t) => {
+  const { base } = await setup(t);
+  for (const name of ['smart-asks', 'quick-ask', 'device']) {
+    const r = await post(base, '/api/local-models/scenario', { name });
+    assert.equal(r.status, 200, name);
+    assert.ok(r.body.sessionId && r.body.message && r.body.expect, name);
+  }
+  assert.equal((await post(base, '/api/local-models/scenario', { name: 'nope' })).status, 400);
+  // the device one: the next message to a stopped model is refused the way a phone would be
+  const dev = await post(base, '/api/local-models/scenario', { name: 'device' });
+  const res = await fetch(`${base}/api/sessions/${dev.body.sessionId}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: dev.body.message, providerId: 'bunny-local', model: 'qwen3-4b' }) });
+  assert.equal(res.status, 409);
+  assert.equal((await res.json()).code, 'local.notRunning');
+  // and the Smart one makes its card
+  await post(base, '/api/local-models/fake', { raise: 'none' });
+  const smart = await post(base, '/api/local-models/scenario', { name: 'smart-asks' });
+  const sres = await fetch(`${base}/api/sessions/${smart.body.sessionId}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content: smart.body.message, providerId: 'bunny-local', model: 'qwen3-4b', workMode: 'code' }) });
+  const reader = sres.body.getReader(); const dec = new TextDecoder(); let seen = '';
+  while (!/event: permission/.test(seen)) { const { done, value } = await reader.read(); if (done) break; seen += dec.decode(value, { stream: true }); }
+  await reader.cancel();
+  assert.match(seen, /Smart can't check this with a local model/);
+});
+
+test('the invented numbers agree: one decimal, and a memory error or a Too big row always needs more than is free', async (t) => {
+  const { base } = await setup(t);
+  await post(base, '/api/local-models/fake', { raise: 'memory' });
+  const r = await chat(base, 'hello');
+  const [, free, need] = /about ([\d.]+) GB free and the model needs about ([\d.]+) GB/.exec(r.json.message);
+  assert.ok(Number(need) > Number(free), `${need} > ${free}`);
+  assert.match(free, /^\d+\.\d$/);
+  const s = await (await fetch(`${base}/api/local-models`)).json();
+  const big = s.models.find((m) => m.fit === 'too-big');
+  assert.ok(big.needBytes > big.availBytes);
 });

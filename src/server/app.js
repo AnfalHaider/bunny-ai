@@ -7,8 +7,8 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
-import { userInfo } from 'node:os';
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir, userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -791,6 +791,28 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (method === 'POST' && part === 'resume') return sendJson(res, 200, await localModels.resume(modelId));
         if (method === 'POST' && part === 'cancel') return sendJson(res, 200, await localModels.cancel(modelId));
         if (method === 'POST' && part === 'stop') return sendJson(res, 200, await localModels.stopNow());
+        // Test mode: three ready-made scenarios for QA. Each makes what it needs (a downloaded model, a chat with a local model) and returns the chat's id and the one message to send.
+        if (method === 'POST' && part === 'scenario') {
+          if (!localModels.isFake()) return sendJson(res, 404, { code: 'local.notAvailable', message: 'Only in test mode.' });
+          const name = String(body.name ?? '');
+          if (!['smart-asks', 'quick-ask', 'device'].includes(name)) return sendJson(res, 400, { code: 'local.bad', message: 'Choose smart-asks, quick-ask or device.' });
+          await localModels.raise('none');
+          await localModels.setUp();
+          for (let i = 0; i < 100 && !(await localModels.status()).installed; i += 1) await new Promise((r) => setTimeout(r, 50));
+          await localModels.download('qwen3-4b');
+          for (let i = 0; i < 100 && (await localModels.status()).models.find((m) => m.id === 'qwen3-4b').state !== 'ready'; i += 1) await new Promise((r) => setTimeout(r, 50));
+          await localModels.stopNow();
+          const folder = await mkdtemp(join(tmpdir(), 'bunny-local-demo-'));
+          const made = await sessions.create({ title: { 'smart-asks': 'Local model: Smart asks', 'quick-ask': 'Local model: Quick ask', device: 'Local model: a device' }[name], providerId: 'bunny-local', model: 'qwen3-4b' });
+          if (name === 'smart-asks') {
+            settings = { ...settings, autoJudgeEnabled: true, autoJudgeModel: '' }; await writeJson(settingsFile, settings);
+            await sessions.update(made.id, { folder, workMode: 'code', permissionMode: 'auto' });
+            return sendJson(res, 200, { sessionId: made.id, message: '[[call run_command {"command":"echo hi"}]] run it', expect: "A card: Asked because Smart can't check this with a local model. Choose a checking model in Settings to let Smart decide." });
+          }
+          if (name === 'quick-ask') return sendJson(res, 200, { sessionId: made.id, message: 'hello', extraBody: { textOnly: true, providerId: 'bunny-local', model: 'qwen3-4b' }, expect: 'A notice: Starting your local model…' });
+          await localModels.raise('device');
+          return sendJson(res, 200, { sessionId: made.id, message: 'hello', expect: "409 local.notRunning: Bunny local is stopped. Start it from Bunny's window on your PC." });
+        }
         if (method === 'POST' && part === 'fake') return sendJson(res, 200, await localModels.raise(String(body.raise ?? ''), typeof body.id === 'string' ? body.id : null)); // test mode only: shows each plain error state
         if ((method === 'POST' || method === 'PUT') && part === 'settings') return sendJson(res, 200, await localModels.settings(body));
       } catch (err) {

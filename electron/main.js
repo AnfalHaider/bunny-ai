@@ -224,6 +224,14 @@ const madeFile = createMadeFile({
 ipcMain.handle('made:open', (event, chat, file) => madeFile.open(event, chat, file));
 ipcMain.handle('made:show', (event, chat, file) => madeFile.show(event, chat, file));
 ipcMain.handle('made:save', (event, chat, file) => madeFile.save(event, chat, file));
+// LOCAL-MODELS: Show in folder for Bunny local's models folder. No argument: the main process knows the folder itself, and only Bunny's own window may ask.
+ipcMain.handle('local:show-folder', async (event) => {
+  if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false, message: 'Not allowed' };
+  const dir = join(dataDir, 'models');
+  await mkdir(dir, { recursive: true });
+  const failed = await shell.openPath(dir);
+  return failed ? { ok: false, message: 'The folder could not be opened.' } : { ok: true };
+});
 ipcMain.handle('remote:tray-event', (event, raw) => { // window-only, fixed fields only
   if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false };
   trayEvent = cleanTrayEvent(raw);

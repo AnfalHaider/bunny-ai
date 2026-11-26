@@ -2069,7 +2069,9 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     },
     onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
+    onError: (err) => {
+      if (['local.memory', 'local.missing', 'local.changed'].includes(err.code)) { errorCode = err.code; errorInfo = { scope: 'other', message: '' }; showLocalError(bodyEl, err); return; } // a card with its buttons, never a red line
+      errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       if (info.pcTainted) state.noAutoLoad = true; // file text from this PC is in this reply: the answer loads nothing by itself
       settleThinking();
@@ -2507,6 +2509,25 @@ function setFolded(pre, folded) {
 }
 
 /** The model asked for something it does not have: the person chooses. */
+/** LOCAL-MODELS: the plain error of a local model is a card with its buttons (design-local-models, section 6), not a red line. */
+function showLocalError(bodyEl, info) {
+  const foot = $('error')?.parentElement; // the card lives by the message box: the thread is drawn again after an error, and would take it away
+  if (!foot) return;
+  document.querySelectorAll('.local-error-card').forEach((n) => n.remove());
+  const card = element('div', { className: 'permission-prompt live-permission capability-card local-error-card' });
+  card.dataset.localError = info.code;
+  const title = { 'local.memory': (info.message.match(/^Not enough memory to load [^.]*/) ?? ['Not enough memory'])[0], 'local.missing': "Bunny local isn't set up on this PC", 'local.changed': "Bunny local's program changed on disk" }[info.code] ?? 'Bunny local';
+  card.append(element('p', { className: 'capability-reason' }, element('b', { textContent: title }), document.createElement('br'), document.createTextNode(info.message.slice(info.message.startsWith(title) ? title.length : 0).replace(/^\.\s*/, ''))));
+  const actions = element('div', { className: 'permission-actions' });
+  if (info.code === 'local.memory') {
+    actions.append(button('Choose a smaller model', { className: 'primary', onclick: () => { card.remove(); $('picker-button')?.click(); } }), button('Try again', { onclick: () => { card.remove(); $('send')?.click(); } }));
+  } else {
+    actions.append(button(info.code === 'local.changed' ? 'Set up again' : 'Set up Bunny local', { className: 'primary', onclick: () => { card.remove(); openSettings('providers'); } }), button('Not now', { onclick: () => card.remove() }));
+  }
+  card.append(actions);
+  foot.before(card);
+}
+
 /** W4-14e: a plain note in the chat from Bunny's server, with the folder picker when a folder is what is missing. */
 function showLiveNotice(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
@@ -3066,6 +3087,7 @@ function askAboutPcFile(row) {
 }
 
 async function send() {
+  document.querySelectorAll('.local-error-card').forEach((n) => n.remove()); // a local model's error card goes when the next message is sent
   const input = $('input');
   const text = input.value.trim();
   $('error').textContent = '';
@@ -3180,7 +3202,7 @@ async function send() {
     candidates.push(...rankModels(state.models, job).filter((m) => m.id !== state.selected?.model).slice(0, 2));
   }
   // Errors that are not the model's fault: another model would not help.
-  const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
+  const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson', 'local.memory', 'local.missing', 'local.changed', 'local.notRunning']);
   let result = { meter: null, aborted: false };
   // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
   // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
@@ -4238,7 +4260,7 @@ function visibleModels(all) {
   state.allModelCount = all.length;
   state.allModels = all;
   if (state.settings?.modelFilter === 'all') return all;
-  return all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
+  return all.filter((m) => m.providerId === 'nvidia' || m.providerId === 'bunny-local' || m.free === true || /(?::|-)free$/i.test(m.id));
 }
 
 /** How many models the "Show models" setting is hiding right now. */

@@ -179,3 +179,34 @@ test('Settings: the checking-model row says what a local chat model means for Sm
   expect(options.join(' ')).not.toContain('bunny-local');
   expect(options.join(' ')).not.toContain('Qwen3 4B');
 });
+
+test('the chat\'s memory error is a card with two buttons; a missing program shows "Not ready" on the card; a mismatch row says Download again', async ({ page, request }) => {
+  await request.post('/api/local-models/setup');
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).installed).toBe(true);
+  await request.post('/api/local-models/download', { data: { id: 'qwen3-4b' } });
+  await expect.poll(async () => (await (await request.get('/api/local-models')).json()).models.find((m) => m.id === 'qwen3-4b').state, { timeout: 10000 }).toBe('ready');
+  await request.post('/api/local-models/fake', { data: { raise: 'memory' } });
+  await page.goto('/');
+  await page.locator('#picker-button').click();
+  await page.locator('.picker-item', { hasText: 'Qwen3 4B' }).first().click();
+  await page.locator('#input').fill('hello');
+  await page.locator('#send').click();
+  const err = page.locator('[data-local-error="local.memory"]');
+  await expect(err).toContainText('Not enough memory to load Qwen3 4B');
+  await expect(err.getByRole('button', { name: 'Choose a smaller model' })).toBeVisible();
+  await expect(err.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await request.post('/api/local-models/fake', { data: { raise: 'none' } });
+  await request.post('/api/local-models/fake', { data: { raise: 'missing' } });
+  await page.goto('/src/ui/providers.html?embed=1');
+  await card(page).getByRole('button', { name: 'Manage' }).click();
+  await expect(card(page).locator('.lm-state')).toHaveText(/^Not ready/);
+  await request.post('/api/local-models/fake', { data: { raise: 'none' } });
+  await request.post('/api/local-models/fake', { data: { raise: 'fingerprint', id: 'qwen3-8b' } });
+  await page.reload();
+  await card(page).getByRole('button', { name: 'Manage' }).click();
+  await expect(card(page).getByRole('button', { name: 'Download again Qwen3 8B' })).toBeVisible();
+  await expect(card(page)).toContainText("Show in folder: Bunny's window only"); // a browser tab has no folder to show
+  await request.post('/api/local-models/fake', { data: { raise: 'none' } });
+});
+
+test.afterAll(async ({ request }) => { await request.post('/api/local-models/fake', { data: { raise: 'none' } }); await request.delete('/api/local-models'); }); // leave no local models behind for the other specs

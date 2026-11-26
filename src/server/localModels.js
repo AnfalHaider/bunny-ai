@@ -9,7 +9,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { GB, chooseContext } from './localFit.js';
+import { GB, chooseContext, needBytes } from './localFit.js';
 
 export const IDLE_CHOICES = [5, 10, 30, 60, 0]; // minutes; 0 = only when Bunny closes
 export const PROGRAM = { name: 'llama.cpp', sizeMB: 39, from: 'GitHub releases', licence: 'MIT', host: 'github.com', signed: false }; // signed: S-LM1 decides; until it says otherwise the card says the program is not signed (LM-1)
@@ -27,7 +27,7 @@ export const FAKE_LIST = Object.freeze([
 ]);
 
 /** The PC the fake mode pretends to be (invented numbers). */
-export const FAKE_PC = Object.freeze({ totalRam: 16 * GB, freeRam: 7.1 * GB, freeVram: 8 * GB, vram: 12 * GB, gpu: true, freeDisk: 41 * GB, gpuName: 'Invented graphics card' });
+export const FAKE_PC = Object.freeze({ totalRam: 16 * GB, freeRam: 6.9 * GB, freeVram: 7.5 * GB, vram: 12 * GB, gpu: true, freeDisk: 41 * GB, gpuName: 'Invented graphics card' });
 
 export class LocalError extends Error {
   constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; }
@@ -68,7 +68,7 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
           : (mine.error ?? null),
       changedOnHub: raised.hfchanged === e.id, // LM-5d: this model changed on Hugging Face: offered again after an update, Download off
       needFreeDisk: e.size + 2 * GB,
-      needBytes: fit.fit.need, availBytes: pc().freeRam + (gpu ? pc().freeVram : 0),
+      needBytes: fit.fit.result === 'too-big' ? Math.max(fit.fit.need, pc().freeRam + (gpu ? pc().freeVram : 0) + 0.1 * GB) : fit.fit.need, availBytes: pc().freeRam + (gpu ? pc().freeVram : 0),
       speedBps: mine.state === 'downloading' ? (fake ? 18 * 1024 * 1024 : null) : null,
       fingerprint: mine.state === 'ready' ? `${e.id.replace(/[^a-z0-9]/g, '').padEnd(12, '0').slice(0, 12)}` : null, // fake mode: the real one is the first 12 hex of the checked sha256
     };
@@ -161,7 +161,7 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
     if (fake && raised.device && state.running?.id !== id) who = 'device'; // the device refusal, raised on purpose
     if (raised.missing) throw new LocalError('local.missing', "Bunny local isn't set up on this PC. The program that runs models isn't installed (it may have been removed).", 409);
     if (raised.changed) throw new LocalError('local.changed', "Bunny local's program changed on disk. Bunny won't start it, in case something else altered it. Set it up again to get a fresh, checked copy.", 409);
-    if (raised.memory) throw new LocalError('local.memory', `Not enough memory to load ${entry(id)?.name ?? id}. This PC has about ${(pc().freeRam / GB).toFixed(0)} GB free and the model needs about ${(view(entry(id)).needBytes / GB).toFixed(1)} GB. Close other apps or choose a smaller model.`, 409);
+    if (raised.memory) throw new LocalError('local.memory', `Not enough memory to load ${entry(id)?.name ?? id}. This PC has about ${(pc().freeRam / GB).toFixed(1)} GB free and the model needs about ${(Math.max(needBytes(entry(id), 32768), pc().freeRam + 0.1 * GB) / GB).toFixed(1)} GB. Close other apps or choose a smaller model.`, 409);
     if (who !== 'window' && state.running?.id !== id) throw new LocalError('local.notRunning', 'Bunny local is stopped. Start it from Bunny\'s window on your PC.', 409);
     if (state.models[id]?.state !== 'ready') throw new LocalError('local.notReady', 'That model is not downloaded.', 409);
     state.running = { id, usedBytes: Math.round(entry(id).size * 1.25), lastUsed: clock() };
@@ -199,5 +199,5 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
   const baseUrl = () => (fake && process.env.BUNNY_FAKE_LOCAL_URL ? process.env.BUNNY_FAKE_LOCAL_URL : '');
   const hasReady = () => loaded && state.installed && readyModels().length > 0;
 
-  return { status, setUp, download, pause, resume, cancel, remove, settings, stopNow, ensure, removeAll, cancelSetup, raise, pickerModels, hasReady, baseUrl, load, view };
+  return { status, setUp, download, pause, resume, cancel, remove, settings, stopNow, ensure, removeAll, cancelSetup, raise, pickerModels, hasReady, baseUrl, isFake: () => fake, load, view };
 }

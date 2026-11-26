@@ -2695,3 +2695,6 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .lm-unsigned { color: var(--warn); border-color: var(--warn); }
 .lm-unsigned-note { font-size: 12.5px; }
 .lm-warn { color: var(--warn); font-size: 12.5px; }
+.lm-row .meta-col { min-width: 0; }
+.lm-row .desc { overflow-wrap: anywhere; }
+.lm-row .right { min-width: 0; max-width: 100%; }
