@@ -753,4 +753,21 @@ All in an invented profile, with invented folders. The injectable drive type and
    - never touches own files or model folders.
 5. **Depth:** a file at level 3 is listed; one at level 4 is not.
 
+### OBS-2 ruling (2026-11-27): a download edited in place is still Bunny's file, so Remove deletes it
+
+Asked by the Chief of Staff, from QA's walk of db4ee101. QA edited a Bunny download in place: the same file, with new bytes. "Remove Bunny local" deleted it. A file replaced by another file was left.
+
+**Ruling: the build is right. LF-24 is clarified below; nothing changes in the code.**
+
+- **What decides a delete: identity, not content.** Delete (LF-17) and Remove Bunny local (LF-24) are decided by identity: real path, volume serial and file id. That answers the question the check exists for: "is this the file Bunny created?"
+  - The risk in deleting is removing something that isn't Bunny's: a stranger file, or a link swapped in under a recorded name. A different file id catches that, and that file is left and named.
+  - A file with the same identity and new bytes is still the file Bunny created, in Bunny's own locked subfolder. Removing it removes possibly altered content, which is the safe outcome.
+  - Re-hashing several GB only to decide whether to delete would add time and protect nothing.
+- **What decides a run: content.** LF-18 governs starting a model. There, any change in size, mtime or ctime means a full re-hash against the pin, and a mismatch refuses the start. That rule is unchanged, and the build does it.
+- **Wording.**
+  - LF-24's "left in place because it changed after Bunny downloaded it" applies to a file whose identity no longer matches: replaced, swapped or turned into a link.
+  - Remove Bunny local doesn't name an in-place edit; it deletes it with the rest.
+  - The single-model Delete follows the same rule.
+- **Move (LF-21) is unaffected.** It checks the old copy with LF-18 before copying, so an edited file is hashed, fails, and isn't moved.
+
 **Sign-off.** HIGH, as before. I review Builder E's build sha against LF-1 to LF-26.
