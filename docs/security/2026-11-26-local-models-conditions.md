@@ -667,3 +667,90 @@ Never the owner's real drives, model folders or `.lmstudio`.
    - if Move is built: a hash failure mid-move leaves the old file and the old record.
 
 **Sign-off.** This is HIGH: Bunny writes outside its own folder, and the folder rules are a security control. I review the build sha against LF-13 to LF-20 together with LF-1 to LF-12, including the mapped-drive record in LF-14.
+
+## Design's five choices in v5 (design-local-models @ 1ae07c36, section 3d; owner approved, record 29fb90c2), LF-21 to LF-26, 2026-11-26
+
+Asked by the Chief of Staff. I read section 3d of `docs/design/review-v016-local-models/index.html` at 1ae07c36. Nothing was run for this note.
+
+All five choices are accepted. Where one is stricter than LF-13 to LF-20, it replaces the earlier rule as stated below. Everything else in LF-13 to LF-20 stands, including the never-allowed list (LF-15) and the overlap rule (LF-19).
+
+### LF-21 (choice 1): Move is the recommended answer when the download folder changes
+
+Accepted. This replaces LF-20's "nothing moves unless the person presses Move". The change card offers Move first and Leave second, as drawn. Leave keeps the LF-20 rules.
+
+The Move steps, for each model:
+
+1. **Check the old copy first.** Run LF-18 against its record: real path, volume serial, file id, size and mtime. If anything differs, hash the whole file against the pinned sha256. If that fails, don't move it, and mark it "This file changed after Bunny downloaded it".
+2. **Check free space** for the whole move on the new drive before anything is copied. Design's "needs X + Y" line is the check.
+3. **Copy** to `<new>\Bunny models\<owner>__<repo>\<file>.part`, with the LF-17 rules: exclusive create (`wx`), real path inside the new subfolder, no links, and icacls set on the new `Bunny models\`.
+4. **Hash the new copy.** Read the `.part` back from disk and compute its full sha256. It must equal the pinned sha256, not just the old copy's hash. A mismatch deletes the `.part` and leaves the old copy and the old record as they were.
+5. **Rename** the `.part` to the final name, again with exclusive create. A stranger file with that name follows LF-17: it is adopted only if its sha matches.
+6. **Write the new record** (real path, volume serial, file id, size, mtime) in the data folder. Then delete the old file, only if its real path, volume serial and file id still match the old record. If they don't, leave the old file and tell the person.
+7. **Remove** the old `<owner>__<repo>` folder and the old `Bunny models\` only if they are empty. Never `removeTree`.
+
+Cancel or a failure at any step leaves every model not yet finished on its old copy and old record. A model that finished stays moved. After a move, the next start runs the normal LF-18 check against the new record. Own-file entries (LF-1 to LF-12) are never moved.
+
+The change of setting is still refused while a download is running (LF-20). Move runs as one job with progress, and only one move or download job runs at a time.
+
+### LF-22 (choice 2): removable drives are refused for downloads, allowed for the folder list
+
+Accepted. This replaces LF-14's "removable drives are allowed" for the download folder only.
+- **The check.** The drive type comes from the main process: `[System.IO.DriveInfo]` DriveType `Removable`, or the Win32 drive type. It is run when the folder is chosen and before each download or move.
+- **What it can't catch.** Some USB disks report as Fixed. That is accepted: the LF-18 volume serial and file id checks still cover a swapped disk.
+- **Model folders on a removable drive** are allowed, as drawn. A missing drive shows the calm "Not available" state, and LF-2's check before each start still applies.
+- Message as drawn: "Pick a folder on a drive that stays in this PC."
+
+### LF-23 (choice 3): the download folder can't be where Bunny's tools write, or Downloads, or Desktop
+
+Accepted, and needed: it stops one of Bunny's own write tools from swapping a downloaded model. This adds to the LF-15 list for the download folder only.
+
+- **Folders Bunny's tools can write to.** That means every folder the person has added as a project or workspace, trusted or not, plus any folder the write paths accept.
+  - The download folder may not be inside one, and may not contain one.
+  - The check runs on choosing and before each download or move.
+- **The reverse case.** The person may later add a project folder that overlaps the download folder. Also put `<download folder>\Bunny models\` on the `isProtected` list in `workspace.js` while it is set, so `write_file` and the `make_*` tools refuse it whatever the folders are. It comes off when the setting changes.
+- **Downloads and Desktop.** Refuse the folders themselves and anything inside them. Take their real locations from Windows (the shell known folders: `Desktop` and the Downloads known folder; `[Environment]::GetFolderPath` or the "User Shell Folders" registry values), because the person may have moved them. Refuse the defaults `~\Downloads` and `~\Desktop` as well.
+- Message as drawn: "Pick a folder only you use for models."
+
+### LF-24 (choice 4): "Remove Bunny local" deletes Bunny's downloads wherever they are
+
+Accepted, as drawn, with the second confirmation naming the size and each place.
+- **Only files Bunny recorded as its downloads are deleted.** For each one:
+  - LF-17 delete: the real path, volume serial and file id must match the record;
+  - then its `<owner>__<repo>` folder and the `Bunny models\` folder are removed, only if empty.
+  - `removeTree` is used only inside the data folder (the runtime, the cache and the key file, as LM-10 says).
+- **A file that doesn't match its record is left in place.** The result says "1 model was left in <folder> because it changed after Bunny downloaded it."
+- **A file on a drive or folder that isn't there** is not deleted. The result names the folder: "2 models on D:\Models weren't removed because the drive isn't connected." Bunny then drops the record, so no later run deletes a file it can't re-check.
+- **Never deleted:** own files, the model folders the person added, and LM Studio's folder. Only Bunny's entries for them are removed, as LF-7 says.
+
+### LF-25 (choice 5): the list goes 3 levels deep
+
+Accepted. This replaces the "4 levels deep" in LF-8 and LF-16, and it is stricter.
+- **How deep.** A `.gguf` file is listed at most three levels below the chosen folder: `<folder>\<a>\<b>\file.gguf`. That fits LM Studio's `<publisher>\<model>\<file>`. The test must show LM Studio's own layout is listed, and that a file at the fourth level is not.
+- The other walk limits are unchanged: 5,000 entries, `lstat`, and links never followed.
+
+### LF-26: tests added to LF-12 and LF-20
+
+All in an invented profile, with invented folders. The injectable drive type and known folders point at invented paths.
+
+1. **Move:**
+   - the new copy is hashed against the pin before the rename;
+   - a byte flipped in the `.part` fails, and the old copy and record are kept;
+   - an old copy that changed is not moved and is marked;
+   - cancel halfway: the finished models are moved, and the rest are untouched;
+   - not enough space: nothing is copied;
+   - a stranger file at the target follows LF-17;
+   - the next start checks the new record.
+2. **Removable drives:** refused as the download folder; listed as a model folder; shown as Not available when missing.
+3. **Download folder placement:**
+   - inside a project folder: refused;
+   - containing one: refused;
+   - Downloads and Desktop, both a moved known folder and the default: refused;
+   - `write_file` and every `make_*` tool into `<download>\Bunny models\` are refused while it is set, and allowed again after it changes.
+4. **Remove Bunny local:**
+   - deletes recorded downloads in two download folders;
+   - leaves a changed file, and a stranger file in the same folder;
+   - names a missing drive;
+   - never touches own files or model folders.
+5. **Depth:** a file at level 3 is listed; one at level 4 is not.
+
+**Sign-off.** HIGH, as before. I review Builder E's build sha against LF-1 to LF-26.
