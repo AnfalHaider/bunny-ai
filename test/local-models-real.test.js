@@ -59,15 +59,15 @@ test('the backend: Vulkan only for the vendors it was proven on, and only with t
   assert.equal(chooseBackend({ vendor: null }), 'cpu');
 });
 
-test('SP-2: the real pins (allow lists not complete) can never be set up: the build says it is not available yet', async (t) => {
-  const { lm } = await service(t, { pins: undefined });
+test('SP-2: pins whose allow list is not complete can never be set up: the build says it is not available yet', async (t) => {
+  const bad = JSON.parse(JSON.stringify(PINS)); bad['llama-server'].files.cpu.allowComplete = false;
+  const { lm } = await service(t, { pins: bad });
   await assert.rejects(lm.setUp(), (e) => e.code === 'local.notAvailable' && e.status === 501);
   const s = await lm.status();
   assert.equal(s.installed, false);
   assert.equal(s.program.available, false);
   assert.equal(s.program.signed, false, 'the card says the program is not signed');
   assert.equal(s.program.tag, 'b12760');
-  assert.deepEqual(s.models.map((m) => m.id), ['tiny'].length ? s.models.map((m) => m.id) : []);
 });
 
 test('set up from the stand-in GitHub, download a model from the stand-in Hugging Face, start it with the key, chat, stop, delete, Remove', async (t) => {

@@ -50,9 +50,18 @@ test('SP-1: the checks on the pins refuse a wrong skip list, a host off the list
   assert.ok(bad((p) => { p.licence = 'GPL'; }).some((m) => /licence/.test(m)));
 });
 
-test('SP-2: the real allow lists are marked incomplete, so a release check refuses them until the zip\'s own entry names are in', () => {
-  const problems = checkRuntimePins(loadRuntimePins(), { forShip: true });
-  assert.ok(problems.some((m) => /allow list is not complete/.test(m)), problems.join(' | '));
+test('SP-2: the real allow lists are complete (from the two zips own 52 and 53 entries), never hold the two RPC files, and an incomplete list still fails the release check', () => {
+  const pins = loadRuntimePins();
+  assert.deepEqual(checkRuntimePins(pins, { forShip: true }), []);
+  const f = pins['llama-server'].files;
+  assert.equal(f.cpu.allow.length, 50);
+  assert.equal(f.vulkan.allow.length, 51);
+  for (const k of ['cpu', 'vulkan']) {
+    assert.ok(f[k].allow.includes('llama-server.exe'));
+    assert.ok(!f[k].allow.includes('ggml-rpc.dll') && !f[k].allow.includes('ggml-rpc-server.exe'), k);
+  }
+  const bad = JSON.parse(JSON.stringify(pins)); bad['llama-server'].files.cpu.allowComplete = false;
+  assert.ok(checkRuntimePins(bad, { forShip: true }).some((m) => /allow list is not complete/.test(m)));
 });
 
 test('SP-2: neither skipped file exists in the runtime folder after set-up; the manifest holds every written file', async (t) => {
