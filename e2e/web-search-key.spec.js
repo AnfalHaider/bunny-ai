@@ -11,7 +11,7 @@ test('the Brave Search key row: password field, saved without echo, removed; the
   await expect(row).toBeVisible();
   await expect(row).toContainText('Brave needs a card to sign up');
   await expect(row).toContainText('Bunny sends your searches to Brave when a key is set');
-  await expect(page.locator('#brave-state')).toHaveText('No key: DuckDuckGo only.');
+  await expect(page.locator('#brave-state')).toHaveText('No key: DuckDuckGo, then Bing and Wikipedia.');
   await expect(page.locator('#brave-remove')).toBeHidden();
   const field = page.locator('#brave-key');
   await expect(field).toHaveAttribute('type', 'password');
@@ -20,7 +20,7 @@ test('the Brave Search key row: password field, saved without echo, removed; the
   await field.fill('short');
   await page.locator('#brave-save').click();
   await expect(page.locator('#brave-err')).toContainText('does not look like a Brave Search key');
-  await expect(page.locator('#brave-state')).toHaveText('No key: DuckDuckGo only.');
+  await expect(page.locator('#brave-state')).toHaveText('No key: DuckDuckGo, then Bing and Wikipedia.');
   // a good key: saved, the field is emptied, and the key appears nowhere on the page
   await field.fill(KEY);
   await page.locator('#brave-save').click();
@@ -38,7 +38,7 @@ test('the Brave Search key row: password field, saved without echo, removed; the
   expect(await page.evaluate(() => document.documentElement.outerHTML)).not.toContain(KEY);
   // removed
   await page.locator('#brave-remove').click();
-  await expect(page.locator('#brave-state')).toHaveText('No key: DuckDuckGo only.');
+  await expect(page.locator('#brave-state')).toHaveText('No key: DuckDuckGo, then Bing and Wikipedia.');
   await expect(page.locator('#brave-remove')).toBeHidden();
   expect(await (await request.get('/api/web-search')).json()).toEqual({ braveKey: false });
 });
