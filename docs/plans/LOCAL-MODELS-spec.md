@@ -34,6 +34,12 @@ Nothing was run.
 | LM-13 | LM-5a | The advisory read for each release |
 | LM-14 | §8 | All twelve tests are listed there |
 
+**Revision 3, 2026-11-26.** Security's verdict on revision 2 (0d6210f3, the end of the same file):
+- **R2-1:** LM-5d now agrees with LM-10. `LLAMA_CACHE` points inside the models folder, and `-hf` is never used.
+- **R2-2:** LM-17 refuses the runtime port on every loopback address, decided after the host is resolved, with tests for `127.0.0.2` and `0.0.0.0`.
+- **R2-3:** LM-14 lets Quick ask start the runtime only for a typed question carrying the main-process admin secret, never on `textOnly` alone.
+- **New LM-18:** scheduled runs and helpers never start the runtime.
+
 ## 0. What v0.1.16 ships, and what waits
 
 | In v0.1.16 | Later (named so nobody builds it now) |
@@ -57,7 +63,7 @@ Nothing was run.
 
 **LM-2. The address and key are looked up when a request is made, never stored.**
 - The registry keeps no `baseUrl` and no masked key for `bunny-local`.
-- Before each model request, chat calls `localRuntime.ensure(modelId)`. That resolves to `{ baseUrl: 'http://127.0.0.1:<port>/v1', apiKey }` for the running server, starting it first if it isn't running (LM-9). Only a request from the window, or from Quick ask, may start it (LM-13, LM-14).
+- Before each model request, chat calls `localRuntime.ensure(modelId)`. That resolves to `{ baseUrl: 'http://127.0.0.1:<port>/v1', apiKey }` for the running server, starting it first if it isn't running (LM-9). Only a request from the window, or a question typed in Quick ask, may start it (LM-13, LM-14, LM-18). Every other caller gets `local.notRunning` while the runtime is stopped.
 - The rest of the request goes through the existing OpenAI-compatible Chat Completions path, unchanged. That path already allows plain http to loopback (`connections.js`, `parseBaseUrl` with `allowHttp`).
 - The per-run key lives only in the main process's memory and in the key file of LM-10. It never goes to `secretStore`, the settings file, a log, a page or the device server.
 
@@ -126,7 +132,7 @@ The v0.1.16 candidates are official-publisher repos from Researcher's section 3:
 Third-party quants (`unsloth/*`) are left out. The final list is whatever passes S-LM2 and S-LM5. The researcher's sizes and sha256 values are re-read **at the pinned commit** when the list is made.
 
 **LM-5d. The download.**
-- **URL:** Bunny's own downloader fetches `https://huggingface.co/<repo>/resolve/<revision>/<file>`. It never uses llama-server's `-hf`, and Bunny never sets `LLAMA_CACHE`.
+- **URL:** Bunny's own downloader fetches `https://huggingface.co/<repo>/resolve/<revision>/<file>`. Bunny never uses `-hf`. `LLAMA_CACHE` points inside the models folder (LM-10) only so that nothing lands anywhere else (Security R2-1).
 - **Hosts:** `huggingface.co` and the CDN hosts that S-LM3 records from the live redirect. Any other redirect host fails the download.
 - **Integrity:** the sha256 is computed while streaming. A download is kept only if `X-Linked-Size` equals the pinned `size`, **and** `X-Linked-ETag` equals the pinned `sha256`, **and** the computed hash equals it too. If the headers differ from the pin, nothing is downloaded and the card says "This model changed on Hugging Face. Bunny will offer it again after an update." The pin is never followed to a new value.
 - **Resume:** the file is written as `<file>.part` with a small sidecar holding the bytes done, and resumes with `Range`. Restarting the app resumes, and a resume re-hashes the bytes already on disk first. Cancel deletes the `.part` file.
@@ -259,7 +265,12 @@ Help text and pictures ship with the screen (O7), in a README section "Run model
 - **Starting from the window counts as the person starting it.** That covers the first message in a window chat, and choosing the model in the window's menu.
 - **What's never exposed:** the server's port and key, to devices or to any page. The device server never proxies or forwards to the runtime port. Device requests go through Bunny's provider code, which calls `ensure()` in the main process.
 
-**LM-14. Quick ask.** Quick ask may use a Bunny local model when it's the person's chosen model. The bar is Bunny's own window-side process on this PC (Electron main, not the device server), so a Quick ask question may start the runtime like a window chat. Security confirms this reading in the review, because Sec LM-0 names only "Bunny's window"; if Security says no, the bar shows the stopped sentence instead. Its rules don't change: text only, no tools, and the card for a real local action. The 120 s start wait (LM-9) shows in the bar. A failure maps to the existing kinds: `none` when nothing is downloaded, otherwise the plain LM-9 reason.
+**LM-14. Quick ask.** Quick ask may use a Bunny local model when it's the person's chosen model. The bar is Bunny's own window-side process on this PC (Electron main, not the device server), so a question the person types there may start the runtime like a window chat. Security ruled on this in R2-3 and allowed it, under these conditions:
+- **The caller decides, never the body.** `body.textOnly === true` (`app.js:2880`) marks a Quick ask turn, but any client can send it, a device included. So the bar's request may start the runtime only when `adminOk(req) && !req.bunnyRemote && !req.bunnyDevice`: the main-process admin secret, the same check `app.js:2535` makes for the lookup retry. Otherwise it must come from the window itself. `textOnly` alone never starts anything.
+- **A device sending `textOnly: true`** gets `local.notRunning`, and the runtime doesn't start. A test proves it.
+- **Only a typed question starts it.** The bar's own retry (`lookupFirst` or `pcLookupFirst`) never starts the runtime. It follows a question that already did, and if the runtime has stopped in between, the retry gets `local.notRunning`.
+
+Its rules don't change: text only, no tools, and the card for a real local action. The 120 s start wait (LM-9) shows in the bar. A failure maps to the existing kinds: `none` when nothing is downloaded, otherwise the plain LM-9 reason.
 
 **LM-15. Same rules as any provider (Sec LM-8).** The model gets exactly the tools, modes, rules, window-only lists and device levels any other provider gets, judged the same way, and its output is just as untrusted. "Local" isn't a trust level, so nothing is allowed more because the model is on the PC. The one difference is LM-4's Ask in Smart.
 
@@ -267,8 +278,17 @@ Help text and pictures ship with the screen (O7), in a README section "Run model
 
 **LM-17. Nothing reaches the runtime except Bunny (Sec LM-4).**
 - `read_url` and `download_file` already refuse loopback through `fetchLimited`. A test adds the runtime's live port.
-- `browser_open` and the browser panel get an explicit refusal of `127.0.0.1:<runtime port>`, `localhost:<runtime port>` and `[::1]:<runtime port>`, with a test. The refusal is checked on each navigation and redirect, not only on the first address.
+- `browser_open` and the browser panel refuse the runtime port on **any loopback address** (Security R2-2).
+  - **What counts as loopback:** `127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `localhost.`, and `[::ffff:127.0.0.1]` (any IPv4-mapped loopback address).
+  - **When it's decided:** after the host name is resolved, never by matching the text of the address.
+  - **How often:** on every navigation and every redirect, not only for the first address.
+  - **Tests:** `127.0.0.1`, `127.0.0.2`, `0.0.0.0`, `localhost.`, `[::1]` and `[::ffff:127.0.0.1]`, each at `:<runtime port>`, are all refused. A host name that resolves to loopback is refused too.
 - The runtime's address and key are never sent to a model, a connector, a helper or an engine.
+
+**LM-18. Scheduled runs and helpers (Security R2-3.3; Security's recommendation, the cautious answer).** A scheduled run, a helper agent, a hook, an automation, or any turn the person didn't type in the window or Quick ask **never starts** the runtime.
+- If the runtime is already running with the model they ask for, they may use it. Their requests reset the idle timer.
+- Otherwise they get `local.notRunning`. A scheduled run reports it in its result: "Bunny local was stopped, so this run didn't use it."
+- **Tests:** a scheduled run and a helper each get `local.notRunning` while the runtime is stopped, and nothing starts. Each may use the runtime while it's running.
 
 ## 7. Spikes before build (each one recorded in `pins.json` `canaries`, the way OI-1 was)
 
@@ -327,7 +347,7 @@ Everything runs in an invented profile (`BUNNY_DATA_DIR` set to a temp folder), 
 6. The child's environment has none of the listed variables, and has `HF_HUB_OFFLINE=1` and `LLAMA_CACHE` inside the models folder.
 7. Kill-on-close: killing Bunny's process ends the (fake) server.
 8. A device, at both levels, gets 403 on every set-up, download, start, stop and delete route; the window gets 200. A device chat while the runtime is stopped gets `local.notRunning` and doesn't start it.
-9. The browser panel, `browser_open`, `read_url` and `download_file` refuse the runtime port.
+9. The browser panel, `browser_open`, `read_url` and `download_file` refuse the runtime port on every loopback spelling of LM-17, `127.0.0.2:<port>` and `0.0.0.0:<port>` included, decided after resolution (R2-2).
 10. The downloader:
     - a hash mismatch deletes the file;
     - a resumed file is hashed whole;
@@ -340,6 +360,12 @@ Everything runs in an invented profile (`BUNNY_DATA_DIR` set to a temp folder), 
 12. With a local model as the chat's model and no judge picked, Smart gives Ask. The judge-model menu lists no local model.
 
 LM-16's test also goes in: no model tool reaches `/api/local-models`.
+
+**R2-3 and LM-18 tests:**
+- A Quick ask request with the admin secret (`adminOk`, not remote, not a device) starts the stopped runtime.
+- A device request with `textOnly: true`, and a plain-HTTP request with `textOnly: true` but no admin secret, each get `local.notRunning`, and nothing starts.
+- The bar's `lookupFirst` retry never starts the runtime.
+- Scheduled runs and helpers get `local.notRunning` while the runtime is stopped.
 
 **The gate** (`node scripts/gate.mjs`) runs all of these. No real model or runtime is ever downloaded by the gate.
 
@@ -360,6 +386,5 @@ These are the points to check against Researcher's section 5:
 3. **The pinned `b` tag?** Security picks and signs it after reading the advisory list for every build since the previous pin (Sec LM-1.8). It moves only with a Bunny release, and the release record gives its tag and date (Sec LM-13).
 
 **Still open for Security:**
-- whether Quick ask may start the runtime (LM-14);
 - the CDN host constants, once S-LM3 has recorded them;
 - the list entries, once S-LM2 and S-LM5 have settled them (Sec LM-6).
