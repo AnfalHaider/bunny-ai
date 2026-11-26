@@ -13,9 +13,9 @@ const url = 'file:///' + path.join(__dirname, 'index.html').replace(/\\/g, '/');
     p.on('pageerror', (e) => errs.push(String(e))); p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
     await p.goto(url); await p.waitForTimeout(400);
     const ov = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    const sec = p.locator('section', { has: p.locator('h2', { hasText: '3c' }) });
-    await sec.screenshot({ path: `${OUT}/3c-${w}-${scheme}.png` });
-    const empty = await p.evaluate(() => ['pc-card','pc-card-p','pc-add','pc-refuse','pc-gone','pc-nolm','pc-menu'].filter((i) => !document.getElementById(i).innerHTML.trim()));
+    const sec = p.locator('section', { has: p.locator('h2', { hasText: '3d' }) });
+    await sec.screenshot({ path: `${OUT}/3d-${w}-${scheme}.png` });
+    const empty = await p.evaluate(() => ['dl-row','dl-change','dl-moving','dl-bad','dl-gone','fl-card','fl-card-p','fl-states','fl-ops','pc-card','pc-card-p','pc-add','pc-refuse','pc-gone','pc-nolm','pc-menu'].filter((i) => !document.getElementById(i).innerHTML.trim()));
     console.log(w, scheme, 'overflow', ov, 'empty', JSON.stringify(empty), 'errors', JSON.stringify(errs));
     await ctx.close();
   }
