@@ -86,7 +86,8 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 <li><b>Same pattern as the rest of Settings.</b> A provider row, a card with rows and switches, and the engine rows' states (Not set up, Ready, Running). Nothing new to learn.</li>
 <li><b>Every download says what it is</b> (name, size, where from), checks a fingerprint, and can be paused, resumed, cancelled and deleted.</li>
 <li><b>The fit badge is honest.</b> Fits, Tight, Slow or Too big, worked out from this PC's memory before you download. Too big rows can't be downloaded.</li>
-<li><b>Only the window manages it.</b> A phone or another PC can chat with a model that's already downloaded; it cannot set up, download, delete or stop anything.</li>
+<li><b>Only the window manages it</b> (Security LM-0). A phone or another PC, even one set to Everything, can chat with a model that's already downloaded; it cannot set up, download, add, start, stop or delete anything. Bunny itself has no tool for it either: it can suggest a model in words, and only you press Download.</li>
+<li><b>Honest about trust</b> (Security LM-1, 6, 7, 8, 11): the program is shown as unsigned, a model that isn't on Bunny's list gets a warning card whose main button is Don't add, and with a local chat model the Smart mode asks you instead of judging, unless you choose a checking model.</li>
 </ul>
 <div class="note"><b>Drawn with invented data.</b> The PC is made up: 16 GB memory with 7.1 GB free, and a graphics card with 4 GB (3.6 GB free). Sizes are rounded and the model list is the spec's candidate list, which Security and the spikes may change. Folder names use the invented user Sam.</div>
 </section>
@@ -137,6 +138,16 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 </section>
 
 <section>
+<h2>3b · A model that isn't on Bunny's list</h2>
+<p class="dim">Security's LM-7. Only you, in this window, by typing a Hugging Face name. Bunny's own list is checked by Security for publisher, licence and chat template; anything else is on you, and the card says so before anything downloads. The spec leaves "Add from a Hugging Face link" for later, so this is drawn for the day it is built.</p>
+<div class="cols">
+<div class="cell"><h3>The warning card</h3><div class="app" id="nl"></div></div>
+<div class="cell"><h3>Two ways it stops</h3><div class="app" id="nl2"></div>
+<p class="cap">There is no Hugging Face login in Bunny. A gated model is refused in one sentence. Only .gguf model files are ever downloaded: nothing else from the repository.</p></div>
+</div>
+</section>
+
+<section>
 <h2>4 · Choosing a local model in the chat</h2>
 <p class="dim">The model menu gets one more group, listing downloaded models only. Never in Auto, never the Auto check's model, never an engine's model: a local model is always your own pick.</p>
 <div class="cols">
@@ -146,6 +157,11 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 <div class="cols">
 <div class="cell"><h3>A chat-only model: one line under the message box</h3><div class="app" id="cp-chat"></div></div>
 <div class="cell"><h3>Nothing downloaded yet</h3><div class="menu" id="mn-empty"></div><p class="cap">Get more… opens the card from section 2. On a phone the same menu shows downloaded models, and Get more… is left out (the window does the downloading).</p></div>
+</div>
+<div class="cols">
+<div class="cell"><h3>Smart mode with a local model and no checking model chosen</h3><div class="app" id="sm"></div>
+<p class="cap">Security's LM-8. Smart normally lets a second model judge each risky action. When the chat's own model is the local one, a small model is a weak judge, so Smart simply asks you. Nothing is blocked: you get the same Allow / Deny card as in Manual.</p></div>
+<div class="cell"><h3>Settings → Permissions: the same row, with the reason</h3><div class="app" id="sm2"></div></div>
 </div>
 </section>
 
@@ -176,8 +192,8 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 <h2>7 · Removing Bunny local</h2>
 <div class="cols">
 <div class="cell"><div class="app" id="rm"></div></div>
-<div class="cell"><div class="note"><b>Two clicks, and the second names the size.</b> Remove Bunny local deletes the program. Because the models are the big part, a second confirmation says how much disk comes back and that models are removed too. Delete on one model asks nothing: it is only a download and can be fetched again.</div>
-<div class="note"><b>On a phone or another PC</b> there is no Set up, Download, Delete, Stop now or graphics switch. The Bunny local card isn't drawn there at all; the model menu and the loading line are the only parts a device sees.</div></div>
+<div class="cell"><div class="note"><b>Two clicks, and the second names the size.</b> Remove Bunny local deletes the program, the models, the cache and the key file. Because the models are the big part, a second confirmation says how much disk comes back and that models are removed too. Delete on one model asks nothing: it is only a download and can be fetched again.</div>
+<div class="note"><b>On a phone or another PC</b> (both device levels, Everything included) there is no Set up, Download, Add, Start, Stop now, Delete or graphics switch, and a device is refused if it tries. The Bunny local card isn't drawn there; the model menu and the loading line are the only parts a device sees. A device set to Everything still isn't "the window" for this.</div></div>
 </div>
 </section>
 
@@ -187,7 +203,7 @@ table.t{border-collapse:collapse;width:100%;font-size:13px}table.t td,table.t th
 <li><b>Words I chose that the spec doesn't fix:</b> "Set up" (the program), "Download" (a model), "Stop after idle", "Use graphics card", "Runs on: graphics card / CPU". The CPU/Vulkan choice is not asked: Bunny picks, and the person only has the Use graphics card switch (spec LM-5b).</li>
 <li><b>Fingerprint on screen:</b> the card says "Checked" with a short fingerprint (first 12 characters) in a details line, so a person can compare it with Hugging Face. The full value stays in the program's own list.</li>
 <li><b>Disk location:</b> shown as a path with a Show in folder button, window only. It is inside Bunny's data folder, which Bunny's own tools can't write to.</li>
-<li><b>Honest limits stated on the card:</b> "Runs on this PC. Nothing you type is sent anywhere." Security should confirm the spike results before that sentence ships.</li>
+<li><b>Words that depend on spikes (Security says so):</b> "This program isn't signed" (LM-1, only if the binaries really are unsigned), a SmartScreen warning line, and the fallback "the model runner runs with your rights; a crafted model file could act as you" if the low-rights run doesn't work (LM-3). The unsigned line is drawn; the other two I add the day a spike says they are true.</li>
 <li><b>Questions for the owner or Security, not decided here:</b> (1) whether Remove Bunny local should keep models by default; drawn as deleting both, with the size named. (2) whether "Slow" should allow Download (drawn: allowed) while Too big does not.</li>
 </ul>
 </section>
@@ -231,12 +247,12 @@ const pcline=`<div class="note" style="font-size:12.5px">This PC: 16 GB memory (
 const foot=`<div class="grp">${row('Where models are kept','C:\\Users\\Sam\\AppData\\Local\\BunnyAI\\models','<span class="tag">2.5 GB used</span>'+btn('Show in folder'))}</div>`;
 const ST={
  none:{n:'Not set up. One button. The size and the place it comes from are on the card, because Bunny is about to download a program. Nothing is downloaded until the button is pressed.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Models Bunny downloads and runs on this PC. No key, no account</div>
-<div class="grp"><div class="steps"><b>Set up Bunny local</b><div class="dim" style="font-size:13px">Bunny downloads a 39 MB program (llama.cpp) from its GitHub releases, checks its fingerprint, and keeps it in its own folder. It runs only on this PC, and nothing you type is sent anywhere.</div><div class="meta">${tag('39 MB')}${tag('MIT licence')}${tag('github.com')}</div><div style="margin-top:6px">${btn('Set up Bunny local','primary')}</div></div></div>`},
+<div class="grp"><div class="steps"><b>Set up Bunny local</b><div class="dim" style="font-size:13px">Bunny downloads a 39 MB program (llama.cpp) from its GitHub releases, checks its fingerprint, and keeps it in its own folder. Chats with a local model stay on this PC, and downloads talk only to GitHub (the program) and Hugging Face (models).</div><div class="note warn" style="font-size:12.5px"><b>This program isn't signed.</b> llama.cpp doesn't sign its Windows files, so Windows may warn you. Bunny checks it against a fingerprint it shipped with instead, and checks it again before every start.</div><div class="meta">${tag('39 MB')}${tag('MIT licence')}${tag('github.com')}${tag('Not signed')}</div><div style="margin-top:6px">${btn('Set up Bunny local','primary')}</div></div></div>`},
  setup:{n:'Setting up: four plain steps with the real checks named. Cancel is always there; a cancelled set-up leaves nothing behind.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Setting up</div>
 <div class="grp"><div class="steps"><div class="step done"><span class="d">✓</span>Downloaded 39 MB from github.com</div><div class="step done"><span class="d">✓</span>Fingerprint checked: matches the one Bunny shipped with (a41c…7e09)</div><div class="step now"><span class="d">3</span>Unpacking: only the expected files are allowed</div><div class="step wait"><span class="d">4</span>Trying it on this PC</div><div class="prog"><i style="width:68%"></i></div><div>${btn('Cancel')}</div></div></div>`},
  ready:{n:'Ready. The rows are the model list from section 3. The graphics switch and idle choice sit above it, like the other cards. Remove Bunny local is at the bottom, away from the everyday buttons.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Ready · Runs on: graphics card (Vulkan)</div>${pcline}
 <div class="grp">${row('Use graphics card','Off uses only the processor: slower, but works on every PC',sw(true))}${row('Stop after idle','Frees memory when you stop chatting','<select class="sel"><option>10 minutes</option></select>')}</div>
-<div class="grph">Models</div><div class="grp">${models()}</div>${foot}<div class="grp">${row('Remove Bunny local','Deletes the program and every downloaded model',btn('Remove…','danger'))}</div>`},
+<div class="grph">Models</div><div class="grp">${models()}${row('A model that isn\'t on this list','Only from a publisher you trust. Gated models and private logins aren\'t supported',btn('Add by name…'))}</div>${foot}<div class="note" style="font-size:12.5px">Chats with a local model stay on this PC. Downloads talk only to Hugging Face and GitHub. Only this window can set up, download, add, start, stop or delete: not a phone, not another PC, and not Bunny itself.</div><div class="grp">${row('Remove Bunny local','Deletes the program, every downloaded model and the cache',btn('Remove…','danger'))}</div>`},
  run:{n:'Running. One extra row at the top while a model is loaded. Stop now is the same as the idle stop, only sooner.',h:()=>`<div class="appttl">Bunny local</div><div class="sub">Running Qwen3 4B, using about 3.1 GB</div>
 <div class="grp">${row('Qwen3 4B is loaded','Last used 2 minutes ago. Stops by itself after 10 idle minutes',btn('Stop now'))}${row('Runs on','Graphics card (Vulkan), 4 GB',tag('Graphics card'))}</div>
 <div class="grph">Models</div><div class="grp">${models().split('</div></div></div>').slice(0,2).join('</div></div></div>')}</div></div>`}
@@ -261,8 +277,14 @@ $('cp-chat').innerHTML=`<div class="chat"><div class="me">Summarise this page fo
 $('ld').innerHTML=`<div class="chat"><div class="me">Plan a two-day trip to Lisbon.</div><div class="status"><span class="spin"></span>Starting Qwen3 4B… (first message after a start takes longer)</div></div><div class="comp"><span class="dim">Send a message…</span><div><span class="chip">Qwen3 4B · Bunny local ▾</span></div></div>`;
 $('idle').innerHTML=`<div class="grp">${row('Stop after idle','Frees memory when you stop chatting','<select class="sel"><option>10 minutes</option></select>')}${row('Qwen3 4B is loaded','Using about 3.1 GB',btn('Stop now'))}</div><div class="note" style="font-size:12.5px"><b>Choices:</b> 5, 10 (default), 30 or 60 minutes, or Only when Bunny closes.</div>`;
 
-/* 6 errors */
 const al=(t,b,acts,cls='')=>`<div class="alert ${cls}"><b>${t}</b><div>${b}</div><div class="acts">${acts}</div></div>`;
+/* 3b not on list */
+$('nl').innerHTML=`<div class="alert warn"><b>Add a model that isn't on Bunny's list?</b><div class="mono">Repository: someone-else/Tiny-Chat-7B-GGUF<br>Revision: 3f9c2e7a81b04d6c5e9f0a1b2c3d4e5f60718293<br>File: tiny-chat-7b.Q4_K_M.gguf · 4.1 GB<br>Fingerprint (sha256): 7be1…c90a<br>Licence tag: none</div><div>Not on Bunny's list. A model file can carry an attack on the program that loads it, and its chat template is run as given. Add it only from a publisher you trust.</div><label class="step" style="gap:8px"><span role="img" aria-label="ticked" style="width:18px;height:18px;border-radius:4px;background:var(--accent);color:var(--btnfg);display:grid;place-items:center;font-size:12px;flex:none">✓</span><span style="font-size:13px">It has no licence tag. I've checked I may use it.</span></label><div class="acts">${btn("Don't add",'primary')}${btn('Add this model')}</div></div>`;
+$('nl2').innerHTML=al('This model needs a Hugging Face login','Bunny doesn\'t use a Hugging Face account, so it can\'t download this one.',btn('OK'),'warn')+`<div style="height:8px"></div>`+al('Bunny can only download .gguf model files','This repository has no .gguf file with that name.',btn('OK'),'warn');
+/* 4 smart asks */
+$('sm').innerHTML=`<div class="chat"><div class="me">Run the tests and fix what fails.</div><div class="alert warn"><b>Allow: Run npm test?</b><div class="mono">npm test</div><div class="acts">${btn('Allow','primary')}${btn('Deny')}</div><small class="dim">Asked because Smart can't check this with a local model. Choose a checking model in Settings to let Smart decide.</small></div></div><div class="comp"><span class="dim">Ask about or change the code in your folder…</span><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">Qwen3 4B · Bunny local ▾</span><span class="chip">Smart · asks ▾</span></div></div>`;
+$('sm2').innerHTML=`<div class="grp">${row('Check Auto actions with a second model','In Auto, a second model checks each risky action before it runs.',sw(true))}${row('Model that checks Auto actions','This chat\'s own model. With a local model that means Smart asks you: a small local model is a weaker check.','<select class="sel"><option>This chat\'s own model</option></select>')}</div>`;
+/* 6 errors */
 $('e1').innerHTML=al('Not enough memory to load Qwen3 8B','This PC has about 7 GB free and the model needs about 7.2 GB. Close other apps or choose a smaller model.',btn('Choose a smaller model','primary')+btn('Try again'),'warn');
 $('e2').innerHTML=al('Bunny local isn\'t set up on this PC','The program that runs models isn\'t installed (it may have been removed).',btn('Set up Bunny local','primary')+btn('Not now'));
 $('e3').innerHTML=al('Bunny local\'s program changed on disk','Bunny won\'t start it, in case something else altered it. Set it up again to get a fresh, checked copy. Your downloaded models are kept.',btn('Set up again','primary')+btn('Not now'));
