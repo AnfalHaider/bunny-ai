@@ -221,7 +221,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     run.exited.finally(() => clearTimeout(stop)).catch(() => {});
     // v0.1.16: the address the program gave its browser (the one that calls back to the program's own listener), written by record-browser.cmd; only a vendor address is taken
     let browserUrl = null;
-    const readBrowserUrl = async () => { if (browserUrl) return browserUrl; try { browserUrl = signInUrlFrom((await readFile(browserArgFile, 'utf8')).trim()); } catch { /* not written yet */ } return browserUrl; };
+    const readBrowserUrl = async () => { if (browserUrl) return browserUrl; try { const text = (await readFile(browserArgFile, 'utf8')).trim(); await rm(browserArgFile, { force: true }).catch(() => {}) /* read once and deleted: it holds the one-time state and challenge (Security LOW) */; browserUrl = signInUrlFrom(text); } catch { /* not written yet */ } return browserUrl; };
     const t0 = Date.now();
     while (url === null && exitCode === undefined && Date.now() - t0 < loginWaitMs) { url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`); if (url) break; await new Promise((r) => setTimeout(r, 100)); }
     url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`);

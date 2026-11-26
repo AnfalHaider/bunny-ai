@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createEngineService } from '../src/server/engines/service.js';
@@ -39,11 +39,12 @@ function service(t, stand, extra = {}) {
 }
 
 test('part A: the address the program gives its browser is the one Bunny offers first; the printed (code) address is kept as the second choice', async (t) => {
-  const { svc } = service(t, login());
+  const { svc, dataDir } = service(t, login());
   const r = await svc.signIn('claude-code');
   assert.equal(r.url, CALLBACK);
   assert.equal(r.manualUrl, PRINTED);
   assert.equal(r.canPaste, true);
+  assert.equal(existsSync(join(dataDir, 'engines', 'claude-code', 'account', 'home', 'browser-address.txt')), false, 'the file with the one-time state is deleted once read');
 });
 
 test('part A: with no browser address (the program did not call its browser), the printed address is offered and the paste box is still available; a stranger\'s browser address is ignored', async (t) => {
