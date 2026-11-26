@@ -85,3 +85,26 @@ test('the dialogs and the service refuse a network path, a link as the download 
   await assert.rejects(localModels.chooseDownloadFolder(d('data')), (e) => e.code === 'place.data');
   await assert.rejects(localModels.addModelFolder(join(d('data'), '..')), (e) => e.code === 'place.data');
 });
+
+test('QA: in the real window (the window-only lock on) a plain read of the places is refused and the main process\'s own read works; a GET never carries a body', async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'bunny-pr2-')));
+  const d = (...p) => join(root, ...p);
+  for (const p of ['data', 'home', 'win']) await mkdir(d(p), { recursive: true });
+  const rules = createFolderRules({ dataDir: d('data'), home: d('home'), env: { SystemRoot: d('win') }, driveType: async () => 'Fixed', knownFolders: async () => ({}) });
+  const places = createPlaces({ dataDir: d('data'), rules, home: d('home') });
+  const store = createStore({ dataDir: d('data'), places, rules, lock: async () => true });
+  const localModels = createRealLocalModels({ dataDir: d('data'), rules, places, store, home: d('home') });
+  const { app, base } = await startApp(t, { dataDir: d('data'), localModels, folderPickerOnly: true, localGuard: true, apiToken: 'tok-test-0000000000' });
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 }));
+  const plain = await fetch(`${base}/api/local-models/places`, { headers: { authorization: 'Bearer tok-test-0000000000' } });
+  assert.equal(plain.status, 403, 'a page in a browser tab cannot read the places');
+  const viaMain = await app.adminFetch('/api/local-models/places', { method: 'GET' });
+  assert.equal(viaMain.status, 200);
+  assert.ok(Array.isArray((await viaMain.json()).folders));
+  const main = await readFile(new URL('../electron/main.js', import.meta.url), 'utf8');
+  assert.match(main, /\['GET', 'HEAD'\]\.includes\(String\(method\)\.toUpperCase\(\)\) \? \{\} : \{ body:/, 'the main process sends no body with a GET');
+  const api = await readFile(new URL('../src/ui/api.js', import.meta.url), 'utf8');
+  assert.match(api, /\['GET', 'HEAD'\]\.includes\(String\(method\)\.toUpperCase\(\)\) \? \{\} : \{ body: JSON\.stringify/, 'the page sends no body with a GET');
+  const ui = await readFile(new URL('../src/ui/local-models.js', import.meta.url), 'utf8');
+  assert.match(ui, /getPlaces: \(\) => sendJSON\('\/api\/local-models\/places', 'GET'\)/, 'the places are read the way every window-only call is, through the bridge');
+});

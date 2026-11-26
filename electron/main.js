@@ -310,7 +310,7 @@ ipcMain.handle('secure:write', async (event, method, path, body) => {
   const from = event.senderFrame?.url ?? event.sender.getURL();
   if (!isOwn(from)) throw new Error('Not a Bunny page.');
   if (!isWindowOnlyRoute(method, path, body)) throw new Error('That is not a window-only change.');
-  const res = await bunnyApp.adminFetch(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  const res = await bunnyApp.adminFetch(path, { method, headers: { 'content-type': 'application/json' }, ...(['GET', 'HEAD'].includes(String(method).toUpperCase()) ? {} : { body: JSON.stringify(body ?? {}) }) }); // a GET or HEAD cannot have a body
   return { status: res.status, data: await res.json().catch(() => ({})) };
 });
 

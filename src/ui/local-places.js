@@ -22,9 +22,9 @@ const inside = (child, parent) => { const c = String(child).replace(/\//g, '\\')
  * @param {(text:string)=>void} o.say              a plain message under the card
  * @param {(m: number)=>string} [o.fmt]
  */
-export function mountPlaces({ getPlaces, post, bridge, say, models = () => [] }) {
+export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], onLoaded = () => {} }) {
   const host = el('div', { class: 'lm-places' });
-  let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null;
+  let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null; let leftKey = null;
 
   const button = (text, onclick, cls = 'btn', extra = {}) => el('button', { type: 'button', class: cls, textContent: text, onclick, ...extra });
   const row = (title, sub, ...right) => el('div', { class: 'row lm-row' }, el('div', { class: 'meta-col' }, el('div', { class: 'name', textContent: title }), sub ? el('div', { class: 'desc', textContent: sub }) : null), el('div', { class: 'right' }, ...right));
@@ -32,7 +32,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [] })
 
   async function refresh() {
     try { view = await getPlaces(); } catch { view = null; }
-    paint(); schedule();
+    paint(); schedule(); onLoaded();
   }
   function schedule() { clearTimeout(timer); if (view?.move) timer = setTimeout(refresh, 600); }
   async function call(path, body) {
@@ -66,11 +66,11 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [] })
       const pct = v.move.total ? Math.round((v.move.done / v.move.total) * 100) : 0;
       wrap.append(el('div', { class: 'lm-card' }, el('b', { textContent: 'Moving your models' }), el('div', { class: 'lm-prog', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100 }, el('i', { style: `width:${pct}%` })),
         el('div', { class: 'desc', textContent: `${gb(v.move.done)} of ${gb(v.move.total)}. Each copy is checked against Bunny's fingerprint before the old one is deleted.` }), button('Cancel', () => call('move-cancel'), 'btn')));
-    } else if (left.length) {
+    } else if (left.length && leftKey !== JSON.stringify([d.root, left.map(([id]) => id)])) {
       const size = left.reduce((n, [id]) => n + (models().find((m) => m.id === id)?.size ?? 0), 0);
       wrap.append(el('div', { class: 'lm-card', 'data-card': 'move' }, el('b', { textContent: `Move your ${left.length} downloaded model${left.length === 1 ? '' : 's'} to the new folder?` }),
         el('div', { class: 'desc', textContent: `Moving needs ${gb(size)} plus 2 GB free on the new drive. If they stay behind they sit in two places, and Remove Bunny local has two places to clean.` }),
-        el('div', { class: 'lm-acts' }, button('Move', () => call('move'), 'btn btn-primary'), button('Leave them', () => paint(), 'btn'))));
+        el('div', { class: 'lm-acts' }, button('Move', () => call('move'), 'btn btn-primary'), button('Leave them', () => { leftKey = JSON.stringify([d.root, left.map(([id]) => id)]); paint(); }, 'btn'))));
     }
     if (v.lastMove && !v.move) {
       const { moved, failed, untouched } = v.lastMove;

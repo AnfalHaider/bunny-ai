@@ -116,7 +116,7 @@ export async function sendJSON(path, method, body) {
   const res = await reach(() => fetch(path, {
     method,
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body ?? {}),
+    ...(['GET', 'HEAD'].includes(String(method).toUpperCase()) ? {} : { body: JSON.stringify(body ?? {}) }),
   }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { if (data.code === 'request.windowOnly') refused(); throw Object.assign(new Error(data.message ?? `HTTP ${res.status}`), data); }

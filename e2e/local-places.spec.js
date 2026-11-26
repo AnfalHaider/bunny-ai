@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { test, expect } from '@playwright/test';
 import { resetProfile } from './helpers.js';
 
@@ -54,6 +55,8 @@ test('a chosen folder with models left behind offers Move first; Move and Leave 
   await c.getByRole('button', { name: 'Move', exact: true }).click();
   expect(posts).toContain('move');
   await expect(lm(page).getByRole('button', { name: "Use Bunny's folder" })).toBeVisible();
+  await c.getByRole('button', { name: 'Leave them' }).click();
+  await expect(c).toHaveCount(0); // the card goes; the models stay where they are
 });
 
 test('an unavailable download folder says so and never mentions a fall-back; a model that is gone says Not found', async ({ page }) => {
@@ -120,4 +123,16 @@ test('Remove Bunny local names each place and what is never touched; a plain bro
   await lm(page).getByRole('button', { name: 'Remove…' }).click();
   await expect(lm(page).locator('[data-card="remove"]')).toContainText('2.3 GB in C:\\Users\\Sam\\AppData\\Local\\BunnyAI\\models');
   await expect(lm(page).locator('[data-card="remove"]')).toContainText('Your own model files and the folders you added are never touched');
+});
+
+test('QA: a read of the places is a GET with no body; after Remove Bunny local the set-up card names what was left and what was not reachable, without opening anything first', async ({ page }) => {
+  const seen = [];
+  await page.route('**/api/local-models', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { ...STATUS([]), installed: false, program: STATUS().program } }) : r.fallback()));
+  await page.route('**/api/local-models/places**', (r) => { const q = r.request(); seen.push([q.method(), q.postData()]); return r.fulfill({ json: PLACES({ downloads: {}, removal: { removed: 1, left: [{ id: 'a', folder: 'D:\Models\Bunny models' }], missing: [{ id: 'b', folder: 'E:\Old' }, { id: 'c', folder: 'E:\Old' }] } }) }); });
+  await page.goto('/src/ui/providers.html?embed=1');
+  await page.locator('#bunny-local').getByRole('button', { name: 'Set up', exact: true }).click();
+  await expect(page.locator('.lm-removal').first()).toContainText('1 model was left in D:\Models\Bunny models because it changed after Bunny downloaded it.');
+  await expect(page.locator('.lm-removal').nth(1)).toContainText("2 models on E:\Old weren't removed because the drive isn't connected.");
+  expect(seen.length).toBeGreaterThan(0);
+  for (const [method, body] of seen) { assert(method === 'GET' && !body); }
 });

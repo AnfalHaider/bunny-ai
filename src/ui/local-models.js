@@ -30,7 +30,8 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
   const bridge = typeof window !== 'undefined' ? (window.bunnyDesktop ?? window.parent?.bunnyDesktop)?.localModels ?? null : null;
   // the folders, the files from this PC and the download place (design 3c, 3d): the window's alone, so a page that is not the window simply gets no places
   const places = mountPlaces({
-    getPlaces: () => getJSON('/api/local-models/places'), post: (path, body) => sendJSON(`/api/local-models/places/${path}`, 'POST', body ?? {}),
+    getPlaces: () => sendJSON('/api/local-models/places', 'GET'), // window-only for reads too: in the desktop app this goes through the main process, which adds the secret
+    onLoaded: () => { if (!status?.installed) paint(); }, post: (path, body) => sendJSON(`/api/local-models/places/${path}`, 'POST', body ?? {}),
     bridge, say: (t) => { notice = t; paint(); }, models: () => status?.models ?? [],
   });
   const act = async (path, method = 'POST', body = {}) => {
@@ -51,7 +52,7 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
     try { status = await getJSON('/api/local-models'); } catch { /* the card keeps what it has */ }
     paint();
     schedule();
-    if (open) places.refresh();
+    places.refresh();
   }
 
   function row(title, sub, ...right) {

@@ -186,7 +186,7 @@ export function createPlaces({
   }
   async function removeModelFolder(id) {
     await load();
-    if (id === 'lmstudio') { st.lmRemoved = true; await save(); return true; }
+    if (id === 'lmstudio') { st.lmRemoved = true; st.own = st.own.filter((o) => o.folderId !== 'lmstudio'); await save(); return true; } // files added from it stop being listed too
     const n = st.modelFolders.length; st.modelFolders = st.modelFolders.filter((f) => f.id !== id);
     if (st.modelFolders.length !== n) { st.own = st.own.filter((o) => o.folderId !== id); await save(); return true; } // models added from that folder stop being listed
     return false;

@@ -235,3 +235,14 @@ test('LF-4 (L-b): a file whose default template is known but a named variant is 
   assert.match(card.template, /--- tokenizer\.chat_template\.tool_use ---/);
   assert.ok(card.template.length > 6000, 'not cut at 4,000');
 });
+
+test('QA: removing LM Studio\'s entry also drops the files added from it', async (t) => {
+  const { d, places } = await world(t);
+  const lm = d('home', '.lmstudio', 'models'); await mkdir(lm, { recursive: true }); await gguf(join(lm, 'x.gguf'));
+  const m = (await places.folders())[0].models[0];
+  await places.add((await places.inspect({ entryId: m.id })).token);
+  assert.equal((await places.ownList()).length, 1);
+  await places.removeModelFolder('lmstudio');
+  assert.equal((await places.ownList()).length, 0);
+  assert.equal(await stat(join(lm, 'x.gguf')).then(() => true), true, 'the file stays');
+});
