@@ -203,3 +203,35 @@ test('the listing hands out entry ids, never paths: only an id from the last lis
   assert.equal((await places.inspect({ entryId: m.id })).fromLmStudio, true);
   await assert.rejects(places.inspect({ entryId: 'deadbeef' }), (e) => e.code === 'place.unknownEntry');
 });
+
+test('Security M-2: a UNC home pointer is never opened; a pointer on a Network-type drive is ignored; a relative or ~ downloadsFolder falls back to the default', async (t) => {
+  const { d, rules, places } = await world(t);
+  const lm = d('home', '.lmstudio', 'models'); await mkdir(lm, { recursive: true }); await gguf(join(lm, 'x.gguf'));
+  const opened = [];
+  const watching = createPlaces({ dataDir: d('data'), rules: { ...rules, checkFolder: (...a) => { opened.push(a[0]); return rules.checkFolder(...a); } }, home: d('home') });
+  await writeFile(d('home', '.lmstudio-home-pointer'), '\\attacker\share\lm\n');
+  assert.deepEqual((await watching.folders())[0].models.map((m) => m.name), ['x.gguf'], 'the default is used');
+  assert.deepEqual(opened.filter((p) => p.startsWith('\\')), [], 'the UNC pointer was not even checked as a folder, let alone read');
+  await writeFile(d('home', '.lmstudio-home-pointer'), `${d('extra')}\n`);
+  const netRules = createFolderRules({ dataDir: d('data'), home: d('home'), env: { SystemRoot: d('win') }, driveType: async () => 'Network', knownFolders: async () => ({}) });
+  const netPlaces = createPlaces({ dataDir: d('data'), rules: netRules, home: d('home') });
+  await mkdir(d('extra'), { recursive: true }); await writeFile(d('extra', 'settings.json'), JSON.stringify({ downloadsFolder: d('extra') }));
+  assert.equal((await netPlaces.folders())[0].state !== 'ok', true, 'nothing on a Network drive is listed');
+  await rm(d('home', '.lmstudio-home-pointer'));
+  for (const bad of ['models', '~/.lmstudio/models', '..\models', '/x']) {
+    await mkdir(d('home', '.lmstudio'), { recursive: true });
+    await writeFile(d('home', '.lmstudio', 'settings.json'), JSON.stringify({ downloadsFolder: bad }));
+    assert.deepEqual((await places.folders())[0].models.map((m) => m.name), ['x.gguf'], bad);
+  }
+});
+
+test('LF-4 (L-b): a file whose default template is known but a named variant is not is "Unknown chat format"; the view shows every template, whole', async (t) => {
+  const tpl = '{% for m in messages %}<|{{ m.role }}|>{{ m.content }}{% endfor %}';
+  const sha = (await import('node:crypto')).createHash('sha256').update(tpl).digest('hex');
+  const { d, places } = await world(t, { curated: new Map([[sha, 'Qwen3 4B']]) });
+  await gguf(d('models', 'v.gguf'), { extra: [['tokenizer.chat_template.tool_use', 8, 'TOOLS ' + 'x'.repeat(6000)]] });
+  const card = await places.inspect({ dialogPath: d('models', 'v.gguf') });
+  assert.equal(card.format.text, 'Unknown chat format');
+  assert.match(card.template, /--- tokenizer\.chat_template\.tool_use ---/);
+  assert.ok(card.template.length > 6000, 'not cut at 4,000');
+});

@@ -17,6 +17,7 @@ const refuse = (code, message) => { throw new FolderError(code, message); };
 
 export const MESSAGES = Object.freeze({
   network: "Bunny only uses folders on this PC's own drives.",
+  drive: "Bunny couldn't check this drive. Try again.",
   link: 'This folder is a link. Choose the folder it points to.',
   fileLink: 'This file is a link. Pick the file it points to.',
   system: "Bunny can't use a system folder.",
@@ -71,6 +72,7 @@ export function createFolderRules({
     if (!/^[A-Za-z]:\\/.test(realPath)) refuse('network', MESSAGES.network); // \\server\share, \\?\..., \\.\...
     const type = await driveType(drive(realPath));
     if (type === 'Network') refuse('network', MESSAGES.network);
+    if (type !== 'Fixed' && type !== 'Removable') refuse('drive', MESSAGES.drive); // '' (the question failed or timed out), Unknown, CDRom, Ram: not a drive Bunny can vouch for
     return type;
   }
   const insideOrContains = (a, b) => isInside(a, b) || isInside(b, a);

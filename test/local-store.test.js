@@ -233,3 +233,19 @@ test('the record store keeps only paths and numbers, in the data folder; a chose
   assert.deepEqual((await readdir(w.d('drive-a', BUNNY_DIR, 'Acme__Tiny-GGUF', 'a'.repeat(40)))), ['rec.gguf']);
   assert.ok(stat && copyFile);
 });
+
+test('Security M-1: the lock reads the permissions back: an extra explicit entry on a folder that already existed, or a child with its own entry, is refused (real icacls, Windows only)', { skip: process.platform !== 'win32' }, async (t) => {
+  const { lockFolder } = await import('../src/server/localStore.js');
+  const { execFileSync } = await import('node:child_process');
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'bunny-acl-')));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
+  const icacls = (...a) => execFileSync(join(process.env.SystemRoot, 'System32', 'icacls.exe'), a, { windowsHide: true });
+  const clean = join(root, 'clean'); await mkdir(clean);
+  assert.equal(await lockFolder(clean), true, 'a new folder locks and reads back clean');
+  const dirty = join(root, 'dirty'); await mkdir(dirty);
+  icacls(dirty, '/grant', '*S-1-5-32-545:(OI)(CI)M'); // BUILTIN\Users: Modify, explicit
+  assert.equal(await lockFolder(dirty), false, 'an extra explicit entry is refused');
+  const child = join(root, 'child'); await mkdir(child); await mkdir(join(child, 'sub'));
+  icacls(join(child, 'sub'), '/grant', '*S-1-5-32-545:(OI)(CI)M');
+  assert.equal(await lockFolder(child), false, 'a child with its own entry is refused');
+});

@@ -10,6 +10,7 @@ import { chmod, link, lstat, mkdir, open, rename, rmdir, rm, stat } from 'node:f
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { dirname, join, win32 as wp } from 'node:path';
+import { powershellPath } from './safeExec.js';
 
 import { PlaceError } from './localPlaces.js';
 import { FolderError, isInside } from './localFolderRules.js';
@@ -26,11 +27,24 @@ const MSG = Object.freeze({
 export { MSG as STORE_MESSAGES };
 
 /** The permission set of LF-17: the person, SYSTEM and Administrators only, no inheritance. SIDs, so it works in any Windows language. */
-export const lockFolder = (dir, { env = process.env, platform = process.platform } = {}) => new Promise((resolve) => {
+/** Security M-1: icacls /inheritance:r only drops INHERITED entries, so an explicit entry an earlier owner left on a folder that already existed would stay. After the lock the permissions are read back:
+ * the folder and everything inside it must hold only the person, SYSTEM and Administrators (the folder with inheritance off), and be owned by one of them. Anything else is refused. */
+export const ACL_CHECK_SCRIPT = `$d=$env:BUNNY_ACL_DIR; $me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $ok=@($me,'S-1-5-18','S-1-5-32-544'); $bad=0
+$all=@($d)+@(Get-ChildItem -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+foreach($p in $all){ $a=Get-Acl -LiteralPath $p; $o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($ok -notcontains $o){$bad++}
+ if($p -eq $d -and -not $a.AreAccessRulesProtected){$bad++}
+ foreach($r in $a.Access){ $s=$r.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value; if($ok -notcontains $s){$bad++} } }
+if($bad -eq 0){'OK'}else{'BAD'}`;
+export const aclAllowed = (dir, { env = process.env, platform = process.platform, powershell = powershellPath() } = {}) => new Promise((resolve) => {
+  if (platform !== 'win32') return resolve(true);
+  if (!powershell) return resolve(false);
+  execFile(powershell, ['-NoProfile', '-NonInteractive', '-Command', ACL_CHECK_SCRIPT], { windowsHide: true, timeout: 30_000, env: { ...env, BUNNY_ACL_DIR: dir } }, (err, out) => resolve(!err && String(out).trim() === 'OK'));
+});
+export const lockFolder = (dir, { env = process.env, platform = process.platform, check = aclAllowed } = {}) => new Promise((resolve) => {
   if (platform !== 'win32') return resolve(true);
   const user = env.USERNAME; if (!user) return resolve(false);
   const grant = (who) => `${who}:(OI)(CI)F`;
-  execFile(join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'icacls.exe'), [dir, '/inheritance:r', '/grant:r', grant(user), grant('*S-1-5-18'), grant('*S-1-5-32-544')], { windowsHide: true }, (err) => resolve(!err));
+  execFile(join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'icacls.exe'), [dir, '/inheritance:r', '/grant:r', grant(user), grant('*S-1-5-18'), grant('*S-1-5-32-544')], { windowsHide: true }, (err) => (err ? resolve(false) : check(dir, { env, platform }).then(resolve, () => resolve(false))));
 });
 
 export const sha256File = (path) => new Promise((resolve, reject) => {

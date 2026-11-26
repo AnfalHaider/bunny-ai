@@ -139,3 +139,15 @@ test('LF-23: the download folder may not be Downloads or Desktop (the default or
   assert.ok((await rules.checkFolder(d('home', 'Docs'), { kind: 'download' })).real);
   assert.ok((await rules.checkFolder(d('home', 'Downloads'), { kind: 'model' })).real);
 });
+
+test('Security M-3: a drive whose type cannot be told (empty, Unknown, CDRom) is refused for a folder and for a file, with "Bunny couldn\'t check this drive"', async (t) => {
+  const { d, rules, types } = await tree(t);
+  await writeFile(d('models-a', 'f.gguf'), 'x');
+  for (const bad of ['', 'Unknown', 'CDRom', 'Ram', 'NoRootDirectory']) {
+    types.default = bad;
+    await assert.rejects(rules.checkFolder(d('models-a')), (e) => e.code === 'drive' && e.message === MESSAGES.drive, `folder ${JSON.stringify(bad)}`);
+    await assert.rejects(rules.checkFile(d('models-a', 'f.gguf')), (e) => e.code === 'drive', `file ${JSON.stringify(bad)}`);
+  }
+  types.default = 'Fixed';
+  assert.ok((await rules.checkFolder(d('models-a'))).real);
+});

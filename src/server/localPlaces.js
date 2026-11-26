@@ -67,12 +67,16 @@ export function createPlaces({
     const dir = (...p) => wp.join(home, ...p);
     let lmHome = null;
     const pointer = await readSmallText(dir('.lmstudio-home-pointer'));
-    if (pointer) { const line = pointer.split(/\r?\n/)[0].trim(); if (/^[A-Za-z]:\\/.test(line) || /^\\\\/.test(line)) lmHome = line; }
+    if (pointer) { // the pointer must be a local drive path that passes the folder rules BEFORE anything inside it is read (opening a UNC path would send the sign-in hash)
+      const line = pointer.split(/\r?\n/)[0].trim();
+      if (/^[A-Za-z]:\\/.test(line)) { try { await rules.checkFolder(line, { kind: 'model' }); lmHome = line; } catch { /* not usable: the defaults */ } }
+    }
     const homes = [lmHome, dir('.lmstudio'), dir('.cache', 'lm-studio')].filter(Boolean);
     for (const h of homes) {
       const settings = await readSmallJson(wp.join(h, 'settings.json'));
       const v = settings && typeof settings.downloadsFolder === 'string' ? settings.downloadsFolder.trim() : '';
-      if (v && v.length < 1024 && !v.includes('\0')) return { path: v };
+      if (v.startsWith('\\\\')) return { path: null, network: true }; // a network path is only named, never opened
+      if (/^[A-Za-z]:\\/.test(v) && v.length < 1024 && !v.includes('\0')) return { path: v }; // an absolute local path only: a relative, UNC or ~ value falls through to the defaults
     }
     const defaults = [...(lmHome ? [wp.join(lmHome, 'models')] : []), dir('.lmstudio', 'models'), dir('.cache', 'lm-studio', 'models')];
     for (const d of defaults) { try { if ((await stat(d)).isDirectory()) return { path: d }; } catch { /* next */ } }
@@ -82,6 +86,7 @@ export function createPlaces({
     await load();
     if (st.lmRemoved) return { state: 'removed' };
     const c = await lmStudioCandidate();
+    if (c.network) return { state: 'network', message: "LM Studio's models folder is on a network drive; Bunny only runs files from this PC." };
     if (!c.path) return { state: 'none' };
     try {
       const r = await rules.checkFolder(c.path, { kind: 'model', download: st.downloadFolder?.real ?? join(dataDir, 'models') });
@@ -127,13 +132,16 @@ export function createPlaces({
 
   /** The one place the format line of the card comes from (LF-4): known (equal to a curated entry's recorded sha), unknown (shown, person decides), or none (chatml, tools off). */
   function formatOf(templates) {
-    const shas = Object.values(templates ?? {}).map((t) => t.sha256 ?? t);
-    if (!shas.length) return { kind: 'none', text: 'This file has no chat format; Bunny will use a plain one.', tools: false };
-    const known = curatedTemplates(); const def = (templates.default?.sha256 ?? templates.default);
-    const match = def ? known.get(def) : null;
-    if (match) return { kind: 'known', entry: match, text: `Same chat format as ${match}` };
+    const entries = Object.entries(templates ?? {}).map(([k, t]) => [k, t.sha256 ?? t]);
+    if (!entries.length) return { kind: 'none', text: 'This file has no chat format; Bunny will use a plain one.', tools: false };
+    const known = curatedTemplates();
+    // known only when EVERY template in the file (the default and each named variant such as tool_use) is one Bunny recorded; one unknown variant makes the whole format unknown
+    const names = entries.map(([, sha]) => known.get(sha));
+    if (names.every(Boolean) && entries.some(([k]) => k === 'default') && new Set(names).size === 1) return { kind: 'known', entry: names[0], text: `Same chat format as ${names[0]}` };
     return { kind: 'unknown', text: 'Unknown chat format' };
   }
+  /** The whole of every template for the "Show the template" view: control characters and bidi marks removed, newlines kept; shown with textContent only. */
+  const templateView = (templates) => Object.entries(templates ?? {}).map(([k, t]) => (k === 'default' ? '' : `--- tokenizer.chat_template.${cleanLabel(k, 60)} ---\n`) + String(t.text ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '')).join('\n\n');
 
   // ---------------------------------------------------------------- listing model folders
   async function folderView(f) {
@@ -207,7 +215,7 @@ export function createPlaces({
     return {
       token, name, where: cleanLabel(wp.dirname(ok.real)), size: key.size, architecture: facts.architecture, quant: fileTypeName(facts.fileType),
       license: facts.license ? `The file says: ${cleanLabel(facts.license, 80)}` : 'The file names no licence', format: fmt,
-      template: fmt.kind === 'unknown' ? cleanLabel(facts.templates.default?.text ?? '', 4000) : null, // shown with textContent, in the window only
+      template: fmt.kind === 'unknown' ? templateView(facts.templates) : null, // all of it, shown with textContent, in the window only
       memory: mem, fromLmStudio: source === 'folder' && folderId === 'lmstudio', trust: TRUST_SENTENCE, toolsOff: true,
     };
   }
