@@ -782,6 +782,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       try {
         const body = method === 'POST' || method === 'PUT' ? await readBody(req) : {};
         const [, part] = lmMatch;
+        if (method === 'DELETE' && part === 'setup') return sendJson(res, 200, await localModels.cancelSetup());
         if (method === 'DELETE') return sendJson(res, 200, part ? await localModels.remove(part) : await localModels.removeAll());
         const modelId = typeof body.id === 'string' ? body.id : '';
         if (method === 'POST' && part === 'setup') return sendJson(res, 200, await localModels.setUp());
@@ -2555,6 +2556,18 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 400, { code: 'provider.notConnected', message: 'That provider is not connected' });
       }
 
+      // LOCAL-MODELS (LM-9, LM-13): a Bunny local model is looked up when the request is made. Only the window may start it; a device gets local.notRunning while it is stopped.
+      let localStarting = null;
+      if (providerId === 'bunny-local') {
+        try {
+          const before = (await localModels.status()).running;
+          await localModels.ensure(model, { who: req.bunnyRemote ?? req.bunnyDevice ? 'device' : 'window' });
+          if (before?.id !== model) localStarting = (await localModels.status()).models.find((m) => m.id === model)?.name ?? model;
+        } catch (err) {
+          if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
+          throw err;
+        }
+      }
       // Compact automatically before the window fills, so a long thread keeps
       // working instead of failing at the provider's limit.
       const compacted = await sessions.compactIfFull(id, 0.8, { summarize: modelSummarizer(providerId, model) }).catch(() => null);
@@ -2630,6 +2643,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (helper && event === 'permission') out = { ...data, title: `${helper} › ${data.title}` };
         res.write(`event: ${event}\ndata: ${JSON.stringify(out)}\n\n`);
       };
+      if (localStarting) send('notice', { text: `Starting ${localStarting}… (first message after a start takes longer)` }); // LM-9: the Starting line
       // A helper's own steps are kept in its own chat; the main chat keeps its own.
       // What the model said since its last step ("Checking the server log.") is kept with the
       // next step, so the chat reads as a running account of the work, also after a reload.

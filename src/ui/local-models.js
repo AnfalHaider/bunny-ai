@@ -1,0 +1,130 @@
+// LOCAL-MODELS: the "Bunny local" card on the Providers page (design-local-models @ 4ee59efc). One module, five states: Not set up, Setting up, Ready, Running, and
+// the plain errors. Every button is the window's alone: the server refuses a device (LM-13), and this page shows no button to a page that is not the window.
+const GB = 1024 ** 3;
+const gb = (n) => `${(n / GB).toFixed(n >= 10 * GB ? 0 : 1)} GB`;
+const IDLE_LABEL = { 5: '5 minutes', 10: '10 minutes', 30: '30 minutes', 60: '60 minutes', 0: 'Only when Bunny closes' };
+const STEPS = ['Downloaded from github.com', 'Fingerprint checked against the one Bunny shipped with', 'Unpacking: only the expected files are allowed', 'Trying it on this PC'];
+const BADGE = { fits: 'ok', 'fits-gpu': 'ok', tight: 'tight', slow: 'slow', 'too-big': 'big' };
+
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k.includes('-') || k === 'role') n.setAttribute(k, String(v)); else if (k === 'class') n.className = v; else n[k] = v;
+  }
+  for (const kid of kids) if (kid != null) n.append(kid);
+  return n;
+}
+
+export function mountLocalModels(host, { getJSON, sendJSON }) {
+  let status = null;
+  let removing = false;
+  let adding = false;
+  let notice = '';
+  let timer = null;
+
+  const act = async (path, method = 'POST', body = {}) => {
+    try { status = await sendJSON(`/api/local-models${path}`, method, body); notice = ''; }
+    catch (err) { notice = err.message ?? 'That did not work.'; }
+    paint();
+    schedule();
+  };
+  const button = (text, onclick, cls = 'ghost small', extra = {}) => el('button', { type: 'button', class: cls, textContent: text, onclick, ...extra });
+
+  function schedule() {
+    clearTimeout(timer);
+    const busy = status && (status.setup || status.models.some((m) => m.state === 'downloading'));
+    if (busy) timer = setTimeout(refresh, 500);
+  }
+  async function refresh() {
+    try { status = await getJSON('/api/local-models'); } catch { /* the card keeps what it has */ }
+    paint();
+    schedule();
+  }
+
+  function row(title, sub, ...right) {
+    return el('div', { class: 'row lm-row' }, el('div', { class: 'meta-col' }, el('div', { class: 'name', textContent: title }), sub ? el('div', { class: 'desc', textContent: sub }) : null), el('div', { class: 'right' }, ...right));
+  }
+
+  function modelRow(m) {
+    const meta = el('div', { class: 'lm-meta' },
+      el('span', { class: `lm-fit ${BADGE[m.fit]}`, textContent: m.fitText }),
+      el('span', { class: 'tag', textContent: gb(m.size) }), el('span', { class: 'tag', textContent: m.licence }), el('span', { class: 'tag', textContent: m.publisher }),
+      el('span', { class: 'tag', textContent: m.tools ? 'Uses tools' : 'Chat only' }));
+    const acts = el('div', { class: 'lm-acts' });
+    const id = { id: m.id };
+    if (m.state === 'downloading') acts.append(button('Pause', () => act('/pause', 'POST', id)), button('Cancel', () => act('/cancel', 'POST', id)));
+    else if (m.state === 'paused') acts.append(button('Resume', () => act('/resume', 'POST', id), 'primary small'), button('Cancel', () => act('/cancel', 'POST', id)));
+    else if (m.state === 'ready') acts.append(el('span', { class: 'tag lm-ready', textContent: 'Ready' }), button('Delete', () => act(`/${m.id}`, 'DELETE'), 'ghost small', { 'aria-label': `Delete ${m.name}` }));
+    else acts.append(button('Download', () => act('/download', 'POST', id), 'primary small', { disabled: !m.canDownload, 'aria-label': `Download ${m.name}` }));
+    const lines = [];
+    if (m.state === 'downloading' || m.state === 'paused') {
+      lines.push(el('div', { class: 'lm-prog', role: 'progressbar', 'aria-valuenow': Math.round((m.done / m.size) * 100), 'aria-valuemin': 0, 'aria-valuemax': 100 }, el('i', { style: `width:${Math.round((m.done / m.size) * 100)}%` })));
+      lines.push(el('small', { class: 'desc', textContent: `${m.state === 'paused' ? 'Paused at ' : ''}${gb(m.done)} of ${gb(m.size)}${m.state === 'paused' ? '. Picks up where it stopped, even after Bunny restarts' : ''}` }));
+    } else if (m.error) lines.push(el('small', { class: 'lm-err', textContent: m.error }));
+    else if (m.fit === 'too-big') lines.push(el('small', { class: 'desc', textContent: `Too big for this PC: needs about ${gb(m.needFreeDisk - 2 * GB)} of memory free.` }));
+    else if (m.fit === 'slow') lines.push(el('small', { class: 'desc', textContent: 'Partly on your graphics card: slower' }));
+    else if (m.fit === 'tight') lines.push(el('small', { class: 'desc', textContent: 'Fits, but close other apps first' }));
+    if (m.toolsNote) lines.push(el('small', { class: 'desc', textContent: m.toolsNote }));
+    return el('div', { class: `lm-model${m.fit === 'too-big' ? ' dis' : ''}`, 'data-model': m.id }, el('div', { class: 'lm-head' }, el('div', { class: 'lm-l' }, el('b', { textContent: m.name }), meta), acts), ...lines);
+  }
+
+  function paint() {
+    host.replaceChildren();
+    if (!status) return;
+    const s = status;
+    host.append(el('div', { class: 'lm-title' }, el('b', { textContent: 'Bunny local' }), el('span', { class: 'tag', textContent: 'Managed' }), el('span', { class: 'tag lm-new', textContent: 'New' })));
+    host.append(el('div', { class: 'desc', textContent: 'Models Bunny downloads and runs on this PC. No key, no account.' }));
+    if (notice) host.append(el('div', { class: 'lm-err', role: 'alert', textContent: notice }));
+    if (removing) { host.append(removeCard()); return; }
+
+    if (s.setup) {
+      const list = el('ol', { class: 'lm-steps' });
+      STEPS.forEach((text, i) => list.append(el('li', { class: i + 1 < s.setup.step ? 'done' : i + 1 === s.setup.step ? 'now' : 'wait', textContent: `${i + 1 < s.setup.step ? '✓ ' : ''}${text}` })));
+      host.append(el('div', { class: 'lm-card' }, el('b', { textContent: 'Setting up' }), list, button('Cancel', () => act('/setup', 'DELETE'), 'ghost small')));
+      return;
+    }
+    if (!s.installed) {
+      host.append(el('div', { class: 'lm-card' },
+        el('b', { textContent: 'Set up Bunny local' }),
+        el('div', { class: 'desc', textContent: `Bunny downloads a ${s.program.sizeMB} MB program (${s.program.name}) from its ${s.program.from}, checks its fingerprint, and keeps it in its own folder. Chats with a local model stay on this PC, and downloads talk only to GitHub (the program) and Hugging Face (models).` }),
+        s.fake ? el('div', { class: 'lm-note', textContent: 'Test mode: nothing is really downloaded. The models below are invented.' }) : null,
+        button('Set up', () => act('/setup'), 'primary')));
+      return;
+    }
+
+    const p = s.pc;
+    host.append(el('div', { class: 'desc lm-pc', textContent: `This PC: ${gb(p.totalRam)} memory (${gb(p.freeRam)} free)${p.vram ? ` · graphics card, ${gb(p.vram)} (${gb(p.freeVram)} free)` : ''} · ${gb(p.freeDisk)} free on the data drive` }));
+    const sw = el('input', { type: 'checkbox', checked: s.runtime.useGpu, 'aria-label': 'Use graphics card', onchange: (e) => act('/settings', 'POST', { useGpu: e.target.checked }) });
+    const idle = el('select', { 'aria-label': 'Stop after idle', onchange: (e) => act('/settings', 'POST', { idleMinutes: Number(e.target.value) }) });
+    for (const m of s.runtime.idleChoices) idle.append(el('option', { value: String(m), textContent: IDLE_LABEL[m], selected: m === s.runtime.idleMinutes }));
+    host.append(el('div', { class: 'group lm-group' },
+      row('Use graphics card', s.runtime.backend === 'vulkan' ? 'Runs on: graphics card (Vulkan). Off uses only the processor: slower, but works on every PC' : 'Runs on: CPU', el('label', { class: 'switch' }, sw)),
+      row('Stop after idle', 'Frees memory when you stop chatting', idle)));
+    if (s.running) host.append(el('div', { class: 'group lm-group lm-running' }, row(`${s.running.name} is loaded`, `Using about ${gb(s.running.usedBytes)}. Stops by itself after ${IDLE_LABEL[s.runtime.idleMinutes].toLowerCase()} idle`, button('Stop now', () => act('/stop')))));
+    host.append(el('div', { class: 'lm-sub', textContent: 'Models' }));
+    host.append(el('div', { class: 'group lm-group lm-models' }, ...s.models.map(modelRow),
+      row("A model that isn't on this list", "Only from a publisher you trust. Gated models and private logins aren't supported", button('Add by name…', () => { adding = !adding; paint(); }))));
+    if (adding) host.append(addCard());
+    host.append(el('div', { class: 'desc lm-foot', textContent: `${gb(s.usedBytes)} used in Bunny's data folder. Chats with a local model stay on this PC. Downloads talk only to Hugging Face and GitHub. Only this window can set up, download, add, start, stop or delete: a phone can only chat with a model that is already running.` }));
+    host.append(button('Remove Bunny local', () => { removing = true; paint(); }, 'danger small lm-remove'));
+  }
+
+  function addCard() {
+    return el('div', { class: 'lm-card warn', 'data-card': 'not-on-list' },
+      el('b', { textContent: "Add a model that isn't on Bunny's list?" }),
+      el('div', { class: 'desc', textContent: "Not on Bunny's list. A model file can carry an attack on the program that loads it, and its chat template is code Bunny has not read. Add one only from a publisher you trust." }),
+      el('div', { class: 'desc', textContent: 'Adding a model by its repository name is not part of this version. Bunny shows this card so you can see how it will work: the repository, the exact version, the file, its size and fingerprint, and the licence tag come first.' }),
+      el('div', { class: 'lm-acts' }, button("Don't add", () => { adding = false; paint(); }, 'primary'), button('Add anyway', () => {}, 'ghost small', { disabled: true, title: 'Not available in this version' })));
+  }
+
+  function removeCard() {
+    const ready = status.models.filter((m) => m.state === 'ready');
+    const total = ready.reduce((n, m) => n + m.size, 0);
+    return el('div', { class: 'lm-card warn', 'data-card': 'remove' },
+      el('b', { textContent: 'Remove Bunny local?' }),
+      el('div', { class: 'desc', textContent: `This deletes the program and ${ready.length} downloaded model${ready.length === 1 ? '' : 's'} (${gb(total)}). You can set it up and download them again later.` }),
+      el('div', { class: 'lm-acts' }, button('Remove everything', async () => { removing = false; await act('', 'DELETE'); }, 'danger small'), button('Keep it', () => { removing = false; paint(); }, 'primary small')));
+  }
+
+  return { refresh };
+}

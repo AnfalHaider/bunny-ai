@@ -25,7 +25,7 @@ export const FAKE_LIST = Object.freeze([
 ]);
 
 /** The PC the fake mode pretends to be (invented numbers). */
-export const FAKE_PC = Object.freeze({ totalRam: 16 * GB, freeRam: 7.1 * GB, freeVram: 3.6 * GB, vram: 4 * GB, gpu: true, freeDisk: 41 * GB, gpuName: 'Invented graphics card' });
+export const FAKE_PC = Object.freeze({ totalRam: 16 * GB, freeRam: 7.1 * GB, freeVram: 8 * GB, vram: 12 * GB, gpu: true, freeDisk: 41 * GB, gpuName: 'Invented graphics card' });
 
 export class LocalError extends Error {
   constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; }
@@ -91,7 +91,8 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
     lastError = null;
     setup = { step: 1 };
     (async () => {
-      for (const step of [1, 2, 3, 4]) { setup.step = step; await sleep(120 / SPEED * 40); }
+      for (const step of [1, 2, 3, 4]) { if (!setup) return; setup.step = step; await sleep(120 / SPEED * 40); }
+      if (!setup) return; // cancelled: nothing is left behind
       state.installed = true; state.backend = pc().gpu ? 'vulkan' : 'cpu'; setup = null;
       await save();
     })();
@@ -141,6 +142,7 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
     state.running = { id, usedBytes: Math.round(entry(id).size * 1.25), lastUsed: clock() };
     return state.running;
   }
+  async function cancelSetup() { setup = null; return status(); }
   async function removeAll() {
     await load();
     for (const id of [...timers.keys()]) stopTimer(id);
@@ -160,5 +162,5 @@ export function createLocalModels({ dataDir, fake = false, list = FAKE_LIST, pc 
   }
   const hasReady = () => loaded && state.installed && readyModels().length > 0;
 
-  return { status, setUp, download, pause, resume, cancel, remove, settings, stopNow, ensure, removeAll, pickerModels, hasReady, load, view };
+  return { status, setUp, download, pause, resume, cancel, remove, settings, stopNow, ensure, removeAll, cancelSetup, pickerModels, hasReady, load, view };
 }

@@ -398,6 +398,10 @@ function renderPicker() {
   }
   trigger.append(icon('chevron'));
   host.append(trigger);
+  // LOCAL-MODELS: a local model that cannot use tools says so under the message box, in one line
+  const chosen = !state.modelAuto && state.selected ? state.models.find((m) => m.id === state.selected.model && m.providerId === state.selected.providerId) : null;
+  const hint = $('local-hint');
+  if (hint) { hint.hidden = !(chosen?.providerId === 'bunny-local' && chosen.toolsOk === false); hint.textContent = hint.hidden ? '' : "This model answers only; it can't use tools."; }
 
   if (!state.models.length) {
     // Models exist but the "Show models" setting hides them: one click shows them. Otherwise there is nothing yet: add a provider.
@@ -559,6 +563,15 @@ function openPicker(host, trigger) {
     list.append(more);
   };
 
+  // LOCAL-MODELS: the menu always offers a way to the Bunny local card (downloaded models are listed above under their own provider name)
+  const addGetMore = () => {
+    const more = button('Get more local models…', { className: 'picker-item picker-get-more', role: 'option', 'aria-selected': 'false' });
+    more.id = 'model-get-more';
+    more.append(element('span', { className: 'model-desc', textContent: 'Opens Bunny local in Settings' }));
+    more.addEventListener('click', () => { closePicker(); openSettings('providers'); });
+    list.append(more);
+  };
+
   const paint = (query) => {
     const q = query.trim().toLowerCase();
     list.replaceChildren();
@@ -621,6 +634,7 @@ function openPicker(host, trigger) {
     else if (sort === 'context') groups.sort((a, b) => top(b) - top(a) || nameOf(a).localeCompare(nameOf(b)));
     for (const group of groups) list.append(modelItem(group));
     addShowAll();
+    if (!q && !filterCount()) addGetMore();
     active = 0;
     highlight();
   };
@@ -639,7 +653,7 @@ function openPicker(host, trigger) {
     if (readList('bunny.favourites').includes(first.id)) item.querySelector('.model-name')?.append(element('span', { className: 'picker-star', textContent: '★', title: 'Favourite' }));
     const tags = element('span', { className: 'picker-tags' });
     for (const m of rowsInOrder) {
-      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerName });
+      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerId === 'bunny-local' ? `${m.providerName} · ${m.note ?? ''}${m.fitText ? ` · ${m.fitText}` : ''}`.replace(/ · $/, '') : m.providerName });
       if (m.freeKind) tag.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
       tags.append(tag);
     }
