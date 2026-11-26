@@ -72,8 +72,9 @@ export function lanReachable(port, { interfaces = networkInterfaces } = {}) {
 }
 
 const icacls = (file) => new Promise((resolve) => {
+  if (process.platform !== 'win32') return resolve(true);
   const user = process.env.USERNAME;
-  if (!user || process.platform !== 'win32') return resolve(true);
+  if (!user) return resolve(false); // no user name: the key file cannot be locked to its owner, so nothing starts (LF L1)
   execFile(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'icacls.exe'), [file, '/inheritance:r', '/grant:r', `${user}:(R,W,D)`], { windowsHide: true }, (err) => resolve(!err));
 });
 
@@ -140,7 +141,7 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
     const key = randomBytes(32).toString('hex'); // new for every start
     const file = keyPath(id);
     await writeFile(file, key, { mode: 0o600 });
-    await lockKey(file);
+    if ((await lockKey(file)) === false) { await dropKey(file); throw new RuntimeStartError('local.keyLock', "Bunny couldn't lock the key file to your account, so it didn't start the model."); }
     let lastErr = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const p = await port();

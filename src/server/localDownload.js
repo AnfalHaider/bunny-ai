@@ -21,7 +21,7 @@ import { fetchHop } from './download.js';
 
 /** Hosts a model download may touch. S-LM3 records the real CDN hosts from a live redirect; until then only the origin is listed. */
 /** SP-4 (Security): huggingface.co, and Hugging Face's own regional CDN names (us.aws.cdn.hf.co was recorded; another region may send another *.cdn.hf.co name). Nothing wider: not *.hf.co, not *.amazonaws.com. */
-export const CDN_HOST = /^[a-z0-9-]+(.[a-z0-9-]+)*.cdn.hf.co$/;
+export const CDN_HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.cdn\.hf\.co$/;
 export const MODEL_HOSTS = Object.freeze(['huggingface.co', CDN_HOST]);
 export const FREE_SPACE_MARGIN = 2 * 1024 ** 3;
 export const MAX_REDIRECTS = 5;

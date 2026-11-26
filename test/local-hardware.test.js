@@ -58,3 +58,13 @@ test('the trial fails when the program ends with an error, never starts, or does
   assert.equal((await hang('x')).ok, false);
   assert.deepEqual(killed, [77]);
 });
+
+test('Security L4: the trial can only run --version or --list-devices, with the same environment as a start', async () => {
+  const seen = [];
+  const trial = createTrial({ launch: async (o) => { seen.push(o); return { pid: 1, exited: Promise.resolve(0), output: () => '' }; }, dataDir: 'D:/invented' });
+  await trial('D:/invented/runtimes/llama.cpp/b12760-cpu/llama-server.exe', 'vulkan');
+  assert.deepEqual(seen.map((s) => s.args), [['--version'], ['--list-devices']]);
+  assert.equal(seen[0].env.HF_HUB_OFFLINE, '1');
+  assert.match(seen[0].env.LLAMA_CACHE, /models/);
+  assert.equal(Object.keys(seen[0].env).some((k) => /^BUNNY_|KEY|TOKEN/i.test(k)), false);
+});

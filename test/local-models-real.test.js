@@ -52,10 +52,11 @@ async function service(t, extra = {}) {
 const until = async (fn, ms = 15000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 50)); } };
 
 test('the backend: Vulkan only for the vendors it was proven on, and only with the switch on', () => {
-  assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: true }), 'vulkan');
-  assert.equal(chooseBackend({ vendor: 'Intel', useGpu: true }), 'vulkan');
-  assert.equal(chooseBackend({ vendor: 'AMD', useGpu: true }), 'cpu');
-  assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: false }), 'cpu');
+  assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: true }), 'cpu', 'Security B3: CPU only until a Vulkan run without ggml-rpc.dll is recorded');
+  assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: true, vulkanRecorded: true }), 'vulkan');
+  assert.equal(chooseBackend({ vendor: 'Intel', useGpu: true, vulkanRecorded: true }), 'vulkan');
+  assert.equal(chooseBackend({ vendor: 'AMD', useGpu: true, vulkanRecorded: true }), 'cpu');
+  assert.equal(chooseBackend({ vendor: 'NVIDIA', useGpu: false, vulkanRecorded: true }), 'cpu');
   assert.equal(chooseBackend({ vendor: null }), 'cpu');
 });
 
@@ -156,7 +157,7 @@ test('the saved settings never hold an address or a key', async (t) => {
 test('a PC with an NVIDIA card gets the Vulkan build, the trial must pass, and the card and its memory come into the status', async (t) => {
   const asked = [];
   const trial = async (exe, backend) => { asked.push(backend); return { ok: true, devices: [{ name: 'NVIDIA GeForce RTX 3060', totalBytes: 12 * GB, freeBytes: 11 * GB }] }; };
-  const { lm } = await service(t, { gpuInfo: async () => ({ vendor: 'NVIDIA', name: 'NVIDIA GeForce RTX 3060' }), trial, pc: null });
+  const { lm } = await service(t, { gpuInfo: async () => ({ vendor: 'NVIDIA', name: 'NVIDIA GeForce RTX 3060' }), vulkanRecorded: true, trial, pc: null });
   await lm.setUp();
   const s = await until(async () => { const x = await lm.status(); return x.installed ? x : null; });
   assert.deepEqual(asked, ['vulkan']);

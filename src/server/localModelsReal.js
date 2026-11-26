@@ -23,11 +23,13 @@ import { LocalError, PROGRAM, IDLE_CHOICES, QUICK_ASK_STARTING } from './localMo
 const PROVIDER_ID = 'bunny-local';
 /** Vendors whose graphics cards the Vulkan build was proven on (S-LM1: NVIDIA and Intel on one PC). Others get the CPU build until someone runs it there. */
 export const VULKAN_PROVEN = ['nvidia', 'intel'];
-export const chooseBackend = ({ vendor = null, useGpu = true } = {}) => (useGpu && VULKAN_PROVEN.includes(String(vendor ?? '').toLowerCase()) ? 'vulkan' : 'cpu');
+/** Security B3: the Vulkan build without ggml-rpc.dll has not been run (only the CPU build was). Until a run is recorded (through the Low helper, the LM-2 argv, one chat, the Vulkan device in the log) every PC gets the CPU build. */
+export const VULKAN_RECORDED = false;
+export const chooseBackend = ({ vendor = null, useGpu = true, vulkanRecorded = VULKAN_RECORDED } = {}) => (vulkanRecorded && useGpu && VULKAN_PROVEN.includes(String(vendor ?? '').toLowerCase()) ? 'vulkan' : 'cpu');
 
 export function createRealLocalModels({
   dataDir, list = loadLocalList(), pins = loadRuntimePins(), fetchImpl = fetchHop, launch = null, helper = null, runtime = null,
-  trial = null, gpuInfo = detectGpu, gpuVendor = null, pc = null, allowIncompletePins = false, clock = Date.now,
+  trial = null, gpuInfo = detectGpu, gpuVendor = null, vulkanRecorded = VULKAN_RECORDED, pc = null, allowIncompletePins = false, clock = Date.now,
 } = {}) {
   const file = join(dataDir, 'local-models.json');
   const pin = pins['llama-server'];
@@ -40,7 +42,7 @@ export function createRealLocalModels({
   const launcher = launch ?? helperLaunch(helper ?? createRunnerHelper({ dataDir }));
   const runner = runtime ?? createLocalRuntime({ dataDir, launch: launcher });
   /** `--version` must end with 0 (and on Vulkan `--list-devices` gives the card's memory): the same Low, job-bound launch as a model run. */
-  const tryProgram = trial ?? createTrial({ launch: launcher, kill: killTree });
+  const tryProgram = trial ?? createTrial({ launch: launcher, dataDir, kill: killTree });
   let freeVramAt = 0; let freeVramNow = null;
 
   const entry = (id) => list.find((m) => m.id === id) ?? null;
@@ -136,7 +138,7 @@ export function createRealLocalModels({
     (async () => {
       try {
         const found = gpuVendor ? { vendor: await gpuVendor(), name: null } : (await gpuInfo().catch(() => null));
-        const backend = chooseBackend({ vendor: found?.vendor ?? null, useGpu: state.useGpu });
+        const backend = chooseBackend({ vendor: found?.vendor ?? null, useGpu: state.useGpu, vulkanRecorded });
         const zip = join(dataDir, 'runtimes', 'llama.cpp', '.download', pin.files[backend].name);
         await downloadRuntimeZip({ pins, backend, dest: zip, fetchImpl, signal: ctl.signal });
         setup.step = 2; // the fingerprint was checked while it streamed

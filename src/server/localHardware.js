@@ -7,7 +7,7 @@
  */
 import { execFile } from 'node:child_process';
 import { powershellPath } from './safeExec.js';
-import { minimalEnv } from './engines/process.js';
+import { runtimeEnv } from './localRuntime.js';
 
 const KNOWN = [['nvidia', 'NVIDIA'], ['intel', 'Intel'], ['amd', 'AMD'], ['advanced micro', 'AMD'], ['ati', 'AMD'], ['qualcomm', 'Qualcomm']];
 const VIRTUAL = /microsoft basic|remote display|virtual|vmware|hyper-v|parsec|citrix|displaylink/i;
@@ -26,6 +26,9 @@ export function parseVideoControllers(raw) {
   const best = cards.sort((a, b) => rank(b) - rank(a))[0];
   return best ? { vendor: best.vendor, name: best.name } : null;
 }
+
+/** The two short commands of a trial: neither listens, loads a model or reads a key, so they carry none of a start's other arguments. */
+export const TRIAL_ARGS = Object.freeze(['--version', '--list-devices']);
 
 const exec = (file, args, { timeout = 15_000, env } = {}) => new Promise((resolve) => {
   execFile(file, args, { windowsHide: true, timeout, env, maxBuffer: 1 << 20 }, (err, stdout) => resolve({ ok: !err, stdout: String(stdout ?? '') }));
@@ -52,8 +55,9 @@ export function parseListDevices(text) {
  * The trial and the card's memory, through the same launcher as a model run. `launch({ file, args, cwd, env, capture })` returns { exited, output(), pid }.
  * Resolves { ok, devices } and never throws; a program that does not end in 20 s counts as not working.
  */
-export function createTrial({ launch, env = () => ({ ...minimalEnv(process.env), HF_HUB_OFFLINE: '1' }), timeoutMs = 20_000, kill = null } = {}) {
+export function createTrial({ launch, dataDir = null, env = () => runtimeEnv({ dataDir: dataDir ?? '.' }), timeoutMs = 20_000, kill = null } = {}) {
   async function one(exe, args, cwd) {
+    if (!(args.length === 1 && TRIAL_ARGS.includes(args[0]))) throw new Error(`The trial may only run ${TRIAL_ARGS.join(' or ')}.`); // the only two command lines besides a real start (Security L4)
     let child;
     try { child = await launch({ file: exe, args, cwd, env: env(), capture: true }); } catch { return { ok: false, text: '' }; }
     let timer;

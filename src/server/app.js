@@ -827,7 +827,8 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       }
     }
     if (path === '/api/providers' && method === 'GET') {
-      return sendJson(res, 200, registry.list());
+      // LM-2 / Security L2: Bunny local's runtime address is never sent to a page or a device (it is looked up per request, in the main process)
+      return sendJson(res, 200, registry.list().map((p) => (p.id === 'bunny-local' ? { ...p, baseUrl: '' } : p)));
     }
 
     // ---- signing in with GitHub or Google ----

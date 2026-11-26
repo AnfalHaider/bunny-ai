@@ -163,3 +163,11 @@ test('LM-12: after a crash, leftover key files are swept and only llama-server.e
   assert.match(cmd, /StartsWith/);
   assert.match(plainReason('Vulkan: no devices found').message, /graphics card/);
 });
+
+test('Security L1: if the key file cannot be locked to its owner, nothing starts and no key file is left behind', async (t) => {
+  const { dir, modelFile, runtimeDir, launched } = await setup(t);
+  const rt = createLocalRuntime({ dataDir: dir, launch: async () => { throw new Error('must not launch'); }, lockKey: async () => false });
+  await assert.rejects(rt.ensure({ runtimeDir, modelId: 'm', modelFile, ctx: 8192, gpu: false }), (e) => e.code === 'local.keyLock');
+  assert.equal(launched.length, 0);
+  assert.deepEqual(existsSync(join(dir, 'runtimes', 'run')) ? readdirSync(join(dir, 'runtimes', 'run')) : [], []);
+});
