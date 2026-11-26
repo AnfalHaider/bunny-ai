@@ -54,6 +54,7 @@ export function deviceRefusal(method, path, body = null) {
   const p = String(path);
   if (isRemoteAdminPath(p)) return DEVICE_ACCESS_MESSAGE;
   if (ENGINE_PATH.test(p)) return ENGINE_REFUSED_MESSAGE;
+  if (/^\/api\/local-models\/places(\/|$)/.test(p)) return LOCAL_MODELS_REFUSED_MESSAGE; // LF-1, LF-13: not even a read: the folders and files hold the Windows user name
   if (/^\/api\/local-models(\/|$)/.test(p) && m !== 'GET') return LOCAL_MODELS_REFUSED_MESSAGE; // LM-13: a device, at either level, never sets up, downloads, starts or stops a model; it only chats with one that already runs
   const has = (...keys) => Boolean(body) && typeof body === 'object' && keys.some((k) => Object.hasOwn(body, k));
   if (p === '/api/settings' && m === 'PUT' && has('engine', 'engines', 'useBunnyEngine')) return ENGINE_REFUSED_MESSAGE;

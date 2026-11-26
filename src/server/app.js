@@ -240,7 +240,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, installSource: installSourceOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+export async function createApp({ localModels: localModelsOption = null, pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, installSource: installSourceOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
   // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
   const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
@@ -322,7 +322,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
   // LOCAL-MODELS (fake mode for now): what Bunny local has downloaded, and the window's buttons for it
   const localFake = fake || process.env.BUNNY_FAKE_LOCAL === '1';
-  const localModels = localFake ? createLocalModels({ dataDir, fake: true }) : createRealLocalModels({ dataDir });
+  const localModels = localModelsOption ?? (localFake ? createLocalModels({ dataDir, fake: true }) : createRealLocalModels({ dataDir, installDirs: [process.resourcesPath, join(dirname(fileURLToPath(import.meta.url)), '..', '..')].filter(Boolean), projectFolders: () => [...chosenFolders] }));;
   await localModels.load();
   await localModels.refreshReady?.();
   /** The key for a provider's requests: Bunny local's is the running server's own, looked up per request and never stored (LM-2). */
@@ -782,6 +782,32 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
     // ---- LOCAL-MODELS: the card's state and the window's buttons. Writes are the window's alone (LM-13); a device may only read what runs. ----
     if (path === '/api/local-models' && method === 'GET') { const st = await localModels.status(); await localModels.refreshReady?.(); return sendJson(res, 200, st); }
+    // ---- LOCAL-MODELS: the places (download folder, model folders, files from this PC). Window only for every method, reads included: paths hold the Windows user name (LF-1, LF-13).
+    // A path is never taken from a request: the folders and files come from the system dialogs in the main process (chooseDownloadFolder, addModelFolder, inspectFile with dialogPath), and a listed file by its id.
+    if (path.startsWith('/api/local-models/places')) {
+      if (windowOnly(req, res)) return;
+      if (typeof localModels.placesView !== 'function') return sendJson(res, 404, { code: 'local.notAvailable', message: 'Only with the real Bunny local.' });
+      try {
+        const part = path.slice('/api/local-models/places'.length).replace(/^\//, '');
+        const body = method === 'POST' || method === 'PUT' ? await readBody(req) : {};
+        const str = (v) => (typeof v === 'string' ? v : '');
+        if (method === 'GET' && part === '') return sendJson(res, 200, await localModels.placesView());
+        if (method === 'POST' && part === 'refresh') return sendJson(res, 200, await localModels.placesView());
+        if (method === 'POST' && part === 'inspect') return sendJson(res, 200, await localModels.inspectFile({ entryId: str(body.entryId) }));
+        if (method === 'POST' && part === 'add-file') return sendJson(res, 200, await localModels.addFile(str(body.token)));
+        if (method === 'POST' && part === 'remove-file') return sendJson(res, 200, await localModels.removeFile(str(body.id)));
+        if (method === 'POST' && part === 'file-tools') return sendJson(res, 200, await localModels.setFileTools(str(body.id), body.on === true));
+        if (method === 'POST' && part === 'remove-folder') return sendJson(res, 200, await localModels.removeModelFolder(str(body.id)));
+        if (method === 'POST' && part === 'lmstudio-back') return sendJson(res, 200, await localModels.addLmStudioBack());
+        if (method === 'POST' && part === 'download-default') return sendJson(res, 200, await localModels.useDefaultDownloadFolder());
+        if (method === 'POST' && part === 'move') return sendJson(res, 200, await localModels.startMove());
+        if (method === 'POST' && part === 'move-cancel') return sendJson(res, 200, await localModels.cancelMove());
+        return sendJson(res, 404, { code: 'local.bad', message: 'No such action.' });
+      } catch (err) {
+        if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
+        throw err;
+      }
+    }
     const lmMatch = path.match(/^\/api\/local-models(?:\/([a-z0-9-]+))?$/);
     if (lmMatch && method !== 'GET') {
       if (windowOnly(req, res)) return;
@@ -2243,7 +2269,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
       const folderInfo = await effectiveRoot(session);
       if (!folderInfo?.ok) return sendJson(res, 409, { code: 'folderRules.noFolder', message: 'This chat has no working folder.' });
-      const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir], allow: folderInfo.copy ? [folderInfo.folder] : [] });
+      const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir, ...(localModels.protectedPaths?.() ?? [])], allow: folderInfo.copy ? [folderInfo.folder] : [] });
       const rules = () => rulesFor(settings.permissionRules, workspace.root);
       const key = await frKey(session, folderInfo);
       const trust = frTrusted(key);
@@ -2771,7 +2797,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [dataDir], allow: folder.copy ? [folder.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [dataDir, ...(localModels.protectedPaths?.() ?? [])], allow: folder.copy ? [folder.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // W6-12: a Code chat carries its task list from one message to the next. The newest saved list that still has an open step
       // is the starting list of this reply (and is told to the model); a finished list is not carried. Not in Chat mode (no workspace).
@@ -3411,7 +3437,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           const fresh = await sessions.get(id);
           const checked = await effectiveRoot(fresh);
           if (!checked?.ok) return checked?.gone ? checked.reason : 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { protect: [dataDir], allow: checked.copy ? [checked.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
+          workspace = createWorkspace(checked.folder, { protect: [dataDir, ...(localModels.protectedPaths?.() ?? [])], allow: checked.copy ? [checked.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.

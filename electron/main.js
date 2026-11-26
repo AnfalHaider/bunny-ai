@@ -227,11 +227,23 @@ ipcMain.handle('made:save', (event, chat, file) => madeFile.save(event, chat, fi
 // LOCAL-MODELS: Show in folder for Bunny local's models folder. No argument: the main process knows the folder itself, and only Bunny's own window may ask.
 ipcMain.handle('local:show-folder', async (event) => {
   if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false, message: 'Not allowed' };
-  const dir = join(dataDir, 'models');
-  await mkdir(dir, { recursive: true });
+  const view = await bunnyApp?.localModels?.placesView?.().catch(() => null); // the folder downloads go to now (the person's choice, or Bunny's own)
+  const dir = view?.download?.root ?? join(dataDir, 'models');
+  if (!view?.download?.root) await mkdir(dir, { recursive: true });
   const failed = await shell.openPath(dir);
   return failed ? { ok: false, message: 'The folder could not be opened.' } : { ok: true };
 });
+// LOCAL-MODELS LF-1, LF-13: the folders and the model file come from the system dialogs HERE, in the main process, and go straight to the service. A page never types or sends a path.
+const placeCall = async (event, title, props, filters, run) => {
+  if (!isOwn(event.senderFrame?.url ?? '') || !bunnyApp?.localModels) return { ok: false, message: 'Not allowed' };
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? win;
+  const result = await dialog.showOpenDialog(owner, { title, properties: props, ...(filters ? { filters } : {}) });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+  try { return { ok: true, ...(await run(result.filePaths[0])) }; } catch (err) { return { ok: false, code: err.code ?? 'local.failed', message: err.message ?? 'That did not work.' }; }
+};
+ipcMain.handle('local:choose-download-folder', (event) => placeCall(event, 'Choose where Bunny saves models', ['openDirectory', 'createDirectory'], null, async (path) => ({ places: await bunnyApp.localModels.chooseDownloadFolder(path) })));
+ipcMain.handle('local:add-model-folder', (event) => placeCall(event, 'Choose a folder of model files', ['openDirectory'], null, async (path) => ({ places: await bunnyApp.localModels.addModelFolder(path) })));
+ipcMain.handle('local:pick-model-file', (event) => placeCall(event, 'Add a model from this PC', ['openFile'], [{ name: 'GGUF model files', extensions: ['gguf'] }], async (path) => ({ card: await bunnyApp.localModels.inspectFile({ dialogPath: path }) })));
 ipcMain.handle('remote:tray-event', (event, raw) => { // window-only, fixed fields only
   if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false };
   trayEvent = cleanTrayEvent(raw);

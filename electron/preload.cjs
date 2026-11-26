@@ -33,7 +33,12 @@ contextBridge.exposeInMainWorld('bunnyDesktop', {
     copy: (ref) => ipcRenderer.invoke('pcsearch:copy', ref),
   },
   // OFFICE-MAKE: Open, Save as… and Show in folder for a file made in a chat with no folder, by the chat's id and the file's id (the main process asks the server; no path comes from the page)
-  localModels: { showFolder: () => ipcRenderer.invoke('local:show-folder') },
+  localModels: {
+    showFolder: () => ipcRenderer.invoke('local:show-folder'),
+    chooseDownloadFolder: () => ipcRenderer.invoke('local:choose-download-folder'),
+    addModelFolder: () => ipcRenderer.invoke('local:add-model-folder'),
+    pickModelFile: () => ipcRenderer.invoke('local:pick-model-file'),
+  },
   made: {
     open: (chat, file) => ipcRenderer.invoke('made:open', chat, file),
     show: (chat, file) => ipcRenderer.invoke('made:show', chat, file),
