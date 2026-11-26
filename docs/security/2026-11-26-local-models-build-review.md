@@ -371,3 +371,39 @@ I read these files: `localFolderRules.js`, `localPlaces.js`, `localStore.js`, `g
 - **F-1 is fixed, B3 holds, and LF-1 to LF-26 are built as ruled**, except M-1 to M-3.
 - **M-1 to M-3 block the sign-off.** Each is a small change with its tests.
 - **On the fix sha**, I sign `v0116-local-models` for CPU, Vulkan (NVIDIA), own files and folders.
+
+## Re-review at 612f2a3f: M-1 to M-3, L-a and L-b, 2026-11-27
+
+One commit since db4ee101, touching six files: `localFolderRules.js`, `localPlaces.js`, `localStore.js`, and three test files.
+
+- **M-1: fixed.**
+  - After `icacls`, `lockFolder` runs `aclAllowed`: one PowerShell call, with the folder passed in an environment variable, not in the script text.
+  - It requires, for the folder and everything inside it:
+    - only the person's SID, SYSTEM and Administrators in the access rules;
+    - an owner among those three;
+    - the folder itself protected from inheritance.
+  - Anything else, a script error, a timeout or no PowerShell all count as refused.
+  - The new test uses real `icacls` on a temp folder. An extra explicit `BUILTIN\Users` entry and a child with its own entry are both refused, and it passed here.
+- **M-2: fixed.**
+  - The pointer line must start with a drive letter and pass `rules.checkFolder` before `settings.json` inside it is read.
+  - A `\\` pointer is never opened.
+  - `downloadsFolder` must be an absolute local path. A `\\` value only gives the network message, and a relative, `~` or `/` value falls back to the defaults.
+- **M-3: fixed.** `local()` accepts only `Fixed` and `Removable`. Anything else (`''`, Unknown, CDRom, Ram, NoRootDirectory) is refused with "Bunny couldn't check this drive. Try again." This is tested for a folder and for a file.
+- **L-a: fixed.** The template view shows every template whole, named variants under a header line. Control and bidi characters are removed, and it is shown with `textContent`.
+- **L-b: fixed.** The format is "known" only when every template in the file (the default and each named variant) is a recorded one from the same entry.
+- **Still open for v0.1.17:** L-c, L-d and L-e.
+
+**Tests.** At 612f2a3f, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`:
+- `import('./src/server/app.js')` loads;
+- `node --test test/local*.test.js test/folder-rules.test.js test/one-instructions.test.js test/window-only.test.js test/guard-providers.test.js`: 190 tests, 189 pass, 0 fail, 1 skipped (the link test).
+
+The full unit suite at db4ee101 is in the section above. This commit changes only the local-models files. I didn't run the e2e suite or the gate; the Chief runs the gate on the integration branch.
+
+### Verdict at 612f2a3f: PASS
+
+It covers the CPU build, Vulkan on NVIDIA, own files, model folders, LM Studio's folder and the download folder, against LM-0 to LM-14, R2-1 to R2-3, SP-1 to SP-7 and LF-1 to LF-26.
+
+Left for later:
+- L3 (narrowing the allow lists) and L-c to L-e, for v0.1.17;
+- the mapped-drive resolve, to be confirmed on a PC with a share. The drive-type check covers it until then;
+- whether Intel graphics runs well, for QA.
