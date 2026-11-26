@@ -202,3 +202,30 @@ Tech Lead's spec and Design's drawing should follow these conditions. Each one i
 12. With a local model as the chat model and no judge picked, Smart gives Ask.
 
 All tests use an invented profile (`BUNNY_DATA_DIR`, `BUNNY_FAKE_UPSTREAM=1`) and stand-in servers. The one real run of the pinned binary (LM-2 endpoints, LM-9 traffic) needs the owner's go, like the CLI-engines probe.
+
+## Review of Tech Lead's spec rev 2 (4d311ce8, `docs/plans/LOCAL-MODELS-spec.md`), 2026-11-26
+
+I read the spec only. The mapping table matches LM-0 to LM-14, and several items go further than I asked:
+- the judge never runs on a local model;
+- prompt text is never written to the logs;
+- model files are made read-only after they are verified;
+- the endpoint list is written into `pins.json`;
+- the LAN-reach check stops the server.
+
+Two corrections and one ruling follow.
+
+**R2-1 (fix the text): LLAMA_CACHE.** The spec contradicts itself:
+- LM-5d says "Bunny never sets `LLAMA_CACHE`";
+- LM-10 sets `LLAMA_CACHE=<dataDir>/models/.cache`.
+
+Keep LM-10, which is Sec LM-3, and change LM-5d to read "Bunny never uses `-hf`; `LLAMA_CACHE` points inside the models folder only so nothing lands elsewhere".
+
+**R2-2 (extend LM-17): every loopback spelling.** The browser panel and `browser_open` must refuse the runtime port on **any loopback address**, decided after the host is resolved: `127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `localhost.`, and `[::ffff:127.0.0.1]`. Naming only `127.0.0.1`, `localhost` and `[::1]` is not enough. The refusal applies on every navigation and redirect, as the spec says. The test includes `127.0.0.2:<port>` and `0.0.0.0:<port>`.
+
+**R2-3 (ruling on LM-14): Quick ask may start the runtime, under these conditions.** The bar runs in the main process on this PC, at the person's own shortcut, so a question typed there counts as the person starting it, the same as the window.
+1. **The permission comes from the caller, not from the body.** Today a Quick-ask turn is marked by `body.textOnly === true` (`app.js:2880`), which any client can send, a device included.
+   - So `ensure()` may start the runtime only when the request is `adminOk(req) && !req.bunnyRemote && !req.bunnyDevice` (the main-process admin secret, as `app.js:2535` already does for the lookup retry), or comes from the window itself.
+   - A device request with `textOnly: true` must still get `local.notRunning`.
+   - A test sends that device request and proves the runtime does not start.
+2. **Only a question the person typed starts it.** A start from the bar comes only from a question typed there, never from a retry loop, a scheduled task or a helper.
+3. **Scheduled runs and helpers.** The spec does not say whether these may start the runtime, and it must. Security accepts either answer. My recommendation is the cautious one: they get `local.notRunning` unless the runtime is already running.
