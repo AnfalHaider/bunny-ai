@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process';
 import { dirname, join, win32 as wp } from 'node:path';
 
 import { PlaceError } from './localPlaces.js';
-import { FolderError, isInside } from './folderRules.js';
+import { FolderError, isInside } from './localFolderRules.js';
 
 export const BUNNY_DIR = 'Bunny models';
 const PART = /^[A-Za-z0-9._-]{1,128}$/;

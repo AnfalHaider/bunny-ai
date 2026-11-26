@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createFolderRules } from '../src/server/folderRules.js';
+import { createFolderRules } from '../src/server/localFolderRules.js';
 import { createPlaces } from '../src/server/localPlaces.js';
 import { createStore, entryDir, BUNNY_DIR } from '../src/server/localStore.js';
 import { downloadModel } from '../src/server/localDownload.js';

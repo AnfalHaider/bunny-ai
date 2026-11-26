@@ -8,7 +8,7 @@ import { mkdtemp, mkdir, rm, writeFile, symlink, realpath, link, stat, readdir, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createFolderRules } from '../src/server/folderRules.js';
+import { createFolderRules } from '../src/server/localFolderRules.js';
 import { createPlaces, WALK, PlaceError } from '../src/server/localPlaces.js';
 import { GgufError } from '../src/server/ggufHeader.js';
 import { makeGguf } from './helpers-gguf.js';

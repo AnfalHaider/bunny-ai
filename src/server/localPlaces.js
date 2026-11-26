@@ -11,7 +11,7 @@ import { join, win32 as wp } from 'node:path';
 import { homedir } from 'node:os';
 
 import { readGguf, GgufError, cleanLabel, looksSplitOrProjector, fileTypeName } from './ggufHeader.js';
-import { FolderError, MESSAGES, isInside } from './folderRules.js';
+import { FolderError, MESSAGES, isInside } from './localFolderRules.js';
 
 export class PlaceError extends Error {
   constructor(code, message, status = 409) { super(message); this.name = 'PlaceError'; this.code = code; this.status = status; }

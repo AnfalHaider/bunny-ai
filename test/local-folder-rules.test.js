@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, rm, writeFile, symlink, realpath } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createFolderRules, FolderError, MESSAGES } from '../src/server/folderRules.js';
+import { createFolderRules, FolderError, MESSAGES } from '../src/server/localFolderRules.js';
 
 async function tree(t, extra = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'bunny-fr-')));
