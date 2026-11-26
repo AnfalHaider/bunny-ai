@@ -30,3 +30,13 @@ A listed model's template is code Bunny has not run on its own: the check for a 
 ## Not listed (and why)
 
 Ministral 3, Gemma 4, GPT-OSS and every other model: not refused on security grounds, but none has been checked, and their tool calls and memory fit were not measured (S-LM2, S-LM5 covered these two). One joins in a later release when its entry and template reach Security.
+
+## LM Studio's models folder (LF-8): what Bunny reads, and what is not yet verified
+
+Bunny lists LM Studio's models folder only. It reads these files, only under the person's own profile folder, each with a 1 MiB cap, parsed as JSON (or one line of text for the pointer), taking exactly one string value, and uses the default when one is missing, too big or malformed:
+
+1. `<profile>\.lmstudio-home-pointer`: if present, its first line is a path to LM Studio's home folder (community plugin code that finds LM Studio's home, for example the `findLMStudioHome.ts` files published on lmstudio.ai, describes it; not LM Studio's own documentation).
+2. `<LM Studio home>\settings.json`, the key `downloadsFolder` (a string): the key name is named in LM Studio's own issue tracker (lmstudio-ai/lms issue 573: "downloadsFolder" in settings.json, where a value starting with `~` is not expanded, so a value is taken as an absolute path only). The home is the pointer's folder, else `<profile>\.lmstudio`, else `<profile>\.cache\lm-studio`.
+3. The defaults: `<home>\models`, `<profile>\.lmstudio\models`, `<profile>\.cache\lm-studio\models`.
+
+**Not verified.** No fresh LM Studio install was made and no official LM Studio page names the file and key (the sources above are an issue report and community plugin code). Builder E could not read the owner's real `.lmstudio` (never done). Security: this is the one LF-8 record that rests on secondary sources. If LM Studio keeps the setting somewhere else, Bunny falls back to the default folder, so the failure is "not listed", never a read somewhere unexpected. Nothing is ever written there, and Bunny never starts LM Studio, calls its local server or runs its bundled runtimes.

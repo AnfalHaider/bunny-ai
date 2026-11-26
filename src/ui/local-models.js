@@ -1,5 +1,6 @@
 // LOCAL-MODELS: the "Bunny local" card on the Providers page (design-local-models @ 4ee59efc). One module, five states: Not set up, Setting up, Ready, Running, and
 // the plain errors. Every button is the window's alone: the server refuses a device (LM-13), and this page shows no button to a page that is not the window.
+import { mountPlaces } from './local-places.js';
 const GB = 1024 ** 3;
 const gb = (n) => `${(n / GB).toFixed(1)} GB`; // one decimal everywhere, so the numbers on a card agree
 const IDLE_LABEL = { 5: '5 minutes', 10: '10 minutes', 30: '30 minutes', 60: '60 minutes', 0: 'Only when Bunny closes' };
@@ -26,11 +27,18 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
   let open = false;
   let timer = null;
 
+  const bridge = typeof window !== 'undefined' ? (window.bunnyDesktop ?? window.parent?.bunnyDesktop)?.localModels ?? null : null;
+  // the folders, the files from this PC and the download place (design 3c, 3d): the window's alone, so a page that is not the window simply gets no places
+  const places = mountPlaces({
+    getPlaces: () => getJSON('/api/local-models/places'), post: (path, body) => sendJSON(`/api/local-models/places/${path}`, 'POST', body ?? {}),
+    bridge, say: (t) => { notice = t; paint(); }, models: () => status?.models ?? [],
+  });
   const act = async (path, method = 'POST', body = {}) => {
     try { status = await sendJSON(`/api/local-models${path}`, method, body); notice = ''; }
     catch (err) { notice = err.message ?? 'That did not work.'; }
     paint();
     schedule();
+    places.refresh();
   };
   const button = (text, onclick, cls = 'ghost small', extra = {}) => el('button', { type: 'button', class: cls, textContent: text, onclick, ...extra });
 
@@ -43,6 +51,7 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
     try { status = await getJSON('/api/local-models'); } catch { /* the card keeps what it has */ }
     paint();
     schedule();
+    if (open) places.refresh();
   }
 
   function row(title, sub, ...right) {
@@ -128,9 +137,12 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
     host.append(el('div', { class: 'group lm-group lm-models' }, ...s.models.map(modelRow),
       row("A model that isn't on this list", "Only from a publisher you trust. Gated models and private logins aren't supported", button('Add by name…', () => { adding = !adding; paint(); }, 'btn'))));
     if (adding) host.append(addCard());
-    const bridge = typeof window !== 'undefined' ? (window.bunnyDesktop ?? window.parent?.bunnyDesktop) : null;
-    host.append(el('div', { class: 'group lm-group' }, row('Where models are kept', s.modelsDir, el('span', { class: 'tag', textContent: s.usedBytes ? `${gb(s.usedBytes)} used` : 'Nothing downloaded yet' }),
-      bridge?.localModels ? button('Show in folder', async () => { const r = await bridge.localModels.showFolder(); if (r && !r.ok) { notice = r.message; paint(); } }, 'btn') : el('small', { class: 'desc', textContent: "Show in folder: Bunny's window only" }))));
+    if (!places.loaded()) { // no places view (test mode, or a page that is not the window): the one plain row, with no path
+      const dl = typeof window !== 'undefined' ? (window.bunnyDesktop ?? window.parent?.bunnyDesktop) : null;
+      host.append(el('div', { class: 'group lm-group' }, row('Where models are kept', "Bunny's own folder", el('span', { class: 'tag', textContent: s.usedBytes ? `${gb(s.usedBytes)} used` : 'Nothing downloaded yet' }),
+        dl?.localModels ? button('Show in folder', async () => { const r = await dl.localModels.showFolder(); if (r && !r.ok) { notice = r.message; paint(); } }, 'btn') : el('small', { class: 'desc', textContent: "Show in folder: Bunny's window only" }))));
+    }
+    host.append(places.el);
     host.append(el('div', { class: 'desc lm-foot', textContent: 'Chats with a local model stay on this PC. Downloads talk only to Hugging Face and GitHub. Only this window can set up, download, add, start, stop or delete: not a phone, not another PC, and not Bunny itself.' }));
     host.append(el('div', { class: 'group lm-group lm-remove-row' }, row('Remove Bunny local', 'Deletes the program, every downloaded model and the cache', button('Remove…', () => { removing = true; paint(); }, 'btn btn-danger'))));
   }
@@ -149,8 +161,10 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
     return el('div', { class: 'lm-card warn', 'data-card': 'remove' },
       el('b', { textContent: 'Remove Bunny local?' }),
       el('div', { class: 'desc', textContent: `This deletes the program and ${ready.length} downloaded model${ready.length === 1 ? '' : 's'} (${gb(total)}). You can set it up and download them again later.` }),
+      ...places.whereDownloads().map((w) => el('div', { class: 'desc lm-where', textContent: `${gb(w.bytes)} in ${w.folder}` })),
+      el('div', { class: 'desc', textContent: 'Only files Bunny downloaded are deleted, and only if they are still the file it saved. Your own model files and the folders you added are never touched.' }),
       el('div', { class: 'lm-acts' }, button('Remove everything', async () => { removing = false; await act('', 'DELETE'); }, 'btn btn-danger'), button('Keep it', () => { removing = false; paint(); }, 'btn btn-primary')));
   }
 
-  return { refresh };
+  return { refresh: async () => { await refresh(); await places.refresh(); } };
 }

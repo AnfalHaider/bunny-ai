@@ -1745,3 +1745,11 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .lm-row .meta-col { min-width: 0; }
 .lm-row .desc { overflow-wrap: anywhere; }
 .lm-row .right { min-width: 0; max-width: 100%; }
+
+/* LOCAL-MODELS 3c/3d: the places (download folder, files from this PC, model folders) */
+.lm-places { display: grid; gap: 10px; min-width: 0; }
+.lm-facts { display: grid; gap: 2px; font: 12px ui-monospace, Consolas, monospace; color: var(--text-dim); word-break: break-all; }
+.lm-template { margin: 4px 0 0; white-space: pre-wrap; overflow: auto; max-height: 140px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px; background: var(--panel-2, var(--panel)); font: 12px ui-monospace, Consolas, monospace; }
+.lm-tools, .lm-trust { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.lm-where { word-break: break-all; }
+.lm-own .lm-model small, .lm-folders .lm-row .desc { word-break: break-all; }
