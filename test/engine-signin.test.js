@@ -39,7 +39,7 @@ test('a sign-in that prints its page: the address is returned, the program was s
   const stand = login({ lines: ['Opening browser to sign in…', 'If the browser did not open, visit:', 'https://claude.ai/oauth/authorize?code=true&client_id=abc&state=xyz'] });
   const { svc, dataDir } = service(t, stand);
   const r = await svc.signIn('claude-code');
-  assert.deepEqual(r, { started: true, url: 'https://claude.ai/oauth/authorize?code=true&client_id=abc&state=xyz' });
+  assert.deepEqual(r, { started: true, url: 'https://claude.ai/oauth/authorize?code=true&client_id=abc&state=xyz', manualUrl: null, canPaste: true });
   assert.deepEqual(stand.calls[0].args, AUTH_COMMANDS.login);
   assert.equal(stand.calls[0].cwd, join(dataDir, 'engines', 'claude-code', 'account', 'home'));
   assert.equal(stand.calls[0].extraEnv.CLAUDE_CONFIG_DIR, join(dataDir, 'engines', 'claude-code', 'account', 'home', 'config'), 'the account folder isolation is kept');
@@ -47,8 +47,8 @@ test('a sign-in that prints its page: the address is returned, the program was s
   assert.doesNotMatch(JSON.stringify((await svc.record?.()) ?? ''), /oauth|client_id|state=xyz/, 'the address is not written to the record');
   // the program's own browser launch must not inherit the isolated profile folders: its browser is a file that does nothing, so the person's normal browser is opened by Bunny's button
   const noBrowser = stand.calls[0].extraEnv.BROWSER;
-  assert.equal(noBrowser, join(dataDir, 'engines', 'claude-code', 'account', 'home', 'no-browser.cmd'));
-  assert.equal(readFileSync(noBrowser, 'utf8').trim(), '@exit /b 0');
+  assert.equal(noBrowser, join(dataDir, 'engines', 'claude-code', 'account', 'home', 'record-browser.cmd'));
+  assert.match(readFileSync(noBrowser, 'utf8'), /^@echo %\*> ".*browser-address\.txt"\r\n@exit \/b 0\r\n$/, 'v0.1.16: the browser only WRITES the address it is given to a file and exits; it runs and opens nothing');
 });
 
 test('an address on a stranger\'s site is never returned; a program that prints nothing is "started, no page seen", never "a window opened"', async (t) => {

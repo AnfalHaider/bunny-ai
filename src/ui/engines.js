@@ -206,6 +206,62 @@ function ask({ title, body, action, danger = false, single = false }) {
 }
 const tell = (message) => ask({ title: 'Engines', body: message, action: 'OK', single: true });
 
+/**
+ * v0.1.16: the Claude Code sign-in dialog. "Open the sign-in page" opens the address the program gave its browser (it finishes by itself when the page calls back). If the page shows a code instead, the person pastes it into
+ * the box and it goes to the waiting sign-in, from this window only. The code is not kept: the field is emptied the moment it is sent, and nothing here stores or shows it.
+ */
+function signInDialog({ page, manual, canPaste }) {
+  return new Promise((resolve) => {
+    const mk = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; };
+    const head = mk('div', 'modal-head'); head.append(mk('h3', 'modal-title', 'Sign in to Claude Code'));
+    const body = mk('div', 'modal-body');
+    body.append(mk('p', '', 'Claude Code started its own sign-in. Open the sign-in page in your browser and finish there. Bunny never sees your sign-in. This page updates by itself when you are signed in.'));
+    const open = mk('button', 'btn btn-primary', 'Open the sign-in page'); open.type = 'button';
+    open.addEventListener('click', () => window.open(page, '_blank', 'noopener,noreferrer'));
+    body.append(open);
+    if (manual) {
+      const other = mk('button', 'btn btn-ghost', 'The page shows a code? Open the code page instead'); other.type = 'button';
+      other.addEventListener('click', () => window.open(manual, '_blank', 'noopener,noreferrer'));
+      body.append(other);
+    }
+    const status = mk('div', 'modal-sub'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+    let timer = null;
+    const backdrop = mk('div', 'palette-backdrop modal-backdrop');
+    const done = () => { clearInterval(timer); backdrop.remove(); resolve(); };
+    if (canPaste) {
+      const label = mk('label', '', 'If the page shows a code, paste it here'); label.setAttribute('for', 'signin-code');
+      const field = mk('input'); field.id = 'signin-code'; field.type = 'password'; field.autocomplete = 'off'; field.spellcheck = false; field.maxLength = 600; field.setAttribute('aria-label', 'Code from the sign-in page');
+      const send = mk('button', 'btn btn-primary', 'Send the code'); send.type = 'button';
+      const row = mk('div', 'signin-code-row'); row.append(field, send);
+      body.append(label, row);
+      const submit = async () => {
+        const code = field.value.trim();
+        field.value = ''; // gone from the page at once, whatever the answer
+        if (!code) { status.textContent = 'Paste the code first.'; return; }
+        send.disabled = true; status.textContent = 'Sending…';
+        try {
+          const r = await sendJSON('/api/engines/claude-code/signin/code', 'POST', { code });
+          if (r?.signedIn) { status.textContent = 'You are signed in.'; await load(); setTimeout(done, 900); }
+          else status.textContent = r?.waiting ? 'Claude Code did not accept that code yet. Copy the whole code from the page and try again.' : 'Sent. This page updates by itself when you are signed in.';
+        } catch (err) { status.textContent = err.message; }
+        send.disabled = false;
+      };
+      send.addEventListener('click', submit);
+      field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    }
+    body.append(status);
+    const close = mk('button', 'btn btn-ghost', 'Close'); close.type = 'button'; close.addEventListener('click', done);
+    const foot = mk('div', 'modal-foot actions'); foot.append(mk('span', 'spacer'), close);
+    const card = mk('div', 'palette modal engine-confirm'); card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', 'Sign in to Claude Code'); card.append(head, body, foot);
+    backdrop.append(card);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(); });
+    backdrop.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(); });
+    // it closes by itself once the program says it is signed in (the browser's callback finished the sign-in)
+    timer = setInterval(async () => { try { if ((await getJSON('/api/engines')).engines?.find((e) => e.id === 'claude-code')?.signedIn === true) { await load(); done(); } } catch { /* try again */ } }, 1500);
+    document.body.append(backdrop); open.focus();
+  });
+}
+
 /** The sign-in page address the server returned, only if it is an https address on the vendor's own sites (the server checks too); anything else is not opened. */
 const signInPage = (u) => { try { const x = new URL(String(u ?? '')); return x.protocol === 'https:' && !x.username && !x.password && /(^|\.)(claude\.ai|claude\.com|anthropic\.com)$/i.test(x.hostname) ? x.href : null; } catch { return null; } };
 
@@ -218,7 +274,7 @@ async function act(id, what) {
       const page = signInPage(r?.url);
       if (page) {
         watchSignIn();
-        if (await ask({ title: 'Sign in to Claude Code', body: 'Claude Code started its own sign-in. Open the sign-in page in your browser and finish there. Bunny never sees your sign-in. This page updates by itself when you are signed in.', action: 'Open the sign-in page' })) window.open(page, '_blank', 'noopener,noreferrer');
+        await signInDialog({ page, manual: signInPage(r?.manualUrl), canPaste: r?.canPaste !== false });
       } else if (r?.finished) await tell('Claude Code finished its sign-in without needing a page. This page updates by itself.');
       else { await tell('Claude Code started its sign-in, but Bunny could not see a page address, so it cannot tell whether a page opened in your browser. If none did, press Sign in again. This page updates by itself when you are signed in.'); watchSignIn(); }
     }
