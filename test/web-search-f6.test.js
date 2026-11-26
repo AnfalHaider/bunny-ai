@@ -1,12 +1,13 @@
-import { test } from 'node:test';
+import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { searchWeb, BRAVE_HOST } from '../src/server/webSearch.js';
+import { searchWeb, resetWebSearch, BRAVE_HOST } from '../src/server/webSearch.js';
 import { startApp } from './helpers.js';
 
 // AGENT-FLOW F6: Brave Search (with the person's key), then DuckDuckGo, then words. All fetches are stubbed: no network.
+beforeEach(() => resetWebSearch()); // the cooldown and the two-minute memory are per process: every test starts clean
 const KEY = 'BSA-test-key-0123456789abcdef';
 const DDG_OK = '<html><body><div class="result"><a class="result__a" href="https://example.com/a">Carrots</a><a class="result__snippet">How to grow carrots</a></div></body></html>';
 const braveBody = { web: { results: [{ title: 'Brave <strong>carrots</strong>', url: 'https://brave.example/carrots', description: 'From <b>Brave</b>' }] } };
@@ -52,28 +53,35 @@ test('Brave fails (401, 429, 500, timeout, unreadable): DuckDuckGo is tried, and
     [Object.assign(new Error('x'), { name: 'TimeoutError' }), /did not answer in 15 seconds/], [html('not json'), /could not read/],
   ];
   for (const [brave, said] of cases) {
+    resetWebSearch();
     const ok = world({ [BRAVE_HOST]: brave, 'html.duckduckgo.com': html(DDG_OK) });
     assert.match(await searchWeb('carrots', { fetchImpl: ok.fetchImpl, braveKey: KEY }), /^\(via DuckDuckGo\)/, 'DuckDuckGo answered after Brave failed');
+    resetWebSearch(); // the answer above is remembered for two minutes: this is another try
     const bad = world({ [BRAVE_HOST]: brave, 'html.duckduckgo.com': html('', 202) });
-    await assert.rejects(searchWeb('carrots', { fetchImpl: bad.fetchImpl, braveKey: KEY }), (err) => said.test(err.message) && /DuckDuckGo showed a check page/.test(err.message) && /Try again in a minute\./.test(err.message));
+    await assert.rejects(searchWeb('carrots', { fetchImpl: bad.fetchImpl, braveKey: KEY }), (err) => said.test(err.message) && /DuckDuckGo showed a check page/.test(err.message) && /Try again in a few minutes\./.test(err.message));
   }
 });
 
 test('with no key, a total failure also says to add a Brave Search key; a window gets the browser panel as another way', async () => {
   const bad = world({ 'html.duckduckgo.com': html('', 202) });
-  await assert.rejects(searchWeb('weather in Islamabad', { fetchImpl: bad.fetchImpl }), (err) => /add a Brave Search key in Settings, Web search/.test(err.message) && !/browser panel/.test(err.message));
+  await assert.rejects(searchWeb('weather in Islamabad', { fetchImpl: bad.fetchImpl }), (err) => /A free Brave Search key in Settings, Web search makes this steadier/.test(err.message) && !/browser panel/.test(err.message));
+  resetWebSearch();
   const windowed = world({ 'html.duckduckgo.com': html('', 202) });
   await assert.rejects(searchWeb('weather in Islamabad', { fetchImpl: windowed.fetchImpl, browser: true }), /browser_open https:\/\/duckduckgo\.com\/\?q=weather%20in%20Islamabad/);
 });
 
 test('DuckDuckGo with a check page body, or an error status, is a reason; zero matches from every provider is "No results."', async () => {
+  resetWebSearch();
   const check = world({ 'html.duckduckgo.com': html('<html>Unusual traffic, anomaly detected</html>') });
   await assert.rejects(searchWeb('x', { fetchImpl: check.fetchImpl }), /showed a check page/);
+  resetWebSearch();
   const err = world({ 'html.duckduckgo.com': html('', 503) });
   await assert.rejects(searchWeb('x', { fetchImpl: err.fetchImpl }), /DuckDuckGo answered 503/);
-  const none = world({ 'html.duckduckgo.com': html('<html><body>nothing</body></html>') });
+  resetWebSearch();
+  const none = world({ 'html.duckduckgo.com': html('<html><body>nothing</body></html>'), 'www.bing.com': html('<html><body>nothing</body></html>'), 'en.wikipedia.org': json({ query: { search: [] } }) });
   assert.equal(await searchWeb('x', { fetchImpl: none.fetchImpl }), 'No results.');
-  const empty = world({ [BRAVE_HOST]: json({ web: { results: [] } }), 'html.duckduckgo.com': html('<html></html>') });
+  resetWebSearch();
+  const empty = world({ [BRAVE_HOST]: json({ web: { results: [] } }), 'html.duckduckgo.com': html('<html></html>'), 'www.bing.com': html('<html></html>'), 'en.wikipedia.org': json({ query: { search: [] } }) });
   assert.equal(await searchWeb('x', { fetchImpl: empty.fetchImpl, braveKey: KEY }), 'No results.');
 });
 
@@ -222,4 +230,69 @@ test("F6-4: Brave's result links are in the Quick ask read_url allow-set like Du
   const out = await searchWeb('x', { fetchImpl: w.fetchImpl, braveKey: KEY });
   const links = out.split('\n').map((l) => /^ {2}(https?:\/\/\S+)$/.exec(l)?.[1]).filter(Boolean);
   assert.deepEqual(links, ['https://brave.example/carrots']);
+});
+
+
+// ---------------------------------------------------------------- v0.1.16: no key, the free page refuses: Bing, then Wikipedia; a rested page, a memory, a relevance guard
+import { bingTarget, relevant } from '../src/server/webSearch.js';
+const enc = (u) => Buffer.from(u).toString('base64url');
+const bingPage = (items) => `<html><body><ol id="b_results">${items.map((i) => `<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1${enc(i.url)}&amp;ntb=1">${i.title}</a></h2><div class="b_caption"><p>${i.text}</p></div></li>`).join('')}</ol></body></html>`;
+const wikiBody = (titles) => ({ query: { search: titles.map((t) => ({ title: t, snippet: `About <span class="searchmatch">${t}</span>` })) } });
+
+test('DuckDuckGo refuses (202): Bing answers, says "via Bing", and its redirect links are the real addresses', async () => {
+  const w = world({ 'html.duckduckgo.com': html('', 202), 'www.bing.com': html(bingPage([{ title: 'Islamabad weather | AccuWeather', url: 'https://www.accuweather.com/en/pk/islamabad/258278/weather-forecast', text: 'Weather in Islamabad today' }, { title: 'Ventusky', url: 'https://www.ventusky.com/islamabad', text: 'forecast' }])) });
+  const out = await searchWeb('weather Islamabad', { fetchImpl: w.fetchImpl });
+  assert.match(out, /^\(via Bing\)\n- Islamabad weather \| AccuWeather\n {2}https:\/\/www\.accuweather\.com\/en\/pk\/islamabad\/258278\/weather-forecast\n {2}Weather in Islamabad today/);
+  assert.deepEqual(w.calls.map((c) => c.host), ['html.duckduckgo.com', 'www.bing.com']);
+  assert.match(w.calls[1].url, /setlang=en-US&cc=US&mkt=en-US/); assert.match(String(w.calls[1].headers.cookie), /SRCHLANG=en/);
+  assert.equal(out.split('\n').filter((l) => /^ {2}https?:\/\//.test(l)).length, 2, 'the link lines the quick bar reads');
+});
+
+test('a page that answered a different question is not trusted: Bing\'s Thanksgiving answer to "capital of Australia" is skipped and Wikipedia answers', async () => {
+  const w = world({ 'html.duckduckgo.com': html('', 202), 'www.bing.com': html(bingPage([{ title: 'Official Discussion - Thanksgiving : r/movies', url: 'https://www.reddit.com/r/movies/comments/17x5dt2/x', text: 'turkey and stuffing' }])), 'en.wikipedia.org': json(wikiBody(['Canberra', 'Australia'])) });
+  const out = await searchWeb('capital of Australia', { fetchImpl: w.fetchImpl });
+  assert.match(out, /^\(via Wikipedia\)\n- Canberra\n {2}https:\/\/en\.wikipedia\.org\/wiki\/Canberra\n {2}About Canberra/);
+  assert.equal(relevant('capital of Australia', ['Thanksgiving turkey']), false); assert.equal(relevant('of the', ['anything']), true, 'no usable word: trusted');
+});
+
+test('every page failing says which pages refused, in fixed words, and never points a keyless person only at Brave', async () => {
+  const w = world({ 'html.duckduckgo.com': html('', 202), 'www.bing.com': html('', 429), 'en.wikipedia.org': html('', 503) });
+  await assert.rejects(searchWeb('moon phase', { fetchImpl: w.fetchImpl }), (err) => /DuckDuckGo showed a check page instead of results\. Bing showed a check page instead of results\. Wikipedia answered 503\. Try again in a few minutes\. A free Brave Search key/.test(err.message));
+});
+
+test('a refusing page is rested for five minutes (not asked again in a burst), and asked again after; the same question within two minutes is answered from memory', async () => {
+  let clock = 1_000_000; const now = () => clock;
+  const w = world({ 'html.duckduckgo.com': html('', 202), 'www.bing.com': () => html(bingPage([{ title: 'Carrots', url: 'https://example.com/carrots', text: 'carrots' }])) });
+  await searchWeb('carrots', { fetchImpl: w.fetchImpl, now });
+  assert.equal(w.calls.filter((c) => c.host === 'html.duckduckgo.com').length, 1);
+  clock += 10_000;
+  const second = await searchWeb('carrots farming', { fetchImpl: w.fetchImpl, now });
+  assert.match(second, /^\(via Bing\)/); assert.equal(w.calls.filter((c) => c.host === 'html.duckduckgo.com').length, 1, 'DuckDuckGo was resting: not asked again');
+  const callsBefore = w.calls.length;
+  assert.equal(await searchWeb('carrots farming', { fetchImpl: w.fetchImpl, now }), second); assert.equal(w.calls.length, callsBefore, 'the same question again: from memory, no request');
+  clock += 3 * 60_000; await searchWeb('carrots farming', { fetchImpl: w.fetchImpl, now });
+  assert.ok(w.calls.length > callsBefore, 'after two minutes it is asked again');
+  clock += 6 * 60_000; await searchWeb('carrot cake', { fetchImpl: w.fetchImpl, now });
+  assert.equal(w.calls.filter((c) => c.host === 'html.duckduckgo.com').length, 2, 'after five minutes DuckDuckGo is tried again');
+});
+
+test('a keyed Brave answer is never kept in memory (Brave\'s terms), and Bing\'s odd or hostile links are never listed', async () => {
+  const w = world({ [BRAVE_HOST]: json(braveBody) });
+  await searchWeb('carrots', { fetchImpl: w.fetchImpl, braveKey: KEY });
+  const again = world({ [BRAVE_HOST]: json(braveBody) });
+  await searchWeb('carrots', { fetchImpl: again.fetchImpl, braveKey: KEY });
+  assert.equal(again.calls.length, 1, 'asked again: nothing was remembered');
+  for (const bad of ['javascript:alert(1)', 'https://a b.example/x', 'ftp://x.example/']) assert.equal(bingTarget(`https://www.bing.com/ck/a?u=a1${enc(bad)}`), null, bad);
+  assert.equal(bingTarget(`https://www.bing.com/ck/a?u=a1${enc('https://ok.example/a')}`), 'https://ok.example/a');
+  assert.equal(bingTarget('https://www.bing.com/search?q=x'), null, 'a link back into Bing is not a result');
+});
+
+test('an answer from another site (a redirect away) is never read, and Wikipedia\'s titles become safe addresses', async () => {
+  const redirected = async (url) => { if (/bing\.com/.test(String(url))) { const r = new Response(bingPage([{ title: 'Carrots', url: 'https://example.com/c', text: 'carrots' }]), { status: 200 }); Object.defineProperty(r, 'url', { value: 'https://evil.example/search' }); return r; } return html('', 202); };
+  await assert.rejects(searchWeb('carrots', { fetchImpl: redirected }), /Bing could not be reached/);
+  resetWebSearch();
+  const w = world({ 'html.duckduckgo.com': html('', 202), 'www.bing.com': html('', 500), 'en.wikipedia.org': json(wikiBody(['C (programming language)', 'Rust/Go?'])) });
+  const out = await searchWeb('programming language', { fetchImpl: w.fetchImpl });
+  assert.match(out, /https:\/\/en\.wikipedia\.org\/wiki\/C_\(programming_language\)/);
+  assert.match(out, /https:\/\/en\.wikipedia\.org\/wiki\/Rust%2FGo%3F\n/, 'a title with / and ? is one safe path');
 });
