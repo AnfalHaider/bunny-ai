@@ -1753,3 +1753,5 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .lm-tools, .lm-trust { display: flex; gap: 6px; align-items: center; font-size: 13px; }
 .lm-where { word-break: break-all; }
 .lm-own .lm-model small, .lm-folders .lm-row .desc { word-break: break-all; }
+
+.lm-running-line { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }

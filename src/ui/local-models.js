@@ -133,7 +133,7 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
     host.append(el('div', { class: 'group lm-group' },
       row('Use graphics card', s.runtime.backend === 'vulkan' ? 'Runs on: graphics card (Vulkan). Off uses only the processor: slower, but works on every PC' : 'Runs on: CPU', el('label', { class: 'switch' }, sw)),
       row('Stop after idle', 'Frees memory when you stop chatting', idle)));
-    if (s.running) host.append(el('div', { class: 'group lm-group lm-running' }, row(`${s.running.name} is loaded`, `Using about ${gb(s.running.usedBytes)}. Stops by itself after ${IDLE_LABEL[s.runtime.idleMinutes].toLowerCase()} idle`, button('Stop now', () => act('/stop'), 'btn'))));
+    if (s.running) host.append(el('div', { class: 'lm-running-line' }, el('small', { class: 'desc', textContent: `Stops by itself after ${IDLE_LABEL[s.runtime.idleMinutes].toLowerCase()} idle` }), button('Stop now', () => act('/stop'), 'btn')));
     host.append(el('div', { class: 'lm-sub', textContent: 'Models' }));
     host.append(el('div', { class: 'group lm-group lm-models' }, ...s.models.map(modelRow),
       row("A model that isn't on this list", "Only from a publisher you trust. Gated models and private logins aren't supported", button('Add by name…', () => { adding = !adding; paint(); }, 'btn'))));
