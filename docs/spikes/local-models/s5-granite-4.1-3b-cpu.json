@@ -1,0 +1,38 @@
+{
+  "build": "cpu",
+  "label": "granite-4.1-3b",
+  "fileMiB": 2002,
+  "rows": [
+    {
+      "ctx": 8192,
+      "idleMB": 4149,
+      "peakMB": 4156,
+      "kvMiBFromLog": 0,
+      "kvLines": [],
+      "estimateMiB": 3538,
+      "startMs": 3124,
+      "estimateVsPeakPercent": -15
+    },
+    {
+      "ctx": 16384,
+      "idleMB": 4789,
+      "peakMB": 4796,
+      "kvMiBFromLog": 0,
+      "kvLines": [],
+      "estimateMiB": 3538,
+      "startMs": 4095,
+      "estimateVsPeakPercent": -26
+    },
+    {
+      "ctx": 32768,
+      "idleMB": 6070,
+      "peakMB": 6077,
+      "kvMiBFromLog": 0,
+      "kvLines": [],
+      "estimateMiB": 3538,
+      "startMs": 5145,
+      "estimateVsPeakPercent": -42
+    }
+  ],
+  "note": "estimate = file + KV (from the server log) + 1.5 GB, as LM-7; peak = working set of llama-server during a short chat"
+}

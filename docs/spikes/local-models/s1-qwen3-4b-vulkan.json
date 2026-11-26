@@ -1,0 +1,52 @@
+{
+  "build": "vulkan",
+  "label": "qwen3-4b",
+  "modelBytes": 2497280256,
+  "fwBefore": [],
+  "argv": [
+    "-m",
+    "<scratch>/models/qwen.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "51446",
+    "--api-key-file",
+    "<keyfile>",
+    "--no-ui",
+    "--no-slots",
+    "-c",
+    "4096",
+    "--jinja",
+    "--log-verbosity",
+    "4",
+    "-ngl",
+    "99"
+  ],
+  "startMs": 6375,
+  "chat": {
+    "status": 200,
+    "text": "Rabbits are social animals known for their agility, keen senses, and ability to adapt to a wide range of habitats.",
+    "reasoningChars": 0,
+    "ms": 916,
+    "predictedPerSecond": 28.760624174570086,
+    "promptPerSecond": 41.142104830083106
+  },
+  "logDevices": [
+    "0.00.050.733 I load_backend: loaded RPC backend from <scratch>/rt-vulkan/ggml-rpc.dll",
+    "0.00.333.314 I load_backend: loaded Vulkan backend from <scratch>/rt-vulkan/ggml-vulkan.dll",
+    "0.00.386.638 I load_backend: loaded CPU backend from <scratch>/rt-vulkan/ggml-cpu-alderlake.dll",
+    "0.00.390.729 I cmn  common_param:   - Vulkan0 : NVIDIA GeForce RTX 3050 Ti Laptop GPU (3962 MiB, 3367 MiB free)",
+    "0.00.393.617 I cmn  common_param:   - Vulkan1 : Intel(R) UHD Graphics (16217 MiB, 15449 MiB free)",
+    "0.00.778.066 I common_memory_breakdown_print: |   - Vulkan0 (RTX 3050 Ti Laptop GPU) |  3962 = 3365 + (3032 =  2375 +     576 +      81) +       -2436 |",
+    "0.00.877.804 I llama_prepare_model_devices: using device Vulkan0 (NVIDIA GeForce RTX 3050 Ti Laptop GPU) (0000:01:00.0) - 3365 MiB free",
+    "0.01.975.798 I load_tensors: offloaded 37/37 layers to GPU",
+    "0.01.975.803 I load_tensors:   CPU_Mapped model buffer size =   304.28 MiB",
+    "0.01.975.804 I load_tensors:      Vulkan0 model buffer size =  2375.91 MiB",
+    "0.04.938.122 I llama_context: Vulkan_Host  output buffer size =     2.32 MiB",
+    "0.05.422.540 I llama_kv_cache:    Vulkan0 KV buffer size =   576.00 MiB"
+  ],
+  "fwAfter": [],
+  "bound": [
+    "  TCP    127.0.0.1:51446        0.0.0.0:0              LISTENING       27676"
+  ]
+}

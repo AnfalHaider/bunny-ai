@@ -1,0 +1,38 @@
+{
+  "build": "cpu",
+  "label": "qwen3-4b",
+  "fileMiB": 2382,
+  "rows": [
+    {
+      "ctx": 8192,
+      "idleMB": 5297,
+      "peakMB": 5305,
+      "kvMiBFromLog": 0,
+      "kvLines": [],
+      "estimateMiB": 3918,
+      "startMs": 4672,
+      "estimateVsPeakPercent": -26
+    },
+    {
+      "ctx": 16384,
+      "idleMB": 6449,
+      "peakMB": 6458,
+      "kvMiBFromLog": 0,
+      "kvLines": [],
+      "estimateMiB": 3918,
+      "startMs": 5594,
+      "estimateVsPeakPercent": -39
+    },
+    {
+      "ctx": 32768,
+      "idleMB": 8755,
+      "peakMB": 8763,
+      "kvMiBFromLog": 0,
+      "kvLines": [],
+      "estimateMiB": 3918,
+      "startMs": 9663,
+      "estimateVsPeakPercent": -55
+    }
+  ],
+  "note": "estimate = file + KV (from the server log) + 1.5 GB, as LM-7; peak = working set of llama-server during a short chat"
+}

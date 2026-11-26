@@ -1,0 +1,50 @@
+{
+  "build": "cpu",
+  "label": "qwen3-4b-norpcdll",
+  "modelBytes": 2497280256,
+  "fwBefore": [],
+  "argv": [
+    "-m",
+    "<scratch>/models/qwen.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "51861",
+    "--api-key-file",
+    "<keyfile>",
+    "--no-ui",
+    "--no-slots",
+    "-c",
+    "4096",
+    "--jinja",
+    "--log-verbosity",
+    "4"
+  ],
+  "startMs": 4133,
+  "chat": {
+    "status": 200,
+    "text": "Rabbits are social animals known for their agility, keen senses, and ability to adapt to a wide range of habitats.",
+    "reasoningChars": 0,
+    "ms": 1929,
+    "predictedPerSecond": 13.57151155152777,
+    "promptPerSecond": 12.750710852130005
+  },
+  "logDevices": [
+    "0.00.078.036 I load_backend: loaded CPU backend from <scratch>/rt-cpu/ggml-cpu-alderlake.dll",
+    "0.00.949.445 I load_tensors:   CPU_Mapped model buffer size =   304.29 MiB",
+    "0.00.949.456 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB",
+    "0.00.949.458 I load_tensors:   CPU_Mapped model buffer size =    21.53 MiB",
+    "0.00.949.459 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB",
+    "0.00.949.460 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB",
+    "0.00.949.461 I load_tensors:   CPU_Mapped model buffer size =    21.53 MiB",
+    "0.00.949.461 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB",
+    "0.00.949.462 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB",
+    "0.00.949.463 I load_tensors:   CPU_Mapped model buffer size =    21.53 MiB",
+    "0.00.949.463 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB",
+    "0.00.949.464 I load_tensors:   CPU_Mapped model buffer size =     0.01 MiB"
+  ],
+  "fwAfter": [],
+  "bound": [
+    "  TCP    127.0.0.1:51861        0.0.0.0:0              LISTENING       24796"
+  ]
+}

@@ -1,0 +1,402 @@
+{
+  "build": "cpu",
+  "label": "qwen3-4b",
+  "results": [
+    {
+      "verbosity": 1,
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "noKey": 200,
+          "wrongKey": 200,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "noKey": 404,
+          "wrongKey": 404,
+          "rightKey": 404
+        },
+        {
+          "method": "GET",
+          "path": "/v1/models",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/models",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/props",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/props",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "GET",
+          "path": "/slots",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "GET",
+          "path": "/metrics",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/completion",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/tokenize",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/detokenize",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/apply-template",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/embedding",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "GET",
+          "path": "/lora-adapters",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/lora-adapters",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/infill",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 400
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/tags",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 404
+        },
+        {
+          "method": "GET",
+          "path": "/cors-proxy",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 403
+        },
+        {
+          "method": "GET",
+          "path": "/mcp",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 404
+        },
+        {
+          "method": "GET",
+          "path": "/tools",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 403
+        },
+        {
+          "method": "POST",
+          "path": "/tools",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 403
+        },
+        {
+          "method": "GET",
+          "path": "/v1/models/x",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 404
+        },
+        {
+          "method": "POST",
+          "path": "/slots/0?action=erase",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        }
+      ],
+      "lanAnswer": "unreachable (ECONNREFUSED)",
+      "lanAddressTested": true,
+      "chatStatus": 200,
+      "netSamples": 28,
+      "connections": [
+        "(loopback) TCP LISTENING",
+        "(loopback) TCP ESTABLISHED"
+      ],
+      "promptTextInLog": false,
+      "replyTextInLog": null,
+      "logLines": 1,
+      "logHasUrls": [],
+      "keyFile": {
+        "rightKeyBefore": 200,
+        "oldKeyAfterRewrite": 200,
+        "newKeyAfterRewrite": 401,
+        "oldKeyAfterDelete": 200
+      }
+    },
+    {
+      "verbosity": 3,
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "noKey": 200,
+          "wrongKey": 200,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "noKey": 404,
+          "wrongKey": 404,
+          "rightKey": 404
+        },
+        {
+          "method": "GET",
+          "path": "/v1/models",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/models",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/props",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/props",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "GET",
+          "path": "/slots",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "GET",
+          "path": "/metrics",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/completion",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/tokenize",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/detokenize",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/apply-template",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/embedding",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        },
+        {
+          "method": "GET",
+          "path": "/lora-adapters",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/lora-adapters",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "POST",
+          "path": "/infill",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 400
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/tags",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 404
+        },
+        {
+          "method": "GET",
+          "path": "/cors-proxy",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 403
+        },
+        {
+          "method": "GET",
+          "path": "/mcp",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 404
+        },
+        {
+          "method": "GET",
+          "path": "/tools",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 403
+        },
+        {
+          "method": "POST",
+          "path": "/tools",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 403
+        },
+        {
+          "method": "GET",
+          "path": "/v1/models/x",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 404
+        },
+        {
+          "method": "POST",
+          "path": "/slots/0?action=erase",
+          "noKey": 401,
+          "wrongKey": 401,
+          "rightKey": 501
+        }
+      ],
+      "lanAnswer": "unreachable (ECONNREFUSED)",
+      "lanAddressTested": true,
+      "chatStatus": 200,
+      "netSamples": 28,
+      "connections": [
+        "(loopback) TCP LISTENING",
+        "(loopback) TCP ESTABLISHED"
+      ],
+      "promptTextInLog": false,
+      "replyTextInLog": null,
+      "logLines": 100,
+      "logHasUrls": [],
+      "keyFile": {
+        "rightKeyBefore": 200,
+        "oldKeyAfterRewrite": 200,
+        "newKeyAfterRewrite": 401,
+        "oldKeyAfterDelete": 200
+      }
+    }
+  ]
+}

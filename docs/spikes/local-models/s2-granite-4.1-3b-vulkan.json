@@ -1,0 +1,114 @@
+{
+  "build": "vulkan",
+  "label": "granite-4.1-3b",
+  "passes": 5,
+  "of": 5,
+  "chatFormat": [],
+  "runs": [
+    {
+      "i": 0,
+      "calls": [
+        {
+          "name": "get_weather",
+          "args": {
+            "city": "Paris"
+          }
+        },
+        {
+          "name": "add_numbers",
+          "args": {
+            "a": 17,
+            "b": 25
+          }
+        }
+      ],
+      "validJson": true,
+      "finalText": "The weather in Paris is sunny with a temperature of 21°C. The sum of 17 and 25 is 42.",
+      "ok": true
+    },
+    {
+      "i": 1,
+      "calls": [
+        {
+          "name": "get_weather",
+          "args": {
+            "city": "Paris"
+          }
+        },
+        {
+          "name": "add_numbers",
+          "args": {
+            "a": 17,
+            "b": 25
+          }
+        }
+      ],
+      "validJson": true,
+      "finalText": "The weather in Paris is sunny with a temperature of 21°C. The sum of 17 and 25 is 42.",
+      "ok": true
+    },
+    {
+      "i": 2,
+      "calls": [
+        {
+          "name": "get_weather",
+          "args": {
+            "city": "Paris"
+          }
+        },
+        {
+          "name": "add_numbers",
+          "args": {
+            "a": 17,
+            "b": 25
+          }
+        }
+      ],
+      "validJson": true,
+      "finalText": "The weather in Paris is sunny with a temperature of 21 °C. The sum of 17 and 25 is 42.",
+      "ok": true
+    },
+    {
+      "i": 3,
+      "calls": [
+        {
+          "name": "get_weather",
+          "args": {
+            "city": "Paris"
+          }
+        },
+        {
+          "name": "add_numbers",
+          "args": {
+            "a": 17,
+            "b": 25
+          }
+        }
+      ],
+      "validJson": true,
+      "finalText": "The weather in Paris is sunny with a temperature of 21°C. The sum of 17 and 25 is 42.",
+      "ok": true
+    },
+    {
+      "i": 4,
+      "calls": [
+        {
+          "name": "get_weather",
+          "args": {
+            "city": "Paris"
+          }
+        },
+        {
+          "name": "add_numbers",
+          "args": {
+            "a": 17,
+            "b": 25
+          }
+        }
+      ],
+      "validJson": true,
+      "finalText": "The weather in Paris is sunny with a temperature of 21°C. The sum of 17 and 25 is 42.",
+      "ok": true
+    }
+  ]
+}
