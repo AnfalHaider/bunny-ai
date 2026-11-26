@@ -17,9 +17,12 @@ import { createHash } from 'node:crypto';
 import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { fetchHop } from './download.js';
 
 /** Hosts a model download may touch. S-LM3 records the real CDN hosts from a live redirect; until then only the origin is listed. */
-export const MODEL_HOSTS = Object.freeze(['huggingface.co']);
+/** SP-4 (Security): huggingface.co, and Hugging Face's own regional CDN names (us.aws.cdn.hf.co was recorded; another region may send another *.cdn.hf.co name). Nothing wider: not *.hf.co, not *.amazonaws.com. */
+export const CDN_HOST = /^[a-z0-9-]+(.[a-z0-9-]+)*.cdn.hf.co$/;
+export const MODEL_HOSTS = Object.freeze(['huggingface.co', CDN_HOST]);
 export const FREE_SPACE_MARGIN = 2 * 1024 ** 3;
 export const MAX_REDIRECTS = 5;
 export const MAX_429_RETRIES = 3;
@@ -52,7 +55,7 @@ export function checkEntry(entry) {
 
 export const urlFor = (entry) => `https://huggingface.co/${entry.repo}/resolve/${entry.revision}/${entry.file}`;
 
-const hostAllowed = (u, hosts) => u.protocol === 'https:' && !u.username && !u.password && hosts.includes(u.hostname.toLowerCase());
+const hostAllowed = (u, hosts) => u.protocol === 'https:' && !u.username && !u.password && hosts.some((h) => (h instanceof RegExp ? h.test(u.hostname.toLowerCase()) : h === u.hostname.toLowerCase()));
 
 async function hashFile(path, hash) {
   await new Promise((done, fail) => { const s = createReadStream(path); s.on('data', (c) => hash.update(c)); s.on('end', done); s.on('error', fail); });
@@ -81,7 +84,7 @@ async function assertPlainTarget(root, path) {
  * @param {string[]} [o.hosts]
  * @returns {Promise<{path:string, manifest:object}>}
  */
-export async function downloadModel({ dataDir, entry, fetchImpl, freeBytes = async () => Infinity, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onProgress = () => {}, signal, hosts = MODEL_HOSTS }) {
+export async function downloadModel({ dataDir, entry, fetchImpl = fetchHop, freeBytes = async () => Infinity, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onProgress = () => {}, signal, hosts = MODEL_HOSTS }) {
   checkEntry(entry);
   const dir = modelDir(dataDir, entry);
   const finalPath = join(dir, entry.file);

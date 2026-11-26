@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "runtimes": {
+    "llama-server": {
+      "tag": "b12760",
+      "licence": "MIT",
+      "licenceName": "MIT licence (llama.cpp)",
+      "entry": "llama-server.exe",
+      "signed": false,
+      "signoff": "Security SP-1, 2026-11-26 (docs/security/2026-11-26-local-models-conditions.md)",
+      "hosts": ["github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"],
+      "skip": ["ggml-rpc-server.exe", "ggml-rpc.dll"],
+      "files": {
+        "cpu": {
+          "name": "llama-b12760-bin-win-cpu-x64.zip",
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12760/llama-b12760-bin-win-cpu-x64.zip",
+          "size": 25273382,
+          "sha256": "c82a83190be4f0506778d458db685b6ba5d1b06372b7f7083e6e76605c84cb97",
+          "kind": "zip",
+          "allowComplete": false,
+          "allow": ["llama-server.exe", "llama-server-impl.dll", "llama-common.dll", "mtmd.dll", "llama.dll", "ggml-base.dll", "ggml.dll", "libomp.dll", "ggml-cpu-alderlake.dll"]
+        },
+        "vulkan": {
+          "name": "llama-b12760-bin-win-vulkan-x64.zip",
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12760/llama-b12760-bin-win-vulkan-x64.zip",
+          "size": 39145779,
+          "sha256": "c7764958827c03353da4d4543e6b44a99ac984fed9b098052e320b02089fb6e9",
+          "kind": "zip",
+          "allowComplete": false,
+          "allow": ["llama-server.exe"]
+        }
+      }
+    }
+  },
+  "canaries": {
+    "ran": "2026-11-26",
+    "how": "Builder D's spikes S-LM1 to S-LM5 (docs/spikes/local-models, 8b390825): the pinned zips (sha256 and size checked first) ran on one PC with the exact argv, no Hugging Face token and no sign-in",
+    "endpoints_without_key": { "open": ["GET /health"], "refused_401": ["/v1/models", "/models", "/props", "/v1/chat/completions", "/completion", "/tokenize", "/detokenize", "/apply-template", "/v1/messages", "/lora-adapters", "/infill"], "not_found": ["GET /"] },
+    "keyFileReadOnce": true,
+    "notReachableOnLan": true,
+    "lowIntegrity": "0x1000 through the F13 helper, cpu and vulkan",
+    "authenticode": "NotSigned (every exe and dll in both zips)"
+  }
+}

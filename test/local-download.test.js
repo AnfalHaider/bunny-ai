@@ -146,3 +146,14 @@ test('delete removes the model folder and nothing else', async (t) => {
   assert.equal(existsSync(join(dir, 'models', 'keep.txt')), true);
   assert.equal(await deleteModel({ dataDir: dir, entry: ENTRY }), false);
 });
+
+import { MODEL_HOSTS, CDN_HOST } from '../src/server/localDownload.js';
+
+test('SP-4: the default host list is huggingface.co and Hugging Face\'s own regional CDN names, nothing wider', async (t) => {
+  for (const ok of ['us.aws.cdn.hf.co', 'eu.aws.cdn.hf.co', 'cas-bridge.cdn.hf.co']) assert.ok(CDN_HOST.test(ok), ok);
+  for (const bad of ['cdn.hf.co.evil.example', 'hf.co', 'x.hf.co', 'evil-cdn.hf.co.com', 's3.amazonaws.com', 'cdn.hf.co', 'a.b.amazonaws.com']) assert.equal(CDN_HOST.test(bad), false, bad);
+  const dir = await temp(t);
+  const ok = await downloadModel({ dataDir: dir, entry: ENTRY, fetchImpl: stand({ cdn: 'eu.aws.cdn.hf.co' }), hosts: MODEL_HOSTS });
+  assert.ok(ok.path);
+  await assert.rejects(downloadModel({ dataDir: await temp(t), entry: ENTRY, fetchImpl: stand({ cdn: 'x.hf.co' }), hosts: MODEL_HOSTS }), (e) => e.code === 'local.host');
+});

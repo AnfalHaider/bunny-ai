@@ -108,7 +108,7 @@ export async function readZipDirectory(file) {
 }
 
 /** Unpack a zip into `dest`. Returns the relative paths written. */
-export async function unpackZip(file, dest, { max = MAX_TOTAL_BYTES, strip = '' } = {}) {
+export async function unpackZip(file, dest, { max = MAX_TOTAL_BYTES, strip = '', skip = null } = {}) {
   const entries = await readZipDirectory(file);
   const state = { total: 0, max };
   const written = [];
@@ -120,6 +120,7 @@ export async function unpackZip(file, dest, { max = MAX_TOTAL_BYTES, strip = '' 
       const unixMode = e.attrs >>> 16; // zip made on Unix keeps the mode in the high bits: a link is 0o120000
       if ((unixMode & 0o170000) === 0o120000) throw new UnpackError(`The archive has a symbolic link ("${e.name.slice(0, 60)}").`);
       if (!rel) continue;
+      if (skip && !e.isDir && skip(rel)) continue; // LOCAL-MODELS SP-2: an entry the caller leaves in the zip is never written
       const out = target(dest, rel);
       if (e.isDir) { await mkdir(out, { recursive: true }); continue; }
       if (e.method !== 0 && e.method !== 8) throw new UnpackError('The zip file uses a compression this check does not accept.');
