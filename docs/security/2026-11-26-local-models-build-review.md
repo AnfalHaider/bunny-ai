@@ -442,3 +442,33 @@ One commit on top of 74d40382, touching the UI only: `src/ui/local-models.js`, `
 ### Verdict at 9f1472d0: PASS
 
 The 612f2a3f scope is unchanged.
+
+## Re-review at f7c917cc (Tech Lead's T1–T3 on 521abb71)
+
+**What changed since 9f1472d0.** Two commits on `claude/v0116-local-models-t1`, ec6358a6 and f7c917cc. Since 521abb71 they change `src/server/app.js`, `src/server/localCalls.js` (new), `src/server/localModelsReal.js` and `src/server/localRuntime.js`, plus tests. Nothing in `electron/` changed.
+
+- **T1: idle stop and switch during a reply.** `trackLocalCalls` wraps every `streamChat` call, and a call to Bunny local's own address counts as in flight.
+  - The count is raised by `runner.begin()` and lowered once, in a `finally`, by the function it returns. Each chunk calls `touch()`.
+  - The idle timer re-arms instead of stopping while a call is in flight.
+  - `ensure()` for another model waits up to 10 minutes (`waitForCalls`) before `stop()`.
+  - A reply that never ends can therefore keep the server up only until the 10-minute switch wait runs out, or until its stream ends or fails. There is no security effect: it is the person's own model on this PC.
+- **T2: a call with no address.** A non-fake call with an empty `baseUrl` is refused with `local.notRunning` (LM-18's sentence) and starts nothing.
+  - This keeps R2-3: a scheduled run, a helper or another chat that finds Bunny local stopped doesn't start it.
+  - Every other provider always has an address (connections.js requires one), so the wrapper can't block them. The one exception is an OAuth provider without a default address; it would only see the Bunny-local wording instead of a reach error. A wording nit, not a security issue.
+- **T3: the wrong model.** On Bunny local's own address, a call that names a model other than `runningModelId()` is refused, so the running model never answers for another one.
+  - `ownsAddress` compares against the running server's full `http://127.0.0.1:<port>/v1` prefix. A different port such as `:12345` doesn't match `:1234/v1`.
+- **Cold start (f7c917cc).** The chat route reads the provider again after `localModels.ensure()` has passed, so the stream gets the new server's address.
+  - `ensure()` still decides who may start a model, with the same `who` value as before (`device`, `scheduled`, `textOnly`, `window`).
+  - The address and key are still looked up per request and never stored (LM-2).
+  - No window-only route and no allow list changed.
+
+**T4 ruling (record-browser.cmd `@echo %*`): LOW, v0.1.17.**
+- The echoed address comes from the sign-in program Bunny already runs with the person's rights (`src/server/engines/service.js:219`). No page can put characters into it, so cmd parsing it gives nothing new.
+- A mangled address is refused by `readBrowserUrl`, which takes only a whole vendor callback address. The printed address with "Paste the code" remains as the fallback.
+- Fix for v0.1.17: write the argument without cmd parsing, either through a fixed node or powershell one-liner, or by pointing BROWSER at a small script run by Bunny's own Node.
+
+**Tests.** At f7c917cc, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`, I ran the same set as before plus `local-calls`, `local-first-message` and `web-access-ssrf`: 203 tests, 202 pass, 0 fail, 1 skipped (the link test). I didn't run the e2e suite or the gate.
+
+### Verdict at f7c917cc: PASS
+
+The 612f2a3f scope is unchanged. The release sign-off waits for the new integration sha and its gate.
