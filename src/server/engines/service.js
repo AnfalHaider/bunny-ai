@@ -143,6 +143,15 @@ export function budgeted(upstream, turn) {
 
 // ---------------------------------------------------------------- the service
 
+/**
+ * SB-1 (Security): the address the program gave its browser is taken only when it arrived WHOLE: cmd splits an unquoted address at an ampersand, so a cut-off one is ignored (the printed address and the paste box are offered instead).
+ * Whole means: client_id, state and code_challenge are there, and redirect_uri is http://localhost:<port>/callback.
+ */
+export function wholeCallbackAddress(address) {
+  if (!address) return null;
+  try { const u = new URL(address); const q = u.searchParams; return q.get('client_id') && q.get('state') && q.get('code_challenge') && /^http:\/\/localhost:\d{1,5}\/callback$/.test(q.get('redirect_uri') ?? '') ? address : null; } catch { return null; }
+}
+
 export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_FAKE_ENGINE), pinsOverride = null, fetchImpl = null, versionOf, signatureOf, busyCheck = () => false, openLoginRun = null, loginWaitMs = 12_000 , codeWaitMs = 15_000} = {}) {
   const fakeMode = Boolean(fake);
   const fp = fakeMode ? fakePins() : null;
@@ -221,7 +230,7 @@ export function createEngineService({ dataDir, fake = Boolean(process.env.BUNNY_
     run.exited.finally(() => clearTimeout(stop)).catch(() => {});
     // v0.1.16: the address the program gave its browser (the one that calls back to the program's own listener), written by record-browser.cmd; only a vendor address is taken
     let browserUrl = null;
-    const readBrowserUrl = async () => { if (browserUrl) return browserUrl; try { const text = (await readFile(browserArgFile, 'utf8')).trim(); await rm(browserArgFile, { force: true }).catch(() => {}) /* read once and deleted: it holds the one-time state and challenge (Security LOW) */; browserUrl = signInUrlFrom(text); } catch { /* not written yet */ } return browserUrl; };
+    const readBrowserUrl = async () => { if (browserUrl) return browserUrl; try { const text = (await readFile(browserArgFile, 'utf8')).trim(); await rm(browserArgFile, { force: true }).catch(() => {}) /* read once and deleted: it holds the one-time state and challenge (Security LOW) */; browserUrl = wholeCallbackAddress(signInUrlFrom(text)); } catch { /* not written yet */ } return browserUrl; };
     const t0 = Date.now();
     while (url === null && exitCode === undefined && Date.now() - t0 < loginWaitMs) { url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`); if (url) break; await new Promise((r) => setTimeout(r, 100)); }
     url ??= signInUrlFrom(`${said}\n${run.stderr?.() ?? ''}`);

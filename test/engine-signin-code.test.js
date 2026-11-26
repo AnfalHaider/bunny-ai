@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createEngineService } from '../src/server/engines/service.js';
+import { createEngineService, wholeCallbackAddress } from '../src/server/engines/service.js';
 import { isWindowOnlyRoute } from '../src/server/windowOnly.js';
 import { ENGINE_REFUSED_MESSAGE, deviceRefusal } from '../src/server/remoteAccess.js';
 
@@ -12,7 +12,7 @@ import { ENGINE_REFUSED_MESSAGE, deviceRefusal } from '../src/server/remoteAcces
 // Part A: the "browser" Bunny gives the program only records that address. Part B: the code goes to the waiting program's stdin. Every case here uses a stand-in program and an invented data folder.
 
 const PRINTED = 'https://claude.com/cai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&state=s1';
-const CALLBACK = 'https://claude.com/cai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A60075%2Fcallback&state=s1';
+const CALLBACK = 'https://claude.com/cai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A60075%2Fcallback&code_challenge=c1&code_challenge_method=S256&state=s1';
 const GOOD = 'abcDEF123456_-.~#xyz';
 
 /** A stand-in for `auth login`: prints the address, calls its browser (writes the file the recorder would write) and waits on stdin; the right code finishes it. */
@@ -122,4 +122,20 @@ test('part B: the code is nowhere but the program\'s stdin: not in the answer, n
 test('the route and the box are Bunny\'s window only: the route is on the window-only list and a device at any level is refused it', () => {
   assert.equal(isWindowOnlyRoute('POST', '/api/engines/claude-code/signin/code'), true);
   assert.equal(deviceRefusal('POST', '/api/engines/claude-code/signin/code'), ENGINE_REFUSED_MESSAGE);
+});
+
+test('SB-1: the browser address is taken only when it arrived whole (client_id, state, code_challenge and a localhost callback); a cut-off one is ignored and the printed address and the paste box are offered', async (t) => {
+  assert.equal(wholeCallbackAddress(CALLBACK), CALLBACK);
+  const cut = 'https://claude.com/cai/oauth/authorize?code=true'; // what a cmd that split the address at its first ampersand would have kept
+  assert.equal(wholeCallbackAddress(cut), null);
+  assert.equal(wholeCallbackAddress(CALLBACK.replace('&state=s1', '')), null, 'no state');
+  assert.equal(wholeCallbackAddress(CALLBACK.replace('&code_challenge=c1', '')), null, 'no code_challenge');
+  assert.equal(wholeCallbackAddress(CALLBACK.replace('client_id=abc&', '')), null, 'no client_id');
+  assert.equal(wholeCallbackAddress(CALLBACK.replace('localhost%3A60075', 'evil.example')), null, 'a callback that is not localhost');
+  assert.equal(wholeCallbackAddress(CALLBACK.replace('%2Fcallback', '%2Fsteal')), null, 'a callback path that is not /callback');
+  assert.equal(wholeCallbackAddress(CALLBACK.replace('http%3A', 'https%3A')), null, 'a callback that is not plain http');
+  assert.equal(wholeCallbackAddress(null), null);
+  const { svc } = service(t, login({ browser: cut }));
+  const r = await svc.signIn('claude-code');
+  assert.deepEqual([r.url, r.manualUrl, r.canPaste], [PRINTED, null, true], 'the cut-off address is not offered; the printed one is, with the paste box');
 });
