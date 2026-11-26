@@ -229,6 +229,7 @@ export function createPlaces({
   }
   const kvBytes = (f) => (f.blockCount && f.embeddingLength && f.headCount && f.headCountKv ? Math.round(2 * f.blockCount * (f.embeddingLength / f.headCount) * f.headCountKv * 2) : 131072);
   const publicOwn = (o) => ({ id: o.id, name: o.name, size: o.size, architecture: o.architecture, quant: fileTypeName(o.fileType), format: o.format, toolsOn: o.toolsOn, kvBytesPerToken: o.kvBytesPerToken, contextLength: o.contextLength });
+  async function removeAllOwn() { await load(); st.own = []; await save(); }
   async function removeOwn(id) { await load(); const n = st.own.length; st.own = st.own.filter((o) => o.id !== id); if (st.own.length !== n) { await save(); return true; } return false; }
   async function setTools(id, on) { await load(); const o = st.own.find((x) => x.id === id); if (!o) throw new PlaceError('place.unknownEntry', 'That model is not in the list.', 404); o.toolsOn = on === true; await save(); return publicOwn(o); }
   const ownList = async () => { await load(); return st.own.map((o) => ({ ...publicOwn(o), real: o.real })); };
@@ -258,5 +259,5 @@ export function createPlaces({
     return { real: o.real, rec: o, tools: o.toolsOn === true && o.format !== 'none' };
   }
 
-  return { load, folders, addModelFolder, removeModelFolder, addLmStudioBack, lmStudio, inspect, add, removeOwn, setTools, ownList, verifyForStart, listings, state: () => st, save, statKey, walk, isInside };
+  return { load, folders, addModelFolder, removeModelFolder, addLmStudioBack, lmStudio, inspect, add, removeOwn, removeAllOwn, setTools, ownList, verifyForStart, listings, state: () => st, save, statKey, walk, isInside };
 }

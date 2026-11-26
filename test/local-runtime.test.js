@@ -82,7 +82,7 @@ test('SP-5 and LM-9: a start waits for /health, deletes the key file at once, ke
   const text = JSON.stringify({ launched, running: rt.running() });
   assert.equal(text.includes(apiKey), false);
   assert.equal(launched[0].args.join(' ').includes(apiKey), false);
-  assert.equal(launched[0].cwd, join(dir, 'models'), 'the working folder is the models folder');
+  assert.equal(launched[0].cwd, runtimeDir, "LF-7: the working folder is Bunny's runtime folder, never a model's folder");
   // the key opens the server and nothing else does
   assert.equal((await fetch(`${baseUrl}/models`)).status, 401);
   assert.equal((await fetch(`${baseUrl}/models`, { headers: { authorization: 'Bearer wrong' } })).status, 401);
@@ -170,4 +170,15 @@ test('Security L1: if the key file cannot be locked to its owner, nothing starts
   await assert.rejects(rt.ensure({ runtimeDir, modelId: 'm', modelFile, ctx: 8192, gpu: false }), (e) => e.code === 'local.keyLock');
   assert.equal(launched.length, 0);
   assert.deepEqual(existsSync(join(dir, 'runtimes', 'run')) ? readdirSync(join(dir, 'runtimes', 'run')) : [], []);
+});
+
+test('LF-9 and LF-4: a file with no chat format gets only --chat-template chatml; no other template flag, no projector, draft model or slot-save path is ever passed', () => {
+  const base = { model: 'C:\m\q.gguf', port: 51234, keyFile: 'C:\d\k.key', ctx: 8192 };
+  assert.deepEqual(buildArgv({ ...base, chatTemplate: 'chatml' }).slice(-2), ['--chat-template', 'chatml']);
+  assert.ok(!buildArgv(base).includes('--chat-template'));
+  assert.ok(!buildArgv({ ...base, chatTemplate: 'llama3' }).includes('--chat-template'), 'any other format name is dropped, not passed');
+  const argv = buildArgv({ ...base, chatTemplate: 'chatml' });
+  assert.doesNotThrow(() => checkArgv(argv));
+  for (const bad of ['--chat-template-file', '--mmproj', '-md', '--model-draft', '--slot-save-path', '-mm']) assert.throws(() => checkArgv([...argv, bad, 'x']), /never uses/, bad);
+  assert.throws(() => checkArgv([...argv.slice(0, -1), 'llama3']), /plain chat format/);
 });

@@ -11,8 +11,8 @@ const kvBuf = ([key, type, val]) => {
   else throw new Error(`test helper: type ${type}`);
   return Buffer.concat([str(key), u32(type), v]);
 };
-export function makeGguf({ version = 3, magic = 'GGUF', arch = 'llama', template = 'default', extra = [], tensors = [{ name: 'w', dims: [32], type: 0 }], alignment = 32, keyCountOverride = null, truncateBy = 0, tensorOffsetOverride = null, general = {} } = {}) {
-  const kvs = [['general.architecture', 8, arch], ['general.name', 8, general.name ?? 'Tiny Test'], ['general.file_type', 4, 15], ['general.license', 8, general.license ?? 'apache-2.0'], [`${arch}.context_length`, 4, 4096], [`${arch}.block_count`, 4, 2]];
+export function makeGguf({ version = 3, magic = 'GGUF', arch = 'llama', template = 'default', extra = [], tensors = [{ name: 'w', dims: [32], type: 0 }], alignment = 32, keyCountOverride = null, truncateBy = 0, tensorOffsetOverride = null, general = {}, contextLength = 4096 } = {}) {
+  const kvs = [['general.architecture', 8, arch], ['general.name', 8, general.name ?? 'Tiny Test'], ['general.file_type', 4, 15], ['general.license', 8, general.license ?? 'apache-2.0'], [`${arch}.context_length`, 4, contextLength], [`${arch}.block_count`, 4, 2]];
   if (template === 'default') kvs.push(['tokenizer.chat_template', 8, '{% for m in messages %}<|{{ m.role }}|>{{ m.content }}{% endfor %}']);
   else if (template !== null) kvs.push(['tokenizer.chat_template', 8, template]);
   kvs.push(...extra);

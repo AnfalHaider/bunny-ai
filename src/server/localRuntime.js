@@ -27,11 +27,12 @@ export const IDLE_CHOICES = [5, 10, 30, 60, 0];
 
 /** Flags that must never be on the command line. Matched on the flag name (before any "="). */
 export const FORBIDDEN_FLAGS = ['-hf', '--hf-repo', '-hff', '--hf-file', '-hft', '--hf-token', '--tools', '--agent', '--ui-agent', '--mcp', '--mcp-config', '--allow-unauthenticated-tools', '--rpc', '--metrics', '--props',
-  '--lora', '--lora-scaled', '--lora-init-without-apply', '--models-dir', '--models-preset', '--api-key', '--webui', '--ui', '--path', '--media-path', '--ssl-key-file', '--ssl-cert-file'];
+  '--lora', '--lora-scaled', '--lora-init-without-apply', '--models-dir', '--models-preset', '--api-key', '--webui', '--ui', '--path', '--media-path', '--ssl-key-file', '--ssl-cert-file',
+  '--chat-template-file', '--mmproj', '--mmproj-url', '-mm', '-mmu', '-md', '--model-draft', '--slot-save-path']; // LF-9: for a file Bunny did not download, none of these is ever passed
 
 /** The exact argv for one start (LM-10). */
-export function buildArgv({ model, port, keyFile, ctx, gpu = false, verbosity = LOG_VERBOSITY }) {
-  return ['-m', model, '--host', '127.0.0.1', '--port', String(port), '--api-key-file', keyFile, '--no-ui', '--no-slots', '-c', String(ctx), '--jinja', '--log-verbosity', String(verbosity), ...(gpu ? ['-ngl', '99'] : [])];
+export function buildArgv({ model, port, keyFile, ctx, gpu = false, verbosity = LOG_VERBOSITY, chatTemplate = null }) {
+  return ['-m', model, '--host', '127.0.0.1', '--port', String(port), '--api-key-file', keyFile, '--no-ui', '--no-slots', '-c', String(ctx), '--jinja', '--log-verbosity', String(verbosity), ...(gpu ? ['-ngl', '99'] : []), ...(chatTemplate === 'chatml' ? ['--chat-template', 'chatml'] : [])]; // LF-4: only the runner's own plain format, and only for a file with no chat format
 }
 
 /** Throws unless the argv is exactly what LM-10 allows. */
@@ -39,6 +40,8 @@ export function checkArgv(argv) {
   const flags = argv.filter((a) => /^-/.test(a)).map((a) => a.split('=')[0]);
   for (const f of flags) if (FORBIDDEN_FLAGS.includes(f)) throw new Error(`The model runtime was about to start with ${f}, which Bunny never uses.`);
   for (const need of ['-m', '--host', '--port', '--api-key-file', '--no-ui', '--no-slots', '-c', '--jinja']) if (!flags.includes(need)) throw new Error(`The model runtime's command line has no ${need}.`);
+  const ct = argv.indexOf('--chat-template');
+  if (ct >= 0 && argv[ct + 1] !== 'chatml') throw new Error('The model runtime may only be given its own plain chat format.');
   if (argv[argv.indexOf('--host') + 1] !== '127.0.0.1') throw new Error('The model runtime may only listen on 127.0.0.1.');
   return argv;
 }
@@ -131,7 +134,7 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
     idleTimer.unref?.();
   }
 
-  async function startOne({ runtimeDir, modelFile, modelId, ctx, gpu }) {
+  async function startOne({ runtimeDir, modelFile, modelId, ctx, gpu, chatTemplate = null }) {
     const ok = await verifyRuntime(runtimeDir);
     if (!ok.ok) throw new RuntimeStartError(ok.missing ? 'local.missing' : 'local.changed', ok.missing ? "Bunny local isn't set up on this PC." : "Bunny local's program changed on disk.");
     await mkdir(runDir, { recursive: true });
@@ -145,10 +148,11 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
     let lastErr = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const p = await port();
-      const argv = checkArgv(buildArgv({ model: modelFile, port: p, keyFile: file, ctx, gpu }));
+      const argv = checkArgv(buildArgv({ model: modelFile, port: p, keyFile: file, ctx, gpu, chatTemplate }));
       registerRuntimePort(p); // from here on nothing a model, a page or a device names may reach this port
       let proc;
-      try { proc = await launch({ file: ok.exe, args: argv, cwd: modelsDir, env: runtimeEnv({ dataDir }) }); } catch (err) { unregisterRuntimePort(p); await dropKey(file); throw err; }
+      // LF-7: the working folder is Bunny's runtime folder, never a model's folder
+      try { proc = await launch({ file: ok.exe, args: argv, cwd: runtimeDir, env: runtimeEnv({ dataDir }) }); } catch (err) { unregisterRuntimePort(p); await dropKey(file); throw err; }
       let exitedEarly = null;
       proc.exited.then((code) => { exitedEarly = code; });
       const until = clock() + healthWaitMs;
@@ -161,7 +165,7 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
       if (status === 200) {
         await dropKey(file); // SP-5: the server read the key once, at start: the file has done its job
         if (await lan(p)) { await kill(proc.pid); unregisterRuntimePort(p); throw new RuntimeStartError('local.lan', 'The model runtime answered on the network, so Bunny stopped it.'); }
-        current = { pid: proc.pid, port: p, key, modelId, ctx, gpu, startedAt: clock(), lastUsed: clock(), exited: proc.exited };
+        current = { pid: proc.pid, port: p, key, modelId, ctx, gpu, chatTemplate, startedAt: clock(), lastUsed: clock(), exited: proc.exited };
         proc.exited.then(() => { if (current?.pid === proc.pid) { unregisterRuntimePort(p); current = null; idle.clear(idleTimer); } });
         armIdle();
         return current;
@@ -179,7 +183,7 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
 
   /** Single flight: two callers asking at once share one start. A different model stops the running one first. */
   async function ensure(opts) {
-    if (current && current.modelId === opts.modelId && current.ctx === opts.ctx && current.gpu === opts.gpu) { current.lastUsed = clock(); armIdle(); return current; }
+    if (current && current.modelId === opts.modelId && current.ctx === opts.ctx && current.gpu === opts.gpu && (current.chatTemplate ?? null) === (opts.chatTemplate ?? null)) { current.lastUsed = clock(); armIdle(); return current; }
     if (starting) { await starting.catch(() => {}); if (current?.modelId === opts.modelId) return current; }
     starting = (async () => { if (current) await stop(); return startOne(opts); })();
     try { return await starting; } finally { starting = null; }
