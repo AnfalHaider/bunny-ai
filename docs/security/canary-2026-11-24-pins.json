@@ -1,5 +1,11 @@
 {
-  "note": "The engine files the canaries (docs/security/canary-2026-11-24.json) and spike S-F13B ran against. test/canary-pins.test.js fails when src/server/engines/pins.json names a different version or file hash: rerun scripts/canary-engines.mjs, commit its JSON, and update this file.",
-  "claude-code": { "version": "2.1.311", "sha256": "32a333769981c72843b990f944cdcac53595ec5a98ca73ff75f0f5c417c79ee6" },
-  "codex": { "version": "0.170.0", "sha256": "b1634415b6ecb87fea80691580dfe49f83fd46f0ad93f128ba029604d7faa158" }
+  "note": "The engine files the canaries (docs/security/canary-2026-11-24.json) and spike S-F13B ran against. test/canary-pins.test.js fails when src/server/engines/pins.json names a different version or file hash: rerun scripts/canary-engines.mjs, commit its JSON, and update this file. Pin checklist, SB-2: a new Claude Code pin also repeats the sign-in capture (docs/spikes/cli-engines/s-login) and confirms the address given to the browser arrives whole and quoted, as part of the pin's Security sign-off.",
+  "claude-code": {
+    "version": "2.1.311",
+    "sha256": "32a333769981c72843b990f944cdcac53595ec5a98ca73ff75f0f5c417c79ee6"
+  },
+  "codex": {
+    "version": "0.170.0",
+    "sha256": "b1634415b6ecb87fea80691580dfe49f83fd46f0ad93f128ba029604d7faa158"
+  }
 }
