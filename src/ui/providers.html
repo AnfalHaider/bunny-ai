@@ -38,6 +38,9 @@
     </form>
   </div>
 
+  <h2 style="margin-top:28px">Available: on this PC</h2>
+  <div class="group lm-card-host" id="bunny-local" aria-live="polite"></div>
+
   <h2 style="margin-top:28px">Popular providers</h2>
   <div class="group" id="available"></div>
 
@@ -52,6 +55,7 @@
   import { getJSON, sendJSON, esc, applyAppearance } from './api.js';
   import { applyEmbed } from './embed.js';
   import { applyLanguage, t } from './i18n.js';
+  import { mountLocalModels } from './local-models.js';
   applyEmbed();
   const tt = (key) => t(key, document.documentElement.lang || 'en');
   // The page speaks the language chosen in Settings.
@@ -224,8 +228,10 @@
   async function render() {
     const connectedEl = document.getElementById('connected');
     const availableEl = document.getElementById('available');
-    const connected = state.providers.filter((p) => p.status === 'connected');
-    const rest = state.providers.filter((p) => p.status !== 'connected');
+    // Bunny local has its own card (local-models.js): no address, no key, no Connect button
+    const shown = state.providers.filter((p) => p.id !== 'bunny-local');
+    const connected = shown.filter((p) => p.status === 'connected');
+    const rest = shown.filter((p) => p.status !== 'connected');
 
     // Paint both lists before asking any provider for models. A slow model list
     // must not leave the connectable rows showing a provider that is now gone.
@@ -339,6 +345,7 @@
   });
 
   await reload();
+  mountLocalModels(document.getElementById('bunny-local'), { getJSON, sendJSON }).refresh();
 </script>
 </body>
 </html>

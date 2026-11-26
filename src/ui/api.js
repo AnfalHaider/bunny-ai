@@ -63,6 +63,8 @@ export const WINDOW_ONLY_ROUTES = [
   [WRITES, '^/api/web-search(/.*)?$'],                      // F6: the Brave Search key is the window's alone
   [WRITES, '^/api/folder-trust(/.*)?$'],                    // F12: which folders may run in Auto is the window's alone
   [WRITES, `^/api/sessions/${UUID}/allow-kinds(/(all|\d{1,2}))?$`],       // F9: Forget what was allowed for this chat (the list is only ever written by the server)
+  [[...WRITES, 'GET'], '^/api/local-models/places(/.*)?$'],  // LOCAL-MODELS LF-1, LF-13: the folders and files of Bunny local, read and written by the window alone
+  [WRITES, '^/api/local-models(/.*)?$'],                    // LOCAL-MODELS LM-13: set up, download, start, stop, delete, remove and the settings of Bunny local are the window's alone
   [WRITES, '^/api/remote(/.*)?$'],                          // BROWSER step 2: opening Bunny to other devices, and ending their sessions
 ];
 
@@ -114,7 +116,7 @@ export async function sendJSON(path, method, body) {
   const res = await reach(() => fetch(path, {
     method,
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body ?? {}),
+    ...(['GET', 'HEAD'].includes(String(method).toUpperCase()) ? {} : { body: JSON.stringify(body ?? {}) }),
   }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { if (data.code === 'request.windowOnly') refused(); throw Object.assign(new Error(data.message ?? `HTTP ${res.status}`), data); }

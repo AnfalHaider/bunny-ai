@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "signoff": "Security SP-7, 2026-11-26: the two proven models only. A model joins only when its entry (the same five values and its chat template) has been checked by Security.",
+  "models": [
+    {
+      "id": "qwen3-4b",
+      "name": "Qwen3 4B",
+      "publisher": "Qwen",
+      "family": "qwen3",
+      "repo": "Qwen/Qwen3-4B-GGUF",
+      "revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "size": 2497280256,
+      "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "licence": "apache-2.0",
+      "gated": false,
+      "tools": true,
+      "toolsProof": "S-LM2 2026-11-26: the two-tool round trip with valid JSON arguments in 5 of 5 runs (docs/spikes/local-models)",
+      "kvBytesPerToken": 147456,
+      "nativeCtx": 40960,
+      "minRamGB": 8,
+      "template": { "status": "read", "sha256": "57f1fd00f0013a2be96aa79b857391f27e23df5b5f847072b524c897e24d0361", "note": "tokenizer.chat_template read from the GGUF header at the pinned commit (first 24 MiB by range read, 2026-11-26, owner's yes relayed in docs/plans/2026-11-26-v0.1.16-live-fixes.md); sha256 of its UTF-8 text" }
+    },
+    {
+      "id": "granite-4.1-3b",
+      "name": "Granite 4.1 3B",
+      "publisher": "IBM",
+      "family": "granite",
+      "repo": "ibm-granite/granite-4.1-3b-GGUF",
+      "revision": "ab4701481089b58a082ef63cc1cee738887293ff",
+      "file": "granite-4.1-3b-Q4_K_M.gguf",
+      "size": 2099501664,
+      "sha256": "662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29",
+      "licence": "apache-2.0",
+      "gated": false,
+      "tools": true,
+      "toolsProof": "S-LM2 2026-11-26: the two-tool round trip with valid JSON arguments in 5 of 5 runs (docs/spikes/local-models)",
+      "kvBytesPerToken": 81920,
+      "nativeCtx": 32768,
+      "minRamGB": 8,
+      "template": { "status": "read", "sha256": "fed2756d2d24e127b951dcf139d0b03ab7db8ef23a456128ebc9c2db4901d476", "note": "tokenizer.chat_template read from the GGUF header at the pinned commit (first 24 MiB by range read, 2026-11-26, owner's yes relayed in docs/plans/2026-11-26-v0.1.16-live-fixes.md); sha256 of its UTF-8 text" }
+    }
+  ]
+}

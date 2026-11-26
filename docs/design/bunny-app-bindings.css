@@ -1706,3 +1706,53 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .engine-confirm .signin-code-row { display: flex; gap: var(--sp-3); margin: var(--sp-3) 0; }
 .engine-confirm .signin-code-row input { flex: 1; min-width: 0; }
 .engine-confirm .modal-body > button { margin: var(--sp-3) var(--sp-3) 0 0; }
+
+/* LOCAL-MODELS (design-local-models @ 4ee59efc): the Bunny local card, its model rows, fit badges and the plain error lines */
+.lm-card-host { display: grid; gap: 0; }
+.lm-body { padding: 0 16px 14px; display: grid; gap: 10px; min-width: 0; }
+.lm-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; }
+.lm-new { border-color: var(--accent); color: var(--accent); }
+.lm-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 8px; background: var(--panel); min-width: 0; }
+.lm-card.warn { border-color: var(--warn); }
+.lm-note, .lm-pc { font-size: 12.5px; color: var(--text-dim); }
+.lm-sub { font-size: var(--fs-sm); letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-top: 4px; }
+.lm-group { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; min-width: 0; }
+.lm-steps { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+.lm-steps .done { color: var(--ok); } .lm-steps .now { font-weight: 600; } .lm-steps .wait { color: var(--text-dim); }
+.lm-model { padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 6px; min-width: 0; }
+.lm-model:first-child { border-top: 0; }
+.lm-model.dis { opacity: .65; }
+.lm-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.lm-l { display: grid; gap: 4px; min-width: 0; flex: 1 1 220px; }
+.lm-meta, .lm-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.lm-fit { font-size: 11.5px; border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; font-weight: 600; }
+.lm-fit.ok { color: var(--ok); border-color: var(--ok); } .lm-fit.tight, .lm-fit.slow { color: var(--warn); border-color: var(--warn); } .lm-fit.big { color: var(--bad); border-color: var(--bad); }
+.lm-ready { color: var(--ok); }
+.lm-prog { height: 6px; border-radius: 99px; background: var(--soft, var(--line)); overflow: hidden; }
+.lm-prog i { display: block; height: 100%; background: var(--accent); }
+.lm-err { color: var(--bad); font-size: 12.5px; }
+.lm-foot { font-size: 12.5px; }
+.lm-remove { justify-self: start; }
+.lm-row .right { flex-wrap: wrap; }
+.local-hint { font-size: 12.5px; color: var(--text-dim); margin-left: auto; }
+.picker-get-more .model-desc { display: block; }
+.local-hint { display: block; }
+.lm-remove-row { margin-top: 4px; }
+.lm-state { font-size: 13px; }
+.lm-unsigned { color: var(--warn); border-color: var(--warn); }
+.lm-unsigned-note { font-size: 12.5px; }
+.lm-warn { color: var(--warn); font-size: 12.5px; }
+.lm-row .meta-col { min-width: 0; }
+.lm-row .desc { overflow-wrap: anywhere; }
+.lm-row .right { min-width: 0; max-width: 100%; }
+
+/* LOCAL-MODELS 3c/3d: the places (download folder, files from this PC, model folders) */
+.lm-places { display: grid; gap: 10px; min-width: 0; }
+.lm-facts { display: grid; gap: 2px; font: 12px ui-monospace, Consolas, monospace; color: var(--text-dim); word-break: break-all; }
+.lm-template { margin: 4px 0 0; white-space: pre-wrap; overflow: auto; max-height: 140px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px; background: var(--panel-2, var(--panel)); font: 12px ui-monospace, Consolas, monospace; }
+.lm-tools, .lm-trust { display: flex; gap: 6px; align-items: center; font-size: 13px; min-height: 28px; }
+.lm-tools input, .lm-trust input { min-width: 18px; min-height: 18px; }
+.lm-where { word-break: break-all; }
+.lm-own .lm-model small, .lm-folders .lm-row .desc { word-break: break-all; }
+
+.lm-running-line { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }

@@ -71,7 +71,7 @@ test('guard on: a key-based provider connects, lists models and answers a messag
 test('guard on: every catalogue key-based provider connects and answers (fake upstream)', async (t) => {
   const { base } = await startApp(t, { localGuard: true, apiToken: TOKEN });
   const a = api(base);
-  const list = (await a.json('/api/providers')).body.filter((p) => p.kind !== 'oauth' && !p.custom && p.id !== 'ollama');
+  const list = (await a.json('/api/providers')).body.filter((p) => p.kind !== 'oauth' && p.kind !== 'managed' && !p.custom && p.id !== 'ollama');
   assert.ok(list.length >= 5, `${list.length} providers`);
   for (const p of list) {
     const c = await a.post(`/api/providers/${p.id}/connect`, { apiKey: 'sk-test-000000000000' });

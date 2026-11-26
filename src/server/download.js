@@ -10,7 +10,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
-import { isOwnServer, isLoopbackAddress, ownPorts } from './ownAddress.js';
+import { isOwnServer, isReservedAddress, isLoopbackAddress, ownPorts } from './ownAddress.js';
 
 export const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
 export const DOWNLOAD_TIMEOUT_MS = 60_000;
@@ -72,7 +72,7 @@ const refusedHost = (name) => new Error(`${name} is on this computer or a privat
 const stopped = (signal) => new Error(signal?.aborted ? 'Stopped by the person.' : `The download took longer than ${DOWNLOAD_TIMEOUT_MS / 1000} s and was stopped.`);
 
 /** One request that connects only to the address validated for it. Resolves with the response (body not read). */
-function requestOnce(url, { sig, allowLoopback, lookupImpl }) {
+function requestOnce(url, { sig, allowLoopback, lookupImpl, headers = {} }) {
   return new Promise((resolve, reject) => {
     const lib = url.protocol === 'https:' ? https : http;
     const literal = isIP(hostOf(url)) !== 0;
@@ -92,7 +92,7 @@ function requestOnce(url, { sig, allowLoopback, lookupImpl }) {
     };
     const req = lib.request(url, {
       method: 'GET', agent: false, signal: sig, lookup,
-      headers: { 'user-agent': 'Bunny-AI', accept: '*/*', 'accept-encoding': 'identity' },
+      headers: { 'user-agent': 'Bunny-AI', accept: '*/*', 'accept-encoding': 'identity', ...headers },
     }, resolve);
     req.on('error', reject);
     req.end();
@@ -112,7 +112,7 @@ export async function fetchLimited(url, { signal, allowLoopback = false, lookupI
   const sig = AbortSignal.any([AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS), ...(signal ? [signal] : [])]);
   for (let hop = 0; ; hop += 1) {
     if (current.protocol !== 'http:' && current.protocol !== 'https:') throw new Error(`download_file only fetches http or https addresses, not ${current.protocol}`);
-    if (isOwnServer(current)) throw refusedOwn(); // every hop, so a redirect cannot lead there either
+    if (isOwnServer(current) || isReservedAddress(current)) throw refusedOwn(); // Bunny's server and the model runtime (LM-17) // every hop, so a redirect cannot lead there either
     await hopJudge.getStore()?.(current.href); // PG-1: the person's website rules, at every hop (a private address is still refused below, whatever an allow says)
     let res;
     try {
@@ -150,4 +150,17 @@ export async function fetchLimited(url, { signal, allowLoopback = false, lookupI
     const type = String(res.headers['content-type'] ?? '').split(';')[0].trim() || 'unknown';
     return { bytes: Buffer.concat(chunks), type, url: current.href };
   }
+}
+
+/**
+ * LOCAL-MODELS: ONE request, redirects NOT followed, for the model and runtime downloaders (which judge every hop against their own host list). Public addresses only, never Bunny's
+ * own server or the model runtime's port, the same checks as fetchLimited. Returns { status, headers (lower-case names), body (the response stream) }.
+ */
+export async function fetchHop(url, { headers = {}, signal, lookupImpl = (h, o) => dnsLookup(h, o) } = {}) {
+  const current = new URL(String(url));
+  if (current.protocol !== 'https:') throw new Error('Only https addresses are fetched.');
+  if (isOwnServer(current) || isReservedAddress(current)) throw refusedOwn();
+  const sig = signal ?? new AbortController().signal; // a model is gigabytes: the caller's Cancel is the only time limit
+  const res = await requestOnce(current, { sig, allowLoopback: false, lookupImpl, headers });
+  return { status: res.statusCode, headers: res.headers, body: res };
 }

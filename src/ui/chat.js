@@ -387,7 +387,7 @@ function renderPicker() {
   } else if (state.selected) {
     const row = state.models.find((m) => m.id === state.selected.model && m.providerId === state.selected.providerId) ?? state.models.find((m) => m.id === state.selected.model);
     const name = row?.displayName ?? state.selected.model;
-    trigger.append(chipDot(state.selected.providerName), element('span', { className: 'label', textContent: name }));
+    trigger.append(chipDot(state.selected.providerName), element('span', { className: 'label', textContent: state.selected.providerId === 'bunny-local' ? `${name} · Bunny local` : name }));
     if (row?.freeKind) trigger.append(element('span', { className: 'chip-free', textContent: row.freeKind === 'daily' ? 'Free daily' : 'Free' }));
     trigger.title = `${name} (${state.selected.providerName})`; trigger.setAttribute('aria-label', `Model: ${name}, ${state.selected.providerName}`);
   } else {
@@ -398,6 +398,10 @@ function renderPicker() {
   }
   trigger.append(icon('chevron'));
   host.append(trigger);
+  // LOCAL-MODELS: a local model that cannot use tools says so under the message box, in one line
+  const chosen = !state.modelAuto && state.selected ? state.models.find((m) => m.id === state.selected.model && m.providerId === state.selected.providerId) : null;
+  const hint = $('local-hint');
+  if (hint) { hint.hidden = !(chosen?.providerId === 'bunny-local' && chosen.toolsOk === false); hint.textContent = hint.hidden ? '' : "This model answers only; it can't use tools."; }
 
   if (!state.models.length) {
     // Models exist but the "Show models" setting hides them: one click shows them. Otherwise there is nothing yet: add a provider.
@@ -532,7 +536,7 @@ function openPicker(host, trigger) {
   // The focus stays in the search box so typing keeps working.
   let active = 0;
 
-  const items = () => [...list.querySelectorAll('.picker-item')];
+  const items = () => [...list.querySelectorAll('.picker-item:not(.picker-get-more)')];
 
   const highlight = () => {
     const all = items();
@@ -556,6 +560,15 @@ function openPicker(host, trigger) {
     const more = button(`Show all models (${hidden} more)`, { className: 'picker-item picker-show-all', role: 'option', 'aria-selected': 'false' });
     more.id = 'model-show-all';
     more.addEventListener('click', () => { closePicker(); showAllModels().catch((err) => { $('error').textContent = err.message; }); });
+    list.append(more);
+  };
+
+  // LOCAL-MODELS: the menu always offers a way to the Bunny local card (downloaded models are listed above under their own provider name)
+  const addGetMore = () => {
+    const more = button('Get more…', { className: 'picker-item picker-get-more' });
+    more.id = 'model-get-more';
+    more.append(element('span', { className: 'model-desc', textContent: 'Opens Bunny local in Settings' }));
+    more.addEventListener('click', () => { closePicker(); openSettings('providers'); });
     list.append(more);
   };
 
@@ -619,8 +632,17 @@ function openPicker(host, trigger) {
     const nameOf = (g) => String(g[0].displayName ?? g[0].id);
     if (sort === 'name') groups.sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' }));
     else if (sort === 'context') groups.sort((a, b) => top(b) - top(a) || nameOf(a).localeCompare(nameOf(b)));
-    for (const group of groups) list.append(modelItem(group));
+    // LM-4: a local model is the person's own pick: it has its own group, never under Best for and never mixed into All models
+    const isLocal = (g) => g[0].providerId === 'bunny-local';
+    for (const group of groups.filter((g) => !isLocal(g))) list.append(modelItem(group));
     addShowAll();
+    const mine = groups.filter(isLocal);
+    if (mine.length || (!q && !filtered)) {
+      list.append(element('div', { className: 'picker-group picker-group-local', textContent: 'Bunny local · on this PC' }));
+      if (mine.length) for (const group of mine) list.append(modelItem(group));
+      else list.append(element('div', { className: 'picker-empty', textContent: 'No models downloaded yet' }));
+      if (!q && !filtered) addGetMore();
+    }
     active = 0;
     highlight();
   };
@@ -639,7 +661,7 @@ function openPicker(host, trigger) {
     if (readList('bunny.favourites').includes(first.id)) item.querySelector('.model-name')?.append(element('span', { className: 'picker-star', textContent: '★', title: 'Favourite' }));
     const tags = element('span', { className: 'picker-tags' });
     for (const m of rowsInOrder) {
-      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerName });
+      const tag = element('span', { className: 'picker-tag' + (m.unavailable ? ' is-out' : ''), textContent: m.providerId === 'bunny-local' ? `${m.providerName} · ${m.note ?? ''}${m.fitText ? ` · ${m.fitText}` : ''}`.replace(/ · $/, '') : m.providerName });
       if (m.freeKind) tag.append(element('span', { className: 'picker-free', textContent: m.freeKind === 'daily' ? 'Free daily' : 'Free' }));
       tags.append(tag);
     }
@@ -2022,6 +2044,10 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
   // The hopping bunny under the reply, with a word that matches what is happening.
   const working = createWorking(mood, { model: state.selected?.model ?? '', openThinking: ['thinking', 'verbose'].includes(state.settings?.transcriptView) });
   bodyEl.closest('.msg')?.after(working.el);
+  // LOCAL-MODELS: a local model that is not running yet is being started; the line says so until the first words arrive (it ends on the first delta, a step or an error)
+  if (state.selected?.providerId === 'bunny-local' && !state.modelAuto) {
+    getJSON('/api/local-models').then((st) => { if (!st?.running && assembled === '' && !working.isThinking() && !controller.signal.aborted) working.set('starting'); }).catch(() => {});
+  }
   // The thinking the line was showing settles into a quiet "Thought for 21s" row above the reply, where it can be opened any time.
   const settleThinking = () => {
     if (!working.isThinking()) return;
@@ -2047,7 +2073,9 @@ async function streamInto(bodyEl, { path, payload, mood = 'waiting', quietError 
     },
     onWorking: (info) => flashStatus(`Still working · step ${info.step}`),
     onDone: (info) => { gotDone = true; meter = info?.context ?? null; },
-    onError: (err) => { errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
+    onError: (err) => {
+      if (['local.memory', 'local.missing', 'local.changed'].includes(err.code)) { errorCode = err.code; errorInfo = { scope: 'other', message: '' }; showLocalError(bodyEl, err); return; } // a card with its buttons, never a red line
+      errorCode = err.code ?? 'chat.failed'; errorInfo = { scope: err.scope, reason: err.reason, unavailable: err.modelUnavailable, coolingUntil: err.coolingUntil, coolingScope: err.coolingScope, message: err.message }; showError(err.message ?? 'The request failed.'); },
     onTool: (info) => {
       if (info.pcTainted) state.noAutoLoad = true; // file text from this PC is in this reply: the answer loads nothing by itself
       settleThinking();
@@ -2485,6 +2513,25 @@ function setFolded(pre, folded) {
 }
 
 /** The model asked for something it does not have: the person chooses. */
+/** LOCAL-MODELS: the plain error of a local model is a card with its buttons (design-local-models, section 6), not a red line. */
+function showLocalError(bodyEl, info) {
+  const foot = $('error')?.parentElement; // the card lives by the message box: the thread is drawn again after an error, and would take it away
+  if (!foot) return;
+  document.querySelectorAll('.local-error-card').forEach((n) => n.remove());
+  const card = element('div', { className: 'permission-prompt live-permission capability-card local-error-card' });
+  card.dataset.localError = info.code;
+  const title = { 'local.memory': (info.message.match(/^Not enough memory to load [^.]*/) ?? ['Not enough memory'])[0], 'local.missing': "Bunny local isn't set up on this PC", 'local.changed': "Bunny local's program changed on disk" }[info.code] ?? 'Bunny local';
+  card.append(element('p', { className: 'capability-reason' }, element('b', { textContent: title }), document.createElement('br'), document.createTextNode(info.message.slice(info.message.startsWith(title) ? title.length : 0).replace(/^\.\s*/, ''))));
+  const actions = element('div', { className: 'permission-actions' });
+  if (info.code === 'local.memory') {
+    actions.append(button('Choose a smaller model', { className: 'primary', onclick: () => { card.remove(); $('picker-button')?.click(); } }), button('Try again', { onclick: () => { card.remove(); $('send')?.click(); } }));
+  } else {
+    actions.append(button(info.code === 'local.changed' ? 'Set up again' : 'Set up Bunny local', { className: 'primary', onclick: () => { card.remove(); openSettings('providers'); } }), button('Not now', { onclick: () => card.remove() }));
+  }
+  card.append(actions);
+  foot.before(card);
+}
+
 /** W4-14e: a plain note in the chat from Bunny's server, with the folder picker when a folder is what is missing. */
 function showLiveNotice(bodyEl, info) {
   const msg = bodyEl.closest('.msg');
@@ -3044,6 +3091,7 @@ function askAboutPcFile(row) {
 }
 
 async function send() {
+  document.querySelectorAll('.local-error-card').forEach((n) => n.remove()); // a local model's error card goes when the next message is sent
   const input = $('input');
   const text = input.value.trim();
   $('error').textContent = '';
@@ -3158,7 +3206,7 @@ async function send() {
     candidates.push(...rankModels(state.models, job).filter((m) => m.id !== state.selected?.model).slice(0, 2));
   }
   // Errors that are not the model's fault: another model would not help.
-  const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson']);
+  const notTheModel = new Set(['speech.failed', 'model.notSelected', 'provider.notConnected', 'request.invalidJson', 'local.memory', 'local.missing', 'local.changed', 'local.notRunning']);
   let result = { meter: null, aborted: false };
   // T-3: models are tried one at a time, at most MAX_ATTEMPTS, and a provider that just failed as a whole
   // (unreachable, bad key) is skipped for the rest of this send. Only the last failure is shown, once.
@@ -4216,7 +4264,7 @@ function visibleModels(all) {
   state.allModelCount = all.length;
   state.allModels = all;
   if (state.settings?.modelFilter === 'all') return all;
-  return all.filter((m) => m.providerId === 'nvidia' || m.free === true || /(?::|-)free$/i.test(m.id));
+  return all.filter((m) => m.providerId === 'nvidia' || m.providerId === 'bunny-local' || m.free === true || /(?::|-)free$/i.test(m.id));
 }
 
 /** How many models the "Show models" setting is hiding right now. */

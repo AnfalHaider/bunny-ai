@@ -521,7 +521,7 @@
       <div class="row" id="auto-judge-model-row">
         <div class="meta-col">
           <div class="name">Model that checks Auto actions</div>
-          <div class="desc">By default the model of the chat's own provider. Another provider can be chosen below. Each checked action is sent to that provider. <span id="auto-judge-note" role="status"></span></div>
+          <div class="desc">By default the model of the chat's own provider. Another provider can be chosen below. Each checked action is sent to that provider. With a local model as the chat's model that means Smart asks you: a small local model is a weaker check. <span id="auto-judge-note" role="status"></span></div>
         </div>
         <div class="right"><select id="auto-judge-model" aria-label="Model that checks Auto actions"><option value="">This chat's own model</option></select></div>
       </div>
@@ -1537,7 +1537,7 @@
     try {
       const models = await getJSON('/api/models');
       const seen = new Set();
-      for (const m of models) { const v = `${m.providerId}/${m.id}`; if (seen.has(v) || !/^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(v)) continue; seen.add(v); const o = document.createElement('option'); o.value = v; o.textContent = `${m.providerName ?? m.providerId}: ${m.name ?? m.id}`; sel.append(o); }
+      for (const m of models) { const v = `${m.providerId}/${m.id}`; if (m.providerId === 'bunny-local') continue; /* LM-4: no local model checks anything */ if (seen.has(v) || !/^[\w.-]{1,60}\/[\w./:@-]{1,120}$/.test(v)) continue; seen.add(v); const o = document.createElement('option'); o.value = v; o.textContent = `${m.providerName ?? m.providerId}: ${m.name ?? m.id}`; sel.append(o); }
     } catch { /* no model list: the default stays */ }
     sel.value = [...sel.options].some((o) => o.value === settings.autoJudgeModel) ? settings.autoJudgeModel : '';
     note();

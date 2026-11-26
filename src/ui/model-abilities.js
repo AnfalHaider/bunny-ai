@@ -112,6 +112,7 @@ export function noEyesWarning({ job, modelAuto, modelName, canSee }) {
 /** Models ordered best-first for a job; only ones that can actually run it here. */
 export function rankModels(models, job) {
   return models
+    .filter((m) => m.providerId !== 'bunny-local') // LOCAL-MODELS LM-4: a local model is always the person's own pick, never Auto's and never a recommendation
     .filter((m) => !m.unavailable)
     // W6-5: a provider that just refused for rate or usage reasons is left alone until its cool-down ends.
     .filter((m) => !(m.coolingUntil && m.coolingUntil > Date.now()))

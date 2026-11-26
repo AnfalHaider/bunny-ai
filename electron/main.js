@@ -21,7 +21,7 @@ import { cleanTrayEvent, trayTooltip } from './tray-words.js';
 import { childWindowOptions, isOwnPage, navigationAllowed, openDecision } from './own-pages.js';
 import { createPcOpen } from './pc-open.js';
 import { createMadeFile, findMadeFile } from './made-file.js';
-import { copyFile } from 'node:fs/promises';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { browserAddress, listenWithFallback, portToKeepNow, wantedPort } from './browser-access.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -224,6 +224,26 @@ const madeFile = createMadeFile({
 ipcMain.handle('made:open', (event, chat, file) => madeFile.open(event, chat, file));
 ipcMain.handle('made:show', (event, chat, file) => madeFile.show(event, chat, file));
 ipcMain.handle('made:save', (event, chat, file) => madeFile.save(event, chat, file));
+// LOCAL-MODELS: Show in folder for Bunny local's models folder. No argument: the main process knows the folder itself, and only Bunny's own window may ask.
+ipcMain.handle('local:show-folder', async (event) => {
+  if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false, message: 'Not allowed' };
+  const view = await bunnyApp?.localModels?.placesView?.().catch(() => null); // the folder downloads go to now (the person's choice, or Bunny's own)
+  const dir = view?.download?.root ?? join(dataDir, 'models');
+  if (!view?.download?.root) await mkdir(dir, { recursive: true });
+  const failed = await shell.openPath(dir);
+  return failed ? { ok: false, message: 'The folder could not be opened.' } : { ok: true };
+});
+// LOCAL-MODELS LF-1, LF-13: the folders and the model file come from the system dialogs HERE, in the main process, and go straight to the service. A page never types or sends a path.
+const placeCall = async (event, title, props, filters, run) => {
+  if (!isOwn(event.senderFrame?.url ?? '') || !bunnyApp?.localModels) return { ok: false, message: 'Not allowed' };
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? win;
+  const result = await dialog.showOpenDialog(owner, { title, properties: props, ...(filters ? { filters } : {}) });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+  try { return { ok: true, ...(await run(result.filePaths[0])) }; } catch (err) { return { ok: false, code: err.code ?? 'local.failed', message: err.message ?? 'That did not work.' }; }
+};
+ipcMain.handle('local:choose-download-folder', (event) => placeCall(event, 'Choose where Bunny saves models', ['openDirectory', 'createDirectory'], null, async (path) => ({ places: await bunnyApp.localModels.chooseDownloadFolder(path) })));
+ipcMain.handle('local:add-model-folder', (event) => placeCall(event, 'Choose a folder of model files', ['openDirectory'], null, async (path) => ({ places: await bunnyApp.localModels.addModelFolder(path) })));
+ipcMain.handle('local:pick-model-file', (event) => placeCall(event, 'Add a model from this PC', ['openFile'], [{ name: 'GGUF model files', extensions: ['gguf'] }], async (path) => ({ card: await bunnyApp.localModels.inspectFile({ dialogPath: path }) })));
 ipcMain.handle('remote:tray-event', (event, raw) => { // window-only, fixed fields only
   if (!isOwn(event.senderFrame?.url ?? '')) return { ok: false };
   trayEvent = cleanTrayEvent(raw);
@@ -290,7 +310,7 @@ ipcMain.handle('secure:write', async (event, method, path, body) => {
   const from = event.senderFrame?.url ?? event.sender.getURL();
   if (!isOwn(from)) throw new Error('Not a Bunny page.');
   if (!isWindowOnlyRoute(method, path, body)) throw new Error('That is not a window-only change.');
-  const res = await bunnyApp.adminFetch(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  const res = await bunnyApp.adminFetch(path, { method, headers: { 'content-type': 'application/json' }, ...(['GET', 'HEAD'].includes(String(method).toUpperCase()) ? {} : { body: JSON.stringify(body ?? {}) }) }); // a GET or HEAD cannot have a body
   return { status: res.status, data: await res.json().catch(() => ({})) };
 });
 
@@ -347,7 +367,7 @@ app.on('before-quit', (event) => {
   if (programsStopped || !bunnyApp) return;
   event.preventDefault();
   programsStopped = true;
-  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll()]).catch(() => {}).finally(async () => {
+  Promise.all([bunnyApp.processes.stopAll(), bunnyApp.localMcp.stopAll(), bunnyApp.localModels?.stopAll?.()]).catch(() => {}).finally(async () => {
     // A downloaded update installs as the app closes (and reopens it after Restart to update). S-7: it is checked against its published fingerprint once more first.
     if (updater?.hasUpdate()) await updater.install({ relaunch: installOnQuit === 'relaunch' }).catch(() => {});
     app.quit();

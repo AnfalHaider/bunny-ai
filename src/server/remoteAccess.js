@@ -39,6 +39,7 @@ export const DEVICE_ACCESS_MESSAGE = "Only Bunny's window can change device acce
 export const isRemoteAdminPath = (path) => /^\/api\/remote(\/|$)/.test(String(path));
 /** CLI-ENGINES (CE-6): what a device at ANY level is told when it reaches for the engines. */
 export const ENGINE_REFUSED_MESSAGE = "Only Bunny's window can change engines.";
+export const LOCAL_MODELS_REFUSED_MESSAGE = "Only Bunny's window can set up, download, start or stop local models.";
 export const FOLDER_RULES_REFUSED_MESSAGE = "Answer this in Bunny's window on the PC.";
 const UUID_ = '[a-f0-9-]{36}';
 const ENGINE_PATH = /^\/api\/engines(\/|$)/;
@@ -53,6 +54,8 @@ export function deviceRefusal(method, path, body = null) {
   const p = String(path);
   if (isRemoteAdminPath(p)) return DEVICE_ACCESS_MESSAGE;
   if (ENGINE_PATH.test(p)) return ENGINE_REFUSED_MESSAGE;
+  if (/^\/api\/local-models\/places(\/|$)/.test(p)) return LOCAL_MODELS_REFUSED_MESSAGE; // LF-1, LF-13: not even a read: the folders and files hold the Windows user name
+  if (/^\/api\/local-models(\/|$)/.test(p) && m !== 'GET') return LOCAL_MODELS_REFUSED_MESSAGE; // LM-13: a device, at either level, never sets up, downloads, starts or stops a model; it only chats with one that already runs
   const has = (...keys) => Boolean(body) && typeof body === 'object' && keys.some((k) => Object.hasOwn(body, k));
   if (p === '/api/settings' && m === 'PUT' && has('engine', 'engines', 'useBunnyEngine')) return ENGINE_REFUSED_MESSAGE;
   if (p === '/api/sessions' && m === 'POST' && has('engine')) return ENGINE_REFUSED_MESSAGE;

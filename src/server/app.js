@@ -7,8 +7,8 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
-import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
-import { userInfo } from 'node:os';
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir, userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -23,6 +23,8 @@ import { WINDOW_ONLY_SESSION_SETTINGS, WINDOW_ONLY_SETTING_KEYS, isWindowOnlyRou
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { createProviderRegistry } from '../providers/connections.js';
+import { createLocalModels, LocalError, QUICK_ASK_STARTING } from './localModels.js';
+import { createRealLocalModels } from './localModelsReal.js';
 import { findProvider } from '../providers/catalog.js';
 import { startDeviceFlow, waitForToken } from '../providers/oauth.js';
 import { dpapiSecretStore } from '../providers/secretStore.js';
@@ -238,7 +240,7 @@ export function readFileUrlIn(workspace, url) {
   return workspace.readFileUrl(String(url).trim());
 }
 
-export async function createApp({ pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, installSource: installSourceOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
+export async function createApp({ localModels: localModelsOption = null, pcOptions = {}, electronData = '', toolInstaller: toolInstallerOverride = null, installSource: installSourceOverride = null, waitNudgeMs = 3 * 60_000, dataDir, fake = process.env.BUNNY_FAKE_UPSTREAM === '1', secretStore, probe, discover, apiToken, localGuard = true, networkProbe = probeNetwork, folderPickerOnly = false, lanAddress: lanAddressOverride = null, networkProfile: networkProfileOverride = null } = {}) {
   // what the network is called (Windows: its name and Private/Public); a test that names its own local address is not asked of Windows
   const networkProfile = networkProfileOverride ?? (lanAddressOverride ? async () => null : networkProfileOf);
   await mkdir(dataDir, { recursive: true });
@@ -318,8 +320,16 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     ? { probe: offlineProbe, discover: offlineDiscover }
     : {};
 
+  // LOCAL-MODELS (fake mode for now): what Bunny local has downloaded, and the window's buttons for it
+  const localFake = fake || process.env.BUNNY_FAKE_LOCAL === '1';
+  const localModels = localModelsOption ?? (localFake ? createLocalModels({ dataDir, fake: true }) : createRealLocalModels({ dataDir, installDirs: [process.resourcesPath, join(dirname(fileURLToPath(import.meta.url)), '..', '..')].filter(Boolean), projectFolders: () => [...chosenFolders] }));;
+  await localModels.load();
+  await localModels.refreshReady?.();
+  /** The key for a provider's requests: Bunny local's is the running server's own, looked up per request and never stored (LM-2). */
+  const providerKey = (id) => (id === 'bunny-local' ? (localModels.apiKey?.() ?? undefined) : secrets.get(`provider:${id}`));
   const registry = createProviderRegistry({
     secrets,
+    managed: { status: () => (localModels.hasReady() ? 'connected' : 'disconnected'), models: () => localModels.pickerModels(), baseUrl: () => localModels.baseUrl() },
     ...offline,
     ...(probe ? { probe } : {}),
     ...(discover ? { discover } : {}),
@@ -617,7 +627,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
     return async (session) => {
       const provider = registry.list().find((p) => p.id === providerId && p.status === 'connected');
       if (!provider || !model || fake) return '';
-      const apiKey = await secrets.get(`provider:${providerId}`);
+      const apiKey = await providerKey(providerId);
       const transcript = session.messages
         .filter((m) => m.kind !== 'tool_call' && m.kind !== 'permission_prompt')
         .map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 4000)}`)
@@ -680,7 +690,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           { role: 'system', content: `Today is ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. This is the scheduled task "${schedule.name}", running on its own in Bunny AI.` },
           { role: 'user', content: schedule.prompt },
         ];
-        const apiKey = await secrets.get(`provider:${providerId}`);
+        const apiKey = await providerKey(providerId);
         let assembled = '';
         for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           // auth: providers that want the key in their own header (Anthropic, some custom ones).
@@ -700,6 +710,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
   /** All models across connected providers, for the picker. */
   async function allModels({ refresh = false } = {}) {
+    await localModels.refreshReady?.(); // Bunny local counts as connected only while a model is on disk
     const connected = registry.list().filter((p) => p.status === 'connected');
     const out = [];
     for (const provider of connected) {
@@ -769,8 +780,81 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
 
     if (path === '/api/health') return sendJson(res, 200, { ok: true, fake, windowOnlyLock: Boolean(folderPickerOnly) }); // BROWSER: a page in a browser can say "Change this in Bunny's window." early
 
+    // ---- LOCAL-MODELS: the card's state and the window's buttons. Writes are the window's alone (LM-13); a device may only read what runs. ----
+    if (path === '/api/local-models' && method === 'GET') { const st = await localModels.status(); await localModels.refreshReady?.(); return sendJson(res, 200, st); }
+    // ---- LOCAL-MODELS: the places (download folder, model folders, files from this PC). Window only for every method, reads included: paths hold the Windows user name (LF-1, LF-13).
+    // A path is never taken from a request: the folders and files come from the system dialogs in the main process (chooseDownloadFolder, addModelFolder, inspectFile with dialogPath), and a listed file by its id.
+    if (path.startsWith('/api/local-models/places')) {
+      if (windowOnly(req, res)) return;
+      if (typeof localModels.placesView !== 'function') return sendJson(res, 404, { code: 'local.notAvailable', message: 'Only with the real Bunny local.' });
+      try {
+        const part = path.slice('/api/local-models/places'.length).replace(/^\//, '');
+        const body = method === 'POST' || method === 'PUT' ? await readBody(req) : {};
+        const str = (v) => (typeof v === 'string' ? v : '');
+        if (method === 'GET' && part === '') return sendJson(res, 200, await localModels.placesView());
+        if (method === 'POST' && part === 'refresh') return sendJson(res, 200, await localModels.placesView());
+        if (method === 'POST' && part === 'inspect') return sendJson(res, 200, await localModels.inspectFile({ entryId: str(body.entryId) }));
+        if (method === 'POST' && part === 'add-file') return sendJson(res, 200, await localModels.addFile(str(body.token)));
+        if (method === 'POST' && part === 'remove-file') return sendJson(res, 200, await localModels.removeFile(str(body.id)));
+        if (method === 'POST' && part === 'file-tools') return sendJson(res, 200, await localModels.setFileTools(str(body.id), body.on === true));
+        if (method === 'POST' && part === 'remove-folder') return sendJson(res, 200, await localModels.removeModelFolder(str(body.id)));
+        if (method === 'POST' && part === 'lmstudio-back') return sendJson(res, 200, await localModels.addLmStudioBack());
+        if (method === 'POST' && part === 'download-default') return sendJson(res, 200, await localModels.useDefaultDownloadFolder());
+        if (method === 'POST' && part === 'move') return sendJson(res, 200, await localModels.startMove());
+        if (method === 'POST' && part === 'move-cancel') return sendJson(res, 200, await localModels.cancelMove());
+        return sendJson(res, 404, { code: 'local.bad', message: 'No such action.' });
+      } catch (err) {
+        if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
+        throw err;
+      }
+    }
+    const lmMatch = path.match(/^\/api\/local-models(?:\/([a-z0-9-]+))?$/);
+    if (lmMatch && method !== 'GET') {
+      if (windowOnly(req, res)) return;
+      try {
+        const body = method === 'POST' || method === 'PUT' ? await readBody(req) : {};
+        const [, part] = lmMatch;
+        if (method === 'DELETE' && part === 'setup') return sendJson(res, 200, await localModels.cancelSetup());
+        if (method === 'DELETE') return sendJson(res, 200, part ? await localModels.remove(part) : await localModels.removeAll());
+        const modelId = typeof body.id === 'string' ? body.id : '';
+        if (method === 'POST' && part === 'setup') return sendJson(res, 200, await localModels.setUp());
+        if (method === 'POST' && part === 'download') return sendJson(res, 200, await localModels.download(modelId));
+        if (method === 'POST' && part === 'pause') return sendJson(res, 200, await localModels.pause(modelId));
+        if (method === 'POST' && part === 'resume') return sendJson(res, 200, await localModels.resume(modelId));
+        if (method === 'POST' && part === 'cancel') return sendJson(res, 200, await localModels.cancel(modelId));
+        if (method === 'POST' && part === 'stop') return sendJson(res, 200, await localModels.stopNow());
+        // Test mode: three ready-made scenarios for QA. Each makes what it needs (a downloaded model, a chat with a local model) and returns the chat's id and the one message to send.
+        if (method === 'POST' && part === 'scenario') {
+          if (!localModels.isFake()) return sendJson(res, 404, { code: 'local.notAvailable', message: 'Only in test mode.' });
+          const name = String(body.name ?? '');
+          if (!['smart-asks', 'quick-ask', 'device'].includes(name)) return sendJson(res, 400, { code: 'local.bad', message: 'Choose smart-asks, quick-ask or device.' });
+          await localModels.raise('none');
+          await localModels.setUp();
+          for (let i = 0; i < 100 && !(await localModels.status()).installed; i += 1) await new Promise((r) => setTimeout(r, 50));
+          await localModels.download('qwen3-4b');
+          for (let i = 0; i < 100 && (await localModels.status()).models.find((m) => m.id === 'qwen3-4b').state !== 'ready'; i += 1) await new Promise((r) => setTimeout(r, 50));
+          await localModels.stopNow();
+          const folder = await mkdtemp(join(tmpdir(), 'bunny-local-demo-'));
+          const made = await sessions.create({ title: { 'smart-asks': 'Local model: Smart asks', 'quick-ask': 'Local model: Quick ask', device: 'Local model: a device' }[name], providerId: 'bunny-local', model: 'qwen3-4b' });
+          if (name === 'smart-asks') {
+            settings = { ...settings, autoJudgeEnabled: true, autoJudgeModel: '' }; await writeJson(settingsFile, settings);
+            await sessions.update(made.id, { folder, workMode: 'code', permissionMode: 'auto' });
+            return sendJson(res, 200, { sessionId: made.id, message: '[[call run_command {"command":"echo hi"}]] run it', expect: "A card: Asked because Smart can't check this with a local model. Choose a checking model in Settings to let Smart decide." });
+          }
+          if (name === 'quick-ask') return sendJson(res, 200, { sessionId: made.id, message: 'hello', extraBody: { textOnly: true, providerId: 'bunny-local', model: 'qwen3-4b' }, expect: 'A notice: Starting your local model…' });
+          await localModels.raise('device');
+          return sendJson(res, 200, { sessionId: made.id, message: 'hello', expect: "409 local.notRunning: Bunny local is stopped. Start it from Bunny's window on your PC." });
+        }
+        if (method === 'POST' && part === 'fake') return sendJson(res, 200, await localModels.raise(String(body.raise ?? ''), typeof body.id === 'string' ? body.id : null)); // test mode only: shows each plain error state
+        if ((method === 'POST' || method === 'PUT') && part === 'settings') return sendJson(res, 200, await localModels.settings(body));
+      } catch (err) {
+        if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
+        throw err;
+      }
+    }
     if (path === '/api/providers' && method === 'GET') {
-      return sendJson(res, 200, registry.list());
+      // LM-2 / Security L2: Bunny local's runtime address is never sent to a page or a device (it is looked up per request, in the main process)
+      return sendJson(res, 200, registry.list().map((p) => (p.id === 'bunny-local' ? { ...p, baseUrl: '' } : p)));
     }
 
     // ---- signing in with GitHub or Google ----
@@ -2185,7 +2269,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (!session) return sendJson(res, 404, { code: 'session.notFound', message: 'No such session' });
       const folderInfo = await effectiveRoot(session);
       if (!folderInfo?.ok) return sendJson(res, 409, { code: 'folderRules.noFolder', message: 'This chat has no working folder.' });
-      const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir], allow: folderInfo.copy ? [folderInfo.folder] : [] });
+      const workspace = createWorkspace(folderInfo.folder, { protect: [dataDir, ...(localModels.protectedPaths?.() ?? [])], allow: folderInfo.copy ? [folderInfo.folder] : [] });
       const rules = () => rulesFor(settings.permissionRules, workspace.root);
       const key = await frKey(session, folderInfo);
       const trust = frTrusted(key);
@@ -2408,7 +2492,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (fake) return sendJson(res, 200, { suggestions: ['Explain that in simpler words', 'What should I do next?', 'Show me an example'] });
       const provider = registry.list().find((p) => p.id === body.providerId && p.status === 'connected');
       if (!provider || !body.model) return sendJson(res, 200, { suggestions: [] });
-      const apiKey = await secrets.get(`provider:${provider.id}`);
+      const apiKey = await providerKey(provider.id);
       const recent = session.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.kind?.match(/tool_call|permission_prompt|error|summary/))
         .slice(-6).map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${String(m.content ?? '').slice(0, 2500)}`).join('\n\n');
       let out = '';
@@ -2528,6 +2612,20 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         return sendJson(res, 400, { code: 'provider.notConnected', message: 'That provider is not connected' });
       }
 
+      // LOCAL-MODELS (LM-9, LM-13): a Bunny local model is looked up when the request is made. Only the window may start it; a device gets local.notRunning while it is stopped.
+      let localStarting = null;
+      if (providerId === 'bunny-local') {
+        try {
+          const before = (await localModels.status()).running;
+          // LM-13, LM-14, LM-18: the window starts it; a Quick ask question only with the main process's admin secret (a body that merely says textOnly is nobody); a device and a scheduled run never
+          const who = (req.bunnyRemote ?? req.bunnyDevice) ? 'device' : body.scheduledTask ? 'scheduled' : (body.textOnly === true && !adminOk(req)) ? 'textOnly' : 'window';
+          await localModels.ensure(model, { who, quick: body.textOnly === true });
+          if (before?.id !== model) localStarting = (await localModels.status()).models.find((m) => m.id === model)?.name ?? model;
+        } catch (err) {
+          if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
+          throw err;
+        }
+      }
       // Compact automatically before the window fills, so a long thread keeps
       // working instead of failing at the provider's limit.
       const compacted = await sessions.compactIfFull(id, 0.8, { summarize: modelSummarizer(providerId, model) }).catch(() => null);
@@ -2603,6 +2701,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (helper && event === 'permission') out = { ...data, title: `${helper} › ${data.title}` };
         res.write(`event: ${event}\ndata: ${JSON.stringify(out)}\n\n`);
       };
+      if (localStarting) send('notice', body.textOnly === true ? { text: QUICK_ASK_STARTING, localStarting: true } : { text: `Starting ${localStarting}… (first message after a start takes longer)` }); // LM-9: the Starting line
       // A helper's own steps are kept in its own chat; the main chat keeps its own.
       // What the model said since its last step ("Checking the server log.") is kept with the
       // next step, so the chat reads as a running account of the work, also after a reload.
@@ -2698,7 +2797,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         await checkpoint.capture(abs);
       };
       const undoInfo = () => (checkpoint?.count() ? { checkpoint: { id: checkpoint.id, files: checkpoint.count() } } : {});
-      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [dataDir], allow: folder.copy ? [folder.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
+      let workspace = workMode !== 'chat' && folder?.ok ? createWorkspace(folder.folder, { protect: [dataDir, ...(localModels.protectedPaths?.() ?? [])], allow: folder.copy ? [folder.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) }) : null;
 
       // W6-12: a Code chat carries its task list from one message to the next. The newest saved list that still has an open step
       // is the starting list of this reply (and is told to the model); a finished list is not carried. Not in Chat mode (no workspace).
@@ -2771,7 +2870,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (chosen) {
           const [pid, ...rest] = chosen.split('/');
           const other = registry.find(pid);
-          const otherKey = other ? await secrets.get(`provider:${other.id}`) : null;
+          const otherKey = other ? await providerKey(other.id) : null;
           if (!other || !otherKey) throw new Error('the chosen check model has no key');
           if (Array.isArray(settings.allowlist) && settings.allowlist.length && !settings.allowlist.includes(rest.join('/'))) throw new Error('the chosen check model is not on the allowlist');
           p = other; key = otherKey; judgeModel = rest.join('/');
@@ -2792,6 +2891,11 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       /** @returns {Promise<{ proceed: true } | { stop: string } | { card: string }>} */
       const autoCheck = async (summary, name, parsed, risk) => {
         if (!judgeOn() || !goesToJudge(name, risk)) return { proceed: true };
+        // LM-8: a small local model is a weak judge. With a local chat model and no checking model chosen, Smart asks instead of letting it decide.
+        if (providerId === 'bunny-local' && !String(settings.autoJudgeModel ?? '')) {
+          if (!judgeNoticeShown) { judgeNoticeShown = true; }
+          return { card: "Asked because Smart can't check this with a local model. Choose a checking model in Settings to let Smart decide." };
+        }
         replyJudge ??= createReplyJudge({ ask: askJudgeModel, model: judgeModelLabel() });
         const out = await replyJudge.judge({ tool: name, args: parsed, folder: workspace?.root ?? folder?.folder ?? '' }, { userTurns: await typedTurns(), scheduled: Boolean(scheduledTask) });
         const stats = replyJudge.stats;
@@ -3333,7 +3437,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
           const fresh = await sessions.get(id);
           const checked = await effectiveRoot(fresh);
           if (!checked?.ok) return checked?.gone ? checked.reason : 'No folder was chosen, so Code mode is not on yet.';
-          workspace = createWorkspace(checked.folder, { protect: [dataDir], allow: checked.copy ? [checked.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
+          workspace = createWorkspace(checked.folder, { protect: [dataDir, ...(localModels.protectedPaths?.() ?? [])], allow: checked.copy ? [checked.folder] : [], beforeWrite, onCommand: markCommand, signal: () => controller?.signal, hidden: (rel) => readDenied(activeRules(), rel) });
           await sessions.update(id, { workMode: 'code' });
           toolDefinitions.push(...workspaceToolDefinitions(risks), ...processToolDefinitions(risks));
           // The reply goes on in Code mode: its rules and its longer step limit apply from here.
@@ -3495,7 +3599,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         if (!chosen || (chosen.id === model && chosen.providerId === providerId)) return parentModel();
         const p = registry.list().find((x) => x.id === chosen.providerId && x.status === 'connected');
         if (!p) return parentModel();
-        return { providerId: p.id, model: chosen.id, provider: p, apiKey: await secrets.get(`provider:${p.id}`), why };
+        return { providerId: p.id, model: chosen.id, provider: p, apiKey: await providerKey(p.id), why };
       };
       const listHelperModels = async () => {
         const list = await helperModels();
@@ -3559,7 +3663,7 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
         const theirProvider = registry.list().find((p) => p.id === target.providerId && p.status === 'connected');
         const useProvider = theirProvider ?? provider;
         const useModel = theirProvider ? target.model : model;
-        const useKey = theirProvider ? await secrets.get(`provider:${theirProvider.id}`) : apiKey;
+        const useKey = theirProvider ? await providerKey(theirProvider.id) : apiKey;
         const incoming = `Message from the chat "${session.title}": ${text}`;
         const history = [
           { role: 'system', content: `${today}You are Bunny AI in the chat "${target.title}". Another chat is sending you a message. Answer it from what this conversation knows, briefly.` },
@@ -4377,7 +4481,7 @@ with settings: ${Object.keys(parsed.env).join(', ')}` : ''}` : '';
       let thinkingSince = 0;
       const closeThinking = () => { if (thinkingSince) { thinkingMs += Date.now() - thinkingSince; thinkingSince = 0; } };
       let maxTokens = Math.min(64_000, Math.round((Number(settings.maxTokens) || 4096) * EFFORT.tokens));
-      const apiKey = await secrets.get(`provider:${providerId}`);
+      const apiKey = await providerKey(providerId);
 
       // CLI-ENGINES: a Code chat with a folder may run on an engine (Claude Code or Codex). The engine and its auth mode are fixed at the chat's first message.
       // A device at the Chats level never runs one (req.bunnyRemote); schedules, Quick ask and Chat mode stay on Bunny's own engine.
@@ -4749,7 +4853,7 @@ ${content}` : content), handover, root: workspace.root, permissionMode, send, lo
       const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       let assembled = '';
       try {
-        const apiKey = await secrets.get(`provider:${providerId}`);
+        const apiKey = await providerKey(providerId);
         for await (const delta of streamChat({ waitSeconds: settings.firstReplyWaitSeconds,
           baseUrl: provider.baseUrl, apiKey: apiKey ?? undefined, model, messages, fake, auth: provider.auth ?? null,
         })) {
@@ -5041,7 +5145,7 @@ ${content}` : content), handover, root: workspace.root, permissionMode, send, lo
   server.on('close', () => { processes.stopAll().catch(() => {}); localMcp.stopAll().catch(() => {}); });
 
   return {
-    server, registry, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
+    server, registry, localModels, processes, localMcp, sessions, projects, artifacts, memory, mcp, schedules, hooks, skills, usage,
     computer, terminals, remote, resumeRemote,
     getSettings: () => settings,
     siteRules: () => rulesFor(settings.permissionRules, null).filter((r) => r.kind === 'domain'), // PG1-c: the browser panel (electron/main.js) judges every request with these

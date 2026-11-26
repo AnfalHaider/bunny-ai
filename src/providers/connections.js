@@ -53,6 +53,11 @@ export function parseBaseUrl(raw, opts = {}) {
  * Pure: no network, no storage.
  */
 export function validateInput(provider, input = {}) {
+  // LOCAL-MODELS LM-1: Bunny local takes no address and no key from anyone: a page or a device cannot point it somewhere else
+  if (provider.kind === 'managed') {
+    if (input && (Object.hasOwn(input, 'baseUrl') || Object.hasOwn(input, 'apiKey'))) throw new ConnectError('provider.managed', 'Bunny local needs no address or key. Bunny sets it up itself.', 'baseUrl');
+    return { baseUrl: '' };
+  }
   if (provider.kind === 'oauth') {
     // A sign-in provider takes no typed secret: the token arrives from the
     // device flow, not from the form.
@@ -162,7 +167,7 @@ async function defaultProbe({ baseUrl, apiKey, local = false, auth = null }, fet
  *   catalog?: ReadonlyArray<any>
  * }} deps
  */
-export function createProviderRegistry({ secrets, probe = defaultProbe, catalog: builtIn = PROVIDERS, discover = discoverModels, modelTtlMs = 5 * 60_000 }) {
+export function createProviderRegistry({ secrets, probe = defaultProbe, catalog: builtIn = PROVIDERS, discover = discoverModels, modelTtlMs = 5 * 60_000, managed = null }) {
   // The built-in providers, then any the person added (custom: true).
   const catalog = [...builtIn];
   /** @type {Map<string, { status: Status, baseUrl: string, maskedKey: string, lastError: string|null, connectedAt: string|null }>} */
@@ -194,8 +199,9 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog:
         defaultBaseUrl: provider.defaultBaseUrl ?? '',
         // Which header the key belongs in. Names only, never the key itself.
         auth: provider.auth ?? null,
-        status: s.status,
-        baseUrl: s.baseUrl,
+        // LOCAL-MODELS: Bunny local is 'connected' when it has a downloaded model, and has no address or key stored anywhere
+        status: provider.kind === 'managed' ? (managed?.status?.(provider.id) ?? 'disconnected') : s.status,
+        baseUrl: provider.kind === 'managed' ? (managed?.baseUrl?.(provider.id) ?? '') : s.baseUrl, // LM-2: looked up when asked, never stored; empty while the runtime is stopped
         maskedKey: s.status === 'connected' ? s.maskedKey : '',
         lastError: s.lastError,
         connectedAt: s.connectedAt,
@@ -290,6 +296,10 @@ export function createProviderRegistry({ secrets, probe = defaultProbe, catalog:
    */
   async function models(id, { refresh = false } = {}) {
     const provider = requireProvider(id);
+    if (provider.kind === 'managed') { // the list is what is on disk (LM-3), never a running server's answer
+      if (managed?.status?.(id) !== 'connected') throw new ConnectError('models.notConnected', `${provider.name} is not connected`);
+      return managed.models(id);
+    }
     const current = state.get(id);
 
     if (!current || current.status !== 'connected') {

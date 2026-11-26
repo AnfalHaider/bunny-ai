@@ -149,6 +149,12 @@ export const FREE_ALLOWANCE = Object.freeze({
     url: 'https://moark.com/docs/openapi/v1',
     checked: '2026-11-17',
   },
+  'bunny-local': {
+    kind: 'priced-zero',
+    note: 'models Bunny downloads and runs on the person\'s own computer: nothing is billed.',
+    url: 'https://github.com/ggml-org/llama.cpp',
+    checked: '2026-11-17',
+  },
   ollama: {
     kind: 'unknown',
     note: 'not checked: local models cost nothing on the person\'s own computer; Ollama cloud free-plan limits not checked.',
