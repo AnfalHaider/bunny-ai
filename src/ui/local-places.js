@@ -25,6 +25,8 @@ const inside = (child, parent) => { const c = String(child).replace(/\//g, '\\')
 export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], onLoaded = () => {} }) {
   const host = el('div', { class: 'lm-places' });
   let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null; let leftKey = null;
+  const KEY = 'bunny.local.leave';
+  try { leftKey = localStorage.getItem(KEY); } catch { /* no storage: the card simply asks again */ }
 
   const button = (text, onclick, cls = 'btn', extra = {}) => el('button', { type: 'button', class: cls, textContent: text, onclick, ...extra });
   const row = (title, sub, ...right) => el('div', { class: 'row lm-row' }, el('div', { class: 'meta-col' }, el('div', { class: 'name', textContent: title }), sub ? el('div', { class: 'desc', textContent: sub }) : null), el('div', { class: 'right' }, ...right));
@@ -70,7 +72,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
       const size = left.reduce((n, [id]) => n + (models().find((m) => m.id === id)?.size ?? 0), 0);
       wrap.append(el('div', { class: 'lm-card', 'data-card': 'move' }, el('b', { textContent: `Move your ${left.length} downloaded model${left.length === 1 ? '' : 's'} to the new folder?` }),
         el('div', { class: 'desc', textContent: `Moving needs ${gb(size)} plus 2 GB free on the new drive. If they stay behind they sit in two places, and Remove Bunny local has two places to clean.` }),
-        el('div', { class: 'lm-acts' }, button('Move', () => call('move'), 'btn btn-primary'), button('Leave them', () => { leftKey = JSON.stringify([d.root, left.map(([id]) => id)]); paint(); }, 'btn'))));
+        el('div', { class: 'lm-acts' }, button('Move', () => call('move'), 'btn btn-primary'), button('Leave them', () => { leftKey = JSON.stringify([d.root, left.map(([id]) => id)]); try { localStorage.setItem(KEY, leftKey); } catch { /* kept for this page only */ } paint(); }, 'btn'))));
     }
     if (v.lastMove && !v.move) {
       const { moved, failed, untouched } = v.lastMove;

@@ -115,7 +115,8 @@ export function mountLocalModels(root, { getJSON, sendJSON }) {
       return;
     }
     if (!s.installed) {
-      for (const line of places.removalLines()) host.append(el('div', { class: 'lm-warn lm-removal', role: 'status', textContent: line }));
+      const r = s.removal; const counted = r ? [r.left ? `${r.left} model${r.left === 1 ? ' was' : 's were'} left where ${r.left === 1 ? 'it was' : 'they were'} because ${r.left === 1 ? 'it' : 'they'} changed after Bunny downloaded ${r.left === 1 ? 'it' : 'them'}.` : null, r.missing ? `${r.missing} model${r.missing === 1 ? '' : 's'} on a drive that isn't connected ${r.missing === 1 ? 'was' : 'were'} not removed.` : null].filter(Boolean) : [];
+      for (const line of places.loaded() && places.removalLines().length ? places.removalLines() : counted) host.append(el('div', { class: 'lm-warn lm-removal', role: 'status', textContent: line }));
       host.append(el('div', { class: 'lm-card' },
         el('b', { textContent: 'Set up Bunny local' }),
         el('div', { class: 'desc', textContent: `Bunny downloads a ${s.program.sizeMB} MB program (${s.program.name}) from its ${s.program.from}, checks its fingerprint, and keeps it in its own folder. Chats with a local model stay on this PC, and downloads talk only to GitHub (the program) and Hugging Face (models).` }),

@@ -1750,7 +1750,8 @@ textarea.bad, input.bad { border-color: var(--bad); }
 .lm-places { display: grid; gap: 10px; min-width: 0; }
 .lm-facts { display: grid; gap: 2px; font: 12px ui-monospace, Consolas, monospace; color: var(--text-dim); word-break: break-all; }
 .lm-template { margin: 4px 0 0; white-space: pre-wrap; overflow: auto; max-height: 140px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px; background: var(--panel-2, var(--panel)); font: 12px ui-monospace, Consolas, monospace; }
-.lm-tools, .lm-trust { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.lm-tools, .lm-trust { display: flex; gap: 6px; align-items: center; font-size: 13px; min-height: 28px; }
+.lm-tools input, .lm-trust input { min-width: 18px; min-height: 18px; }
 .lm-where { word-break: break-all; }
 .lm-own .lm-model small, .lm-folders .lm-row .desc { word-break: break-all; }
 

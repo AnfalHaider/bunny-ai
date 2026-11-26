@@ -57,6 +57,9 @@ test('a chosen folder with models left behind offers Move first; Move and Leave 
   await expect(lm(page).getByRole('button', { name: "Use Bunny's folder" })).toBeVisible();
   await c.getByRole('button', { name: 'Leave them' }).click();
   await expect(c).toHaveCount(0); // the card goes; the models stay where they are
+  await page.reload();
+  await lm(page).getByRole('button', { name: 'Manage', exact: true }).click();
+  await expect(lm(page).locator('[data-card="move"]')).toHaveCount(0); // and the answer is remembered
 });
 
 test('an unavailable download folder says so and never mentions a fall-back; a model that is gone says Not found', async ({ page }) => {
@@ -135,4 +138,13 @@ test('QA: a read of the places is a GET with no body; after Remove Bunny local t
   await expect(page.locator('.lm-removal').nth(1)).toContainText("2 models on E:\Old weren't removed because the drive isn't connected.");
   expect(seen.length).toBeGreaterThan(0);
   for (const [method, body] of seen) { assert(method === 'GET' && !body); }
+});
+
+test('QA F4: with no places view at all (a page that is not the window), the set-up card still says what Remove left, from the counts in the status', async ({ page }) => {
+  await page.route('**/api/local-models', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { ...STATUS([]), installed: false, removal: { removed: 0, left: 1, missing: 2 } } }) : r.fallback()));
+  await page.route('**/api/local-models/places**', (r) => r.fulfill({ status: 403, json: { code: 'request.windowOnly', message: 'Only the window.' } }));
+  await page.goto('/src/ui/providers.html?embed=1');
+  await page.locator('#bunny-local').getByRole('button', { name: 'Set up', exact: true }).click();
+  await expect(page.locator('.lm-removal').first()).toContainText('1 model was left where it was because it changed after Bunny downloaded it.');
+  await expect(page.locator('.lm-removal').nth(1)).toContainText("2 models on a drive that isn't connected were not removed.");
 });
