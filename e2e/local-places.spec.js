@@ -148,3 +148,22 @@ test('QA F4: with no places view at all (a page that is not the window), the set
   await expect(page.locator('.lm-removal').first()).toContainText('1 model was left where it was because it changed after Bunny downloaded it.');
   await expect(page.locator('.lm-removal').nth(1)).toContainText("2 models on a drive that isn't connected were not removed.");
 });
+
+test('Design: a new pick clears the old refusal at once and shows its own result: the data folder is refused, then Documents is accepted and named', async ({ page }) => {
+  const docs = PLACES({ download: { ...PLACES().download, custom: true, where: 'C:\Users\Sam\Documents', root: 'C:\Users\Sam\Documents\Bunny models' }, downloads: {} });
+  await page.addInitScript((accepted) => {
+    window.__download = { ok: false, code: 'place.data', message: "Bunny can't use its own data folder." };
+    window.__acceptNext = () => { window.__download = { ok: true, places: accepted }; };
+  }, docs);
+  await open(page);
+  await lm(page).getByRole('button', { name: 'Change…' }).click();
+  await expect(lm(page)).toContainText("Bunny can't use its own data folder.");
+  await page.evaluate(() => window.__acceptNext());
+  await lm(page).getByRole('button', { name: 'Change…' }).click();
+  await expect(lm(page)).not.toContainText("Bunny can't use its own data folder.");
+  await expect(lm(page).locator('.lm-result')).toHaveText('Bunny will save new downloads in C:\Users\Sam\Documents.');
+  await page.evaluate(() => { window.__download = { ok: false, code: 'place.system', message: "Bunny can't use a system folder." }; });
+  await lm(page).getByRole('button', { name: 'Change…' }).click();
+  await expect(lm(page).locator('.lm-result')).toHaveCount(0); // the old result goes with the new pick
+  await expect(lm(page)).toContainText("Bunny can't use a system folder.");
+});

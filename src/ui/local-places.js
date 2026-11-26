@@ -24,7 +24,7 @@ const inside = (child, parent) => { const c = String(child).replace(/\//g, '\\')
  */
 export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], onLoaded = () => {} }) {
   const host = el('div', { class: 'lm-places' });
-  let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null; let leftKey = null;
+  let view = null; let card = null; let showTemplate = false; let trusted = false; let confirmRemove = null; let timer = null; let leftKey = null; let result = '';
   const KEY = 'bunny.local.leave';
   try { leftKey = localStorage.getItem(KEY); } catch { /* no storage: the card simply asks again */ }
 
@@ -43,9 +43,10 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
   }
   async function dialog(run, after) {
     if (!bridge) { say("This is chosen in Bunny's window on this PC."); return; }
+    result = ''; say(''); // a new pick clears the old refusal and the old result at once
     const r = await run();
-    if (r?.canceled) return;
-    if (!r?.ok) { say(r?.message ?? 'That did not work.'); return; }
+    if (r?.canceled) { paint(); return; }
+    if (!r?.ok) { paint(); say(r?.message ?? 'That did not work.'); return; }
     say(''); if (r.places) view = r.places; after?.(r);
     paint(); schedule();
   }
@@ -56,7 +57,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
     const used = models().filter((m) => m.state === 'ready').reduce((n, m) => n + m.size, 0);
     const where = d.custom ? d.where : "Bunny's own folder";
     const rows = [row('Where Bunny saves models', where, el('span', { class: 'tag', textContent: used ? `${gb(used)} used` : 'Nothing downloaded yet' }),
-      bridge ? button('Change…', () => dialog(() => bridge.chooseDownloadFolder()), 'btn') : el('small', { class: 'desc', textContent: "Change: Bunny's window only" }),
+      bridge ? button('Change…', () => dialog(() => bridge.chooseDownloadFolder(), (r) => { result = `Bunny will save new downloads in ${r.places?.download?.where ?? 'that folder'}.`; }), 'btn') : el('small', { class: 'desc', textContent: "Change: Bunny's window only" }),
       d.custom ? button("Use Bunny's folder", () => call('download-default'), 'btn') : null,
       bridge ? button('Show in folder', async () => { try { const r = await bridge.showFolder(); if (r && !r.ok) say(r.message); } catch { say('The folder could not be opened.'); } }, 'btn') : null)];
     if (d.custom) rows.push(el('div', { class: 'row lm-row' }, el('small', { class: 'desc', textContent: d.cloud ? 'This folder syncs to the cloud; several GB will upload. Bunny saves into a folder it makes inside it, named Bunny models.' : 'Bunny saves into a folder it makes inside your pick, named Bunny models. Each model keeps the place it was saved in.' })));
@@ -137,7 +138,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
       out.push(...parts);
     }
     if (!v.folders.some((f) => f.id === 'lmstudio')) out.push(row("LM Studio's models folder", "It isn't listed. Bunny only reads this folder; it doesn't start LM Studio or read its settings or chats.", button('List it again', () => call('lmstudio-back'), 'btn')));
-    out.push(row('Add a folder of models', 'Bunny lists the .gguf files in it, three levels deep, and never changes them', bridge ? button('Add a folder…', () => dialog(() => bridge.addModelFolder()), 'btn') : el('small', { class: 'desc', textContent: "Bunny's window only" })));
+    out.push(row('Add a folder of models', 'Bunny lists the .gguf files in it, three levels deep, and never changes them', bridge ? button('Add a folder…', () => dialog(() => bridge.addModelFolder(), (r) => { result = `Added the folder ${r.places?.folders?.at(-1)?.name ?? ''}.`.replace(' .', '.'); }), 'btn') : el('small', { class: 'desc', textContent: "Bunny's window only" })));
     return el('div', { class: 'group lm-group lm-folders', 'data-places': 'folders' }, ...out);
   }
 
@@ -145,6 +146,7 @@ export function mountPlaces({ getPlaces, post, bridge, say, models = () => [], o
     host.replaceChildren();
     if (!view) return;
     host.append(downloadRow(view));
+    if (result) host.append(el('div', { class: 'desc lm-result', role: 'status', textContent: result }));
     host.append(el('div', { class: 'lm-sub', textContent: 'From this PC' }), ownGroup(view));
     if (card) host.append(addCard());
     host.append(el('div', { class: 'lm-sub', textContent: 'Model folders' }), foldersGroup(view));
