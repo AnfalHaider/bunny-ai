@@ -34,21 +34,22 @@ async function setup(t) {
   process.env.BUNNY_FAKE_LOCAL = '1';
   process.env.BUNNY_FAKE_LOCAL_URL = `http://127.0.0.1:${model.address().port}/v1`;
   t.after(() => { delete process.env.BUNNY_FAKE_LOCAL; delete process.env.BUNNY_FAKE_LOCAL_URL; });
-  const { base } = await startApp(t, { fake: false });
+  const { base, app } = await startApp(t, { fake: false });
   await post(base, '/api/local-models/setup', {});
   for (let i = 0; i < 80 && !(await (await fetch(`${base}/api/local-models`)).json()).installed; i += 1) await new Promise((r) => setTimeout(r, 50));
   await post(base, '/api/local-models/download', { id: 'qwen3-4b' });
   for (let i = 0; i < 100 && (await (await fetch(`${base}/api/local-models`)).json()).models.find((m) => m.id === 'qwen3-4b').state !== 'ready'; i += 1) await new Promise((r) => setTimeout(r, 50));
-  return { base, asked };
+  return { base, asked, app };
 }
 
-async function chat(base, content, { mode = 'auto', raiseFirst = null, textOnly = false } = {}) {
+async function chat(base, content, { mode = 'auto', raiseFirst = null, textOnly = false, admin = null } = {}) {
   if (raiseFirst) await post(base, '/api/local-models/fake', { raise: raiseFirst });
   const folder = await mkdtemp(join(tmpdir(), 'bunny-lm-'));
   const { body: s } = await post(base, '/api/sessions', { title: 'local', providerId: 'bunny-local', model: 'qwen3-4b' });
   const set = (name, value) => fetch(`${base}/api/sessions/${s.id}/setting/${name}`, { method: 'PATCH', headers: j, body: JSON.stringify({ value }) });
   await set('folder', folder); await set('workMode', 'code'); await set('permissionMode', mode);
-  const res = await fetch(`${base}/api/sessions/${s.id}/messages`, { method: 'POST', headers: j, body: JSON.stringify({ content, providerId: 'bunny-local', model: 'qwen3-4b', workMode: 'code', ...(textOnly ? { textOnly: true } : {}) }) });
+  const init = { method: 'POST', headers: j, body: JSON.stringify({ content, providerId: 'bunny-local', model: 'qwen3-4b', workMode: 'code', ...(textOnly ? { textOnly: true } : {}) }) };
+  const res = admin ? await admin(`/api/sessions/${s.id}/messages`, init) : await fetch(`${base}/api/sessions/${s.id}/messages`, init);
   if (!(res.headers.get('content-type') ?? '').includes('event-stream')) return { status: res.status, json: await res.json(), cards: [], stream: '' };
   const cards = []; let buf = ''; let all = '';
   const reader = res.body.getReader(); const dec = new TextDecoder();
@@ -98,9 +99,14 @@ test('the plain error states are raised on purpose and come back as the drawn wo
 });
 
 test('Quick ask says "Starting your local model…" the first time; a window chat says "Starting <model>…"', async (t) => {
-  const { base } = await setup(t);
+  const { base, app } = await setup(t);
   await post(base, '/api/local-models/stop', {});
-  const quick = await chat(base, 'hello', { textOnly: true, mode: 'ask' });
+  // LM-14: a body that merely says textOnly is nobody, so it starts nothing
+  const plain = await chat(base, 'hello', { textOnly: true, mode: 'ask' });
+  assert.equal(plain.status, 409);
+  assert.equal(plain.json.code, 'local.notRunning');
+  // the bar's own request carries the main process's admin secret
+  const quick = await chat(base, 'hello', { textOnly: true, mode: 'ask', admin: app.adminFetch });
   assert.match(quick.stream, /Starting your local model…/);
   await post(base, '/api/local-models/stop', {});
   const win = await chat(base, 'hello', { mode: 'ask' });

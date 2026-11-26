@@ -2590,7 +2590,9 @@ export async function createApp({ pcOptions = {}, electronData = '', toolInstall
       if (providerId === 'bunny-local') {
         try {
           const before = (await localModels.status()).running;
-          await localModels.ensure(model, { who: req.bunnyRemote ?? req.bunnyDevice ? 'device' : 'window', quick: body.textOnly === true });
+          // LM-13, LM-14, LM-18: the window starts it; a Quick ask question only with the main process's admin secret (a body that merely says textOnly is nobody); a device and a scheduled run never
+          const who = (req.bunnyRemote ?? req.bunnyDevice) ? 'device' : body.scheduledTask ? 'scheduled' : (body.textOnly === true && !adminOk(req)) ? 'textOnly' : 'window';
+          await localModels.ensure(model, { who, quick: body.textOnly === true });
           if (before?.id !== model) localStarting = (await localModels.status()).models.find((m) => m.id === model)?.name ?? model;
         } catch (err) {
           if (err instanceof LocalError) return sendJson(res, err.status, { code: err.code, message: err.message });
