@@ -182,3 +182,37 @@ test('LF-9 and LF-4: a file with no chat format gets only --chat-template chatml
   for (const bad of ['--chat-template-file', '--mmproj', '-md', '--model-draft', '--slot-save-path', '-mm']) assert.throws(() => checkArgv([...argv, bad, 'x']), /never uses/, bad);
   assert.throws(() => checkArgv([...argv.slice(0, -1), 'llama3']), /plain chat format/);
 });
+
+test('T1: a call that is still open is never cut off by the idle stop, and a switch to another model waits for it; the idle stop works again once it ends', async (t) => {
+  const dir = await temp(t);
+  const timers = [];
+  const idle = { set: (fn, ms) => { const h = { fn, ms, cleared: false, unref() {} }; timers.push(h); return h; }, clear: (h) => { if (h) h.cleared = true; } };
+  const zip = join(dir, 'x.zip'); await writeFile(zip, makeZip([{ name: 'llama-server.exe', data: 'MZ' }]));
+  const pins = { 'llama-server': { tag: 'b1', entry: 'llama-server.exe', skip: ['ggml-rpc-server.exe', 'ggml-rpc.dll'], files: { cpu: { sha256: 'x', allow: ['llama-server.exe'] } } } };
+  const runtimeDir = join(dir, 'rt'); await installFromZip({ zip, dir: runtimeDir, pins, backend: 'cpu' });
+  await mkdir(join(dir, 'models'), { recursive: true }); await writeFile(join(dir, 'models', 'a.gguf'), 'OK'); await writeFile(join(dir, 'models', 'b.gguf'), 'OK');
+  const rt = createLocalRuntime({ dataDir: dir, idle, healthWaitMs: 15000, launch: async ({ args, cwd, env }) => spawnTracked(process.execPath, [FAKE, ...args], { cwd, env: { ...env, PATH: process.env.PATH } }) });
+  t.after(() => rt.stop());
+  t.after(() => new Promise((r) => setTimeout(r, 300)));
+  const a = { runtimeDir, modelFile: join(dir, 'models', 'a.gguf'), modelId: 'a', ctx: 8192, gpu: false };
+  await rt.ensure(a);
+  const end = rt.begin();
+  assert.equal(rt.inflight(), 1);
+  timers.at(-1).fn(); // the idle time passes while the reply is still arriving
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(rt.running()?.modelId, 'a', 'not stopped in the middle of a reply');
+  assert.equal(timers.at(-1).cleared, false, 'the timer is set again');
+  // another chat asks for another model while the reply is streaming: it waits
+  let switched = false;
+  const sw = rt.ensure({ ...a, modelFile: join(dir, 'models', 'b.gguf'), modelId: 'b' }).then(() => { switched = true; });
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(switched, false, 'the switch waits for the stream');
+  assert.equal(rt.running()?.modelId, 'a');
+  end(); end(); // ending twice counts once
+  await sw;
+  assert.equal(rt.running()?.modelId, 'b');
+  assert.equal(rt.inflight(), 0);
+  timers.at(-1).fn(); // idle, and nothing in flight: it stops
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(rt.running(), null);
+});

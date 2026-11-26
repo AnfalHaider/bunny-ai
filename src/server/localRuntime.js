@@ -127,10 +127,18 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
   /** The next start (and a crash) deletes any key file a dead run left (LM-12). */
   async function sweepKeys() { for (const n of await readdir(runDir).catch(() => [])) if (n.endsWith('.key')) await rm(join(runDir, n), { force: true }).catch(() => {}); }
 
+  let inflight = 0; let drained = [];
+  /** A call to the model begins (T1): the server is not stopped by the idle timer, or switched to another model, until every call that began has ended. Returns the function that ends it (once). */
+  function begin() {
+    inflight += 1; if (current) { current.lastUsed = clock(); } armIdle();
+    let ended = false;
+    return () => { if (ended) return; ended = true; inflight = Math.max(0, inflight - 1); if (current) current.lastUsed = clock(); if (inflight === 0) { const w = drained; drained = []; for (const r of w) r(); } armIdle(); };
+  }
+  const waitForCalls = (maxMs = 10 * 60_000) => (inflight === 0 ? Promise.resolve() : new Promise((resolve) => { const t = setTimeout(resolve, maxMs); t.unref?.(); drained.push(() => { clearTimeout(t); resolve(); }); }));
   function armIdle() {
     idle.clear(idleTimer); idleTimer = null;
     if (!current || !idleMinutes) return;
-    idleTimer = idle.set(() => { stop().catch(() => {}); }, idleMinutes * 60_000);
+    idleTimer = idle.set(() => { if (inflight > 0) { armIdle(); return; } stop().catch(() => {}); }, idleMinutes * 60_000); // a reply that is still arriving is never cut off by the idle stop
     idleTimer.unref?.();
   }
 
@@ -185,7 +193,7 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
   async function ensure(opts) {
     if (current && current.modelId === opts.modelId && current.ctx === opts.ctx && current.gpu === opts.gpu && (current.chatTemplate ?? null) === (opts.chatTemplate ?? null)) { current.lastUsed = clock(); armIdle(); return current; }
     if (starting) { await starting.catch(() => {}); if (current?.modelId === opts.modelId) return current; }
-    starting = (async () => { if (current) await stop(); return startOne(opts); })();
+    starting = (async () => { if (current) { await waitForCalls(); await stop(); } return startOne(opts); })(); // a switch waits for the reply that is streaming (LM-9)
     try { return await starting; } finally { starting = null; }
   }
 
@@ -203,6 +211,7 @@ export function createLocalRuntime({ dataDir, launch, health = httpHealth, port 
   return {
     ensure, stop,
     touch: () => { if (current) { current.lastUsed = clock(); armIdle(); } },
+    begin, inflight: () => inflight,
     setIdleMinutes: (m) => { if (!IDLE_CHOICES.includes(m)) throw new Error('Choose 5, 10, 30 or 60 minutes, or only when Bunny closes.'); idleMinutes = m; armIdle(); },
     /** Looked up per request (LM-2): never stored anywhere. */
     endpoint: () => (current ? { baseUrl: `http://127.0.0.1:${current.port}/v1`, apiKey: current.key } : null),

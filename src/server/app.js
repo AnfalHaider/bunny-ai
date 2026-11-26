@@ -25,6 +25,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createProviderRegistry } from '../providers/connections.js';
 import { createLocalModels, LocalError, QUICK_ASK_STARTING } from './localModels.js';
 import { createRealLocalModels } from './localModelsReal.js';
+import { trackLocalCalls } from './localCalls.js';
 import { findProvider } from '../providers/catalog.js';
 import { startDeviceFlow, waitForToken } from '../providers/oauth.js';
 import { dpapiSecretStore } from '../providers/secretStore.js';
@@ -54,7 +55,7 @@ import { listTools as httpListTools, callTool as httpCallTool, connectorTools, m
 import { createLocalMcp, checkProposedCommand } from './mcpLocal.js';
 import { createComputerStore } from './computer.js';
 import { createTerminalStore } from './terminal.js';
-import { streamChat, stripToolMarkup, asksPermissionToContinue, statesDoneOrBlocked, goesThenStops as typedStop, fitResult } from './chat.js';
+import { streamChat as streamChatRaw, stripToolMarkup, asksPermissionToContinue, statesDoneOrBlocked, goesThenStops as typedStop, fitResult } from './chat.js';
 import { clip } from './clip.js';
 import { validWaitSeconds } from './waitLimits.js';
 import { resolveArtifact, htmlDocument } from '../ui/artifact-content.js';
@@ -325,6 +326,7 @@ export async function createApp({ localModels: localModelsOption = null, pcOptio
   const localModels = localModelsOption ?? (localFake ? createLocalModels({ dataDir, fake: true }) : createRealLocalModels({ dataDir, installDirs: [process.resourcesPath, join(dirname(fileURLToPath(import.meta.url)), '..', '..')].filter(Boolean), projectFolders: () => [...chosenFolders] }));;
   await localModels.load();
   await localModels.refreshReady?.();
+  const streamChat = trackLocalCalls({ streamChat: streamChatRaw, localModels }); // T1, T2, T3: every model call is counted, and refuses a stopped or different local model
   /** The key for a provider's requests: Bunny local's is the running server's own, looked up per request and never stored (LM-2). */
   const providerKey = (id) => (id === 'bunny-local' ? (localModels.apiKey?.() ?? undefined) : secrets.get(`provider:${id}`));
   const registry = createProviderRegistry({

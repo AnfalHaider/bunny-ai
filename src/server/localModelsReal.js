@@ -354,6 +354,11 @@ export function createRealLocalModels({
     hasReady: () => ready.value,
     refreshReady,
     baseUrl: () => runner.endpoint()?.baseUrl ?? '',
+    /** T1, T2, T3: for the code that calls a model by address. */
+    ownsAddress: (url) => { const b = runner.endpoint()?.baseUrl; return Boolean(b) && String(url ?? '').startsWith(b); },
+    runningModelId: () => runner.running()?.modelId ?? null,
+    beginCall: () => runner.begin(),
+    touch: () => runner.touch(),
     apiKey: () => runner.endpoint()?.apiKey ?? null,
     stopAll: () => runner.stop(),
     runner, QUICK_ASK_STARTING,
