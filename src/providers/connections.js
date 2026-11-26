@@ -53,6 +53,11 @@ export function parseBaseUrl(raw, opts = {}) {
  * Pure: no network, no storage.
  */
 export function validateInput(provider, input = {}) {
+  // LOCAL-MODELS LM-1: Bunny local takes no address and no key from anyone: a page or a device cannot point it somewhere else
+  if (provider.kind === 'managed') {
+    if (input && (Object.hasOwn(input, 'baseUrl') || Object.hasOwn(input, 'apiKey'))) throw new ConnectError('provider.managed', 'Bunny local needs no address or key. Bunny sets it up itself.', 'baseUrl');
+    return { baseUrl: '' };
+  }
   if (provider.kind === 'oauth') {
     // A sign-in provider takes no typed secret: the token arrives from the
     // device flow, not from the form.

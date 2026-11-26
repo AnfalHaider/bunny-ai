@@ -12,7 +12,7 @@
 
 /** @typedef {'apiKey'|'oauth'|'local'} ProviderKind */
 
-export const KINDS = /** @type {const} */ (['apiKey', 'oauth', 'local']);
+export const KINDS = /** @type {const} */ (['apiKey', 'oauth', 'local', 'managed']);
 
 /** @typedef {'coding'|'reasoning'|'vision'|'long-context'|'tool-use'|'cheap-fast'|'local-offline'} Ability */
 
@@ -269,6 +269,16 @@ export const PROVIDERS = Object.freeze([
     docsUrl: 'https://ollama.com',
     abilities: ['coding', 'reasoning', 'local-offline', 'tool-use'],
   },
+  // LOCAL-MODELS LM-1: models Bunny downloads and runs itself. No form, no address, no key: both are looked up when a request is made (see src/server/localRuntime.js).
+  {
+    id: 'bunny-local',
+    name: 'Bunny local',
+    tagline: 'Models Bunny downloads and runs on this PC. No key, no account',
+    kind: 'managed',
+    defaultBaseUrl: '',
+    docsUrl: '',
+    abilities: ['local-offline'],
+  },
 ]);
 
 /** @param {string} id */
@@ -289,6 +299,7 @@ export function fieldsFor(provider) {
         { name: 'baseUrl', label: 'Server URL', type: 'url', required: true, hint: provider.defaultBaseUrl },
       ];
     case 'oauth':
+    case 'managed': // Bunny local: nothing to type
       return [];
   }
 }
