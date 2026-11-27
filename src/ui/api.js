@@ -13,6 +13,13 @@ async function reach(request) {
 }
 
 export async function getJSON(path) {
+  // A read the server keeps to Bunny's window (the devices' activity, the model folders) goes through the bridge, as a window-only write does; a plain fetch would get 403.
+  const desk = desktopBridge();
+  if (desk?.secureWrite && isWindowOnlyRoute('GET', path.split('?')[0])) {
+    const r = await desk.secureWrite('GET', path, {});
+    if (r.status >= 400) throw Object.assign(new Error(r.data?.message ?? `HTTP ${r.status}`), r.data);
+    return r.data;
+  }
   const res = await reach(() => fetch(path, { headers: { accept: 'application/json' } }));
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body.message ?? `HTTP ${res.status}`), body);
