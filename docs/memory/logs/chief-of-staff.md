@@ -2,6 +2,20 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-27 - v0.1.16 published
+
+**Owner's words (typed in this chat):** "Approved for release and pus when completed.", then "Yes, release v0.1.16 when all pass (Recommended)" (2026-11-27 03:28). Later, on SC-f: "Fix it first". Record: docs/releases/2026-11-27-v0-1-16.md.
+
+- **What shipped:**
+  - LOCAL-MODELS: Bunny local, own .gguf files, model folders, the download place.
+  - The web search fallback.
+  - The Claude sign-in paste box.
+  - Fixes for T1 to T3, the cold start, the status() race and SC-f.
+- **Release:** shas [97e3eb29]. Gate 12/12. Six sign-offs. Published at https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.16 (tag at fe4763fc). Release Ops checked that the installer sha256 equals its build.
+- **Held for v0.1.17:** 22de8f3e and 1e2d585b, plus the follow-ups in docs/plans/2026-11-26-v0.1.16-live-fixes.md.
+- **Lesson:** merge main into the release line BEFORE the gate, and push nothing to main between the gate and the release. My docs push 15db7050 forced one more merge.
+- **Lesson:** fake mode hid a cold-start bug that only the real runner shows. Keep a real-runner test in the gate for every new runtime.
+
 ## 2026-11-20 - v0.1.14 published
 
 **Owner's words (typed in this chat):** "Ship 0.1.14 as soon as it can be without the internet sign-in." (2026-11-19) and "check all sessions, and continue, then release and publish 0.1.14 manage everything yourself. i am going to sleep. give me a report of gaps and features vs claude app and cursor vs Bunny AI when done." (2026-11-20). Record: docs/releases/2026-11-20-v0-1-14.md.
