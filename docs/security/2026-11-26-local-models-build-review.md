@@ -485,3 +485,16 @@ The 612f2a3f scope is unchanged. The release sign-off waits for the new integrat
 **Tests.** At 434eab71, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`, I ran the same set as at f7c917cc plus the race test: 204 tests, 203 pass, 0 fail, 1 skipped. I didn't run the e2e suite or the gate.
 
 ### Verdict at 434eab71: PASS
+
+## Re-check at 3ab0e22d (SC-f: window-only reads through the bridge)
+
+**What changed.** One commit on 434eab71, on `claude/v0116-local-models-t3`. It adds 7 lines to `getJSON` in `src/ui/api.js` and a new test, `test/window-only-get.test.js`. Nothing in the server, `electron/` or the route lists changed.
+
+- **The fix.** A GET whose path, without its query, is on the window-only list now goes through `secureWrite`, as window-only writes already did. Every other GET is a plain fetch, as before.
+- **The trust check stays in main.** `secure:write` in `electron/main.js` refuses unless the sending frame is a Bunny page (`isOwn`) and `isWindowOnlyRoute(method, path, body)` holds. It sends no body for a GET (74d40382). The page's own list decides only which channel it uses, never what is allowed.
+- **A query string fails closed.** Main checks the full path, query included, against anchored patterns. A window-only GET with a query is therefore refused, not let through.
+- **No change for other pages.** A device page or a non-Bunny frame has no bridge (`desktopBridge`), so it keeps the plain fetch, which the server refuses with 403.
+
+**Tests.** At 3ab0e22d, with `BUNNY_DATA_DIR` set to an invented temp folder and `BUNNY_FAKE_UPSTREAM=1`, I ran the same set as at 434eab71: 207 tests, 206 pass, 0 fail, 1 skipped. I didn't run the e2e suite or the gate.
+
+### Verdict at 3ab0e22d: PASS
