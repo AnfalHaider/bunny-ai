@@ -2,6 +2,24 @@
 
 Newest entry on top. Only this session writes this file.
 
+## 2026-11-27 - Published v0.1.16
+
+**Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-27 03:28) "Approved for release and pus when completed."; the question as asked ("Release v0.1.16 without asking again, once the gate on 06490c65 passes, QA's walk is clean and all six sign-offs are in? ... If anything fails or a real bug turns up, I stop and ask you."); the answer "Yes, release v0.1.16 when all pass (Recommended)". Then the owner answered "Fix it first" on SC-f, so the release is 06490c65 plus 3ab0e22d = 97e3eb29. Main fe4763fc = 97e3eb29 plus docs only. Gate 12/12 at 97e3eb29 with its results listed; six sign-offs at 97e3eb29. Accepted because the answer names v0.1.16 and the release.
+
+**Commands (PST)**
+
+- Fresh worktree (scratchpad `release-0.1.16`) detached at fe4763fc = origin/main; version 0.1.16, tag absent. A hook bars me from assigning my own role, so the Chief set it there.
+- `npm ci`, `npm run dist` -> build-sha fe4763fc, tree clean, `latest.yml` 0.1.16 with sha512 (built before the role was set; the build needs no role).
+- `npm run release -- --dry-run --notes-file docs/releases/v0.1.16-notes.md` clean (3 files).
+- `npm run release -- --notes-file docs/releases/v0.1.16-notes.md` ran 14:55:16 to 14:55:46 (GitHub publishedAt 2026-11-27T09:55:45Z); no retry needed -> https://github.com/AnfalHaider/bunny-ai/releases/tag/v0.1.16
+- Checks: not draft, not prerelease; .exe 125101657, .blockmap 131763, latest.yml 348; tag v0.1.16 -> fe4763fc; feed serves 0.1.16. Downloaded the uploaded .exe: sha256 9ea2b9794d5d38f93ae9104379820a96d752fac547fb3f08daaf871251369215 equals my built file; sha512 and size equal latest.yml.
+
+**Not checked:** an update on an invented profile; the record, notes and sign-off files (hook bars me).
+
+**Rollback:** a higher version (0.1.17) with 0.1.15's code; pulling the release is owner-only.
+
+**Lesson:** the edit hook only allows writes inside the project folder, so write log entries in the project worktree, then copy the file onto the log branch with git.
+
 ## 2026-11-26 - Published v0.1.15
 
 **Word:** the Chief of Staff's 7E relay: the owner's words (2026-11-25 22:07) "update the release and push when done"; the question as asked ("Release v0.1.15 without asking again, once the final gate passes, QA's walk passes and all six sign-offs are in? ... If anything fails or a real bug turns up, I stop and ask you."); the answer "Yes, release v0.1.15 when all pass (Recommended)". Shas: 80626b03 (merges gated 7c81da08), main 2fe1803a = that plus docs only. Gate 12/12 at 80626b03 with its results listed; six sign-offs at 80626b03. Accepted because the answer names v0.1.15 and the release.
