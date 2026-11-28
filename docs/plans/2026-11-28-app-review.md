@@ -25,3 +25,9 @@
   - no setting, provider, key, rule or connector changes;
   - the project is archived after, not deleted;
   - QA proposes its method to the Chief of Staff before running anything.
+
+## Real-model test method: the owner's choice
+
+- QA proposed two methods, and the owner was asked: "...Which way?" Method A: the owner creates one Code chat, and a script drives only that chat with the app's launch token. Method B: the owner types the tasks.
+- Answer: "A: script, about 6 tasks (Recommended)".
+- The script calls only these routes, for the given chat id: send, stream, answer that chat's cards, and read that chat's messages and Changes. A hard allowlist in the script enforces this. It changes no settings, keys or other chats, and it stops after about 6 tasks. The owner does the 30-second setup in the window and gives the chat id.
